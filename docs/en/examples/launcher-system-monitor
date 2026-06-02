@@ -33,13 +33,20 @@ refresh_cache() {
 }
 
 read_cpu_ticks() {
-    awk '/^cpu / {
-        total = 0
-        for (i = 2; i <= NF; i++) total += $i
-        idle = $5 + $6
-        print total, idle
-        exit
-    }' /proc/stat 2>/dev/null
+    # /proc/stat is unreadable by unprivileged apps on Android 12+ (SELinux denies it),
+    # which silently zeroes the CPU widget. Fall back to rish (Shizuku shell). rish spawns
+    # occasionally return empty (~1/3), so retry until we get a valid "cpu " line.
+    RISH="$HOME/.rish/rish"; [ -x "$RISH" ] || RISH="$HOME/.local/bin/rish"
+    out="$(awk '/^cpu / { t=0; for (i=2;i<=NF;i++) t+=$i; print t, $5+$6; exit }' /proc/stat 2>/dev/null)"
+    if [ -z "$out" ] && [ -x "$RISH" ]; then
+        i=0
+        while [ -z "$out" ] && [ "$i" -lt 5 ]; do
+            out="$(printf 'cat /proc/stat\n' | timeout 6 "$RISH" 2>/dev/null \
+                   | awk '/^cpu / { t=0; for (j=2;j<=NF;j++) t+=$j; print t, $5+$6; exit }')"
+            i=$((i + 1))
+        done
+    fi
+    [ -n "$out" ] && printf '%s\n' "$out"
 }
 
 calculate_cpu_percent() {
