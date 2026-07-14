@@ -35,6 +35,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 public final class LiteRtTaiRuntime implements TaiRuntime {
+    private static final Object EXPERIMENTAL_FLAGS_LOCK = new Object();
     private static final int DEFAULT_TOP_K = 64;
     private static final double DEFAULT_TOP_P = 0.95d;
     private static final double DEFAULT_TEMPERATURE = 1.0d;
@@ -200,6 +201,9 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             conversation.cancelProcess();
         } catch (Exception e) {
             return error(500, "cancel_failed", "Failed to cancel active LiteRT-LM generation: " + e.getMessage());
+        } finally {
+            // cancelProcess() does not roll back the conversation's KV state. Never reuse it.
+            closeConversationLocked();
         }
         JSONObject data = stateEnvelopeLocked(true);
         data.put("cancelled", true);
@@ -460,7 +464,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                         Backend backend = new Backend.GPU();
                         initializedBackendName = backend.getName();
                         initializedFallbackReason = AUTO_GPU_REASON;
-                        initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options, profile, backend, "gpu");
+                        initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options,
+                            profile, deviceCapabilities, backend, "gpu");
                     } catch (Exception gpuException) {
                         TaiRuntimeCrashMarker.clear(appContext);
                         TaiRuntimeHistory.recordFailure(appContext, modelSpec, deviceCapabilities,
@@ -470,7 +475,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                         Backend backend = new Backend.CPU(null);
                         initializedBackendName = backend.getName();
                         initializedFallbackReason = "Auto GPU initialization failed; selected the model's CPU fallback. GPU error: " + gpuException.getMessage();
-                        initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options, profile, backend, "cpu");
+                        initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options,
+                            profile, deviceCapabilities, backend, "cpu");
                     }
                 } else {
                     throwIfLoadCancellationRequested();
@@ -479,13 +485,15 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                     initializedFallbackReason = deviceCapabilities.pixel10 && profile.supports("gpu")
                         ? "Auto selected CPU because Google AI Edge Gallery disables GPU on Pixel 10 devices."
                         : AUTO_MODEL_CPU_REASON;
-                    initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options, profile, backend, "cpu");
+                    initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options,
+                        profile, deviceCapabilities, backend, "cpu");
                 }
             } else {
                 throwIfLoadCancellationRequested();
                 Backend backend = "gpu".equals(requestedAccelerator) ? new Backend.GPU() : new Backend.CPU(null);
                 initializedBackendName = backend.getName();
-                initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options, profile, backend, requestedAccelerator);
+                initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options,
+                    profile, deviceCapabilities, backend, requestedAccelerator);
             }
         } catch (Exception e) {
             TaiRuntimeCrashMarker.clear(appContext);
@@ -580,7 +588,20 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         closeConversationLocked();
         Contents systemContents = contents(request.systemPrompt);
         ConversationConfig conversationConfig = conversationConfig(systemContents, request, options);
-        conversation = engine.createConversation(conversationConfig);
+        synchronized (EXPERIMENTAL_FLAGS_LOCK) {
+            ExperimentalFlags.INSTANCE.setConvertCamelToSnakeCaseInToolDescription(false);
+            boolean constrainedDecoding = !request.tools.isEmpty();
+            if (constrainedDecoding) {
+                ExperimentalFlags.INSTANCE.setEnableConversationConstrainedDecoding(true);
+            }
+            try {
+                conversation = engine.createConversation(conversationConfig);
+            } finally {
+                if (constrainedDecoding) {
+                    ExperimentalFlags.INSTANCE.setEnableConversationConstrainedDecoding(false);
+                }
+            }
+        }
         conversationKey = request.reusableConversation ? key : "";
         return conversation;
     }
@@ -627,9 +648,9 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         @NonNull String modelPath,
         @NonNull TaiRuntimeOptions options,
         @NonNull TaiModelProfile profile,
+        @NonNull TaiDeviceCapabilities deviceCapabilities,
         @NonNull Backend backend
     ) {
-        applyExperimentalFlags(options, modelPath);
         String cacheDir = modelPath.startsWith("/data/local/tmp")
             ? appContext.getCacheDir().getAbsolutePath() : null;
         boolean imageInput = modelSpec.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)
@@ -647,24 +668,29 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         EngineConfig config = new EngineConfig(
             modelPath,
             backend,
-            imageInput ? matchingBackend(backend) : null,
+            imageInput ? visionBackend(modelSpec, options, profile, deviceCapabilities) : null,
             audioInput ? new Backend.CPU(null) : null,
             engineMaxTokens,
             imageInput ? 8 : null,
             cacheDir
         );
-        Engine loadedEngine = new Engine(config);
-        try {
-            loadedEngine.initialize();
-            return loadedEngine;
-        } catch (RuntimeException e) {
+        Boolean speculativeDecoding = speculativeDecodingFlag(options, modelPath);
+        synchronized (EXPERIMENTAL_FLAGS_LOCK) {
+            ExperimentalFlags.INSTANCE.setConvertCamelToSnakeCaseInToolDescription(false);
+            Engine loadedEngine = new Engine(config);
             try {
-                loadedEngine.close();
-            } catch (Exception ignored) {
+                ExperimentalFlags.INSTANCE.setEnableSpeculativeDecoding(speculativeDecoding);
+                loadedEngine.initialize();
+                return loadedEngine;
+            } catch (RuntimeException e) {
+                try {
+                    loadedEngine.close();
+                } catch (Exception ignored) {
+                }
+                throw e;
+            } finally {
+                ExperimentalFlags.INSTANCE.setEnableSpeculativeDecoding(null);
             }
-            throw e;
-        } finally {
-            ExperimentalFlags.INSTANCE.setEnableSpeculativeDecoding(false);
         }
     }
 
@@ -673,16 +699,38 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         @NonNull String modelPath,
         @NonNull TaiRuntimeOptions options,
         @NonNull TaiModelProfile profile,
+        @NonNull TaiDeviceCapabilities deviceCapabilities,
         @NonNull Backend backend,
         @NonNull String accelerator
     ) {
         TaiRuntimeCrashMarker.markLoad(appContext, modelSpec, options.withAccelerator(accelerator), TaiModelSpec.BACKEND_LITERT_LM);
-        return createAndInitializeEngine(modelSpec, modelPath, options, profile, backend);
+        return createAndInitializeEngine(modelSpec, modelPath, options, profile, deviceCapabilities, backend);
     }
 
     @NonNull
-    private Backend matchingBackend(@NonNull Backend backend) {
-        return backend instanceof Backend.GPU ? new Backend.GPU() : new Backend.CPU(null);
+    private Backend visionBackend(
+        @NonNull TaiModelSpec modelSpec,
+        @NonNull TaiRuntimeOptions options,
+        @NonNull TaiModelProfile profile,
+        @NonNull TaiDeviceCapabilities deviceCapabilities
+    ) {
+        String requested = requestedAccelerator(options);
+        boolean gpuKnownFailed = TaiRuntimeHistory.failedEntry(
+            appContext, modelSpec, deviceCapabilities, "gpu") != null;
+        return useGpuVision(requested, profile.supports("gpu"),
+            deviceCapabilities.supportsAccelerator("gpu"), gpuKnownFailed)
+            ? new Backend.GPU()
+            : new Backend.CPU(null);
+    }
+
+    static boolean useGpuVision(
+        @Nullable String requestedAccelerator,
+        boolean modelSupportsGpu,
+        boolean deviceSupportsGpu,
+        boolean gpuKnownFailed
+    ) {
+        if (requestedAccelerator != null) return "gpu".equals(requestedAccelerator);
+        return modelSupportsGpu && deviceSupportsGpu && !gpuKnownFailed;
     }
 
     @Nullable
@@ -716,16 +764,14 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         return fallback == null ? "auto" : fallback;
     }
 
-    private void applyExperimentalFlags(@NonNull TaiRuntimeOptions options, @NonNull String modelPath) {
-        boolean enabled = false;
-        if (Boolean.TRUE.equals(options.speculativeDecodingEnabled)) {
-            try (Capabilities capabilities = new Capabilities(modelPath)) {
-                enabled = capabilities.hasSpeculativeDecodingSupport();
-            } catch (Exception ignored) {
-                enabled = false;
-            }
+    @Nullable
+    private Boolean speculativeDecodingFlag(@NonNull TaiRuntimeOptions options, @NonNull String modelPath) {
+        if (!Boolean.TRUE.equals(options.speculativeDecodingEnabled)) return null;
+        try (Capabilities capabilities = new Capabilities(modelPath)) {
+            return capabilities.hasSpeculativeDecodingSupport() ? Boolean.TRUE : null;
+        } catch (Exception ignored) {
+            return null;
         }
-        ExperimentalFlags.INSTANCE.setEnableSpeculativeDecoding(enabled);
     }
 
     @NonNull

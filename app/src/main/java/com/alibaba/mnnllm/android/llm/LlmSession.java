@@ -49,16 +49,6 @@ public final class LlmSession {
         return submitFullHistoryNative(nativePtr, history, listener);
     }
 
-    @NonNull
-    public synchronized HashMap<String, Object> generateStructuredChat(
-        @NonNull String messagesJson,
-        @NonNull String toolsJson,
-        @NonNull GenerateProgressListener listener
-    ) {
-        ensureLoaded();
-        return submitStructuredChatNative(nativePtr, messagesJson, toolsJson, listener);
-    }
-
     public synchronized void reset() {
         if (nativePtr != 0L) resetNative(nativePtr);
     }
@@ -113,13 +103,6 @@ public final class LlmSession {
     private native HashMap<String, Object> submitFullHistoryNative(
         long nativePtr,
         List<Pair<String, String>> history,
-        GenerateProgressListener listener
-    );
-
-    private native HashMap<String, Object> submitStructuredChatNative(
-        long nativePtr,
-        String messagesJson,
-        String toolsJson,
         GenerateProgressListener listener
     );
 

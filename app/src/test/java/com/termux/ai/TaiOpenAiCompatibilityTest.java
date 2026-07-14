@@ -233,6 +233,20 @@ public class TaiOpenAiCompatibilityTest {
     }
 
     @Test
+    public void liteRtVisionBackend_autoUsesGpuOnlyWhenEligibleAndNotKnownFailed() {
+        assertTrue(LiteRtTaiRuntime.useGpuVision(null, true, true, false));
+        assertFalse(LiteRtTaiRuntime.useGpuVision(null, false, true, false));
+        assertFalse(LiteRtTaiRuntime.useGpuVision(null, true, false, false));
+        assertFalse(LiteRtTaiRuntime.useGpuVision(null, true, true, true));
+    }
+
+    @Test
+    public void liteRtVisionBackend_honorsExplicitAccelerator() {
+        assertTrue(LiteRtTaiRuntime.useGpuVision("gpu", false, false, true));
+        assertFalse(LiteRtTaiRuntime.useGpuVision("cpu", true, true, false));
+    }
+
+    @Test
     public void messageContentToContents_acceptsImageForMnnVlModel() throws Exception {
         TaiModelSpec spec = spec("qwen-vl-mnn", TaiModelSpec.BACKEND_MNN_LLM, "image_input");
         assertTrue(spec.capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT));

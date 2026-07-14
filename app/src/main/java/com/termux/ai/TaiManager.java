@@ -2,7 +2,7 @@ package com.termux.ai;
 
 import android.content.Context;
 import android.net.Uri;
-import android.util.Base64;
+import java.util.Base64;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -846,9 +846,11 @@ public final class TaiManager {
             JSONArray declaredEndpointCapabilities = model.optJSONArray("endpointCapabilities");
             JSONArray capabilities = declaredEndpointCapabilities == null ? model.optJSONArray("capabilities") : declaredEndpointCapabilities;
             if (capabilities == null) capabilities = new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_CHAT);
+            String defaultFormat = TaiModelSpec.BACKEND_MNN_LLM.equals(backend)
+                ? TaiModelSpec.FORMAT_MNN : TaiModelSpec.FORMAT_LITERTLM;
             JSONArray endpointCapabilities = declaredEndpointCapabilities == null
                 ? openAiEndpointCapabilities(model.optString("id", ""), capabilities, backend,
-                    model.optString("format", TaiModelSpec.FORMAT_LITERTLM))
+                    model.optString("format", defaultFormat))
                 : capabilities;
             item.put("_capabilities", endpointCapabilities);
             item.put("_endpoint_capabilities", endpointCapabilities);
@@ -1744,7 +1746,7 @@ public final class TaiManager {
     @NonNull
     private static byte[] decodeBase64(@NonNull String value, @NonNull String partName) throws JSONException {
         try {
-            byte[] bytes = Base64.decode(value, Base64.DEFAULT);
+            byte[] bytes = Base64.getMimeDecoder().decode(value);
             if (bytes.length > MAX_MEDIA_BYTES) throw new JSONException("media_fetch_failed:" + partName + " exceeds 25 MB");
             return bytes;
         } catch (IllegalArgumentException e) {
