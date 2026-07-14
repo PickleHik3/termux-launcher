@@ -32,6 +32,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 public final class LiteRtTaiRuntime implements TaiRuntime {
@@ -298,23 +300,22 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         StringBuilder responseBuilder = new StringBuilder();
         JSONArray toolCalls = new JSONArray();
         AtomicReference<Throwable> errorRef = new AtomicReference<>();
+        AtomicBoolean lengthLimited = new AtomicBoolean(false);
+        AtomicBoolean callbackFinished = new AtomicBoolean(false);
+        AtomicInteger firstCallbackTokenCount = new AtomicInteger(-1);
+        int maxOutputTokens = options.maxTokens != null
+            ? options.maxTokens
+            : loadedProfile.defaultMaxTokens;
         boolean unloadRequested;
         try {
-            if (callback == null) {
-                Message response = activeConversation.sendMessage(request.message, Collections.emptyMap());
-                String responseText = textFromMessage(response);
-                responseBuilder.append(responseText);
-                appendToolCalls(toolCalls, response.getToolCalls(), generationId);
-                done.countDown();
-            } else {
-                activeConversation.sendMessageAsync(request.message, new MessageCallback() {
+            activeConversation.sendMessageAsync(request.message, new MessageCallback() {
                     @Override
                     public void onMessage(@NonNull Message message) {
                         String text = textFromMessage(message);
                         synchronized (responseBuilder) {
                             responseBuilder.append(text);
                         }
-                        callback.onToken(text);
+                        if (callback != null) callback.onToken(text);
                         JSONArray messageToolCalls = new JSONArray();
                         appendToolCalls(messageToolCalls, message.getToolCalls(), generationId);
                         if (messageToolCalls.length() > 0) {
@@ -323,28 +324,56 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                                     toolCalls.put(messageToolCalls.opt(i));
                                 }
                             }
-                            callback.onToolCalls(messageToolCalls);
+                            if (callback != null) callback.onToolCalls(messageToolCalls);
+                        }
+
+                        try {
+                            int currentTokenCount = activeConversation.getTokenCount();
+                            firstCallbackTokenCount.compareAndSet(-1, currentTokenCount);
+                            int generatedTokens = generatedTokenCount(
+                                firstCallbackTokenCount.get(), currentTokenCount);
+                            if (generatedTokens >= maxOutputTokens
+                                && lengthLimited.compareAndSet(false, true)) {
+                                activeConversation.cancelProcess();
+                            }
+                        } catch (Throwable throwable) {
+                            lengthLimited.set(false);
+                            errorRef.compareAndSet(null, throwable);
+                            if (callbackFinished.compareAndSet(false, true)) {
+                                if (callback != null) callback.onError(throwable);
+                                done.countDown();
+                            }
                         }
                     }
 
                     @Override
                     public void onDone() {
+                        if (!callbackFinished.compareAndSet(false, true)) return;
                         String fullText;
                         synchronized (responseBuilder) {
                             fullText = responseBuilder.toString();
                         }
-                        callback.onComplete(fullText);
+                        if (callback != null) callback.onComplete(fullText);
                         done.countDown();
                     }
 
                     @Override
                     public void onError(@NonNull Throwable throwable) {
+                        if (!callbackFinished.compareAndSet(false, true)) return;
+                        if (lengthLimited.get() && isCancellation(throwable)) {
+                            String fullText;
+                            synchronized (responseBuilder) {
+                                fullText = responseBuilder.toString();
+                            }
+                            if (callback != null) callback.onComplete(fullText);
+                            done.countDown();
+                            return;
+                        }
                         errorRef.set(throwable);
-                        callback.onError(throwable);
+                        if (callback != null) callback.onError(throwable);
                         done.countDown();
                     }
                 }, Collections.emptyMap());
-            }
             done.await();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -355,7 +384,9 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             synchronized (this) {
                 unloadRequested = unloadAfterGeneration;
                 finishGenerationLocked(errorRef.get());
-                if (!request.reusableConversation) closeConversationLocked();
+                // cancelProcess() leaves the KV cache dirty, so a length-limited conversation
+                // must never be reused even though its partial response is a normal completion.
+                if (lengthLimited.get() || !request.reusableConversation) closeConversationLocked();
             }
         }
 
@@ -381,6 +412,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         data.put("mode", mode);
         data.put("response", responseBuilder.toString());
         data.put("toolCalls", toolCalls);
+        data.put("finishReason", lengthLimited.get()
+            ? "length" : (toolCalls.length() > 0 ? "tool_calls" : "stop"));
         data.put("elapsedMs", System.currentTimeMillis() - startedAt);
         data.put("options", options.toJson());
         if (loadedProfile != null) {
@@ -391,12 +424,20 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         return data;
     }
 
+    static int generatedTokenCount(int firstCallbackTokenCount, int currentTokenCount) {
+        // The first streaming callback follows prefill and contains at least one decoded token.
+        // Native KV-cache growth after that callback gives an exact decode-token delta. A
+        // speculative batch can cross the cap as one indivisible callback, so cancellation occurs
+        // at the first callback boundary at or beyond maxTokens.
+        return Math.max(1, currentTokenCount - firstCallbackTokenCount + 1);
+    }
+
     @NonNull
     private JSONObject loadInternal(@NonNull TaiModelSpec modelSpec, @NonNull TaiRuntimeOptions options, int keepWarmMinutes) throws JSONException {
         TaiModelProfile profile = TaiModelProfile.forModel(modelSpec);
         TaiDeviceCapabilities deviceCapabilities = TaiDeviceCapabilities.detect(appContext);
         if (!deviceCapabilities.liteRtLmAbiSupported) {
-            return error(501, "litert_lm_unsupported_abi", "LiteRT-LM 0.12.0 ships native libraries for arm64-v8a and x86_64 only.");
+            return error(501, "litert_lm_unsupported_abi", "LiteRT-LM 0.14.0 ships native libraries for arm64-v8a and x86_64 only.");
         }
         if (!deviceCapabilities.liteRtLmNativeLibrariesAvailable) {
             return error(501, "litert_lm_native_unavailable", "LiteRT-LM native libraries are not available in this APK.");
@@ -472,7 +513,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                             TaiModelSpec.BACKEND_LITERT_LM, "gpu", gpuException.getMessage() == null ? "GPU initialization failed." : gpuException.getMessage());
                         if (!autoAccelerators.contains("cpu")) throw gpuException;
                         throwIfLoadCancellationRequested();
-                        Backend backend = new Backend.CPU(null);
+                        Backend backend = new Backend.CPU();
                         initializedBackendName = backend.getName();
                         initializedFallbackReason = "Auto GPU initialization failed; selected the model's CPU fallback. GPU error: " + gpuException.getMessage();
                         initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options,
@@ -480,7 +521,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                     }
                 } else {
                     throwIfLoadCancellationRequested();
-                    Backend backend = new Backend.CPU(null);
+                    Backend backend = new Backend.CPU();
                     initializedBackendName = backend.getName();
                     initializedFallbackReason = deviceCapabilities.pixel10 && profile.supports("gpu")
                         ? "Auto selected CPU because Google AI Edge Gallery disables GPU on Pixel 10 devices."
@@ -490,7 +531,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 }
             } else {
                 throwIfLoadCancellationRequested();
-                Backend backend = "gpu".equals(requestedAccelerator) ? new Backend.GPU() : new Backend.CPU(null);
+                Backend backend = "gpu".equals(requestedAccelerator) ? new Backend.GPU() : new Backend.CPU();
                 initializedBackendName = backend.getName();
                 initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options,
                     profile, deviceCapabilities, backend, requestedAccelerator);
@@ -669,7 +710,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             modelPath,
             backend,
             imageInput ? visionBackend(modelSpec, options, profile, deviceCapabilities) : null,
-            audioInput ? new Backend.CPU(null) : null,
+            // LiteRT-LM 0.14 also supports GPU/NPU audio acceleration; keep CPU as the default.
+            audioInput ? new Backend.CPU() : null,
             engineMaxTokens,
             imageInput ? 8 : null,
             cacheDir
@@ -720,7 +762,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         return useGpuVision(requested, profile.supports("gpu"),
             deviceCapabilities.supportsAccelerator("gpu"), gpuKnownFailed)
             ? new Backend.GPU()
-            : new Backend.CPU(null);
+            : new Backend.CPU();
     }
 
     static boolean useGpuVision(

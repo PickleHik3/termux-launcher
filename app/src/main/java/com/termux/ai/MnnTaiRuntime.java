@@ -549,6 +549,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
                         builder.append(object.optString("text", ""));
                     } else if ("image_url".equals(type) || "input_image".equals(type)) {
                         builder.append(mnnImageMarkup(object));
+                    } else if ("input_audio".equals(type) || "audio".equals(type)) {
+                        builder.append(mnnAudioMarkup(object));
                     }
                 } else if (item != null && !JSONObject.NULL.equals(item)) {
                     builder.append(String.valueOf(item));
@@ -601,6 +603,75 @@ public final class MnnTaiRuntime implements TaiRuntime {
             File dir = new File(appContext.getCacheDir(), "tai-mnn-images");
             if (!dir.isDirectory() && !dir.mkdirs()) return "";
             File file = new File(dir, "img-" + System.currentTimeMillis() + "-" + bytes.length + ".bin");
+            try (FileOutputStream out = new FileOutputStream(file)) {
+                out.write(bytes);
+            }
+            return file.getAbsolutePath();
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    /**
+     * MNN audio/omni models consume audio as inline {@code <audio>path</audio>} prompt markup.
+     * OpenAI base64 audio is materialised under the app cache; local paths and file URLs pass
+     * straight through.
+     */
+    @NonNull
+    private String mnnAudioMarkup(@NonNull JSONObject part) {
+        JSONObject inputAudio = part.optJSONObject("input_audio");
+        if (inputAudio == null) inputAudio = part.optJSONObject("audio");
+        String path = "";
+        if (inputAudio != null) {
+            String data = inputAudio.optString("data", "").trim();
+            if (!data.isEmpty()) {
+                try {
+                    int comma = data.startsWith("data:") ? data.indexOf(',') : -1;
+                    String encoded = comma >= 0 ? data.substring(comma + 1) : data;
+                    path = writeAudioCache(Base64.decode(encoded, Base64.DEFAULT), inputAudio.optString("format", "wav"));
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+            if (path.isEmpty()) path = audioPath(inputAudio.optString("url", ""), inputAudio.optString("format", "wav"));
+        }
+        if (path.isEmpty()) {
+            Object audioUrl = part.opt("audio_url");
+            String url = audioUrl instanceof JSONObject
+                ? ((JSONObject) audioUrl).optString("url", "")
+                : audioUrl == null || JSONObject.NULL.equals(audioUrl) ? "" : String.valueOf(audioUrl);
+            path = audioPath(url, part.optString("format", "wav"));
+        }
+        return path.isEmpty() ? "" : "<audio>" + path + "</audio>";
+    }
+
+    @NonNull
+    private String audioPath(@Nullable String rawUrl, @Nullable String format) {
+        String url = rawUrl == null ? "" : rawUrl.trim();
+        if (url.startsWith("/")) return url;
+        if (url.startsWith("file://")) {
+            String path = Uri.parse(url).getPath();
+            return path == null ? "" : path;
+        }
+        if (url.startsWith("data:")) {
+            int comma = url.indexOf(',');
+            if (comma >= 0) {
+                try {
+                    return writeAudioCache(Base64.decode(url.substring(comma + 1), Base64.DEFAULT), format);
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+        }
+        return "";
+    }
+
+    @NonNull
+    private String writeAudioCache(@NonNull byte[] bytes, @Nullable String format) {
+        try {
+            File dir = new File(appContext.getCacheDir(), "tai-mnn-audio");
+            if (!dir.isDirectory() && !dir.mkdirs()) return "";
+            String extension = format == null ? "wav" : format.trim().toLowerCase(Locale.ROOT);
+            if (!extension.matches("[a-z0-9]{1,8}")) extension = "wav";
+            File file = new File(dir, "audio-" + System.currentTimeMillis() + "-" + bytes.length + "." + extension);
             try (FileOutputStream out = new FileOutputStream(file)) {
                 out.write(bytes);
             }
@@ -946,6 +1017,10 @@ public final class MnnTaiRuntime implements TaiRuntime {
         else json.put("max_all_tokens", Math.min(json.optInt("max_all_tokens", modelSpec.endpointContextWindow), modelSpec.endpointContextWindow));
         json.remove("max_context_len");
         json.put("prompt_cache", true);
+        File mmapDir = new File(appContext.getCacheDir(), "tai-mnn-mmap/" + cacheKey(modelSpec.id));
+        if (!mmapDir.isDirectory()) mmapDir.mkdirs();
+        json.put("use_mmap", true);
+        json.put("tmp_path", mmapDir.getAbsolutePath());
         if (!json.has("max_new_tokens")) json.put("max_new_tokens", modelSpec.defaultMaxOutputTokens);
         if (!json.has("temperature")) json.put("temperature", 0.8d);
         if (!json.has("top_p")) json.put("top_p", 0.9d);
@@ -959,6 +1034,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
         if (options.temperature != null) json.put("temperature", options.temperature);
         if (options.topP != null) json.put("top_p", options.topP);
         if (options.topK != null) json.put("top_k", options.topK);
+        applyThinkingOverride(json, options.thinkingEnabled);
         return json.toString();
     }
 
@@ -974,7 +1050,25 @@ public final class MnnTaiRuntime implements TaiRuntime {
         if (options.temperature != null) json.put("temperature", options.temperature);
         if (options.topP != null) json.put("top_p", options.topP);
         if (options.topK != null) json.put("top_k", options.topK);
+        applyThinkingOverride(json, options.thinkingEnabled);
         return json;
+    }
+
+    private void applyThinkingOverride(@NonNull JSONObject json, @Nullable Boolean thinkingEnabled) throws JSONException {
+        if (thinkingEnabled == null) return;
+        JSONObject jinja = json.optJSONObject("jinja");
+        if (jinja == null) jinja = new JSONObject();
+        JSONObject context = jinja.optJSONObject("context");
+        if (context == null) context = new JSONObject();
+        context.put("enable_thinking", thinkingEnabled);
+        jinja.put("context", context);
+        json.put("jinja", jinja);
+    }
+
+    @NonNull
+    private String cacheKey(@NonNull String value) {
+        String key = value.replaceAll("[^A-Za-z0-9._-]", "_");
+        return key.isEmpty() ? "model" : key;
     }
 
     @NonNull

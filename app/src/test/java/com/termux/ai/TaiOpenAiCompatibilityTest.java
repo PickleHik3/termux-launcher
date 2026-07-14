@@ -104,7 +104,7 @@ public class TaiOpenAiCompatibilityTest {
     }
 
     @Test
-    public void openAiModels_marksMnnToolUseAsPromptFallbackAllowsImageFiltersAudioVideo() throws Exception {
+    public void openAiModels_marksMnnToolUseAsPromptFallbackAllowsImageAudioFiltersVideo() throws Exception {
         JSONObject taiModels = new JSONObject()
             .put("ok", true)
             .put("models", new JSONArray().put(new JSONObject()
@@ -123,9 +123,9 @@ public class TaiOpenAiCompatibilityTest {
         JSONObject model = response.getJSONArray("data").getJSONObject(0);
         assertTrue(contains(capabilities, TaiModelSpec.CAPABILITY_TEXT_CHAT));
         assertTrue(contains(capabilities, TaiModelSpec.CAPABILITY_TOOL_USE));
-        // MNN VL models advertise image; audio/video have no MNN runtime path so they stay filtered.
+        // MNN multimodal models accept image/audio path markup; video remains unsupported.
         assertTrue(contains(capabilities, TaiModelSpec.CAPABILITY_IMAGE_INPUT));
-        assertFalse(contains(capabilities, TaiModelSpec.CAPABILITY_AUDIO_INPUT));
+        assertTrue(contains(capabilities, TaiModelSpec.CAPABILITY_AUDIO_INPUT));
         assertFalse(contains(capabilities, TaiModelSpec.CAPABILITY_VIDEO_INPUT));
         assertEquals(TaiModelSpec.TOOL_MODE_PROMPT_FALLBACK, model.getString("_tool_mode"));
     }
@@ -230,6 +230,13 @@ public class TaiOpenAiCompatibilityTest {
 
         assertTrue(LiteRtTaiRuntime.isCancellation(error));
         assertFalse(LiteRtTaiRuntime.isCancellation(new RuntimeException("GPU initialization failed")));
+    }
+
+    @Test
+    public void liteRtGeneratedTokenCount_usesNativeDeltaAfterFirstStreamingToken() {
+        assertEquals(1, LiteRtTaiRuntime.generatedTokenCount(120, 120));
+        assertEquals(8, LiteRtTaiRuntime.generatedTokenCount(120, 127));
+        assertEquals(1, LiteRtTaiRuntime.generatedTokenCount(120, 119));
     }
 
     @Test

@@ -161,7 +161,7 @@ dependencies {
     implementation "io.noties.markwon:linkify:$markwonVersion"
     implementation "io.noties.markwon:recycler:$markwonVersion"
     implementation 'com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava'
-    implementation "com.google.ai.edge.litertlm:litertlm-android:0.12.0"
+    implementation "com.google.ai.edge.litertlm:litertlm-android:0.14.0"
     implementation "com.google.ai.edge.litert:litert:1.4.2"
     implementation("io.github.eix128:sentencepiece4j:1.0.2") {
         exclude group: "it.unimi.dsi", module: "fastutil"

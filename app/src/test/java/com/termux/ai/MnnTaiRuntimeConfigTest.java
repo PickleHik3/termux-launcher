@@ -17,6 +17,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -60,6 +61,9 @@ public class MnnTaiRuntimeConfigTest {
         assertEquals(0.05d, merged.getDouble("min_p"), 0.0d);
         assertEquals("tokenizer.mtok", merged.getString("tokenizer_file"));
         assertFalse(merged.has("system_prompt"));
+        assertTrue(merged.getBoolean("use_mmap"));
+        assertTrue(merged.getString("tmp_path").startsWith(context.getCacheDir().getAbsolutePath()));
+        assertTrue(new File(merged.getString("tmp_path")).isDirectory());
     }
 
     @Test
@@ -187,6 +191,54 @@ public class MnnTaiRuntimeConfigTest {
     }
 
     @Test
+    public void mnnHistory_materializesOpenAiAudioAndInjectsMarkup() throws Exception {
+        MnnTaiRuntime runtime = new MnnTaiRuntime(context);
+        org.json.JSONArray messages = new org.json.JSONArray().put(new JSONObject()
+            .put("role", "user")
+            .put("content", new org.json.JSONArray()
+                .put(new JSONObject().put("type", "text").put("text", "transcribe "))
+                .put(new JSONObject().put("type", "input_audio").put("input_audio",
+                    new JSONObject().put("data", "AQID").put("format", "wav")))));
+        TaiChatRequest request = new TaiChatRequest(
+            "", Collections.emptyList(), Message.Companion.user(""), Collections.emptyList(),
+            false, messages, new org.json.JSONArray(), null);
+
+        Method method = MnnTaiRuntime.class.getDeclaredMethod("mnnHistory", TaiChatRequest.class);
+        method.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<Pair<String, String>> history = (List<Pair<String, String>>) method.invoke(runtime, request);
+
+        String content = history.get(0).second;
+        assertTrue(content.startsWith("transcribe <audio>"));
+        assertTrue(content.endsWith("</audio>"));
+        String path = content.substring(content.indexOf("<audio>") + 7, content.indexOf("</audio>"));
+        assertTrue(path.endsWith(".wav"));
+        assertEquals(3, Files.readAllBytes(new File(path).toPath()).length);
+    }
+
+    @Test
+    public void mnnHistory_injectsAudioMarkupForFileUrl() throws Exception {
+        MnnTaiRuntime runtime = new MnnTaiRuntime(context);
+        File audio = new File(context.getCacheDir(), "sample.wav");
+        touch(audio);
+        org.json.JSONArray messages = new org.json.JSONArray().put(new JSONObject()
+            .put("role", "user")
+            .put("content", new org.json.JSONArray().put(new JSONObject()
+                .put("type", "audio")
+                .put("audio", new JSONObject().put("url", "file://" + audio.getAbsolutePath())))));
+        TaiChatRequest request = new TaiChatRequest(
+            "", Collections.emptyList(), Message.Companion.user(""), Collections.emptyList(),
+            false, messages, new org.json.JSONArray(), null);
+
+        Method method = MnnTaiRuntime.class.getDeclaredMethod("mnnHistory", TaiChatRequest.class);
+        method.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<Pair<String, String>> history = (List<Pair<String, String>>) method.invoke(runtime, request);
+
+        assertEquals("<audio>" + audio.getAbsolutePath() + "</audio>", history.get(0).second);
+    }
+
+    @Test
     public void extraConfig_enablesPromptCacheWithStatelessHistory() throws Exception {
         MnnTaiRuntime runtime = new MnnTaiRuntime(context);
         Method method = MnnTaiRuntime.class.getDeclaredMethod("extraConfigJson", TaiModelSpec.class);
@@ -209,6 +261,25 @@ public class MnnTaiRuntimeConfigTest {
 
         assertEquals(3072, overrides.getInt("max_all_tokens"));
         assertFalse(overrides.has("max_context_len"));
+    }
+
+    @Test
+    public void thinkingOption_emitsJinjaContextInMergedAndRuntimeOverrides() throws Exception {
+        File dir = new File(context.getCacheDir(), "mnn-thinking-config");
+        dir.mkdirs();
+        File config = configFile(dir);
+        TaiRuntimeOptions options = new TaiRuntimeOptions(null, null, null, null,
+            null, null, null, null, null, false, null, null);
+        MnnTaiRuntime runtime = new MnnTaiRuntime(context);
+
+        JSONObject merged = new JSONObject((String) invokeMergedConfig(runtime, config, model(config), options));
+        Method method = MnnTaiRuntime.class.getDeclaredMethod("overridesJson", TaiRuntimeOptions.class);
+        method.setAccessible(true);
+        JSONObject overrides = (JSONObject) method.invoke(runtime, options);
+
+        assertEquals("template", merged.getJSONObject("jinja").getString("chat_template"));
+        assertFalse(merged.getJSONObject("jinja").getJSONObject("context").getBoolean("enable_thinking"));
+        assertFalse(overrides.getJSONObject("jinja").getJSONObject("context").getBoolean("enable_thinking"));
     }
 
     private static Object invokeMergedConfig(MnnTaiRuntime runtime, File config, TaiModelSpec model, TaiRuntimeOptions options) throws Exception {
