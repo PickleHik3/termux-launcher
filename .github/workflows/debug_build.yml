@@ -4,8 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - experimental
-      - tai-ext
+      - dev
 
 
 concurrency:

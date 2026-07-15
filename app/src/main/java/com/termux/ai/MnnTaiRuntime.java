@@ -27,7 +27,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class MnnTaiRuntime implements TaiRuntime {
     private final Context appContext;
@@ -283,56 +286,28 @@ public final class MnnTaiRuntime implements TaiRuntime {
 
         StringBuilder responseBuilder = new StringBuilder();
         AtomicReference<Throwable> errorRef = new AtomicReference<>();
+        AtomicBoolean callbackCancelled = new AtomicBoolean(false);
         HashMap<String, Object> metrics = new HashMap<>();
+        List<Pair<String, String>> history = mnnHistory(request);
+        String debugInfo = "";
         boolean wasCancelled;
         try {
-            boolean hasTools = request.toolDefinitions.length() > 0
-                && !"none".equals(String.valueOf(request.toolChoice));
-            HashMap<String, Object> nativeResult;
-            if (hasTools) {
-                try {
-                    nativeResult = activeSession.generateStructuredChat(
-                        mnnStructuredMessagesJson(request).toString(),
-                        request.toolDefinitions.toString(),
-                        progress -> {
-                            if (cancelRequested) return true;
-                            if (progress == null) return false;
-                            synchronized (responseBuilder) {
-                                responseBuilder.append(progress);
-                            }
-                            if (callback != null) callback.onToken(progress);
-                            return false;
-                        });
-                } catch (UnsatisfiedLinkError missingStructuredBridge) {
-                    synchronized (responseBuilder) {
-                        responseBuilder.setLength(0);
-                    }
-                    List<Pair<String, String>> history = mnnHistory(request);
-                    nativeResult = activeSession.generateHistory(history, progress -> {
-                        if (cancelRequested) return true;
-                        if (progress == null) return false;
-                        synchronized (responseBuilder) {
-                            responseBuilder.append(progress);
-                        }
-                        if (callback != null) callback.onToken(progress);
-                        return false;
-                    });
-                    if (nativeResult == null) nativeResult = new HashMap<>();
-                    nativeResult.put("structuredChatFallback", true);
-                }
-            } else {
-                List<Pair<String, String>> history = mnnHistory(request);
-                nativeResult = activeSession.generateHistory(history, progress -> {
+            HashMap<String, Object> nativeResult = activeSession.generateHistory(history, progress -> {
                 if (cancelRequested) return true;
                 if (progress == null) return false;
                 synchronized (responseBuilder) {
                     responseBuilder.append(progress);
                 }
                 if (callback != null) callback.onToken(progress);
+                if (callback != null && callback.shouldCancelGeneration()) {
+                    callbackCancelled.set(true);
+                    cancelRequested = true;
+                    return true;
+                }
                 return false;
-                });
-            }
+            });
             if (nativeResult != null) metrics.putAll(nativeResult);
+            debugInfo = activeSession.debugInfo();
         } catch (Throwable t) {
             errorRef.set(t);
         } finally {
@@ -349,14 +324,15 @@ public final class MnnTaiRuntime implements TaiRuntime {
         }
         if (throwable != null) {
             if (callback != null) callback.onError(throwable);
-            if (wasCancelled) return error(499, "generation_cancelled", "MNN generation was cancelled.");
-            if (throwable instanceof UnsatisfiedLinkError && request.toolDefinitions.length() > 0) {
-                return error(501, "mnn_structured_chat_unavailable",
-                    "This MNN native library does not expose the structured chat bridge required for OpenAI tools.");
+            if (wasCancelled || callbackCancelled.get()) {
+                return error(499, "generation_cancelled", "MNN generation was cancelled.");
             }
             return error(500, "mnn_generation_failed", "MNN generation failed: " + message(throwable));
         }
-        if (wasCancelled) return error(499, "generation_cancelled", "MNN generation was cancelled.");
+        if (wasCancelled && !callbackCancelled.get()) {
+            return error(499, "generation_cancelled", "MNN generation was cancelled.");
+        }
+        response = OpenAiStopSequences.truncate(response, request.stopSequences).text;
         JSONArray toolCalls = parseToolCalls(response, generationId);
         if (toolCalls.length() == 0) appendRequiredFallbackToolCall(request, response, generationId, toolCalls);
         JSONObject toolChoiceError = validateRequiredToolChoice(request.toolChoice, request.toolDefinitions, toolCalls);
@@ -379,12 +355,82 @@ public final class MnnTaiRuntime implements TaiRuntime {
         data.put("mode", mode);
         data.put("response", responseText);
         data.put("toolCalls", toolCalls);
+        data.put("finishReason", "stop");
         data.put("elapsedMs", System.currentTimeMillis() - startedAt);
         data.put("options", options.toJson());
         data.put("effectiveConfig", safeJson(activeSession.dumpConfig()));
         data.put("metrics", metricsJson(metrics));
+        appendUsage(data, metrics, debugInfo, history, response);
+        data.put("stoppedByCallback", callbackCancelled.get());
         data.put("state", getState().toJson());
         return data;
+    }
+
+    private void appendUsage(
+        @NonNull JSONObject data,
+        @NonNull HashMap<String, Object> metrics,
+        @Nullable String debugInfo,
+        @NonNull List<Pair<String, String>> history,
+        @NonNull String response
+    ) throws JSONException {
+        int promptTokens = metricInt(metrics, "prompt_len", "prompt_tokens", "prefill_tokens", "promptLen");
+        int completionTokens = metricInt(metrics, "decode_len", "completion_tokens", "decode_tokens", "decodeLen");
+        if (promptTokens < 0) promptTokens = debugMetricInt(debugInfo, "prompt_len");
+        if (completionTokens < 0) completionTokens = debugMetricInt(debugInfo, "decode_len");
+
+        boolean estimated = false;
+        if (promptTokens < 0) {
+            int promptCharacters = 0;
+            for (Pair<String, String> item : history) {
+                if (item != null && item.second != null) promptCharacters += item.second.length();
+            }
+            promptTokens = approximateTokenCountFromCharacters(promptCharacters);
+            estimated = true;
+        }
+        if (completionTokens < 0 || (completionTokens == 0 && !response.isEmpty())) {
+            completionTokens = approximateTokenCountFromCharacters(response.length());
+            estimated = true;
+        }
+
+        JSONObject usage = new JSONObject();
+        usage.put("prompt_tokens", Math.max(0, promptTokens));
+        usage.put("completion_tokens", Math.max(0, completionTokens));
+        usage.put("total_tokens", Math.max(0, promptTokens) + Math.max(0, completionTokens));
+        data.put("usage", usage);
+        data.put("usageEstimated", estimated);
+        data.put("usageSource", estimated
+            ? "mnn_metrics_or_characters_divided_by_4" : "mnn_native_metrics");
+    }
+
+    private int metricInt(@NonNull HashMap<String, Object> metrics, @NonNull String... keys) {
+        for (String key : keys) {
+            Object value = metrics.get(key);
+            if (value instanceof Number) return Math.max(0, ((Number) value).intValue());
+            if (value != null) {
+                try {
+                    return Math.max(0, Integer.parseInt(String.valueOf(value).trim()));
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        return -1;
+    }
+
+    private int debugMetricInt(@Nullable String debugInfo, @NonNull String key) {
+        if (debugInfo == null || debugInfo.isEmpty()) return -1;
+        Matcher matcher = Pattern.compile("(?:\\\"?" + Pattern.quote(key)
+            + "\\\"?)\\s*[:=]\\s*(\\d+)").matcher(debugInfo);
+        if (!matcher.find()) return -1;
+        try {
+            return Integer.parseInt(matcher.group(1));
+        } catch (NumberFormatException ignored) {
+            return -1;
+        }
+    }
+
+    private int approximateTokenCountFromCharacters(int characters) {
+        if (characters <= 0) return 0;
+        return Math.max(1, (characters + 3) / 4);
     }
 
     @Nullable
@@ -524,6 +570,27 @@ public final class MnnTaiRuntime implements TaiRuntime {
     @NonNull
     private String mnnSystemPrompt(@NonNull TaiChatRequest request) {
         StringBuilder prompt = new StringBuilder(request.systemPrompt == null ? "" : request.systemPrompt.trim());
+        if (request.messagesJson.length() > 0) {
+            StringBuilder openAiSystemPrompt = new StringBuilder();
+            for (int i = 0; i < request.messagesJson.length(); i++) {
+                JSONObject message = request.messagesJson.optJSONObject(i);
+                if (message == null) continue;
+                String role = message.optString("role", "user");
+                if (!"system".equals(role) && !"developer".equals(role)) continue;
+                String content = openAiContentText(message.opt("content")).trim();
+                if (content.isEmpty()) continue;
+                if (openAiSystemPrompt.length() > 0) openAiSystemPrompt.append('\n');
+                openAiSystemPrompt.append(content);
+            }
+            String openAiPrompt = openAiSystemPrompt.toString();
+            String requestPrompt = prompt.toString();
+            boolean alreadyIncluded = requestPrompt.equals(openAiPrompt)
+                || requestPrompt.startsWith(openAiPrompt + "\n");
+            if (!openAiPrompt.isEmpty() && !alreadyIncluded) {
+                if (prompt.length() > 0) openAiSystemPrompt.append("\n\n").append(prompt);
+                prompt = openAiSystemPrompt;
+            }
+        }
         if (request.toolDefinitions.length() == 0 || "none".equals(String.valueOf(request.toolChoice))) {
             return prompt.toString();
         }
@@ -554,38 +621,6 @@ public final class MnnTaiRuntime implements TaiRuntime {
     }
 
     @NonNull
-    private JSONArray mnnStructuredMessagesJson(@NonNull TaiChatRequest request) throws JSONException {
-        JSONArray messages = new JSONArray();
-        if (!request.systemPrompt.trim().isEmpty()) {
-            messages.put(new JSONObject()
-                .put("role", "system")
-                .put("content", request.systemPrompt));
-        }
-        if (request.messagesJson.length() > 0) {
-            for (int i = 0; i < request.messagesJson.length(); i++) {
-                JSONObject source = request.messagesJson.optJSONObject(i);
-                if (source == null) continue;
-                String role = source.optString("role", "user");
-                if ("system".equals(role) || "developer".equals(role)) continue;
-                JSONObject message = new JSONObject();
-                message.put("role", role);
-                message.put("content", openAiContentText(source.opt("content")));
-                if (source.has("tool_calls")) message.put("tool_calls", source.opt("tool_calls"));
-                if (source.has("tool_call_id")) message.put("tool_call_id", source.optString("tool_call_id", ""));
-                if (source.has("name")) message.put("name", source.optString("name", ""));
-                messages.put(message);
-            }
-        } else {
-            for (Pair<String, String> item : mnnHistory(request)) {
-                messages.put(new JSONObject()
-                    .put("role", item.first)
-                    .put("content", item.second));
-            }
-        }
-        return messages;
-    }
-
-    @NonNull
     private String openAiContentText(@Nullable Object content) {
         if (content == null || JSONObject.NULL.equals(content)) return "";
         if (content instanceof JSONArray) {
@@ -600,6 +635,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
                         builder.append(object.optString("text", ""));
                     } else if ("image_url".equals(type) || "input_image".equals(type)) {
                         builder.append(mnnImageMarkup(object));
+                    } else if ("input_audio".equals(type) || "audio".equals(type)) {
+                        builder.append(mnnAudioMarkup(object));
                     }
                 } else if (item != null && !JSONObject.NULL.equals(item)) {
                     builder.append(String.valueOf(item));
@@ -652,6 +689,75 @@ public final class MnnTaiRuntime implements TaiRuntime {
             File dir = new File(appContext.getCacheDir(), "tai-mnn-images");
             if (!dir.isDirectory() && !dir.mkdirs()) return "";
             File file = new File(dir, "img-" + System.currentTimeMillis() + "-" + bytes.length + ".bin");
+            try (FileOutputStream out = new FileOutputStream(file)) {
+                out.write(bytes);
+            }
+            return file.getAbsolutePath();
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    /**
+     * MNN audio/omni models consume audio as inline {@code <audio>path</audio>} prompt markup.
+     * OpenAI base64 audio is materialised under the app cache; local paths and file URLs pass
+     * straight through.
+     */
+    @NonNull
+    private String mnnAudioMarkup(@NonNull JSONObject part) {
+        JSONObject inputAudio = part.optJSONObject("input_audio");
+        if (inputAudio == null) inputAudio = part.optJSONObject("audio");
+        String path = "";
+        if (inputAudio != null) {
+            String data = inputAudio.optString("data", "").trim();
+            if (!data.isEmpty()) {
+                try {
+                    int comma = data.startsWith("data:") ? data.indexOf(',') : -1;
+                    String encoded = comma >= 0 ? data.substring(comma + 1) : data;
+                    path = writeAudioCache(Base64.decode(encoded, Base64.DEFAULT), inputAudio.optString("format", "wav"));
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+            if (path.isEmpty()) path = audioPath(inputAudio.optString("url", ""), inputAudio.optString("format", "wav"));
+        }
+        if (path.isEmpty()) {
+            Object audioUrl = part.opt("audio_url");
+            String url = audioUrl instanceof JSONObject
+                ? ((JSONObject) audioUrl).optString("url", "")
+                : audioUrl == null || JSONObject.NULL.equals(audioUrl) ? "" : String.valueOf(audioUrl);
+            path = audioPath(url, part.optString("format", "wav"));
+        }
+        return path.isEmpty() ? "" : "<audio>" + path + "</audio>";
+    }
+
+    @NonNull
+    private String audioPath(@Nullable String rawUrl, @Nullable String format) {
+        String url = rawUrl == null ? "" : rawUrl.trim();
+        if (url.startsWith("/")) return url;
+        if (url.startsWith("file://")) {
+            String path = Uri.parse(url).getPath();
+            return path == null ? "" : path;
+        }
+        if (url.startsWith("data:")) {
+            int comma = url.indexOf(',');
+            if (comma >= 0) {
+                try {
+                    return writeAudioCache(Base64.decode(url.substring(comma + 1), Base64.DEFAULT), format);
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+        }
+        return "";
+    }
+
+    @NonNull
+    private String writeAudioCache(@NonNull byte[] bytes, @Nullable String format) {
+        try {
+            File dir = new File(appContext.getCacheDir(), "tai-mnn-audio");
+            if (!dir.isDirectory() && !dir.mkdirs()) return "";
+            String extension = format == null ? "wav" : format.trim().toLowerCase(Locale.ROOT);
+            if (!extension.matches("[a-z0-9]{1,8}")) extension = "wav";
+            File file = new File(dir, "audio-" + System.currentTimeMillis() + "-" + bytes.length + "." + extension);
             try (FileOutputStream out = new FileOutputStream(file)) {
                 out.write(bytes);
             }
@@ -993,8 +1099,10 @@ public final class MnnTaiRuntime implements TaiRuntime {
         if (!json.has("thread_num")) json.put("thread_num", 4);
         if (!json.has("precision")) json.put("precision", "low");
         if (!json.has("memory")) json.put("memory", "low");
-        if (!json.has("max_context_len")) json.put("max_context_len", modelSpec.endpointContextWindow);
-        else json.put("max_context_len", Math.min(json.optInt("max_context_len", modelSpec.endpointContextWindow), modelSpec.endpointContextWindow));
+        if (!json.has("max_all_tokens")) json.put("max_all_tokens", modelSpec.endpointContextWindow);
+        else json.put("max_all_tokens", Math.min(json.optInt("max_all_tokens", modelSpec.endpointContextWindow), modelSpec.endpointContextWindow));
+        json.remove("max_context_len");
+        json.put("prompt_cache", true);
         if (!json.has("max_new_tokens")) json.put("max_new_tokens", modelSpec.defaultMaxOutputTokens);
         if (!json.has("temperature")) json.put("temperature", 0.8d);
         if (!json.has("top_p")) json.put("top_p", 0.9d);
@@ -1003,11 +1111,12 @@ public final class MnnTaiRuntime implements TaiRuntime {
         if (options.threadCount != null) json.put("thread_num", Math.max(1, options.threadCount));
         if (options.precision != null) json.put("precision", mnnMode(options.precision, json.optString("precision", "low")));
         if (options.memoryMode != null) json.put("memory", mnnMode(options.memoryMode, json.optString("memory", "low")));
-        if (options.contextWindow != null) json.put("max_context_len", options.contextWindow);
+        if (options.contextWindow != null) json.put("max_all_tokens", options.contextWindow);
         if (options.maxTokens != null) json.put("max_new_tokens", options.maxTokens);
         if (options.temperature != null) json.put("temperature", options.temperature);
         if (options.topP != null) json.put("top_p", options.topP);
         if (options.topK != null) json.put("top_k", options.topK);
+        applyThinkingOverride(json, options.thinkingEnabled);
         return json.toString();
     }
 
@@ -1018,12 +1127,30 @@ public final class MnnTaiRuntime implements TaiRuntime {
         if (options.threadCount != null) json.put("thread_num", Math.max(1, options.threadCount));
         if (options.precision != null) json.put("precision", mnnMode(options.precision, "low"));
         if (options.memoryMode != null) json.put("memory", mnnMode(options.memoryMode, "low"));
-        if (options.contextWindow != null) json.put("max_context_len", options.contextWindow);
+        if (options.contextWindow != null) json.put("max_all_tokens", options.contextWindow);
         if (options.maxTokens != null) json.put("max_new_tokens", options.maxTokens);
         if (options.temperature != null) json.put("temperature", options.temperature);
         if (options.topP != null) json.put("top_p", options.topP);
         if (options.topK != null) json.put("top_k", options.topK);
+        applyThinkingOverride(json, options.thinkingEnabled);
         return json;
+    }
+
+    private void applyThinkingOverride(@NonNull JSONObject json, @Nullable Boolean thinkingEnabled) throws JSONException {
+        if (thinkingEnabled == null) return;
+        JSONObject jinja = json.optJSONObject("jinja");
+        if (jinja == null) jinja = new JSONObject();
+        JSONObject context = jinja.optJSONObject("context");
+        if (context == null) context = new JSONObject();
+        context.put("enable_thinking", thinkingEnabled);
+        jinja.put("context", context);
+        json.put("jinja", jinja);
+    }
+
+    @NonNull
+    private String cacheKey(@NonNull String value) {
+        String key = value.replaceAll("[^A-Za-z0-9._-]", "_");
+        return key.isEmpty() ? "model" : key;
     }
 
     @NonNull
@@ -1031,8 +1158,14 @@ public final class MnnTaiRuntime implements TaiRuntime {
         JSONObject json = new JSONObject();
         json.put("is_r1", modelSpec.id.toLowerCase(Locale.ROOT).contains("r1")
             || (modelSpec.architecture != null && modelSpec.architecture.toLowerCase(Locale.ROOT).contains("r1")));
-        json.put("mmap_dir", "");
+        // The native shim derives use_mmap from whether mmap_dir is non-empty and overwrites
+        // any use_mmap/tmp_path in the merged config (llm_session.cpp) — so the directory must
+        // be passed here, not in mergedConfigJson.
+        File mmapDir = new File(appContext.getCacheDir(), "tai-mnn-mmap/" + cacheKey(modelSpec.id));
+        if (!mmapDir.isDirectory()) mmapDir.mkdirs();
+        json.put("mmap_dir", mmapDir.getAbsolutePath());
         json.put("keep_history", false);
+        json.put("prompt_cache", true);
         return json.toString();
     }
 

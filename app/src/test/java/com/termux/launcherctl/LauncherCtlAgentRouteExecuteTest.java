@@ -142,7 +142,8 @@ public class LauncherCtlAgentRouteExecuteTest {
             .put("arguments", new JSONObject().put("query", "maps")));
         assertEquals(403, conn.getResponseCode());
         JSONObject response = new JSONObject(readBody(conn));
-        assertEquals("confirmation_required", response.getString("error"));
+        assertEquals("confirmation_required", response.getJSONObject("error").getString("code"));
+        assertEquals("confirmation_required", response.getJSONObject("tai").getString("error"));
         assertEquals("apps.launch", response.getString("tool"));
     }
 

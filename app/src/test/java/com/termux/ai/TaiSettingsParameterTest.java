@@ -231,13 +231,13 @@ public class TaiSettingsParameterTest {
 
     @Test
     public void parameterScreenKeys_includeBackendToPreventCrossBackendRowsColliding() {
-        assertEquals("tai_global_parameter_screen.litert_lm.max_tokens",
+        assertEquals("tai_global_parameter_screen.litert-lm.max_tokens",
             TaiParameterPreferencesFragment.parameterPreferenceKey(
                 TaiModelSpec.BACKEND_LITERT_LM, TaiSettings.FIELD_MAX_TOKENS, false));
-        assertEquals("tai_global_parameter_screen.mnn_llm.max_tokens",
+        assertEquals("tai_global_parameter_screen.mnn-llm.max_tokens",
             TaiParameterPreferencesFragment.parameterPreferenceKey(
                 TaiModelSpec.BACKEND_MNN_LLM, TaiSettings.FIELD_MAX_TOKENS, false));
-        assertEquals("tai_model_parameter_screen.mnn_llm.context_window",
+        assertEquals("tai_model_parameter_screen.mnn-llm.context_window",
             TaiParameterPreferencesFragment.parameterPreferenceKey(
                 TaiModelSpec.BACKEND_MNN_LLM, TaiSettings.FIELD_CONTEXT_WINDOW, true));
     }

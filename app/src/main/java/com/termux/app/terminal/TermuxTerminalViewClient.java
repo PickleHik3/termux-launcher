@@ -95,6 +95,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     public void onCreate() {
         onReloadProperties();
         mActivity.getTerminalView().setTextSize(mActivity.getPreferences().getFontSize());
+        mActivity.requestTerminalFlushDockGeometryUpdate();
         mActivity.getTerminalView().setKeepScreenOn(mActivity.getPreferences().shouldKeepScreenOn());
     }
 
@@ -160,6 +161,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      */
     @Override
     public void onEmulatorSet() {
+        mActivity.requestTerminalFlushDockGeometryUpdate();
         if (!mTerminalCursorBlinkerStateAlreadySet) {
             // Start terminal cursor blinking if enabled
             // We need to wait for the first session to be attached that's set in
@@ -516,6 +518,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     public void changeFontSize(boolean increase) {
         mActivity.getPreferences().changeFontSize(increase);
         mActivity.getTerminalView().setTextSize(mActivity.getPreferences().getFontSize());
+        mActivity.requestTerminalFlushDockGeometryUpdate();
     }
 
     /**

@@ -26,10 +26,10 @@ public class TaiModelCatalogTest {
             if (TaiModelSpec.BACKEND_MNN_LLM.equals(entry.backend)) mnnCount++;
         }
 
-        assertEquals(11, entries.size());
-        assertEquals(11, new HashSet<>(entries.keySet()).size());
-        assertEquals(5, liteRtCount);
-        assertEquals(6, mnnCount);
+        assertEquals(13, entries.size());
+        assertEquals(13, new HashSet<>(entries.keySet()).size());
+        assertEquals(6, liteRtCount);
+        assertEquals(7, mnnCount);
     }
 
     @Test
@@ -122,8 +122,8 @@ public class TaiModelCatalogTest {
     @Test
     public void downloadEntry_buildsCatalogRowForActiveCustomDownload() throws Exception {
         JSONObject download = new JSONObject()
-            .put("modelId", "embeddinggemma-300m")
-            .put("displayName", "EmbeddingGemma 300M")
+            .put("modelId", "custom-embedding-model")
+            .put("displayName", "Custom Embedding Model")
             .put("url", "https://huggingface.co/litert-community/embeddinggemma-300m/resolve/main/model.tflite")
             .put("path", "/models/embeddinggemma-300m/model.tflite")
             .put("status", TaiModelStore.STATE_DOWNLOADING)
@@ -135,8 +135,8 @@ public class TaiModelCatalogTest {
         TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.downloadEntry(download);
 
         assertNotNull(entry);
-        assertEquals("embeddinggemma-300m", entry.modelId);
-        assertEquals("EmbeddingGemma 300M", entry.displayName);
+        assertEquals("custom-embedding-model", entry.modelId);
+        assertEquals("Custom Embedding Model", entry.displayName);
         assertEquals("litert-community/embeddinggemma-300m", entry.repositoryId);
         assertTrue(entry.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
         assertTrue(entry.displayCapabilityTags.contains("Embeddings"));

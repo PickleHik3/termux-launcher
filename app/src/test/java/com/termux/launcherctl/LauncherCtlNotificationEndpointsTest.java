@@ -108,7 +108,8 @@ public class LauncherCtlNotificationEndpointsTest {
         HttpURLConnection conn = post("/v1/notifications/since", new JSONObject());
         assertEquals(400, conn.getResponseCode());
         JSONObject response = new JSONObject(readBody(conn));
-        assertEquals("bad_request", response.getString("error"));
+        assertEquals("bad_request", response.getJSONObject("error").getString("code"));
+        assertEquals("bad_request", response.getJSONObject("tai").getString("error"));
     }
 
     @Test
@@ -128,7 +129,8 @@ public class LauncherCtlNotificationEndpointsTest {
         HttpURLConnection conn = post("/v1/notifications/search", new JSONObject());
         assertEquals(400, conn.getResponseCode());
         JSONObject response = new JSONObject(readBody(conn));
-        assertEquals("bad_request", response.getString("error"));
+        assertEquals("bad_request", response.getJSONObject("error").getString("code"));
+        assertEquals("bad_request", response.getJSONObject("tai").getString("error"));
     }
 
     @Test

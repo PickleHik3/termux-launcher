@@ -57,8 +57,6 @@ import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.ViewParent;
 import android.view.ViewTreeObserver;
-import android.view.WindowInsets;
-import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.util.DisplayMetrics;
 import android.widget.EditText;
@@ -135,6 +133,7 @@ import androidx.core.view.WindowInsetsAnimationCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsCompat.Type;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.viewpager.widget.ViewPager;
 import java.util.ArrayList;
@@ -299,6 +298,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public boolean isToolbarHidden = false;
 
     private int mNavBarHeight;
+    private int mImeLiftPx;
 
     /** Reactive glass-plank physics for the dock (tilt, specular, accent rim glow). */
     @Nullable private DockPlankController mDockPlankController;
@@ -423,6 +423,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final int[] mTmpViewLocation = new int[2];
     private long mLastAccessoryRenderSyncUptimeMs;
     private long mLastAccessoryGeometryApplyUptimeMs;
+    private int mAppliedTerminalFlushPaddingPx;
+    private boolean mHasMeasuredTerminalFlushPadding;
     private long mDelayRootMarginAdjustmentsUntilUptimeMs;
     private boolean mImeTransitionInProgress;
     private boolean mFadeAccessoryBlurAfterImeRestore;
@@ -532,7 +534,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 if (imeAnimationRunning) {
                     mDelayRootMarginAdjustmentsUntilUptimeMs = SystemClock.uptimeMillis() + 80L;
-                    applySmoothDockImeOffset(0);
+                    applySmoothDockImeOffset(computeDockImeLiftPx(insets));
                 }
                 return insets;
             }
@@ -598,6 +600,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         content.setOnApplyWindowInsetsListener((v, insets) -> {
             WindowInsetsCompat insetsCompat = WindowInsetsCompat.toWindowInsetsCompat(insets, v);
             mNavBarHeight = insetsCompat.getInsets(Type.systemBars()).bottom;
+            mImeLiftPx = computeDockImeLiftPx(insetsCompat);
             applyTerminalOverlayInsets(insetsCompat);
             configureExtraKeysBackground();
             return insetsCompat.toWindowInsets();
@@ -608,13 +611,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (accessoryContainer != null) {
             ViewCompat.setWindowInsetsAnimationCallback(accessoryContainer, mDockImeAnimationCallback);
         }
-        if (mProperties.isUsingFullScreen()) {
-            WindowInsetsController insetsController = getWindow().getInsetsController();
-            if (insetsController != null) {
-                insetsController.hide(WindowInsets.Type.statusBars());
-                insetsController.hide(WindowInsets.Type.navigationBars());
-            }
-        }
+        applyFullscreenMode();
         // Must be done every time activity is created in order to registerForActivityResult,
         // Even if the logic of launching is based on user input.
         registerWallpaperActivityResultLaunchers();
@@ -2653,14 +2650,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyTerminalSurfaceAppearance();
     }
 
-    private void applySmoothDockImeOffset(int translationYPx) {
+    private void applySmoothDockImeOffset(int imeLiftPx) {
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
         if (accessoryContainer == null) {
             return;
         }
-        float translationY = Math.max(0, translationYPx);
+        float translationY = -Math.max(0, imeLiftPx);
         if (accessoryContainer.getTranslationY() != translationY) {
             accessoryContainer.setTranslationY(translationY);
+        }
+    }
+
+    /**
+     * IME lift for the dock, owned by insets only while system bars are hidden (fullscreen property
+     * or externally forced immersive). With bars visible, {@link TermuxActivityRootView}'s
+     * visible-frame probe already lifts the whole root above the keyboard, so applying an inset
+     * lift too would double it.
+     */
+    private int computeDockImeLiftPx(@NonNull WindowInsetsCompat insets) {
+        if (insets.isVisible(Type.navigationBars())) {
+            return 0;
+        }
+        return Math.max(0,
+            insets.getInsets(Type.ime()).bottom - insets.getInsets(Type.navigationBars()).bottom);
+    }
+
+    /** True while the dock is being lifted above the IME via insets instead of the root-view probe. */
+    public boolean isDockImeLiftActive() {
+        return mImeLiftPx > 0;
+    }
+
+    private void applyFullscreenMode() {
+        if (mProperties == null || getWindow() == null) {
+            return;
+        }
+        WindowInsetsControllerCompat insetsController = WindowCompat.getInsetsController(
+            getWindow(), getWindow().getDecorView());
+        if (mProperties.isUsingFullScreen()) {
+            insetsController.setSystemBarsBehavior(
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            insetsController.hide(Type.systemBars());
+        } else {
+            insetsController.show(Type.systemBars());
         }
     }
 
@@ -2765,7 +2796,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mTermuxService != null) {
             // Do not leave service and session clients with references to activity.
-            mTermuxService.unsetTermuxTerminalSessionClient();
+            mTermuxService.unsetTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
             mTermuxService = null;
         }
         try {
@@ -4186,16 +4217,67 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         DockLayoutMetrics dockMetrics = buildDockLayoutMetrics(0);
         applyDockLayoutMetrics(dockMetrics);
-        int combinedHeight = dockMetrics.combinedHeight(toolbarHeightPx);
+        int accessoryBottomMarginPx = resolveAccessoryStackBottomMarginPx();
+        int dockContentHeightPx = dockMetrics.combinedHeight(toolbarHeightPx);
+        int terminalFlushPaddingPx = resolveTerminalFlushDockPaddingPx(dockContentHeightPx, accessoryBottomMarginPx);
+        mAppliedTerminalFlushPaddingPx = terminalFlushPaddingPx;
+        int combinedHeight = dockContentHeightPx + terminalFlushPaddingPx;
+        // Split the absorbed remainder around the dock rows so they stay visually centered in the
+        // taller glass instead of hugging its bottom edge.
+        int flushBottomInsetPx = terminalFlushPaddingPx / 2;
+        if (accessoryStackContainer.getPaddingBottom() != flushBottomInsetPx) {
+            accessoryStackContainer.setPadding(
+                accessoryStackContainer.getPaddingLeft(),
+                accessoryStackContainer.getPaddingTop(),
+                accessoryStackContainer.getPaddingRight(),
+                flushBottomInsetPx);
+        }
         boolean accessoryHeightChanged = updateAccessoryStackContainerHeight(accessoryStackContainer, combinedHeight);
         boolean accessoryMarginChanged = updateAccessoryStackContainerBottomMargin(
             accessoryStackContainer,
-            resolveAccessoryStackBottomMarginPx()
+            accessoryBottomMarginPx
         );
         if (requestTerminalResize && (accessoryHeightChanged || accessoryMarginChanged) && mTerminalView != null) {
             mTerminalView.post(mTerminalView::updateSize);
         }
         scheduleAccessoryRenderSync("setTerminalToolbarHeight");
+    }
+
+    private int resolveTerminalFlushDockPaddingPx(int dockContentHeightPx, int accessoryBottomMarginPx) {
+        if (mPreferences == null || !mPreferences.isTerminalFlushDockEnabled())
+            return 0;
+        if (mTerminalView == null || mTerminalView.mRenderer == null
+            || mTerminalView.getWidth() <= 0 || mTerminalView.getHeight() <= 0)
+            return mAppliedTerminalFlushPaddingPx;
+        int fontLineSpacingPx = mTerminalView.mRenderer.getFontLineSpacing();
+        if (fontLineSpacingPx <= 0)
+            return mAppliedTerminalFlushPaddingPx;
+        View rootRelativeLayout = findViewById(R.id.activity_termux_root_relative_layout);
+        if (rootRelativeLayout == null || rootRelativeLayout.getHeight() <= 0)
+            return mAppliedTerminalFlushPaddingPx;
+        // Structural base: the height the terminal will settle at once the dock content (without
+        // any flush padding) is laid out. Deliberately NOT derived from the terminal's current
+        // height — mid-relayout passes (e.g. multi-row extra keys toggling with the IME) would
+        // feed the previously applied padding back in and make the result oscillate.
+        rootRelativeLayout.getLocationInWindow(mTmpViewLocation);
+        int accessoryBottomWindowY = mTmpViewLocation[1] + rootRelativeLayout.getHeight() - accessoryBottomMarginPx;
+        mTerminalView.getLocationInWindow(mTmpViewLocation);
+        int terminalTopWindowY = mTmpViewLocation[1];
+        int baseTerminalHeightPx = accessoryBottomWindowY - dockContentHeightPx - terminalTopWindowY;
+        if (baseTerminalHeightPx <= 0)
+            return mAppliedTerminalFlushPaddingPx;
+        int availableTerminalHeightPx = Math.max(0,
+            baseTerminalHeightPx - mTerminalView.mRenderer.getFontLineSpacingAndAscent());
+        return availableTerminalHeightPx % fontLineSpacingPx;
+    }
+
+    public void requestTerminalFlushDockGeometryUpdate() {
+        if (mTerminalView == null)
+            return;
+        mTerminalView.post(() -> {
+            if (!isFinishing() && !isDestroyed())
+                applyAccessoryGeometryIfNeeded(true, "terminal:metrics");
+        });
     }
 
     private boolean updateAccessoryStackContainerHeight(View view, int height) {
@@ -4225,9 +4307,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The capsule floats, so it keeps its bottom gap even when the keyboard is up — otherwise it
         // sits flush against the keyboard. Non-capsule styles stay flush.
         if (!isValarieDockStyle()) {
-            return 0;
+            return mImeLiftPx;
         }
-        return resolveDockCapsuleBottomGapPx();
+        return mImeLiftPx + resolveDockCapsuleBottomGapPx();
     }
 
     // Kept for test compatibility and to preserve existing RelativeLayout params in-place.
@@ -5244,6 +5326,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            applyFullscreenMode();
+        }
         if (!hasFocus || mIsInvalidState || !mIsVisible) {
             return;
         }
@@ -5531,9 +5616,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (width == oldWidth && height == oldHeight) {
                 return;
             }
+            if (v == mTerminalView) {
+                // Never mutate accessory layout params from inside this layout pass.
+                v.post(() -> {
+                    if (!isFinishing() && !isDestroyed())
+                        applyAccessoryGeometryIfNeeded(true, "terminal:layout");
+                });
+                return;
+            }
             scheduleAccessoryRenderSync("accessory:layout");
         };
         int[] watchIds = {
+            R.id.terminal_view,
             R.id.accessory_stack_container,
             R.id.apps_bar_viewpager,
             R.id.apps_bar_indicator_band,
@@ -5553,6 +5647,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         int[] watchIds = {
+            R.id.terminal_view,
             R.id.accessory_stack_container,
             R.id.apps_bar_viewpager,
             R.id.apps_bar_indicator_band,
@@ -5842,6 +5937,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Logger.logDebug(LOG_TAG, "Recreating activity");
             TermuxActivity.this.recreate();
         }
+        applyFullscreenMode();
     }
 
     public static void startTermuxActivity(@NonNull final Context context) {

@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.27-vaj
+
+VAJ edition (`io.vaj.tl`), pinned to the verified aarch64 APT bootstrap and the signed `https://repo.pathayam.xyz stable main` repository.
+
+### Changed
+
+- Added **Fullscreen** toggle in Settings → Termux → Terminal View.
+- Terminal receive buffer increased from 4 KB to 64 KB for smoother, faster output on heavy streams (build logs, TUIs, AI token streaming).
+
+### Fixed
+
+- Fixed a rare terminal "bounce" where the view could oscillate during relayout (e.g. while running full-screen CLIs); terminal geometry is now derived structurally instead of from its own shifting height.
+- Fixed a fullscreen-mode crash on Android 8-10, made the fullscreen toggle apply live, and stabilized the dock lift over the soft keyboard.
+- Fixed a terminal freeze that could occur after relaunching the launcher. (all hail Fable, this demon has been a bug since the inception)
+
+### Termux AI
+
+- Upgraded the LiteRT runtime to 0.14.0 and rebuilt the MNN native libraries with embedding support.
+- Fixed a LiteRT generation deadlock and corrected MNN memory-mapping for more stable on-device inference.
+- Broader OpenAI/Ollama API conformance: token-usage accounting, error shapes, and stop-sequence handling.
+- Audit-driven correctness fixes across both backends versus the official specs; retained automatic tool use for mobile-action specialist models.
+
 ## 0.2.26-vaj
 
 VAJ edition (`io.vaj.tl`), pinned to the verified aarch64 APT bootstrap and the signed `https://repo.pathayam.xyz stable main` repository.
