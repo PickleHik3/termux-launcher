@@ -131,6 +131,19 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
         if (mActivity == null || !mActivity.isVisible()) return;
         if (mActivity.shouldDelayRootMarginAdjustments()) return;
 
+        // While system bars are hidden the visible-frame probe below is unreliable and the dock is
+        // lifted above the IME via insets instead; keep the root margin at 0 so both mechanisms
+        // never stack.
+        if (mActivity.isDockImeLiftActive()) {
+            FrameLayout.LayoutParams liftParams = (FrameLayout.LayoutParams) getLayoutParams();
+            if (liftParams.bottomMargin != 0) {
+                commitBottomMargin(liftParams, 0);
+            }
+            marginBottom = 0;
+            lastMarginBottom = 0;
+            return;
+        }
+
         View bottomSpaceView = mActivity.getTermuxActivityBottomSpaceView();
         if (bottomSpaceView == null) return;
 

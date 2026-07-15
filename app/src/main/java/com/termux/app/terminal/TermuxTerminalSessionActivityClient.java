@@ -141,7 +141,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (mTerminalScreenUpdatePending)
             return;
         mTerminalScreenUpdatePending = true;
-        mActivity.getTerminalView().post(() -> {
+        mUiHandler.post(() -> {
             mTerminalScreenUpdatePending = false;
             if (!mActivity.isVisible())
                 return;
@@ -540,6 +540,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             final Typeface newTypeface = (fontFile.exists() && fontFile.length() > 0) ? Typeface.createFromFile(fontFile) : Typeface.MONOSPACE;
             final Typeface newItalicTypeface = (italicFontFile.exists() && italicFontFile.length() > 0) ? Typeface.createFromFile(italicFontFile) : newTypeface;
             mActivity.getTerminalView().setTypeface(newTypeface, newItalicTypeface);
+            mActivity.requestTerminalFlushDockGeometryUpdate();
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in checkForFontAndColors()", e);
         }

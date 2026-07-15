@@ -95,7 +95,11 @@ public class LauncherCtlApiServerLanSettingsTest {
         String response = output.toString(StandardCharsets.UTF_8.name());
 
         assertTrue(response.startsWith("HTTP/1.1 401 Unauthorized"));
-        assertTrue(response.contains("\"error\":\"unauthorized\""));
+        assertTrue(response.contains("\"code\":\"unauthorized\""));
+        String body = response.substring(response.indexOf("\r\n\r\n") + 4);
+        JSONObject json = new JSONObject(body);
+        assertEquals("unauthorized", json.getJSONObject("error").getString("code"));
+        assertEquals("unauthorized", json.getJSONObject("tai").getString("error"));
         assertFalse(response.toLowerCase().contains("access-control-allow-origin"));
         assertFalse(response.toLowerCase().contains("access-control-allow-headers"));
         assertFalse(response.toLowerCase().contains("access-control-allow-methods"));

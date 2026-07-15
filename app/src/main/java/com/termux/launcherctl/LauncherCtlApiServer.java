@@ -277,12 +277,16 @@ public class LauncherCtlApiServer {
             }
 
             if (!isAuthorized(request.headers)) {
-                writeResponse(output, unauthorizedResponse());
+                writeResponse(output, request.path.startsWith("/api/")
+                    ? ollamaUnauthorizedResponse() : unauthorizedResponse());
                 return;
             }
 
             if (!allowRequest(request)) {
-                writeJsonResponse(output, 429, jsonError("rate_limited", "Too many requests; retry later").toString());
+                JSONObject rateLimitError = jsonError("rate_limited", "Too many requests; retry later");
+                rateLimitError.put("_statusCode", 429);
+                writeResponse(output, request.path.startsWith("/api/")
+                    ? ollamaJsonResponse(rateLimitError) : jsonResponse(rateLimitError));
                 return;
             }
 
@@ -297,39 +301,39 @@ public class LauncherCtlApiServer {
     private HttpResponse routeRequest(Context context, HttpRequest request) {
         try {
             if ("GET".equals(request.method) && "/api/version".equals(request.path)) {
-                return jsonResponse(new JSONObject().put("version", TaiApiCompatibility.OLLAMA_VERSION));
+                return ollamaJsonResponse(new JSONObject().put("version", TaiApiCompatibility.OLLAMA_VERSION));
             } else if ("GET".equals(request.method) && "/api/tags".equals(request.path)) {
                 TaiManager manager = TaiManager.getInstance(context);
-                return jsonResponse(TaiApiCompatibility.ollamaTags(manager.openAiModels()));
+                return ollamaJsonResponse(TaiApiCompatibility.ollamaTags(manager.openAiModels()));
             } else if ("POST".equals(request.method) && "/api/show".equals(request.path)) {
                 TaiManager manager = TaiManager.getInstance(context);
-                return jsonResponse(TaiApiCompatibility.ollamaShow(manager.openAiModels(), request.body));
+                return ollamaJsonResponse(TaiApiCompatibility.ollamaShow(manager.openAiModels(), request.body));
             } else if ("GET".equals(request.method) && "/api/ps".equals(request.path)) {
                 TaiManager manager = TaiManager.getInstance(context);
-                return jsonResponse(TaiApiCompatibility.ollamaPs(manager.openAiModels(), manager.getRuntimeState()));
+                return ollamaJsonResponse(TaiApiCompatibility.ollamaPs(manager.openAiModels(), manager.getRuntimeState()));
             } else if ("POST".equals(request.method) && "/api/chat".equals(request.path)) {
                 TaiManager manager = TaiManager.getInstance(context);
                 JSONObject chatRequest = TaiApiCompatibility.ollamaChatRequest(request.body);
                 if (chatRequest.optBoolean("stream", true)) {
                     return ndjsonResponse(output -> writeOllamaChatStream(context, chatRequest.toString(), output, false));
                 }
-                return jsonResponse(TaiApiCompatibility.ollamaChatFromOpenAi(manager.openAiChatCompletions(chatRequest.toString())));
+                return ollamaJsonResponse(TaiApiCompatibility.ollamaChatFromOpenAi(manager.openAiChatCompletions(chatRequest.toString())));
             } else if ("POST".equals(request.method) && "/api/generate".equals(request.path)) {
                 TaiManager manager = TaiManager.getInstance(context);
                 JSONObject chatRequest = TaiApiCompatibility.ollamaGenerateRequest(request.body);
                 if (chatRequest.optBoolean("stream", true)) {
                     return ndjsonResponse(output -> writeOllamaChatStream(context, chatRequest.toString(), output, true));
                 }
-                return jsonResponse(TaiApiCompatibility.ollamaGenerateFromOpenAi(manager.openAiChatCompletions(chatRequest.toString())));
+                return ollamaJsonResponse(TaiApiCompatibility.ollamaGenerateFromOpenAi(manager.openAiChatCompletions(chatRequest.toString())));
             } else if ("POST".equals(request.method) && "/api/embed".equals(request.path)) {
                 TaiManager manager = TaiManager.getInstance(context);
                 JSONObject embedRequest = TaiApiCompatibility.ollamaEmbedRequest(request.body);
-                return jsonResponse(TaiApiCompatibility.ollamaEmbedFromOpenAi(
+                return ollamaJsonResponse(TaiApiCompatibility.ollamaEmbedFromOpenAi(
                     manager.embeddings(embedRequest.toString()), embedRequest.optString("model", "")));
             } else if ("POST".equals(request.method) && ("/api/pull".equals(request.path)
                     || "/api/create".equals(request.path) || "/api/push".equals(request.path)
                     || "/api/copy".equals(request.path) || "/api/delete".equals(request.path))) {
-                return jsonResponse(TaiApiCompatibility.ollamaError(501, "unsupported_registry_operation",
+                return ollamaJsonResponse(TaiApiCompatibility.ollamaError(501, "unsupported_registry_operation",
                     "Ollama registry operations do not map to LiteRT-LM/MNN packages; use the Termux:GUI model market or import flow."));
             } else if ("GET".equals(request.method) && "/v1/status".equals(request.path)) {
                 return maybeTextResponse(request, "launcher-status", buildStatus());
@@ -435,11 +439,12 @@ public class LauncherCtlApiServer {
 
             JSONObject notFound = jsonError("not_found", "Unknown endpoint");
             notFound.put("_statusCode", 404);
-            return jsonResponse(notFound);
+            return request.path.startsWith("/api/") ? ollamaJsonResponse(notFound) : jsonResponse(notFound);
         } catch (Exception e) {
             JSONObject error = jsonError("internal_error", e.getMessage());
             try {
                 error.put("_statusCode", 500);
+                if (request.path.startsWith("/api/")) return ollamaJsonResponse(error);
             } catch (JSONException ignored) {
             }
             return jsonResponse(error);
@@ -1211,6 +1216,7 @@ public class LauncherCtlApiServer {
             error.put("ok", false);
             error.put("error", code);
             error.put("message", message == null ? "" : message);
+            withOpenAiErrorEnvelope(error);
         } catch (JSONException ignored) {
         }
         return error;
@@ -1222,9 +1228,72 @@ public class LauncherCtlApiServer {
             error.put("ok", false);
             error.put("error", "unauthorized");
             error.put("message", "Missing or invalid token");
+            withOpenAiErrorEnvelope(error, 401);
         } catch (JSONException ignored) {
         }
         return new HttpResponse(401, "application/json; charset=utf-8", error.toString().getBytes(StandardCharsets.UTF_8), null);
+    }
+
+    static HttpResponse ollamaUnauthorizedResponse() {
+        JSONObject error = new JSONObject();
+        try {
+            error.put("error", "Missing or invalid token");
+            error.put("_statusCode", 401);
+            return ollamaJsonResponse(error);
+        } catch (JSONException e) {
+            return new HttpResponse(401, "application/json; charset=utf-8",
+                "{\"error\":\"Missing or invalid token\"}".getBytes(StandardCharsets.UTF_8), null);
+        }
+    }
+
+    /**
+     * Adds the OpenAI SDK error object while retaining the legacy flat envelope under {@code tai}
+     * and as top-level compatibility aliases. A JSON key cannot simultaneously be a string and an
+     * object, so the former flat {@code error} value is also exposed as {@code code/error_code}.
+     */
+    @NonNull
+    static JSONObject withOpenAiErrorEnvelope(@NonNull JSONObject response) throws JSONException {
+        return withOpenAiErrorEnvelope(response, response.optInt("_statusCode", 400));
+    }
+
+    @NonNull
+    static JSONObject withOpenAiErrorEnvelope(@NonNull JSONObject response, int statusCode) throws JSONException {
+        Object existing = response.opt("error");
+        if (existing instanceof JSONObject) {
+            JSONObject nested = (JSONObject) existing;
+            String message = response.optString("message", nested.optString("message", "Request failed"));
+            String code = nested.optString("code", response.optString("code", "api_error"));
+            response.put("ok", response.optBoolean("ok", false));
+            response.put("message", message);
+            response.put("code", code);
+            response.put("error_code", code);
+            nested.put("type", openAiErrorType(statusCode));
+            return response;
+        }
+
+        String code = existing == null || JSONObject.NULL.equals(existing)
+            ? response.optString("code", "api_error") : String.valueOf(existing);
+        String message = response.optString("message", "Request failed");
+        JSONObject legacy = new JSONObject(response.toString());
+        JSONObject nested = new JSONObject();
+        nested.put("message", message);
+        nested.put("type", openAiErrorType(statusCode));
+        nested.put("code", code);
+        response.put("ok", false);
+        response.put("message", message);
+        response.put("code", code);
+        response.put("error_code", code);
+        response.put("error", nested);
+        if (!response.has("tai")) response.put("tai", legacy);
+        return response;
+    }
+
+    private static String openAiErrorType(int statusCode) {
+        if (statusCode == 401) return "authentication_error";
+        if (statusCode == 403) return "permission_error";
+        if (statusCode == 429) return "rate_limit_error";
+        if (statusCode >= 500) return "api_error";
+        return "invalid_request_error";
     }
 
     private void initializeRateLimiters() {
@@ -2031,6 +2100,24 @@ public class LauncherCtlApiServer {
     private HttpResponse jsonResponse(JSONObject response) {
         int statusCode = response.optInt("_statusCode", 200);
         response.remove("_statusCode");
+        if (statusCode >= 400 || (!response.optBoolean("ok", true) && response.has("error"))) {
+            try {
+                withOpenAiErrorEnvelope(response, statusCode);
+            } catch (JSONException ignored) {
+            }
+        }
+        return new HttpResponse(statusCode, "application/json; charset=utf-8",
+            response.toString().getBytes(StandardCharsets.UTF_8), null);
+    }
+
+    static HttpResponse ollamaJsonResponse(JSONObject response) throws JSONException {
+        int statusCode = response.optInt("_statusCode", 200);
+        response.remove("_statusCode");
+        Object error = response.opt("error");
+        if (error instanceof JSONObject) {
+            JSONObject nested = (JSONObject) error;
+            response.put("error", nested.optString("message", "Request failed"));
+        }
         return new HttpResponse(statusCode, "application/json; charset=utf-8",
             response.toString().getBytes(StandardCharsets.UTF_8), null);
     }

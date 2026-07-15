@@ -26,6 +26,8 @@ public final class TaiChatRequest {
     public final JSONArray toolDefinitions;
     /** Protocol-neutral tool selection policy (none, auto, required, or a named function). */
     public final Object toolChoice;
+    /** OpenAI-compatible terminal sequences applied by runtimes before tool parsing and usage. */
+    public final List<String> stopSequences;
 
     /** @deprecated Use {@link #messagesJson}. Kept for source compatibility with older plugins. */
     @Deprecated public final JSONArray openAiMessages;
@@ -54,6 +56,21 @@ public final class TaiChatRequest {
         @Nullable JSONArray toolDefinitions,
         @Nullable Object toolChoice
     ) {
+        this(systemPrompt, initialMessages, message, tools, reusableConversation, messagesJson,
+            toolDefinitions, toolChoice, Collections.emptyList());
+    }
+
+    public TaiChatRequest(
+        @NonNull String systemPrompt,
+        @NonNull List<Message> initialMessages,
+        @NonNull Message message,
+        @NonNull List<ToolProvider> tools,
+        boolean reusableConversation,
+        @NonNull JSONArray messagesJson,
+        @Nullable JSONArray toolDefinitions,
+        @Nullable Object toolChoice,
+        @NonNull List<String> stopSequences
+    ) {
         this.systemPrompt = systemPrompt;
         this.initialMessages = Collections.unmodifiableList(new ArrayList<>(initialMessages));
         this.message = message;
@@ -62,6 +79,7 @@ public final class TaiChatRequest {
         this.messagesJson = copyArray(messagesJson);
         this.toolDefinitions = toolDefinitions == null ? new JSONArray() : copyArray(toolDefinitions);
         this.toolChoice = copyJsonValue(toolChoice);
+        this.stopSequences = Collections.unmodifiableList(new ArrayList<>(stopSequences));
         this.openAiMessages = this.messagesJson;
         this.openAiTools = this.toolDefinitions;
         this.openAiToolChoice = this.toolChoice;

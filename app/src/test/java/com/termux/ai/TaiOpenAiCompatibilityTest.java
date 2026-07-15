@@ -104,7 +104,7 @@ public class TaiOpenAiCompatibilityTest {
     }
 
     @Test
-    public void openAiModels_marksMnnToolUseAsPromptFallbackAllowsImageFiltersAudioVideo() throws Exception {
+    public void openAiModels_marksMnnToolUseAsPromptFallbackAllowsImageAudioFiltersVideo() throws Exception {
         JSONObject taiModels = new JSONObject()
             .put("ok", true)
             .put("models", new JSONArray().put(new JSONObject()
@@ -123,9 +123,9 @@ public class TaiOpenAiCompatibilityTest {
         JSONObject model = response.getJSONArray("data").getJSONObject(0);
         assertTrue(contains(capabilities, TaiModelSpec.CAPABILITY_TEXT_CHAT));
         assertTrue(contains(capabilities, TaiModelSpec.CAPABILITY_TOOL_USE));
-        // MNN VL models advertise image; audio/video have no MNN runtime path so they stay filtered.
+        // MNN multimodal models accept image/audio path markup; video remains unsupported.
         assertTrue(contains(capabilities, TaiModelSpec.CAPABILITY_IMAGE_INPUT));
-        assertFalse(contains(capabilities, TaiModelSpec.CAPABILITY_AUDIO_INPUT));
+        assertTrue(contains(capabilities, TaiModelSpec.CAPABILITY_AUDIO_INPUT));
         assertFalse(contains(capabilities, TaiModelSpec.CAPABILITY_VIDEO_INPUT));
         assertEquals(TaiModelSpec.TOOL_MODE_PROMPT_FALLBACK, model.getString("_tool_mode"));
     }
@@ -233,6 +233,20 @@ public class TaiOpenAiCompatibilityTest {
     }
 
     @Test
+    public void liteRtVisionBackend_autoUsesGpuOnlyWhenEligibleAndNotKnownFailed() {
+        assertTrue(LiteRtTaiRuntime.useGpuVision(null, true, true, false));
+        assertFalse(LiteRtTaiRuntime.useGpuVision(null, false, true, false));
+        assertFalse(LiteRtTaiRuntime.useGpuVision(null, true, false, false));
+        assertFalse(LiteRtTaiRuntime.useGpuVision(null, true, true, true));
+    }
+
+    @Test
+    public void liteRtVisionBackend_honorsExplicitAccelerator() {
+        assertTrue(LiteRtTaiRuntime.useGpuVision("gpu", false, false, true));
+        assertFalse(LiteRtTaiRuntime.useGpuVision("cpu", true, true, false));
+    }
+
+    @Test
     public void messageContentToContents_acceptsImageForMnnVlModel() throws Exception {
         TaiModelSpec spec = spec("qwen-vl-mnn", TaiModelSpec.BACKEND_MNN_LLM, "image_input");
         assertTrue(spec.capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT));
@@ -265,7 +279,7 @@ public class TaiOpenAiCompatibilityTest {
     }
 
     @Test
-    public void endpointCapabilities_embeddingOnlyDoesNotBecomeChatAndMnnDoesNotClaimEmbeddings() {
+    public void endpointCapabilities_embeddingOnlyDoesNotBecomeChat() {
         LinkedHashSet<String> declared = new LinkedHashSet<>();
         declared.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
 
@@ -275,7 +289,7 @@ public class TaiOpenAiCompatibilityTest {
             "qwen3-embedding", TaiModelSpec.BACKEND_MNN_LLM, TaiModelSpec.FORMAT_MNN, declared, "/models/config.json");
 
         assertTrue(liteRt.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
-        assertFalse(mnn.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
+        assertTrue(mnn.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
         assertFalse(liteRt.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
         assertFalse(mnn.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
     }
@@ -366,6 +380,42 @@ public class TaiOpenAiCompatibilityTest {
         assertFalse(TaiManager.omitAutomaticToolsForCompatibility(reliableNative,
             toolSpec("native-agent", 16384, true, TaiModelSpec.TOOL_MODE_NATIVE)));
         assertTrue(reliableNative.has("tools"));
+
+        LinkedHashSet<String> specialistCapabilities = new LinkedHashSet<>();
+        specialistCapabilities.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);
+        specialistCapabilities.add(TaiModelSpec.CAPABILITY_TOOL_USE);
+        specialistCapabilities.add(TaiModelSpec.CAPABILITY_MOBILE_ACTIONS);
+        TaiModelSpec shortNativeSpecialist = new TaiModelSpec(
+            TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M,
+            "FunctionGemma",
+            "test",
+            "test",
+            "/models/model.litertlm",
+            "test",
+            0L,
+            specialistCapabilities,
+            false,
+            null,
+            TaiModelSpec.BACKEND_LITERT_LM,
+            TaiModelSpec.FORMAT_LITERTLM,
+            null,
+            null,
+            0,
+            0,
+            0,
+            0,
+            null,
+            null,
+            null
+        );
+        assertTrue(shortNativeSpecialist.capabilities.contains(TaiModelSpec.CAPABILITY_TOOL_USE));
+        assertTrue(shortNativeSpecialist.capabilities.contains(TaiModelSpec.CAPABILITY_MOBILE_ACTIONS));
+        assertEquals(TaiModelSpec.TOOL_MODE_NATIVE, shortNativeSpecialist.toolMode);
+        assertEquals(1024, shortNativeSpecialist.endpointContextWindow);
+
+        JSONObject shortSpecialist = new JSONObject(tools.toString());
+        assertFalse(TaiManager.omitAutomaticToolsForCompatibility(shortSpecialist, shortNativeSpecialist));
+        assertTrue(shortSpecialist.has("tools"));
     }
 
     @Test
@@ -377,6 +427,126 @@ public class TaiOpenAiCompatibilityTest {
         assertFalse(TaiManager.omitAutomaticToolsForCompatibility(request,
             toolSpec("phi", 4096, false, null)));
         assertTrue(request.has("tools"));
+    }
+
+    @Test
+    public void nonStreamUsage_hasRequiredIntegerShapeAndUsesRuntimeCounts() throws Exception {
+        JSONObject runtime = new JSONObject().put("usage", new JSONObject()
+            .put("prompt_tokens", 12)
+            .put("completion_tokens", 7)
+            .put("total_tokens", 999));
+
+        JSONObject response = new JSONObject().put("usage", TaiManager.openAiUsage(runtime, "ignored", "ignored"));
+        JSONObject usage = response.getJSONObject("usage");
+
+        assertEquals(12, usage.getInt("prompt_tokens"));
+        assertEquals(7, usage.getInt("completion_tokens"));
+        assertEquals(19, usage.getInt("total_tokens"));
+    }
+
+    @Test
+    public void usageFallback_isPresentAndClearlyMarkedAsEstimated() throws Exception {
+        JSONObject runtime = new JSONObject();
+
+        JSONObject usage = TaiManager.openAiUsage(runtime, "12345678", "1234");
+
+        assertEquals(2, usage.getInt("prompt_tokens"));
+        assertEquals(1, usage.getInt("completion_tokens"));
+        assertEquals(3, usage.getInt("total_tokens"));
+        assertTrue(runtime.getBoolean("usageEstimated"));
+        assertEquals("characters_divided_by_4", runtime.getString("usageSource"));
+    }
+
+    @Test
+    public void usageFallback_estimatesOnlyMissingRuntimeCount() throws Exception {
+        JSONObject runtime = new JSONObject().put("usage", new JSONObject()
+            .put("prompt_tokens", 12));
+
+        JSONObject usage = TaiManager.openAiUsage(runtime, "ignored", "1234");
+
+        assertEquals(12, usage.getInt("prompt_tokens"));
+        assertEquals(1, usage.getInt("completion_tokens"));
+        assertTrue(runtime.getBoolean("usageEstimated"));
+    }
+
+    @Test
+    public void includeUsageChunk_hasEmptyChoicesAndIsTerminalMetadataOnly() throws Exception {
+        JSONObject request = new JSONObject().put("stream", true)
+            .put("stream_options", new JSONObject().put("include_usage", true));
+        JSONObject usage = new JSONObject().put("prompt_tokens", 2)
+            .put("completion_tokens", 3).put("total_tokens", 5);
+
+        JSONObject chunk = TaiManager.openAiUsageChunk(
+            "chatcmpl-test", 123L, "local", "chat.completion.chunk", usage);
+
+        assertTrue(TaiManager.includeStreamUsage(request));
+        assertEquals(0, chunk.getJSONArray("choices").length());
+        assertEquals(usage.toString(), chunk.getJSONObject("usage").toString());
+    }
+
+    @Test
+    public void openAiErrorEnvelope_preservesLegacySourceAndAddsNested400Error() throws Exception {
+        JSONObject source = new JSONObject().put("ok", false).put("error", "bad_request")
+            .put("message", "Missing messages").put("_statusCode", 400);
+
+        JSONObject response = TaiManager.openAiError(source);
+
+        assertEquals(400, response.getInt("_statusCode"));
+        assertEquals("bad_request", response.getJSONObject("error").getString("code"));
+        assertEquals("Missing messages", response.getJSONObject("error").getString("message"));
+        assertEquals("bad_request", response.getJSONObject("tai").getString("error"));
+        assertFalse(response.getBoolean("ok"));
+    }
+
+    @Test
+    public void openAiErrorEnvelope_usesNestedRuntimeCode() throws Exception {
+        JSONObject source = new JSONObject().put("ok", false)
+            .put("error", new JSONObject().put("code", "model_load_failed").put("message", "Failed"))
+            .put("message", "Failed").put("_statusCode", 500);
+
+        JSONObject response = TaiManager.openAiError(source);
+
+        assertEquals("model_load_failed", response.getJSONObject("error").getString("code"));
+    }
+
+    @Test
+    public void nonStreamStopSuppressesToolCalls() throws Exception {
+        JSONArray calls = new JSONArray().put(new JSONObject().put("id", "call-1"));
+        JSONObject runtime = new JSONObject().put("response", "answer STOP tool-json")
+            .put("toolCalls", calls).put("finishReason", "tool_calls");
+        JSONObject choice = new JSONObject();
+
+        TaiManager.populateOpenAiChatChoice(choice, runtime, Arrays.asList("STOP"));
+
+        assertEquals("stop", choice.getString("finish_reason"));
+        assertEquals("answer ", choice.getJSONObject("message").getString("content"));
+        assertFalse(choice.getJSONObject("message").has("tool_calls"));
+    }
+
+    @Test
+    public void stopSequences_truncateAtEarliestMatchWithoutIncludingStopText() throws Exception {
+        List<String> stops = OpenAiStopSequences.fromRequest(new JSONObject()
+            .put("stop", new JSONArray().put("END").put("STOP")));
+
+        OpenAiStopSequences.Match match = OpenAiStopSequences.truncate("answer STOP ignored END", stops);
+
+        assertTrue(match.stopped);
+        assertEquals("answer ", match.text);
+    }
+
+    @Test
+    public void stopSequences_detectMatchSplitAcrossStreamingChunks() throws Exception {
+        List<String> stops = OpenAiStopSequences.fromRequest(new JSONObject().put("stop", "<END>"));
+        OpenAiStopSequences.StreamMatcher matcher = new OpenAiStopSequences.StreamMatcher(stops);
+        StringBuilder emitted = new StringBuilder();
+
+        emitted.append(matcher.append("hello <EN"));
+        assertFalse(matcher.isStopped());
+        emitted.append(matcher.append("D>discarded"));
+
+        assertTrue(matcher.isStopped());
+        assertEquals("hello ", emitted.toString());
+        assertEquals("", matcher.finish());
     }
 
     private static TaiModelSpec toolSpec(String id, int context, boolean tools, String toolMode) {

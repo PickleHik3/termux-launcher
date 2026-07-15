@@ -2,7 +2,7 @@ package com.termux.ai;
 
 import android.content.Context;
 import android.net.Uri;
-import android.util.Base64;
+import java.util.Base64;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -446,7 +446,15 @@ public final class TaiManager {
         if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_OPENAI_CHAT, body);
         JSONObject request = parseBody(body);
         JSONArray messages = request.optJSONArray("messages");
-        if (messages == null || messages.length() == 0) return error(400, "bad_request", "Missing messages");
+        if (messages == null || messages.length() == 0) {
+            return openAiError(error(400, "bad_request", "Missing messages"));
+        }
+        List<String> stopSequences;
+        try {
+            stopSequences = OpenAiStopSequences.fromRequest(request);
+        } catch (JSONException e) {
+            return openAiError(error(400, "invalid_stop", e.getMessage()));
+        }
 
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(modelId);
@@ -484,19 +492,32 @@ public final class TaiManager {
         JSONArray choices = new JSONArray();
         JSONObject choice = new JSONObject();
         choice.put("index", 0);
-        JSONArray toolCalls = chat.optJSONArray("toolCalls");
-        boolean hasToolCalls = toolCalls != null && toolCalls.length() > 0;
-        choice.put("finish_reason", hasToolCalls ? "tool_calls" : "stop");
-        JSONObject message = new JSONObject();
-        message.put("role", "assistant");
-        message.put("content", hasToolCalls && chat.optString("response", "").isEmpty()
-            ? JSONObject.NULL : chat.optString("response", ""));
-        if (hasToolCalls) message.put("tool_calls", toolCalls);
-        choice.put("message", message);
+        String rawResponse = chat.optString("response", "");
+        populateOpenAiChatChoice(choice, chat, stopSequences);
         choices.put(choice);
         response.put("choices", choices);
+        response.put("usage", openAiUsage(chat, messages.toString(), rawResponse));
         response.put("tai", chat);
         return response;
+    }
+
+    static void populateOpenAiChatChoice(
+        @NonNull JSONObject choice,
+        @NonNull JSONObject chat,
+        @NonNull List<String> stopSequences
+    ) throws JSONException {
+        JSONArray toolCalls = chat.optJSONArray("toolCalls");
+        OpenAiStopSequences.Match stopMatch = OpenAiStopSequences.truncate(
+            chat.optString("response", ""), stopSequences);
+        boolean hasToolCalls = !stopMatch.stopped && toolCalls != null && toolCalls.length() > 0;
+        choice.put("finish_reason", stopMatch.stopped ? "stop" : chat.optString("finishReason",
+            hasToolCalls ? "tool_calls" : "stop"));
+        JSONObject message = new JSONObject();
+        message.put("role", "assistant");
+        message.put("content", hasToolCalls && stopMatch.text.isEmpty()
+            ? JSONObject.NULL : stopMatch.text);
+        if (hasToolCalls) message.put("tool_calls", toolCalls);
+        choice.put("message", message);
     }
 
     @NonNull
@@ -505,6 +526,12 @@ public final class TaiManager {
         JSONObject request = parseBody(body);
         String prompt = promptFromCompletionRequest(request);
         if (prompt.trim().isEmpty()) return openAiError(error(400, "bad_request", "Missing prompt"));
+        List<String> stopSequences;
+        try {
+            stopSequences = OpenAiStopSequences.fromRequest(request);
+        } catch (JSONException e) {
+            return openAiError(error(400, "invalid_stop", e.getMessage()));
+        }
 
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(modelId);
@@ -528,11 +555,15 @@ public final class TaiManager {
         response.put("created", System.currentTimeMillis() / 1000L);
         JSONArray choices = new JSONArray();
         JSONObject choice = new JSONObject();
-        choice.put("text", completion.optString("response", ""));
+        String rawResponse = completion.optString("response", "");
+        OpenAiStopSequences.Match stopMatch = OpenAiStopSequences.truncate(rawResponse, stopSequences);
+        choice.put("text", stopMatch.text);
         choice.put("index", 0);
-        choice.put("finish_reason", "stop");
+        choice.put("finish_reason", stopMatch.stopped
+            ? "stop" : completion.optString("finishReason", "stop"));
         choices.put(choice);
         response.put("choices", choices);
+        response.put("usage", openAiUsage(completion, prompt, rawResponse));
         response.put("tai", completion);
         return response;
     }
@@ -568,6 +599,14 @@ public final class TaiManager {
             emitOpenAiError(sink, error(400, "bad_request", "Missing messages"));
             return;
         }
+        List<String> stopSequences;
+        try {
+            stopSequences = OpenAiStopSequences.fromRequest(request);
+        } catch (JSONException e) {
+            emitOpenAiError(sink, error(400, "invalid_stop", e.getMessage()));
+            return;
+        }
+        boolean includeUsage = includeStreamUsage(request);
 
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(modelId);
@@ -609,12 +648,14 @@ public final class TaiManager {
 
         AtomicReference<IOException> ioError = new AtomicReference<>();
         AtomicReference<Boolean> emittedToolCalls = new AtomicReference<>(false);
+        OpenAiStopSequences.StreamMatcher stopMatcher = new OpenAiStopSequences.StreamMatcher(stopSequences);
         JSONObject chat = localRuntime().chat(modelId, chatRequest.request, options, new TaiGenerationCallback() {
             @Override
             public void onToken(@NonNull String text) {
                 if (text.isEmpty() || ioError.get() != null) return;
                 try {
-                    emitChatChunk(sink, id, created, modelId, text, null, null);
+                    String safeText = stopMatcher.append(text);
+                    if (!safeText.isEmpty()) emitChatChunk(sink, id, created, modelId, safeText, null, null);
                 } catch (IOException e) {
                     ioError.set(e);
                     try {
@@ -631,8 +672,13 @@ public final class TaiManager {
             }
 
             @Override
+            public boolean shouldCancelGeneration() {
+                return stopMatcher.isStopped();
+            }
+
+            @Override
             public void onToolCalls(@NonNull JSONArray toolCalls) {
-                if (toolCalls.length() == 0 || ioError.get() != null) return;
+                if (toolCalls.length() == 0 || ioError.get() != null || stopMatcher.isStopped()) return;
                 try {
                     emitToolCallChunk(sink, id, created, modelId, toolCalls);
                     emittedToolCalls.set(true);
@@ -658,12 +704,20 @@ public final class TaiManager {
             emitOpenAiError(sink, chat);
             return;
         }
+        String remainingText = stopMatcher.finish();
+        if (!remainingText.isEmpty()) emitChatChunk(sink, id, created, modelId, remainingText, null, null);
         JSONArray toolCalls = chat.optJSONArray("toolCalls");
-        boolean hasToolCalls = toolCalls != null && toolCalls.length() > 0;
+        boolean hasToolCalls = !stopMatcher.isStopped() && toolCalls != null && toolCalls.length() > 0;
         if (hasToolCalls && !emittedToolCalls.get()) {
             emitToolCallChunk(sink, id, created, modelId, toolCalls);
         }
-        emitChatChunk(sink, id, created, modelId, "", null, hasToolCalls ? "tool_calls" : "stop");
+        String finishReason = stopMatcher.isStopped() ? "stop"
+            : chat.optString("finishReason", hasToolCalls ? "tool_calls" : "stop");
+        emitChatChunk(sink, id, created, modelId, "", null, finishReason);
+        if (includeUsage) {
+            emitUsageChunk(sink, id, created, modelId, "chat.completion.chunk",
+                openAiUsage(chat, messages.toString(), chat.optString("response", "")));
+        }
         sink.onDone();
     }
 
@@ -682,6 +736,14 @@ public final class TaiManager {
             emitOpenAiError(sink, error(400, "bad_request", "Missing prompt"));
             return;
         }
+        List<String> stopSequences;
+        try {
+            stopSequences = OpenAiStopSequences.fromRequest(request);
+        } catch (JSONException e) {
+            emitOpenAiError(sink, error(400, "invalid_stop", e.getMessage()));
+            return;
+        }
+        boolean includeUsage = includeStreamUsage(request);
 
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(modelId);
@@ -703,12 +765,14 @@ public final class TaiManager {
         String id = "tai-cmpl-" + System.currentTimeMillis();
         long created = System.currentTimeMillis() / 1000L;
         AtomicReference<IOException> ioError = new AtomicReference<>();
+        OpenAiStopSequences.StreamMatcher stopMatcher = new OpenAiStopSequences.StreamMatcher(stopSequences);
         JSONObject completion = localRuntime().complete(modelId, prompt, options, new TaiGenerationCallback() {
             @Override
             public void onToken(@NonNull String text) {
                 if (text.isEmpty() || ioError.get() != null) return;
                 try {
-                    emitCompletionChunk(sink, id, created, modelId, text, null);
+                    String safeText = stopMatcher.append(text);
+                    if (!safeText.isEmpty()) emitCompletionChunk(sink, id, created, modelId, safeText, null);
                 } catch (IOException e) {
                     ioError.set(e);
                     try {
@@ -725,6 +789,11 @@ public final class TaiManager {
             }
 
             @Override
+            public boolean shouldCancelGeneration() {
+                return stopMatcher.isStopped();
+            }
+
+            @Override
             public void onComplete(@NonNull String fullText) {
             }
 
@@ -737,7 +806,15 @@ public final class TaiManager {
             emitOpenAiError(sink, completion);
             return;
         }
-        emitCompletionChunk(sink, id, created, modelId, "", "stop");
+        String remainingText = stopMatcher.finish();
+        if (!remainingText.isEmpty()) emitCompletionChunk(sink, id, created, modelId, remainingText, null);
+        String finishReason = stopMatcher.isStopped()
+            ? "stop" : completion.optString("finishReason", "stop");
+        emitCompletionChunk(sink, id, created, modelId, "", finishReason);
+        if (includeUsage) {
+            emitUsageChunk(sink, id, created, modelId, "text_completion",
+                openAiUsage(completion, prompt, completion.optString("response", "")));
+        }
         sink.onDone();
     }
 
@@ -846,9 +923,11 @@ public final class TaiManager {
             JSONArray declaredEndpointCapabilities = model.optJSONArray("endpointCapabilities");
             JSONArray capabilities = declaredEndpointCapabilities == null ? model.optJSONArray("capabilities") : declaredEndpointCapabilities;
             if (capabilities == null) capabilities = new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_CHAT);
+            String defaultFormat = TaiModelSpec.BACKEND_MNN_LLM.equals(backend)
+                ? TaiModelSpec.FORMAT_MNN : TaiModelSpec.FORMAT_LITERTLM;
             JSONArray endpointCapabilities = declaredEndpointCapabilities == null
                 ? openAiEndpointCapabilities(model.optString("id", ""), capabilities, backend,
-                    model.optString("format", TaiModelSpec.FORMAT_LITERTLM))
+                    model.optString("format", defaultFormat))
                 : capabilities;
             item.put("_capabilities", endpointCapabilities);
             item.put("_endpoint_capabilities", endpointCapabilities);
@@ -1230,17 +1309,62 @@ public final class TaiManager {
     }
 
     @NonNull
-    private JSONObject openAiError(@NonNull JSONObject source) throws JSONException {
+    static JSONObject openAiError(@NonNull JSONObject source) throws JSONException {
+        JSONObject nestedSourceError = source.optJSONObject("error");
+        String code = nestedSourceError == null
+            ? source.optString("error", source.optString("code", "tai_error"))
+            : nestedSourceError.optString("code", source.optString("code", "tai_error"));
+        String message = source.optString("message", "TAI request failed");
         JSONObject error = new JSONObject();
-        error.put("message", source.optString("message", "TAI request failed"));
+        error.put("message", message);
         error.put("type", "invalid_request_error");
-        error.put("code", source.optString("error", "tai_error"));
+        error.put("code", code);
 
         JSONObject response = new JSONObject();
+        response.put("ok", false);
+        response.put("message", message);
+        response.put("code", code);
+        response.put("error_code", code);
         response.put("error", error);
         response.put("tai", source);
         response.put("_statusCode", source.optInt("_statusCode", 500));
         return response;
+    }
+
+    static boolean includeStreamUsage(@NonNull JSONObject request) {
+        JSONObject streamOptions = request.optJSONObject("stream_options");
+        return streamOptions != null && streamOptions.optBoolean("include_usage", false);
+    }
+
+    @NonNull
+    static JSONObject openAiUsage(
+        @NonNull JSONObject runtimeResult,
+        @Nullable String promptFallback,
+        @Nullable String completionFallback
+    ) throws JSONException {
+        JSONObject runtimeUsage = runtimeResult.optJSONObject("usage");
+        boolean hasPromptTokens = runtimeUsage != null && runtimeUsage.has("prompt_tokens");
+        boolean hasCompletionTokens = runtimeUsage != null && runtimeUsage.has("completion_tokens");
+        int promptTokens = hasPromptTokens
+            ? Math.max(0, runtimeUsage.optInt("prompt_tokens", 0))
+            : approximateTokenCountFromCharacters(promptFallback);
+        int completionTokens = hasCompletionTokens
+            ? Math.max(0, runtimeUsage.optInt("completion_tokens", 0))
+            : approximateTokenCountFromCharacters(completionFallback);
+        if (!hasPromptTokens || !hasCompletionTokens) {
+            runtimeResult.put("usageEstimated", true);
+            runtimeResult.put("usageSource", "characters_divided_by_4");
+        }
+        JSONObject usage = new JSONObject();
+        usage.put("prompt_tokens", promptTokens);
+        usage.put("completion_tokens", completionTokens);
+        usage.put("total_tokens", promptTokens + completionTokens);
+        return usage;
+    }
+
+    private static int approximateTokenCountFromCharacters(@Nullable String text) {
+        if (text == null || text.isEmpty()) return 0;
+        return Math.max(1, (text.length() + 3) / 4);
     }
 
     @NonNull
@@ -1294,8 +1418,11 @@ public final class TaiManager {
      * Agent TUIs attach their complete tool catalogue to even a casual text prompt. For local
      * models that cannot use tools, short-context models where that catalogue cannot fit, and MNN
      * prompt-fallback models that are not reliable under automatic tool choice, degrade only the
-     * automatic request to ordinary text chat. Explicit required/named tool choices still fail
-     * closed through {@link #modelSupportsRequestedTools(JSONObject, TaiModelSpec)}.
+     * automatic request to ordinary text chat. Mobile-actions specialists are exempt from the
+     * short-context degrade because making tool calls is their purpose; stripping tools makes them
+     * useless, so any overflow instead surfaces as a normal context error. Explicit required/named
+     * tool choices still fail closed through
+     * {@link #modelSupportsRequestedTools(JSONObject, TaiModelSpec)}.
      */
     static boolean omitAutomaticToolsForCompatibility(
         @NonNull JSONObject request,
@@ -1307,8 +1434,9 @@ public final class TaiManager {
         boolean automatic = choice == null || JSONObject.NULL.equals(choice) || "auto".equals(String.valueOf(choice));
         if (!automatic) return false;
         boolean reliableAutomaticTools = spec.capabilities.contains(TaiModelSpec.CAPABILITY_TOOL_USE)
-            && spec.endpointContextWindow >= 16_384
-            && !TaiModelSpec.TOOL_MODE_PROMPT_FALLBACK.equals(spec.toolMode);
+            && !TaiModelSpec.TOOL_MODE_PROMPT_FALLBACK.equals(spec.toolMode)
+            && (spec.endpointContextWindow >= 16_384
+                || spec.capabilities.contains(TaiModelSpec.CAPABILITY_MOBILE_ACTIONS));
         if (reliableAutomaticTools) return false;
         request.remove("tools");
         request.put("tool_choice", "none");
@@ -1346,6 +1474,35 @@ public final class TaiManager {
         choices.put(choice);
         response.put("choices", choices);
         sink.onEvent(response);
+    }
+
+    private void emitUsageChunk(
+        @NonNull OpenAiStreamSink sink,
+        @NonNull String id,
+        long created,
+        @NonNull String model,
+        @NonNull String object,
+        @NonNull JSONObject usage
+    ) throws JSONException, IOException {
+        sink.onEvent(openAiUsageChunk(id, created, model, object, usage));
+    }
+
+    @NonNull
+    static JSONObject openAiUsageChunk(
+        @NonNull String id,
+        long created,
+        @NonNull String model,
+        @NonNull String object,
+        @NonNull JSONObject usage
+    ) throws JSONException {
+        JSONObject response = new JSONObject();
+        response.put("id", id);
+        response.put("object", object);
+        response.put("created", created);
+        response.put("model", model);
+        response.put("choices", new JSONArray());
+        response.put("usage", usage);
+        return response;
     }
 
     private void emitCompletionChunk(
@@ -1470,7 +1627,7 @@ public final class TaiManager {
         }
         return new OpenAiChatRequest(new TaiChatRequest(
             systemPrompt, conversationMessages, finalMessage, tools, false,
-            messages, toolsJson, request.opt("tool_choice")));
+            messages, toolsJson, request.opt("tool_choice"), OpenAiStopSequences.fromRequest(request)));
     }
 
     @NonNull
@@ -1744,7 +1901,7 @@ public final class TaiManager {
     @NonNull
     private static byte[] decodeBase64(@NonNull String value, @NonNull String partName) throws JSONException {
         try {
-            byte[] bytes = Base64.decode(value, Base64.DEFAULT);
+            byte[] bytes = Base64.getMimeDecoder().decode(value);
             if (bytes.length > MAX_MEDIA_BYTES) throw new JSONException("media_fetch_failed:" + partName + " exceeds 25 MB");
             return bytes;
         } catch (IllegalArgumentException e) {

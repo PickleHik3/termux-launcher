@@ -5,6 +5,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.ai.edge.litertlm.Backend;
+import com.google.ai.edge.litertlm.BenchmarkInfo;
 import com.google.ai.edge.litertlm.Capabilities;
 import com.google.ai.edge.litertlm.Content;
 import com.google.ai.edge.litertlm.Contents;
@@ -32,9 +33,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 public final class LiteRtTaiRuntime implements TaiRuntime {
+    private static final Object EXPERIMENTAL_FLAGS_LOCK = new Object();
     private static final int DEFAULT_TOP_K = 64;
     private static final double DEFAULT_TOP_P = 0.95d;
     private static final double DEFAULT_TEMPERATURE = 1.0d;
@@ -200,6 +204,9 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             conversation.cancelProcess();
         } catch (Exception e) {
             return error(500, "cancel_failed", "Failed to cancel active LiteRT-LM generation: " + e.getMessage());
+        } finally {
+            // cancelProcess() does not roll back the conversation's KV state. Never reuse it.
+            closeConversationLocked();
         }
         JSONObject data = stateEnvelopeLocked(true);
         data.put("cancelled", true);
@@ -294,23 +301,30 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         StringBuilder responseBuilder = new StringBuilder();
         JSONArray toolCalls = new JSONArray();
         AtomicReference<Throwable> errorRef = new AtomicReference<>();
+        AtomicBoolean lengthLimited = new AtomicBoolean(false);
+        AtomicBoolean callbackCancelled = new AtomicBoolean(false);
+        AtomicBoolean callbackFinished = new AtomicBoolean(false);
+        AtomicInteger lastPrefillTokens = new AtomicInteger(-1);
+        AtomicInteger lastDecodeTokens = new AtomicInteger(-1);
+        AtomicInteger conversationTokenCount = new AtomicInteger(-1);
+        // Do not call activeConversation.getTokenCount() from inside onMessage: the native
+        // session lock is held by the decode loop during callbacks and the call deadlocks the
+        // whole generation (observed on-device). Each onMessage delivers at least one decoded
+        // token, so the callback count is a safe lower-bound proxy for output tokens.
+        AtomicInteger decodedCallbacks = new AtomicInteger(0);
+        int maxOutputTokens = options.maxTokens != null
+            ? options.maxTokens
+            : loadedProfile.defaultMaxTokens;
         boolean unloadRequested;
         try {
-            if (callback == null) {
-                Message response = activeConversation.sendMessage(request.message, Collections.emptyMap());
-                String responseText = textFromMessage(response);
-                responseBuilder.append(responseText);
-                appendToolCalls(toolCalls, response.getToolCalls(), generationId);
-                done.countDown();
-            } else {
-                activeConversation.sendMessageAsync(request.message, new MessageCallback() {
+            activeConversation.sendMessageAsync(request.message, new MessageCallback() {
                     @Override
                     public void onMessage(@NonNull Message message) {
                         String text = textFromMessage(message);
                         synchronized (responseBuilder) {
                             responseBuilder.append(text);
                         }
-                        callback.onToken(text);
+                        if (callback != null) callback.onToken(text);
                         JSONArray messageToolCalls = new JSONArray();
                         appendToolCalls(messageToolCalls, message.getToolCalls(), generationId);
                         if (messageToolCalls.length() > 0) {
@@ -319,29 +333,67 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                                     toolCalls.put(messageToolCalls.opt(i));
                                 }
                             }
-                            callback.onToolCalls(messageToolCalls);
+                            if (callback != null) callback.onToolCalls(messageToolCalls);
+                        }
+
+                        int generatedTokens = decodedCallbacks.incrementAndGet();
+                        boolean stopRequested = callback != null && callback.shouldCancelGeneration();
+                        boolean newStopRequest = stopRequested && callbackCancelled.compareAndSet(false, true);
+                        if ((generatedTokens >= maxOutputTokens && lengthLimited.compareAndSet(false, true))
+                            || newStopRequest) {
+                            // Cancel from the scheduler thread, never from the decode callback,
+                            // so the native session lock is free when cancelProcess() runs.
+                            scheduler.execute(() -> {
+                                try {
+                                    activeConversation.cancelProcess();
+                                } catch (Throwable throwable) {
+                                    errorRef.compareAndSet(null, throwable);
+                                }
+                            });
                         }
                     }
 
                     @Override
                     public void onDone() {
+                        if (!callbackFinished.compareAndSet(false, true)) return;
                         String fullText;
                         synchronized (responseBuilder) {
                             fullText = responseBuilder.toString();
                         }
-                        callback.onComplete(fullText);
+                        if (callback != null) callback.onComplete(fullText);
                         done.countDown();
                     }
 
                     @Override
                     public void onError(@NonNull Throwable throwable) {
+                        if (!callbackFinished.compareAndSet(false, true)) return;
+                        if ((lengthLimited.get() || callbackCancelled.get()) && isCancellation(throwable)) {
+                            String fullText;
+                            synchronized (responseBuilder) {
+                                fullText = responseBuilder.toString();
+                            }
+                            if (callback != null) callback.onComplete(fullText);
+                            done.countDown();
+                            return;
+                        }
                         errorRef.set(throwable);
-                        callback.onError(throwable);
+                        if (callback != null) callback.onError(throwable);
                         done.countDown();
                     }
                 }, Collections.emptyMap());
-            }
             done.await();
+            try {
+                BenchmarkInfo benchmark = activeConversation.getBenchmarkInfo();
+                if (benchmark != null) {
+                    lastPrefillTokens.set(benchmark.getLastPrefillTokenCount());
+                    lastDecodeTokens.set(benchmark.getLastDecodeTokenCount());
+                }
+            } catch (Throwable ignored) {
+            }
+            try {
+                conversationTokenCount.set(activeConversation.getTokenCount());
+            } catch (Throwable ignored) {
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             errorRef.set(e);
@@ -351,7 +403,9 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             synchronized (this) {
                 unloadRequested = unloadAfterGeneration;
                 finishGenerationLocked(errorRef.get());
-                if (!request.reusableConversation) closeConversationLocked();
+                // cancelProcess() leaves the KV cache dirty, so a length-limited conversation
+                // must never be reused even though its partial response is a normal completion.
+                if (lengthLimited.get() || callbackCancelled.get() || !request.reusableConversation) closeConversationLocked();
             }
         }
 
@@ -377,6 +431,10 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         data.put("mode", mode);
         data.put("response", responseBuilder.toString());
         data.put("toolCalls", toolCalls);
+        data.put("finishReason", callbackCancelled.get() ? "stop" : (lengthLimited.get()
+            ? "length" : (toolCalls.length() > 0 ? "tool_calls" : "stop")));
+        appendUsage(data, request, responseBuilder.toString(), decodedCallbacks.get(),
+            lastPrefillTokens.get(), lastDecodeTokens.get(), conversationTokenCount.get());
         data.put("elapsedMs", System.currentTimeMillis() - startedAt);
         data.put("options", options.toJson());
         if (loadedProfile != null) {
@@ -387,12 +445,59 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         return data;
     }
 
+    private void appendUsage(
+        @NonNull JSONObject data,
+        @NonNull TaiChatRequest request,
+        @NonNull String response,
+        int decodedCallbacks,
+        int lastPrefillTokens,
+        int lastDecodeTokens,
+        int conversationTokenCount
+    ) throws JSONException {
+        int promptTokens = lastPrefillTokens;
+        int completionTokens = lastDecodeTokens;
+
+        boolean estimated = false;
+        if (completionTokens < 0 || (completionTokens == 0 && !response.isEmpty())) {
+            completionTokens = decodedCallbacks > 0
+                ? decodedCallbacks : approximateTokenCountFromCharacters(response);
+            estimated = true;
+        }
+        if (promptTokens <= 0) {
+            if (conversationTokenCount >= completionTokens && conversationTokenCount > 0) {
+                promptTokens = conversationTokenCount - completionTokens;
+            } else {
+                promptTokens = approximatePromptTokens(request);
+                estimated = true;
+            }
+        }
+
+        JSONObject usage = new JSONObject();
+        usage.put("prompt_tokens", Math.max(0, promptTokens));
+        usage.put("completion_tokens", Math.max(0, completionTokens));
+        usage.put("total_tokens", Math.max(0, promptTokens) + Math.max(0, completionTokens));
+        data.put("usage", usage);
+        data.put("usageEstimated", estimated);
+        data.put("usageSource", estimated
+            ? "litert_callback_or_characters_divided_by_4" : "litert_benchmark_info");
+    }
+
+    private int approximatePromptTokens(@NonNull TaiChatRequest request) {
+        String prompt = request.systemPrompt + request.messagesJson + request.initialMessages + request.message;
+        return approximateTokenCountFromCharacters(prompt);
+    }
+
+    private int approximateTokenCountFromCharacters(@Nullable String text) {
+        if (text == null || text.isEmpty()) return 0;
+        return Math.max(1, (text.length() + 3) / 4);
+    }
+
     @NonNull
     private JSONObject loadInternal(@NonNull TaiModelSpec modelSpec, @NonNull TaiRuntimeOptions options, int keepWarmMinutes) throws JSONException {
         TaiModelProfile profile = TaiModelProfile.forModel(modelSpec);
         TaiDeviceCapabilities deviceCapabilities = TaiDeviceCapabilities.detect(appContext);
         if (!deviceCapabilities.liteRtLmAbiSupported) {
-            return error(501, "litert_lm_unsupported_abi", "LiteRT-LM 0.12.0 ships native libraries for arm64-v8a and x86_64 only.");
+            return error(501, "litert_lm_unsupported_abi", "LiteRT-LM 0.14.0 ships native libraries for arm64-v8a and x86_64 only.");
         }
         if (!deviceCapabilities.liteRtLmNativeLibrariesAvailable) {
             return error(501, "litert_lm_native_unavailable", "LiteRT-LM native libraries are not available in this APK.");
@@ -460,32 +565,36 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                         Backend backend = new Backend.GPU();
                         initializedBackendName = backend.getName();
                         initializedFallbackReason = AUTO_GPU_REASON;
-                        initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options, profile, backend, "gpu");
+                        initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options,
+                            profile, deviceCapabilities, backend, "gpu");
                     } catch (Exception gpuException) {
                         TaiRuntimeCrashMarker.clear(appContext);
                         TaiRuntimeHistory.recordFailure(appContext, modelSpec, deviceCapabilities,
                             TaiModelSpec.BACKEND_LITERT_LM, "gpu", gpuException.getMessage() == null ? "GPU initialization failed." : gpuException.getMessage());
                         if (!autoAccelerators.contains("cpu")) throw gpuException;
                         throwIfLoadCancellationRequested();
-                        Backend backend = new Backend.CPU(null);
+                        Backend backend = new Backend.CPU();
                         initializedBackendName = backend.getName();
                         initializedFallbackReason = "Auto GPU initialization failed; selected the model's CPU fallback. GPU error: " + gpuException.getMessage();
-                        initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options, profile, backend, "cpu");
+                        initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options,
+                            profile, deviceCapabilities, backend, "cpu");
                     }
                 } else {
                     throwIfLoadCancellationRequested();
-                    Backend backend = new Backend.CPU(null);
+                    Backend backend = new Backend.CPU();
                     initializedBackendName = backend.getName();
                     initializedFallbackReason = deviceCapabilities.pixel10 && profile.supports("gpu")
                         ? "Auto selected CPU because Google AI Edge Gallery disables GPU on Pixel 10 devices."
                         : AUTO_MODEL_CPU_REASON;
-                    initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options, profile, backend, "cpu");
+                    initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options,
+                        profile, deviceCapabilities, backend, "cpu");
                 }
             } else {
                 throwIfLoadCancellationRequested();
-                Backend backend = "gpu".equals(requestedAccelerator) ? new Backend.GPU() : new Backend.CPU(null);
+                Backend backend = "gpu".equals(requestedAccelerator) ? new Backend.GPU() : new Backend.CPU();
                 initializedBackendName = backend.getName();
-                initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options, profile, backend, requestedAccelerator);
+                initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options,
+                    profile, deviceCapabilities, backend, requestedAccelerator);
             }
         } catch (Exception e) {
             TaiRuntimeCrashMarker.clear(appContext);
@@ -573,14 +682,30 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
 
     @NonNull
     private Conversation ensureConversationLocked(@NonNull String mode, @NonNull TaiChatRequest request, @NonNull TaiRuntimeOptions options) {
-        String key = mode + "|" + normalized(request.systemPrompt) + "|" + optionsKey(options);
+        // Tools are baked into the Conversation at creation, so they must be part of the reuse
+        // key — otherwise a cached tool-less conversation silently serves tool requests.
+        String key = mode + "|" + normalized(request.systemPrompt) + "|" + optionsKey(options)
+            + "|tools:" + request.toolDefinitions.toString().hashCode();
         if (request.reusableConversation && conversation != null && conversation.isAlive() && key.equals(conversationKey)) {
             return conversation;
         }
         closeConversationLocked();
         Contents systemContents = contents(request.systemPrompt);
         ConversationConfig conversationConfig = conversationConfig(systemContents, request, options);
-        conversation = engine.createConversation(conversationConfig);
+        synchronized (EXPERIMENTAL_FLAGS_LOCK) {
+            ExperimentalFlags.INSTANCE.setConvertCamelToSnakeCaseInToolDescription(false);
+            boolean constrainedDecoding = !request.tools.isEmpty();
+            if (constrainedDecoding) {
+                ExperimentalFlags.INSTANCE.setEnableConversationConstrainedDecoding(true);
+            }
+            try {
+                conversation = engine.createConversation(conversationConfig);
+            } finally {
+                if (constrainedDecoding) {
+                    ExperimentalFlags.INSTANCE.setEnableConversationConstrainedDecoding(false);
+                }
+            }
+        }
         conversationKey = request.reusableConversation ? key : "";
         return conversation;
     }
@@ -627,9 +752,9 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         @NonNull String modelPath,
         @NonNull TaiRuntimeOptions options,
         @NonNull TaiModelProfile profile,
+        @NonNull TaiDeviceCapabilities deviceCapabilities,
         @NonNull Backend backend
     ) {
-        applyExperimentalFlags(options, modelPath);
         String cacheDir = modelPath.startsWith("/data/local/tmp")
             ? appContext.getCacheDir().getAbsolutePath() : null;
         boolean imageInput = modelSpec.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)
@@ -647,24 +772,30 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         EngineConfig config = new EngineConfig(
             modelPath,
             backend,
-            imageInput ? matchingBackend(backend) : null,
-            audioInput ? new Backend.CPU(null) : null,
+            imageInput ? visionBackend(modelSpec, options, profile, deviceCapabilities) : null,
+            // LiteRT-LM 0.14 also supports GPU/NPU audio acceleration; keep CPU as the default.
+            audioInput ? new Backend.CPU() : null,
             engineMaxTokens,
             imageInput ? 8 : null,
             cacheDir
         );
-        Engine loadedEngine = new Engine(config);
-        try {
-            loadedEngine.initialize();
-            return loadedEngine;
-        } catch (RuntimeException e) {
+        Boolean speculativeDecoding = speculativeDecodingFlag(options, modelPath);
+        synchronized (EXPERIMENTAL_FLAGS_LOCK) {
+            ExperimentalFlags.INSTANCE.setConvertCamelToSnakeCaseInToolDescription(false);
+            Engine loadedEngine = new Engine(config);
             try {
-                loadedEngine.close();
-            } catch (Exception ignored) {
+                ExperimentalFlags.INSTANCE.setEnableSpeculativeDecoding(speculativeDecoding);
+                loadedEngine.initialize();
+                return loadedEngine;
+            } catch (RuntimeException e) {
+                try {
+                    loadedEngine.close();
+                } catch (Exception ignored) {
+                }
+                throw e;
+            } finally {
+                ExperimentalFlags.INSTANCE.setEnableSpeculativeDecoding(null);
             }
-            throw e;
-        } finally {
-            ExperimentalFlags.INSTANCE.setEnableSpeculativeDecoding(false);
         }
     }
 
@@ -673,16 +804,38 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         @NonNull String modelPath,
         @NonNull TaiRuntimeOptions options,
         @NonNull TaiModelProfile profile,
+        @NonNull TaiDeviceCapabilities deviceCapabilities,
         @NonNull Backend backend,
         @NonNull String accelerator
     ) {
         TaiRuntimeCrashMarker.markLoad(appContext, modelSpec, options.withAccelerator(accelerator), TaiModelSpec.BACKEND_LITERT_LM);
-        return createAndInitializeEngine(modelSpec, modelPath, options, profile, backend);
+        return createAndInitializeEngine(modelSpec, modelPath, options, profile, deviceCapabilities, backend);
     }
 
     @NonNull
-    private Backend matchingBackend(@NonNull Backend backend) {
-        return backend instanceof Backend.GPU ? new Backend.GPU() : new Backend.CPU(null);
+    private Backend visionBackend(
+        @NonNull TaiModelSpec modelSpec,
+        @NonNull TaiRuntimeOptions options,
+        @NonNull TaiModelProfile profile,
+        @NonNull TaiDeviceCapabilities deviceCapabilities
+    ) {
+        String requested = requestedAccelerator(options);
+        boolean gpuKnownFailed = TaiRuntimeHistory.failedEntry(
+            appContext, modelSpec, deviceCapabilities, "gpu") != null;
+        return useGpuVision(requested, profile.supports("gpu"),
+            deviceCapabilities.supportsAccelerator("gpu"), gpuKnownFailed)
+            ? new Backend.GPU()
+            : new Backend.CPU();
+    }
+
+    static boolean useGpuVision(
+        @Nullable String requestedAccelerator,
+        boolean modelSupportsGpu,
+        boolean deviceSupportsGpu,
+        boolean gpuKnownFailed
+    ) {
+        if (requestedAccelerator != null) return "gpu".equals(requestedAccelerator);
+        return modelSupportsGpu && deviceSupportsGpu && !gpuKnownFailed;
     }
 
     @Nullable
@@ -716,16 +869,14 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         return fallback == null ? "auto" : fallback;
     }
 
-    private void applyExperimentalFlags(@NonNull TaiRuntimeOptions options, @NonNull String modelPath) {
-        boolean enabled = false;
-        if (Boolean.TRUE.equals(options.speculativeDecodingEnabled)) {
-            try (Capabilities capabilities = new Capabilities(modelPath)) {
-                enabled = capabilities.hasSpeculativeDecodingSupport();
-            } catch (Exception ignored) {
-                enabled = false;
-            }
+    @Nullable
+    private Boolean speculativeDecodingFlag(@NonNull TaiRuntimeOptions options, @NonNull String modelPath) {
+        if (!Boolean.TRUE.equals(options.speculativeDecodingEnabled)) return null;
+        try (Capabilities capabilities = new Capabilities(modelPath)) {
+            return capabilities.hasSpeculativeDecodingSupport() ? Boolean.TRUE : null;
+        } catch (Exception ignored) {
+            return null;
         }
-        ExperimentalFlags.INSTANCE.setEnableSpeculativeDecoding(enabled);
     }
 
     @NonNull

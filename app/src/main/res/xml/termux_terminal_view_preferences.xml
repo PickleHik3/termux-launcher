@@ -1,8 +1,15 @@
-<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <PreferenceCategory
         app:key="view"
         app:title="@string/termux_terminal_view_view_header">
+
+        <SwitchPreferenceCompat
+            app:key="fullscreen"
+            app:title="@string/termux_fullscreen_title"
+            app:summary="@string/termux_fullscreen_summary"
+            android:defaultValue="false" />
 
         <SwitchPreferenceCompat
             app:key="terminal_margin_adjustment"

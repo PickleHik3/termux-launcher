@@ -104,6 +104,10 @@ bind -n M-w run-shell 'tmux display-message "Opening WhatsApp"; launcherctl laun
     <td><img src="screenshots/3.png" alt="Settings" width="320"></td>
     <td><img src="screenshots/4.png" alt="Light theme" width="320"></td>
   </tr>
+  <tr>
+    <td><img src="screenshots/5.png" alt="On-device Termux AI" width="320"></td>
+    <td><img src="screenshots/6.png" alt="Notification popup" width="320"></td>
+  </tr>
 </table>
 
 ## Upstream Base

@@ -124,8 +124,8 @@ public final class KeyHandler {
         // terminfo=kind, scroll-forward key
         TERMCAP_TO_KEYCODE.put("kF", KEYMOD_SHIFT | KEYCODE_DPAD_DOWN);
         TERMCAP_TO_KEYCODE.put("kI", KEYCODE_INSERT);
-        TERMCAP_TO_KEYCODE.put("kN", KEYCODE_PAGE_UP);
-        TERMCAP_TO_KEYCODE.put("kP", KEYCODE_PAGE_DOWN);
+        TERMCAP_TO_KEYCODE.put("kP", KEYCODE_PAGE_UP);
+        TERMCAP_TO_KEYCODE.put("kN", KEYCODE_PAGE_DOWN);
         // terminfo=kri, scroll-backward key
         TERMCAP_TO_KEYCODE.put("kR", KEYMOD_SHIFT | KEYCODE_DPAD_UP);
         // non-standard shifted up

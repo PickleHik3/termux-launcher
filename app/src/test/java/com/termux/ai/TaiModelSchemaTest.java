@@ -45,8 +45,8 @@ public class TaiModelSchemaTest {
 
         assertEquals(TaiModelSpec.BACKEND_MNN_LLM, spec.backend);
         assertEquals(TaiModelSpec.FORMAT_MNN, spec.format);
-        assertTrue(spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
-        assertFalse(spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
+        assertFalse(spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
+        assertTrue(spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
         assertTrue(spec.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
         assertEquals(TaiModelSpec.BACKEND_MNN_LLM, roundTrip.getString("backend"));
         assertEquals(TaiModelSpec.FORMAT_MNN, roundTrip.getString("format"));
@@ -152,7 +152,8 @@ public class TaiModelSchemaTest {
         assertEquals(1, reloaded.size());
         assertEquals(TaiModelSpec.BACKEND_MNN_LLM, reloaded.get("user-mnn").backend);
         assertEquals(TaiModelSpec.FORMAT_MNN, reloaded.get("user-mnn").format);
-        assertFalse(reloaded.get("user-mnn").capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
+        assertFalse(reloaded.get("user-mnn").capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
+        assertTrue(reloaded.get("user-mnn").capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
         assertTrue(reloaded.get("user-mnn").sourceCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
     }
 

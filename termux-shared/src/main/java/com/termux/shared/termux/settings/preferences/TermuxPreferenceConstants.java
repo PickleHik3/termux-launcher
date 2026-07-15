@@ -405,6 +405,13 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_VALUE_DOCK_GLASS_GRAIN = 12;
 
         /**
+         * Defines whether the terminal's bottom cell remainder is absorbed by the dock glass.
+         */
+        public static final String KEY_TERMINAL_FLUSH_DOCK = "terminal_flush_dock";
+
+        public static final boolean DEFAULT_VALUE_TERMINAL_FLUSH_DOCK = false;
+
+        /**
          * Stores the user's preferred terminal opacity while wallpaper mode is enabled so it can
          * be restored after temporarily disabling wallpaper.
          */

@@ -41,7 +41,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
-public class SettingsActivity extends AppCompatActivity {
+public class SettingsActivity extends AppCompatActivity implements PreferenceFragmentCompat.OnPreferenceStartFragmentCallback {
 
     public static final String EXTRA_INITIAL_FRAGMENT = "settings_initial_fragment";
     public static final String EXTRA_INITIAL_TITLE_RES = "settings_initial_title_res";
@@ -150,6 +150,22 @@ public class SettingsActivity extends AppCompatActivity {
     @Override
     public boolean onSupportNavigateUp() {
         onBackPressed();
+        return true;
+    }
+
+    @Override
+    public boolean onPreferenceStartFragment(@NonNull PreferenceFragmentCompat caller,
+                                             @NonNull Preference preference) {
+        String fragmentClassName = preference.getFragment();
+        if (fragmentClassName == null || fragmentClassName.isEmpty())
+            return false;
+        Fragment fragment = getSupportFragmentManager().getFragmentFactory()
+            .instantiate(getClassLoader(), fragmentClassName);
+        fragment.setArguments(preference.getExtras());
+        getSupportFragmentManager().beginTransaction()
+            .replace(R.id.settings, fragment)
+            .addToBackStack(null)
+            .commit();
         return true;
     }
 

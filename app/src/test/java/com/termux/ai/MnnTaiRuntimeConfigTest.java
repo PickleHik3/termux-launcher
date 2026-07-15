@@ -1,8 +1,11 @@
 package com.termux.ai;
 
 import android.content.Context;
+import android.util.Pair;
 
 import androidx.test.core.app.ApplicationProvider;
+
+import com.google.ai.edge.litertlm.Message;
 
 import org.json.JSONObject;
 import org.junit.Before;
@@ -14,12 +17,15 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
 public class MnnTaiRuntimeConfigTest {
@@ -55,6 +61,10 @@ public class MnnTaiRuntimeConfigTest {
         assertEquals(0.05d, merged.getDouble("min_p"), 0.0d);
         assertEquals("tokenizer.mtok", merged.getString("tokenizer_file"));
         assertFalse(merged.has("system_prompt"));
+        // mmap is wired via extra-config mmap_dir (the native shim overwrites any
+        // use_mmap/tmp_path in the merged config) — see extraConfig test.
+        assertFalse(merged.has("use_mmap"));
+        assertFalse(merged.has("tmp_path"));
     }
 
     @Test
@@ -78,9 +88,10 @@ public class MnnTaiRuntimeConfigTest {
         File dir = new File(context.getCacheDir(), "mnn-config-defaults");
         dir.mkdirs();
         File config = new File(dir, "config.json");
-        // Minimal config: no max_context_len, no max_new_tokens, only model paths + chat template.
+        // The obsolete max_context_len key must not leak into the emitted engine config.
         write(config, "{\"llm_model\":\"llm.mnn\",\"llm_weight\":\"llm.mnn.weight\","
-            + "\"tokenizer_file\":\"tokenizer.mtok\",\"jinja\":{\"chat_template\":\"template\"}}");
+            + "\"tokenizer_file\":\"tokenizer.mtok\",\"max_context_len\":32768,"
+            + "\"prompt_cache\":false,\"jinja\":{\"chat_template\":\"template\"}}");
         touch(new File(dir, "llm.mnn"));
         touch(new File(dir, "llm.mnn.weight"));
         touch(new File(dir, "tokenizer.mtok"));
@@ -95,7 +106,9 @@ public class MnnTaiRuntimeConfigTest {
         assertEquals(4, merged.getInt("thread_num"));
         assertEquals("low", merged.getString("precision"));
         assertEquals("low", merged.getString("memory"));
-        assertEquals(spec.endpointContextWindow, merged.getInt("max_context_len"));
+        assertEquals(spec.endpointContextWindow, merged.getInt("max_all_tokens"));
+        assertFalse(merged.has("max_context_len"));
+        assertTrue(merged.getBoolean("prompt_cache"));
         assertEquals(spec.defaultMaxOutputTokens, merged.getInt("max_new_tokens"));
         assertEquals(0.8d, merged.getDouble("temperature"), 0.0d);
         assertEquals(40, merged.getInt("top_k"));
@@ -109,7 +122,7 @@ public class MnnTaiRuntimeConfigTest {
         File config = new File(dir, "config.json");
         // Upstream config advertises a larger context than the endpoint cap.
         write(config, "{\"llm_model\":\"llm.mnn\",\"llm_weight\":\"llm.mnn.weight\","
-            + "\"tokenizer_file\":\"tokenizer.mtok\",\"max_context_len\":32768,"
+            + "\"tokenizer_file\":\"tokenizer.mtok\",\"max_all_tokens\":32768,"
             + "\"max_new_tokens\":8192,\"jinja\":{\"chat_template\":\"template\"}}");
         touch(new File(dir, "llm.mnn"));
         touch(new File(dir, "llm.mnn.weight"));
@@ -121,8 +134,8 @@ public class MnnTaiRuntimeConfigTest {
         TaiModelSpec spec = model(config);
         JSONObject merged = new JSONObject((String) invokeMergedConfig(runtime, config, spec, options));
 
-        assertEquals(spec.endpointContextWindow, merged.getInt("max_context_len"));
-        assertTrue(merged.getInt("max_context_len") <= spec.endpointContextWindow);
+        assertEquals(spec.endpointContextWindow, merged.getInt("max_all_tokens"));
+        assertTrue(merged.getInt("max_all_tokens") <= spec.endpointContextWindow);
         assertEquals(8192, merged.getInt("max_new_tokens"));
     }
 
@@ -154,6 +167,122 @@ public class MnnTaiRuntimeConfigTest {
         assertEquals("function", calls.getJSONObject(0).getString("type"));
         assertEquals("lookup", calls.getJSONObject(0).getJSONObject("function").getString("name"));
         assertEquals("{\"query\":\"termux\"}", calls.getJSONObject(0).getJSONObject("function").getString("arguments"));
+    }
+
+    @Test
+    public void mnnHistory_emitsOpenAiSystemAndDeveloperContentAsFirstSystemRole() throws Exception {
+        MnnTaiRuntime runtime = new MnnTaiRuntime(context);
+        org.json.JSONArray messages = new org.json.JSONArray()
+            .put(new JSONObject().put("role", "system").put("content", "System rules"))
+            .put(new JSONObject().put("role", "developer").put("content", "Developer rules"))
+            .put(new JSONObject().put("role", "user").put("content", "Hello"));
+        TaiChatRequest request = new TaiChatRequest(
+            "", Collections.emptyList(), Message.Companion.user("Hello"), Collections.emptyList(),
+            false, messages, new org.json.JSONArray(), null);
+
+        Method method = MnnTaiRuntime.class.getDeclaredMethod("mnnHistory", TaiChatRequest.class);
+        method.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<Pair<String, String>> history = (List<Pair<String, String>>) method.invoke(runtime, request);
+
+        assertEquals("system", history.get(0).first);
+        assertEquals("System rules\nDeveloper rules", history.get(0).second);
+        assertEquals("user", history.get(1).first);
+        assertEquals("Hello", history.get(1).second);
+    }
+
+    @Test
+    public void mnnHistory_materializesOpenAiAudioAndInjectsMarkup() throws Exception {
+        MnnTaiRuntime runtime = new MnnTaiRuntime(context);
+        org.json.JSONArray messages = new org.json.JSONArray().put(new JSONObject()
+            .put("role", "user")
+            .put("content", new org.json.JSONArray()
+                .put(new JSONObject().put("type", "text").put("text", "transcribe "))
+                .put(new JSONObject().put("type", "input_audio").put("input_audio",
+                    new JSONObject().put("data", "AQID").put("format", "wav")))));
+        TaiChatRequest request = new TaiChatRequest(
+            "", Collections.emptyList(), Message.Companion.user(""), Collections.emptyList(),
+            false, messages, new org.json.JSONArray(), null);
+
+        Method method = MnnTaiRuntime.class.getDeclaredMethod("mnnHistory", TaiChatRequest.class);
+        method.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<Pair<String, String>> history = (List<Pair<String, String>>) method.invoke(runtime, request);
+
+        String content = history.get(0).second;
+        assertTrue(content.startsWith("transcribe <audio>"));
+        assertTrue(content.endsWith("</audio>"));
+        String path = content.substring(content.indexOf("<audio>") + 7, content.indexOf("</audio>"));
+        assertTrue(path.endsWith(".wav"));
+        assertEquals(3, Files.readAllBytes(new File(path).toPath()).length);
+    }
+
+    @Test
+    public void mnnHistory_injectsAudioMarkupForFileUrl() throws Exception {
+        MnnTaiRuntime runtime = new MnnTaiRuntime(context);
+        File audio = new File(context.getCacheDir(), "sample.wav");
+        touch(audio);
+        org.json.JSONArray messages = new org.json.JSONArray().put(new JSONObject()
+            .put("role", "user")
+            .put("content", new org.json.JSONArray().put(new JSONObject()
+                .put("type", "audio")
+                .put("audio", new JSONObject().put("url", "file://" + audio.getAbsolutePath())))));
+        TaiChatRequest request = new TaiChatRequest(
+            "", Collections.emptyList(), Message.Companion.user(""), Collections.emptyList(),
+            false, messages, new org.json.JSONArray(), null);
+
+        Method method = MnnTaiRuntime.class.getDeclaredMethod("mnnHistory", TaiChatRequest.class);
+        method.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<Pair<String, String>> history = (List<Pair<String, String>>) method.invoke(runtime, request);
+
+        assertEquals("<audio>" + audio.getAbsolutePath() + "</audio>", history.get(0).second);
+    }
+
+    @Test
+    public void extraConfig_enablesPromptCacheWithStatelessHistory() throws Exception {
+        MnnTaiRuntime runtime = new MnnTaiRuntime(context);
+        Method method = MnnTaiRuntime.class.getDeclaredMethod("extraConfigJson", TaiModelSpec.class);
+        method.setAccessible(true);
+        File config = new File(context.getCacheDir(), "mnn-extra-config/config.json");
+        JSONObject extra = new JSONObject((String) method.invoke(runtime, model(config)));
+
+        assertFalse(extra.getBoolean("keep_history"));
+        assertTrue(extra.getBoolean("prompt_cache"));
+        assertTrue(extra.getString("mmap_dir").startsWith(context.getCacheDir().getAbsolutePath()));
+        assertTrue(new File(extra.getString("mmap_dir")).isDirectory());
+    }
+
+    @Test
+    public void runtimeOverrides_useMaxAllTokensForContextWindow() throws Exception {
+        MnnTaiRuntime runtime = new MnnTaiRuntime(context);
+        TaiRuntimeOptions options = new TaiRuntimeOptions(null, null, null, null,
+            null, 3072, null, null, null, null, null, null);
+        Method method = MnnTaiRuntime.class.getDeclaredMethod("overridesJson", TaiRuntimeOptions.class);
+        method.setAccessible(true);
+        JSONObject overrides = (JSONObject) method.invoke(runtime, options);
+
+        assertEquals(3072, overrides.getInt("max_all_tokens"));
+        assertFalse(overrides.has("max_context_len"));
+    }
+
+    @Test
+    public void thinkingOption_emitsJinjaContextInMergedAndRuntimeOverrides() throws Exception {
+        File dir = new File(context.getCacheDir(), "mnn-thinking-config");
+        dir.mkdirs();
+        File config = configFile(dir);
+        TaiRuntimeOptions options = new TaiRuntimeOptions(null, null, null, null,
+            null, null, null, null, null, false, null, null);
+        MnnTaiRuntime runtime = new MnnTaiRuntime(context);
+
+        JSONObject merged = new JSONObject((String) invokeMergedConfig(runtime, config, model(config), options));
+        Method method = MnnTaiRuntime.class.getDeclaredMethod("overridesJson", TaiRuntimeOptions.class);
+        method.setAccessible(true);
+        JSONObject overrides = (JSONObject) method.invoke(runtime, options);
+
+        assertEquals("template", merged.getJSONObject("jinja").getString("chat_template"));
+        assertFalse(merged.getJSONObject("jinja").getJSONObject("context").getBoolean("enable_thinking"));
+        assertFalse(overrides.getJSONObject("jinja").getJSONObject("context").getBoolean("enable_thinking"));
     }
 
     private static Object invokeMergedConfig(MnnTaiRuntime runtime, File config, TaiModelSpec model, TaiRuntimeOptions options) throws Exception {
