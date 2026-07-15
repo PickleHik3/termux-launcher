@@ -4217,15 +4217,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         DockLayoutMetrics dockMetrics = buildDockLayoutMetrics(0);
         applyDockLayoutMetrics(dockMetrics);
-        int terminalFlushPaddingPx = resolveTerminalFlushDockPaddingPx();
+        int accessoryBottomMarginPx = resolveAccessoryStackBottomMarginPx();
+        int dockContentHeightPx = dockMetrics.combinedHeight(toolbarHeightPx);
+        int terminalFlushPaddingPx = resolveTerminalFlushDockPaddingPx(dockContentHeightPx, accessoryBottomMarginPx);
         mAppliedTerminalFlushPaddingPx = terminalFlushPaddingPx;
-        // Dock rows remain bottom-anchored. Increasing only their parent leaves this addition as
-        // empty space at the glass surface's top edge rather than stretching an icon row.
-        int combinedHeight = dockMetrics.combinedHeight(toolbarHeightPx) + terminalFlushPaddingPx;
+        int combinedHeight = dockContentHeightPx + terminalFlushPaddingPx;
+        // Split the absorbed remainder around the dock rows so they stay visually centered in the
+        // taller glass instead of hugging its bottom edge.
+        int flushBottomInsetPx = terminalFlushPaddingPx / 2;
+        if (accessoryStackContainer.getPaddingBottom() != flushBottomInsetPx) {
+            accessoryStackContainer.setPadding(
+                accessoryStackContainer.getPaddingLeft(),
+                accessoryStackContainer.getPaddingTop(),
+                accessoryStackContainer.getPaddingRight(),
+                flushBottomInsetPx);
+        }
         boolean accessoryHeightChanged = updateAccessoryStackContainerHeight(accessoryStackContainer, combinedHeight);
         boolean accessoryMarginChanged = updateAccessoryStackContainerBottomMargin(
             accessoryStackContainer,
-            resolveAccessoryStackBottomMarginPx()
+            accessoryBottomMarginPx
         );
         if (requestTerminalResize && (accessoryHeightChanged || accessoryMarginChanged) && mTerminalView != null) {
             mTerminalView.post(mTerminalView::updateSize);
@@ -4233,28 +4243,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         scheduleAccessoryRenderSync("setTerminalToolbarHeight");
     }
 
-    private int resolveTerminalFlushDockPaddingPx() {
-        if (mPreferences == null || !mPreferences.isTerminalFlushDockEnabled()) {
-            mHasMeasuredTerminalFlushPadding = false;
+    private int resolveTerminalFlushDockPaddingPx(int dockContentHeightPx, int accessoryBottomMarginPx) {
+        if (mPreferences == null || !mPreferences.isTerminalFlushDockEnabled())
             return 0;
-        }
-        if (mTerminalView == null || mTerminalView.mRenderer == null || mTerminalView.getHeight() <= 0)
+        if (mTerminalView == null || mTerminalView.mRenderer == null
+            || mTerminalView.getWidth() <= 0 || mTerminalView.getHeight() <= 0)
             return mAppliedTerminalFlushPaddingPx;
-
         int fontLineSpacingPx = mTerminalView.mRenderer.getFontLineSpacing();
         if (fontLineSpacingPx <= 0)
             return mAppliedTerminalFlushPaddingPx;
-        int baseTerminalHeightPx = mTerminalView.getHeight() + mAppliedTerminalFlushPaddingPx;
+        View rootRelativeLayout = findViewById(R.id.activity_termux_root_relative_layout);
+        if (rootRelativeLayout == null || rootRelativeLayout.getHeight() <= 0)
+            return mAppliedTerminalFlushPaddingPx;
+        // Structural base: the height the terminal will settle at once the dock content (without
+        // any flush padding) is laid out. Deliberately NOT derived from the terminal's current
+        // height — mid-relayout passes (e.g. multi-row extra keys toggling with the IME) would
+        // feed the previously applied padding back in and make the result oscillate.
+        rootRelativeLayout.getLocationInWindow(mTmpViewLocation);
+        int accessoryBottomWindowY = mTmpViewLocation[1] + rootRelativeLayout.getHeight() - accessoryBottomMarginPx;
+        mTerminalView.getLocationInWindow(mTmpViewLocation);
+        int terminalTopWindowY = mTmpViewLocation[1];
+        int baseTerminalHeightPx = accessoryBottomWindowY - dockContentHeightPx - terminalTopWindowY;
+        if (baseTerminalHeightPx <= 0)
+            return mAppliedTerminalFlushPaddingPx;
         int availableTerminalHeightPx = Math.max(0,
             baseTerminalHeightPx - mTerminalView.mRenderer.getFontLineSpacingAndAscent());
-        int flushPaddingPx = availableTerminalHeightPx % fontLineSpacingPx;
-        // A one-pixel rounding shift during inset/layout settling must not alternate the parent
-        // height between adjacent values. The unpadded base still makes larger changes converge.
-        if (mHasMeasuredTerminalFlushPadding
-            && Math.abs(flushPaddingPx - mAppliedTerminalFlushPaddingPx) <= 1)
-            return mAppliedTerminalFlushPaddingPx;
-        mHasMeasuredTerminalFlushPadding = true;
-        return flushPaddingPx;
+        return availableTerminalHeightPx % fontLineSpacingPx;
     }
 
     public void requestTerminalFlushDockGeometryUpdate() {
