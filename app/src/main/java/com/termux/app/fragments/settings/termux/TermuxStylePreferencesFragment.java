@@ -225,10 +225,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         if (key == null)
             return;
         switch(key) {
-            case TermuxPropertyConstants.KEY_USE_FULLSCREEN:
-                writeTermuxPropertyToProperties(TermuxPropertyConstants.KEY_USE_FULLSCREEN, Boolean.toString(value));
-                scheduleTermuxActivityStylingSync(false);
-                break;
             case "use_system_wallpaper":
                 TermuxActivity.setWallpaperModeEnabled(mContext, value);
                 break;
@@ -247,10 +243,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 break;
             case "terminal_dynamic_colors_enabled":
                 mPreferences.setTerminalDynamicColorsEnabled(value);
-                scheduleTermuxActivityStylingSync(false);
-                break;
-            case "terminal_flush_dock":
-                mPreferences.setTerminalFlushDockEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
             case "app_launcher_bw_icons":
@@ -298,9 +290,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         if (mPreferences == null)
             return defValue;
         switch(key) {
-            case TermuxPropertyConstants.KEY_USE_FULLSCREEN:
-                return Boolean.parseBoolean(loadTermuxProperties().getProperty(
-                    TermuxPropertyConstants.KEY_USE_FULLSCREEN, Boolean.toString(defValue)));
             case "use_system_wallpaper":
                 return mPreferences.isUseSystemWallpaperEnabled();
             case "extrakeys_blur_enabled":
@@ -312,8 +301,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return true;
             case "terminal_dynamic_colors_enabled":
                 return mPreferences.isTerminalDynamicColorsEnabled();
-            case "terminal_flush_dock":
-                return mPreferences.isTerminalFlushDockEnabled();
             case "app_launcher_bw_icons":
                 return mPreferences.isAppLauncherBwIconsEnabled();
             case "app_launcher_unify_icons":
