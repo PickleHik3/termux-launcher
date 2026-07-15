@@ -365,6 +365,12 @@ public final class TaiManager {
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(modelId);
         if (spec == null) return error(404, "model_not_found", "Unknown TAI model: " + modelId);
+        if (spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)
+                && !spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
+            return error(400, "embedding_model_not_loadable",
+                "Model " + modelId + " is an embedding model. It is served on demand via /v1/embeddings and "
+                    + "/api/embed and does not need to be loaded into the generation runtime.");
+        }
         String requestedBackend = request.optString("backend", "").trim();
         if (!requestedBackend.isEmpty() && !requestedBackend.equalsIgnoreCase(spec.backend)) {
             return error(409, "backend_mismatch", "Model " + modelId + " requires backend " + spec.backend + ".");
