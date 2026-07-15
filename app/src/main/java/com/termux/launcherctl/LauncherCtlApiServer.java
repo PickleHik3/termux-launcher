@@ -283,10 +283,13 @@ public class LauncherCtlApiServer {
             }
 
             if (!allowRequest(request)) {
+                SimpleRateLimiter limiter = rateLimiterFor(request);
+                long retryAfter = limiter != null ? limiter.retryAfterSeconds() : 1;
                 JSONObject rateLimitError = jsonError("rate_limited", "Too many requests; retry later");
                 rateLimitError.put("_statusCode", 429);
-                writeResponse(output, request.path.startsWith("/api/")
-                    ? ollamaJsonResponse(rateLimitError) : jsonResponse(rateLimitError));
+                HttpResponse rateLimitResponse = request.path.startsWith("/api/")
+                    ? ollamaJsonResponse(rateLimitError) : jsonResponse(rateLimitError);
+                writeResponse(output, withRateLimitHeaders(rateLimitResponse, limiter, retryAfter));
                 return;
             }
 
@@ -1055,11 +1058,27 @@ public class LauncherCtlApiServer {
     }
 
     private boolean allowRequest(HttpRequest request) {
+        SimpleRateLimiter limiter = rateLimiterFor(request);
+        return limiter == null || limiter.allow();
+    }
+
+    private SimpleRateLimiter rateLimiterFor(HttpRequest request) {
         SimpleRateLimiter limiter = rateLimiters.get(request.method + ":" + request.path);
         if (limiter == null && "GET".equals(request.method) && isAppIconPath(request.path)) {
             limiter = rateLimiters.get("GET:/v1/apps/icon/*");
         }
-        return limiter == null || limiter.allow();
+        return limiter;
+    }
+
+    private static HttpResponse withRateLimitHeaders(HttpResponse response, SimpleRateLimiter limiter, long retryAfterSeconds) {
+        Map<String, String> headers = response.headers != null ? new HashMap<>(response.headers) : new HashMap<>();
+        headers.put("Retry-After", Long.toString(retryAfterSeconds));
+        if (limiter != null) {
+            headers.put("RateLimit-Limit", Integer.toString(limiter.maxRequests));
+            headers.put("RateLimit-Remaining", "0");
+            headers.put("RateLimit-Reset", Long.toString(retryAfterSeconds));
+        }
+        return new HttpResponse(response.statusCode, response.contentType, response.body, headers);
     }
 
     private HttpRequest parseRequest(InputStream input) throws IOException, HttpParseException {
@@ -3230,6 +3249,13 @@ public class LauncherCtlApiServer {
             }
             timestamps.addLast(now);
             return true;
+        }
+
+        synchronized long retryAfterSeconds() {
+            if (timestamps.isEmpty()) return 1;
+            long waitMs = (timestamps.peekFirst() + windowMs) - System.currentTimeMillis();
+            if (waitMs <= 0) return 1;
+            return (waitMs + 999) / 1000;
         }
     }
 
