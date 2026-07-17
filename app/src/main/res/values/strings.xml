@@ -211,6 +211,82 @@
                 <string name="termux_soft_keyboard_enabled_off">Soft keyboard will be disabled.</string>
                 <string name="termux_soft_keyboard_enabled_on">Soft keyboard will be enabled. (Default)</string>
 
+                <!-- In-app Keyboard -->
+                <string name="termux_keyboard_preferences_title">Keyboard</string>
+                <string name="termux_keyboard_preferences_summary">Built-in terminal keyboard — themes, feedback and keys</string>
+                <string name="termux_keyboard_appearance_header">Appearance</string>
+                <string name="termux_keyboard_typing_header">Typing &amp; feedback</string>
+                <string name="termux_keyboard_advanced_header">Advanced</string>
+                <string name="termux_keyboard_credits_header">About this keyboard</string>
+                <string name="termux_keyboard_credits_text">If you like this keyboard, support its amazing developer ❤</string>
+                <string name="termux_keyboard_credits_summary">Powered by Unexpected Keyboard, an open-source project by Jules Aguillon.</string>
+                <string name="termux_keyboard_credits_github_title">Unexpected Keyboard on GitHub</string>
+                <string name="termux_keyboard_credits_play_title">Unexpected Keyboard on Google Play</string>
+                <string name="termux_in_app_keyboard_enabled_title">Use built-in keyboard</string>
+                <string name="termux_in_app_keyboard_enabled_summary">Type in the terminal with the launcher’s own keyboard instead of the Android keyboard. It stays ready when you switch back from other apps.</string>
+                <string name="termux_in_app_keyboard_theme_title">Theme</string>
+                <string name="termux_in_app_keyboard_height_adjust_title">Size &amp; shape</string>
+                <string name="termux_in_app_keyboard_height_adjust_summary">Drag to resize the keyboard, or fine-tune key spacing and corner radius.</string>
+                <string name="termux_in_app_keyboard_height_adjust_handle">Drag to adjust keyboard height</string>
+                <string name="termux_in_app_keyboard_height_adjust_confirm">Confirm keyboard adjustments</string>
+                <string name="termux_in_app_keyboard_height_adjust_cancel">Cancel keyboard adjustments</string>
+                <string name="termux_in_app_keyboard_height_adjust_confirm_symbol">✓</string>
+                <string name="termux_in_app_keyboard_height_adjust_cancel_symbol">✗</string>
+                <string name="termux_in_app_keyboard_key_spacing">Key spacing</string>
+                <string name="termux_in_app_keyboard_key_spacing_slider">Adjust space between keyboard keys</string>
+                <string name="termux_in_app_keyboard_key_corner_radius">Corner radius</string>
+                <string name="termux_in_app_keyboard_key_corner_radius_slider">Adjust keyboard key corner radius</string>
+                <string name="termux_in_app_keyboard_custom_layout_title">Custom layout</string>
+                <string name="termux_in_app_keyboard_custom_layout_summary">Load your own layout from ~/.termux/keyboard/layout.xml</string>
+                <string-array name="termux_in_app_keyboard_theme_entries">
+                    <item>System</item>
+                    <item>Light</item>
+                    <item>Dark</item>
+                    <item>Black</item>
+                    <item>Steel &amp; Teal</item>
+                    <item>Mint Fuji</item>
+                    <item>Neon Nightfall</item>
+                    <item>Sakura Wood</item>
+                    <item>Ink Plum</item>
+                </string-array>
+                <string-array name="termux_in_app_keyboard_theme_values">
+                    <item>system</item>
+                    <item>light</item>
+                    <item>dark</item>
+                    <item>black</item>
+                    <item>steel_teal</item>
+                    <item>mint_fuji</item>
+                    <item>neon_nightfall</item>
+                    <item>sakura_wood</item>
+                    <item>ink_plum</item>
+                </string-array>
+                <string name="termux_in_app_keyboard_dock_match_title">Match dock</string>
+                <string name="termux_in_app_keyboard_dock_match_summary">Blend the keyboard with the dock — follow its shape, render on its frosted glass, or both.</string>
+                <string-array name="termux_in_app_keyboard_dock_match_entries">
+                    <item>None</item>
+                    <item>Shape</item>
+                    <item>Glass</item>
+                    <item>Shape + glass</item>
+                </string-array>
+                <string-array name="termux_in_app_keyboard_dock_match_values">
+                    <item>none</item>
+                    <item>shape</item>
+                    <item>glass</item>
+                    <item>both</item>
+                </string-array>
+                <string name="termux_in_app_keyboard_haptics_title">Vibrate on keypress</string>
+                <string name="termux_in_app_keyboard_haptics_summary">Gentle haptic tick for every key.</string>
+                <string name="termux_in_app_keyboard_key_sound_title">Keypress sound</string>
+                <string name="termux_in_app_keyboard_key_sound_summary">Uses the system touch-sound volume.</string>
+                <string name="termux_in_app_keyboard_font_title">Font</string>
+                <string name="termux_in_app_keyboard_font_summary_default">System default typeface.</string>
+                <string name="termux_in_app_keyboard_font_summary_custom">Custom font: %1$s</string>
+                <string name="termux_in_app_keyboard_font_pick">Choose font file…</string>
+                <string name="termux_in_app_keyboard_font_reset">Use system default</string>
+                <string name="termux_in_app_keyboard_font_error">Could not read that file as a font.</string>
+                <string name="termux_in_app_keyboard_extra_keys_title">Add keys to the keyboard</string>
+                <string name="termux_in_app_keyboard_extra_keys_summary">Choose extra editing and navigation keys to show on the layout.</string>
+
                 <!-- Soft Keyboard Only If No Hardware-->
                 <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Soft Keyboard Only If No Hardware</string>
                 <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Soft keyboard will be enabled even if

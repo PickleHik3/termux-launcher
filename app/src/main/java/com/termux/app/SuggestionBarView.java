@@ -7296,26 +7296,31 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private void scheduleStableDrawReleaseIfPossible() {
-        if (!hostVisible || !suppressDrawUntilStableLayout || stableLayoutRerenderPosted || !hasStableRenderBounds()) {
+        if (!hostVisible || !suppressDrawUntilStableLayout || stableLayoutRerenderPosted) {
+            return;
+        }
+        // The timeout must be able to expire even while render bounds never stabilize (e.g. the
+        // bar stuck at a collapsed height after a crash-restart mid-layout) — otherwise draw
+        // suppression holds the bar blank indefinitely.
+        if (hasStableDrawSuppressionExpired()) {
+            releaseStableDrawSuppression();
+            return;
+        }
+        if (!hasStableRenderBounds()) {
+            postDelayed(this::scheduleStableDrawReleaseIfPossible, 16L);
             return;
         }
         stableLayoutRerenderPosted = true;
         post(() -> {
             stableLayoutRerenderPosted = false;
+            if (hasStableDrawSuppressionExpired()) {
+                releaseStableDrawSuppression();
+                return;
+            }
             if (!hostVisible || !isAttachedToWindow() || !hasStableRenderBounds()) {
                 return;
             }
             if (!hasStableChildLayout()) {
-                long suppressedForMs = stableLayoutSuppressedSinceUptimeMs == 0L
-                    ? 0L
-                    : SystemClock.uptimeMillis() - stableLayoutSuppressedSinceUptimeMs;
-                if (suppressedForMs >= STABLE_LAYOUT_MAX_SUPPRESS_MS) {
-                    suppressDrawUntilStableLayout = false;
-                    childLayoutPending = false;
-                    stableLayoutSuppressedSinceUptimeMs = 0L;
-                    invalidate();
-                    return;
-                }
                 if (suppressDrawUntilStableLayout) {
                     postDelayed(this::scheduleStableDrawReleaseIfPossible, 16L);
                 }
@@ -7327,6 +7332,20 @@ public final class SuggestionBarView extends GridLayout {
             stableLayoutSuppressedSinceUptimeMs = 0L;
             invalidate();
         });
+    }
+
+    private boolean hasStableDrawSuppressionExpired() {
+        if (!suppressDrawUntilStableLayout || stableLayoutSuppressedSinceUptimeMs == 0L)
+            return false;
+        return SystemClock.uptimeMillis() - stableLayoutSuppressedSinceUptimeMs
+            >= STABLE_LAYOUT_MAX_SUPPRESS_MS;
+    }
+
+    private void releaseStableDrawSuppression() {
+        suppressDrawUntilStableLayout = false;
+        childLayoutPending = false;
+        stableLayoutSuppressedSinceUptimeMs = 0L;
+        invalidate();
     }
 
     private void rerenderCurrentSurface() {
@@ -7439,7 +7458,10 @@ public final class SuggestionBarView extends GridLayout {
     /** Pages occupied by the user's persisted pinned items (excludes the dynamic most-used page). */
     private int getRealPinnedPagesCount() {
         int totalPinned = pinnedItems == null ? 0 : pinnedItems.size();
-        int perPage = Math.max(1, pinnedItemsPerPage);
+        // Compute fresh instead of reading the pinnedItemsPerPage field: the field is 1 until
+        // the first successful pinned render and after az/non-pinned renders, so reading it here
+        // would report one page per pinned item (the "dozens of empty page ticks" failure).
+        int perPage = Math.max(1, computePinnedItemsPerPage());
         if (totalPinned <= 0) return 1;
         return (totalPinned + perPage - 1) / perPage;
     }

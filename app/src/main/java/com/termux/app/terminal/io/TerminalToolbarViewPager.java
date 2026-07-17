@@ -118,7 +118,13 @@ public class TerminalToolbarViewPager {
                 final EditText editText = mTerminalToolbarViewPager.findViewById(R.id.terminal_toolbar_text_input);
                 if (editText != null) {
                     editText.requestFocus();
-                    editText.postDelayed(() -> KeyboardUtils.showSoftKeyboard(mActivity, editText), 120);
+                    editText.postDelayed(() -> {
+                        if (mActivity.isInAppKeyboardEnabled()) {
+                            mActivity.suppressSystemImeForInAppKeyboard();
+                            return;
+                        }
+                        KeyboardUtils.showSoftKeyboard(mActivity, editText);
+                    }, 120);
                 }
             }
         }

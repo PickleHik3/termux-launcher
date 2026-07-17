@@ -174,6 +174,8 @@
                 android:id="@+id/accessory_surface_host"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:layout_above="@id/inapp_keyboard_container"
+                android:layout_alignWithParentIfMissing="true"
                 android:clipChildren="true"
                 android:clipToPadding="true"
                 android:visibility="gone">
@@ -225,7 +227,8 @@
                 android:id="@+id/apps_bar_az_fx_underlay"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_alignParentBottom="true"
+                android:layout_above="@id/inapp_keyboard_container"
+                android:layout_alignWithParentIfMissing="true"
                 android:clickable="false"
                 android:focusable="false"
                 android:visibility="gone" />
@@ -259,7 +262,8 @@
                 android:visibility="gone"
                 android:layout_width="match_parent"
                 android:layout_height="37.5dp"
-                android:layout_alignParentBottom="true"
+                android:layout_above="@id/inapp_keyboard_container"
+                android:layout_alignWithParentIfMissing="true"
                 android:background="@android:color/transparent"/>
 
             <View
@@ -274,10 +278,144 @@
                 android:id="@+id/apps_bar_az_fx_overlay"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_alignParentBottom="true"
+                android:layout_above="@id/inapp_keyboard_container"
+                android:layout_alignWithParentIfMissing="true"
                 android:clickable="false"
                 android:focusable="false"
                 android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/inapp_keyboard_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_alignParentBottom="true"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/inapp_keyboard_height_adjust_controls"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <FrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="36dp">
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_gravity="center"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:id="@+id/inapp_keyboard_height_adjust_cancel"
+                                android:layout_width="40dp"
+                                android:layout_height="32dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:contentDescription="@string/termux_in_app_keyboard_height_adjust_cancel"
+                                android:gravity="center"
+                                android:text="@string/termux_in_app_keyboard_height_adjust_cancel_symbol"
+                                android:textColor="?attr/termuxColorOnSurface"
+                                android:textSize="18sp" />
+
+                            <FrameLayout
+                                android:id="@+id/inapp_keyboard_height_adjust_handle"
+                                android:layout_width="88dp"
+                                android:layout_height="match_parent"
+                                android:contentDescription="@string/termux_in_app_keyboard_height_adjust_handle"
+                                android:clickable="true"
+                                android:focusable="true">
+
+                                <View
+                                    android:id="@+id/inapp_keyboard_height_adjust_handle_indicator"
+                                    android:layout_width="52dp"
+                                    android:layout_height="4dp"
+                                    android:layout_gravity="center"
+                                    android:background="?attr/termuxColorOnSurfaceVariant" />
+                            </FrameLayout>
+
+                            <TextView
+                                android:id="@+id/inapp_keyboard_height_adjust_confirm"
+                                android:layout_width="40dp"
+                                android:layout_height="32dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:contentDescription="@string/termux_in_app_keyboard_height_adjust_confirm"
+                                android:gravity="center"
+                                android:text="@string/termux_in_app_keyboard_height_adjust_confirm_symbol"
+                                android:textColor="?attr/termuxColorOnSurface"
+                                android:textSize="18sp" />
+                        </LinearLayout>
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="28dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp">
+
+                        <TextView
+                            android:id="@+id/inapp_keyboard_key_spacing_label"
+                            android:layout_width="92dp"
+                            android:layout_height="wrap_content"
+                            android:maxLines="1"
+                            android:text="@string/termux_in_app_keyboard_key_spacing"
+                            android:textColor="?attr/termuxColorOnSurface"
+                            android:textSize="11sp" />
+
+                        <SeekBar
+                            android:id="@+id/inapp_keyboard_key_spacing_slider"
+                            android:layout_width="0dp"
+                            android:layout_height="28dp"
+                            android:layout_weight="1"
+                            android:contentDescription="@string/termux_in_app_keyboard_key_spacing_slider"
+                            android:max="200"
+                            android:splitTrack="false" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="28dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp">
+
+                        <TextView
+                            android:id="@+id/inapp_keyboard_key_corner_radius_label"
+                            android:layout_width="92dp"
+                            android:layout_height="wrap_content"
+                            android:maxLines="1"
+                            android:text="@string/termux_in_app_keyboard_key_corner_radius"
+                            android:textColor="?attr/termuxColorOnSurface"
+                            android:textSize="11sp" />
+
+                        <SeekBar
+                            android:id="@+id/inapp_keyboard_key_corner_radius_slider"
+                            android:layout_width="0dp"
+                            android:layout_height="28dp"
+                            android:layout_weight="1"
+                            android:contentDescription="@string/termux_in_app_keyboard_key_corner_radius_slider"
+                            android:max="240"
+                            android:splitTrack="false" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <FrameLayout
+                    android:id="@+id/inapp_keyboard_suggestion_host"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:visibility="gone" />
+
+                <FrameLayout
+                    android:id="@+id/inapp_keyboard_view_host"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
         </RelativeLayout>
 
         <com.termux.app.LauncherAzGestureFxView
@@ -285,7 +423,8 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_alignParentTop="true"
-            android:layout_alignParentBottom="true"
+            android:layout_above="@id/accessory_stack_container"
+            android:layout_alignWithParentIfMissing="true"
             android:clickable="false"
             android:focusable="false"
             android:visibility="gone" />

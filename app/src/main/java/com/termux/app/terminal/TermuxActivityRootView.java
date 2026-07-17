@@ -131,6 +131,20 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
         if (mActivity == null || !mActivity.isVisible()) return;
         if (mActivity.shouldDelayRootMarginAdjustments()) return;
 
+        // The embedded keyboard suppresses the system IME for the whole activity; any "IME
+        // visible" reading below is then a stale visible-frame artifact carried over from the
+        // app we resumed from, and lifting the root for it shoves the terminal and keyboard
+        // toward the top of the screen.
+        if (mActivity.isSystemImeSuppressedByInAppKeyboard()) {
+            FrameLayout.LayoutParams suppressedParams = (FrameLayout.LayoutParams) getLayoutParams();
+            if (suppressedParams.bottomMargin != 0) {
+                commitBottomMargin(suppressedParams, 0);
+            }
+            marginBottom = 0;
+            lastMarginBottom = 0;
+            return;
+        }
+
         // While system bars are hidden the visible-frame probe below is unreliable and the dock is
         // lifted above the IME via insets instead; keep the root margin at 0 so both mechanisms
         // never stack.

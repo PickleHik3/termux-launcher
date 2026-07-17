@@ -32,6 +32,9 @@ import com.termux.shared.activities.ReportActivity;
 import com.termux.shared.models.ReportInfo;
 import com.termux.app.models.UserAction;
 import com.termux.app.terminal.io.KeyboardShortcut;
+import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
+import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason;
+import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ToggleReason;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.data.DataUtils;
 import com.termux.shared.logger.Logger;
@@ -65,6 +68,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     private Runnable mShowSoftKeyboardRunnable;
 
+    // WP4 installs the activity-owned controller. Null intentionally preserves legacy IME policy.
+    private TermuxInAppKeyboard mInAppKeyboardController;
+
     private boolean mShowSoftKeyboardIgnoreOnce;
 
     private boolean mShowSoftKeyboardWithDelayOnce;
@@ -83,6 +89,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     public TermuxActivity getActivity() {
         return mActivity;
+    }
+
+    public void setInAppKeyboardController(TermuxInAppKeyboard controller) {
+        mInAppKeyboardController = controller;
     }
 
     public void setSuggestionBarCallback(SuggestionBarCallback callback) {
@@ -198,6 +208,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             }
         }
         if (!term.isMouseTrackingActive() && !e.isFromSource(InputDevice.SOURCE_MOUSE)) {
+            if (isInAppKeyboardEnabled()) {
+                mInAppKeyboardController.show(ShowReason.TERMINAL_TAP);
+                suppressSystemImeForInAppKeyboard();
+                return;
+            }
             if (!KeyboardUtils.areDisableSoftKeyboardFlagsSet(mActivity))
                 KeyboardUtils.showSoftKeyboard(mActivity, mActivity.getTerminalView());
             else
@@ -526,6 +541,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      * drawer or extra keys, or with ctrl+alt+k hardware keyboard shortcut.
      */
     public void onToggleSoftKeyboardRequest() {
+        if (isInAppKeyboardEnabled()) {
+            mInAppKeyboardController.toggle(ToggleReason.KEYBOARD_ACTION);
+            suppressSystemImeForInAppKeyboard();
+            return;
+        }
         // If soft keyboard toggle behaviour is enable/disabled
         if (mActivity.getProperties().shouldEnableDisableSoftKeyboardOnToggle()) {
             // If soft keyboard is visible
@@ -563,6 +583,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     public void setSoftKeyboardState(boolean isStartup, boolean isReloadTermuxProperties) {
+        if (isInAppKeyboardEnabled()) {
+            suppressSystemImeForInAppKeyboard();
+            return;
+        }
         boolean noShowKeyboard = false;
         // Requesting terminal view focus is necessary regardless of if soft keyboard is to be
         // disabled or hidden at startup, otherwise if hardware keyboard is attached and user
@@ -652,10 +676,33 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     private Runnable getShowSoftKeyboardRunnable() {
         if (mShowSoftKeyboardRunnable == null) {
             mShowSoftKeyboardRunnable = () -> {
+                // A runnable posted before embedded mode was enabled must never leak the system IME.
+                if (isInAppKeyboardEnabled()) {
+                    suppressSystemImeForInAppKeyboard();
+                    return;
+                }
                 KeyboardUtils.showSoftKeyboard(mActivity, mActivity.getTerminalView());
             };
         }
         return mShowSoftKeyboardRunnable;
+    }
+
+    private boolean isInAppKeyboardEnabled() {
+        return mInAppKeyboardController != null && mInAppKeyboardController.isEnabled();
+    }
+
+    private void suppressSystemImeForInAppKeyboard() {
+        TermuxInAppKeyboard controller = mInAppKeyboardController;
+        if (controller == null || !controller.isEnabled())
+            return;
+
+        if (mShowSoftKeyboardRunnable != null)
+            mActivity.getTerminalView().removeCallbacks(mShowSoftKeyboardRunnable);
+        mShowSoftKeyboardIgnoreOnce = false;
+        mShowSoftKeyboardWithDelayOnce = false;
+
+        // The controller applies the same policy for lifecycle calls made directly by WP4.
+        controller.suppressSystemIme();
     }
 
     public void setTerminalCursorBlinkerState(boolean start) {

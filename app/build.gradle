@@ -168,6 +168,7 @@ dependencies {
     }
     implementation project(":terminal-view")
     implementation project(":termux-shared")
+    implementation project(":inapp-keyboard")
     // Shizuku dependencies for privileged operations
     implementation "dev.rikka.shizuku:api:13.1.5"
     implementation "dev.rikka.shizuku:provider:13.1.5"
@@ -292,6 +293,9 @@ tasks.register("generateLicenseResources", Copy) {
     }
     from(rootProject.file("LICENSE-BSD-2-CLAUSE")) {
         rename { "license_bsd_2_clause.txt" }
+    }
+    from(rootProject.file("LICENSE-UNEXPECTED-KEYBOARD")) {
+        rename { "license_gpl_3_unexpected_keyboard.txt" }
     }
 }
 

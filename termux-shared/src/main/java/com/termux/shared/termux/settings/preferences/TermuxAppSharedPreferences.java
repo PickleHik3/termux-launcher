@@ -430,6 +430,238 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_SOFT_KEYBOARD_ENABLED, value, false);
     }
 
+    public boolean isInAppKeyboardEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_IN_APP_KEYBOARD_ENABLED, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_ENABLED);
+    }
+
+    public void setInAppKeyboardEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_IN_APP_KEYBOARD_ENABLED, value, false);
+    }
+
+    public String getInAppKeyboardTheme() {
+        String value = SharedPreferenceUtils.getString(
+            mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_THEME,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_THEME,
+            true
+        );
+        if (isValidInAppKeyboardTheme(value))
+            return value;
+        return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_THEME;
+    }
+
+    public void setInAppKeyboardTheme(String value) {
+        if (!isValidInAppKeyboardTheme(value))
+            value = TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_THEME;
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_IN_APP_KEYBOARD_THEME, value, false);
+    }
+
+    private static boolean isValidInAppKeyboardTheme(String value) {
+        if (value == null) return false;
+        switch (value) {
+            case "system":
+            case "light":
+            case "dark":
+            case "black":
+            case "steel_teal":
+            case "mint_fuji":
+            case "neon_nightfall":
+            case "sakura_wood":
+            case "ink_plum":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /** Dock-match mode: {@code none}, {@code shape}, {@code glass}, or {@code both}. */
+    public String getInAppKeyboardDockMatch() {
+        String value = SharedPreferenceUtils.getString(
+            mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_DOCK_MATCH,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_DOCK_MATCH,
+            true
+        );
+        if (isValidInAppKeyboardDockMatch(value))
+            return value;
+        return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_DOCK_MATCH;
+    }
+
+    public void setInAppKeyboardDockMatch(String value) {
+        if (!isValidInAppKeyboardDockMatch(value))
+            value = TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_DOCK_MATCH;
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_DOCK_MATCH, value, false);
+    }
+
+    private static boolean isValidInAppKeyboardDockMatch(String value) {
+        if (value == null) return false;
+        switch (value) {
+            case "none":
+            case "shape":
+            case "glass":
+            case "both":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public boolean isInAppKeyboardHapticsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_HAPTICS_ENABLED,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HAPTICS_ENABLED);
+    }
+
+    public void setInAppKeyboardHapticsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_HAPTICS_ENABLED, value, false);
+    }
+
+    public boolean isInAppKeyboardKeySoundEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_SOUND_ENABLED,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_SOUND_ENABLED);
+    }
+
+    public void setInAppKeyboardKeySoundEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_SOUND_ENABLED, value, false);
+    }
+
+    /** Absolute path of the imported label font file, or empty for the default typeface. */
+    public String getInAppKeyboardFontPath() {
+        String value = SharedPreferenceUtils.getString(
+            mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_FONT_PATH,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FONT_PATH,
+            true
+        );
+        return value == null ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FONT_PATH : value;
+    }
+
+    public void setInAppKeyboardFontPath(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_FONT_PATH,
+            value == null ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FONT_PATH : value, false);
+    }
+
+    /** Extra-key names selectable for merging into the in-app keyboard layout, in catalog order. */
+    public static final String[] IN_APP_KEYBOARD_EXTRA_KEY_NAMES = {
+        "tab", "esc", "capslock", "compose", "home", "end", "page_up", "page_down",
+        "copy", "paste", "cut", "selectAll", "undo", "redo",
+        "delete_word", "forward_delete_word", "shareText", "pasteAsPlainText",
+        "switch_greekmath", "meta", "alt", "superscript", "subscript",
+        "f11_placeholder", "f12_placeholder", "menu", "scroll_lock",
+        "€", "ß", "£", "§", "†", "ª", "º",
+        "accent_aigu", "accent_grave", "accent_circonflexe", "accent_tilde",
+        "accent_cedille", "accent_trema", "accent_ring", "accent_caron",
+        "accent_macron", "accent_ogonek", "accent_breve", "accent_dot_above",
+        "accent_double_aigu", "accent_slash", "accent_bar"
+    };
+
+    /**
+     * Comma-joined subset of {@link #IN_APP_KEYBOARD_EXTRA_KEY_NAMES} in canonical order (an
+     * empty string means "none enabled"), or the
+     * {@link TERMUX_APP#DEFAULT_IN_APP_KEYBOARD_EXTRA_KEYS} sentinel when the user never chose
+     * a selection and the built-in defaults apply.
+     */
+    public String getInAppKeyboardExtraKeys() {
+        String value = SharedPreferenceUtils.getString(
+            mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_EXTRA_KEYS,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_EXTRA_KEYS,
+            true
+        );
+        return normalizeInAppKeyboardExtraKeys(value);
+    }
+
+    public void setInAppKeyboardExtraKeys(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_EXTRA_KEYS,
+            normalizeInAppKeyboardExtraKeys(value), false);
+    }
+
+    /**
+     * Drops unknown names and rewrites the survivors in canonical catalog order. The
+     * never-chose sentinel (and {@code null}) pass through unchanged; an empty string is a
+     * valid "none enabled" selection.
+     */
+    public static String normalizeInAppKeyboardExtraKeys(String value) {
+        if (value == null || TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_EXTRA_KEYS.equals(value))
+            return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_EXTRA_KEYS;
+        if (value.isEmpty())
+            return "";
+        java.util.Set<String> selected = new java.util.HashSet<>(
+            java.util.Arrays.asList(value.split(",")));
+        StringBuilder result = new StringBuilder();
+        for (String name : IN_APP_KEYBOARD_EXTRA_KEY_NAMES) {
+            if (!selected.contains(name)) continue;
+            if (result.length() > 0) result.append(',');
+            result.append(name);
+        }
+        return result.toString();
+    }
+
+    public float getInAppKeyboardHeightScale() {
+        float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE);
+        return clampInAppKeyboardHeightScale(value);
+    }
+
+    public void setInAppKeyboardHeightScale(float value) {
+        SharedPreferenceUtils.setFloat(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            clampInAppKeyboardHeightScale(value), false);
+    }
+
+    public static float clampInAppKeyboardHeightScale(float value) {
+        if (Float.isNaN(value) || Float.isInfinite(value))
+            return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE;
+        return Math.max(TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE, value));
+    }
+
+    public float getInAppKeyboardKeyMarginScale() {
+        float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE);
+        return clampInAppKeyboardKeyMarginScale(value);
+    }
+
+    public void setInAppKeyboardKeyMarginScale(float value) {
+        SharedPreferenceUtils.setFloat(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
+            clampInAppKeyboardKeyMarginScale(value), false);
+    }
+
+    public static float clampInAppKeyboardKeyMarginScale(float value) {
+        if (Float.isNaN(value) || Float.isInfinite(value))
+            return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE;
+        return Math.max(TERMUX_APP.MIN_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
+            Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_MARGIN_SCALE, value));
+    }
+
+    public float getInAppKeyboardKeyCornerRadiusDp() {
+        float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP);
+        return clampInAppKeyboardKeyCornerRadiusDp(value);
+    }
+
+    public void setInAppKeyboardKeyCornerRadiusDp(float value) {
+        SharedPreferenceUtils.setFloat(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP,
+            clampInAppKeyboardKeyCornerRadiusDp(value), false);
+    }
+
+    public static float clampInAppKeyboardKeyCornerRadiusDp(float value) {
+        if (Float.isNaN(value) || Float.isInfinite(value) || value < 0f)
+            return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP;
+        return Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP, value);
+    }
+
     public boolean isSoftKeyboardEnabledOnlyIfNoHardware() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_SOFT_KEYBOARD_ENABLED_ONLY_IF_NO_HARDWARE, TERMUX_APP.DEFAULT_VALUE_KEY_SOFT_KEYBOARD_ENABLED_ONLY_IF_NO_HARDWARE);
     }
