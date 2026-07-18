@@ -153,6 +153,20 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     }
 
     @Test
+    public void unifiedKeyboardGlassIsExclusiveToDefaultDock() {
+        assertTrue(TermuxActivity.shouldUseUnifiedDefaultKeyboardGlassSurface(
+            true, true, false, true));
+        assertFalse(TermuxActivity.shouldUseUnifiedDefaultKeyboardGlassSurface(
+            true, true, true, true));
+        assertFalse(TermuxActivity.shouldUseUnifiedDefaultKeyboardGlassSurface(
+            true, true, false, false));
+        assertFalse(TermuxActivity.shouldUseUnifiedDefaultKeyboardGlassSurface(
+            false, true, false, true));
+        assertFalse(TermuxActivity.shouldUseUnifiedDefaultKeyboardGlassSurface(
+            true, false, false, true));
+    }
+
+    @Test
     public void controllerIsCreatedLazilyWhenPreferenceBecomesEnabled() {
         TermuxAppSharedPreferences preferences = prepareActivity(false);
 

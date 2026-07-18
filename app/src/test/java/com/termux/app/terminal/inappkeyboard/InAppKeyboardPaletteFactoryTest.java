@@ -82,14 +82,12 @@ public class InAppKeyboardPaletteFactoryTest {
         assertEquals(0xFF727A80, steel.actionKeyBackground);
         assertEquals(0xFF727A80, steel.spaceBarBackground);
         assertEquals(0xFF1C7A71, steel.activatedKeyBackground);
-        assertNotNull(steel.indicatorColors);
-        assertEquals(6, steel.indicatorColors.length);
+        assertNull(steel.indicatorColors);
 
         Theme.Palette neon = InAppKeyboardPaletteFactory.create(context, "neon_nightfall");
         assertEquals(0xFF0D0D10, neon.keyboardBackground);
         assertEquals(0xFF17171B, neon.keyBackground);
-        assertNotNull(neon.indicatorColors);
-        assertEquals(3, neon.indicatorColors.length);
+        assertNull(neon.indicatorColors);
 
         for (String variant : new String[] {"mint_fuji", "sakura_wood", "ink_plum"}) {
             Theme.Palette palette = InAppKeyboardPaletteFactory.create(context, variant);
@@ -135,7 +133,7 @@ public class InAppKeyboardPaletteFactoryTest {
         assertTrue("neon glass chips stay dark",
             ColorUtils.calculateLuminance(ColorUtils.setAlphaComponent(
                 neon.keyBackground, 255)) < 0.2d);
-        assertNotNull("indicator survives glassing", neon.indicatorColors);
+        assertNull("decorative indicator is removed from glass themes", neon.indicatorColors);
 
         Theme.Palette steel = InAppKeyboardPaletteFactory.createGlass(context, "steel_teal");
         assertTrue("steel glass chips stay light",

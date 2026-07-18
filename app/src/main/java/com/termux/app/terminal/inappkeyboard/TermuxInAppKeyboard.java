@@ -551,6 +551,7 @@ public final class TermuxInAppKeyboard {
         KeyboardData data = getSelectedLayoutData();
         if (data != null)
             mKeyboardView.setKeyboard(data);
+        applyCustomColorScheme();
         mHost.attachKeyboardView(mKeyboardView);
     }
 
@@ -623,9 +624,19 @@ public final class TermuxInAppKeyboard {
         }
         resetInputPipeline();
         mKeyboardView.setPalette(createPalette());
+        applyCustomColorScheme();
         if (mHeightAdjusting)
             mHost.setKeyboardHeightAdjustmentVisible(true);
         mHost.requestAccessoryGeometrySync();
+    }
+
+    private void applyCustomColorScheme() {
+        if (mKeyboardView == null)
+            return;
+        Context context = requireContainer().getContext();
+        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
+            mPreferences.getInAppKeyboardColorScheme());
+        mKeyboardView.setKeyColorOverrides(scheme.resolvedOverrides());
     }
 
     private void recheckLayout() {

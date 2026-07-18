@@ -1085,6 +1085,37 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private Drawable buildDockGlassSurface(float barAlpha) {
+        return buildDockGlassSurface(barAlpha, 0f, 1f);
+    }
+
+    /**
+     * Builds the dock/keyboard glass tint. The vertical light model — thin cool sheen at the top, a
+     * faint accent edge, a clear see-through middle, then a soft dark "foot" at the bottom that
+     * suggests the slab's thickness — normally spans the full surface height ({@code sliceStart=0},
+     * {@code sliceEnd=1}).
+     *
+     * <p>When the keyboard is shown, the glass is split across two stacked surfaces (the keyboard
+     * host, then the shorter under-pill nav strip below it). Rendering the full model on each would
+     * put a dark foot at the keyboard's own bottom AND another at the strip's bottom — a dark band
+     * mid-slab and an over-tinted strip. Instead both surfaces render adjacent slices of ONE model
+     * spanning keyboard+strip: the keyboard uses {@code [0, f]} and the strip {@code [f, 1]}, so the
+     * single foot lands under the pill exactly as it does for the keyboard-off dock (which draws one
+     * gradient over dock+nav). This keeps the two states looking identical.</p>
+     */
+    @NonNull
+    private Drawable buildDockGlassSurface(float barAlpha, float sliceStart, float sliceEnd) {
+        return buildDockGlassSurface(barAlpha, sliceStart, sliceEnd, true);
+    }
+
+    /**
+     * @param withFoot when false the dark bottom "foot" of the light model is dropped. The default
+     *     dock stack (in-content dock/keyboard + under-pill nav strip) sets this false so the strip
+     *     is not darker than the dock body — the foot would otherwise land under the pill and read as
+     *     a darker nav band. The floating capsule veil / controls bar keep the foot for slab depth.
+     */
+    @NonNull
+    private Drawable buildDockGlassSurface(float barAlpha, float sliceStart, float sliceEnd,
+                                           boolean withFoot) {
         int base = resolveAccessoryGlassBaseColor();
         int accent = resolveDockAccentColor();
         float clamped = barAlpha < 0f ? 0f : (barAlpha > 1f ? 1f : barAlpha);
@@ -1094,36 +1125,92 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int baseAlpha = dockGlassBaseAlpha(clamped);
         int topSheenAlpha = Math.round(16f * clamped);
         int midSheenAlpha = Math.round(8f * clamped);
-        int bottomFootAlpha = Math.round(20f * clamped);
+        int bottomFootAlpha = withFoot ? Math.round(20f * clamped) : 0;
         GradientDrawable baseLayer = new GradientDrawable();
         baseLayer.setColor(withAlphaComponent(base, baseAlpha));
         baseLayer.setDither(true);
-        // Vertical glass light model, held roughly constant so the slab still reads as glass even at
-        // low opacity: a thin cool sheen at the top, a faint saturated accent edge tint, a clear
-        // see-through middle, then a soft dark "foot" at the bottom that suggests the slab's
-        // thickness. The crisp thin top/bottom edge highlights are drawn by DockEdgeGlowView.
+
+        int[] sliceColors = dockGlassLightModelSlice(accent, topSheenAlpha, midSheenAlpha,
+            bottomFootAlpha, sliceStart, sliceEnd);
         GradientDrawable lightLayer = new GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            new int[] {
-                // No broad white sheen — a near-white wash over the wallpaper reads as frosted
-                // plastic. A faint cool accent lift at the top keeps the glass tinted, not milky.
-                withAlphaComponent(accent, topSheenAlpha),
-                withAlphaComponent(accent, midSheenAlpha),
-                Color.TRANSPARENT,
-                withAlphaComponent(Color.BLACK, bottomFootAlpha)
-            }
-        );
+            GradientDrawable.Orientation.TOP_BOTTOM, sliceColors);
         lightLayer.setDither(true);
 
+        java.util.List<Drawable> layers = new java.util.ArrayList<>();
+        layers.add(baseLayer);
+        layers.add(lightLayer);
         // Optional film grain over the frosted glass — reads as real glass texture instead of a flat
         // blur. Amount is user-controlled (Appearance > Glass grain); 0 omits the layer entirely.
         int grain = mPreferences != null
             ? mPreferences.getDockGlassGrain()
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
         if (grain > 0) {
-            return new LayerDrawable(new Drawable[] { baseLayer, lightLayer, buildDockGrainLayer(grain, clamped) });
+            layers.add(buildDockGrainLayer(grain, clamped));
         }
-        return new LayerDrawable(new Drawable[] { baseLayer, lightLayer });
+        return new LayerDrawable(layers.toArray(new Drawable[0]));
+    }
+
+    /** Model stop positions for the vertical glass light model, matched to {@link #dockGlassLightModelColorAt}. */
+    private static final float[] DOCK_GLASS_MODEL_STOPS = {0f, 0.33f, 0.67f, 1f};
+
+    /**
+     * Samples the vertical glass light model over {@code [sliceStart, sliceEnd]} (fractions of the
+     * full model height) and returns the colors for a top-to-bottom gradient across that slice. The
+     * slice's own model stops are included so the sheen/foot shape is preserved rather than reduced
+     * to a straight two-color ramp.
+     */
+    @NonNull
+    private int[] dockGlassLightModelSlice(int accent, int topSheenAlpha, int midSheenAlpha,
+                                           int bottomFootAlpha, float sliceStart, float sliceEnd) {
+        float start = Math.max(0f, Math.min(1f, sliceStart));
+        float end = Math.max(start, Math.min(1f, sliceEnd));
+        java.util.List<Integer> colors = new java.util.ArrayList<>();
+        colors.add(dockGlassLightModelColorAt(start, accent, topSheenAlpha, midSheenAlpha, bottomFootAlpha));
+        for (float stop : DOCK_GLASS_MODEL_STOPS) {
+            if (stop > start && stop < end) {
+                colors.add(dockGlassLightModelColorAt(stop, accent, topSheenAlpha, midSheenAlpha, bottomFootAlpha));
+            }
+        }
+        colors.add(dockGlassLightModelColorAt(end, accent, topSheenAlpha, midSheenAlpha, bottomFootAlpha));
+        int[] result = new int[colors.size()];
+        for (int i = 0; i < result.length; i++) {
+            result[i] = colors.get(i);
+        }
+        return result;
+    }
+
+    /**
+     * Color of the vertical glass light model at {@code pos} in [0,1]: accent sheen at the top
+     * ([0,0.33]), fading to a clear see-through middle ([0.33,0.67]), then to a dark foot at the
+     * bottom ([0.67,1]). No broad white wash — a near-white sheen reads as frosted plastic.
+     */
+    private int dockGlassLightModelColorAt(float pos, int accent, int topSheenAlpha,
+                                           int midSheenAlpha, int bottomFootAlpha) {
+        int sheenTop = withAlphaComponent(accent, topSheenAlpha);
+        int sheenMid = withAlphaComponent(accent, midSheenAlpha);
+        int clear = Color.TRANSPARENT;
+        int foot = withAlphaComponent(Color.BLACK, bottomFootAlpha);
+        if (pos <= 0.33f) {
+            return lerpArgb(sheenTop, sheenMid, pos / 0.33f);
+        }
+        if (pos <= 0.67f) {
+            return lerpArgb(sheenMid, clear, (pos - 0.33f) / 0.34f);
+        }
+        return lerpArgb(clear, foot, (pos - 0.67f) / 0.33f);
+    }
+
+    /** Straight ARGB interpolation (alpha included) between two colors. */
+    private static int lerpArgb(int a, int b, float t) {
+        t = t < 0f ? 0f : (t > 1f ? 1f : t);
+        int aa = Color.alpha(a), ab = Color.alpha(b);
+        int ra = Color.red(a), rb = Color.red(b);
+        int ga = Color.green(a), gb = Color.green(b);
+        int ba = Color.blue(a), bb = Color.blue(b);
+        return Color.argb(
+            Math.round(aa + (ab - aa) * t),
+            Math.round(ra + (rb - ra) * t),
+            Math.round(ga + (gb - ga) * t),
+            Math.round(ba + (bb - ba) * t));
     }
 
     /** Cached static monochrome noise tile for the dock-glass grain. */
@@ -1646,6 +1733,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /** Positions the dock glass behind either the dock rows alone or the unified default stack. */
+    private void applyAccessorySurfaceBounds(@NonNull AccessoryRenderState state) {
+        View surface = findViewById(R.id.accessory_surface_host);
+        if (surface == null)
+            return;
+        ViewGroup.LayoutParams layoutParams = surface.getLayoutParams();
+        if (layoutParams instanceof RelativeLayout.LayoutParams) {
+            RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) layoutParams;
+            boolean unified = shouldUseUnifiedDefaultKeyboardGlassSurface(state);
+            boolean rulesChanged = false;
+            if (unified) {
+                rulesChanged = params.getRule(RelativeLayout.ABOVE) != 0
+                    || params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != RelativeLayout.TRUE;
+                params.removeRule(RelativeLayout.ABOVE);
+                params.addRule(RelativeLayout.ALIGN_PARENT_TOP, RelativeLayout.TRUE);
+            } else {
+                rulesChanged = params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != 0
+                    || params.getRule(RelativeLayout.ABOVE) != R.id.inapp_keyboard_container;
+                params.removeRule(RelativeLayout.ALIGN_PARENT_TOP);
+                params.addRule(RelativeLayout.ABOVE, R.id.inapp_keyboard_container);
+                params.alignWithParent = true;
+            }
+            if (rulesChanged)
+                surface.setLayoutParams(params);
+        }
+        Rect bounds = state.keyboardShown && !shouldUseUnifiedDefaultKeyboardGlassSurface(state)
+            ? buildToolbarOnlyAccessoryBounds(state) : null;
+        applyAccessoryLayerBounds(R.id.accessory_surface_host, bounds);
+    }
+
     private void applyAccessoryLayerVerticalBounds(int viewId, @Nullable Rect bounds) {
         View view = findViewById(viewId);
         if (view == null || !(view.getLayoutParams() instanceof RelativeLayout.LayoutParams))
@@ -1977,7 +2094,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private boolean shouldUseDockDecorNavBarSurface(@NonNull AccessoryRenderState state) {
-        return shouldShowDecorNavBarSurface(state) && !state.keyboardShown;
+        // The dock body always renders in-content (accessory_surface_host + refraction), in front of
+        // the terminal dim, in BOTH keyboard states — so keyboard-off no longer routes the dock
+        // through the behind-content decor overlay (which the terminal dim darkened, making it read
+        // darker than the keyboard-on dock). The decor overlay is now the under-pill nav strip only.
+        return false;
+    }
+
+    /**
+     * The default edge-to-edge dock and a glass-matched keyboard are one rectangular material.
+     * Render one backdrop through both instead of placing two independently cropped glass layers
+     * next to each other. Floating/capsule styling deliberately remains on its separate path.
+     */
+    private boolean shouldUseUnifiedDefaultKeyboardGlassSurface(@NonNull AccessoryRenderState state) {
+        return shouldUseUnifiedDefaultKeyboardGlassSurface(state.toolbarShown,
+            state.keyboardShown, isValarieDockStyle(), isInAppKeyboardGlassSurface());
+    }
+
+    static boolean shouldUseUnifiedDefaultKeyboardGlassSurface(boolean toolbarShown,
+                                                                boolean keyboardShown,
+                                                                boolean valarieDockStyle,
+                                                                boolean keyboardGlassSurface) {
+        return toolbarShown && keyboardShown && !valarieDockStyle && keyboardGlassSurface;
     }
 
     private void ensureDecorNavBarSurfaceOverlay() {
@@ -2095,9 +2233,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // opaque keyboard surface through the decor-owned gesture-navigation inset.
                 mDecorNavBarTintOverlay.setBackgroundColor(resolveInAppKeyboardBackgroundColor());
             } else {
-                // Match the edge-to-edge glass under the pill — for the dock, and for the
-                // dock-matching keyboard whose surface is the same tinted glass.
-                mDecorNavBarTintOverlay.setBackground(buildDockGlassSurface(state.barAlpha));
+                // The under-pill strip is the bottom slice [f, 1] of the shared light model; the
+                // in-content surface above it (dock stack when keyboard-off, keyboard host when
+                // keyboard-on) renders [0, f]. Both states stack a content-level surface + this
+                // nav-only strip, so a single foot lands under the pill identically either way.
+                mDecorNavBarTintOverlay.setBackground(
+                    buildDockGlassSurface(state.barAlpha, defaultDockGlassFootFraction(), 1f, false));
             }
             mDecorNavBarTintOverlay.setAlpha(1f);
             mDecorNavBarTintOverlay.setVisibility(View.VISIBLE);
@@ -2113,7 +2254,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     @Nullable
-    private Rect buildDecorNavBarBackdropTargetRect() {
+    private Rect buildDecorNavBarBackdropTargetRect(int topOverscanPx) {
         if (getWindow() == null || getWindow().getDecorView() == null || resolveDecorNavBarSurfaceHeightPx() <= 0) {
             return null;
         }
@@ -2129,9 +2270,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int bottomMargin = 0;
         int surfaceHeight = Math.min(Math.max(1, resolveDecorNavBarSurfaceHeightPx()), decorHeight);
         int bottom = mTmpParentLocation[1] + decorHeight - bottomMargin;
+        // Overscan the crop UPWARD past the strip top (the seam with the dock/keyboard) so the
+        // refraction edge band lands above the visible strip; the dock overscans down by the same
+        // amount, so their blurred wallpaper meets seamlessly at the seam.
+        int top = Math.max(mTmpParentLocation[1], bottom - surfaceHeight - Math.max(0, topOverscanPx));
         return new Rect(
             mTmpParentLocation[0] + horizontalMargin,
-            bottom - surfaceHeight,
+            top,
             mTmpParentLocation[0] + decorWidth - horizontalMargin,
             bottom
         );
@@ -2141,14 +2286,53 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mNavBarHeight <= 0) {
             return 0;
         }
-        if (isInAppKeyboardShown()) {
-            return mNavBarHeight;
+        if (isValarieDockStyle()) {
+            View accessoryContainer = findViewById(R.id.accessory_stack_container);
+            int dockHeight = accessoryContainer != null ? Math.max(0, accessoryContainer.getHeight()) : 0;
+            return dockHeight + mNavBarHeight + resolveDockCapsuleBottomGapPx();
         }
-        View accessoryContainer = findViewById(R.id.accessory_stack_container);
-        int dockHeight = accessoryContainer != null ? Math.max(0, accessoryContainer.getHeight()) : 0;
-        return isValarieDockStyle()
-            ? dockHeight + mNavBarHeight + resolveDockCapsuleBottomGapPx()
-            : mNavBarHeight + dockHeight;
+        // Default dock renders its body in-content; the decor overlay is the under-pill nav strip
+        // only. Size it from the in-content surface's actual bottom edge down to the screen bottom
+        // rather than from mNavBarHeight — the content's applied bottom inset can differ from the
+        // system-bars height by a few px, which otherwise leaves a thin wallpaper gap (or an overlap)
+        // between the dock/keyboard bottom and the strip. This makes them meet exactly.
+        int measured = measuredUnderPillStripHeightPx();
+        return measured > 0 ? measured : mNavBarHeight;
+    }
+
+    /**
+     * Distance from the in-content surface's bottom edge (keyboard host when shown, else the dock
+     * stack) to the screen bottom, so the under-pill decor strip fills exactly that span. Returns 0
+     * when geometry is not yet laid out (callers fall back to {@code mNavBarHeight}).
+     */
+    private int measuredUnderPillStripHeightPx() {
+        if (getWindow() == null || getWindow().getDecorView() == null) {
+            return 0;
+        }
+        // Use the glass host, not the stack container: the container has a bottom padding (flush
+        // centering) so its glass surface ends a few px above the container bottom. Sizing from the
+        // container left that padding band uncovered — the ~3-4dp wallpaper gap the user saw.
+        View content = findViewById(isInAppKeyboardShown()
+            ? R.id.inapp_keyboard_view_host : R.id.accessory_surface_host);
+        if (content == null || content.getHeight() <= 0 || content.getWidth() <= 0) {
+            return 0;
+        }
+        View decorView = getWindow().getDecorView();
+        if (decorView.getHeight() <= 0) {
+            return 0;
+        }
+        int[] decorLoc = new int[2];
+        int[] contentLoc = new int[2];
+        decorView.getLocationOnScreen(decorLoc);
+        content.getLocationOnScreen(contentLoc);
+        int screenBottom = decorLoc[1] + decorView.getHeight();
+        int contentBottom = contentLoc[1] + content.getHeight();
+        int height = screenBottom - contentBottom;
+        // Guard against transient layouts that would collapse or overshoot the strip.
+        if (height <= 0 || height > mNavBarHeight * 3) {
+            return 0;
+        }
+        return height;
     }
 
     private int resolveInAppKeyboardBackgroundColor() {
@@ -2165,6 +2349,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return false;
         String mode = mPreferences.getInAppKeyboardDockMatch();
         return "glass".equals(mode) || "both".equals(mode);
+    }
+
+    /**
+     * Fraction of the combined content+under-pill glass height occupied by the in-content surface
+     * (the keyboard host when the keyboard is shown, otherwise the dock stack). The content surface
+     * and the under-pill nav strip render adjacent slices ({@code [0, f]} and {@code [f, 1]}) of one
+     * shared light model so a single dark foot lands under the pill in both keyboard states. Returns
+     * 1 (no slicing) for the floating capsule or when there is no gesture-nav strip below.
+     */
+    private float defaultDockGlassFootFraction() {
+        if (isValarieDockStyle()) {
+            return 1f;
+        }
+        int navHeight = mNavBarHeight;
+        if (navHeight <= 0) {
+            return 1f;
+        }
+        View contentHost = findViewById(isInAppKeyboardShown()
+            ? R.id.inapp_keyboard_view_host : R.id.accessory_stack_container);
+        int contentHeight = contentHost != null ? contentHost.getHeight() : 0;
+        if (contentHeight <= 0) {
+            return 1f;
+        }
+        return contentHeight / (float) (contentHeight + navHeight);
     }
 
     /** True when the dock-match mode makes the keyboard shape follow the dock style. */
@@ -2230,6 +2438,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         float cornerRadiusPx = capsule ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
         applyInAppKeyboardSurfaceClip(surfaceHost, capsule, cornerRadiusPx);
+        if (shouldUseUnifiedDefaultKeyboardGlassSurface(state)) {
+            // accessory_surface_host spans the complete default dock + keyboard stack. The
+            // transparent glass keyboard palette exposes that shared material here.
+            surfaceHost.setBackground(null);
+            clearInAppKeyboardBackdrop();
+            return;
+        }
         surfaceHost.setBackground(
             buildInAppKeyboardSurfaceBackground(state, surfaceHost, capsule, glassTheme, cornerRadiusPx));
     }
@@ -2267,7 +2482,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     layers.add(backdrop);
                 }
             }
-            layers.add(buildDockGlassSurface(state.barAlpha));
+            // Render only the keyboard's slice of the shared light model; the under-pill nav strip
+            // renders the remainder so the single foot lands under the pill (see the slice overload).
+            layers.add(buildDockGlassSurface(state.barAlpha, 0f, defaultDockGlassFootFraction(), false));
         } else if (capsule) {
             // Opaque themes fill the capsule with the keyboard's own background color so the
             // inner padding ring stays seamless with the keys.
@@ -2368,7 +2585,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (backdrop == null || overlay == null || wallpaperFrame == null) {
             return;
         }
-        Rect targetRect = buildDecorNavBarBackdropTargetRect();
+        // Overscan the strip's blur bitmap upward past the seam with the dock/keyboard (default dock
+        // only) so the refraction edge band clears the visible seam and meets the dock's downward
+        // overscan. The bitmap is taller than the overlay; a negative top margin pushes the overscan
+        // above the overlay where clipChildren hides it.
+        int topOverscanPx = !isValarieDockStyle()
+            ? computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp) : 0;
+        Rect targetRect = buildDecorNavBarBackdropTargetRect(topOverscanPx);
         if (targetRect == null) {
             if (backdrop.getDrawable() != null) {
                 backdrop.setVisibility(View.VISIBLE);
@@ -2376,6 +2599,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 clearDecorNavBarBackdrop();
             }
             return;
+        }
+        if (backdrop.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams bp = (FrameLayout.LayoutParams) backdrop.getLayoutParams();
+            int surfaceHeight = Math.max(1, resolveDecorNavBarSurfaceHeightPx());
+            int targetBackdropHeight = surfaceHeight + Math.max(0, topOverscanPx);
+            if (bp.height != targetBackdropHeight || bp.topMargin != -topOverscanPx) {
+                bp.height = targetBackdropHeight;
+                bp.width = FrameLayout.LayoutParams.MATCH_PARENT;
+                bp.topMargin = -topOverscanPx;
+                bp.gravity = Gravity.TOP | Gravity.START;
+                backdrop.setLayoutParams(bp);
+            }
         }
 
         boolean usingManagedWallpaperSource = shouldUseManagedWallpaperBlurSource();
@@ -2401,7 +2636,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             float blurRadiusPx = ViewUtils.dpToPx(this, Math.max(0, state.blurRadiusDp));
             backdrop.setImageBitmap(wallpaperBackdrop);
-            backdrop.setRenderEffect(RenderEffect.createBlurEffect(blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP));
+            // Use the SAME AGSL glass refraction the content dock/keyboard backdrop uses (API 33+),
+            // not a plain blur, so this decor surface reads as the same material in both states: the
+            // keyboard-off dock+nav overlay and the keyboard-on under-pill strip now match the
+            // refraction-lit content dock instead of being a flatter, darker plain blur. Falls back
+            // to plain blur when the shader is unavailable (< API 33 or shader failure).
+            RenderEffect glass = buildGlassRefractionEffect(blurRadiusPx, 0f, 0f,
+                Math.max(1, targetRect.width()), Math.max(1, targetRect.height()), 0f);
+            backdrop.setRenderEffect(glass != null
+                ? glass
+                : RenderEffect.createBlurEffect(blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP));
         } else {
             Bitmap blurredBackdrop = createPreBlurredWallpaperBackdropBitmap(wallpaperBackdrop, state.blurRadiusDp);
             if (blurredBackdrop == null) {
@@ -2419,6 +2663,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
 
+        // Same content-aware light scatter the dock and keyboard backdrops apply, so the
+        // under-pill strip reads as the same glass material rather than a plain blur.
+        backdrop.setColorFilter(glassFrostFilter());
         backdrop.setVisibility(View.VISIBLE);
         mDecorNavBarBackdropDirty = false;
         mLastDecorNavBarBackdropBlurRadiusDp = state.blurRadiusDp;
@@ -2562,14 +2809,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return Math.max(0, Math.round((blurRadiusPx * 2f) + (density * 2f)));
     }
 
-    private void applyAccessoryBackdropOverscan(@NonNull ImageView backdrop, @NonNull View surfaceHost, int horizontalOverscanPx) {
+    private void applyAccessoryBackdropOverscan(@NonNull ImageView backdrop, @NonNull View surfaceHost,
+                                                int horizontalOverscanPx, int bottomOverscanPx) {
         ViewGroup.LayoutParams layoutParams = backdrop.getLayoutParams();
         if (!(layoutParams instanceof FrameLayout.LayoutParams)) {
             return;
         }
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) layoutParams;
         int targetWidth = Math.max(1, surfaceHost.getWidth() + (horizontalOverscanPx * 2));
-        int targetHeight = Math.max(1, surfaceHost.getHeight());
+        // Grow the bitmap DOWN past the surface (clipped by the host) so the refraction's bottom edge
+        // band falls below the visible seam with the under-pill strip, not on it.
+        int targetHeight = Math.max(1, surfaceHost.getHeight() + bottomOverscanPx);
         int targetLeftMargin = -horizontalOverscanPx;
         int targetTopMargin = 0;
         if (params.width != targetWidth || params.height != targetHeight ||
@@ -2586,13 +2836,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     @NonNull
-    private Rect buildAccessoryBackdropTargetRect(@NonNull View surfaceHost, int horizontalOverscanPx) {
+    private Rect buildAccessoryBackdropTargetRect(@NonNull View surfaceHost, int horizontalOverscanPx,
+                                                  int bottomOverscanPx) {
         surfaceHost.getLocationOnScreen(mTmpViewLocation);
         return new Rect(
             mTmpViewLocation[0] - horizontalOverscanPx,
             mTmpViewLocation[1],
             mTmpViewLocation[0] + Math.max(1, surfaceHost.getWidth()) + horizontalOverscanPx,
-            mTmpViewLocation[1] + Math.max(1, surfaceHost.getHeight())
+            mTmpViewLocation[1] + Math.max(1, surfaceHost.getHeight()) + bottomOverscanPx
         );
     }
 
@@ -2737,8 +2988,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
         boolean usingManagedWallpaperSource = shouldUseManagedWallpaperBlurSource();
         View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
-        applyAccessoryLayerBounds(R.id.accessory_surface_host,
-            state.keyboardShown ? buildToolbarOnlyAccessoryBounds(state) : null);
+        applyAccessorySurfaceBounds(state);
         if (shouldUseDockDecorNavBarSurface(state) && !isValarieDockStyle()) {
             clearAccessoryRenderEffectBackdrop();
             return;
@@ -2762,8 +3012,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         int horizontalOverscanPx = computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp);
-        applyAccessoryBackdropOverscan(backdrop, surfaceHost, horizontalOverscanPx);
-        Rect backdropTargetRect = buildAccessoryBackdropTargetRect(surfaceHost, horizontalOverscanPx);
+        // When the under-pill decor strip abuts the dock/keyboard bottom (default dock only), overscan
+        // the bitmap downward past that seam so the refraction edge band lands below it — the strip
+        // overscans upward by the same amount, so the two surfaces' blurred wallpaper meets seamlessly.
+        int seamOverscanPx = !isValarieDockStyle() && shouldShowDecorNavBarSurface(state)
+            ? horizontalOverscanPx : 0;
+        applyAccessoryBackdropOverscan(backdrop, surfaceHost, horizontalOverscanPx, seamOverscanPx);
+        Rect backdropTargetRect = buildAccessoryBackdropTargetRect(surfaceHost, horizontalOverscanPx,
+            seamOverscanPx);
         if (!mAccessoryBackdropDirty &&
             mLastAccessoryBackdropBlurRadiusDp == state.blurRadiusDp &&
             mLastAccessoryBackdropManagedSource == usingManagedWallpaperSource &&
@@ -2790,7 +3046,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // refraction happens at the real dock edge.
             float capLeft = horizontalOverscanPx;
             float capRight = horizontalOverscanPx + Math.max(1, surfaceHost.getWidth());
-            float capBottom = Math.max(1, surfaceHost.getHeight());
+            // Put the shader's bottom edge at the overscanned bitmap bottom (below the visible seam)
+            // so the visible dock bottom reads as interior glass, not a refracting edge.
+            float capBottom = Math.max(1, surfaceHost.getHeight()) + seamOverscanPx;
             float radiusPx = isValarieDockStyle()
                 ? resolveDockCapsuleCornerRadiusPx(surfaceHost.getHeight())
                 : 0f;
@@ -2861,7 +3119,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View azFxOverlay = findViewById(R.id.apps_bar_az_fx_overlay);
         View azLabelOverlay = findViewById(R.id.apps_bar_az_label_overlay);
         Rect toolbarOnlyBounds = state.keyboardShown ? buildToolbarOnlyAccessoryBounds(state) : null;
-        applyAccessoryLayerBounds(R.id.accessory_surface_host, toolbarOnlyBounds);
+        applyAccessorySurfaceBounds(state);
         applyAccessoryLayerVerticalBounds(R.id.apps_bar_az_fx_underlay, toolbarOnlyBounds);
         applyAccessoryLayerVerticalBounds(R.id.apps_bar_az_fx_overlay, toolbarOnlyBounds);
         boolean useRenderEffectBlur = shouldUseAccessoryRenderEffectBlur(state);
@@ -2957,7 +3215,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         if (extraKeysBackground != null) {
             extraKeysBackground.setVisibility(useDecorSurface && !isValarieDockStyle() ? View.GONE : View.VISIBLE);
-            extraKeysBackground.setBackground(buildDockGlassSurface(state.barAlpha));
+            // Keyboard-off, the dock continues into the under-pill nav strip, so it renders the top
+            // slice [0, f] of the shared model (strip renders [f, 1]) — one foot under the pill.
+            // Keyboard-on, the dock is a distinct plank above the keyboard, so it keeps the full model.
+            extraKeysBackground.setBackground(buildDockGlassSurface(state.barAlpha,
+                0f, state.keyboardShown ? 1f : defaultDockGlassFootFraction(), false));
             // Opacity is baked into the drawable (translucent base) so the glass light model survives.
             extraKeysBackground.setAlpha(1f);
         }

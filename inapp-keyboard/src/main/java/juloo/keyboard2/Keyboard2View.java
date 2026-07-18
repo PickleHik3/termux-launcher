@@ -5,11 +5,9 @@ import android.graphics.Canvas;
 import android.media.AudioManager;
 import android.view.KeyEvent;
 import android.graphics.Color;
-import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.Shader;
 import android.os.Build;
 import android.os.Looper;
 import android.util.AttributeSet;
@@ -17,6 +15,8 @@ import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.View;
 import java.util.Objects;
+import java.util.Collections;
+import java.util.Map;
 
 public class Keyboard2View extends View
   implements View.OnTouchListener, Pointers.IPointerEventHandler
@@ -56,8 +56,11 @@ public class Keyboard2View extends View
 
   private Theme _theme;
   private Theme.Computed _tc;
-  private Paint _indicatorPaint;
-  private float _indicatorShaderWidth = -1f;
+  private final Paint _overrideBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+  private final Paint _overrideBorderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+  private Map<String, KeyColorOverride> _keyColorOverrides = Collections.emptyMap();
+  private OnKeyPaintListener _keyPaintListener;
+  private String _lastPaintedKeyId;
   private final Paint _trailPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final SparseArray<Trail> _trails = new SparseArray<Trail>();
 
@@ -114,9 +117,49 @@ public class Keyboard2View extends View
   {
     _trailPaint.setColor(_theme.pressedColor);
     _trailPaint.setStrokeWidth(_config.swipeTrailWidthPx);
-    _indicatorPaint = null;
-    _indicatorShaderWidth = -1f;
     setBackgroundColor(withOpacity(_theme.colorKeyboard, _theme.opacity));
+  }
+
+  /** Per-key colors supplied by a host-side color-scheme editor. Null fields inherit the theme. */
+  public static final class KeyColorOverride
+  {
+    public final Integer keyBackground;
+    public final Integer primaryLabel;
+    public final Integer secondaryLabel;
+    public final Integer secondaryBottomLabel;
+    public final Integer borderColor;
+
+    public KeyColorOverride(Integer keyBackground, Integer primaryLabel,
+        Integer secondaryLabel, Integer secondaryBottomLabel, Integer borderColor)
+    {
+      this.keyBackground = keyBackground;
+      this.primaryLabel = primaryLabel;
+      this.secondaryLabel = secondaryLabel;
+      this.secondaryBottomLabel = secondaryBottomLabel;
+      this.borderColor = borderColor;
+    }
+  }
+
+  /** Receives stable key ids while the user taps or drags across an editor preview. */
+  public interface OnKeyPaintListener
+  {
+    void onPaintKey(String keyId);
+  }
+
+  public void setKeyColorOverrides(Map<String, KeyColorOverride> overrides)
+  {
+    requireMainThread();
+    _keyColorOverrides = overrides == null ? Collections.emptyMap() : overrides;
+    invalidate();
+  }
+
+  /** Non-null enables paint mode and prevents the preview keyboard from producing key events. */
+  public void setOnKeyPaintListener(OnKeyPaintListener listener)
+  {
+    requireMainThread();
+    resetInputStateInternal(false);
+    _keyPaintListener = listener;
+    _lastPaintedKeyId = null;
   }
 
   /** Opaque/translucent color used by an activity-owned navigation-inset continuation surface. */
@@ -375,6 +418,8 @@ public class Keyboard2View extends View
   @Override
   public boolean onTouch(View v, MotionEvent event)
   {
+    if (_keyPaintListener != null)
+      return onPaintTouch(event);
     int p;
     switch (event.getActionMasked())
     {
@@ -421,6 +466,53 @@ public class Keyboard2View extends View
     if (_config.swipeTrailEnabled)
       invalidate();
     return (true);
+  }
+
+  private boolean onPaintTouch(MotionEvent event)
+  {
+    switch (event.getActionMasked())
+    {
+      case MotionEvent.ACTION_DOWN:
+        requestDisallowIntercept(true);
+        _lastPaintedKeyId = null;
+        paintKeyAt(event.getX(), event.getY());
+        return true;
+      case MotionEvent.ACTION_MOVE:
+        paintKeyAt(event.getX(), event.getY());
+        return true;
+      case MotionEvent.ACTION_UP:
+      case MotionEvent.ACTION_CANCEL:
+        _lastPaintedKeyId = null;
+        requestDisallowIntercept(false);
+        return true;
+      default:
+        return true;
+    }
+  }
+
+  private void paintKeyAt(float x, float y)
+  {
+    KeyboardData.Key key = getKeyAtPosition(x, y);
+    String keyId = keyId(key);
+    if (keyId != null && !keyId.equals(_lastPaintedKeyId))
+    {
+      _lastPaintedKeyId = keyId;
+      _keyPaintListener.onPaintKey(keyId);
+    }
+  }
+
+  private String keyId(KeyboardData.Key target)
+  {
+    if (target == null || _keyboard == null)
+      return null;
+    for (int rowIndex = 0; rowIndex < _keyboard.rows.size(); rowIndex++)
+    {
+      KeyboardData.Row row = _keyboard.rows.get(rowIndex);
+      for (int keyIndex = 0; keyIndex < row.keys.size(); keyIndex++)
+        if (row.keys.get(keyIndex) == target)
+          return rowIndex + ":" + keyIndex;
+    }
+    return null;
   }
 
   private void requestDisallowIntercept(boolean disallow)
@@ -567,16 +659,17 @@ public class Keyboard2View extends View
   {
     if (_keyboard == null || _tc == null)
       return;
-    if (_theme.indicatorColors != null)
-      drawIndicatorStrip(canvas);
     float y = getPaddingTop() + _tc.margin_top;
-    for (KeyboardData.Row row : _keyboard.rows)
+    for (int rowIndex = 0; rowIndex < _keyboard.rows.size(); rowIndex++)
     {
+      KeyboardData.Row row = _keyboard.rows.get(rowIndex);
       y += row.shift * _tc.row_height;
       float x = _marginLeft + _tc.margin_left;
       float keyH = row.height * _tc.row_height - _tc.vertical_margin;
-      for (KeyboardData.Key k : row.keys)
+      for (int keyIndex = 0; keyIndex < row.keys.size(); keyIndex++)
       {
+        KeyboardData.Key k = row.keys.get(keyIndex);
+        KeyColorOverride colorOverride = _keyColorOverrides.get(rowIndex + ":" + keyIndex);
         x += k.shift * _keyWidth;
         float keyW = _keyWidth * k.width - _tc.horizontal_margin;
         boolean isKeyDown = _pointers.isKeyDown(k);
@@ -592,13 +685,23 @@ public class Keyboard2View extends View
             default:
             case Normal: tc_key = _tc.key; break;
           }
-        drawKeyFrame(canvas, x, y, keyW, keyH, tc_key);
+        drawKeyFrame(canvas, x, y, keyW, keyH, tc_key,
+            isKeyDown || colorOverride == null ? null : colorOverride.keyBackground,
+            isKeyDown || colorOverride == null ? null : colorOverride.borderColor);
         if (k.keys[0] != null)
-          drawLabel(canvas, k.keys[0], keyW / 2f + x, y, keyH, isKeyDown, tc_key);
+          drawLabel(canvas, k.keys[0], keyW / 2f + x, y, keyH, isKeyDown, tc_key,
+              isKeyDown || colorOverride == null ? null : colorOverride.primaryLabel);
         for (int i = 1; i < 9; i++)
         {
           if (k.keys[i] != null)
-            drawSubLabel(canvas, k.keys[i], x, y, keyW, keyH, i, isKeyDown, tc_key);
+          {
+            Integer labelOverride = null;
+            if (!isKeyDown && colorOverride != null)
+              labelOverride = (i == 3 || i == 4) && colorOverride.secondaryBottomLabel != null
+                  ? colorOverride.secondaryBottomLabel : colorOverride.secondaryLabel;
+            drawSubLabel(canvas, k.keys[i], x, y, keyW, keyH, i, isKeyDown, tc_key,
+                labelOverride);
+          }
         }
         drawIndication(canvas, k, x, y, keyW, keyH, _tc);
         x += _keyWidth * k.width;
@@ -622,44 +725,39 @@ public class Keyboard2View extends View
     super.onDetachedFromWindow();
   }
 
-  /** Draw the theme's underglow as a small centered pill in the keyboard's top
-      margin, echoing the launcher dock's page-indicator styling. */
-  private void drawIndicatorStrip(Canvas canvas)
-  {
-    float width = getWidth();
-    if (width <= 0f)
-      return;
-    float density = getResources().getDisplayMetrics().density;
-    float height = _config.marginTopPx > 0f ? _config.marginTopPx : 3f * density;
-    float pillWidth = Math.min(width * 0.28f, 140f * density);
-    float pillLeft = (width - pillWidth) / 2f;
-    if (_indicatorPaint == null || _indicatorShaderWidth != width)
-    {
-      _indicatorPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-      _indicatorPaint.setShader(new LinearGradient(pillLeft, 0f,
-          pillLeft + pillWidth, 0f, _theme.indicatorColors, null,
-          Shader.TileMode.CLAMP));
-      _indicatorPaint.setAlpha(Theme.multiplyAlpha(230, _theme.opacity));
-      _indicatorShaderWidth = width;
-    }
-    float top = getPaddingTop();
-    float radius = height / 2f;
-    _tmpRect.set(pillLeft, top, pillLeft + pillWidth, top + height);
-    canvas.drawRoundRect(_tmpRect, radius, radius, _indicatorPaint);
-  }
-
   /** Draw borders and background of the key. */
   void drawKeyFrame(Canvas canvas, float x, float y, float keyW, float keyH,
-      Theme.Computed.Key tc)
+      Theme.Computed.Key tc, Integer backgroundOverride, Integer borderOverride)
   {
     float r = tc.border_radius;
     float w = tc.border_width;
     float padding = w / 2.f;
     _tmpRect.set(x + padding, y + padding, x + keyW - padding, y + keyH - padding);
     tc.positionGradient(y, keyH);
-    canvas.drawRoundRect(_tmpRect, r, r, tc.bg_paint);
+    if (backgroundOverride == null)
+      canvas.drawRoundRect(_tmpRect, r, r, tc.bg_paint);
+    else
+    {
+      // A host override recolors the base but keeps this role's translucency and
+      // keycap gradient, so a custom color reads as a tint of the glass chip, not
+      // an opaque slab that hides the blurred wallpaper behind it.
+      _overrideBackgroundPaint.setStyle(Paint.Style.FILL);
+      tc.applyOverrideFill(_overrideBackgroundPaint, backgroundOverride, y, keyH);
+      canvas.drawRoundRect(_tmpRect, r, r, _overrideBackgroundPaint);
+      _overrideBackgroundPaint.setShader(null);
+    }
     if (w > 0.f)
     {
+      if (borderOverride != null)
+      {
+        // One uniform stroke in the host-chosen color; overrides the theme's four
+        // side colors regardless of whether they were uniform.
+        _overrideBorderPaint.setStyle(Paint.Style.STROKE);
+        _overrideBorderPaint.setStrokeWidth(w);
+        _overrideBorderPaint.setColor(borderOverride);
+        canvas.drawRoundRect(_tmpRect, r, r, _overrideBorderPaint);
+        return;
+      }
       if (tc.border_uniform)
       {
         // One anti-aliased stroke pass; the four-way clip below leaves seams
@@ -711,19 +809,20 @@ public class Keyboard2View extends View
   }
 
   private void drawLabel(Canvas canvas, KeyValue kv, float x, float y,
-      float keyH, boolean isKeyDown, Theme.Computed.Key tc)
+      float keyH, boolean isKeyDown, Theme.Computed.Key tc, Integer colorOverride)
   {
     kv = modifyKey(kv, _mods);
     if (kv == null)
       return;
     float textSize = scaleTextSize(kv, true);
-    Paint p = tc.label_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT), labelColor(kv, isKeyDown, false, tc), textSize);
+    int color = colorOverride == null ? labelColor(kv, isKeyDown, false, tc) : colorOverride;
+    Paint p = tc.label_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT), color, textSize);
     canvas.drawText(kv.getString(), x, (keyH - p.ascent() - p.descent()) / 2f + y, p);
   }
 
   private void drawSubLabel(Canvas canvas, KeyValue kv, float x, float y,
       float keyW, float keyH, int sub_index, boolean isKeyDown,
-      Theme.Computed.Key tc)
+      Theme.Computed.Key tc, Integer colorOverride)
   {
     Paint.Align a = LABEL_POSITION_H[sub_index];
     Vertical v = LABEL_POSITION_V[sub_index];
@@ -731,7 +830,8 @@ public class Keyboard2View extends View
     if (kv == null)
       return;
     float textSize = scaleTextSize(kv, false);
-    Paint p = tc.sublabel_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT), labelColor(kv, isKeyDown, true, tc), textSize, a);
+    int color = colorOverride == null ? labelColor(kv, isKeyDown, true, tc) : colorOverride;
+    Paint p = tc.sublabel_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT), color, textSize, a);
     float subPadding = _config.keyPaddingPx;
     // Corner-anchored sublabels sit where a large corner radius cuts the key
     // fill away; pull them inward with the radius so they stay on the cap.

@@ -18,10 +18,6 @@ public final class InAppKeyboardPaletteFactory {
 
     private static final double MIN_TEXT_CONTRAST = 4.5d;
 
-    private static final int[] INDICATOR_RGB = {
-        0xFFFF004C, 0xFFFF8A00, 0xFFFFE600, 0xFF31D158, 0xFF00B4FF, 0xFF7C4DFF};
-    private static final int[] INDICATOR_RGB_PINK = {0xFFFF2D78, 0xFFA24DFF, 0xFF00E5FF};
-
     private InAppKeyboardPaletteFactory() {}
 
     /**
@@ -112,6 +108,20 @@ public final class InAppKeyboardPaletteFactory {
         return resolve(context).signature();
     }
 
+    /** Material roles used as the color editor's initial, wallpaper-aware swatches. */
+    @NonNull
+    public static int[] defaultEditorSwatches(@NonNull Context context) {
+        SourceRoles roles = resolve(context);
+        return new int[] {
+            opaque(roles.surfaceContainerHigh),
+            opaque(roles.primary),
+            opaque(roles.secondary),
+            opaque(roles.onSurface),
+            opaque(roles.onSurfaceVariant),
+            opaque(roles.secondaryContainer)
+        };
+    }
+
     /**
      * Glass base color of the launcher dock — must stay in sync with
      * {@code TermuxActivity#resolveAccessoryGlassBaseColor()}.
@@ -185,7 +195,7 @@ public final class InAppKeyboardPaletteFactory {
             Color.TRANSPARENT, key, action, space, activated,
             label, subLabel, activatedLabel, pressedLabel, lockedLabel,
             border, true, 1f * density, 6f * density, 1f,
-            0.25f, 0.5f, actionLabel, actionSubLabel, base.indicatorColors,
+            0.25f, 0.5f, actionLabel, actionSubLabel, null,
             gradientTop, gradientBottom
         );
     }
@@ -194,30 +204,25 @@ public final class InAppKeyboardPaletteFactory {
      * Fixed color-token themes from the KeyboardThemes design handoff. Tokens map onto the
      * keyboard roles as: case = board, alpha = normal keys, mod = action keys + space bar,
      * accent = activated/pressed key highlight, accent2 = locked-modifier legend,
-     * indicator = optional underglow gradient strip.
+     * Decorative underglow strips are intentionally omitted from every scheme.
      */
     private static DesignTheme designTheme(@NonNull String variant) {
         switch (variant) {
             case "steel_teal":
                 return new DesignTheme(0xFFE9E7E2, 0xFFF4F2EC, 0xFF48484A,
-                    0xFF727A80, 0xFFF3F4F2, 0xFF1C7A71, 0xFFFFFFFF, 0xFF2B3034,
-                    INDICATOR_RGB);
+                    0xFF727A80, 0xFFF3F4F2, 0xFF1C7A71, 0xFFFFFFFF, 0xFF2B3034);
             case "mint_fuji":
                 return new DesignTheme(0xFF141414, 0xFFF6F3EA, 0xFF2C2C2C,
-                    0xFFA4DCC4, 0xFF22463A, 0xFF90CDEE, 0xFF1D3F57, 0xFFB8EAD4,
-                    null);
+                    0xFFA4DCC4, 0xFF22463A, 0xFF90CDEE, 0xFF1D3F57, 0xFFB8EAD4);
             case "neon_nightfall":
                 return new DesignTheme(0xFF0D0D10, 0xFF17171B, 0xFFF26AA6,
-                    0xFF141418, 0xFFC76BFF, 0xFFFF2D78, 0xFF12010A, 0xFF7C4DFF,
-                    INDICATOR_RGB_PINK);
+                    0xFF141418, 0xFFC76BFF, 0xFFFF2D78, 0xFF12010A, 0xFF7C4DFF);
             case "sakura_wood":
                 return new DesignTheme(0xFF5F4331, 0xFFE8DABF, 0xFF5C4832,
-                    0xFF8A5A3C, 0xFFF0E6D2, 0xFFB1502E, 0xFFF7EFE2, 0xFF7D8A5F,
-                    null);
+                    0xFF8A5A3C, 0xFFF0E6D2, 0xFFB1502E, 0xFFF7EFE2, 0xFF7D8A5F);
             case "ink_plum":
                 return new DesignTheme(0xFFC7C7C7, 0xFFFBFBFB, 0xFF1A1A1A,
-                    0xFFEDEDED, 0xFF1A1A1A, 0xFFC0241D, 0xFFFFFFFF, 0xFF2F2F2F,
-                    null);
+                    0xFFEDEDED, 0xFF1A1A1A, 0xFFC0241D, 0xFFFFFFFF, 0xFF2F2F2F);
             default:
                 return null;
         }
@@ -241,7 +246,7 @@ public final class InAppKeyboardPaletteFactory {
             t.caseColor, t.alpha, t.mod, t.mod, t.accent,
             label, subLabel, activatedLabel, activatedLabel, lockedLabel,
             border, true, 1f * density, 6f * density, 1f,
-            0.25f, 0.5f, actionLabel, actionSubLabel, t.indicator
+            0.25f, 0.5f, actionLabel, actionSubLabel, null
         );
     }
 
@@ -360,10 +365,8 @@ public final class InAppKeyboardPaletteFactory {
         final int accent;
         final int accentText;
         final int accent2;
-        final int[] indicator;
-
         DesignTheme(int caseColor, int alpha, int alphaText, int mod, int modText,
-                    int accent, int accentText, int accent2, int[] indicator) {
+                    int accent, int accentText, int accent2) {
             this.caseColor = caseColor;
             this.alpha = alpha;
             this.alphaText = alphaText;
@@ -372,7 +375,6 @@ public final class InAppKeyboardPaletteFactory {
             this.accent = accent;
             this.accentText = accentText;
             this.accent2 = accent2;
-            this.indicator = indicator;
         }
     }
 

@@ -456,6 +456,19 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_IN_APP_KEYBOARD_THEME, value, false);
     }
 
+    public String getInAppKeyboardColorScheme() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_COLOR_SCHEME,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_COLOR_SCHEME, true);
+        return value == null ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_COLOR_SCHEME : value;
+    }
+
+    public void setInAppKeyboardColorScheme(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_COLOR_SCHEME,
+            value == null ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_COLOR_SCHEME : value, false);
+    }
+
     private static boolean isValidInAppKeyboardTheme(String value) {
         if (value == null) return false;
         switch (value) {

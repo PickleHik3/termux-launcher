@@ -324,6 +324,12 @@ public final class Theme
       final Paint _sublabel_paint;
       final Paint _special_sublabel_paint;
       final int _label_alpha_bits;
+      /** This role's resolved fill (with translucency) and keycap gradient overlays,
+          retained so a host color override can tint the glass instead of replacing it. */
+      private final int _fill;
+      private final int _grad_top;
+      private final int _grad_bottom;
+      private final Matrix _override_gradient_matrix = new Matrix();
 
       public Key(Theme theme, Config config, boolean activated,
           KeyboardData.Key.Role role, float keyCornerRadiusOverridePx)
@@ -375,6 +381,9 @@ public final class Theme
         greyedLabelColor = actionRole
             ? theme.actionGreyedLabelColor : theme.greyedLabelColor;
         int fill = withAlpha(bg_color, alpha, theme.opacity);
+        _fill = fill;
+        _grad_top = theme.keyGradientTopOverlay;
+        _grad_bottom = theme.keyGradientBottomOverlay;
         bg_paint.setColor(fill);
         if ((theme.keyGradientTopOverlay != 0 || theme.keyGradientBottomOverlay != 0)
             && Color.alpha(fill) > 0)
@@ -417,6 +426,31 @@ public final class Theme
         _bg_gradient_matrix.setScale(1f, Math.max(1f, keyH));
         _bg_gradient_matrix.postTranslate(0f, y);
         _bg_gradient.setLocalMatrix(_bg_gradient_matrix);
+      }
+
+      /**
+       * Configures [paint] to fill a key with a host override color while keeping this
+       * role's translucency and keycap light gradient. The override supplies only hue:
+       * its alpha is discarded in favor of the theme fill's alpha, so on a glass theme
+       * the color tints the translucent chip rather than covering the wallpaper behind it.
+       */
+      public void applyOverrideFill(Paint paint, int overrideColor, float y, float keyH)
+      {
+        int fill = Color.argb(Color.alpha(_fill), Color.red(overrideColor),
+            Color.green(overrideColor), Color.blue(overrideColor));
+        paint.setColor(fill);
+        if ((_grad_top != 0 || _grad_bottom != 0) && Color.alpha(fill) > 0)
+        {
+          LinearGradient gradient = new LinearGradient(0f, 0f, 0f, 1f,
+              compositeOver(_grad_top, fill), compositeOver(_grad_bottom, fill),
+              Shader.TileMode.CLAMP);
+          _override_gradient_matrix.setScale(1f, Math.max(1f, keyH));
+          _override_gradient_matrix.postTranslate(0f, y);
+          gradient.setLocalMatrix(_override_gradient_matrix);
+          paint.setShader(gradient);
+        }
+        else
+          paint.setShader(null);
       }
 
       public Paint label_paint(boolean special_font, int color, float text_size)

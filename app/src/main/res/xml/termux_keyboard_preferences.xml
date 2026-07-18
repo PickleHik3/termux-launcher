@@ -17,6 +17,13 @@
             app:useSimpleSummaryProvider="true"
             app:title="@string/termux_in_app_keyboard_theme_title" />
 
+        <Preference
+            app:key="in_app_keyboard_color_scheme_editor"
+            app:dependency="in_app_keyboard_enabled"
+            app:fragment="com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment"
+            app:summary="@string/termux_keyboard_color_scheme_summary"
+            app:title="@string/termux_keyboard_color_scheme_title" />
+
         <ListPreference
             app:key="in_app_keyboard_dock_match"
             app:dependency="in_app_keyboard_enabled"
