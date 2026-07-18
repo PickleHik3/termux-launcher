@@ -230,6 +230,11 @@
                 <string name="termux_keyboard_color_scheme_colors">Colors</string>
                 <string name="termux_keyboard_color_scheme_edit">Edit</string>
                 <string name="termux_keyboard_color_scheme_done">Done</string>
+                <string name="termux_keyboard_color_scheme_advanced">Advanced</string>
+                <string name="termux_keyboard_color_scheme_import_base16">Import Base16</string>
+                <string name="termux_keyboard_color_scheme_base16_imported">Base16 colors imported</string>
+                <string name="termux_keyboard_color_scheme_base16_error">This file must contain all colors from base00 through base0F.</string>
+                <string name="termux_keyboard_color_scheme_base16_read_error">Couldn’t read this theme file.</string>
                 <string name="termux_keyboard_color_scheme_reset">Reset</string>
                 <string name="termux_keyboard_color_scheme_reset_title">Reset color scheme?</string>
                 <string name="termux_keyboard_color_scheme_reset_message">Remove all per-key colors and restore the current Material swatches.</string>
@@ -634,10 +639,11 @@
                 
                 <string name="termux_terminal_background_opacity_title">Opacity</string>
             <!-- Extra Keys Category -->
-                <string name="termux_extrakeys_blur_radius_title">Blur</string>
-                <string name="termux_extrakeys_blur_live_wallpaper_note">For best alignment, set wallpapers through the launcher. Live wallpapers should set Blur to 0.</string>
-                <string name="termux_extrakeys_blur_live_wallpaper_active_note">Dock blur is not available while using a live wallpaper. Blur has been set to 0.</string>
-                <string name="termux_app_bar_opacity_title">Opacity</string>
+                <string name="termux_extrakeys_blur_radius_title">Blur strength</string>
+                <string name="termux_extrakeys_blur_live_wallpaper_note">Controls background blur in dp. Set to 0 for clear glass.</string>
+                <string name="termux_extrakeys_blur_live_wallpaper_active_note">Temporarily unavailable with a live wallpaper. Your value is preserved.</string>
+                <string name="termux_app_bar_opacity_title">Glass opacity</string>
+                <string name="termux_app_bar_opacity_summary">Controls the complete dock material. 0 is transparent; 100 is opaque.</string>
                 <string name="termux_dock_glass_grain_title">Glass grain</string>
                 <string name="termux_dock_glass_grain_summary">Subtle film grain over the dock glass. 0 disables it.</string>
 
@@ -647,8 +653,8 @@
             <string name="termux_app_launcher_layout_header">Dock layout</string>
             <string name="termux_app_launcher_appearance_header">Icons</string>
 
-                <string name="termux_app_launcher_button_count_title">Icon count</string>
-                <string name="termux_app_launcher_button_count_summary">Set the number of icons shown in the app launcher bar.</string>
+                <string name="termux_app_launcher_button_count_title">Icons per page</string>
+                <string name="termux_app_launcher_button_count_summary">Set the number of icon slots on each dock page.</string>
                 <string name="termux_app_launcher_input_char_title">Input split character</string>
                 <string name="termux_app_launcher_input_char_summary">Character used to start app search when typing in the terminal. Default: %</string>
                 <string name="termux_app_launcher_default_buttons_title">Default apps</string>

@@ -42,9 +42,8 @@ import java.util.Properties;
 @Keep
 public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
 
-    static final float[] APP_LAUNCHER_ICON_SCALE_PRESETS = {1.40f, 1.54f, 1.74f, 1.92f};
-    // Rebalanced so the old "Large" (2.18) is the new "Default"; smallest/small step down and a
-    // larger top bucket is added above. Paired with the height/icon formulas in TermuxActivity.
+    // Dock size is the sole geometry control. Icon size is derived from it by TermuxActivity, so
+    // the UI cannot put dock height and icon scale into contradictory states.
     static final float[] APP_LAUNCHER_BAR_HEIGHT_PRESETS = {1.72f, 1.95f, 2.18f, 2.45f};
 
     @Override
@@ -90,13 +89,9 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
             );
         }
 
-        if (!liveWallpaperActive) return;
-
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, false);
-        if (preferences != null && preferences.getExtraKeysBlurRadius() != 0) {
-            preferences.setExtraKeysBlurRadius(0);
-            TermuxActivity.requestTermuxActivityStylingOnNextResume(context, true);
-        }
+        // A live wallpaper cannot provide a stable bitmap for this blur pipeline. Keep the user's
+        // chosen value intact and only disable its effective rendering until a static wallpaper is
+        // active again.
     }
 
     private boolean isLiveWallpaperActive(@NonNull Context context) {
@@ -110,17 +105,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
     }
 
     private void configureDockPreferencePresentation() {
-        SeekBarPreference iconScalePreference = findPreference("app_launcher_icon_scale_percent");
-        if (iconScalePreference != null) {
-            updateIconScaleSummary(iconScalePreference, iconScalePreference.getValue());
-            iconScalePreference.setOnPreferenceChangeListener((preference, newValue) -> {
-                if (newValue instanceof Integer) {
-                    updateIconScaleSummary(iconScalePreference, (Integer) newValue);
-                }
-                return true;
-            });
-        }
-
         SeekBarPreference barHeightPreference = findPreference("app_launcher_bar_height_percent");
         if (barHeightPreference != null) {
             updateBarHeightSummary(barHeightPreference, barHeightPreference.getValue());
@@ -131,10 +115,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
                 return true;
             });
         }
-    }
-
-    private void updateIconScaleSummary(@NonNull SeekBarPreference preference, int value) {
-        preference.setSummary(getDockPresetLabel(value));
     }
 
     private void updateBarHeightSummary(@NonNull SeekBarPreference preference, int value) {
@@ -170,10 +150,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
             }
         }
         return bestIndex;
-    }
-
-    static float iconScaleForPreset(int preset) {
-        return APP_LAUNCHER_ICON_SCALE_PRESETS[clampDockPresetIndex(preset, APP_LAUNCHER_ICON_SCALE_PRESETS)];
     }
 
     static float barHeightForPreset(int preset) {
@@ -356,14 +332,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherButtonCount(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
-            case "app_launcher_icon_scale_percent":
-                mPreferences.setAppLauncherBarHeightScale(TermuxStylePreferencesFragment.barHeightForPreset(value));
-                mPreferences.setAppLauncherIconScale(TermuxStylePreferencesFragment.iconScaleForPreset(value));
-                scheduleTermuxActivityStylingSync(false);
-                break;
             case "app_launcher_bar_height_percent":
                 mPreferences.setAppLauncherBarHeightScale(TermuxStylePreferencesFragment.barHeightForPreset(value));
-                mPreferences.setAppLauncherIconScale(TermuxStylePreferencesFragment.iconScaleForPreset(value));
                 scheduleTermuxActivityStylingSync(false);
                 break;
             default:
@@ -390,11 +360,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getDockGlassGrain();
             case "app_launcher_button_count":
                 return mPreferences.getAppLauncherButtonCount();
-            case "app_launcher_icon_scale_percent":
-                return TermuxStylePreferencesFragment.nearestDockPresetIndex(
-                    mPreferences.getAppLauncherBarHeightScale(),
-                    TermuxStylePreferencesFragment.APP_LAUNCHER_BAR_HEIGHT_PRESETS
-                );
             case "app_launcher_bar_height_percent":
                 return TermuxStylePreferencesFragment.nearestDockPresetIndex(
                     mPreferences.getAppLauncherBarHeightScale(),
@@ -462,33 +427,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                         )
                     )
                 );
-                mPreferences.setAppLauncherIconScale(
-                    TermuxStylePreferencesFragment.iconScaleForPreset(
-                        TermuxStylePreferencesFragment.nearestDockPresetIndex(
-                            DataUtils.getFloatFromString(value, mPreferences.getAppLauncherBarHeightScale()),
-                            TermuxStylePreferencesFragment.APP_LAUNCHER_BAR_HEIGHT_PRESETS
-                        )
-                    )
-                );
-                scheduleTermuxActivityStylingSync(false);
-                break;
-            case "app_launcher_icon_scale":
-                mPreferences.setAppLauncherBarHeightScale(
-                    TermuxStylePreferencesFragment.barHeightForPreset(
-                        TermuxStylePreferencesFragment.nearestDockPresetIndex(
-                            DataUtils.getFloatFromString(value, mPreferences.getAppLauncherIconScale()),
-                            TermuxStylePreferencesFragment.APP_LAUNCHER_ICON_SCALE_PRESETS
-                        )
-                    )
-                );
-                mPreferences.setAppLauncherIconScale(
-                    TermuxStylePreferencesFragment.iconScaleForPreset(
-                        TermuxStylePreferencesFragment.nearestDockPresetIndex(
-                            DataUtils.getFloatFromString(value, mPreferences.getAppLauncherIconScale()),
-                            TermuxStylePreferencesFragment.APP_LAUNCHER_ICON_SCALE_PRESETS
-                        )
-                    )
-                );
                 scheduleTermuxActivityStylingSync(false);
                 break;
             default:
@@ -526,8 +464,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case LauncherCtlMcpPreferences.KEY_WEB_PROVIDER:
                 return LauncherCtlMcpPreferences.getWebProvider(mContext);
             case "app_launcher_bar_height":
-                return Float.toString(mPreferences.getAppLauncherBarHeightScale());
-            case "app_launcher_icon_scale":
                 return Float.toString(mPreferences.getAppLauncherBarHeightScale());
             default:
                 return defValue;

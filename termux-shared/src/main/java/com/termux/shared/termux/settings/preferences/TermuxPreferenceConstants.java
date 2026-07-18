@@ -350,7 +350,12 @@ public final class TermuxPreferenceConstants {
         /** Defines the persisted height scale for the in-app keyboard. */
         public static final String KEY_IN_APP_KEYBOARD_HEIGHT_SCALE = "in_app_keyboard_height_scale";
 
-        public static final float DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.0f;
+        // Default-dock baseline tuned on Pong (1080x2412). Height is drag-based, so retain the
+        // exact confirmed value; spacing and radius below are discrete slider steps.
+        public static final float DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.0830541f;
+
+        /** Default keyboard height for the Valarie capsule dock, tuned on Pong. */
+        public static final float DEFAULT_VALARIE_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.1109314f;
 
         public static final float MIN_IN_APP_KEYBOARD_HEIGHT_SCALE = 0.5f;
 
@@ -360,7 +365,10 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE =
             "in_app_keyboard_key_margin_scale";
 
-        public static final float DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 1.0f;
+        public static final float DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 2.96f;
+
+        /** Default key spacing for the Valarie capsule dock, tuned on Pong. */
+        public static final float DEFAULT_VALARIE_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 2.57f;
 
         public static final float MIN_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 0.0f;
 
@@ -372,7 +380,10 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP =
             "in_app_keyboard_key_corner_radius_dp";
 
-        public static final float DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = -1.0f;
+        public static final float DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 2.7f;
+
+        /** Default key radius for the Valarie capsule dock, tuned on Pong. */
+        public static final float DEFAULT_VALARIE_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 12.0f;
 
         public static final float MIN_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 0.0f;
 

@@ -373,8 +373,7 @@ public final class TermuxInAppKeyboard {
         mHeightScale = clamped;
         if (mKeyboardView != null)
             mKeyboardView.setHeightScale(mHeightScale);
-        mHost.invalidateKeyboardMeasurement();
-        mHost.requestAccessoryGeometrySync();
+        requestIntrinsicSizeGeometrySync();
     }
 
     private void applyKeyMarginScale(float keyMarginScale) {
@@ -385,8 +384,7 @@ public final class TermuxInAppKeyboard {
         mKeyMarginScale = clamped;
         if (mKeyboardView != null)
             mKeyboardView.setKeyMarginScale(mKeyMarginScale);
-        mHost.invalidateKeyboardMeasurement();
-        mHost.requestAccessoryGeometrySync();
+        requestIntrinsicSizeGeometrySync();
     }
 
     private void applyKeyCornerRadiusDp(float radiusDp) {
@@ -396,6 +394,16 @@ public final class TermuxInAppKeyboard {
         mKeyCornerRadiusDp = clamped;
         if (mKeyboardView != null)
             mKeyboardView.setKeyCornerRadiusOverride(radiusDpToPx(mKeyCornerRadiusDp));
+        requestIntrinsicSizeGeometrySync();
+    }
+
+    /**
+     * Invalidates the activity-owned measurement before recomputing accessory geometry. The
+     * keyboard view can change intrinsic height without changing the available root bounds (for
+     * example when the async custom layout replaces the bundled fallback), so a plain layout
+     * request is not enough to invalidate the activity's width/height-keyed measurement cache.
+     */
+    private void requestIntrinsicSizeGeometrySync() {
         mHost.invalidateKeyboardMeasurement();
         mHost.requestAccessoryGeometrySync();
     }
@@ -580,9 +588,12 @@ public final class TermuxInAppKeyboard {
         String theme = mPreferences.getInAppKeyboardTheme();
         String dockMatch = mPreferences.getInAppKeyboardDockMatch();
         boolean glass = "glass".equals(dockMatch) || "both".equals(dockMatch);
-        return glass
+        juloo.keyboard2.Theme.Palette palette = glass
             ? InAppKeyboardPaletteFactory.createGlass(context, theme)
             : InAppKeyboardPaletteFactory.create(context, theme);
+        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
+            mPreferences.getInAppKeyboardColorScheme());
+        return scheme.applyToPalette(palette);
     }
 
     /** Immutable-Config inputs; a change forces a renderer rebuild on preference reload. */
@@ -651,7 +662,7 @@ public final class TermuxInAppKeyboard {
                 if (mKeyboardView != null)
                     mKeyboardView.setKeyboard(data);
             }
-            mHost.requestAccessoryGeometrySync();
+            requestIntrinsicSizeGeometrySync();
         });
     }
 
@@ -677,7 +688,7 @@ public final class TermuxInAppKeyboard {
         resetInputPipeline();
         if (mKeyboardView != null)
             mKeyboardView.setKeyboard(data);
-        mHost.requestAccessoryGeometrySync();
+        requestIntrinsicSizeGeometrySync();
     }
 
     private KeyboardData getSelectedLayoutData() {

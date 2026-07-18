@@ -1130,9 +1130,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int base = resolveAccessoryGlassBaseColor();
         int accent = resolveDockAccentColor();
         float clamped = barAlpha < 0f ? 0f : (barAlpha > 1f ? 1f : barAlpha);
-        // Keep opacity in this tint drawable instead of applying it to the host view. The AGSL
-        // wallpaper backdrop is a separate layer below this one and must remain fully active; only
-        // the dock's material surface, sheen and grain should respond to the opacity preference.
+        // Opacity controls the colored material wash and its lighting. The wallpaper blur and
+        // grain are independent physical layers: reducing tint should reveal more frost/texture,
+        // not cross-fade back to sharp wallpaper.
         int baseAlpha = dockGlassBaseAlpha(clamped);
         int topSheenAlpha = Math.round(16f * clamped);
         int midSheenAlpha = Math.round(8f * clamped);
@@ -1156,7 +1156,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? mPreferences.getDockGlassGrain()
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
         if (grain > 0) {
-            layers.add(buildDockGrainLayer(grain, clamped));
+            layers.add(buildDockGrainLayer(grain));
         }
         return new LayerDrawable(layers.toArray(new Drawable[0]));
     }
@@ -1244,28 +1244,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mDockGrainBitmap;
     }
 
-    /** A tiled grain layer whose strength scales with both grain and dock-surface opacity. */
+    /** A tiled grain layer whose strength is controlled only by the grain preference. */
     @NonNull
-    private Drawable buildDockGrainLayer(int grainPercent, float surfaceAlpha) {
+    private Drawable buildDockGrainLayer(int grainPercent) {
         BitmapDrawable grain = new BitmapDrawable(getResources(), getDockGrainBitmap());
         grain.setTileModeXY(Shader.TileMode.REPEAT, Shader.TileMode.REPEAT);
         grain.setDither(true);
         // Cap the strength so even at 100% it stays a texture, not visual static.
-        float clampedSurfaceAlpha = Math.max(0f, Math.min(1f, surfaceAlpha));
-        grain.setAlpha(Math.round(Math.max(0, Math.min(100, grainPercent)) / 100f * 60f * clampedSurfaceAlpha));
+        grain.setAlpha(dockGlassGrainAlpha(grainPercent));
         return grain;
     }
 
-    /**
-     * Max tint alpha at 100% dock opacity. This deliberately remains below 255 so the AGSL-blurred
-     * wallpaper continues to carry the glass body instead of being hidden by an opaque card.
-     */
-    static final int DOCK_GLASS_BASE_MAX_ALPHA = 140;
-    static final float DOCK_GLASS_OPACITY_OFFSET = 0.30f;
+    static int dockGlassGrainAlpha(int grainPercent) {
+        return Math.round(Math.max(0, Math.min(100, grainPercent)) / 100f * 60f);
+    }
 
+    static boolean dockBlurEnabled(int blurRadiusDp) {
+        return blurRadiusDp > 0;
+    }
+
+    /** Literal opacity endpoint: 100% is an opaque material and 0% is fully transparent. */
+    static final int DOCK_GLASS_BASE_MAX_ALPHA = 255;
     static int dockGlassBaseAlpha(float opacity) {
-        float adjustedOpacity = Math.max(0f, Math.min(1f, opacity + DOCK_GLASS_OPACITY_OFFSET));
-        return Math.round(adjustedOpacity * DOCK_GLASS_BASE_MAX_ALPHA);
+        float clampedOpacity = Math.max(0f, Math.min(1f, opacity));
+        return Math.round(clampedOpacity * DOCK_GLASS_BASE_MAX_ALPHA);
     }
 
     /** Cached light-scatter filter applied to the blurred wallpaper backdrop. */
@@ -1494,7 +1496,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** Refreshes the plank FX drawables (accent/shape may change) and enables it for a shown dock. */
-    private void refreshDockPlankFx() {
+    private void refreshDockPlankFx(float materialAlpha) {
         setupDockPlankFx();
         if (mDockPlankController == null) {
             return;
@@ -1503,6 +1505,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View specular = findViewById(R.id.accessory_specular_fx);
         if (specular != null) {
             specular.setBackground(buildDockSpecularDrawable(accent));
+            specular.setAlpha(materialAlpha);
         }
         View glow = findViewById(R.id.accessory_edge_glow_fx);
         if (glow instanceof DockEdgeGlowView) {
@@ -1510,6 +1513,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int surfaceHeightPx = surfaceHost != null ? surfaceHost.getHeight() : 0;
             float radius = isValarieDockStyle() ? resolveDockCapsuleCornerRadiusPx(surfaceHeightPx) : 0f;
             DockEdgeGlowView glowView = (DockEdgeGlowView) glow;
+            glowView.setAlpha(materialAlpha);
             glowView.setAccentColor(accent);
             glowView.setCornerRadiusPx(radius);
             // Feather the rim into a soft glow instead of a hard outline (API 31+). The view draws
@@ -1882,7 +1886,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // No white top highlight band — it read as a plastic sheen. The crisp glass top edge is now
         // produced by the AGSL refraction shader on the backdrop. Keep only a faint shadow seam.
         int highlight = Color.TRANSPARENT;
-        int shadow = withAlphaComponent(resolveAccessoryOutlineColor(), Math.round(18f * Math.max(0.40f, barAlpha)));
+        int shadow = withAlphaComponent(resolveAccessoryOutlineColor(), Math.round(18f * Math.max(0f, barAlpha)));
         GradientDrawable edge = new GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
             new int[] { highlight, shadow, Color.TRANSPARENT }
@@ -1892,16 +1896,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** The subtle hairline between the A–Z row and the extra-keys (3rd) row, per the design. */
-    private void configureExtraKeysDivider(boolean visible) {
+    private void configureExtraKeysDivider(boolean visible, float materialAlpha) {
         View divider = findViewById(R.id.extrakeys_divider);
         if (divider == null) {
             return;
         }
-        if (!visible) {
+        if (!visible || materialAlpha <= 0f) {
             divider.setVisibility(View.GONE);
             return;
         }
-        divider.setBackgroundColor(withAlphaComponent(resolveAccessoryOutlineColor(), 70));
+        divider.setBackgroundColor(withAlphaComponent(resolveAccessoryOutlineColor(),
+            Math.round(70f * Math.max(0f, Math.min(1f, materialAlpha)))));
         divider.setVisibility(View.VISIBLE);
     }
 
@@ -1970,14 +1975,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         boolean appsRowEnabled = mPreferences.isAppLauncherAppsRowEnabled();
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
+        float barAlpha = mPreferences.getAppBarOpacity() / 100f;
         return new AccessoryRenderState(
             mPreferences.shouldShowTerminalToolbar(),
             keyboardShown,
             keyboardHeight,
-            blurRadiusDp > 0,
+            dockBlurEnabled(blurRadiusDp),
             appsRowEnabled,
             appsRowEnabled && mPreferences.isAppLauncherAzRowEnabled(),
-            mPreferences.getAppBarOpacity() / 100f,
+            barAlpha,
             blurRadiusDp
         );
     }
@@ -2520,6 +2526,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     BitmapDrawable backdrop = new BitmapDrawable(getResources(), blurredBackdrop);
                     // Same content-aware light scatter the dock backdrop uses — one material.
                     backdrop.setColorFilter(glassFrostFilter());
+                    backdrop.setAlpha(255);
                     layers.add(backdrop);
                 }
             }
@@ -2545,7 +2552,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (layers.isEmpty()) {
             return null;
         }
-        return layers.size() == 1 ? layers.get(0) : new LayerDrawable(layers.toArray(new Drawable[0]));
+        Drawable material = layers.size() == 1
+            ? layers.get(0) : new LayerDrawable(layers.toArray(new Drawable[0]));
+        // A BitmapDrawable reports its captured bitmap dimensions as its minimum size. Since this
+        // drawable is installed on a wrap-content host, exposing that intrinsic size feeds the old
+        // backdrop height back into layout and creates a blank band below a subsequently shorter
+        // keyboard layout. Decoration must follow content geometry, never define it.
+        return new LayoutNeutralDrawable(material);
     }
 
     private void clearInAppKeyboardBackdrop() {
@@ -2689,6 +2702,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (backdrop == null || overlay == null || wallpaperFrame == null) {
             return;
         }
+        backdrop.setAlpha(1f);
         // Overscan the strip's blur bitmap upward past the seam with the dock/keyboard (default dock
         // only) so the refraction edge band clears the visible seam and meets the dock's downward
         // overscan. The bitmap is taller than the overlay; a negative top margin pushes the overscan
@@ -2831,9 +2845,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void setAccessoryBlurLayerAlpha(float alpha) {
-        setAccessoryBlurLayerAlpha(findViewById(R.id.extrakeys_backgroundblur), alpha);
-        setAccessoryBlurLayerAlpha(findViewById(R.id.accessory_blur_backdrop), alpha);
-        setAccessoryBlurLayerAlpha(mDecorNavBarBlurBackdrop, alpha);
+        float targetAlpha = Math.max(0f, Math.min(1f, alpha));
+        setAccessoryBlurLayerAlpha(findViewById(R.id.extrakeys_backgroundblur), targetAlpha);
+        setAccessoryBlurLayerAlpha(findViewById(R.id.accessory_blur_backdrop), targetAlpha);
+        setAccessoryBlurLayerAlpha(mDecorNavBarBlurBackdrop, targetAlpha);
     }
 
     private void setAccessoryBlurLayerAlpha(@Nullable View view, float alpha) {
@@ -2848,10 +2863,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (view == null || view.getVisibility() != View.VISIBLE) {
             return;
         }
+        float targetAlpha = 1f;
         view.animate()
-            .alpha(1f)
+            .alpha(targetAlpha)
             .setDuration(140L)
-            .withEndAction(() -> view.setAlpha(1f))
+            .withEndAction(() -> view.setAlpha(targetAlpha))
             .start();
     }
 
@@ -3162,6 +3178,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
         boolean usingManagedWallpaperSource = shouldUseManagedWallpaperBlurSource();
         View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+        if (backdrop != null) {
+            backdrop.setAlpha(1f);
+        }
         applyAccessorySurfaceBounds(state);
         if (shouldUseDockDecorNavBarSurface(state) && !isValarieDockStyle()) {
             clearAccessoryRenderEffectBackdrop();
@@ -3349,7 +3368,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyInAppKeyboardSurfaceState(state);
             completePendingInAppKeyboardCloseGeometry(state);
             configureAccessoryTopEdgeFx(false, state.barAlpha);
-            configureExtraKeysDivider(false);
+            configureExtraKeysDivider(false, 0f);
             resetAzOverflowAffordanceState();
             if (mDockPlankController != null) {
                 mDockPlankController.setEnabled(false);
@@ -3399,16 +3418,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Opacity is baked into the drawable (translucent base) so the glass light model survives.
             extraKeysBackground.setAlpha(1f);
         }
-        refreshDockPlankFx();
+        refreshDockPlankFx(state.barAlpha);
 
         if (extraKeysBackgroundBlur != null) {
+            extraKeysBackgroundBlur.setAlpha(1f);
             extraKeysBackgroundBlur.setVisibility(
                 state.blurEnabled && !useRenderEffectBlur && !useDecorSurface ? View.VISIBLE : View.GONE
             );
         }
         configureAccessoryTopEdgeFx(true, state.barAlpha);
         // Thin material hairline at the seam between the A–Z row and the extra-keys row.
-        configureExtraKeysDivider(state.appsRowEnabled);
+        configureExtraKeysDivider(state.appsRowEnabled, state.barAlpha);
         applyDecorNavBarSurfaceState(state);
         applyInAppKeyboardSurfaceState(state);
         updateAccessoryRenderEffectBackdrop(state);
@@ -4133,7 +4153,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSuggestionBarView.setDockRowHeightHintPx(resolveDockAppsBarHeightHintPx(buildDockLayoutMetrics(0).appsBarHeightPx));
         mSuggestionBarView.setAppBarOpacity(mPreferences.getAppBarOpacity());
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
-        mSuggestionBarView.setBlurConfig(blurRadiusDp > 0, blurRadiusDp);
+        mSuggestionBarView.setBlurConfig(dockBlurEnabled(blurRadiusDp), blurRadiusDp);
         mSuggestionBarView.setInheritedTintColor(resolveAccessoryGlassBaseColor());
         mSuggestionBarView.setNotificationBadgesEnabled(mPreferences.isAppLauncherNotificationDotsEnabled());
         mSuggestionBarView.setMostUsedPageEnabled(mPreferences.isAppLauncherMostUsedPageEnabled());
@@ -7340,6 +7360,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mSource.setColorFilter(colorFilter);
             invalidateSelf();
         }
+
+        @Override
+        public int getOpacity() {
+            return mSource.getOpacity();
+        }
+    }
+
+    /** Drawable delegate whose pixels participate in rendering but never in wrap-content sizing. */
+    static final class LayoutNeutralDrawable extends Drawable {
+        @NonNull private final Drawable mSource;
+
+        LayoutNeutralDrawable(@NonNull Drawable source) {
+            mSource = source;
+        }
+
+        @Override
+        public void draw(@NonNull Canvas canvas) {
+            mSource.setBounds(getBounds());
+            mSource.draw(canvas);
+        }
+
+        @Override
+        protected void onBoundsChange(Rect bounds) {
+            mSource.setBounds(bounds);
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+            mSource.setAlpha(alpha);
+            invalidateSelf();
+        }
+
+        @Override
+        public void setColorFilter(@Nullable ColorFilter colorFilter) {
+            mSource.setColorFilter(colorFilter);
+            invalidateSelf();
+        }
+
+        @Override public int getIntrinsicWidth() { return 0; }
+        @Override public int getIntrinsicHeight() { return 0; }
+        @Override public int getMinimumWidth() { return 0; }
+        @Override public int getMinimumHeight() { return 0; }
 
         @Override
         public int getOpacity() {

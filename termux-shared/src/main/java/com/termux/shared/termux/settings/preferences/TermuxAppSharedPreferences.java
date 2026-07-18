@@ -93,7 +93,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public void setAppLauncherButtonCount(int value) {
-        SharedPreferenceUtils.setIntStoredAsString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_BUTTON_COUNT, value, false);
+        SharedPreferenceUtils.setIntStoredAsString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_BUTTON_COUNT, DataUtils.clamp(value, 1, 20), false);
     }
 
     public String getAppLauncherInputChar() {
@@ -130,7 +131,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public void setAppLauncherBarHeightScale(float value) {
-        SharedPreferenceUtils.setFloat(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT, value, false);
+        SharedPreferenceUtils.setFloat(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT,
+            Math.max(0.4f, Math.min(3.0f, value)), false);
     }
 
     public String getAppLauncherDockStyle() {
@@ -203,11 +205,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_PINNED_ICON_PACK_PACKAGE, value == null ? "" : value, true);
     }
 
+    /** @deprecated Dock icon scale is derived from dock size so geometry has one source of truth. */
+    @Deprecated
     public float getAppLauncherIconScale() {
         float iconScale = SharedPreferenceUtils.getFloat(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_ICON_SCALE, TERMUX_APP.DEFAULT_APP_LAUNCHER_ICON_SCALE);
         return DataUtils.rangedOrDefault(iconScale, TERMUX_APP.DEFAULT_APP_LAUNCHER_ICON_SCALE, 1.0f, 1.8f);
     }
 
+    /** @deprecated Retained only for compatibility with older stored preferences. */
+    @Deprecated
     public void setAppLauncherIconScale(float value) {
         float clamped = Math.max(1.0f, Math.min(1.8f, value));
         SharedPreferenceUtils.setFloat(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_ICON_SCALE, clamped, false);
@@ -617,9 +623,11 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public float getInAppKeyboardHeightScale() {
+        float defaultValue = getDefaultInAppKeyboardHeightScale();
         float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE,
-            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE);
+            defaultValue);
+        if (Float.isNaN(value) || Float.isInfinite(value)) return defaultValue;
         return clampInAppKeyboardHeightScale(value);
     }
 
@@ -637,9 +645,11 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public float getInAppKeyboardKeyMarginScale() {
+        float defaultValue = getDefaultInAppKeyboardKeyMarginScale();
         float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
-            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE);
+            defaultValue);
+        if (Float.isNaN(value) || Float.isInfinite(value)) return defaultValue;
         return clampInAppKeyboardKeyMarginScale(value);
     }
 
@@ -657,10 +667,35 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public float getInAppKeyboardKeyCornerRadiusDp() {
+        float defaultValue = getDefaultInAppKeyboardKeyCornerRadiusDp();
         float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP,
-            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP);
+            defaultValue);
+        if (Float.isNaN(value) || Float.isInfinite(value) || value < 0f) return defaultValue;
         return clampInAppKeyboardKeyCornerRadiusDp(value);
+    }
+
+    private boolean usesValarieInAppKeyboardDefaults() {
+        return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_VALARIE_CAPSULE.equals(
+            getAppLauncherDockStyle());
+    }
+
+    private float getDefaultInAppKeyboardHeightScale() {
+        return usesValarieInAppKeyboardDefaults()
+            ? TERMUX_APP.DEFAULT_VALARIE_IN_APP_KEYBOARD_HEIGHT_SCALE
+            : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE;
+    }
+
+    private float getDefaultInAppKeyboardKeyMarginScale() {
+        return usesValarieInAppKeyboardDefaults()
+            ? TERMUX_APP.DEFAULT_VALARIE_IN_APP_KEYBOARD_KEY_MARGIN_SCALE
+            : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE;
+    }
+
+    private float getDefaultInAppKeyboardKeyCornerRadiusDp() {
+        return usesValarieInAppKeyboardDefaults()
+            ? TERMUX_APP.DEFAULT_VALARIE_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP
+            : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP;
     }
 
     public void setInAppKeyboardKeyCornerRadiusDp(float value) {
@@ -839,11 +874,12 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public int getExtraKeysBlurRadius() {
         int radius = SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, TERMUX_APP.DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS);
-        return Math.max(radius, 0);
+        return DataUtils.clamp(radius, 0, 30);
     }
 
     public void setExtraKeysBlurRadius(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, Math.max(value, 0), false);
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS,
+            DataUtils.clamp(value, 0, 30), false);
     }
 
     public int getDockGlassGrain() {

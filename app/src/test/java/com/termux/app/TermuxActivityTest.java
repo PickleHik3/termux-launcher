@@ -1,5 +1,7 @@
 package com.termux.app;
 
+import android.graphics.drawable.GradientDrawable;
+
 import com.termux.shared.termux.data.TermuxUrlUtils;
 import org.junit.Assert;
 import org.junit.Test;
@@ -31,12 +33,33 @@ public class TermuxActivityTest {
     }
 
     @Test
-    public void testDockGlassOpacityUsesMeaningfulRangeWithoutHidingBlur() {
-        Assert.assertEquals(42, TermuxActivity.dockGlassBaseAlpha(0f));
-        Assert.assertEquals(112, TermuxActivity.dockGlassBaseAlpha(0.5f));
-        Assert.assertEquals(140, TermuxActivity.dockGlassBaseAlpha(1f));
+    public void testDockGlassOpacityHasLiteralEndpoints() {
+        Assert.assertEquals(0, TermuxActivity.dockGlassBaseAlpha(0f));
+        Assert.assertEquals(128, TermuxActivity.dockGlassBaseAlpha(0.5f));
+        Assert.assertEquals(255, TermuxActivity.dockGlassBaseAlpha(1f));
         Assert.assertEquals(0, TermuxActivity.dockGlassBaseAlpha(-1f));
-        Assert.assertEquals(140, TermuxActivity.dockGlassBaseAlpha(2f));
-        Assert.assertTrue(TermuxActivity.DOCK_GLASS_BASE_MAX_ALPHA < 255);
+        Assert.assertEquals(255, TermuxActivity.dockGlassBaseAlpha(2f));
+        Assert.assertEquals(255, TermuxActivity.DOCK_GLASS_BASE_MAX_ALPHA);
+    }
+
+    @Test
+    public void testBlurAndGrainDoNotDependOnTintOpacity() {
+        Assert.assertFalse(TermuxActivity.dockBlurEnabled(0));
+        Assert.assertTrue(TermuxActivity.dockBlurEnabled(22));
+        Assert.assertEquals(0, TermuxActivity.dockGlassGrainAlpha(0));
+        Assert.assertEquals(30, TermuxActivity.dockGlassGrainAlpha(50));
+        Assert.assertEquals(60, TermuxActivity.dockGlassGrainAlpha(100));
+    }
+
+    @Test
+    public void keyboardMaterialBackgroundDoesNotContributeToLayoutSize() {
+        GradientDrawable capturedBackdrop = new GradientDrawable();
+        TermuxActivity.LayoutNeutralDrawable background =
+            new TermuxActivity.LayoutNeutralDrawable(capturedBackdrop);
+
+        Assert.assertEquals(0, background.getIntrinsicWidth());
+        Assert.assertEquals(0, background.getIntrinsicHeight());
+        Assert.assertEquals(0, background.getMinimumWidth());
+        Assert.assertEquals(0, background.getMinimumHeight());
     }
 }

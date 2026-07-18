@@ -2,6 +2,7 @@ package com.termux.app.fragments.settings.termux;
 
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
@@ -13,10 +14,13 @@ import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.Space;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 
@@ -25,11 +29,16 @@ import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.color.MaterialColors;
+import com.google.android.material.materialswitch.MaterialSwitch;
 import com.termux.R;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -57,6 +66,12 @@ public class KeyboardColorSchemeFragment extends Fragment {
     private InAppKeyboardColorScheme.Role mSelectedRole =
         InAppKeyboardColorScheme.Role.KEY_BACKGROUND;
     private boolean mEditingSwatches;
+    private boolean mAdvanced;
+    private MaterialButton mImportButton;
+    private static final String STATE_ADVANCED = "advanced";
+
+    private final ActivityResultLauncher<String[]> mBase16Picker = registerForActivityResult(
+        new ActivityResultContracts.OpenDocument(), this::importBase16Uri);
 
     @Nullable
     @Override
@@ -68,6 +83,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
             throw new IllegalStateException("Termux preferences unavailable");
         mScheme = InAppKeyboardColorScheme.fromJson(context,
             mPreferences.getInAppKeyboardColorScheme());
+        mAdvanced = savedInstanceState != null && savedInstanceState.getBoolean(STATE_ADVANCED);
 
         LinearLayout root = new LinearLayout(context);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -99,6 +115,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         Theme.Palette palette = "glass".equals(dockMatch) || "both".equals(dockMatch)
             ? InAppKeyboardPaletteFactory.createGlass(context, theme)
             : InAppKeyboardPaletteFactory.create(context, theme);
+        palette = mScheme.applyToPalette(palette);
         mKeyboard = new Keyboard2View(context, config.build(), palette);
         KeyboardData previewLayout = KeyboardData.load(getResources(),
             juloo.keyboard2.R.xml.latn_qwerty_us);
@@ -168,7 +185,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
                 mScheme = InAppKeyboardColorScheme.fromJson(requireContext(), "");
                 mSelectedSwatch = 0;
                 createSwatches();
-                mKeyboard.setKeyColorOverrides(mScheme.resolvedOverrides());
+                persistAndRender();
             })
             .show());
         heading.addView(reset);
@@ -187,6 +204,28 @@ public class KeyboardColorSchemeFragment extends Fragment {
         heading.addView(edit, editParams);
         content.addView(heading);
 
+        LinearLayout advancedRow = new LinearLayout(context);
+        advancedRow.setGravity(Gravity.CENTER_VERTICAL);
+        MaterialSwitch advanced = new MaterialSwitch(context);
+        advanced.setText(R.string.termux_keyboard_color_scheme_advanced);
+        advanced.setChecked(mAdvanced);
+        advanced.setOnCheckedChangeListener((button, checked) -> {
+            mAdvanced = checked;
+            mImportButton.setVisibility(checked ? View.VISIBLE : View.GONE);
+            createSwatches();
+        });
+        advancedRow.addView(advanced, new LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        mImportButton = new MaterialButton(context, null,
+            com.google.android.material.R.attr.materialButtonOutlinedStyle);
+        mImportButton.setText(R.string.termux_keyboard_color_scheme_import_base16);
+        mImportButton.setVisibility(mAdvanced ? View.VISIBLE : View.GONE);
+        mImportButton.setOnClickListener(view -> mBase16Picker.launch(new String[] {
+            "application/x-yaml", "text/yaml", "text/plain", "application/json", "*/*"
+        }));
+        advancedRow.addView(mImportButton);
+        content.addView(advancedRow);
+
         HorizontalScrollView swatchScroller = new HorizontalScrollView(context);
         swatchScroller.setHorizontalScrollBarEnabled(false);
         swatchScroller.setClipToPadding(false);
@@ -194,9 +233,9 @@ public class KeyboardColorSchemeFragment extends Fragment {
         mSwatchRow.setOrientation(LinearLayout.HORIZONTAL);
         mSwatchRow.setGravity(Gravity.CENTER_VERTICAL);
         swatchScroller.addView(mSwatchRow, new ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, dp(56)));
+            ViewGroup.LayoutParams.WRAP_CONTENT, dp(76)));
         LinearLayout.LayoutParams swatchParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(56));
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(76));
         swatchParams.topMargin = dp(8);
         content.addView(swatchScroller, swatchParams);
         createSwatches();
@@ -260,18 +299,35 @@ public class KeyboardColorSchemeFragment extends Fragment {
     private void createSwatches() {
         mSwatchViews.clear();
         mSwatchRow.removeAllViews();
-        for (int i = 0; i < mScheme.swatchCount(); i++) {
+        int visibleCount = mAdvanced ? mScheme.swatchCount() : Math.min(6, mScheme.swatchCount());
+        for (int i = 0; i < visibleCount; i++) {
             final int index = i;
             View swatch = new View(requireContext());
-            swatch.setContentDescription(getString(R.string.termux_keyboard_color_scheme_swatch, i + 1));
+            String slot = String.format("base%02X", i);
+            swatch.setContentDescription(mAdvanced ? slot
+                : getString(R.string.termux_keyboard_color_scheme_swatch, i + 1));
             swatch.setOnClickListener(view -> {
                 mSelectedSwatch = index;
                 if (mEditingSwatches) showHexEditor(index);
                 updateSwatches();
             });
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(48), dp(48));
+            LinearLayout item = new LinearLayout(requireContext());
+            item.setOrientation(LinearLayout.VERTICAL);
+            item.setGravity(Gravity.CENTER_HORIZONTAL);
+            item.addView(swatch, new LinearLayout.LayoutParams(dp(48), dp(48)));
+            if (mAdvanced) {
+                TextView label = new TextView(requireContext());
+                label.setText(slot);
+                label.setGravity(Gravity.CENTER);
+                label.setTextAppearance(
+                    com.google.android.material.R.style.TextAppearance_Material3_LabelSmall);
+                item.addView(label, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            }
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                dp(54), ViewGroup.LayoutParams.WRAP_CONTENT);
             params.setMarginEnd(dp(10));
-            mSwatchRow.addView(swatch, params);
+            mSwatchRow.addView(item, params);
             mSwatchViews.add(swatch);
         }
         updateSwatches();
@@ -337,7 +393,48 @@ public class KeyboardColorSchemeFragment extends Fragment {
 
     private void persistAndRender() {
         mPreferences.setInAppKeyboardColorScheme(mScheme.toJson());
+        String theme = mPreferences.getInAppKeyboardTheme();
+        String dockMatch = mPreferences.getInAppKeyboardDockMatch();
+        Theme.Palette palette = "glass".equals(dockMatch) || "both".equals(dockMatch)
+            ? InAppKeyboardPaletteFactory.createGlass(requireContext(), theme)
+            : InAppKeyboardPaletteFactory.create(requireContext(), theme);
+        mKeyboard.setPalette(mScheme.applyToPalette(palette));
         mKeyboard.setKeyColorOverrides(mScheme.resolvedOverrides());
+    }
+
+    private void importBase16Uri(@Nullable Uri uri) {
+        if (uri == null) return;
+        try (InputStream stream = requireContext().getContentResolver().openInputStream(uri)) {
+            if (stream == null) throw new IOException("Unable to open document");
+            BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
+            StringBuilder text = new StringBuilder();
+            char[] buffer = new char[4096];
+            int count;
+            while ((count = reader.read(buffer)) >= 0) {
+                if (text.length() + count > 262144)
+                    throw new IOException("Theme file is too large");
+                text.append(buffer, 0, count);
+            }
+            if (!mScheme.importBase16(text.toString())) {
+                Toast.makeText(requireContext(),
+                    R.string.termux_keyboard_color_scheme_base16_error, Toast.LENGTH_LONG).show();
+                return;
+            }
+            mSelectedSwatch = 0;
+            persistAndRender();
+            createSwatches();
+            Toast.makeText(requireContext(),
+                R.string.termux_keyboard_color_scheme_base16_imported, Toast.LENGTH_SHORT).show();
+        } catch (IOException | SecurityException e) {
+            Toast.makeText(requireContext(),
+                R.string.termux_keyboard_color_scheme_base16_read_error, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override
+    public void onSaveInstanceState(@NonNull Bundle outState) {
+        outState.putBoolean(STATE_ADVANCED, mAdvanced);
+        super.onSaveInstanceState(outState);
     }
 
     private int dp(float value) { return Math.round(dpFloat(value)); }

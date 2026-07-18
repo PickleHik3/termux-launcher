@@ -112,13 +112,33 @@ public final class InAppKeyboardPaletteFactory {
     @NonNull
     public static int[] defaultEditorSwatches(@NonNull Context context) {
         SourceRoles roles = resolve(context);
+        int tertiary = materialColor(context, com.google.android.material.R.attr.colorTertiary,
+            ColorUtils.blendARGB(roles.primary, roles.secondary, 0.5f));
+        int error = materialColor(context, com.google.android.material.R.attr.colorError,
+            0xFFBA1A1A);
         return new int[] {
+            // Keep the original six entries first so persisted per-key assignments migrate
+            // without changing appearance. Advanced mode exposes the complete Base16-sized set.
             opaque(roles.surfaceContainerHigh),
             opaque(roles.primary),
             opaque(roles.secondary),
             opaque(roles.onSurface),
             opaque(roles.onSurfaceVariant),
-            opaque(roles.secondaryContainer)
+            opaque(roles.secondaryContainer),
+            opaque(roles.surface),
+            opaque(roles.surfaceContainerHighest),
+            opaque(error),
+            opaque(tertiary),
+            opaque(roles.primaryContainer),
+            opaque(materialColor(context, com.google.android.material.R.attr.colorOnPrimary,
+                roles.surface)),
+            opaque(materialColor(context, com.google.android.material.R.attr.colorOnSecondary,
+                roles.surface)),
+            opaque(materialColor(context, com.google.android.material.R.attr.colorOnTertiary,
+                roles.surface)),
+            opaque(roles.outlineVariant),
+            opaque(materialColor(context, com.google.android.material.R.attr.colorErrorContainer,
+                ColorUtils.blendARGB(roles.surface, error, 0.20f)))
         };
     }
 

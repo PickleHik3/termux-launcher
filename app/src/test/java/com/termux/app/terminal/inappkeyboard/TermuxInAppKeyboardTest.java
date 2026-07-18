@@ -33,6 +33,8 @@ import org.robolectric.annotation.Config;
 import org.robolectric.util.ReflectionHelpers;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.AbstractExecutorService;
@@ -53,6 +55,7 @@ public class TermuxInAppKeyboardTest {
     private FakeHost mHost;
     private TermuxAppSharedPreferences mPreferences;
     private TermuxInAppKeyboard mController;
+    private File mLayoutFile;
 
     @Before
     public void setUp() throws Exception {
@@ -258,6 +261,7 @@ public class TermuxInAppKeyboardTest {
         assertTrue(mController.isVisible());
         assertTrue(mController.isHeightAdjusting());
         assertTrue(mHost.heightAdjustmentVisible);
+        int invalidationsBeforePreviews = mHost.measurementInvalidationCount;
 
         mController.previewHeightScale(3.0f);
         mController.previewKeyMarginScale(9.0f);
@@ -265,7 +269,7 @@ public class TermuxInAppKeyboardTest {
         assertEquals(1.6f, mController.getHeightScale(), 0.0001f);
         assertEquals(8f, mController.getKeyMarginScale(), 0.0001f);
         assertEquals(24f, mController.getKeyCornerRadiusDp(), 0.0001f);
-        assertEquals(3, mHost.measurementInvalidationCount);
+        assertEquals(invalidationsBeforePreviews + 3, mHost.measurementInvalidationCount);
         assertEquals(1.0f, mPreferences.getInAppKeyboardHeightScale(), 0.0001f);
         assertEquals(0.75f, mPreferences.getInAppKeyboardKeyMarginScale(), 0.0001f);
         assertEquals(8f, mPreferences.getInAppKeyboardKeyCornerRadiusDp(), 0.0001f);
@@ -282,7 +286,7 @@ public class TermuxInAppKeyboardTest {
         mController.previewKeyCornerRadiusDp(2f);
         mController.cancelHeightAdjustment();
         assertFalse(mController.isHeightAdjusting());
-        assertEquals(9, mHost.measurementInvalidationCount);
+        assertEquals(invalidationsBeforePreviews + 9, mHost.measurementInvalidationCount);
         assertEquals(1.6f, mController.getHeightScale(), 0.0001f);
         assertEquals(8f, mController.getKeyMarginScale(), 0.0001f);
         assertEquals(24f, mController.getKeyCornerRadiusDp(), 0.0001f);
@@ -348,15 +352,37 @@ public class TermuxInAppKeyboardTest {
             mController.getSelectedLayoutId());
     }
 
+    @Test
+    public void asyncCustomLayoutInvalidatesFallbackLayoutMeasurement() throws Exception {
+        mPreferences.setInAppKeyboardEnabled(true);
+        mController.onCreate(null);
+        mController.onStart();
+        int invalidationsBeforeCustomLayout = mHost.measurementInvalidationCount;
+        int geometrySyncsBeforeCustomLayout = mHost.geometrySyncCount;
+
+        String twoRowLayout = "<keyboard bottom_row='false'>"
+            + "<row><key c='1'/></row>"
+            + "<row><key c='2'/></row>"
+            + "</keyboard>";
+        Files.write(mLayoutFile.toPath(), twoRowLayout.getBytes(StandardCharsets.UTF_8));
+        mController.onStart();
+
+        KeyboardData applied = ReflectionHelpers.getField(
+            (Keyboard2View) mHost.attachedView, "_keyboard");
+        assertEquals(2f, applied.keysHeight, 0.0001f);
+        assertTrue(mHost.measurementInvalidationCount > invalidationsBeforeCustomLayout);
+        assertTrue(mHost.geometrySyncCount > geometrySyncsBeforeCustomLayout);
+    }
+
     private static KeyValue centerKey(Keyboard2View view, int row, int column) {
         KeyboardData keyboard = ReflectionHelpers.getField(view, "_keyboard");
         return keyboard.rows.get(row).keys.get(column).keys[0];
     }
 
     private TermuxInAppKeyboard newController() throws Exception {
-        File layout = new File(temporaryFolder.newFolder(), "layout.xml");
+        mLayoutFile = new File(temporaryFolder.newFolder(), "layout.xml");
         return new TermuxInAppKeyboard(mHost, mPreferences, new DirectExecutorService(),
-            layout, (diagnostic, userMessage) -> { });
+            mLayoutFile, (diagnostic, userMessage) -> { });
     }
 
     private static final class DirectExecutorService extends AbstractExecutorService {

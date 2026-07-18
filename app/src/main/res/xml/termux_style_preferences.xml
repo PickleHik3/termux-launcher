@@ -52,7 +52,8 @@
             android:min="0"
             android:max="30"
             android:defaultValue="10"
-            app:showSeekBarValue="true" />
+            app:showSeekBarValue="true"
+            app:updatesContinuously="true" />
 
         <androidx.preference.SeekBarPreference
             app:key="app_bar_opacity"
@@ -60,7 +61,9 @@
             android:min="0"
             android:max="100"
             android:defaultValue="50"
-            app:showSeekBarValue="true" />
+            app:summary="@string/termux_app_bar_opacity_summary"
+            app:showSeekBarValue="true"
+            app:updatesContinuously="true" />
 
         <androidx.preference.SeekBarPreference
             app:key="dock_glass_grain"
@@ -69,7 +72,8 @@
             android:min="0"
             android:max="100"
             android:defaultValue="12"
-            app:showSeekBarValue="true" />
+            app:showSeekBarValue="true"
+            app:updatesContinuously="true" />
 
         <androidx.preference.SeekBarPreference
             app:key="app_launcher_button_count"
@@ -78,7 +82,8 @@
             app:min="1"
             android:max="20"
             android:defaultValue="7"
-            app:showSeekBarValue="true" />
+            app:showSeekBarValue="true"
+            app:updatesContinuously="true" />
 
         <androidx.preference.SeekBarPreference
             app:key="app_launcher_bar_height_percent"
@@ -86,7 +91,9 @@
             app:min="0"
             android:max="3"
             android:defaultValue="2"
-            app:showSeekBarValue="false" />
+            app:summary="@string/termux_app_launcher_bar_height_summary"
+            app:showSeekBarValue="false"
+            app:updatesContinuously="true" />
 
         <ListPreference
             app:key="app_launcher_dock_style"
