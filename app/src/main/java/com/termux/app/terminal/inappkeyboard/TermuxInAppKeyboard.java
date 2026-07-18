@@ -731,7 +731,7 @@ public final class TermuxInAppKeyboard {
     private void setContainerVisible(boolean visible) {
         if (mHost != null) {
             Log.i("KBTRACE", "setContainerVisible " + visible + " old=" + requireContainer().getVisibility());
-            requireContainer().setVisibility(visible ? View.VISIBLE : View.GONE);
+            mHost.setKeyboardContainerVisible(visible);
         }
     }
 

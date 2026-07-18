@@ -454,6 +454,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mHasMeasuredTerminalFlushPadding;
     private long mDelayRootMarginAdjustmentsUntilUptimeMs;
     private boolean mImeTransitionInProgress;
+    /** Keeps the under-pill glass covering stale close geometry until dock-only layout settles. */
+    private boolean mPendingInAppKeyboardCloseGeometry;
     private boolean mFadeAccessoryBlurAfterImeRestore;
     private boolean mAccessoryBackdropDirty = true;
     private int mLastAccessoryBackdropBlurRadiusDp = -1;
@@ -471,6 +473,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mLastInAppKeyboardBackdropManagedSource;
     @NonNull private final Rect mLastInAppKeyboardBackdropTargetRect = new Rect();
     @Nullable private Bitmap mInAppKeyboardBackdropBitmap;
+    /** One wallpaper-frame blur shared by dock, keyboard, and gesture-nav crops. */
+    @Nullable private Bitmap mCachedAccessoryWallpaperBlurBitmap;
+    @NonNull private final Rect mCachedAccessoryWallpaperBlurFrameRect = new Rect();
+    private int mCachedAccessoryWallpaperBlurRadiusDp = -1;
+    private boolean mCachedAccessoryWallpaperBlurManagedSource;
+    private int mCachedAccessoryWallpaperBlurSystemId = -1;
+    private long mCachedAccessoryWallpaperBlurManagedLastModified = -1L;
+    private long mCachedAccessoryWallpaperBlurManagedLength = -1L;
     @Nullable private Drawable mManagedWallpaperWindowBackground;
     private long mManagedWallpaperWindowBackgroundLastModified = -1L;
     private long mManagedWallpaperWindowBackgroundLength = -1L;
@@ -1012,6 +1022,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         try {
             WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
             mWallpaperColorsChangedListener = (WallpaperColors colors, int which) -> {
+                clearCachedAccessoryWallpaperBlur();
                 if (!mIsVisible) {
                     return;
                 }
@@ -1973,7 +1984,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private boolean isInAppKeyboardShown() {
         View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
-        return keyboardContainer != null && keyboardContainer.getVisibility() == View.VISIBLE;
+        if (mInAppKeyboard != null) {
+            return mInAppKeyboard.isVisible();
+        }
+        return keyboardContainer != null && keyboardContainer.getVisibility() != View.GONE;
     }
 
     private int measureInAppKeyboardHeight() {
@@ -2304,7 +2318,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // system-bars height by a few px, which otherwise leaves a thin wallpaper gap (or an overlap)
         // between the dock/keyboard bottom and the strip. This makes them meet exactly.
         int measured = measuredUnderPillStripHeightPx();
-        return measured > 0 ? measured : mNavBarHeight;
+        int targetHeight = measured > 0 ? measured : mNavBarHeight;
+        if (mPendingInAppKeyboardCloseGeometry) {
+            // Closing makes the keyboard GONE before RelativeLayout has produced dock-only bounds.
+            // During that pass measuredUnderPillStripHeightPx() samples the old full-height host and
+            // misses the newly restored flush padding, exposing a sharp wallpaper seam. Oversizing
+            // the decor glass by that known inset is safe (it sits behind the dock) and keeps the
+            // seam covered until the destination layout is observed.
+            View accessoryContainer = findViewById(R.id.accessory_stack_container);
+            int pendingFlushInset = accessoryContainer != null
+                ? Math.max(0, accessoryContainer.getPaddingBottom()) : 0;
+            targetHeight = Math.max(targetHeight, mNavBarHeight + pendingFlushInset);
+        }
+        return targetHeight;
     }
 
     /**
@@ -2446,10 +2472,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float cornerRadiusPx = capsule ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
         applyInAppKeyboardSurfaceClip(surfaceHost, capsule, cornerRadiusPx);
         if (shouldUseUnifiedDefaultKeyboardGlassSurface(state)) {
-            // accessory_surface_host spans the complete default dock + keyboard stack. The
-            // transparent glass keyboard palette exposes that shared material here.
-            surfaceHost.setBackground(null);
-            clearInAppKeyboardBackdrop();
+            // Once accessory_surface_host has actually laid out at the expanded height and its
+            // matching crop is installed, the transparent keyboard exposes that one unified
+            // material. Until then, keep a keyboard-local glass background in place: changing the
+            // RelativeLayout rules above only requests layout, so clearing this background here
+            // would expose sharp wallpaper for a frame (or the whole IME transition).
+            if (isUnifiedAccessoryBackdropReady(state)) {
+                surfaceHost.setBackground(null);
+                clearInAppKeyboardBackdrop();
+            } else {
+                surfaceHost.setBackground(
+                    buildInAppKeyboardSurfaceBackground(state, surfaceHost, false, glassTheme, 0f));
+            }
             return;
         }
         surfaceHost.setBackground(
@@ -2530,17 +2564,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private Bitmap obtainInAppKeyboardBackdropBitmap(@NonNull AccessoryRenderState state,
                                                      @NonNull View surfaceHost) {
         View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
-        if (wallpaperFrame == null || surfaceHost.getWidth() <= 0 || surfaceHost.getHeight() <= 0) {
+        if (wallpaperFrame == null) {
             return mInAppKeyboardBackdropBitmap;
         }
 
-        surfaceHost.getLocationOnScreen(mTmpViewLocation);
-        Rect targetRect = new Rect(
-            mTmpViewLocation[0],
-            mTmpViewLocation[1],
-            mTmpViewLocation[0] + Math.max(1, surfaceHost.getWidth()),
-            mTmpViewLocation[1] + Math.max(1, surfaceHost.getHeight())
-        );
+        Rect targetRect = buildInAppKeyboardBackdropTargetRect(state, surfaceHost);
+        if (targetRect == null) {
+            return mInAppKeyboardBackdropBitmap;
+        }
         boolean usingManagedWallpaperSource = shouldUseManagedWallpaperBlurSource();
         if (!mInAppKeyboardBackdropDirty &&
             mLastInAppKeyboardBackdropBlurRadiusDp == state.blurRadiusDp &&
@@ -2550,17 +2581,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mInAppKeyboardBackdropBitmap;
         }
 
-        Bitmap wallpaperBackdrop = createWallpaperBackdropBitmapForRect(targetRect, wallpaperFrame);
-        if (wallpaperBackdrop == null) {
-            return mInAppKeyboardBackdropBitmap;
-        }
-        Bitmap blurredBackdrop = createPreBlurredWallpaperBackdropBitmap(wallpaperBackdrop, state.blurRadiusDp);
+        Bitmap blurredBackdrop = createCachedAccessoryWallpaperBlurCrop(state, targetRect, wallpaperFrame);
         if (blurredBackdrop == null) {
-            wallpaperBackdrop.recycle();
             return mInAppKeyboardBackdropBitmap;
-        }
-        if (blurredBackdrop != wallpaperBackdrop) {
-            wallpaperBackdrop.recycle();
         }
         mInAppKeyboardBackdropBitmap = blurredBackdrop;
         mInAppKeyboardBackdropDirty = false;
@@ -2568,6 +2591,80 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastInAppKeyboardBackdropManagedSource = usingManagedWallpaperSource;
         mLastInAppKeyboardBackdropTargetRect.set(targetRect);
         return mInAppKeyboardBackdropBitmap;
+    }
+
+    /**
+     * Returns the keyboard crop even during its first pre-layout render. The accessory stack is
+     * bottom-anchored, so its already-laid-out bottom remains a stable reference while the new
+     * keyboard height is waiting for layout.
+     */
+    @Nullable
+    private Rect buildInAppKeyboardBackdropTargetRect(@NonNull AccessoryRenderState state,
+                                                       @NonNull View surfaceHost) {
+        if (surfaceHost.getWidth() > 0 && surfaceHost.getHeight() > 0) {
+            surfaceHost.getLocationOnScreen(mTmpViewLocation);
+            return new Rect(
+                mTmpViewLocation[0],
+                mTmpViewLocation[1],
+                mTmpViewLocation[0] + surfaceHost.getWidth(),
+                mTmpViewLocation[1] + surfaceHost.getHeight()
+            );
+        }
+
+        View accessoryContainer = findViewById(R.id.accessory_stack_container);
+        if (accessoryContainer == null || state.keyboardHeight <= 0) {
+            return null;
+        }
+        accessoryContainer.getLocationOnScreen(mTmpViewLocation);
+        int width = accessoryContainer.getWidth();
+        if (width <= 0) {
+            width = getResources().getDisplayMetrics().widthPixels;
+        }
+        int bottom = mTmpViewLocation[1] + accessoryContainer.getHeight();
+        if (bottom <= 0) {
+            Rect frameRect = getManagedWallpaperFrameRect();
+            bottom = frameRect.bottom;
+        }
+        return new Rect(
+            mTmpViewLocation[0],
+            Math.max(0, bottom - state.keyboardHeight),
+            mTmpViewLocation[0] + Math.max(1, width),
+            Math.max(1, bottom)
+        );
+    }
+
+    /** True only after both expanded layout geometry and its matching unified crop are installed. */
+    private boolean isUnifiedAccessoryBackdropReady(@NonNull AccessoryRenderState state) {
+        if (!shouldUseUnifiedDefaultKeyboardGlassSurface(state)) {
+            return false;
+        }
+        ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
+        View surfaceHost = findViewById(R.id.accessory_surface_host);
+        View accessoryContainer = findViewById(R.id.accessory_stack_container);
+        if (backdrop == null || surfaceHost == null || accessoryContainer == null
+            || backdrop.getDrawable() == null || backdrop.getVisibility() != View.VISIBLE) {
+            return false;
+        }
+        ViewGroup.LayoutParams containerParams = accessoryContainer.getLayoutParams();
+        int expectedHeight = containerParams != null && containerParams.height > 0
+            ? containerParams.height : accessoryContainer.getHeight();
+        if (expectedHeight <= 0 || surfaceHost.getHeight() < expectedHeight) {
+            return false;
+        }
+        // Before expanded layout, both values above can still describe the old dock-only state and
+        // therefore appear consistent. A unified dock+keyboard host must be taller than the
+        // keyboard portion by itself.
+        if (surfaceHost.getHeight() <= state.keyboardHeight) {
+            return false;
+        }
+        int horizontalOverscanPx = computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp);
+        int seamOverscanPx = !isValarieDockStyle() && shouldShowDecorNavBarSurface(state)
+            ? horizontalOverscanPx : 0;
+        Rect currentTarget = buildAccessoryBackdropTargetRect(
+            surfaceHost, horizontalOverscanPx, seamOverscanPx);
+        return mLastAccessoryBackdropBlurRadiusDp == state.blurRadiusDp
+            && mLastAccessoryBackdropManagedSource == shouldUseManagedWallpaperBlurSource()
+            && mLastAccessoryBackdropTargetRect.equals(currentTarget);
     }
 
     private void clearDecorNavBarBackdrop() {
@@ -2630,7 +2727,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
-        Bitmap wallpaperBackdrop = createWallpaperBackdropBitmapForRect(targetRect, wallpaperFrame);
+        Bitmap wallpaperBackdrop = createCachedAccessoryWallpaperBlurCrop(state, targetRect, wallpaperFrame);
         if (wallpaperBackdrop == null) {
             if (backdrop.getDrawable() != null) {
                 backdrop.setVisibility(View.VISIBLE);
@@ -2641,33 +2738,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            float blurRadiusPx = ViewUtils.dpToPx(this, Math.max(0, state.blurRadiusDp));
             backdrop.setImageBitmap(wallpaperBackdrop);
             // Use the SAME AGSL glass refraction the content dock/keyboard backdrop uses (API 33+),
             // not a plain blur, so this decor surface reads as the same material in both states: the
             // keyboard-off dock+nav overlay and the keyboard-on under-pill strip now match the
             // refraction-lit content dock instead of being a flatter, darker plain blur. Falls back
             // to plain blur when the shader is unavailable (< API 33 or shader failure).
-            RenderEffect glass = buildGlassRefractionEffect(blurRadiusPx, 0f, 0f,
+            RenderEffect glass = buildGlassRefractionEffect(0f, 0f, 0f,
                 Math.max(1, targetRect.width()), Math.max(1, targetRect.height()), 0f);
-            backdrop.setRenderEffect(glass != null
-                ? glass
-                : RenderEffect.createBlurEffect(blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP));
+            backdrop.setRenderEffect(glass);
         } else {
-            Bitmap blurredBackdrop = createPreBlurredWallpaperBackdropBitmap(wallpaperBackdrop, state.blurRadiusDp);
-            if (blurredBackdrop == null) {
-                wallpaperBackdrop.recycle();
-                if (backdrop.getDrawable() != null) {
-                    backdrop.setVisibility(View.VISIBLE);
-                } else {
-                    clearDecorNavBarBackdrop();
-                }
-                return;
-            }
-            backdrop.setImageBitmap(blurredBackdrop);
-            if (blurredBackdrop != wallpaperBackdrop) {
-                wallpaperBackdrop.recycle();
-            }
+            backdrop.setImageBitmap(wallpaperBackdrop);
         }
 
         // Same content-aware light scatter the dock and keyboard backdrops apply, so the
@@ -2989,6 +3070,92 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /**
+     * Returns the one pre-blurred wallpaper frame used by every accessory glass surface. Geometry
+     * changes only crop this bitmap; they never capture and blur a second, visually different copy.
+     */
+    @Nullable
+    private Bitmap obtainCachedAccessoryWallpaperBlur(@NonNull AccessoryRenderState state,
+                                                       @NonNull View wallpaperFrame) {
+        Rect frameRect = getManagedWallpaperFrameRect();
+        boolean managedSource = shouldUseManagedWallpaperBlurSource();
+        int systemWallpaperId = getCurrentSystemWallpaperId();
+        File managedFile = managedSource ? getManagedWallpaperExactFile() : null;
+        long managedLastModified = managedFile != null ? managedFile.lastModified() : -1L;
+        long managedLength = managedFile != null ? managedFile.length() : -1L;
+        if (mCachedAccessoryWallpaperBlurBitmap != null
+            && !mCachedAccessoryWallpaperBlurBitmap.isRecycled()
+            && mCachedAccessoryWallpaperBlurRadiusDp == state.blurRadiusDp
+            && mCachedAccessoryWallpaperBlurManagedSource == managedSource
+            && mCachedAccessoryWallpaperBlurSystemId == systemWallpaperId
+            && mCachedAccessoryWallpaperBlurManagedLastModified == managedLastModified
+            && mCachedAccessoryWallpaperBlurManagedLength == managedLength
+            && mCachedAccessoryWallpaperBlurFrameRect.equals(frameRect)) {
+            return mCachedAccessoryWallpaperBlurBitmap;
+        }
+
+        Bitmap wallpaperBitmap = createWallpaperBackdropBitmapForRect(frameRect, wallpaperFrame);
+        if (wallpaperBitmap == null) {
+            return null;
+        }
+        Bitmap blurredBitmap = createPreBlurredWallpaperBackdropBitmap(wallpaperBitmap, state.blurRadiusDp);
+        if (blurredBitmap == null) {
+            wallpaperBitmap.recycle();
+            return null;
+        }
+        if (blurredBitmap != wallpaperBitmap) {
+            wallpaperBitmap.recycle();
+        }
+        clearCachedAccessoryWallpaperBlur();
+        mCachedAccessoryWallpaperBlurBitmap = blurredBitmap;
+        mCachedAccessoryWallpaperBlurFrameRect.set(frameRect);
+        mCachedAccessoryWallpaperBlurRadiusDp = state.blurRadiusDp;
+        mCachedAccessoryWallpaperBlurManagedSource = managedSource;
+        mCachedAccessoryWallpaperBlurSystemId = systemWallpaperId;
+        mCachedAccessoryWallpaperBlurManagedLastModified = managedLastModified;
+        mCachedAccessoryWallpaperBlurManagedLength = managedLength;
+        return blurredBitmap;
+    }
+
+    /** Crops the shared full-frame blur in screen coordinates, clamping any overscan at its edges. */
+    @Nullable
+    private Bitmap createCachedAccessoryWallpaperBlurCrop(@NonNull AccessoryRenderState state,
+                                                           @NonNull Rect targetRect,
+                                                           @NonNull View wallpaperFrame) {
+        Bitmap fullBlur = obtainCachedAccessoryWallpaperBlur(state, wallpaperFrame);
+        if (fullBlur == null) {
+            return null;
+        }
+        int width = Math.max(1, targetRect.width());
+        int height = Math.max(1, targetRect.height());
+        Bitmap crop = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(crop);
+        BitmapShader shader = new BitmapShader(fullBlur, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        Matrix matrix = new Matrix();
+        matrix.setTranslate(
+            mCachedAccessoryWallpaperBlurFrameRect.left - targetRect.left,
+            mCachedAccessoryWallpaperBlurFrameRect.top - targetRect.top);
+        shader.setLocalMatrix(matrix);
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        paint.setShader(shader);
+        canvas.drawRect(0f, 0f, width, height, paint);
+        return crop;
+    }
+
+    private void clearCachedAccessoryWallpaperBlur() {
+        if (mCachedAccessoryWallpaperBlurBitmap != null
+            && !mCachedAccessoryWallpaperBlurBitmap.isRecycled()) {
+            mCachedAccessoryWallpaperBlurBitmap.recycle();
+        }
+        mCachedAccessoryWallpaperBlurBitmap = null;
+        mCachedAccessoryWallpaperBlurFrameRect.setEmpty();
+        mCachedAccessoryWallpaperBlurRadiusDp = -1;
+        mCachedAccessoryWallpaperBlurManagedSource = false;
+        mCachedAccessoryWallpaperBlurSystemId = -1;
+        mCachedAccessoryWallpaperBlurManagedLastModified = -1L;
+        mCachedAccessoryWallpaperBlurManagedLength = -1L;
+    }
+
     private void updateAccessoryRenderEffectBackdrop(@NonNull AccessoryRenderState state) {
         ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
         View surfaceHost = findViewById(R.id.accessory_surface_host);
@@ -3013,11 +3180,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             clearAccessoryRenderEffectBackdrop();
             return;
         }
-        if (mImeTransitionInProgress && backdrop.getDrawable() != null) {
-            backdrop.setVisibility(View.VISIBLE);
-            return;
-        }
-
         int horizontalOverscanPx = computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp);
         // When the under-pill decor strip abuts the dock/keyboard bottom (default dock only), overscan
         // the bitmap downward past that seam so the refraction edge band lands below it — the strip
@@ -3027,6 +3189,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyAccessoryBackdropOverscan(backdrop, surfaceHost, horizontalOverscanPx, seamOverscanPx);
         Rect backdropTargetRect = buildAccessoryBackdropTargetRect(surfaceHost, horizontalOverscanPx,
             seamOverscanPx);
+        // Keep the existing backdrop through an IME show/hide animation ONLY while its geometry still
+        // covers the current target. On keyboard OFF->ON the unified surface host grows to span
+        // dock+keyboard, so the old dock-sized backdrop would leave the new keyboard band showing raw,
+        // unblurred wallpaper for the length of the transition (the "flash"). When the target grew,
+        // recapture immediately instead of deferring to the end of the IME animation.
+        if (mImeTransitionInProgress && backdrop.getDrawable() != null
+            && mLastAccessoryBackdropTargetRect.equals(backdropTargetRect)) {
+            backdrop.setVisibility(View.VISIBLE);
+            return;
+        }
         if (!mAccessoryBackdropDirty &&
             mLastAccessoryBackdropBlurRadiusDp == state.blurRadiusDp &&
             mLastAccessoryBackdropManagedSource == usingManagedWallpaperSource &&
@@ -3035,7 +3207,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             backdrop.setVisibility(View.VISIBLE);
             return;
         }
-        Bitmap wallpaperBackdrop = createWallpaperBackdropBitmapForRect(backdropTargetRect, wallpaperFrame);
+        Bitmap wallpaperBackdrop = createCachedAccessoryWallpaperBlurCrop(
+            state, backdropTargetRect, wallpaperFrame);
         if (wallpaperBackdrop == null) {
             if (backdrop.getDrawable() != null) {
                 backdrop.setVisibility(View.VISIBLE);
@@ -3046,7 +3219,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            float blurRadiusPx = ViewUtils.dpToPx(this, Math.max(0, state.blurRadiusDp));
             backdrop.setImageBitmap(wallpaperBackdrop);
             // The capsule sits inside the (horizontally overscanned) backdrop bitmap: left/right are
             // inset by the overscan, top/bottom span the full height. Hand that rect to the shader so
@@ -3059,31 +3231,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             float radiusPx = isValarieDockStyle()
                 ? resolveDockCapsuleCornerRadiusPx(surfaceHost.getHeight())
                 : 0f;
-            RenderEffect glass = buildGlassRefractionEffect(blurRadiusPx, capLeft, 0f, capRight, capBottom, radiusPx);
+            RenderEffect glass = buildGlassRefractionEffect(0f, capLeft, 0f, capRight, capBottom, radiusPx);
             // Remember the dock params so a key-press lens can rebuild this effect cheaply (no recapture).
-            mGlassBlurPx = blurRadiusPx;
+            mGlassBlurPx = 0f;
             mGlassCapLeft = capLeft;
             mGlassCapTop = 0f;
             mGlassCapRight = capRight;
             mGlassCapBottom = capBottom;
             mGlassRadiusPx = radiusPx;
             mGlassParamsValid = (glass != null);
-            backdrop.setRenderEffect(glass != null
-                ? glass
-                : RenderEffect.createBlurEffect(blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP));
+            backdrop.setRenderEffect(glass);
         } else {
-            Bitmap blurredBackdrop = createPreBlurredWallpaperBackdropBitmap(wallpaperBackdrop, state.blurRadiusDp);
-            if (blurredBackdrop == null) {
-                wallpaperBackdrop.recycle();
-                if (backdrop.getDrawable() != null) {
-                    backdrop.setVisibility(View.VISIBLE);
-                } else {
-                    clearAccessoryRenderEffectBackdrop();
-                }
-                return;
-            }
-            backdrop.setImageBitmap(blurredBackdrop);
-            wallpaperBackdrop.recycle();
+            backdrop.setImageBitmap(wallpaperBackdrop);
         }
         // Content-aware light scatter — the frost that makes the blur read as glass, not plastic.
         backdrop.setColorFilter(glassFrostFilter());
@@ -3092,6 +3251,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastAccessoryBackdropBlurRadiusDp = state.blurRadiusDp;
         mLastAccessoryBackdropManagedSource = usingManagedWallpaperSource;
         mLastAccessoryBackdropTargetRect.set(backdropTargetRect);
+        // The keyboard-local cover is deliberately retained until this expanded crop is ready.
+        // Remove it now so dock and keyboard switch atomically to the unified material.
+        if (isUnifiedAccessoryBackdropReady(state)) {
+            View keyboardSurfaceHost = findViewById(R.id.inapp_keyboard_view_host);
+            if (keyboardSurfaceHost != null) {
+                keyboardSurfaceHost.setBackground(null);
+            }
+            clearInAppKeyboardBackdrop();
+        }
     }
 
     @Nullable
@@ -3179,6 +3347,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             clearAccessoryRenderEffectBackdrop();
             applyDecorNavBarSurfaceState(state);
             applyInAppKeyboardSurfaceState(state);
+            completePendingInAppKeyboardCloseGeometry(state);
             configureAccessoryTopEdgeFx(false, state.barAlpha);
             configureExtraKeysDivider(false);
             resetAzOverflowAffordanceState();
@@ -3243,7 +3412,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyDecorNavBarSurfaceState(state);
         applyInAppKeyboardSurfaceState(state);
         updateAccessoryRenderEffectBackdrop(state);
+        completePendingInAppKeyboardCloseGeometry(state);
         updateAzOverflowAffordance();
+    }
+
+    /** Stops conservative close-seam coverage after dock-only destination layout is observed. */
+    private void completePendingInAppKeyboardCloseGeometry(@NonNull AccessoryRenderState state) {
+        View accessoryContainer = findViewById(R.id.accessory_stack_container);
+        ViewGroup.LayoutParams accessoryParams = accessoryContainer != null
+            ? accessoryContainer.getLayoutParams() : null;
+        int expectedAccessoryHeight = accessoryParams != null && accessoryParams.height > 0
+            ? accessoryParams.height : 0;
+        boolean destinationLayoutReady = accessoryContainer != null
+            && expectedAccessoryHeight > 0
+            && accessoryContainer.getHeight() == expectedAccessoryHeight;
+        if (!mPendingInAppKeyboardCloseGeometry || state.keyboardShown || accessoryContainer == null) {
+            return;
+        }
+        if (destinationLayoutReady) {
+            mPendingInAppKeyboardCloseGeometry = false;
+            // Re-evaluate the strip once without the conservative close overscan. At this point the
+            // measured dock bottom is stable, so the exact seam crop can replace the safe cover.
+            mDecorNavBarBackdropDirty = true;
+            scheduleAccessoryRenderSync("inapp-keyboard:close-ready");
+        }
     }
 
     private void applyRealtimeBlurRadius(View blurView, int blurRadiusDp) {
@@ -3449,6 +3641,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAccessoryRenderSyncPending = false;
         mPendingAccessoryRenderReason = null;
         mImeTransitionInProgress = false;
+        mPendingInAppKeyboardCloseGeometry = false;
         mFadeAccessoryBlurAfterImeRestore = false;
         setAccessoryBlurLayerAlpha(1f);
         applySmoothDockImeOffset(0);
@@ -3463,6 +3656,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onDestroy() {
         super.onDestroy();
         Logger.logDebug(LOG_TAG, "onDestroy");
+        clearCachedAccessoryWallpaperBlur();
         if (mIsInvalidState)
             return;
         if (mInAppKeyboard != null) {
@@ -4882,6 +5076,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override
         public View getKeyboardContainer() {
             return findViewById(R.id.inapp_keyboard_container);
+        }
+
+        @Override
+        public void setKeyboardContainerVisible(boolean visible) {
+            View keyboardContainer = getKeyboardContainer();
+            if (keyboardContainer == null) {
+                return;
+            }
+            if (visible) {
+                mPendingInAppKeyboardCloseGeometry = false;
+                // Install the keyboard-local blurred glass while the container is still GONE, then
+                // expose keys and backing together. The cover remains until expanded unified
+                // geometry and its matching crop are ready.
+                applyInAppKeyboardSurfaceState(buildAccessoryRenderState());
+                keyboardContainer.setVisibility(View.VISIBLE);
+            } else {
+                mPendingInAppKeyboardCloseGeometry = keyboardContainer.getVisibility() != View.GONE;
+                keyboardContainer.setVisibility(View.GONE);
+            }
         }
 
         @Override

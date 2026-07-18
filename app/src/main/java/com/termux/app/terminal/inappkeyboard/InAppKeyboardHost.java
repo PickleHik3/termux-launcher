@@ -16,6 +16,14 @@ public interface InAppKeyboardHost extends HostActions {
     /** The container whose context and visibility belong to the hosted keyboard. */
     View getKeyboardContainer();
 
+    /**
+     * Applies a requested keyboard visibility change. Activity hosts may stage the visible state
+     * until destination geometry and visual backing are ready; simple/test hosts remain immediate.
+     */
+    default void setKeyboardContainerVisible(boolean visible) {
+        getKeyboardContainer().setVisibility(visible ? View.VISIBLE : View.GONE);
+    }
+
     void attachKeyboardView(View keyboardView);
 
     void detachKeyboardView();

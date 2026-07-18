@@ -258,6 +258,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         mController = ReflectionHelpers.getField(mActivity, "mInAppKeyboard");
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         layoutActivityRoot();
+        ReflectionHelpers.callInstanceMethod(mActivity, "configureExtraKeysBackground");
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         layoutActivityRoot();
 
