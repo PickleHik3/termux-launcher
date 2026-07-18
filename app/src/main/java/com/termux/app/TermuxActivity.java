@@ -2154,7 +2154,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             0,
             Gravity.BOTTOM
         );
-        decorRoot.addView(surfaceOverlay, 0, overlayParams);
+        // Add as the TOPMOST decor child (not index 0). At index 0 the overlay sat behind the
+        // activity content, so the terminal/root dim (activity_termux_root_view's background, set by
+        // applyUnifiedBackgroundDim) composited OVER the finished nav glass — while the dock, being a
+        // descendant of that root, draws after the dim and stays bright. That fixed, opacity- and
+        // wallpaper-independent darkening of the under-pill strip is removed by drawing the strip
+        // after the dim, matching the dock. The strip is non-clickable/non-focusable and confined to
+        // the gesture-nav inset, and the system gesture pill renders above the app window regardless.
+        decorRoot.addView(surfaceOverlay, overlayParams);
 
         mDecorNavBarSurfaceOverlay = surfaceOverlay;
         mDecorNavBarBlurBackdrop = blurBackdrop;
