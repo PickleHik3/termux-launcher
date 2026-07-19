@@ -82,7 +82,6 @@
     <string name="msg_select_url_copied_to_clipboard">URL скопирован в буфер обмена</string>
     <string name="action_share_transcript">Поделиться расшифровкой</string>
     <string name="title_share_transcript">Терминальная стенограмма</string>
-    <string name="action_remove_background_image">Удалить фоновое изображение</string>
     <string name="action_styling_install">Установить</string>
     <string name="notification_action_exit">Выход</string>
     <string name="notification_action_wake_lock">Получить пробуждение</string>
@@ -129,7 +128,6 @@
     <string name="bootstrap_error_installed_on_portable_sd">&TERMUX_APP_NAME; нельзя установить на переносную/внешнюю/съемную SD-карту на вашем устройстве.
 \nДвоичные файлы Bootstrap, скомпилированные для &TERMUX_APP_NAME; имеют жестко заданный путь $PREFIX и не могут быть установлены ни по какому другому пути, кроме:
 \n%1$s.</string>
-    <string name="termux_extrakeys_header">Дополнительные ключи</string>
     <string name="termux_extrakeys_blur_enabled_off">Экстра клавиши с размытым фоном будут отключены. Добавляет прозрачный и размытый фон к дополнительным клавишам. (Может повлиять на производительность) (По умолчанию)</string>
     <string name="action_autofill_username">Автозаполнение имени пользователя</string>
     <string name="termux_monet_background_enabled_off">Терминальный фон Monet будет отключен. Превращает фон терминала в моне (По умолчанию)</string>

@@ -78,8 +78,12 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
     private static final String LOG_TAG = "TermuxActivityRootView";
 
     private static int mStatusBarHeight;
+    /** Suppresses duplicate layout commits that arrive within roughly one display frame. */
     private static final long MIN_MARGIN_UPDATE_INTERVAL_MS = 18L;
+    /** Treats one-pixel visible-frame drift as measurement noise. */
     private static final int BOTTOM_MARGIN_NOISE_PX = 1;
+    /** Lets the visible-frame probe settle before resetting a workaround margin. */
+    private static final long MARGIN_RESET_SETTLE_MS = 40L;
 
     private long mLastMarginCommitTimeMs;
 
@@ -232,7 +236,7 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
                 // if its greater than 0, which was already above the keyboard creating x2x margin.
                 // Adding time check since moving split screen divider in landscape causes jitter
                 // and prevents some infinite loops
-                if ((System.currentTimeMillis() - lastMarginBottomTime) > 40) {
+                if ((System.currentTimeMillis() - lastMarginBottomTime) > MARGIN_RESET_SETTLE_MS) {
                     lastMarginBottomTime = System.currentTimeMillis();
                     marginBottom = 0;
                 } else {
@@ -250,7 +254,7 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
             // onGlobalLayout: Bottom margin already equals 0
             if (isVisibleBecauseExtraMargin) {
                 // Adding time check since prevents infinite loops, like in landscape mode in freeform mode in Taskbar
-                if ((System.currentTimeMillis() - lastMarginBottomExtraTime) > 40) {
+                if ((System.currentTimeMillis() - lastMarginBottomExtraTime) > MARGIN_RESET_SETTLE_MS) {
                     if (root_view_logging_enabled)
                         Logger.logVerbose(LOG_TAG, "Resetting margin since visible due to extra margin");
                     lastMarginBottomExtraTime = System.currentTimeMillis();
@@ -344,7 +348,8 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
         if (params.bottomMargin == targetBottomMargin) return;
         long now = SystemClock.uptimeMillis();
         int delta = Math.abs(params.bottomMargin - targetBottomMargin);
-        if (delta <= 1 && (now - mLastMarginCommitTimeMs) < MIN_MARGIN_UPDATE_INTERVAL_MS) return;
+        if (delta <= BOTTOM_MARGIN_NOISE_PX
+            && (now - mLastMarginCommitTimeMs) < MIN_MARGIN_UPDATE_INTERVAL_MS) return;
         params.setMargins(0, 0, 0, targetBottomMargin);
         setLayoutParams(params);
         mLastMarginCommitTimeMs = now;

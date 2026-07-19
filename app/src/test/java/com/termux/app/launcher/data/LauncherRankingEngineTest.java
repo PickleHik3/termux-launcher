@@ -79,6 +79,32 @@ public class LauncherRankingEngineTest {
     }
 
     @Test
+    public void filterAndRank_ordersEveryMatchTierBeforeFuzzyResults() {
+        List<LauncherAppEntry> entries = Arrays.asList(
+            entry("plain.seven", "plain.seven.Main", "Tarm"),
+            entry("plain.six", "plain.six.Main", "Midterm"),
+            entry("prefix.three", "prefix.three.Main", "Term Notes"),
+            entry("term", "exact.package.Main", "Package Exact"),
+            entry("plain.one", "plain.one.Main", "Term"),
+            entry("term.prefix", "term.prefix.Main", "Package Prefix"),
+            entry("plain.four", "plain.four.Main", "My Termometer"),
+            entry("xtermx", "xtermx.Main", "Package Contains")
+        );
+
+        List<LauncherAppEntry> ranked = LauncherRankingEngine.filterAndRank(entries, "term", 70);
+
+        assertEquals(8, ranked.size());
+        assertEquals("term", ranked.get(0).appRef.packageName);
+        assertEquals("plain.one", ranked.get(1).appRef.packageName);
+        assertEquals("term.prefix", ranked.get(2).appRef.packageName);
+        assertEquals("prefix.three", ranked.get(3).appRef.packageName);
+        assertEquals("plain.four", ranked.get(4).appRef.packageName);
+        assertEquals("xtermx", ranked.get(5).appRef.packageName);
+        assertEquals("plain.six", ranked.get(6).appRef.packageName);
+        assertEquals("plain.seven", ranked.get(7).appRef.packageName);
+    }
+
+    @Test
     public void similarity_scoresExactSubstringsAndSingleEdits() {
         assertEquals(100, LauncherRankingEngine.similarity("termux", "my termux app"));
         assertEquals(88, LauncherRankingEngine.similarity("whtsapp", "whatsapp"));

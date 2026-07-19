@@ -234,6 +234,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     SuggestionBarView mSuggestionBarView;
     private boolean mSuggestionBarExplicitSearchActive;
     AzScrubRowView mAzScrubRowView;
+    @Nullable private View mAzTerminalToolbarView;
     LauncherAzGestureFxView mLauncherAzGestureFxUnderlayView;
     LauncherAzGestureFxView mLauncherAzGestureFxOverlayView;
     LauncherAzGestureFxView mLauncherAzGestureFxLabelOverlayView;
@@ -344,7 +345,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ICON_TRACKING_LOCKED
     }
     @NonNull private AzGestureMode mAzGestureMode = AzGestureMode.IDLE;
-    @Nullable private Runnable mAzEdgePagingRunnable;
+    @Nullable private Choreographer.FrameCallback mAzEdgePagingFrameCallback;
     @Nullable private SuggestionBarView.AzDragFocusResult mAzCurrentFocusResult;
     @Nullable private Runnable mAzOverflowRefreshRunnable;
     private int mAzEdgePagingEdge = SuggestionBarView.AZ_EDGE_NONE;
@@ -359,10 +360,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mAzHasPreviewAnchor = false;
     private char mAzPreviewAnchorLetter = '#';
     private int mAzPreviewAnchorSelectionIndex = 0;
-    private float mAzGestureDownTouchX = 0f;
-    private float mAzGestureDownTouchY = 0f;
     private float mAzRecentMotionDx = 0f;
     private float mAzRecentMotionDy = 0f;
+    private long mAzLastMotionEventTimeMs = 0L;
     private float mAzUpwardTravelRefY = 0f;
     private float mAzLastScrubTouchX = 0f;
     private float mAzLastScrubTouchY = 0f;
@@ -374,14 +374,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mAzLockedAnchorRawY = 0f;
     private final RectF mAzRowRawBounds = new RectF();
     private final RectF mAppsRowRawBounds = new RectF();
-    private final RectF mIndicatorBandRawBounds = new RectF();
     private final RectF mExtraKeysRawBounds = new RectF();
     private final RectF mAzFocusLetterRawBounds = new RectF();
+    private final int[] mAzViewLocation = new int[2];
     private final AzScrubRowView.LetterVisualMetrics mAzLetterVisualMetrics = new AzScrubRowView.LetterVisualMetrics();
     private static final long AZ_EDGE_PAGE_INITIAL_DELAY_MS = 560L;
     private static final long AZ_EDGE_PAGE_REPEAT_INTERVAL_MS = 420L;
     private static final long AZ_EDGE_PAGE_COOLDOWN_MS = 520L;
-    private static final long AZ_EDGE_DWELL_FRAME_MS = 16L;
     private static final long AZ_PREVIEW_TIMEOUT_REFRESH_MS = 5200L;
     private static final float AZ_UPWARD_LOCK_TOUCH_Y_RATIO = 0.60f;
     private static final float AZ_RETURN_TOUCH_Y_RATIO = 0.55f;
@@ -390,8 +389,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     // near-vertical climb before the upward lock could engage.
     private static final float AZ_UPWARD_DIRECTION_RATIO = 0.45f;
     private static final float AZ_RETURN_DIRECTION_RATIO = 0.5f;
-    /** Per-event EMA weight for the recent-motion vector (higher = more responsive). */
-    private static final float AZ_RECENT_MOTION_ALPHA = 0.45f;
+    /** Time constant for recent pointer velocity; independent of touch sampling rate. */
+    private static final float AZ_RECENT_MOTION_TAU_MS = 50f;
 
     private static final int CONTEXT_MENU_SELECT_URL_ID = 0;
 
@@ -443,7 +442,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int SUGGESTION_BAR_MAX_INPUT_CHARS = 10;
     private static final long EMPTY_SESSION_RECOVERY_DEBOUNCE_MS = 1500L;
     private static final long ACCESSORY_BLUR_RECOVERY_RETRY_MS = 120L;
-    private static final boolean ACCESSORY_RENDER_TRACE = false;
     private static final float DEFAULT_DOCK_SIZE_PRESET_SHIFT = 0.27f;
     private static final float DEFAULT_DOCK_SIZE_MAX_PROGRESS = 1.18f;
     private static final float[] DEFAULT_DOCK_ICON_PROGRESS_POINTS = {0.54f, 0.77f, 1.00f, 1.18f};
@@ -462,7 +460,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mEmptySessionRecoveryInProgress;
     private boolean mAccessoryRenderSyncPending;
     private boolean mLastImeVisible;
-    @Nullable private String mPendingAccessoryRenderReason;
     @Nullable private ViewTreeObserver.OnGlobalLayoutListener mAccessoryKeyboardLayoutListener;
     @Nullable private View.OnLayoutChangeListener mAccessoryLayoutChangeListener;
     @Nullable private ViewTreeObserver.OnPreDrawListener mInAppKeyboardOpenPreDrawListener;
@@ -474,7 +471,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private ActivityResultLauncher<CropImageContractOptions> mWallpaperCropLauncher;
     private final int[] mTmpParentLocation = new int[2];
     private final int[] mTmpViewLocation = new int[2];
-    private long mLastAccessoryRenderSyncUptimeMs;
     private long mLastAccessoryGeometryApplyUptimeMs;
     private int mAppliedTerminalFlushPaddingPx;
     private boolean mAppliedInAppKeyboardShown;
@@ -482,7 +478,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mInAppKeyboardMeasureWidthPx;
     private int mInAppKeyboardAvailableHeightPx;
     private boolean mInAppKeyboardHeightDirty = true;
-    private boolean mHasMeasuredTerminalFlushPadding;
     /** Keeps a unified glass keyboard hidden until the expanded dock+keyboard crop is installed. */
     private boolean mPendingInAppKeyboardOpenReveal;
     /** Keeps the under-pill glass covering stale close geometry until dock-only layout settles. */
@@ -554,13 +549,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     };
     private final Runnable mAccessoryRenderSyncRunnable = () -> {
         mAccessoryRenderSyncPending = false;
-        String reason = mPendingAccessoryRenderReason == null ? "unknown" : mPendingAccessoryRenderReason;
-        mPendingAccessoryRenderReason = null;
         configureExtraKeysBackground();
-        syncTerminalOverlayBottomInsetToAccessoryHeight();
         enforceAccessoryFxInvariants();
-        logAccessoryRenderSnapshot(reason);
-        traceInAppKeyboardState("render:" + reason);
     };
 
     @Override
@@ -849,11 +839,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mIsOnResumeAfterOnCreate = false;
     }
 
-    private void configureViewVisibility(int viewId, boolean isVisible) {
-        View view = findViewById(viewId);
-        view.setVisibility(isVisible ? View.VISIBLE : View.GONE);
-    }
-
     private void applyTerminalSurfaceAppearance() {
         if (mPreferences == null) {
             return;
@@ -1043,12 +1028,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int resolveDockAccentColor() {
         return MaterialColors.getColor(this, com.google.android.material.R.attr.colorPrimary,
             ContextCompat.getColor(this, R.color.termux_primary));
-    }
-
-    /** Warm wallpaper-derived tertiary (the ochre in the prototype) used for the glass wash. */
-    private int resolveDockTertiaryColor() {
-        return MaterialColors.getColor(this, com.google.android.material.R.attr.colorTertiary,
-            resolveDockAccentColor());
     }
 
     /**
@@ -1755,47 +1734,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mPreferences.getTerminalBackgroundOpacity() > 0;
     }
 
-    @Nullable
-    private Rect resolveAccessoryContentBounds() {
-        View accessoryContainer = findViewById(R.id.accessory_stack_container);
-        if (accessoryContainer == null || accessoryContainer.getWidth() <= 0 || accessoryContainer.getHeight() <= 0) {
-            return null;
-        }
-        Rect containerRect = new Rect();
-        if (!accessoryContainer.getGlobalVisibleRect(containerRect)) {
-            return null;
-        }
-        int top = Integer.MAX_VALUE;
-        int bottom = Integer.MIN_VALUE;
-        int[] candidateIds = {
-            R.id.apps_bar_viewpager,
-            R.id.apps_bar_az_row,
-            R.id.terminal_toolbar_view_pager
-        };
-        for (int candidateId : candidateIds) {
-            View candidate = findViewById(candidateId);
-            if (candidate == null || candidate.getVisibility() != View.VISIBLE || candidate.getHeight() <= 0) {
-                continue;
-            }
-            Rect candidateRect = new Rect();
-            if (!candidate.getGlobalVisibleRect(candidateRect)) {
-                continue;
-            }
-            candidateRect.offset(-containerRect.left, -containerRect.top);
-            top = Math.min(top, candidateRect.top);
-            bottom = Math.max(bottom, candidateRect.bottom);
-        }
-        if (top == Integer.MAX_VALUE || bottom <= top) {
-            return null;
-        }
-        return new Rect(
-            0,
-            Math.max(0, top),
-            accessoryContainer.getWidth(),
-            Math.min(accessoryContainer.getHeight(), bottom)
-        );
-    }
-
     private void applyAccessoryLayerBounds(int viewId, @Nullable Rect bounds) {
         View view = findViewById(viewId);
         if (view == null) {
@@ -2244,12 +2182,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return toolbarShown && keyboardShown && !valarieDockStyle && keyboardGlassSurface;
     }
 
-    /** Only the blurred unified surface needs a destination-backdrop gate on a fresh open. */
+    /**
+     * Any blurred glass keyboard needs a destination-backdrop gate on a fresh open — the unified
+     * default-dock surface waits on the shared accessory crop, the capsule/local surface waits on
+     * its own keyboard backdrop bitmap. Without the gate the first frame draws base-color glass.
+     */
     static boolean shouldDeferInAppKeyboardReveal(boolean openingFromGone,
-                                                   boolean unifiedGlassSurface,
+                                                   boolean glassSurface,
                                                    boolean blurEnabled,
-                                                   boolean unifiedBackdropReady) {
-        return openingFromGone && unifiedGlassSurface && blurEnabled && !unifiedBackdropReady;
+                                                   boolean backdropReady) {
+        return openingFromGone && glassSurface && blurEnabled && !backdropReady;
+    }
+
+    /** Readiness of the keyboard-local (non-unified) blurred backdrop for the current target. */
+    private boolean isInAppKeyboardLocalBackdropReady(@NonNull AccessoryRenderState state) {
+        View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
+        if (surfaceHost == null) return true;
+        if (mInAppKeyboardBackdropBitmap == null || mInAppKeyboardBackdropDirty) return false;
+        Rect targetRect = buildInAppKeyboardBackdropTargetRect(state, surfaceHost);
+        return targetRect == null || mLastInAppKeyboardBackdropTargetRect.equals(targetRect);
     }
 
     private void ensureDecorNavBarSurfaceOverlay() {
@@ -2601,13 +2552,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 surfaceHost.setBackground(null);
                 clearInAppKeyboardBackdrop();
             } else {
-                surfaceHost.setBackground(
-                    buildInAppKeyboardSurfaceBackground(state, surfaceHost, false, glassTheme, 0f));
+                Bitmap previousBackdrop = mInAppKeyboardBackdropBitmap;
+                Drawable background = buildInAppKeyboardSurfaceBackground(
+                    state, surfaceHost, false, glassTheme, 0f);
+                surfaceHost.setBackground(background);
+                recycleSupersededInAppKeyboardBackdrop(previousBackdrop, surfaceHost.getBackground());
             }
             return;
         }
-        surfaceHost.setBackground(
-            buildInAppKeyboardSurfaceBackground(state, surfaceHost, capsule, glassTheme, cornerRadiusPx));
+        Bitmap previousBackdrop = mInAppKeyboardBackdropBitmap;
+        Drawable background = buildInAppKeyboardSurfaceBackground(
+            state, surfaceHost, capsule, glassTheme, cornerRadiusPx);
+        surfaceHost.setBackground(background);
+        recycleSupersededInAppKeyboardBackdrop(previousBackdrop, surfaceHost.getBackground());
     }
 
     /** Rounded clip for the capsule keyboard; rectangular bounds clip for the default style. */
@@ -2676,11 +2633,42 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void clearInAppKeyboardBackdrop() {
+        Bitmap previousBackdrop = mInAppKeyboardBackdropBitmap;
         mInAppKeyboardBackdropBitmap = null;
         mInAppKeyboardBackdropDirty = true;
         mLastInAppKeyboardBackdropBlurRadiusDp = -1;
         mLastInAppKeyboardBackdropManagedSource = false;
         mLastInAppKeyboardBackdropTargetRect.setEmpty();
+        recycleSupersededInAppKeyboardBackdrop(previousBackdrop, null);
+    }
+
+    private void recycleSupersededInAppKeyboardBackdrop(@Nullable Bitmap previousBackdrop,
+                                                         @Nullable Drawable installedBackground) {
+        if (previousBackdrop == null || previousBackdrop == mInAppKeyboardBackdropBitmap
+            || previousBackdrop == mCachedAccessoryWallpaperBlurBitmap
+            || previousBackdrop.isRecycled()
+            || drawableReferencesBitmap(installedBackground, previousBackdrop)) {
+            return;
+        }
+        previousBackdrop.recycle();
+    }
+
+    private boolean drawableReferencesBitmap(@Nullable Drawable drawable, @NonNull Bitmap bitmap) {
+        if (drawable instanceof BitmapDrawable) {
+            return ((BitmapDrawable) drawable).getBitmap() == bitmap;
+        }
+        if (drawable instanceof LayoutNeutralDrawable) {
+            return drawableReferencesBitmap(((LayoutNeutralDrawable) drawable).mSource, bitmap);
+        }
+        if (drawable instanceof LayerDrawable) {
+            LayerDrawable layers = (LayerDrawable) drawable;
+            for (int i = 0; i < layers.getNumberOfLayers(); i++) {
+                if (drawableReferencesBitmap(layers.getDrawable(i), bitmap)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -3483,7 +3471,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         boolean unifiedGlassSurface = shouldUseUnifiedDefaultKeyboardGlassSurface(state);
-        if (unifiedGlassSurface && state.blurEnabled && !isUnifiedAccessoryBackdropReady(state)) {
+        boolean backdropReady = unifiedGlassSurface
+            ? isUnifiedAccessoryBackdropReady(state)
+            : isInAppKeyboardLocalBackdropReady(state);
+        if (isInAppKeyboardGlassSurface() && state.blurEnabled && !backdropReady) {
             return;
         }
         mPendingInAppKeyboardOpenReveal = false;
@@ -3799,7 +3790,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAccessoryRenderHandler.removeCallbacks(mAccessoryBlurHeartbeatRunnable);
         mAccessoryRenderHandler.removeCallbacks(mAccessoryBlurRecoveryRunnable);
         mAccessoryRenderSyncPending = false;
-        mPendingAccessoryRenderReason = null;
         mPendingInAppKeyboardCloseGeometry = false;
         removeInAppKeyboardOpenPreDrawGate();
         applyDockImeOffset(0);
@@ -3982,7 +3972,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAccessoryRenderHandler.removeCallbacks(mAccessoryRenderSyncRunnable);
         mAccessoryRenderHandler.removeCallbacks(mAccessoryBlurHeartbeatRunnable);
         mAccessoryRenderSyncPending = false;
-        mPendingAccessoryRenderReason = null;
         if (mTerminalView != null) {
             mTerminalView.onContextMenuClosed(null);
         }
@@ -4065,6 +4054,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void setSuggestionBarView() {
         final FrameLayout appsBarContainer = findViewById(R.id.apps_bar_viewpager);
         mAzScrubRowView = findViewById(R.id.apps_bar_az_row);
+        mAzTerminalToolbarView = findViewById(R.id.terminal_toolbar_view_pager);
         mLauncherAzGestureFxUnderlayView = findViewById(R.id.apps_bar_az_fx_underlay);
         mLauncherAzGestureFxOverlayView = findViewById(R.id.apps_bar_az_fx_overlay);
         mLauncherAzGestureFxLabelOverlayView = findViewById(R.id.apps_bar_az_label_overlay);
@@ -4154,8 +4144,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mAzScrubRowView != null) {
             mAzScrubRowView.setScrubCallback(new AzScrubRowView.ScrubCallback() {
                 @Override
-                public void onScrub(char letter, int selectionIndex, float touchX, float touchY, float rawX, float rawY, @NonNull AzScrubRowView.GesturePhase phase) {
-                    handleAzGestureScrub(letter, selectionIndex, touchX, touchY, rawX, rawY, phase);
+                public void onScrub(char letter, int selectionIndex, float touchX, float touchY,
+                                    float rawX, float rawY, long eventTimeMs,
+                                    @NonNull AzScrubRowView.GesturePhase phase) {
+                    handleAzGestureScrub(letter, selectionIndex, touchX, touchY, rawX, rawY,
+                        eventTimeMs, phase);
                 }
 
                 @Override
@@ -4436,7 +4429,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mLauncherAzGestureFxUnderlayView != null) {
             mLauncherAzGestureFxUnderlayView.setColors(orbColor, edgeColor);
             mLauncherAzGestureFxUnderlayView.setDarkThemeActive(isNightThemeActive());
-            mLauncherAzGestureFxUnderlayView.setCapsuleDockStyle(isValarieDockStyle());
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 mLauncherAzGestureFxUnderlayView.setElevation(0f);
                 mLauncherAzGestureFxUnderlayView.setTranslationZ(-dpToPx(8));
@@ -4445,7 +4437,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mLauncherAzGestureFxOverlayView != null) {
             mLauncherAzGestureFxOverlayView.setColors(orbColor, edgeColor);
             mLauncherAzGestureFxOverlayView.setDarkThemeActive(isNightThemeActive());
-            mLauncherAzGestureFxOverlayView.setCapsuleDockStyle(isValarieDockStyle());
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 mLauncherAzGestureFxOverlayView.setElevation(dpToPx(30));
                 mLauncherAzGestureFxOverlayView.setTranslationZ(dpToPx(30));
@@ -4488,6 +4479,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float touchY,
         float rawX,
         float rawY,
+        long eventTimeMs,
         @NonNull AzScrubRowView.GesturePhase phase
     ) {
         if (!isAzRowEnabled() || mSuggestionBarView == null || mAzScrubRowView == null) {
@@ -4498,22 +4490,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mAzGestureMode = AzGestureMode.AZ_TRACKING;
             mAzHasLockedSelection = false;
             mAzHasPreviewAnchor = false;
-            mAzGestureDownTouchX = touchX;
-            mAzGestureDownTouchY = touchY;
             mAzRecentMotionDx = 0f;
             mAzRecentMotionDy = 0f;
+            mAzLastMotionEventTimeMs = eventTimeMs;
             mAzUpwardTravelRefY = touchY;
             mAzLastScrubTouchX = touchX;
             mAzLastScrubTouchY = touchY;
             mAzScrubRowView.setInteractionMode(AzScrubRowView.InteractionMode.WAVE_TRACK);
             mAzScrubRowView.setLockedInlineLetter(null);
         } else {
-            // Smooth per-event motion vector: intent classification below reads direction from
-            // this, so a slide-up right after a long horizontal scrub registers immediately.
-            float eventDx = touchX - mAzLastScrubTouchX;
-            float eventDy = touchY - mAzLastScrubTouchY;
-            mAzRecentMotionDx += (eventDx - mAzRecentMotionDx) * AZ_RECENT_MOTION_ALPHA;
-            mAzRecentMotionDy += (eventDy - mAzRecentMotionDy) * AZ_RECENT_MOTION_ALPHA;
+            // Smooth pointer velocity by elapsed event time: intent classification below reads its
+            // direction, so behavior stays consistent across touch-controller sampling rates.
+            long dtMs = Math.max(1L, eventTimeMs - mAzLastMotionEventTimeMs);
+            float eventVelocityX = (touchX - mAzLastScrubTouchX) / dtMs;
+            float eventVelocityY = (touchY - mAzLastScrubTouchY) / dtMs;
+            float alpha = (float) (1d - Math.exp(-dtMs / AZ_RECENT_MOTION_TAU_MS));
+            mAzRecentMotionDx += (eventVelocityX - mAzRecentMotionDx) * alpha;
+            mAzRecentMotionDy += (eventVelocityY - mAzRecentMotionDy) * alpha;
+            mAzLastMotionEventTimeMs = eventTimeMs;
             mAzLastScrubTouchX = touchX;
             mAzLastScrubTouchY = touchY;
             // While still letter-scrubbing horizontally, keep re-anchoring the upward-travel
@@ -4526,14 +4520,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         mAzLastRawX = rawX;
         mAzLastRawY = rawY;
-        int[] azLoc = new int[2];
-        mAzScrubRowView.getLocationOnScreen(azLoc);
-        mAzLastAnchorRawX = azLoc[0] + touchX;
-        mAzLastAnchorRawY = azLoc[1] + (mAzScrubRowView.getHeight() * 0.5f);
+        mAzScrubRowView.getLocationOnScreen(mAzViewLocation);
+        mAzLastAnchorRawX = mAzViewLocation[0] + touchX;
+        mAzLastAnchorRawY = mAzViewLocation[1] + (mAzScrubRowView.getHeight() * 0.5f);
         populateRawBounds(mAzScrubRowView, mAzRowRawBounds);
         populateRawBounds(mSuggestionBarView, mAppsRowRawBounds);
-        populateRawBounds(findViewById(R.id.apps_bar_indicator_band), mIndicatorBandRawBounds);
-        populateRawBounds(findViewById(R.id.terminal_toolbar_view_pager), mExtraKeysRawBounds);
+        populateRawBounds(mAzTerminalToolbarView, mExtraKeysRawBounds);
 
         if (letter == AzScrubRowView.PINNED_APPS_SYMBOL) {
             mSuggestionBarView.clearAzFocusedEntry();
@@ -4546,7 +4538,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAzGestureActive = true;
         cancelAzOverflowRefresh();
         float rowHeight = Math.max(1f, mAzScrubRowView.getHeight());
-        View extraKeysRow = findViewById(R.id.terminal_toolbar_view_pager);
+        View extraKeysRow = mAzTerminalToolbarView;
         float extraKeysHeight = (extraKeysRow != null && extraKeysRow.getHeight() > 0)
             ? extraKeysRow.getHeight()
             : (rowHeight * 1.2f);
@@ -4636,7 +4628,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean launched = false;
             if (mAzGestureMode == AzGestureMode.ICON_TRACKING_LOCKED && focusResult != null && focusResult.hasFocusEntry()) {
                 if (mLauncherAzGestureFxLabelOverlayView != null) {
-                    mLauncherAzGestureFxLabelOverlayView.playLaunchBloom(rawX, rawY);
+                    mLauncherAzGestureFxLabelOverlayView.dismissFocusedAppPreviewForLaunch();
                 }
                 launched = mSuggestionBarView.launchAzFocusedEntry(focusResult);
             }
@@ -4725,8 +4717,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         populateRawBounds(mAzScrubRowView, mAzRowRawBounds);
         populateRawBounds(mSuggestionBarView, mAppsRowRawBounds);
-        populateRawBounds(findViewById(R.id.apps_bar_indicator_band), mIndicatorBandRawBounds);
-        populateRawBounds(findViewById(R.id.terminal_toolbar_view_pager), mExtraKeysRawBounds);
+        populateRawBounds(mAzTerminalToolbarView, mExtraKeysRawBounds);
         applyAzFxRowBounds();
         LauncherAzGestureFxView.InteractionMode interactionMode =
             mAzGestureMode == AzGestureMode.ICON_TRACKING_LOCKED
@@ -4766,29 +4757,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int pageCount = mSuggestionBarView != null ? mSuggestionBarView.getAzVisiblePageCount() : 1;
         applyAzFxInteractionOverflowState(overflowActive, canLeft, canRight, currentPagePosition, pageCount, overflowActive, true, -1);
 
-        float leftProximity = 0f;
-        float rightProximity = 0f;
-        if (mSuggestionBarView != null && interactionMode == LauncherAzGestureFxView.InteractionMode.ICON_TRACK_LOCKED) {
-            int[] loc = new int[2];
-            mSuggestionBarView.getLocationOnScreen(loc);
-            float localX = mAzLastRawX - loc[0];
-            float width = Math.max(1f, mSuggestionBarView.getWidth());
-            float edgeZone = Math.max(28f * getResources().getDisplayMetrics().density, width * 0.12f);
-            if (canLeft && localX <= edgeZone) {
-                leftProximity = Math.max(0f, 1f - (localX / Math.max(1f, edgeZone)));
-            }
-            if (canRight && localX >= width - edgeZone) {
-                rightProximity = Math.max(0f, 1f - ((width - localX) / Math.max(1f, edgeZone)));
-            }
-        }
-        applyAzFxEdgeProximity(leftProximity, rightProximity);
         applyAzFxDrag(
             mAzGestureActive,
             mAzLastRawX,
-            mAzLastRawY,
-            true,
-            mAzLastAnchorRawX,
-            mAzLastAnchorRawY,
             focusBounds,
             interactionMode
         );
@@ -4814,9 +4785,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             out.setEmpty();
             return;
         }
-        int[] loc = new int[2];
-        view.getLocationOnScreen(loc);
-        out.set(loc[0], loc[1], loc[0] + view.getWidth(), loc[1] + view.getHeight());
+        view.getLocationOnScreen(mAzViewLocation);
+        out.set(mAzViewLocation[0], mAzViewLocation[1],
+            mAzViewLocation[0] + view.getWidth(), mAzViewLocation[1] + view.getHeight());
     }
 
     private void updateAzOverflowAffordance() {
@@ -4829,8 +4800,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         populateRawBounds(mAzScrubRowView, mAzRowRawBounds);
         populateRawBounds(mSuggestionBarView, mAppsRowRawBounds);
-        populateRawBounds(findViewById(R.id.apps_bar_indicator_band), mIndicatorBandRawBounds);
-        populateRawBounds(findViewById(R.id.terminal_toolbar_view_pager), mExtraKeysRawBounds);
+        populateRawBounds(mAzTerminalToolbarView, mExtraKeysRawBounds);
         applyAzFxRowBounds();
         boolean azOverflowActive = mSuggestionBarView.hasAzOverflowPages();
         boolean interactionActive = mSuggestionBarInteractionActive;
@@ -4881,13 +4851,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void applyAzFxRowBounds() {
         if (mLauncherAzGestureFxUnderlayView != null) {
-            mLauncherAzGestureFxUnderlayView.setRowBounds(mAzRowRawBounds, mAppsRowRawBounds, mIndicatorBandRawBounds, mExtraKeysRawBounds);
+            mLauncherAzGestureFxUnderlayView.setRowBounds(mAppsRowRawBounds);
         }
         if (mLauncherAzGestureFxOverlayView != null) {
-            mLauncherAzGestureFxOverlayView.setRowBounds(mAzRowRawBounds, mAppsRowRawBounds, mIndicatorBandRawBounds, mExtraKeysRawBounds);
+            mLauncherAzGestureFxOverlayView.setRowBounds(mAppsRowRawBounds);
         }
         if (mLauncherAzGestureFxLabelOverlayView != null) {
-            mLauncherAzGestureFxLabelOverlayView.setRowBounds(mAzRowRawBounds, mAppsRowRawBounds, mIndicatorBandRawBounds, mExtraKeysRawBounds);
+            mLauncherAzGestureFxLabelOverlayView.setRowBounds(mAppsRowRawBounds);
         }
     }
 
@@ -4929,24 +4899,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    private void applyAzFxEdgeProximity(float leftProximity, float rightProximity) {
+    private void applyAzFxDrag(boolean active, float rawX, @Nullable RectF focusedBoundsRaw,
+                               @NonNull LauncherAzGestureFxView.InteractionMode mode) {
         if (mLauncherAzGestureFxUnderlayView != null) {
-            mLauncherAzGestureFxUnderlayView.setEdgeProximity(leftProximity, rightProximity);
+            mLauncherAzGestureFxUnderlayView.updateDrag(active, rawX, focusedBoundsRaw, mode);
         }
         if (mLauncherAzGestureFxOverlayView != null) {
-            mLauncherAzGestureFxOverlayView.setEdgeProximity(leftProximity, rightProximity);
-        }
-    }
-
-    private void applyAzFxDrag(boolean active, float rawX, float rawY, boolean anchorVisible, float anchorRawX, float anchorRawY, @Nullable RectF focusedBoundsRaw, @NonNull LauncherAzGestureFxView.InteractionMode mode) {
-        if (mLauncherAzGestureFxUnderlayView != null) {
-            mLauncherAzGestureFxUnderlayView.updateDrag(active, rawX, rawY, anchorVisible, anchorRawX, anchorRawY, focusedBoundsRaw, mode);
-        }
-        if (mLauncherAzGestureFxOverlayView != null) {
-            mLauncherAzGestureFxOverlayView.updateDrag(active, rawX, rawY, anchorVisible, anchorRawX, anchorRawY, focusedBoundsRaw, mode);
+            mLauncherAzGestureFxOverlayView.updateDrag(active, rawX, focusedBoundsRaw, mode);
         }
         if (mLauncherAzGestureFxLabelOverlayView != null) {
-            mLauncherAzGestureFxLabelOverlayView.updateDrag(active, rawX, rawY, false, anchorRawX, anchorRawY, focusedBoundsRaw, mode);
+            mLauncherAzGestureFxLabelOverlayView.updateDrag(active, rawX, focusedBoundsRaw, mode);
         }
     }
 
@@ -4984,7 +4946,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyAzFxEdgeDwellProgress(0f, mAzLastRawX, mAzLastRawY);
             return;
         }
-        if (mAzEdgePagingRunnable != null && mAzEdgePagingEdge == focusResult.edge) {
+        if (mAzEdgePagingFrameCallback != null && mAzEdgePagingEdge == focusResult.edge) {
             updateAzEdgeDwellProgress(now);
             return;
         }
@@ -4992,9 +4954,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAzEdgePagingEdge = focusResult.edge;
         mAzEdgeDwellStartUptimeMs = now;
         updateAzEdgeDwellProgress(now);
-        mAzEdgePagingRunnable = new Runnable() {
-            @Override
-            public void run() {
+        mAzEdgePagingFrameCallback = frameTimeNanos -> {
                 if (!mAzGestureActive || mSuggestionBarView == null) {
                     stopAzEdgePagingLoop();
                     return;
@@ -5009,13 +4969,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 long frameNow = SystemClock.uptimeMillis();
                 if (frameNow < mAzEdgePageCooldownUntilUptimeMs || mAzEdgeRequiresReentry) {
                     applyAzFxEdgeDwellProgress(0f, mAzLastRawX, mAzLastRawY);
-                    mAzGestureHandler.postDelayed(this, AZ_EDGE_DWELL_FRAME_MS);
+                    postNextAzEdgePagingFrame();
                     return;
                 }
                 long dwellMs = frameNow - mAzEdgeDwellStartUptimeMs;
                 updateAzEdgeDwellProgress(frameNow);
                 if (dwellMs < AZ_EDGE_PAGE_INITIAL_DELAY_MS) {
-                    mAzGestureHandler.postDelayed(this, AZ_EDGE_DWELL_FRAME_MS);
+                    postNextAzEdgePagingFrame();
                     return;
                 }
                 int pageDelta = mAzEdgePagingEdge == SuggestionBarView.AZ_EDGE_LEFT ? -1 : 1;
@@ -5028,7 +4988,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 mAzEdgePageCooldownUntilUptimeMs = frameNow + AZ_EDGE_PAGE_COOLDOWN_MS;
                 mAzEdgeRequiresReentry = true;
-                mAzEdgePagingRunnable = null;
+                mAzEdgePagingFrameCallback = null;
                 applyAzFxEdgeDwellProgress(0f, mAzLastRawX, mAzLastRawY);
                 mAzGestureHandler.postDelayed(() -> {
                     if (!mAzGestureActive || mSuggestionBarView == null) return;
@@ -5037,15 +4997,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     updateAzOverlayState(afterSwitch, mAzLockedLetter);
                     updateAzEdgePagingLoop(afterSwitch);
                 }, AZ_EDGE_PAGE_REPEAT_INTERVAL_MS);
-            }
         };
-        mAzGestureHandler.postDelayed(mAzEdgePagingRunnable, AZ_EDGE_DWELL_FRAME_MS);
+        postNextAzEdgePagingFrame();
+    }
+
+    private void postNextAzEdgePagingFrame() {
+        if (mAzEdgePagingFrameCallback != null) {
+            Choreographer.getInstance().postFrameCallback(mAzEdgePagingFrameCallback);
+        }
     }
 
     private void stopAzEdgePagingLoop() {
-        if (mAzEdgePagingRunnable != null) {
-            mAzGestureHandler.removeCallbacks(mAzEdgePagingRunnable);
-            mAzEdgePagingRunnable = null;
+        if (mAzEdgePagingFrameCallback != null) {
+            Choreographer.getInstance().removeFrameCallback(mAzEdgePagingFrameCallback);
+            mAzEdgePagingFrameCallback = null;
         }
         mAzEdgePagingEdge = SuggestionBarView.AZ_EDGE_NONE;
         mAzEdgeDwellStartUptimeMs = 0L;
@@ -5334,10 +5299,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 AccessoryRenderState state = buildAccessoryRenderState();
                 boolean openingFromGone = keyboardContainer.getVisibility() == View.GONE;
                 boolean unifiedGlassSurface = shouldUseUnifiedDefaultKeyboardGlassSurface(state);
-                boolean backdropReady = isUnifiedAccessoryBackdropReady(state);
+                boolean backdropReady = unifiedGlassSurface
+                    ? isUnifiedAccessoryBackdropReady(state)
+                    : isInAppKeyboardLocalBackdropReady(state);
                 boolean deferReveal = mPendingInAppKeyboardOpenReveal
-                    || shouldDeferInAppKeyboardReveal(openingFromGone, unifiedGlassSurface,
-                        state.blurEnabled, backdropReady);
+                    || shouldDeferInAppKeyboardReveal(openingFromGone,
+                        isInAppKeyboardGlassSurface(), state.blurEnabled, backdropReady);
                 mPendingInAppKeyboardOpenReveal = deferReveal;
                 // INVISIBLE participates in destination layout without allowing a draw. The render
                 // pass can therefore install the expanded crop before keys and their glass backing
@@ -5676,7 +5643,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
         mDesiredInAppKeyboardHeightPx = 0;
         mInAppKeyboardHeightDirty = true;
-        traceInAppKeyboardState("geometry:request");
         if (keyboardContainer != null)
             keyboardContainer.requestLayout();
         applyAccessoryGeometryIfNeeded(true, "inapp-keyboard");
@@ -5761,9 +5727,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAppliedTerminalFlushPaddingPx = terminalFlushPaddingPx;
         int combinedHeight = computeAccessoryStackHeight(
             dockContentHeightPx, terminalFlushPaddingPx, state.keyboardHeight);
-        android.util.Log.i("KBTRACE", "geometry state keyboard=" + state.keyboardShown
-            + "/" + state.keyboardHeight + " toolbar=" + state.toolbarShown
-            + " dock=" + dockContentHeightPx + " combined=" + combinedHeight);
         // Split the absorbed remainder around the dock rows so they stay visually centered in the
         // taller glass instead of hugging its bottom edge.
         int flushBottomInsetPx = terminalFlushPaddingPx / 2;
@@ -7307,17 +7270,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mAccessoryBackdropDirty = true;
             mDecorNavBarBackdropDirty = true;
         }
-        mPendingAccessoryRenderReason = reason;
         if (mAccessoryRenderSyncPending) {
             return;
         }
         mAccessoryRenderSyncPending = true;
         mAccessoryRenderHandler.post(mAccessoryRenderSyncRunnable);
-    }
-
-    private void syncTerminalOverlayBottomInsetToAccessoryHeight() {
-        // Terminal glass layers now live inside terminal_surface_host, which already ends above the
-        // accessory stack. There is no separate terminal inset layer left to sync here.
     }
 
     private void enforceAccessoryFxInvariants() {
@@ -7336,49 +7293,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         updateAzOverflowAffordance();
-    }
-
-    private void logAccessoryRenderSnapshot(@NonNull String reason) {
-        if (!ACCESSORY_RENDER_TRACE) {
-            return;
-        }
-        View accessoryContainer = findViewById(R.id.accessory_stack_container);
-        View azFxOverlay = findViewById(R.id.apps_bar_az_fx_overlay);
-        View azFxUnderlay = findViewById(R.id.apps_bar_az_fx_underlay);
-        View appsBar = findViewById(R.id.apps_bar_viewpager);
-        long now = SystemClock.uptimeMillis();
-        long delta = mLastAccessoryRenderSyncUptimeMs == 0L ? 0L : now - mLastAccessoryRenderSyncUptimeMs;
-        mLastAccessoryRenderSyncUptimeMs = now;
-        Logger.logVerbose(
-            LOG_TAG,
-            "AccessorySync reason=" + reason +
-                " dt=" + delta +
-                " ime=" + mLastImeVisible +
-                " accessoryVis=" + (accessoryContainer != null ? accessoryContainer.getVisibility() : -1) +
-                " appsBarVis=" + (appsBar != null ? appsBar.getVisibility() : -1) +
-                " fxU=" + (azFxUnderlay != null ? azFxUnderlay.getVisibility() : -1) +
-                " fxO=" + (azFxOverlay != null ? azFxOverlay.getVisibility() : -1)
-        );
-    }
-
-    private void traceInAppKeyboardState(@NonNull String reason) {
-        View accessory = findViewById(R.id.accessory_stack_container);
-        View keyboard = findViewById(R.id.inapp_keyboard_container);
-        View toolbar = findViewById(R.id.terminal_toolbar_view_pager);
-        android.util.Log.i("KBTRACE", reason
-            + " accessory=" + traceView(accessory)
-            + " keyboard=" + traceView(keyboard)
-            + " toolbar=" + traceView(toolbar)
-            + " ime=" + mLastImeVisible
-            + " lift=" + mImeLiftPx);
-    }
-
-    private static String traceView(@Nullable View view) {
-        if (view == null)
-            return "null";
-        ViewGroup.LayoutParams params = view.getLayoutParams();
-        return view.getVisibility() + ":" + view.getHeight() + "/"
-            + (params == null ? -2 : params.height) + "@" + view.getTop() + "-" + view.getBottom();
     }
 
     private void scheduleSuggestionBarPackageRefresh(boolean immediate, boolean forceCatalogRefresh) {

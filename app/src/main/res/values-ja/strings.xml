@@ -59,7 +59,6 @@
     <string name="action_font_and_color">フォントと色の設定</string>
     <string name="action_set_background_image">セッション背景に画像を設定</string>
     <string name="action_style_terminal">Termux:Stylingを開く</string>
-    <string name="action_remove_background_image">セッション背景の画像を削除</string>
     <string name="action_toggle_keep_screen_on">画面をONのままにする</string>
     <string name="action_open_help">ヘルプ</string>
     <string name="action_open_settings">設定</string>

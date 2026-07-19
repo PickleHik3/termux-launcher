@@ -27,6 +27,9 @@ final class FocusOutlineRenderer {
     private static final float STROKE_WIDTH_DP = 1.5f;
     private static final float HALO_RADIUS_DP = 6f;
     private static final float HALO_ALPHA = 0.25f;
+    private static final Paint FALLBACK_PAINT = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private static BlurMaskFilter fallbackHaloFilter;
+    private static float fallbackHaloRadius = -1f;
 
     static final class Visual {
         @NonNull final Bitmap crispMask;
@@ -55,6 +58,7 @@ final class FocusOutlineRenderer {
         @NonNull private final Visual visual;
         @ColorInt private final int accent;
         @NonNull private final RenderPaints paints = new RenderPaints();
+        @NonNull private final RectF target = new RectF();
         private float focusAlpha = 1f;
         private float focusScale = 1f;
         private int drawableAlpha = 255;
@@ -90,7 +94,7 @@ final class FocusOutlineRenderer {
             float yScale = bounds.height() / (float) visual.sourceHeight;
             float padX = visual.outerPadding * xScale;
             float padY = visual.outerPadding * yScale;
-            RectF target = new RectF(
+            target.set(
                 bounds.left - padX,
                 bounds.top - padY,
                 bounds.right + padX,
@@ -202,14 +206,18 @@ final class FocusOutlineRenderer {
         int opaqueAccent = Color.rgb(Color.red(accent), Color.green(accent), Color.blue(accent));
         float strokeWidth = Math.max(1f, density * STROKE_WIDTH_DP);
         float haloRadius = Math.max(1f, density * HALO_RADIUS_DP);
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        Paint paint = FALLBACK_PAINT;
+        if (fallbackHaloFilter == null || fallbackHaloRadius != haloRadius) {
+            fallbackHaloRadius = haloRadius;
+            fallbackHaloFilter = new BlurMaskFilter(haloRadius, BlurMaskFilter.Blur.NORMAL);
+        }
         paint.setStyle(Paint.Style.STROKE);
         paint.setColor(opaqueAccent);
 
         int save = canvas.save();
         canvas.scale(scale, scale, target.centerX(), target.centerY());
         paint.setStrokeWidth(strokeWidth);
-        paint.setMaskFilter(new BlurMaskFilter(haloRadius, BlurMaskFilter.Blur.NORMAL));
+        paint.setMaskFilter(fallbackHaloFilter);
         paint.setAlpha(Math.round(accentAlpha * boundedAlpha * HALO_ALPHA));
         canvas.drawRoundRect(target, cornerRadius, cornerRadius, paint);
         paint.setMaskFilter(null);

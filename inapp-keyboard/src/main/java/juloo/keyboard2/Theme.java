@@ -330,6 +330,8 @@ public final class Theme
       private final int _grad_top;
       private final int _grad_bottom;
       private final Matrix _override_gradient_matrix = new Matrix();
+      private int _override_gradient_color;
+      private LinearGradient _override_gradient;
 
       public Key(Theme theme, Config config, boolean activated,
           KeyboardData.Key.Role role, float keyCornerRadiusOverridePx)
@@ -441,13 +443,17 @@ public final class Theme
         paint.setColor(fill);
         if ((_grad_top != 0 || _grad_bottom != 0) && Color.alpha(fill) > 0)
         {
-          LinearGradient gradient = new LinearGradient(0f, 0f, 0f, 1f,
-              compositeOver(_grad_top, fill), compositeOver(_grad_bottom, fill),
-              Shader.TileMode.CLAMP);
+          if (_override_gradient == null || _override_gradient_color != overrideColor)
+          {
+            _override_gradient_color = overrideColor;
+            _override_gradient = new LinearGradient(0f, 0f, 0f, 1f,
+                compositeOver(_grad_top, fill), compositeOver(_grad_bottom, fill),
+                Shader.TileMode.CLAMP);
+          }
           _override_gradient_matrix.setScale(1f, Math.max(1f, keyH));
           _override_gradient_matrix.postTranslate(0f, y);
-          gradient.setLocalMatrix(_override_gradient_matrix);
-          paint.setShader(gradient);
+          _override_gradient.setLocalMatrix(_override_gradient_matrix);
+          paint.setShader(_override_gradient);
         }
         else
           paint.setShader(null);

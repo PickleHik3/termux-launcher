@@ -6,11 +6,9 @@ import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
-import android.os.SystemClock;
 import android.text.Layout;
 import android.text.StaticLayout;
 import android.text.TextPaint;
@@ -42,13 +40,9 @@ public final class LauncherAzGestureFxView extends View {
         OVERLAY
     }
 
-    private final Paint glassFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint glassInnerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint glassStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint bridgePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint edgePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint edgeInnerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint bloomPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint edgeDwellPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pageIndicatorPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     /** Soft underglow blur for the active page tick; lazily built once the density is known. */
     private BlurMaskFilter pageTickGlow;
@@ -56,32 +50,31 @@ public final class LauncherAzGestureFxView extends View {
     private final FocusOutlineRenderer.RenderPaints focusedIconOutlinePaints =
         new FocusOutlineRenderer.RenderPaints();
     private final TextPaint previewLabelPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
-    private final Path liquidBridgePath = new Path();
-
     private final RectF tmpRect = new RectF();
+    private final RectF tmpShadowRect = new RectF();
     private final RectF focusDisplayRect = new RectF();
     private final RectF focusRawRect = new RectF();
     private final RectF previewRect = new RectF();
-    private final RectF azRowRawBounds = new RectF();
     private final RectF appsRowRawBounds = new RectF();
-    private final RectF indicatorBandRawBounds = new RectF();
-    private final RectF extraKeysRawBounds = new RectF();
     private final int[] locationOnScreen = new int[2];
+    private final int[] edgeDwellGradientColors = new int[3];
+    private final float[] edgeDwellGradientStops = {0f, 0.48f, 1f};
+    @Nullable private RadialGradient edgeDwellShader;
+    private float edgeDwellShaderX = Float.NaN;
+    private float edgeDwellShaderY = Float.NaN;
+    private float edgeDwellShaderRadius = Float.NaN;
+    private int edgeDwellShaderCoreColor;
+    private int edgeDwellShaderOuterColor;
+    private int edgeDwellShaderEndColor;
+    private float[] pageIndicatorWidths = new float[0];
+    private float[] pageIndicatorCenters = new float[0];
 
     private int glassTintColor = 0xFF86A7FF;
-    private int vividLetterTintColor = 0xFF9AB8FF;
     private int edgeTintColor = 0xFF7CE2FF;
     private int overflowGlowTintColor = 0xFF98F0FF;
 
     private boolean dragActive;
     private float targetRawX;
-    private float targetRawY;
-    private float displayRawX;
-    private float displayRawY;
-
-    private boolean hasAnchor;
-    private float anchorRawX;
-    private float anchorRawY;
 
     private boolean hasFocus;
     private boolean interactionOverflowActive;
@@ -104,8 +97,6 @@ public final class LauncherAzGestureFxView extends View {
             animateSubtlePageIndicatorAttentionTo(PINNED_INDICATOR_IDLE_ATTENTION);
         }
     };
-    private float edgeProximityLeft;
-    private float edgeProximityRight;
     private float edgeDwellProgress;
     private float edgeDwellRawX;
     private float edgeDwellRawY;
@@ -129,22 +120,17 @@ public final class LauncherAzGestureFxView extends View {
     private float outgoingIconOutlineScale = 0.96f;
     @Nullable private ValueAnimator focusedIconOutlineAnimator;
     @Nullable private String focusedAppPreviewLabel;
+    @Nullable private StaticLayout focusedAppPreviewLabelLayout;
+    @Nullable private String focusedAppPreviewLabelLayoutText;
+    private int focusedAppPreviewLabelLayoutWidth = -1;
+    private float focusedAppPreviewLabelLayoutTextSize = -1f;
     private boolean darkThemeActive = true;
-    private boolean capsuleDockStyle;
     @NonNull private RenderLayer renderLayer = RenderLayer.OVERLAY;
 
     @NonNull private InteractionMode interactionMode = InteractionMode.LETTER_TRACK;
-    private long lastFocusUpdateUptimeMs = 0L;
-    private static final long FOCUS_HOLD_MS = 140L;
     private static final long PINNED_INDICATOR_IDLE_DELAY_MS = 5000L;
     private static final long PINNED_INDICATOR_FADE_DURATION_MS = 520L;
     private static final float PINNED_INDICATOR_IDLE_ATTENTION = 0.42f;
-
-    private boolean launchBloomActive;
-    private float launchBloomRawX;
-    private float launchBloomRawY;
-    private float launchBloomProgress;
-    @Nullable private ValueAnimator launchBloomAnimator;
 
     public LauncherAzGestureFxView(Context context) {
         super(context);
@@ -166,15 +152,11 @@ public final class LauncherAzGestureFxView extends View {
         setClickable(false);
         setFocusable(false);
 
-        glassFillPaint.setStyle(Paint.Style.FILL);
-        glassInnerPaint.setStyle(Paint.Style.FILL);
         glassStrokePaint.setStyle(Paint.Style.STROKE);
         glassStrokePaint.setStrokeCap(Paint.Cap.ROUND);
         glassStrokePaint.setStrokeJoin(Paint.Join.ROUND);
 
-        bridgePaint.setStyle(Paint.Style.FILL);
         edgePaint.setStyle(Paint.Style.FILL);
-        edgeInnerPaint.setStyle(Paint.Style.FILL);
         pageIndicatorPaint.setStyle(Paint.Style.FILL);
         previewFillPaint.setStyle(Paint.Style.FILL);
         previewLabelPaint.setTextAlign(Paint.Align.LEFT);
@@ -184,28 +166,20 @@ public final class LauncherAzGestureFxView extends View {
 
     public void setColors(int glassTintColor, int edgeTintColor) {
         this.glassTintColor = enforceGlassVisibility(glassTintColor, 0.78f);
-        this.vividLetterTintColor = boostColor(this.glassTintColor, 1.20f, 1.08f);
         this.edgeTintColor = enforceGlassVisibility(edgeTintColor, 0.84f);
         this.overflowGlowTintColor = boostColor(this.edgeTintColor, 1.05f, 1.18f);
+        edgeDwellShader = null;
         invalidate();
     }
 
     public void updateDrag(
         boolean active,
         float rawX,
-        float rawY,
-        boolean anchorVisible,
-        float anchorRawX,
-        float anchorRawY,
         @Nullable RectF focusedBoundsRaw,
         @NonNull InteractionMode mode
     ) {
         dragActive = active;
         targetRawX = rawX;
-        targetRawY = rawY;
-        hasAnchor = anchorVisible;
-        this.anchorRawX = anchorRawX;
-        this.anchorRawY = anchorRawY;
         interactionMode = mode;
 
         if (focusedBoundsRaw != null) {
@@ -230,26 +204,11 @@ public final class LauncherAzGestureFxView extends View {
         invalidate();
     }
 
-    public void setRowBounds(@Nullable RectF azRowRaw, @Nullable RectF appsRowRaw, @Nullable RectF indicatorBandRaw, @Nullable RectF extraKeysRowRaw) {
-        if (azRowRaw != null) {
-            azRowRawBounds.set(azRowRaw);
-        } else {
-            azRowRawBounds.setEmpty();
-        }
+    public void setRowBounds(@Nullable RectF appsRowRaw) {
         if (appsRowRaw != null) {
             appsRowRawBounds.set(appsRowRaw);
         } else {
             appsRowRawBounds.setEmpty();
-        }
-        if (indicatorBandRaw != null) {
-            indicatorBandRawBounds.set(indicatorBandRaw);
-        } else {
-            indicatorBandRawBounds.setEmpty();
-        }
-        if (extraKeysRowRaw != null) {
-            extraKeysRawBounds.set(extraKeysRowRaw);
-        } else {
-            extraKeysRawBounds.setEmpty();
         }
     }
 
@@ -297,12 +256,6 @@ public final class LauncherAzGestureFxView extends View {
             animateInteractionPageIndicatorTo(newPageIndex, shouldAnimatePage);
         }
         refreshVisibility();
-        invalidate();
-    }
-
-    public void setEdgeProximity(float left, float right) {
-        edgeProximityLeft = clamp01(left);
-        edgeProximityRight = clamp01(right);
         invalidate();
     }
 
@@ -457,23 +410,10 @@ public final class LauncherAzGestureFxView extends View {
         invalidate();
     }
 
-    public void setCapsuleDockStyle(boolean capsule) {
-        if (capsuleDockStyle == capsule) {
-            return;
-        }
-        capsuleDockStyle = capsule;
-        invalidate();
-    }
-
     public void clearDrag(boolean keepOverflowAffordance) {
         setFocusedIconOutline(null, null);
         dragActive = false;
         hasFocus = false;
-        hasAnchor = false;
-        displayRawX = 0f;
-        displayRawY = 0f;
-        edgeProximityLeft = 0f;
-        edgeProximityRight = 0f;
         edgeDwellProgress = 0f;
         if (!focusedAppPreviewLaunchDismissing) {
             setFocusedAppPreviewIcon(null);
@@ -494,8 +434,6 @@ public final class LauncherAzGestureFxView extends View {
             interactionShowsPageIndicators = false;
             interactionUseSubtlePageIndicators = false;
         }
-        launchBloomActive = false;
-        launchBloomProgress = 0f;
         refreshVisibility();
         invalidate();
     }
@@ -530,9 +468,7 @@ public final class LauncherAzGestureFxView extends View {
             || focusedAppPreviewProgress > 0.01f || shouldDrawFocusRing ? VISIBLE : GONE);
     }
 
-    public void playLaunchBloom(float rawX, float rawY) {
-        launchBloomRawX = rawX;
-        launchBloomRawY = rawY;
+    public void dismissFocusedAppPreviewForLaunch() {
         focusedAppPreviewLaunchDismissing = true;
         animateFocusedAppPreviewTo(0f, true);
     }
@@ -540,10 +476,6 @@ public final class LauncherAzGestureFxView extends View {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        if (launchBloomAnimator != null) {
-            launchBloomAnimator.cancel();
-            launchBloomAnimator = null;
-        }
         if (focusedAppPreviewAnimator != null) {
             focusedAppPreviewAnimator.cancel();
             focusedAppPreviewAnimator = null;
@@ -718,12 +650,23 @@ public final class LauncherAzGestureFxView extends View {
         int minInnerWidth = Math.round(dp(38f));
         float measuredTextWidth = previewLabelPaint.measureText(displayLabel);
         int textWidth = Math.max(minInnerWidth, Math.min(maxInnerWidth, Math.round(measuredTextWidth + dp(1f))));
-        StaticLayout layout = StaticLayout.Builder.obtain(displayLabel, 0, displayLabel.length(), previewLabelPaint, textWidth)
-            .setAlignment(Layout.Alignment.ALIGN_CENTER)
-            .setIncludePad(false)
-            .setMaxLines(2)
-            .setEllipsize(TextUtils.TruncateAt.END)
-            .build();
+        StaticLayout layout = focusedAppPreviewLabelLayout;
+        if (layout == null
+            || !TextUtils.equals(focusedAppPreviewLabelLayoutText, displayLabel)
+            || focusedAppPreviewLabelLayoutWidth != textWidth
+            || focusedAppPreviewLabelLayoutTextSize != previewLabelPaint.getTextSize()) {
+            layout = StaticLayout.Builder.obtain(
+                    displayLabel, 0, displayLabel.length(), previewLabelPaint, textWidth)
+                .setAlignment(Layout.Alignment.ALIGN_CENTER)
+                .setIncludePad(false)
+                .setMaxLines(2)
+                .setEllipsize(TextUtils.TruncateAt.END)
+                .build();
+            focusedAppPreviewLabelLayout = layout;
+            focusedAppPreviewLabelLayoutText = displayLabel;
+            focusedAppPreviewLabelLayoutWidth = textWidth;
+            focusedAppPreviewLabelLayoutTextSize = previewLabelPaint.getTextSize();
+        }
 
         float pillWidth = Math.min(maxInnerWidth + (horizontalPadding * 2f), Math.max(dp(52f), layout.getWidth() + (horizontalPadding * 2f)));
         float pillHeight = layout.getHeight() + (verticalPadding * 2f);
@@ -735,9 +678,9 @@ public final class LauncherAzGestureFxView extends View {
 
         tmpRect.set(pillLeft, pillTop, pillLeft + pillWidth, pillTop + pillHeight);
         previewFillPaint.setColor(withAlpha(Color.BLACK, Math.round((darkThemeActive ? 58f : 18f) * alpha)));
-        RectF shadow = new RectF(tmpRect);
-        shadow.offset(0f, dp(1.5f));
-        canvas.drawRoundRect(shadow, pillHeight * 0.5f, pillHeight * 0.5f, previewFillPaint);
+        tmpShadowRect.set(tmpRect);
+        tmpShadowRect.offset(0f, dp(1.5f));
+        canvas.drawRoundRect(tmpShadowRect, pillHeight * 0.5f, pillHeight * 0.5f, previewFillPaint);
 
         int pillColor = darkThemeActive
             ? lerpColor(Color.rgb(34, 30, 39), edgeTintColor, 0.04f)
@@ -783,16 +726,29 @@ public final class LauncherAzGestureFxView extends View {
         int innerAlpha = Math.round(lerp(58f, 132f, progress));
         int coreColor = withAlpha(mutedTint, innerAlpha);
         int outerColor = withAlpha(mutedTint, outerAlpha);
-        bloomPaint.setShader(new RadialGradient(
-            cx,
-            cy,
-            radius,
-            new int[] { coreColor, outerColor, withAlpha(edgeTintColor, 0) },
-            new float[] { 0f, 0.48f, 1f },
-            Shader.TileMode.CLAMP
-        ));
-        canvas.drawCircle(cx, cy, radius, bloomPaint);
-        bloomPaint.setShader(null);
+        int endColor = withAlpha(edgeTintColor, 0);
+        if (edgeDwellShader == null
+            || edgeDwellShaderX != cx
+            || edgeDwellShaderY != cy
+            || edgeDwellShaderRadius != radius
+            || edgeDwellShaderCoreColor != coreColor
+            || edgeDwellShaderOuterColor != outerColor
+            || edgeDwellShaderEndColor != endColor) {
+            edgeDwellGradientColors[0] = coreColor;
+            edgeDwellGradientColors[1] = outerColor;
+            edgeDwellGradientColors[2] = endColor;
+            edgeDwellShader = new RadialGradient(cx, cy, radius, edgeDwellGradientColors,
+                edgeDwellGradientStops, Shader.TileMode.CLAMP);
+            edgeDwellShaderX = cx;
+            edgeDwellShaderY = cy;
+            edgeDwellShaderRadius = radius;
+            edgeDwellShaderCoreColor = coreColor;
+            edgeDwellShaderOuterColor = outerColor;
+            edgeDwellShaderEndColor = endColor;
+        }
+        edgeDwellPaint.setShader(edgeDwellShader);
+        canvas.drawCircle(cx, cy, radius, edgeDwellPaint);
+        edgeDwellPaint.setShader(null);
 
         float ringRadius = radius * lerp(0.42f, 0.78f, progress);
         glassStrokePaint.setStrokeWidth(dp(1.15f));
@@ -846,144 +802,6 @@ public final class LauncherAzGestureFxView extends View {
         canvas.drawRoundRect(innerGlow, Math.max(dp(16f), radius - dp(6f)), Math.max(dp(16f), radius - dp(6f)), edgePaint);
     }
 
-    private void drawLetterGlassDroplet(Canvas canvas) {
-        float cx = displayRawX - locationOnScreen[0];
-        float cy = displayRawY - locationOnScreen[1];
-        if (!azRowRawBounds.isEmpty()) {
-            float top = azRowRawBounds.top - locationOnScreen[1];
-            float bottom = azRowRawBounds.bottom - locationOnScreen[1];
-            cy = clamp(cy, top + dp(6f), bottom - dp(6f));
-        }
-
-        float w = dp(24f);
-        float h = dp(18f);
-        float radius = dp(9f);
-        if (hasFocus && !focusRawRect.isEmpty()) {
-            RectF focusLocal = new RectF(
-                focusRawRect.left - locationOnScreen[0],
-                focusRawRect.top - locationOnScreen[1],
-                focusRawRect.right - locationOnScreen[0],
-                focusRawRect.bottom - locationOnScreen[1]
-            );
-            float expandX = Math.max(dp(0.8f), focusLocal.width() * 0.04f);
-            float expandY = Math.max(dp(0.6f), focusLocal.height() * 0.03f);
-            focusLocal.inset(-expandX, -expandY);
-            if (!azRowRawBounds.isEmpty()) {
-                float top = azRowRawBounds.top - locationOnScreen[1];
-                float bottom = azRowRawBounds.bottom - locationOnScreen[1];
-                float centerY = focusLocal.centerY();
-                centerY = clamp(centerY, top + (focusLocal.height() * 0.5f), bottom - (focusLocal.height() * 0.5f));
-                float halfH = focusLocal.height() * 0.5f;
-                focusLocal.top = centerY - halfH;
-                focusLocal.bottom = centerY + halfH;
-            }
-            drawLetterGlassPopupEvolution(canvas, focusLocal, Math.max(dp(8f), focusLocal.height() * 0.46f));
-            return;
-        }
-
-        tmpRect.set(cx - (w * 0.5f), cy - (h * 0.5f), cx + (w * 0.5f), cy + (h * 0.5f));
-        drawLetterGlassPopupEvolution(canvas, tmpRect, radius);
-    }
-
-    private void drawLetterGlassPopupEvolution(Canvas canvas, RectF pill, float radius) {
-        glassFillPaint.setColor(withAlpha(vividLetterTintColor, 208));
-        canvas.drawRoundRect(pill, radius, radius, glassFillPaint);
-
-        RectF innerVeil = new RectF(pill);
-        float veilPad = Math.max(dp(1.4f), Math.min(pill.width(), pill.height()) * 0.10f);
-        innerVeil.inset(veilPad, veilPad * 0.95f);
-        glassInnerPaint.setColor(withAlpha(Color.WHITE, 48));
-        canvas.drawRoundRect(innerVeil, Math.max(dp(4f), radius - veilPad), Math.max(dp(4f), radius - veilPad), glassInnerPaint);
-
-        RectF sheen = new RectF(innerVeil);
-        sheen.bottom = sheen.top + Math.max(dp(4.6f), innerVeil.height() * 0.42f);
-        glassInnerPaint.setColor(withAlpha(Color.WHITE, 84));
-        canvas.drawRoundRect(sheen, Math.max(dp(3f), radius - dp(5f)), Math.max(dp(3f), radius - dp(5f)), glassInnerPaint);
-
-        glassStrokePaint.setStrokeWidth(dp(1.25f));
-        glassStrokePaint.setColor(withAlpha(Color.WHITE, 144));
-        canvas.drawRoundRect(pill, radius, radius, glassStrokePaint);
-
-        RectF innerRim = new RectF(pill);
-        innerRim.inset(dp(0.9f), dp(0.9f));
-        glassStrokePaint.setStrokeWidth(dp(0.9f));
-        glassStrokePaint.setColor(withAlpha(glassTintColor, 122));
-        canvas.drawRoundRect(innerRim, Math.max(dp(4f), radius - dp(1.2f)), Math.max(dp(4f), radius - dp(1.2f)), glassStrokePaint);
-    }
-
-    private void drawLockedIconTrackGlass(Canvas canvas) {
-        if (hasFocus) {
-            lastFocusUpdateUptimeMs = SystemClock.uptimeMillis();
-            if (focusDisplayRect.isEmpty()) {
-                focusDisplayRect.set(focusRawRect);
-            } else {
-                blendRect(focusDisplayRect, focusRawRect, 0.31f);
-            }
-        } else {
-            if ((SystemClock.uptimeMillis() - lastFocusUpdateUptimeMs) > FOCUS_HOLD_MS) {
-                focusDisplayRect.setEmpty();
-            }
-        }
-
-        int save = -1;
-        if (!appsRowRawBounds.isEmpty()) {
-            float left = appsRowRawBounds.left - locationOnScreen[0];
-            float top = appsRowRawBounds.top - locationOnScreen[1];
-            float right = appsRowRawBounds.right - locationOnScreen[0];
-            float bottom = appsRowRawBounds.bottom - locationOnScreen[1];
-            save = canvas.save();
-            canvas.clipRect(left, top, right, bottom);
-        }
-
-        if (hasAnchor && !focusDisplayRect.isEmpty()) {
-            drawLiquidBridge(canvas, focusDisplayRect);
-        }
-
-        if (!focusDisplayRect.isEmpty()) {
-            RectF local = new RectF(
-                focusDisplayRect.left - locationOnScreen[0],
-                focusDisplayRect.top - locationOnScreen[1],
-                focusDisplayRect.right - locationOnScreen[0],
-                focusDisplayRect.bottom - locationOnScreen[1]
-            );
-            float shellPad = Math.max(dp(6f), Math.min(local.width(), local.height()) * 0.17f);
-            local.inset(-shellPad, -shellPad);
-            drawGlassBody(canvas, local, dp(14f), 0.72f, 0.42f);
-        } else {
-            float cx = displayRawX - locationOnScreen[0];
-            float cy = displayRawY - locationOnScreen[1];
-            float halfW = dp(17f);
-            float halfH = dp(17f);
-            tmpRect.set(cx - halfW, cy - halfH, cx + halfW, cy + halfH);
-            drawGlassBody(canvas, tmpRect, dp(12f), 0.56f, 0.24f);
-        }
-        if (save >= 0) {
-            canvas.restoreToCount(save);
-        }
-    }
-
-    private void drawLiquidBridge(Canvas canvas, RectF focusRaw) {
-        float startX = anchorRawX - locationOnScreen[0];
-        float startY = anchorRawY - locationOnScreen[1];
-        float endX = focusRaw.centerX() - locationOnScreen[0];
-        float endY = Math.min(displayRawY, focusRaw.centerY()) - locationOnScreen[1];
-
-        float neck = dp(7f);
-        float shoulder = dp(12f);
-
-        liquidBridgePath.reset();
-        liquidBridgePath.moveTo(startX - neck, startY);
-        liquidBridgePath.cubicTo(startX - shoulder, lerp(startY, endY, 0.42f), endX - shoulder, lerp(startY, endY, 0.58f), endX - neck, endY);
-        liquidBridgePath.lineTo(endX + neck, endY);
-        liquidBridgePath.cubicTo(endX + shoulder, lerp(startY, endY, 0.58f), startX + shoulder, lerp(startY, endY, 0.42f), startX + neck, startY);
-        liquidBridgePath.close();
-
-        bridgePaint.setColor(withAlpha(glassTintColor, 106));
-        canvas.drawPath(liquidBridgePath, bridgePaint);
-        bridgePaint.setColor(withAlpha(Color.WHITE, 52));
-        canvas.drawPath(liquidBridgePath, bridgePaint);
-    }
-
     private void drawInteractionPageIndicators(Canvas canvas) {
         if (!interactionOverflowActive || interactionPageCount <= 1 || appsRowRawBounds.isEmpty()) {
             return;
@@ -1026,7 +844,8 @@ public final class LauncherAzGestureFxView extends View {
 
         // Per-tick widths (the active page's tick widens), then laid out left-to-right with a
         // CONSTANT gap so the spacing reads evenly no matter which page is active.
-        float[] widths = new float[totalPages];
+        ensurePageIndicatorScratchCapacity(totalPages);
+        float[] widths = pageIndicatorWidths;
         float sumW = 0f;
         for (int p = 0; p < totalPages; p++) {
             float prox = Math.max(0f, 1f - Math.abs(p - pos));
@@ -1039,7 +858,7 @@ public final class LauncherAzGestureFxView extends View {
             gap = Math.max(dp(4f), (maxW - sumW) / (totalPages - 1));
             total = sumW + (totalPages - 1) * gap;
         }
-        float[] centers = new float[totalPages];
+        float[] centers = pageIndicatorCenters;
         float x = cx - (total * 0.5f);
         for (int p = 0; p < totalPages; p++) {
             centers[p] = x + (widths[p] * 0.5f);
@@ -1087,6 +906,14 @@ public final class LauncherAzGestureFxView extends View {
             tmpRect.set(left, cy - r, left + widths[p], cy + r);
             canvas.drawRoundRect(tmpRect, r, r, pageIndicatorPaint);
         }
+    }
+
+    private void ensurePageIndicatorScratchCapacity(int totalPages) {
+        if (pageIndicatorWidths.length >= totalPages) {
+            return;
+        }
+        pageIndicatorWidths = new float[totalPages];
+        pageIndicatorCenters = new float[totalPages];
     }
 
     private void animateInteractionPageIndicatorTo(int pageIndex, boolean animate) {
@@ -1223,35 +1050,6 @@ public final class LauncherAzGestureFxView extends View {
         }
     }
 
-    private void drawLaunchGlassBloom(Canvas canvas) {
-        float cx = launchBloomRawX - locationOnScreen[0];
-        float cy = launchBloomRawY - locationOnScreen[1];
-        float maxR = (float) Math.hypot(getWidth(), getHeight());
-        float r = lerp(dp(22f), maxR * 1.08f, launchBloomProgress);
-        float alphaFactor = (1f - launchBloomProgress);
-
-        bloomPaint.setColor(withAlpha(glassTintColor, (int) (198 * alphaFactor)));
-        canvas.drawCircle(cx, cy, r, bloomPaint);
-
-        bloomPaint.setColor(withAlpha(Color.WHITE, (int) (132 * alphaFactor)));
-        canvas.drawCircle(cx, cy, r * 0.55f, bloomPaint);
-    }
-
-    private void drawGlassBody(Canvas canvas, RectF rect, float radius, float tintAlpha, float innerAlpha) {
-        glassFillPaint.setColor(withAlpha(glassTintColor, (int) (255f * tintAlpha)));
-        canvas.drawRoundRect(rect, radius, radius, glassFillPaint);
-
-        float pad = Math.max(dp(1.8f), Math.min(rect.width(), rect.height()) * 0.12f);
-        RectF inner = new RectF(rect);
-        inner.inset(pad, pad * 0.9f);
-        glassInnerPaint.setColor(withAlpha(Color.WHITE, (int) (255f * innerAlpha)));
-        canvas.drawRoundRect(inner, Math.max(dp(4f), radius - pad), Math.max(dp(4f), radius - pad), glassInnerPaint);
-
-        glassStrokePaint.setStrokeWidth(dp(1.6f));
-        glassStrokePaint.setColor(withAlpha(Color.WHITE, 178));
-        canvas.drawRoundRect(rect, radius, radius, glassStrokePaint);
-    }
-
     private float dp(float value) {
         return value * getResources().getDisplayMetrics().density;
     }
@@ -1298,10 +1096,4 @@ public final class LauncherAzGestureFxView extends View {
         return Color.HSVToColor((color >>> 24) == 0 ? 0xFF : (color >>> 24), hsv);
     }
 
-    private static void blendRect(RectF out, RectF target, float t) {
-        out.left = lerp(out.left, target.left, t);
-        out.top = lerp(out.top, target.top, t);
-        out.right = lerp(out.right, target.right, t);
-        out.bottom = lerp(out.bottom, target.bottom, t);
-    }
 }

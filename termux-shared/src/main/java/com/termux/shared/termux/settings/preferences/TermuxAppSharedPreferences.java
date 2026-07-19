@@ -189,20 +189,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_PINNED_ICON_PACK_PACKAGE, value == null ? "" : value, true);
     }
 
-    /** @deprecated Dock icon scale is derived from dock size so geometry has one source of truth. */
-    @Deprecated
-    public float getAppLauncherIconScale() {
-        float iconScale = SharedPreferenceUtils.getFloat(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_ICON_SCALE, TERMUX_APP.DEFAULT_APP_LAUNCHER_ICON_SCALE);
-        return DataUtils.rangedOrDefault(iconScale, TERMUX_APP.DEFAULT_APP_LAUNCHER_ICON_SCALE, 1.0f, 1.8f);
-    }
-
-    /** @deprecated Retained only for compatibility with older stored preferences. */
-    @Deprecated
-    public void setAppLauncherIconScale(float value) {
-        float clamped = Math.max(1.0f, Math.min(1.8f, value));
-        SharedPreferenceUtils.setFloat(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_ICON_SCALE, clamped, false);
-    }
-
     public String getAppLauncherPinnedItemsV2() {
         return SharedPreferenceUtils.getString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_PINNED_ITEMS_V2,
             TERMUX_APP.DEFAULT_APP_LAUNCHER_PINNED_ITEMS_V2, true);
@@ -970,30 +956,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         setExtraKeysBlurRadius(value ? Math.max(1, getExtraKeysBlurRadius()) : 0);
     }
     
-    public boolean isSessionsBlurEnabled() {
-        return false;
-    }
-    
-    public void setSessionsBlurEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_SESSIONS_BLUR_ENABLED, false, false);
-    }
-    
-    public boolean isMonetBackgroundEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_MONET_BACKGROUND_ENABLED, TERMUX_APP.DEFAULT_VALUE_MONET_BACKGROUND_ENABLED);
-    }
-    
-    public void setMonetBackgroundEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_MONET_BACKGROUND_ENABLED, value, false);
-    }
-
-    public boolean isMonetOverlayEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_MONET_OVERLAY_ENABLED, TERMUX_APP.DEFAULT_VALUE_MONET_OVERLAY_ENABLED);
-    }
-
-    public void setMonetOverlayEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_MONET_OVERLAY_ENABLED, value, false);
-    }
-
     public boolean isTerminalDynamicColorsEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_DYNAMIC_COLORS_ENABLED, TERMUX_APP.DEFAULT_VALUE_TERMINAL_DYNAMIC_COLORS_ENABLED);
     }

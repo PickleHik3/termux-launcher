@@ -15,7 +15,6 @@ import android.os.Looper;
 import android.os.Process;
 import android.os.UserHandle;
 import android.os.UserManager;
-import android.util.LruCache;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -44,8 +43,7 @@ public final class LauncherAppDataProvider {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = newIdleFriendlyExecutor();
     private final LauncherIconResolver iconResolver;
-    private final LruCache<String, Drawable> iconCache = new LruCache<>(96);
-    private final List<LauncherAppEntry> cachedApps = new ArrayList<>();
+    private List<LauncherAppEntry> cachedApps = Collections.emptyList();
     private final Map<String, LauncherAppEntry> cachedById = new LinkedHashMap<>();
     private final Map<String, LauncherAppEntry> cachedFirstByPackage = new HashMap<>();
     private final Map<String, LauncherAppEntry> cachedDefaultByPackage = new HashMap<>();
@@ -81,13 +79,12 @@ public final class LauncherAppDataProvider {
         refreshGeneration++;
         loading = false;
         loaded = false;
-        cachedApps.clear();
+        cachedApps = Collections.emptyList();
         cachedById.clear();
         cachedFirstByPackage.clear();
         cachedDefaultByPackage.clear();
         letterBuckets.clear();
         pendingRefreshCallbacks.clear();
-        iconCache.evictAll();
     }
 
     public synchronized boolean hasLoadedApps() {
@@ -123,22 +120,14 @@ public final class LauncherAppDataProvider {
                 if (capturedGeneration != refreshGeneration) {
                     return;
                 }
-                cachedApps.clear();
-                cachedApps.addAll(snapshot.apps);
+                cachedApps = immutableEntryList(snapshot.apps);
                 cachedById.clear();
                 cachedById.putAll(snapshot.byId);
                 cachedFirstByPackage.clear();
                 cachedFirstByPackage.putAll(snapshot.firstByPackage);
                 cachedDefaultByPackage.clear();
                 cachedDefaultByPackage.putAll(snapshot.defaultByPackage);
-                letterBuckets.clear();
-                letterBuckets.putAll(snapshot.letterBuckets);
-                iconCache.evictAll();
-                for (Map.Entry<String, Drawable> iconEntry : snapshot.iconById.entrySet()) {
-                    if (iconEntry.getValue() != null) {
-                        iconCache.put(iconEntry.getKey(), iconEntry.getValue());
-                    }
-                }
+                cacheLetterBuckets(snapshot.letterBuckets);
                 loaded = true;
                 loading = false;
                 callbacks = new ArrayList<>(pendingRefreshCallbacks);
@@ -154,45 +143,37 @@ public final class LauncherAppDataProvider {
 
     @NonNull
     public synchronized List<LauncherAppEntry> getAllApps() {
-        return withCachedIcons(cachedApps);
+        return cachedApps;
     }
 
     @NonNull
     public List<LauncherAppEntry> getAllAppsBlocking() {
         synchronized (this) {
             if (loaded) {
-                return withCachedIcons(cachedApps);
+                return cachedApps;
             }
         }
 
         Snapshot snapshot = loadSnapshot();
         synchronized (this) {
-            cachedApps.clear();
-            cachedApps.addAll(snapshot.apps);
+            cachedApps = immutableEntryList(snapshot.apps);
             cachedById.clear();
             cachedById.putAll(snapshot.byId);
             cachedFirstByPackage.clear();
             cachedFirstByPackage.putAll(snapshot.firstByPackage);
             cachedDefaultByPackage.clear();
             cachedDefaultByPackage.putAll(snapshot.defaultByPackage);
-            letterBuckets.clear();
-            letterBuckets.putAll(snapshot.letterBuckets);
-            iconCache.evictAll();
-            for (Map.Entry<String, Drawable> iconEntry : snapshot.iconById.entrySet()) {
-                if (iconEntry.getValue() != null) {
-                    iconCache.put(iconEntry.getKey(), iconEntry.getValue());
-                }
-            }
+            cacheLetterBuckets(snapshot.letterBuckets);
             loaded = true;
             loading = false;
-            return withCachedIcons(cachedApps);
+            return cachedApps;
         }
     }
 
     @Nullable
     public synchronized LauncherAppEntry findByRef(@NonNull AppRef ref) {
         LauncherAppEntry entry = cachedById.get(ref.stableId());
-        return entry == null ? null : withCachedIcon(entry);
+        return entry;
     }
 
     @Nullable
@@ -201,19 +182,19 @@ public final class LauncherAppDataProvider {
         if (entry == null) {
             entry = cachedFirstByPackage.get(packageName);
         }
-        return entry == null ? null : withCachedIcon(entry);
+        return entry;
     }
 
     @Nullable
     public synchronized LauncherAppEntry findFirstByPackage(@NonNull String packageName) {
         LauncherAppEntry entry = cachedFirstByPackage.get(packageName);
-        return entry == null ? null : withCachedIcon(entry);
+        return entry;
     }
 
     @NonNull
     public synchronized List<LauncherAppEntry> getAppsForLetter(char letter) {
         List<LauncherAppEntry> bucket = letterBuckets.get(normalizeLetter(letter));
-        return bucket == null ? new ArrayList<>() : withCachedIcons(bucket);
+        return bucket == null ? Collections.emptyList() : bucket;
     }
 
     private void dispatchRefreshCallbacksLocked() {
@@ -260,9 +241,6 @@ public final class LauncherAppDataProvider {
                 && ref.packageName.equals(defaultComponent.getPackageName())
                 && normalizeActivityName(ref).equals(defaultComponent.getClassName())) {
                 snapshot.defaultByPackage.put(ref.packageName, entry);
-            }
-            if (icon != null) {
-                snapshot.iconById.put(ref.stableId(), icon);
             }
             char key = normalizeLetter(label.isEmpty() ? '#' : label.charAt(0));
             List<LauncherAppEntry> bucket = snapshot.letterBuckets.get(key);
@@ -367,17 +345,24 @@ public final class LauncherAppDataProvider {
         return " · Clone";
     }
 
+    // UserHandle.getIdentifier() is @SystemApi — reachable only via reflection from app code.
+    // Resolve once; any failure (hidden-API policy, vendor mismatch) degrades to -1 forever.
+    @Nullable private static java.lang.reflect.Method sGetIdentifierMethod;
+    private static boolean sGetIdentifierResolved;
+
     public static int userIdOf(@NonNull UserHandle userHandle) {
         try {
-            java.lang.reflect.Method method = UserHandle.class.getDeclaredMethod("getIdentifier");
-            method.setAccessible(true);
-            Object value = method.invoke(userHandle);
-            if (value instanceof Integer) {
-                return (Integer) value;
+            if (!sGetIdentifierResolved) {
+                sGetIdentifierResolved = true;
+                sGetIdentifierMethod = UserHandle.class.getMethod("getIdentifier");
             }
+            if (sGetIdentifierMethod == null) return -1;
+            Object result = sGetIdentifierMethod.invoke(userHandle);
+            return result instanceof Integer ? (Integer) result : -1;
         } catch (Throwable ignored) {
+            sGetIdentifierMethod = null;
+            return -1;
         }
-        return -1;
     }
 
     private void addEntry(@NonNull Snapshot snapshot,
@@ -401,9 +386,6 @@ public final class LauncherAppDataProvider {
             && normalizeActivityName(ref).equals(defaultComponent.getClassName())) {
             snapshot.defaultByPackage.put(ref.packageName, entry);
         }
-        if (entry.icon != null) {
-            snapshot.iconById.put(ref.stableId(), entry.icon);
-        }
         char key = normalizeLetter(entry.label.isEmpty() ? '#' : entry.label.charAt(0));
         List<LauncherAppEntry> bucket = snapshot.letterBuckets.get(key);
         if (bucket == null) {
@@ -421,25 +403,16 @@ public final class LauncherAppDataProvider {
         return ref.activityName;
     }
 
-    @NonNull
-    private List<LauncherAppEntry> withCachedIcons(@NonNull List<LauncherAppEntry> source) {
-        List<LauncherAppEntry> out = new ArrayList<>(source.size());
-        for (LauncherAppEntry entry : source) {
-            out.add(withCachedIcon(entry));
+    private void cacheLetterBuckets(@NonNull Map<Character, List<LauncherAppEntry>> source) {
+        letterBuckets.clear();
+        for (Map.Entry<Character, List<LauncherAppEntry>> entry : source.entrySet()) {
+            letterBuckets.put(entry.getKey(), immutableEntryList(entry.getValue()));
         }
-        return out;
     }
 
     @NonNull
-    private LauncherAppEntry withCachedIcon(@NonNull LauncherAppEntry entry) {
-        Drawable icon = iconCache.get(entry.appRef.stableId());
-        if (icon == null) {
-            icon = entry.icon;
-        }
-        if (icon == entry.icon) {
-            return entry;
-        }
-        return new LauncherAppEntry(entry.appRef, entry.label, icon, entry.iconPackArtwork);
+    private static List<LauncherAppEntry> immutableEntryList(@NonNull List<LauncherAppEntry> source) {
+        return Collections.unmodifiableList(new ArrayList<>(source));
     }
 
     private static char normalizeLetter(char c) {
@@ -461,6 +434,5 @@ public final class LauncherAppDataProvider {
         final Map<String, LauncherAppEntry> firstByPackage = new HashMap<>();
         final Map<String, LauncherAppEntry> defaultByPackage = new HashMap<>();
         final Map<Character, List<LauncherAppEntry>> letterBuckets = new HashMap<>();
-        final Map<String, Drawable> iconById = new LinkedHashMap<>();
     }
 }

@@ -33,7 +33,7 @@ public class AzScrubRowViewTest {
 
         view.setScrubCallback(new AzScrubRowView.ScrubCallback() {
             @Override
-            public void onScrub(char letter, int selectionIndex, float touchX, float touchY, float rawX, float rawY, AzScrubRowView.GesturePhase phase) {
+            public void onScrub(char letter, int selectionIndex, float touchX, float touchY, float rawX, float rawY, long eventTimeMs, AzScrubRowView.GesturePhase phase) {
                 lastLetter[0] = letter;
                 lastSelection[0] = selectionIndex;
             }
@@ -68,7 +68,7 @@ public class AzScrubRowViewTest {
         final char[] lastLetter = {'?'};
         view.setScrubCallback(new AzScrubRowView.ScrubCallback() {
             @Override
-            public void onScrub(char letter, int selectionIndex, float touchX, float touchY, float rawX, float rawY, AzScrubRowView.GesturePhase phase) {
+            public void onScrub(char letter, int selectionIndex, float touchX, float touchY, float rawX, float rawY, long eventTimeMs, AzScrubRowView.GesturePhase phase) {
                 lastLetter[0] = letter;
             }
 

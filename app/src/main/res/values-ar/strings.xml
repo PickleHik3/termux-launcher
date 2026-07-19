@@ -36,7 +36,6 @@
     <string name="action_style_terminal">نمط</string>
     <string name="action_font_and_color">الخط واللون</string>
     <string name="action_set_background_image">حدد صورة للخلفية</string>
-    <string name="action_remove_background_image">إزالة صورة الخلفية</string>
     <string name="action_toggle_keep_screen_on">أبق الشاشة شغالة</string>
     <string name="action_open_help">مساعدة</string>
     <string name="action_open_settings">الإعدادات</string>
@@ -133,7 +132,6 @@
     <string name="termux_terminal_view_terminal_margin_adjustment_title">ضبط هوامش الترمنل</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_on">‎سيتم تمكين ضبط هوامش الترمنل. يجب تمكينه لمحاولة إصلاح المشكلة التي تؤدي إلى تغطية لوحة المفاتيح الناعمة لجزء من المفاتيح الإضافية/عرض الترمنل. إذا تسبب في وميض الشاشة على أجهزتكم، فعليكم بتعطيله. (الافتراضي)</string>
     <string name="termux_monet_background_enabled_off">سيتم تعطيل خلفية محطة Monet. تحويل الخلفية الطرفية إلى مونيه (افتراضي)</string>
-    <string name="termux_extrakeys_header">فئة المفاتيح الإضافية</string>
     <string name="termux_extrakeys_blur_enabled_title">مفاتيح إضافية خلفية غير واضحة</string>
     <string name="termux_background_image_enabled_off">سيتم تعطيل صورة الخلفية. لتمكينه، تأكد من وجود ملفات عمودية وأفقية مناسبة. إذا كنت تريد تعيين خلفية جديدة، فاضبطها من قائمة السياق بالنقر لفترة طويلة على الترمنل. (تقصير)</string>
     <string name="termux_extrakeys_blur_enabled_on">سيتم تمكين الخلفية غير الواضحة لـ ExtraKeys.</string>

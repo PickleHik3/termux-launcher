@@ -1508,18 +1508,6 @@ public final class TerminalView extends View {
         }
     }
 
-    public synchronized void requestAutoFillUsername() {
-        requestAutoFill(
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? new String[]{View.AUTOFILL_HINT_USERNAME} :
-                null);
-    }
-
-    public synchronized void requestAutoFillPassword() {
-        requestAutoFill(
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? new String[]{View.AUTOFILL_HINT_PASSWORD} :
-            null);
-    }
-
     public synchronized void requestAutoFill(String[] autoFillHints) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         if (autoFillHints == null || autoFillHints.length < 1) return;

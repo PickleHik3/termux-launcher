@@ -17,7 +17,6 @@
     <string name="error_run_command_service_invalid_execution_command_runner">Comando di esecuzione non valido per RunCommandService: `%1$s`</string>
     <string name="msg_disabling_terminal_toolbar">Disabilita la barra degli strumenti del terminale</string>
     <string name="error_run_command_service_mandatory_extra_missing">Parametro obbligatorio mancante per RunCommandService: \"%1$s\"</string>
-    <string name="action_remove_background_image">Rimuovi l\'immagine di sfondo</string>
     <string name="action_toggle_keep_screen_on">Mantieni lo schermo acceso</string>
     <string name="termux_plugin_error_notifications_enabled_on">Mostra avvisi e notifiche per gli errori del plugin. (Predefinito)</string>
     <string name="termux_style_preferences_summary">Preferenze per l\'aspetto e la personalizzazione di &TERMUX_APP_NAME;</string>

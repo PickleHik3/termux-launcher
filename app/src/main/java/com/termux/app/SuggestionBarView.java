@@ -19,7 +19,6 @@ import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.res.Resources;
-import android.content.res.ColorStateList;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.content.pm.ShortcutInfo;
@@ -92,9 +91,6 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
-import androidx.recyclerview.widget.ItemTouchHelper;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
 
 import com.github.mmin18.widget.RealtimeBlurView;
 import com.google.android.material.color.MaterialColors;
@@ -158,6 +154,10 @@ public final class SuggestionBarView extends GridLayout {
     private static final float PICKUP_X_AXIS_SLOP_FACTOR = 0.9f;
     private static final float PICKUP_Y_INTENT_SLOP_FACTOR = 1.8f;
     private static final float MENU_SELECTION_ARM_SLOP_FACTOR = 0.8f;
+    private static final float PAGE_SWIPE_COMMIT_DISTANCE_DP = 42f;
+    private static final float PAGE_SWIPE_COMMIT_WIDTH_RATIO = 0.30f;
+    private static final float PAGE_SWIPE_FLING_MIN_DISPLACEMENT_DP = 28f;
+    private static final float PAGE_SWIPE_FLING_VELOCITY_PX_PER_SEC = 900f;
     private static final int PINNED_FOLDER_FILL_COLOR = 0x26FFFFFF;
     private static final int PINNED_FOLDER_STROKE_COLOR = 0x33FFFFFF;
 
@@ -200,6 +200,11 @@ public final class SuggestionBarView extends GridLayout {
     private final Paint swipePreviewBadgeStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint swipePreviewFolderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint swipePreviewFolderStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Rect swipePreviewIconBounds = new Rect();
+    private final int[] azDragRowLocation = new int[2];
+    private final int[] azDragViewLocation = new int[2];
+    private final RectF azDragIconBoundsScratch = new RectF();
+    private final RectF azDragOutlineBoundsScratch = new RectF();
 
     private LauncherAppDataProvider appDataProvider;
     private LauncherConfigRepository configRepository;
@@ -240,6 +245,7 @@ public final class SuggestionBarView extends GridLayout {
     private int swipePreviewPageIndex = -1;
     @NonNull private List<LauncherAppEntry> swipePreviewEntries = Collections.emptyList();
     @NonNull private List<PinnedItem> swipePreviewPinnedItems = Collections.emptyList();
+    @NonNull private List<List<LauncherAppEntry>> swipePreviewFolderEntries = Collections.emptyList();
     @Nullable private ValueAnimator swipePreviewReboundAnimator;
     private VelocityTracker swipeVelocityTracker;
     private boolean pageSwitchAnimating = false;
@@ -1049,10 +1055,9 @@ public final class SuggestionBarView extends GridLayout {
             return new AzDragFocusResult(null, null, null, null, null, AZ_EDGE_NONE, pageLeft, pageRight);
         }
 
-        int[] location = new int[2];
-        getLocationOnScreen(location);
-        float localX = rawX - location[0];
-        float localY = rawY - location[1];
+        getLocationOnScreen(azDragRowLocation);
+        float localX = rawX - azDragRowLocation[0];
+        float localY = rawY - azDragRowLocation[1];
         float width = Math.max(1f, getWidth());
         float height = Math.max(1f, getHeight());
 
@@ -1074,7 +1079,7 @@ public final class SuggestionBarView extends GridLayout {
         int candidateSlot = clamp((int) ((clampedX / width) * azRenderedSlotCount), 0, azRenderedSlotCount - 1);
         int slot = candidateSlot;
         if (lastAzResolvedSlot >= 0 && lastAzResolvedSlot < azRenderedSlotCount && candidateSlot != lastAzResolvedSlot) {
-            float hysteresis = slotWidth * 0.22f;
+            float hysteresis = slotWidth * AzScrubRowView.LETTER_SLOT_HYSTERESIS_RATIO;
             if (candidateSlot > lastAzResolvedSlot) {
                 float boundary = (lastAzResolvedSlot + 1) * slotWidth;
                 if (clampedX < boundary + hysteresis) {
@@ -1097,30 +1102,41 @@ public final class SuggestionBarView extends GridLayout {
         String key = stableEntryKey(entry);
         WeakReference<View> viewRef = azRenderedEntryTargets.get(key);
         View launchView = viewRef == null ? null : viewRef.get();
-        RectF bounds = null;
+        boolean hasBounds = false;
         FocusOutlineRenderer.Visual outlineVisual = null;
-        RectF outlineBounds = null;
+        boolean hasOutlineBounds = false;
         if (launchView != null && launchView.isAttachedToWindow()) {
-            bounds = resolveVisibleIconBoundsOnScreen(launchView);
+            resolveVisibleIconBoundsOnScreen(launchView, azDragIconBoundsScratch);
+            hasBounds = !azDragIconBoundsScratch.isEmpty();
             if (launchView instanceof ImageView) {
                 FocusOutlineRenderer.Visual visual = resolveFocusOutlineVisual((ImageView) launchView);
                 if (visual != null) {
-                    int[] viewLoc = new int[2];
-                    launchView.getLocationOnScreen(viewLoc);
+                    launchView.getLocationOnScreen(azDragViewLocation);
                     outlineVisual = visual;
-                    outlineBounds = new RectF(
-                        viewLoc[0] - visual.outerPadding,
-                        viewLoc[1] - visual.outerPadding,
-                        viewLoc[0] + visual.sourceWidth + visual.outerPadding,
-                        viewLoc[1] + visual.sourceHeight + visual.outerPadding
+                    azDragOutlineBoundsScratch.set(
+                        azDragViewLocation[0] - visual.outerPadding,
+                        azDragViewLocation[1] - visual.outerPadding,
+                        azDragViewLocation[0] + visual.sourceWidth + visual.outerPadding,
+                        azDragViewLocation[1] + visual.sourceHeight + visual.outerPadding
                     );
+                    hasOutlineBounds = true;
                 }
             }
         }
-        if (bounds == null) {
-            bounds = approximateAzSlotIconBounds(slot, azRenderedSlotCount, location, width, height);
+        if (!hasBounds) {
+            approximateAzSlotIconBounds(
+                slot, azRenderedSlotCount, azDragRowLocation, width, height, azDragIconBoundsScratch);
         }
-        return new AzDragFocusResult(entry, bounds, outlineVisual, outlineBounds, launchView, edge, pageLeft, pageRight);
+        return new AzDragFocusResult(
+            entry,
+            new RectF(azDragIconBoundsScratch),
+            outlineVisual,
+            hasOutlineBounds ? new RectF(azDragOutlineBoundsScratch) : null,
+            launchView,
+            edge,
+            pageLeft,
+            pageRight
+        );
     }
 
     @Nullable
@@ -1167,28 +1183,26 @@ public final class SuggestionBarView extends GridLayout {
      * and legacy/custom Android icons commonly include asymmetric transparent padding; using the
      * whole view makes the focus ring oversized and visibly off-center.
      */
-    @Nullable
-    private RectF resolveVisibleIconBoundsOnScreen(@NonNull View launchView) {
-        int[] viewLoc = new int[2];
-        launchView.getLocationOnScreen(viewLoc);
-        RectF fallback = new RectF(
-            viewLoc[0],
-            viewLoc[1],
-            viewLoc[0] + launchView.getWidth(),
-            viewLoc[1] + launchView.getHeight()
+    private void resolveVisibleIconBoundsOnScreen(@NonNull View launchView, @NonNull RectF out) {
+        launchView.getLocationOnScreen(azDragViewLocation);
+        out.set(
+            azDragViewLocation[0],
+            azDragViewLocation[1],
+            azDragViewLocation[0] + launchView.getWidth(),
+            azDragViewLocation[1] + launchView.getHeight()
         );
         if (!(launchView instanceof ImageView)) {
-            return fallback;
+            return;
         }
 
         ImageView imageView = (ImageView) launchView;
         Drawable drawable = imageView.getDrawable();
         if (drawable == null) {
-            return fallback;
+            return;
         }
         Rect drawableBounds = drawable.getBounds();
         if (drawableBounds.isEmpty()) {
-            return fallback;
+            return;
         }
 
         RectF normalizedVisibleBounds = drawableVisibleBoundsCache.get(drawable);
@@ -1196,18 +1210,20 @@ public final class SuggestionBarView extends GridLayout {
             normalizedVisibleBounds = measureDrawableVisibleBounds(drawable);
             drawableVisibleBoundsCache.put(drawable, normalizedVisibleBounds);
         }
-        RectF mapped = new RectF(
+        azDragOutlineBoundsScratch.set(
             drawableBounds.left + (normalizedVisibleBounds.left * drawableBounds.width()),
             drawableBounds.top + (normalizedVisibleBounds.top * drawableBounds.height()),
             drawableBounds.left + (normalizedVisibleBounds.right * drawableBounds.width()),
             drawableBounds.top + (normalizedVisibleBounds.bottom * drawableBounds.height())
         );
-        imageView.getImageMatrix().mapRect(mapped);
-        mapped.offset(
-            viewLoc[0] + imageView.getPaddingLeft(),
-            viewLoc[1] + imageView.getPaddingTop()
+        imageView.getImageMatrix().mapRect(azDragOutlineBoundsScratch);
+        azDragOutlineBoundsScratch.offset(
+            azDragViewLocation[0] + imageView.getPaddingLeft(),
+            azDragViewLocation[1] + imageView.getPaddingTop()
         );
-        return mapped.width() > 0f && mapped.height() > 0f ? mapped : fallback;
+        if (azDragOutlineBoundsScratch.width() > 0f && azDragOutlineBoundsScratch.height() > 0f) {
+            out.set(azDragOutlineBoundsScratch);
+        }
     }
 
     @NonNull
@@ -1283,14 +1299,14 @@ public final class SuggestionBarView extends GridLayout {
             : new Rect();
     }
 
-    @NonNull
-    private RectF approximateAzSlotIconBounds(int slot, int slotCount, @NonNull int[] rowLocation, float width, float height) {
+    private void approximateAzSlotIconBounds(int slot, int slotCount, @NonNull int[] rowLocation,
+                                             float width, float height, @NonNull RectF out) {
         float safeSlotCount = Math.max(1, slotCount);
         float slotWidth = width / safeSlotCount;
         float cx = (slotWidth * slot) + (slotWidth * 0.5f);
         float cy = height * 0.5f;
         float size = iconSizePx();
-        return new RectF(
+        out.set(
             rowLocation[0] + cx - (size * 0.5f),
             rowLocation[1] + cy - (size * 0.5f),
             rowLocation[0] + cx + (size * 0.5f),
@@ -1529,8 +1545,12 @@ public final class SuggestionBarView extends GridLayout {
             float dx = event.getX() - swipeDownX;
             float dy = event.getY() - swipeDownY;
             float vx = swipeVelocityTracker == null ? 0f : swipeVelocityTracker.getXVelocity();
-            float threshold = dp(28);
-            boolean swipeQualified = Math.abs(dx) > threshold || Math.abs(vx) > 900f;
+            float commitDistance = resolvePageSwipeCommitDistancePx();
+            boolean distanceCommit = Math.abs(dx) > commitDistance;
+            boolean velocityCommit = Math.abs(dx) >= dp(PAGE_SWIPE_FLING_MIN_DISPLACEMENT_DP)
+                && Math.abs(vx) > PAGE_SWIPE_FLING_VELOCITY_PX_PER_SEC
+                && Math.signum(dx) == Math.signum(vx);
+            boolean swipeQualified = distanceCommit || velocityCommit;
             if (swipeQualified && Math.abs(dx) > Math.abs(dy) * 1.2f &&
                 TextUtils.isEmpty(lastInput.trim())) {
                 int pageDelta = dx < 0 ? 1 : -1;
@@ -2794,321 +2814,6 @@ public final class SuggestionBarView extends GridLayout {
         });
     }
 
-    private void showUnifiedPinEditor(final int slotIndex, @Nullable final PinnedItem pinnedAtSlot) {
-        if (configRepository == null) return;
-        if (allApps == null || allApps.isEmpty()) reloadAllApps();
-
-        BottomSheetDialog dialog = new BottomSheetDialog(getContext());
-        LinearLayout root = new LinearLayout(getContext());
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), dp(16), dp(20), dp(16));
-        root.setClipToOutline(true);
-        GradientDrawable sheetBg = new GradientDrawable();
-        sheetBg.setCornerRadii(new float[] {
-            dp(28), dp(28), dp(28), dp(28),
-            dp(12), dp(12), dp(12), dp(12)
-        });
-        sheetBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xFA));
-        sheetBg.setStroke(dp(1), withAlphaComponent(resolveLauncherOutlineColor(), 0x55));
-        root.setBackground(sheetBg);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            root.setElevation(dp(16));
-        }
-
-        final List<LauncherAppEntry> source = new ArrayList<>(allApps);
-        final List<PinOption> options = buildPinOptions(source, pinnedItems);
-
-        final Set<String> selectedIds = new LinkedHashSet<>();
-        final List<PinnedItem> orderedSelected = new ArrayList<>();
-        for (PinnedItem item : pinnedItems) {
-            String stable = stableIdForPinnedItem(item);
-            if (stable == null || !selectedIds.add(stable)) continue;
-            orderedSelected.add(clonePinnedItem(item));
-        }
-
-        TextView title = new TextView(getContext());
-        title.setText("Edit pinned apps");
-        title.setTextColor(resolveLauncherTextColor());
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setTextSize(22f);
-        title.setIncludeFontPadding(false);
-
-        TextView subtitle = new TextView(getContext());
-        subtitle.setText("Choose apps, drag to reorder, or create a folder from the selected pins.");
-        subtitle.setTextColor(resolveLauncherSubtleTextColor());
-        subtitle.setTextSize(13f);
-        subtitle.setPadding(0, dp(6), 0, dp(16));
-
-        TextView selectedTitle = new TextView(getContext());
-        selectedTitle.setText("Pinned order");
-        selectedTitle.setTextColor(resolveLauncherTextColor());
-        selectedTitle.setTypeface(Typeface.DEFAULT_BOLD);
-        selectedTitle.setTextSize(13f);
-        selectedTitle.setAllCaps(true);
-        selectedTitle.setLetterSpacing(0.08f);
-        selectedTitle.setPadding(0, 0, 0, dp(8));
-
-        final ListView[] listViewHolder = new ListView[1];
-        final OrderedPinnedAdapter[] orderedAdapterHolder = new OrderedPinnedAdapter[1];
-        orderedAdapterHolder[0] = new OrderedPinnedAdapter(source, orderedSelected, position -> {
-            if (position < 0 || position >= orderedSelected.size()) return;
-            String stable = stableIdForPinnedItem(orderedSelected.get(position));
-            orderedSelected.remove(position);
-            if (stable != null) selectedIds.remove(stable);
-            orderedAdapterHolder[0].notifyDataSetChanged();
-            ListView lv = listViewHolder[0];
-            if (lv != null) syncListChecks(lv, options, selectedIds);
-        });
-        final OrderedPinnedAdapter orderedAdapter = orderedAdapterHolder[0];
-        RecyclerView orderedRecycler = new RecyclerView(getContext());
-        orderedRecycler.setLayoutManager(new LinearLayoutManager(getContext()));
-        orderedRecycler.setAdapter(orderedAdapter);
-        orderedRecycler.setOverScrollMode(OVER_SCROLL_NEVER);
-        orderedRecycler.setClipToPadding(false);
-        orderedRecycler.setPadding(0, dp(4), 0, dp(4));
-        GradientDrawable orderedBg = new GradientDrawable();
-        orderedBg.setCornerRadius(dp(18));
-        orderedBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xAA));
-        orderedBg.setStroke(dp(1), withAlphaComponent(resolveLauncherOutlineColor(), 0x44));
-        orderedRecycler.setBackground(orderedBg);
-
-        ItemTouchHelper touchHelper = new ItemTouchHelper(new ItemTouchHelper.SimpleCallback(
-            ItemTouchHelper.UP | ItemTouchHelper.DOWN,
-            ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT) {
-            @Override
-            public boolean onMove(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder, @NonNull RecyclerView.ViewHolder target) {
-                int from = viewHolder.getAdapterPosition();
-                int to = target.getAdapterPosition();
-                if (from == RecyclerView.NO_POSITION || to == RecyclerView.NO_POSITION) {
-                    return false;
-                }
-                if (from < 0 || to < 0 || from >= orderedSelected.size() || to >= orderedSelected.size()) {
-                    return false;
-                }
-                Collections.swap(orderedSelected, from, to);
-                orderedAdapter.notifyItemMoved(from, to);
-                return true;
-            }
-
-            @Override
-            public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
-                int pos = viewHolder.getAdapterPosition();
-                if (pos == RecyclerView.NO_POSITION) return;
-                if (pos < 0 || pos >= orderedSelected.size()) return;
-                String stable = stableIdForPinnedItem(orderedSelected.get(pos));
-                orderedSelected.remove(pos);
-                if (stable != null) selectedIds.remove(stable);
-                orderedAdapter.notifyItemRemoved(pos);
-                ListView lv = listViewHolder[0];
-                if (lv != null) syncListChecks(lv, options, selectedIds);
-            }
-        });
-        touchHelper.attachToRecyclerView(orderedRecycler);
-
-        TextView allAppsTitle = new TextView(getContext());
-        allAppsTitle.setText("Apps");
-        allAppsTitle.setTextColor(resolveLauncherTextColor());
-        allAppsTitle.setTypeface(Typeface.DEFAULT_BOLD);
-        allAppsTitle.setTextSize(13f);
-        allAppsTitle.setAllCaps(true);
-        allAppsTitle.setLetterSpacing(0.08f);
-        allAppsTitle.setPadding(0, dp(18), 0, dp(8));
-
-        EditText searchInput = new EditText(getContext());
-        searchInput.setHint("Search apps");
-        searchInput.setSingleLine(true);
-        searchInput.setTextColor(resolveLauncherTextColor());
-        searchInput.setHintTextColor(resolveLauncherSubtleTextColor());
-        searchInput.setTextSize(15f);
-        searchInput.setMinHeight(dp(48));
-        searchInput.setPadding(dp(14), 0, dp(14), 0);
-        GradientDrawable searchBg = new GradientDrawable();
-        searchBg.setCornerRadius(dp(16));
-        searchBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xC8));
-        searchBg.setStroke(dp(1), withAlphaComponent(resolveLauncherOutlineColor(), 0x55));
-        searchInput.setBackground(searchBg);
-
-        ListView listView = new ListView(getContext());
-        listViewHolder[0] = listView;
-        listView.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE);
-        listView.setDivider(null);
-        listView.setDividerHeight(0);
-        listView.setCacheColorHint(0x00000000);
-        listView.setSelector(new ColorDrawable(0x00000000));
-        listView.setClipToPadding(false);
-        listView.setPadding(0, dp(6), 0, dp(6));
-        GradientDrawable listBg = new GradientDrawable();
-        listBg.setCornerRadius(dp(18));
-        listBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0x88));
-        listBg.setStroke(dp(1), withAlphaComponent(resolveLauncherOutlineColor(), 0x33));
-        listView.setBackground(listBg);
-        final List<PinOption> filteredOptions = new ArrayList<>(options);
-        final List<String> filteredLabels = new ArrayList<>();
-        for (PinOption option : options) filteredLabels.add(option.label);
-        ArrayAdapter<String> adapter = new ArrayAdapter<String>(getContext(), android.R.layout.simple_list_item_multiple_choice, filteredLabels) {
-            @NonNull
-            @Override
-            public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
-                View view = super.getView(position, convertView, parent);
-                if (view instanceof TextView) {
-                    TextView textView = (TextView) view;
-                    textView.setTextColor(resolveLauncherTextColor());
-                    textView.setTextSize(15f);
-                    textView.setMinHeight(dp(46));
-                    textView.setGravity(Gravity.CENTER_VERTICAL);
-                    textView.setPadding(dp(14), 0, dp(14), 0);
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && textView instanceof android.widget.CheckedTextView) {
-                        int[][] states = new int[][] {
-                            new int[] {android.R.attr.state_checked},
-                            new int[] {}
-                        };
-                        int[] colors = new int[] {
-                            MaterialColors.getColor(SuggestionBarView.this, com.google.android.material.R.attr.colorPrimary,
-                                ContextCompat.getColor(getContext(), R.color.termux_accent_container)),
-                            resolveLauncherSubtleTextColor()
-                        };
-                        ((android.widget.CheckedTextView) textView).setCheckMarkTintList(new ColorStateList(states, colors));
-                    }
-                }
-                GradientDrawable rowBg = new GradientDrawable();
-                rowBg.setCornerRadius(dp(14));
-                rowBg.setColor(listView.isItemChecked(position)
-                    ? blendColors(withAlphaComponent(inheritedTintColor, 0x33), withAlphaComponent(resolveLauncherPanelColor(), 0xCC), 0.45f)
-                    : 0x00000000);
-                view.setBackground(rowBg);
-                return view;
-            }
-        };
-        listView.setAdapter(adapter);
-        listView.setOnTouchListener((v, event) -> {
-            v.getParent().requestDisallowInterceptTouchEvent(true);
-            return false;
-        });
-
-        syncListChecksFiltered(listView, filteredOptions, selectedIds);
-
-        searchInput.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                String query = stringValue(s).trim();
-                filteredOptions.clear();
-                filteredLabels.clear();
-                for (PinOption option : options) {
-                    if (matchesLookupQuery(query, option.searchKey)) {
-                        filteredOptions.add(option);
-                        filteredLabels.add(option.label);
-                    }
-                }
-                adapter.notifyDataSetChanged();
-                syncListChecksFiltered(listView, filteredOptions, selectedIds);
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) { }
-        });
-
-        listView.setOnItemClickListener((parent, view, position, id) -> {
-            if (position < 0 || position >= filteredOptions.size()) return;
-            PinOption option = filteredOptions.get(position);
-            String stable = option.id;
-            if (listView.isItemChecked(position)) {
-                if (selectedIds.contains(stable)) return;
-                selectedIds.add(stable);
-                orderedSelected.add(clonePinnedItem(option.item));
-                orderedAdapter.notifyDataSetChanged();
-            } else {
-                selectedIds.remove(stable);
-                removePinnedByStableId(orderedSelected, stable);
-                orderedAdapter.notifyDataSetChanged();
-            }
-            syncListChecksFiltered(listView, filteredOptions, selectedIds);
-            adapter.notifyDataSetChanged();
-        });
-
-        LinearLayout buttons = new LinearLayout(getContext());
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        buttons.setGravity(Gravity.CENTER_VERTICAL);
-
-        ImageButton folderAction = new ImageButton(getContext());
-        folderAction.setImageResource(R.drawable.ic_create_new_folder_24);
-        folderAction.setContentDescription("Create folder at this slot");
-        styleIconButton(folderAction, dp(6));
-        GradientDrawable folderActionBg = new GradientDrawable();
-        folderActionBg.setShape(GradientDrawable.OVAL);
-        folderActionBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xD8));
-        folderActionBg.setStroke(dp(1), withAlphaComponent(resolveLauncherOutlineColor(), 0x55));
-        folderAction.setBackground(folderActionBg);
-
-        Button cancel = new Button(getContext());
-        cancel.setText("Cancel");
-        styleGhostButton(cancel);
-        cancel.setOnClickListener(v -> dialog.dismiss());
-
-        Button save = new Button(getContext());
-        save.setText("Save");
-        styleGhostButton(save);
-
-        final boolean[] folderMode = new boolean[] {false};
-        final Runnable refreshFolderModeUi = () -> {
-            save.setText(folderMode[0] ? "Create" : "Save");
-            folderAction.setAlpha(folderMode[0] ? 1f : 0.6f);
-        };
-        folderAction.setOnClickListener(v -> {
-            folderMode[0] = !folderMode[0];
-            refreshFolderModeUi.run();
-        });
-        refreshFolderModeUi.run();
-
-        save.setOnClickListener(v -> {
-            if (folderMode[0]) {
-                List<AppRef> folderApps = new ArrayList<>();
-                for (PinnedItem item : orderedSelected) {
-                    if (item instanceof PinnedAppItem) {
-                        folderApps.add(((PinnedAppItem) item).appRef);
-                    }
-                }
-                createOrReplaceFolderAtSlot(slotIndex, folderApps);
-            } else {
-                applyPinnedSelection(orderedSelected);
-            }
-            dialog.dismiss();
-            reloadWithInput("", lastTerminalView);
-        });
-
-        LinearLayout.LayoutParams folderActionParams = new LinearLayout.LayoutParams(dp(30), dp(30));
-        folderActionParams.setMargins(0, 0, dp(12), 0);
-        buttons.addView(folderAction, folderActionParams);
-        buttons.addView(new View(getContext()), new LinearLayout.LayoutParams(0, 0, 1f));
-        buttons.addView(cancel);
-        buttons.addView(save);
-
-        orderedRecycler.setOnTouchListener((v, event) -> {
-            v.getParent().requestDisallowInterceptTouchEvent(true);
-            return false;
-        });
-
-        root.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(subtitle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(selectedTitle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(orderedRecycler, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(160)));
-        root.addView(allAppsTitle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        LinearLayout.LayoutParams searchParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        searchParams.setMargins(0, 0, 0, dp(10));
-        root.addView(searchInput, searchParams);
-        root.addView(listView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(250)));
-        root.addView(buttons, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        dialog.setContentView(root);
-        dialog.show();
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(0x00000000));
-            dialog.getWindow().setDimAmount(0.35f);
-        }
-    }
-
     private void showFolderContentsEditor(final int folderIndex, @NonNull final PinnedFolderItem folder) {
         if (allApps == null || allApps.isEmpty()) reloadAllApps();
 
@@ -3238,31 +2943,6 @@ public final class SuggestionBarView extends GridLayout {
         dialog.show();
     }
 
-    private void createOrReplaceFolderAtSlot(int slotIndex, @NonNull List<AppRef> selectedOrdered) {
-        List<PinnedAppItem> normalized = normalizePinnedAppItemsFromRefs(selectedOrdered);
-        if (normalized.isEmpty()) {
-            return;
-        }
-        if (normalized.size() == 1) {
-            PinnedAppItem appItem = normalized.get(0);
-            if (slotIndex >= 0 && slotIndex < pinnedItems.size()) {
-                pinnedItems.set(slotIndex, appItem);
-            } else {
-                pinnedItems.add(appItem);
-            }
-            persistPinsAndReload();
-            return;
-        }
-        PinnedFolderItem folder = new PinnedFolderItem(UUID.randomUUID().toString(), "Folder");
-        folder.apps.addAll(normalized);
-        if (slotIndex >= 0 && slotIndex < pinnedItems.size()) {
-            pinnedItems.set(slotIndex, folder);
-        } else {
-            pinnedItems.add(folder);
-        }
-        persistPinsAndReload();
-    }
-
     private View createFolderPreviewButton(@NonNull PinnedFolderItem folder) {
         NotificationBadgeFrame root = new NotificationBadgeFrame(getContext());
         Set<String> folderPackages = new HashSet<>();
@@ -3323,55 +3003,6 @@ public final class SuggestionBarView extends GridLayout {
 
     private int pinnedFolderMiniIconMarginPx() {
         return dp(1);
-    }
-
-    private void applyPinnedSelection(@NonNull List<PinnedItem> selectedOrdered) {
-        List<PinnedItem> rebuilt = new ArrayList<>();
-        for (PinnedItem item : selectedOrdered) {
-            if (item == null) continue;
-            rebuilt.add(clonePinnedItem(item));
-        }
-        pinnedItems = rebuilt;
-        configRepository.savePinnedItems(pinnedItems);
-    }
-
-    private void showPinnedAppOptions(int index, PinnedAppItem item) {
-        String[] options = new String[] {
-            "Replace app",
-            "Change icon",
-            "Reset icon",
-            "Unpin",
-            "Move to folder",
-            "Create folder"
-        };
-
-        new MaterialAlertDialogBuilder(getContext())
-            .setTitle("Pinned app")
-            .setItems(options, (dialog, which) -> {
-                switch (which) {
-                    case 0:
-                        showReplacePinnedApp(index);
-                        break;
-                    case 1:
-                        showPinnedIconPackPicker(index, item);
-                        break;
-                    case 2:
-                        resetPinnedIcon(index, item);
-                        break;
-                    case 3:
-                        removePinnedAt(index);
-                        break;
-                    case 4:
-                        showMovePinnedAppToFolder(index, item);
-                        break;
-                    case 5:
-                        showCreateFolderWithSeed(index, item);
-                        break;
-                    default:
-                        break;
-                }
-            })
-            .show();
     }
 
     private void resetPinnedIcon(int index, @NonNull PinnedAppItem item) {
@@ -3740,37 +3371,6 @@ public final class SuggestionBarView extends GridLayout {
             labelView.setText(item.label);
             return cell;
         }
-    }
-
-    private void showFolderItemOptions(int index, PinnedFolderItem folder) {
-        String[] options = new String[] {
-            "Open folder",
-            "Edit folder apps",
-            "Folder settings",
-            "Unpin folder"
-        };
-
-        new MaterialAlertDialogBuilder(getContext())
-            .setTitle(folder.title)
-            .setItems(options, (dialog, which) -> {
-                switch (which) {
-                    case 0:
-                        showFolderPopup(folder, null);
-                        break;
-                    case 1:
-                        showFolderAppEditor(folder);
-                        break;
-                    case 2:
-                        showFolderSettings(folder);
-                        break;
-                    case 3:
-                        removePinnedAt(index);
-                        break;
-                    default:
-                        break;
-                }
-            })
-            .show();
     }
 
     private void showReplacePinnedApp(int index) {
@@ -6081,129 +5681,6 @@ public final class SuggestionBarView extends GridLayout {
         return displayLabels.toArray(new String[0]);
     }
 
-    private static final class OrderedPinnedAdapter extends RecyclerView.Adapter<OrderedPinnedAdapter.RowHolder> {
-        interface DeleteCallback {
-            void onDelete(int position);
-        }
-
-        private final List<LauncherAppEntry> source;
-        private final List<PinnedItem> ordered;
-        private final DeleteCallback deleteCallback;
-
-        OrderedPinnedAdapter(List<LauncherAppEntry> source, List<PinnedItem> ordered, DeleteCallback deleteCallback) {
-            this.source = source;
-            this.ordered = ordered;
-            this.deleteCallback = deleteCallback;
-        }
-
-        @NonNull
-        @Override
-        public RowHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            LinearLayout row = new LinearLayout(parent.getContext());
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(dpStatic(parent, 6), dpStatic(parent, 8), dpStatic(parent, 4), dpStatic(parent, 8));
-            final int textColor = resolveLauncherTextColor(parent);
-
-            ImageView drag = new ImageView(parent.getContext());
-            drag.setImageResource(R.drawable.ic_drag_indicator_24);
-            drag.setColorFilter(textColor);
-            LinearLayout.LayoutParams dragParams = new LinearLayout.LayoutParams(dpStatic(parent, 20), dpStatic(parent, 20));
-            dragParams.setMargins(0, 0, dpStatic(parent, 8), 0);
-            row.addView(drag, dragParams);
-
-            ImageView folder = new ImageView(parent.getContext());
-            folder.setImageResource(R.drawable.ic_folder_24);
-            folder.setColorFilter(textColor);
-            LinearLayout.LayoutParams folderParams = new LinearLayout.LayoutParams(dpStatic(parent, 18), dpStatic(parent, 18));
-            folderParams.setMargins(0, 0, dpStatic(parent, 6), 0);
-            row.addView(folder, folderParams);
-
-            TextView label = new TextView(parent.getContext());
-            label.setTextColor(textColor);
-            label.setSingleLine(true);
-            label.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-            ImageButton delete = new ImageButton(parent.getContext());
-            delete.setImageResource(R.drawable.ic_delete_sweep_24);
-            delete.setColorFilter(textColor);
-            delete.setBackgroundColor(0x00000000);
-            delete.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-            delete.setPadding(dpStatic(parent, 2), dpStatic(parent, 2), dpStatic(parent, 2), dpStatic(parent, 2));
-            delete.setLayoutParams(new LinearLayout.LayoutParams(dpStatic(parent, 24), dpStatic(parent, 24)));
-
-            row.addView(label);
-            row.addView(delete);
-            return new RowHolder(row, label, folder, delete);
-        }
-
-        @Override
-        public void onBindViewHolder(@NonNull RowHolder holder, int position) {
-            PinnedItem item = ordered.get(position);
-            holder.label.setText(resolveLabel(source, item));
-            holder.folder.setVisibility(item instanceof PinnedFolderItem ? View.VISIBLE : View.GONE);
-            holder.delete.setOnClickListener(v -> {
-                if (deleteCallback != null) {
-                    deleteCallback.onDelete(holder.getAdapterPosition());
-                }
-            });
-        }
-
-        @Override
-        public int getItemCount() {
-            return ordered.size();
-        }
-
-        private static String resolveLabel(List<LauncherAppEntry> source, PinnedItem item) {
-            if (item instanceof PinnedFolderItem) {
-                String title = ((PinnedFolderItem) item).title;
-                return TextUtils.isEmpty(title) ? "Folder" : title;
-            }
-            if (item instanceof PinnedAppItem) {
-                AppRef ref = ((PinnedAppItem) item).appRef;
-                String stable = ref.stableId();
-                for (LauncherAppEntry entry : source) {
-                    if (stable.equals(entry.appRef.stableId()) || entry.appRef.packageName.equals(ref.packageName)) {
-                        return entry.label;
-                    }
-                }
-                return ref.packageName;
-            }
-            return "Pinned item";
-        }
-
-        static final class RowHolder extends RecyclerView.ViewHolder {
-            final TextView label;
-            final ImageView folder;
-            final ImageButton delete;
-
-            RowHolder(@NonNull View itemView, TextView label, ImageView folder, ImageButton delete) {
-                super(itemView);
-                this.label = label;
-                this.folder = folder;
-                this.delete = delete;
-            }
-        }
-
-        private static int dpStatic(@NonNull ViewGroup parent, int value) {
-            return Math.round(value * parent.getResources().getDisplayMetrics().density);
-        }
-    }
-
-    private static final class PinOption {
-        final String id;
-        final String label;
-        final String searchKey;
-        final PinnedItem item;
-
-        PinOption(String id, String label, String searchKey, PinnedItem item) {
-            this.id = id;
-            this.label = label;
-            this.searchKey = searchKey;
-            this.item = item;
-        }
-    }
-
     private static final class MenuActionRow {
         @NonNull final TextView rowView;
         @NonNull final Runnable action;
@@ -6257,17 +5734,6 @@ public final class SuggestionBarView extends GridLayout {
             this.downRawX = downRawX;
             this.downRawY = downRawY;
         }
-    }
-
-    private List<PinOption> buildPinOptions(@NonNull List<LauncherAppEntry> apps, @NonNull List<PinnedItem> currentPinned) {
-        List<PinOption> out = new ArrayList<>();
-        List<String> labels = buildDisplayLabels(apps);
-        for (int i = 0; i < apps.size(); i++) {
-            LauncherAppEntry app = apps.get(i);
-            AppRef ref = resolveForSelectionRef(app.appRef);
-            out.add(new PinOption(ref.stableId(), labels.get(i), buildSearchableAppText(app), new PinnedAppItem(ref)));
-        }
-        return out;
     }
 
     @NonNull
@@ -6371,15 +5837,6 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     @NonNull
-    private List<PinnedAppItem> normalizePinnedAppItemsFromRefs(@NonNull List<AppRef> refs) {
-        List<PinnedAppItem> apps = new ArrayList<>();
-        for (AppRef ref : refs) {
-            apps.add(new PinnedAppItem(ref));
-        }
-        return normalizePinnedAppItems(apps);
-    }
-
-    @NonNull
     private static Map<String, PinnedIconOverride> folderIconOverridesByStableId(@NonNull PinnedFolderItem folder) {
         Map<String, PinnedIconOverride> overrides = new HashMap<>();
         for (PinnedAppItem folderApp : folder.apps) {
@@ -6416,18 +5873,6 @@ public final class SuggestionBarView extends GridLayout {
         }
         folder.apps.add(new PinnedAppItem(resolved, app.iconOverride));
         return true;
-    }
-
-    private static void syncListChecks(@NonNull ListView listView, @NonNull List<PinOption> options, @NonNull Set<String> selectedIds) {
-        for (int i = 0; i < options.size(); i++) {
-            listView.setItemChecked(i, selectedIds.contains(options.get(i).id));
-        }
-    }
-
-    private static void syncListChecksFiltered(@NonNull ListView listView, @NonNull List<PinOption> options, @NonNull Set<String> selectedIds) {
-        for (int i = 0; i < options.size(); i++) {
-            listView.setItemChecked(i, selectedIds.contains(options.get(i).id));
-        }
     }
 
     private static void syncFolderChecks(@NonNull ListView listView, @NonNull List<LauncherAppEntry> apps, @NonNull Set<String> selectedIds) {
@@ -6603,26 +6048,6 @@ public final class SuggestionBarView extends GridLayout {
                     pinnedItems.set(i, new PinnedAppItem(resolveForSelectionRef(surviving.appRef), surviving.iconOverride));
                     break;
                 }
-            }
-        }
-    }
-
-    @Nullable
-    private static String stableIdForPinnedItem(@Nullable PinnedItem item) {
-        if (item instanceof PinnedAppItem) {
-            return ((PinnedAppItem) item).appRef.stableId();
-        }
-        if (item instanceof PinnedFolderItem) {
-            return "folder:" + ((PinnedFolderItem) item).id;
-        }
-        return null;
-    }
-
-    private static void removePinnedByStableId(@NonNull List<PinnedItem> items, @NonNull String stableId) {
-        for (int i = items.size() - 1; i >= 0; i--) {
-            String itemStableId = stableIdForPinnedItem(items.get(i));
-            if (stableId.equals(itemStableId)) {
-                items.remove(i);
             }
         }
     }
@@ -6848,7 +6273,7 @@ public final class SuggestionBarView extends GridLayout {
             return;
         }
         float width = Math.max(1f, getWidth());
-        float commitDistance = Math.max(dp(42f), width * 0.30f);
+        float commitDistance = resolvePageSwipeCommitDistancePx();
         float rawProgress = clamp01(Math.abs(dx) / commitDistance);
         float easedProgress = (float) Math.sin(rawProgress * (Math.PI * 0.5f));
         float resistance = 1f;
@@ -6867,6 +6292,11 @@ public final class SuggestionBarView extends GridLayout {
         swipePagePosition = clampFloat(base + signedProgress, 0f, Math.max(0, pageCount - 1));
         notifyOverflowPagePositionChanged();
         invalidate();
+    }
+
+    private float resolvePageSwipeCommitDistancePx() {
+        return Math.max(dp(PAGE_SWIPE_COMMIT_DISTANCE_DP),
+            Math.max(1f, getWidth()) * PAGE_SWIPE_COMMIT_WIDTH_RATIO);
     }
 
     private boolean hasGesturePageSurface() {
@@ -6894,6 +6324,7 @@ public final class SuggestionBarView extends GridLayout {
             swipePreviewPageIndex = -1;
             swipePreviewEntries = Collections.emptyList();
             swipePreviewPinnedItems = Collections.emptyList();
+            swipePreviewFolderEntries = Collections.emptyList();
             return;
         }
         if (swipePreviewDirection == direction && swipePreviewPageIndex == targetPage && !swipePreviewEntries.isEmpty()) {
@@ -6905,6 +6336,7 @@ public final class SuggestionBarView extends GridLayout {
             ? Collections.emptyList()
             : buildSwipePreviewPinnedItems(targetPage);
         swipePreviewEntries = buildSwipePreviewEntries(targetPage);
+        swipePreviewFolderEntries = buildSwipePreviewFolderEntries(swipePreviewPinnedItems);
     }
 
     private int resolveSwipePreviewTargetPage(int pageDelta) {
@@ -6953,6 +6385,32 @@ public final class SuggestionBarView extends GridLayout {
         return pageItems;
     }
 
+    @NonNull
+    private List<List<LauncherAppEntry>> buildSwipePreviewFolderEntries(
+        @NonNull List<PinnedItem> previewItems
+    ) {
+        if (previewItems.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<List<LauncherAppEntry>> resolved = new ArrayList<>(previewItems.size());
+        for (PinnedItem item : previewItems) {
+            if (!(item instanceof PinnedFolderItem)) {
+                resolved.add(Collections.emptyList());
+                continue;
+            }
+            List<LauncherAppEntry> folderEntries = new ArrayList<>(4);
+            for (PinnedAppItem folderApp : ((PinnedFolderItem) item).apps) {
+                if (folderEntries.size() >= 4) break;
+                LauncherAppEntry entry = resolvePinnedApp(folderApp);
+                if (entry != null && entry.icon != null) {
+                    folderEntries.add(entry);
+                }
+            }
+            resolved.add(folderEntries);
+        }
+        return resolved;
+    }
+
     private void drawSwipePreviewPage(@NonNull Canvas canvas) {
         if (swipePreviewEntries.isEmpty() || swipePreviewDirection == 0 || getWidth() <= 0 || getHeight() <= 0) {
             return;
@@ -6977,7 +6435,10 @@ public final class SuggestionBarView extends GridLayout {
                 ? swipePreviewPinnedItems.get(i)
                 : null;
             if (pinnedItem instanceof PinnedFolderItem) {
-                drawSwipePreviewFolder(canvas, (PinnedFolderItem) pinnedItem, cx, cy, iconSize, previewAlpha);
+                List<LauncherAppEntry> folderEntries = i < swipePreviewFolderEntries.size()
+                    ? swipePreviewFolderEntries.get(i) : Collections.emptyList();
+                drawSwipePreviewFolder(canvas, (PinnedFolderItem) pinnedItem, folderEntries,
+                    cx, cy, iconSize, previewAlpha);
             } else {
                 drawSwipePreviewIcon(canvas, entry, cx, cy, iconSize, previewAlpha);
             }
@@ -6987,6 +6448,7 @@ public final class SuggestionBarView extends GridLayout {
     private void drawSwipePreviewFolder(
         @NonNull Canvas canvas,
         @NonNull PinnedFolderItem folder,
+        @NonNull List<LauncherAppEntry> miniEntries,
         float cx,
         float cy,
         int iconSize,
@@ -7001,14 +6463,6 @@ public final class SuggestionBarView extends GridLayout {
 
         int miniSize = Math.max(dp(9), Math.round(iconSize * 0.42f));
         float miniGap = pinnedFolderMiniIconMarginPx() * 2f;
-        List<LauncherAppEntry> miniEntries = new ArrayList<>();
-        for (PinnedAppItem folderApp : folder.apps) {
-            if (miniEntries.size() >= 4) break;
-            LauncherAppEntry entry = resolvePinnedApp(folderApp);
-            if (entry == null || entry.icon == null) continue;
-            miniEntries.add(entry);
-        }
-
         int count = miniEntries.size();
         if (count == 1) {
             drawSwipePreviewIcon(canvas, miniEntries.get(0), cx, cy, miniSize, alpha, false);
@@ -7072,14 +6526,14 @@ public final class SuggestionBarView extends GridLayout {
         int half = Math.max(1, iconSize / 2);
         int saveAlpha = icon.getAlpha();
         ColorFilter oldFilter = icon.getColorFilter();
-        Rect oldBounds = new Rect(icon.getBounds());
+        swipePreviewIconBounds.set(icon.getBounds());
         icon.setBounds(Math.round(cx) - half, Math.round(cy) - half, Math.round(cx) + half, Math.round(cy) + half);
         icon.setAlpha(alpha);
         icon.setColorFilter(appIconColorFilter);
         icon.draw(canvas);
         icon.setColorFilter(oldFilter);
         icon.setAlpha(saveAlpha);
-        icon.setBounds(oldBounds);
+        icon.setBounds(swipePreviewIconBounds);
         if (showBadge && notificationBadgesEnabled && notificationBadgePackages.contains(entry.appRef.packageName)) {
             drawSwipePreviewBadge(canvas, cx + (iconSize * 0.30f), cy - (iconSize * 0.30f), iconSize);
         }
@@ -7111,6 +6565,7 @@ public final class SuggestionBarView extends GridLayout {
         swipePreviewPageIndex = -1;
         swipePreviewEntries = Collections.emptyList();
         swipePreviewPinnedItems = Collections.emptyList();
+        swipePreviewFolderEntries = Collections.emptyList();
     }
 
     private void runSwipePreviewPageSwitch(
@@ -7679,15 +7134,6 @@ public final class SuggestionBarView extends GridLayout {
         childLayoutPending = false;
         stableLayoutSuppressedSinceUptimeMs = 0L;
         invalidate();
-    }
-
-    private void rerenderCurrentSurface() {
-        if (activeAzLetter != null) {
-            renderButtons(activeAzCandidates, true);
-            captureAzRenderState(activeAzLetter, activeAzPageIndex, Math.max(1, maxButtonCount), activeAzCandidates);
-            return;
-        }
-        reloadWithInput(lastInput, lastTerminalView);
     }
 
     private static float lerp(float start, float end, float t) {

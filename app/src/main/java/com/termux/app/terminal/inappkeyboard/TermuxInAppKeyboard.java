@@ -7,7 +7,6 @@ import android.content.res.Configuration;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
 
@@ -88,6 +87,7 @@ public final class TermuxInAppKeyboard {
     private String mAppliedConfigSignature;
     private String mExtraKeysStoredValue;
     private LayoutModifier.LayoutOptions mLayoutOptions;
+    private final int[] mLaunchWaveLocation = new int[2];
 
     private ShowReason mLastShowReason;
     private HideReason mLastHideReason;
@@ -479,10 +479,9 @@ public final class TermuxInAppKeyboard {
     /** Forwards the default-dock launch wave into the embedded key renderer. */
     public void animateLaunchWave(int color, float originXOnScreen, float originYOnScreen) {
         if (mKeyboardView == null || !isVisible()) return;
-        int[] location = new int[2];
-        mKeyboardView.getLocationOnScreen(location);
-        mKeyboardView.animateLaunchWave(color, originXOnScreen - location[0],
-            originYOnScreen - location[1]);
+        mKeyboardView.getLocationOnScreen(mLaunchWaveLocation);
+        mKeyboardView.animateLaunchWave(color, originXOnScreen - mLaunchWaveLocation[0],
+            originYOnScreen - mLaunchWaveLocation[1]);
     }
 
     /** Fades a launch modulation before keyboard or dock geometry is replaced. */
@@ -503,10 +502,6 @@ public final class TermuxInAppKeyboard {
             if (terminalView == null || activity == null)
                 return;
 
-            Log.i("KBTRACE", "suppress before visible=" + mVisible
-                + " container=" + requireContainer().getVisibility()
-                + " flags=0x" + Integer.toHexString(activity.getWindow().getAttributes().flags)
-                + " soft=0x" + Integer.toHexString(activity.getWindow().getAttributes().softInputMode));
             KeyboardUtils.hideSoftKeyboard(activity, terminalView);
             KeyboardUtils.setDisableSoftKeyboardFlags(activity);
             int softInputMode = activity.getWindow().getAttributes().softInputMode;
@@ -515,10 +510,6 @@ public final class TermuxInAppKeyboard {
                 | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
                 | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING;
             activity.getWindow().setSoftInputMode(softInputMode);
-            Log.i("KBTRACE", "suppress after visible=" + mVisible
-                + " container=" + requireContainer().getVisibility()
-                + " flags=0x" + Integer.toHexString(activity.getWindow().getAttributes().flags)
-                + " soft=0x" + Integer.toHexString(activity.getWindow().getAttributes().softInputMode));
             if (mSystemImeFocusListener == null) {
                 mSystemImeFocusListener = (view, hasFocus) -> {
                     if (hasFocus) {
@@ -813,7 +804,6 @@ public final class TermuxInAppKeyboard {
 
     private void setContainerVisible(boolean visible) {
         if (mHost != null) {
-            Log.i("KBTRACE", "setContainerVisible " + visible + " old=" + requireContainer().getVisibility());
             mHost.setKeyboardContainerVisible(visible);
         }
     }

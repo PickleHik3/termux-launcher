@@ -64,9 +64,10 @@ public class Keyboard2View extends View
   private Theme.Computed _tc;
   private final Paint _overrideBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _overrideBorderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-  private Map<String, KeyColorOverride> _keyColorOverrides = Collections.emptyMap();
+  private SparseArray<KeyColorOverride> _keyColorOverrides = new SparseArray<>();
   private OnKeyPaintListener _keyPaintListener;
   private String _lastPaintedKeyId;
+  private float _launchWaveDensity;
   private final Paint _trailPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _fxFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _fxStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -139,6 +140,7 @@ public class Keyboard2View extends View
     _fxStrokePaint.setStrokeCap(Paint.Cap.ROUND);
     _fxHaloPaint.setStyle(Paint.Style.STROKE);
     _fxHaloPaint.setStrokeCap(Paint.Cap.ROUND);
+    _launchWaveDensity = getResources().getDisplayMetrics().density;
     applyTheme();
   }
 
@@ -236,8 +238,36 @@ public class Keyboard2View extends View
   public void setKeyColorOverrides(Map<String, KeyColorOverride> overrides)
   {
     requireMainThread();
-    _keyColorOverrides = overrides == null ? Collections.emptyMap() : overrides;
+    _keyColorOverrides.clear();
+    if (overrides != null) {
+      for (Map.Entry<String, KeyColorOverride> e : overrides.entrySet()) {
+        int id = parseKeyId(e.getKey());
+        if (id >= 0)
+          _keyColorOverrides.put(id, e.getValue());
+      }
+    }
     invalidate();
+  }
+
+  private static int keyId(int rowIndex, int keyIndex)
+  {
+    return (rowIndex << 16) | (keyIndex & 0xFFFF);
+  }
+
+  private static int parseKeyId(String keyId)
+  {
+    int colon = keyId.indexOf(':');
+    if (colon < 0)
+      return -1;
+    try
+    {
+      return keyId(Integer.parseInt(keyId.substring(0, colon)),
+          Integer.parseInt(keyId.substring(colon + 1)));
+    }
+    catch (NumberFormatException _e)
+    {
+      return -1;
+    }
   }
 
   /** Non-null enables paint mode and prevents the preview keyboard from producing key events. */
@@ -791,6 +821,7 @@ public class Keyboard2View extends View
       return;
     long now = SystemClock.uptimeMillis();
     pruneReleasedTouchFx(now);
+    _launchWaveDensity = getResources().getDisplayMetrics().density;
     boolean animateNextFrame = false;
     float y = getPaddingTop() + _tc.margin_top;
     for (int rowIndex = 0; rowIndex < _keyboard.rows.size(); rowIndex++)
@@ -802,7 +833,7 @@ public class Keyboard2View extends View
       for (int keyIndex = 0; keyIndex < row.keys.size(); keyIndex++)
       {
         KeyboardData.Key k = row.keys.get(keyIndex);
-        KeyColorOverride colorOverride = _keyColorOverrides.get(rowIndex + ":" + keyIndex);
+        KeyColorOverride colorOverride = _keyColorOverrides.get(keyId(rowIndex, keyIndex));
         x += k.shift * _keyWidth;
         float keyW = _keyWidth * k.width - _tc.horizontal_margin;
         boolean isKeyDown = _pointers.isKeyDown(k);
@@ -896,7 +927,7 @@ public class Keyboard2View extends View
     float waveRadius = maxRadius * easedTravel;
     float distance = (float)Math.hypot(keyX - _launchWaveOriginX,
         keyY - _launchWaveOriginY);
-    float halfBand = getResources().getDisplayMetrics().density * 11f;
+    float halfBand = _launchWaveDensity * 11f;
     float delta = Math.abs(distance - waveRadius);
     if (delta >= halfBand)
       return 0f;

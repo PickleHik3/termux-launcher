@@ -49,6 +49,7 @@ public final class OnboardingActivity extends AppCompatActivity {
     private static final String STATE_PAGE = "page";
     private static final String GUIDE_URL = "https://picklehik3.github.io/termux-launcher-site";
     private static final int REQUEST_HOME_ROLE = 1104;
+    private static final int SWIPE_FLING_THRESHOLD_DP = 72;
     static final int PAGE_COUNT = 5;
 
     private static final int[][] PAGE_TEXT = {
@@ -96,6 +97,7 @@ public final class OnboardingActivity extends AppCompatActivity {
     private MaterialButton mBackButton;
     private MaterialButton mNextButton;
     private MaterialButton mSkipButton;
+    private float mDisplayDensity;
 
     @NonNull
     public static Intent createIntent(@NonNull Context context) {
@@ -141,6 +143,7 @@ public final class OnboardingActivity extends AppCompatActivity {
         setTheme(R.style.Theme_TermuxApp_Onboarding);
         TermuxThemeManager.applyThemeOverlays(this);
         super.onCreate(savedInstanceState);
+        mDisplayDensity = getResources().getDisplayMetrics().density;
         setContentView(R.layout.activity_onboarding);
         applySystemBars();
         bindViews();
@@ -227,7 +230,8 @@ public final class OnboardingActivity extends AppCompatActivity {
             public boolean onFling(MotionEvent down, MotionEvent up, float velocityX, float velocityY) {
                 if (down == null || up == null) return false;
                 float dx = up.getX() - down.getX();
-                if (Math.abs(dx) < dp(72) || Math.abs(dx) < Math.abs(up.getY() - down.getY()))
+                if (Math.abs(dx) < dp(SWIPE_FLING_THRESHOLD_DP)
+                    || Math.abs(dx) < Math.abs(up.getY() - down.getY()))
                     return false;
                 if (dx < 0 && mPage < PAGE_COUNT - 1) showPage(mPage + 1);
                 else if (dx > 0 && mPage > 0) showPage(mPage - 1);
@@ -355,7 +359,7 @@ public final class OnboardingActivity extends AppCompatActivity {
     }
 
     private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
+        return Math.round(value * mDisplayDensity);
     }
 
     @Override

@@ -30,6 +30,13 @@ public final class LauncherUsageStatsStore {
     private static final String FIELD_COUNT = "count";
     private static final String FIELD_LAST = "last";
     private static final long PERSIST_DEBOUNCE_MS = 750L;
+    private static final Comparator<RankedEntry> USAGE_RANKING_COMPARATOR = (a, b) -> {
+        int countComparison = Integer.compare(b.count, a.count);
+        if (countComparison != 0) return countComparison;
+        int labelComparison = safeLabel(a.entry).compareToIgnoreCase(safeLabel(b.entry));
+        if (labelComparison != 0) return labelComparison;
+        return 0; // Collections.sort is stable, so identical labels retain source order.
+    };
 
     private final SharedPreferences sharedPreferences;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -71,28 +78,14 @@ public final class LauncherUsageStatsStore {
         if (entries.size() <= 1) {
             return new ArrayList<>(entries);
         }
-        List<LauncherAppEntry> sorted = new ArrayList<>(entries);
-        Collections.sort(sorted, new Comparator<LauncherAppEntry>() {
-            @Override
-            public int compare(LauncherAppEntry a, LauncherAppEntry b) {
-                UsageStat sa = usageByStableId.get(a.appRef.stableId());
-                UsageStat sb = usageByStableId.get(b.appRef.stableId());
-                int ca = sa == null ? 0 : sa.count;
-                int cb = sb == null ? 0 : sb.count;
-
-                // Stability guard: only reorder by usage if difference is meaningful.
-                if (Math.abs(ca - cb) >= 2) {
-                    return Integer.compare(cb, ca);
-                }
-
-                long la = sa == null ? 0L : sa.lastLaunchEpochMs;
-                long lb = sb == null ? 0L : sb.lastLaunchEpochMs;
-                if (ca != cb && Math.abs(ca - cb) >= 1 && (la > 0L || lb > 0L)) {
-                    return Long.compare(lb, la);
-                }
-                return safeLabel(a).compareToIgnoreCase(safeLabel(b));
-            }
-        });
+        List<RankedEntry> ranked = new ArrayList<>(entries.size());
+        for (LauncherAppEntry entry : entries) {
+            UsageStat stat = usageByStableId.get(entry.appRef.stableId());
+            ranked.add(new RankedEntry(entry, stat == null ? 0 : stat.count));
+        }
+        Collections.sort(ranked, USAGE_RANKING_COMPARATOR);
+        List<LauncherAppEntry> sorted = new ArrayList<>(ranked.size());
+        for (RankedEntry item : ranked) sorted.add(item.entry);
         return sorted;
     }
 
@@ -141,5 +134,15 @@ public final class LauncherUsageStatsStore {
     private static final class UsageStat {
         int count;
         long lastLaunchEpochMs;
+    }
+
+    private static final class RankedEntry {
+        final LauncherAppEntry entry;
+        final int count;
+
+        RankedEntry(@NonNull LauncherAppEntry entry, int count) {
+            this.entry = entry;
+            this.count = count;
+        }
     }
 }

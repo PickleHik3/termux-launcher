@@ -62,7 +62,6 @@ public final class KeyValue implements Comparable<KeyValue>
     BREVE,
     BAR,
     FN,
-    SELECTION_MODE,
   } // Last is be applied first
 
   public static enum Editing
@@ -538,7 +537,6 @@ public final class KeyValue implements Comparable<KeyValue>
   public static final KeyValue CONFIG = eventKey(0xE004, Event.CONFIG, FLAG_SMALLER_FONT);
   public static final KeyValue SHIFT = modifierKey(0xE00A, Modifier.SHIFT, FLAG_DOUBLE_TAP_LOCK);
   public static final KeyValue COMPOSE = makeComposePending(0xE016, ComposeKeyData.compose, FLAG_SECONDARY);
-  public static final KeyValue SELECTION_MODE = makeInternalModifier(Modifier.SELECTION_MODE);
   public static final KeyValue CHANGE_METHOD = eventKey(0xE009, Event.CHANGE_METHOD_PICKER, FLAG_SMALLER_FONT);
   public static final KeyValue CHANGE_METHOD_PREV = eventKey(0xE009, Event.CHANGE_METHOD_PREV, FLAG_SMALLER_FONT);
   public static final KeyValue CHANGE_METHOD_NEXT = eventKey(0xE009, Event.CHANGE_METHOD_NEXT, FLAG_SMALLER_FONT);
@@ -841,9 +839,6 @@ public final class KeyValue implements Comparable<KeyValue>
       /* Exta */
       case "෴": case "₨":  // Rupee is not exclusively Sinhala sign
         return makeStringKey(name, FLAG_SMALLER_FONT);
-
-      /* Internal keys */
-      case "selection_mode": return SELECTION_MODE;
 
       default: return null;
     }

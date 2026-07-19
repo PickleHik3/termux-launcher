@@ -81,7 +81,6 @@
     <string name="action_style_terminal">Стиль</string>
     <string name="action_set_background_image">Встановити фонове зображення</string>
     <string name="action_font_and_color">Шрифт і колір</string>
-    <string name="action_remove_background_image">Вилучити фонове зображення</string>
     <string name="action_toggle_keep_screen_on">Тримати екран увімкненим</string>
     <string name="action_open_help">Допомога</string>
     <string name="msg_generating_report">Формування звіту</string>

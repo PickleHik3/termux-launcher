@@ -6,6 +6,7 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RadialGradient;
@@ -43,6 +44,13 @@ public final class DockLaunchRippleView extends View {
     private final Path mClipPath = new Path();
     private final RectF mSurface = new RectF();
     private final float[] mBoundaryDistances = new float[WAVE_SAMPLES];
+    private final int[] mWaveColors = new int[4];
+    private final float[] mWaveStops = new float[4];
+    private final int[] mPressColors = new int[3];
+    private final float[] mPressStops = {0f, 0.56f, 1f};
+    private final Matrix mPressMatrix = new Matrix();
+    private RadialGradient mPressGradient;
+    private int mPressGradientColor;
     private float mOriginX;
     private float mOriginY;
     private float mElapsedMs;
@@ -224,14 +232,15 @@ public final class DockLaunchRippleView extends View {
             float crestStop = clamp01(mWaveRadius / outer);
             trailStop = Math.max(trailStop, innerStop + 0.001f);
             crestStop = Math.max(crestStop, trailStop + 0.001f);
-            int[] colors = {
-                Color.TRANSPARENT,
-                withAlpha(mColor, Math.round(46f * strength)),
-                withAlpha(mColor, Math.round(112f * strength)),
-                Color.TRANSPARENT
-            };
-            float[] stops = {innerStop, trailStop, crestStop, 1f};
-            mPaint.setShader(new RadialGradient(mOriginX, mOriginY, outer, colors, stops,
+            mWaveColors[0] = Color.TRANSPARENT;
+            mWaveColors[1] = withAlpha(mColor, Math.round(46f * strength));
+            mWaveColors[2] = withAlpha(mColor, Math.round(112f * strength));
+            mWaveColors[3] = Color.TRANSPARENT;
+            mWaveStops[0] = innerStop;
+            mWaveStops[1] = trailStop;
+            mWaveStops[2] = crestStop;
+            mWaveStops[3] = 1f;
+            mPaint.setShader(new RadialGradient(mOriginX, mOriginY, outer, mWaveColors, mWaveStops,
                 Shader.TileMode.CLAMP));
             canvas.drawCircle(mOriginX, mOriginY, outer, mPaint);
             mPaint.setShader(null);
@@ -244,11 +253,22 @@ public final class DockLaunchRippleView extends View {
         float eased = 1f - (1f - progress) * (1f - progress);
         float radius = density * (4f + 14f * eased);
         int alpha = Math.round(118f * (1f - progress) * mOpacity);
-        int[] colors = {withAlpha(mColor, alpha), withAlpha(mColor, alpha / 3), Color.TRANSPARENT};
-        float[] stops = {0f, 0.56f, 1f};
-        mPaint.setShader(new RadialGradient(mOriginX, mOriginY, radius, colors, stops,
-            Shader.TileMode.CLAMP));
+        // Reuse a unit-radius gradient for the press flash; only rebuild when the ripple color changes.
+        if (mPressGradient == null || mPressGradientColor != mColor) {
+            mPressGradientColor = mColor;
+            mPressColors[0] = withAlpha(mColor, 255);
+            mPressColors[1] = withAlpha(mColor, 85);
+            mPressColors[2] = Color.TRANSPARENT;
+            mPressGradient = new RadialGradient(0f, 0f, 1f, mPressColors, mPressStops,
+                Shader.TileMode.CLAMP);
+        }
+        mPressMatrix.setScale(radius, radius);
+        mPressMatrix.postTranslate(mOriginX, mOriginY);
+        mPressGradient.setLocalMatrix(mPressMatrix);
+        mPaint.setShader(mPressGradient);
+        mPaint.setAlpha(alpha);
         canvas.drawCircle(mOriginX, mOriginY, radius, mPaint);
+        mPaint.setAlpha(255);
         mPaint.setShader(null);
     }
 

@@ -12,6 +12,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import androidx.annotation.Nullable;
 import com.termux.terminal.TerminalBuffer;
+import com.termux.terminal.TerminalRow;
 import com.termux.terminal.WcWidth;
 import com.termux.view.R;
 import com.termux.view.TerminalView;
@@ -94,12 +95,19 @@ public class TextSelectionCursorController implements CursorController {
         mSelX1 = mSelX2 = columnAndRow[0];
         mSelY1 = mSelY2 = columnAndRow[1];
         TerminalBuffer screen = terminalView.mEmulator.getScreen();
-        if (!" ".equals(screen.getSelectedText(mSelX1, mSelY1, mSelX1, mSelY1))) {
-            // Selecting something other than whitespace. Expand to word.
-            while (mSelX1 > 0 && !"".equals(screen.getSelectedText(mSelX1 - 1, mSelY1, mSelX1 - 1, mSelY1))) {
+        TerminalRow line = screen.allocateFullLineIfNecessary(screen.externalToInternalRow(mSelY1));
+        char[] text = line.mText;
+        int startIndex = line.findStartOfColumn(mSelX1);
+        if (startIndex >= 0 && startIndex < text.length && text[startIndex] != ' ') {
+            // Selecting something other than whitespace. Expand to word by reading the row text once.
+            while (mSelX1 > 0) {
+                int prevIndex = line.findStartOfColumn(mSelX1 - 1);
+                if (prevIndex < 0 || prevIndex >= text.length || text[prevIndex] == ' ') break;
                 mSelX1--;
             }
-            while (mSelX2 < terminalView.mEmulator.mColumns - 1 && !"".equals(screen.getSelectedText(mSelX2 + 1, mSelY1, mSelX2 + 1, mSelY1))) {
+            while (mSelX2 < terminalView.mEmulator.mColumns - 1) {
+                int nextIndex = line.findStartOfColumn(mSelX2 + 1);
+                if (nextIndex < 0 || nextIndex >= text.length || text[nextIndex] == ' ') break;
                 mSelX2++;
             }
         }

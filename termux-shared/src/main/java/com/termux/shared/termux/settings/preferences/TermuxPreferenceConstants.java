@@ -203,13 +203,6 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_APP_LAUNCHER_PINNED_ICON_PACK_PACKAGE = "";
 
         /**
-         * Defines the key for app launcher icon scale.
-         */
-        public static final String KEY_APP_LAUNCHER_ICON_SCALE = "app_launcher_icon_scale";
-
-        public static final float DEFAULT_APP_LAUNCHER_ICON_SCALE = 1.55f;
-
-        /**
          * Defines the key for typed pinned apps/folders launcher configuration.
          */
         public static final String KEY_APP_LAUNCHER_PINNED_ITEMS_V2 = "app_launcher_pinned_items_v2";
@@ -533,34 +526,6 @@ public final class TermuxPreferenceConstants {
 
         public static final int DEFAULT_VALUE_MANAGED_WALLPAPER_SYSTEM_ID = -1;
         
-        /**
-         * Defines the key for whether extrakeys blur is enabled or not.
-         */
-        public static final String KEY_EXTRAKEYS_BLUR_ENABLED = "extrakeys_blur_enabled";
-
-        public static final boolean DEFAULT_VALUE_EXTRAKEYS_BLUR_ENABLED = false;
-        
-        /**
-         * Defines the key for whether sessions blur is enabled or not.
-         */
-        public static final String KEY_SESSIONS_BLUR_ENABLED = "sessions_blur_enabled";
-
-        public static final boolean DEFAULT_VALUE_SESSIONS_BLUR_ENABLED = false;
-        
-        /**
-         * Defines the key for whether monet background is enabled or not.
-         */
-        public static final String KEY_MONET_BACKGROUND_ENABLED = "monet_background_enabled";
-
-        public static final boolean DEFAULT_VALUE_MONET_BACKGROUND_ENABLED = false;
-
-        /**
-         * Defines the key for whether monet color should be used for the terminal background overlay.
-         */
-        public static final String KEY_MONET_OVERLAY_ENABLED = "monet_overlay_enabled";
-
-        public static final boolean DEFAULT_VALUE_MONET_OVERLAY_ENABLED = false;
-
         /**
          * Defines the key for whether terminal colors should follow Material dynamic colors.
          */

@@ -54,7 +54,8 @@ public final class AzScrubRowView extends AppCompatTextView {
     }
 
     public interface ScrubCallback {
-        void onScrub(char letter, int selectionIndex, float touchX, float touchY, float rawX, float rawY, @NonNull GesturePhase phase);
+        void onScrub(char letter, int selectionIndex, float touchX, float touchY, float rawX,
+                     float rawY, long eventTimeMs, @NonNull GesturePhase phase);
         void onCancel();
         default void onDoubleTap() {}
     }
@@ -63,6 +64,7 @@ public final class AzScrubRowView extends AppCompatTextView {
     private static final char[] ALPHABET_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#".toCharArray();
     private static final char[] LETTERS = (PINNED_APPS_SYMBOL + "ABCDEFGHIJKLMNOPQRSTUVWXYZ#").toCharArray();
     private char[] visibleLetters = LETTERS;
+    private String[] visibleGlyphs = buildGlyphStrings(LETTERS);
 
     @Nullable private ScrubCallback callback;
     private int currentSelectionIndex = 0;
@@ -71,6 +73,8 @@ public final class AzScrubRowView extends AppCompatTextView {
     // wallpaper regions — a sharp stroke, unlike the old blurry drop-shadow which read as fuzzy.
     private final Paint letterOutlinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Rect glyphRect = new Rect();
+    private final Paint.FontMetrics letterFontMetrics = new Paint.FontMetrics();
+    private final int[] locationOnScreen = new int[2];
     private float activeTouchX = -1f;
     private float waveStrength = 0f;
     private int accentColor = Color.WHITE;
@@ -91,7 +95,7 @@ public final class AzScrubRowView extends AppCompatTextView {
     @NonNull private InteractionMode interactionMode = InteractionMode.WAVE_TRACK;
     @Nullable private Character lockedInlineLetter;
     private int activeLetterIndex = -1;
-    private static final float LETTER_SLOT_HYSTERESIS_RATIO = 0.22f;
+    static final float LETTER_SLOT_HYSTERESIS_RATIO = 0.22f;
     private boolean interactionRenderActive;
 
     public AzScrubRowView(Context context) {
@@ -200,8 +204,8 @@ public final class AzScrubRowView extends AppCompatTextView {
                 : (1f + (0.34f * envelope * waveStrength));
             letterPaint.setTextSize(baseTextSize * scale);
             applyLetterWeight(envelope, activeFocus);
-            Paint.FontMetrics letterMetrics = letterPaint.getFontMetrics();
-            float baseline = (contentBottom - dp(2) - letterMetrics.descent) - waveLift;
+            letterPaint.getFontMetrics(letterFontMetrics);
+            float baseline = (contentBottom - dp(2) - letterFontMetrics.descent) - waveLift;
             if (activeFocus) {
                 letterPaint.setColor(focusColor);
             } else {
@@ -213,7 +217,7 @@ public final class AzScrubRowView extends AppCompatTextView {
             // Crisp outline pass under the fill: a sharp dark stroke that keeps the light letter
             // readable on any wallpaper, replacing the fuzzy drop-shadow. Constant width so the
             // stroke never thickens enough to fill the letters' inner holes (no "bloat").
-            String glyph = String.valueOf(visibleLetters[i]);
+            String glyph = visibleGlyphs[i];
             float density = getResources().getDisplayMetrics().density;
             letterOutlinePaint.setTextSize(letterPaint.getTextSize());
             letterOutlinePaint.setTypeface(letterPaint.getTypeface());
@@ -250,6 +254,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                 return;
             }
             visibleLetters = LETTERS;
+            visibleGlyphs = buildGlyphStrings(visibleLetters);
             invalidate();
             return;
         }
@@ -266,6 +271,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                 return;
             }
             visibleLetters = LETTERS;
+            visibleGlyphs = buildGlyphStrings(visibleLetters);
             invalidate();
             return;
         }
@@ -291,6 +297,7 @@ public final class AzScrubRowView extends AppCompatTextView {
             return;
         }
         visibleLetters = nextVisibleLetters;
+        visibleGlyphs = buildGlyphStrings(visibleLetters);
         invalidate();
     }
 
@@ -366,9 +373,9 @@ public final class AzScrubRowView extends AppCompatTextView {
         letterPaint.setTextSize(baseTextSize * scale);
         applyLetterWeight(envelope, activeFocus);
 
-        Paint.FontMetrics fontMetrics = letterPaint.getFontMetrics();
-        float baseline = (getHeight() - getPaddingBottom() - dp(2) - fontMetrics.descent) - waveLift;
-        String label = String.valueOf(visibleLetters[index]);
+        letterPaint.getFontMetrics(letterFontMetrics);
+        float baseline = (getHeight() - getPaddingBottom() - dp(2) - letterFontMetrics.descent) - waveLift;
+        String label = visibleGlyphs[index];
         glyphRect.setEmpty();
         letterPaint.getTextBounds(label, 0, label.length(), glyphRect);
         float glyphLeft = x + glyphRect.left;
@@ -391,22 +398,21 @@ public final class AzScrubRowView extends AppCompatTextView {
         float glassTop = Math.max(0f, glyphTop - padY);
         float glassBottom = Math.min(getHeight(), glyphBottom + padY);
 
-        int[] loc = new int[2];
-        getLocationOnScreen(loc);
+        getLocationOnScreen(locationOnScreen);
         out.letter = visibleLetters[index];
-        out.centerRawX = loc[0] + x;
-        out.baselineRawY = loc[1] + baseline;
+        out.centerRawX = locationOnScreen[0] + x;
+        out.baselineRawY = locationOnScreen[1] + baseline;
         out.glyphBoundsRaw.set(
-            loc[0] + (x - (glyphWidth * 0.5f)),
-            loc[1] + glyphTop,
-            loc[0] + (x + (glyphWidth * 0.5f)),
-            loc[1] + glyphBottom
+            locationOnScreen[0] + (x - (glyphWidth * 0.5f)),
+            locationOnScreen[1] + glyphTop,
+            locationOnScreen[0] + (x + (glyphWidth * 0.5f)),
+            locationOnScreen[1] + glyphBottom
         );
         out.glassBoundsRaw.set(
-            loc[0] + glassLeft,
-            loc[1] + glassTop,
-            loc[0] + glassRight,
-            loc[1] + glassBottom
+            locationOnScreen[0] + glassLeft,
+            locationOnScreen[1] + glassTop,
+            locationOnScreen[0] + glassRight,
+            locationOnScreen[1] + glassBottom
         );
         return true;
     }
@@ -416,7 +422,8 @@ public final class AzScrubRowView extends AppCompatTextView {
         if (callback == null) return super.onTouchEvent(event);
         float x = Math.max(0f, Math.min(getWidth(), event.getX()));
         char letter = pickLetter(x, event.getActionMasked() != MotionEvent.ACTION_DOWN);
-        int selectionIndex = Math.max(0, (int) ((-event.getY()) / Math.max(12f, getHeight() / 2f)));
+        int selectionIndex = Math.max(0,
+            (int) ((-event.getY()) / Math.max(dp(12f), getHeight() / 2f)));
         currentSelectionIndex = selectionIndex;
 
         switch (event.getActionMasked()) {
@@ -443,20 +450,23 @@ public final class AzScrubRowView extends AppCompatTextView {
                     return true;
                 }
                 suppressUpScrub = false;
-                callback.onScrub(letter, currentSelectionIndex, event.getX(), event.getY(), event.getRawX(), event.getRawY(), GesturePhase.DOWN);
+                callback.onScrub(letter, currentSelectionIndex, event.getX(), event.getY(),
+                    event.getRawX(), event.getRawY(), event.getEventTime(), GesturePhase.DOWN);
                 return true;
             case MotionEvent.ACTION_MOVE:
                 activeTouchX = x;
                 waveStrength = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK ? 0.92f : 1f;
                 updateInteractionLayerOffset();
                 invalidate();
-                callback.onScrub(letter, currentSelectionIndex, event.getX(), event.getY(), event.getRawX(), event.getRawY(), GesturePhase.MOVE);
+                callback.onScrub(letter, currentSelectionIndex, event.getX(), event.getY(),
+                    event.getRawX(), event.getRawY(), event.getEventTime(), GesturePhase.MOVE);
                 return true;
             case MotionEvent.ACTION_UP:
                 lastTapUpTimeMs = event.getEventTime();
                 lastTapUpX = x;
                 if (!suppressUpScrub) {
-                    callback.onScrub(letter, currentSelectionIndex, event.getX(), event.getY(), event.getRawX(), event.getRawY(), GesturePhase.UP);
+                    callback.onScrub(letter, currentSelectionIndex, event.getX(), event.getY(),
+                        event.getRawX(), event.getRawY(), event.getEventTime(), GesturePhase.UP);
                 }
                 suppressUpScrub = false;
                 if (interactionMode == InteractionMode.WAVE_TRACK) {
@@ -613,6 +623,15 @@ public final class AzScrubRowView extends AppCompatTextView {
             }
         }
         return -1;
+    }
+
+    @NonNull
+    private static String[] buildGlyphStrings(@NonNull char[] letters) {
+        String[] glyphs = new String[letters.length];
+        for (int i = 0; i < letters.length; i++) {
+            glyphs[i] = String.valueOf(letters[i]);
+        }
+        return glyphs;
     }
 
     private int resolveActiveIndex(float anchorX) {

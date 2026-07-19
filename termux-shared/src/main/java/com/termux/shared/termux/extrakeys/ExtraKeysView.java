@@ -7,14 +7,13 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RadialGradient;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.InsetDrawable;
-import android.graphics.drawable.LayerDrawable;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -100,8 +99,7 @@ public final class ExtraKeysView extends GridLayout {
         REPEAT_HELD,
         STICKY_ACTIVE,
         STICKY_LOCKED,
-        POPUP_ARMED,
-        POPUP_SELECTED
+        POPUP_ARMED
     }
 
     /**
@@ -967,59 +965,6 @@ public final class ExtraKeysView extends GridLayout {
         button.setBackground(new ColorDrawable(mButtonBackgroundColor));
     }
 
-    @NonNull
-    private Drawable buildKeyBackground(@NonNull KeyVisualState state) {
-        if (state == KeyVisualState.RESTING) {
-            return new ColorDrawable(mButtonBackgroundColor);
-        }
-        if (state == KeyVisualState.POPUP_SELECTED) {
-            return buildPopupKeyBackground(true);
-        }
-
-        int tint = mKeyPressFeedbackColor != 0 ? mKeyPressFeedbackColor : mButtonActiveBackgroundColor;
-        // One clean rounded-rect pill: a hairline border defines it, with a faint material fill — no
-        // double inner-rim line. Borderless at rest; only the pressed/held/active key shows the pill.
-        int fillAlpha;
-        int rimAlpha;
-        switch (state) {
-            case REPEAT_HELD:
-                fillAlpha = mKeyPressFeedbackBlurAvailable ? 110 : 140;
-                rimAlpha = 245;
-                break;
-            case STICKY_LOCKED:
-                fillAlpha = mKeyPressFeedbackBlurAvailable ? 64 : 120;
-                rimAlpha = 235;
-                break;
-            case STICKY_ACTIVE:
-                fillAlpha = mKeyPressFeedbackBlurAvailable ? 48 : 96;
-                rimAlpha = 215;
-                break;
-            case POPUP_ARMED:
-                // Source key reads as a "lifted/empty socket" while the popup floats above it.
-                fillAlpha = mKeyPressFeedbackBlurAvailable ? 28 : 72;
-                rimAlpha = 200;
-                break;
-            case PRESSED:
-            default:
-                fillAlpha = mKeyPressFeedbackBlurAvailable ? 70 : 110;
-                rimAlpha = 220;
-                break;
-        }
-
-        GradientDrawable chip = new GradientDrawable();
-        chip.setShape(GradientDrawable.RECTANGLE);
-        // Generous corner -> a stadium pill matching the dock capsule and the press bubble.
-        chip.setCornerRadius(dpToPx(18f));
-        chip.setColor(withAlpha(tint, fillAlpha));
-        // Thin hairline rim like the dock edge, brightened a touch off pure accent.
-        chip.setStroke(Math.max(1, Math.round(dpToPx(1.25f))),
-            withAlpha(lerpColor(tint, Color.WHITE, 0.10f), rimAlpha));
-        chip.setDither(true);
-
-        int chipInset = Math.round(dpToPx(3f));
-        return new InsetDrawable(chip, chipInset, chipInset, chipInset, chipInset);
-    }
-
     private void animateKeyCapDip(@NonNull MaterialButton button, @NonNull KeyVisualState state) {
         button.animate().cancel();
         float target;
@@ -1060,11 +1005,6 @@ public final class ExtraKeysView extends GridLayout {
             .start();
     }
 
-    /** The glyph-glow colour: a luminous, slightly whitened accent halo around the key's characters. */
-    private int keyGlowColor() {
-        return keyGlowColor(0.15f);
-    }
-
     /**
      * The accent a lit key glows with: the dock accent if the host set one, else the active-text
      * accent. (Not the active *background*, which is a muted grey and reads as nothing over the
@@ -1097,22 +1037,44 @@ public final class ExtraKeysView extends GridLayout {
     // MaterialButton manages its own background and silently overwrites/ignores a custom setBackground,
     // which is why earlier bloom attempts never showed. Drawing on our own canvas always renders.
     // Keyed per button so a latched modifier keeps its halo while another key is pressed.
-    private final Map<MaterialButton, Float> mGlowLevels = new HashMap<>();
+    private static final class GlowState {
+        float level;
+        float radiusDp;
+        float whiteMix;
+    }
+
+    private static final class GlowGradient {
+        int accent;
+        float whiteMix;
+        int viewW;
+        int viewH;
+        RadialGradient gradient;
+        final Matrix matrix = new Matrix();
+    }
+
+    private final Map<MaterialButton, GlowState> mGlowLevels = new HashMap<>();
+    private final Map<MaterialButton, GlowGradient> mGlowGradients = new HashMap<>();
     private final Paint mGlowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     /**
      * Set a key's glow to {@code level} (0..1): a luminous accent bloom drawn behind the glyph (see
-     * {@link #dispatchDraw}) plus a shift of the glyph itself toward the bright accent and a text
-     * shadow. Resting glyphs are already white, so the bloom + colour shift are what make a
-     * pressed/held/locked key unmistakable.
+     * {@link #dispatchDraw}). {@code radiusDp} sizes the gradient and {@code whiteMix} tints the glow
+     * toward white; the previously ignored parameters are now applied.
      */
     private void applyKeyGlow(@NonNull MaterialButton button, float level, float radiusDp, float whiteMix) {
-        // The glyph stays its own (white/active) colour for contrast; the bloom alone is the feedback.
         float l = clamp01(level);
         if (l <= 0.01f) {
             mGlowLevels.remove(button);
+            mGlowGradients.remove(button);
         } else {
-            mGlowLevels.put(button, l);
+            GlowState state = mGlowLevels.get(button);
+            if (state == null) {
+                state = new GlowState();
+                mGlowLevels.put(button, state);
+            }
+            state.level = l;
+            state.radiusDp = radiusDp;
+            state.whiteMix = whiteMix;
         }
         invalidate(); // repaint the glow layer
     }
@@ -1122,28 +1084,45 @@ public final class ExtraKeysView extends GridLayout {
         // Draw each lit key's glow behind the keys so it haloes the glyph (children draw on top).
         if (!mGlowLevels.isEmpty()) {
             int accent = glowAccent();
-            // Mostly the accent (only a slight lift toward white) so the white glyph stays high-contrast
-            // on top, rather than being washed out by an over-bright bloom.
-            int core = lerpColor(accent, Color.WHITE, 0.12f);
             int w = getWidth();
             int h = getHeight();
-            for (Map.Entry<MaterialButton, Float> entry : mGlowLevels.entrySet()) {
+            for (Map.Entry<MaterialButton, GlowState> entry : mGlowLevels.entrySet()) {
                 MaterialButton b = entry.getKey();
-                float l = clamp01(entry.getValue());
+                GlowState state = entry.getValue();
+                float l = state.level;
                 if (b.getParent() != this || b.getWidth() <= 0 || l <= 0.01f) continue;
                 float cx = b.getLeft() + b.getWidth() * 0.5f;
                 float cy = b.getTop() + b.getHeight() * 0.5f;
                 // Keep the whole circle inside the view so it never hard-clips at the row edge / the
                 // A-Z bar divider above it — the gradient fades to nothing before any boundary.
-                float radius = Math.max(b.getWidth(), b.getHeight()) * 0.62f;
-                radius = Math.min(radius, Math.min(Math.min(cx, w - cx), Math.min(cy, h - cy)));
+                float maxRadius = Math.min(Math.min(cx, w - cx), Math.min(cy, h - cy));
+                float radiusPx = dpToPx(state.radiusDp);
+                float radius = Math.min(radiusPx, maxRadius);
                 if (radius <= 0f) continue;
-                RadialGradient shader = new RadialGradient(cx, cy, radius,
-                    new int[]{withAlpha(core, Math.round(150 * l)), withAlpha(accent, Math.round(80 * l)), withAlpha(accent, 0)},
-                    new float[]{0f, 0.5f, 1f}, Shader.TileMode.CLAMP);
-                mGlowPaint.setShader(shader);
+                // Cache a unit gradient per key; level is applied through paint alpha so a gradient
+                // only needs rebuilding when the color/whiteMix or view bounds change.
+                GlowGradient cached = mGlowGradients.get(b);
+                if (cached == null || cached.accent != accent || cached.whiteMix != state.whiteMix
+                    || cached.viewW != w || cached.viewH != h) {
+                    cached = new GlowGradient();
+                    cached.accent = accent;
+                    cached.whiteMix = state.whiteMix;
+                    cached.viewW = w;
+                    cached.viewH = h;
+                    int core = lerpColor(accent, Color.WHITE, state.whiteMix);
+                    cached.gradient = new RadialGradient(0f, 0f, 1f,
+                        new int[]{withAlpha(core, 150), withAlpha(accent, 80), withAlpha(accent, 0)},
+                        new float[]{0f, 0.5f, 1f}, Shader.TileMode.CLAMP);
+                    mGlowGradients.put(b, cached);
+                }
+                cached.matrix.setScale(radius, radius);
+                cached.matrix.postTranslate(cx, cy);
+                cached.gradient.setLocalMatrix(cached.matrix);
+                mGlowPaint.setShader(cached.gradient);
+                mGlowPaint.setAlpha(Math.round(255 * l));
                 canvas.drawCircle(cx, cy, radius, mGlowPaint);
             }
+            mGlowPaint.setAlpha(255);
             mGlowPaint.setShader(null);
         }
         super.dispatchDraw(canvas);
@@ -1470,42 +1449,6 @@ public final class ExtraKeysView extends GridLayout {
         } else {
             applyButtonVisualState(button, KeyVisualState.RESTING, false);
         }
-    }
-
-    @NonNull
-    private Drawable buildPopupKeyBackground(boolean selected) {
-        int tint = mKeyPressFeedbackColor != 0 ? mKeyPressFeedbackColor : mButtonActiveBackgroundColor;
-        GradientDrawable glow = new GradientDrawable();
-        glow.setShape(GradientDrawable.RECTANGLE);
-        glow.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-        glow.setGradientCenter(0.5f, 0.45f);
-        glow.setGradientRadius(dpToPx(32f));
-        glow.setColors(new int[] {
-            withAlpha(tint, selected ? 96 : 54),
-            withAlpha(tint, selected ? 36 : 18),
-            withAlpha(tint, 0)
-        });
-        glow.setDither(true);
-
-        GradientDrawable key = new GradientDrawable();
-        key.setShape(GradientDrawable.RECTANGLE);
-        key.setCornerRadius(dpToPx(12f));
-        key.setColor(withAlpha(Color.rgb(10, 18, 24), mKeyPressFeedbackBlurAvailable ? 228 : 242));
-        key.setStroke(Math.max(1, Math.round(dpToPx(selected ? 2f : 1.25f))), withAlpha(tint, selected ? 255 : 190));
-
-        GradientDrawable innerRim = new GradientDrawable();
-        innerRim.setShape(GradientDrawable.RECTANGLE);
-        innerRim.setCornerRadius(dpToPx(10f));
-        innerRim.setColor(Color.TRANSPARENT);
-        innerRim.setStroke(Math.max(1, Math.round(dpToPx(0.75f))), withAlpha(Color.WHITE, selected ? 72 : 38));
-
-        int chipInset = Math.round(dpToPx(2f));
-        int rimInset = Math.round(dpToPx(4f));
-        return new LayerDrawable(new Drawable[] {
-            glow,
-            new InsetDrawable(key, chipInset, chipInset, chipInset, chipInset),
-            new InsetDrawable(innerRim, rimInset, rimInset, rimInset, rimInset)
-        });
     }
 
     public void dismissPopup() {

@@ -54,7 +54,6 @@
     <string name="action_style_terminal">Kiểu</string>
     <string name="action_font_and_color">Màu và phông chữ</string>
     <string name="action_set_background_image">Đặt hình nền</string>
-    <string name="action_remove_background_image">Xoá hình nền</string>
     <string name="action_open_help">Trợ giúp</string>
     <string name="action_open_settings">Cài đặt</string>
     <string name="action_report_issue">Báo cáo lỗi</string>
@@ -135,7 +134,6 @@
     <string name="termux_monet_background_enabled_title">Bối cảnh của Monet (Không ổn định)</string>
     <string name="termux_monet_background_enabled_off">Nền Terminal Monet sẽ bị vô hiệu hóa. Biến nền terminal thành monet (Mặc định)</string>
     <string name="termux_extrakeys_blur_enabled_title">Phím bổ sung để làm mờ nền</string>
-    <string name="termux_extrakeys_header">Các phím bổ sung</string>
     <string name="termux_sessions_blur_enabled_off">Nền mờ của Phiên sẽ bị vô hiệu hóa. Thêm Nền mờ và trong suốt vào Menu Phiên. (Có thể ảnh hưởng đến hiệu suất) (Mặc định)</string>
     <string name="termux_extrakeys_blur_enabled_off">Nền mờ của Extra Keys sẽ bị vô hiệu hóa. Thêm Nền mờ và trong suốt vào Extra Keys. (Có thể ảnh hưởng đến hiệu suất) (Mặc định)</string>
     <string name="termux_gui_preferences_title">&TERMUX_GUI_APP_NAME;</string>
