@@ -884,4 +884,8 @@
     <string name="donate_preference_title">Donate</string>
     <string name="donate_preference_summary">Support development</string>
 
+    <!-- Report Issue Preference -->
+    <string name="report_issue_preference_title">Send feedback</string>
+    <string name="report_issue_preference_summary">Report a bug or suggest an idea on GitHub</string>
+
 </resources>

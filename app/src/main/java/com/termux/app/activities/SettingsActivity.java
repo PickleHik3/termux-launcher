@@ -187,6 +187,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             configureAboutPreference(context);
             configureOpenSourceLicensesPreference(context);
             configureDonatePreference(context);
+            configureReportIssuePreference(context);
         }
 
         @Override
@@ -353,6 +354,16 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 return new String(output.toByteArray(), StandardCharsets.UTF_8);
             } catch (IOException e) {
                 return "Unable to read bundled license text: " + e.getMessage();
+            }
+        }
+
+        private void configureReportIssuePreference(@NonNull Context context) {
+            Preference reportIssuePreference = findPreference("report_issue");
+            if (reportIssuePreference != null) {
+                reportIssuePreference.setOnPreferenceClickListener(preference -> {
+                    ShareUtils.openUrl(context, "https://github.com/PickleHik3/termux-launcher/issues");
+                    return true;
+                });
             }
         }
 

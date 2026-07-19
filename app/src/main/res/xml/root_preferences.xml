@@ -25,13 +25,6 @@
         app:title="@string/settings_root_launcher_header">
 
         <Preference
-            app:key="quick_start_tour"
-            app:icon="@drawable/ic_settings_shortcut"
-            app:title="@string/onboarding_settings_title"
-            app:summary="@string/onboarding_settings_summary"
-            app:persistent="false"/>
-
-        <Preference
             app:key="termux"
             app:icon="@drawable/ic_settings_terminal"
             app:title="@string/termux_preferences_title"
@@ -122,6 +115,20 @@
             app:summary="@string/donate_preference_summary"
             app:persistent="false"
             app:isPreferenceVisible="false"/>
+
+        <Preference
+            app:key="report_issue"
+            app:icon="@drawable/ic_settings_info"
+            app:title="@string/report_issue_preference_title"
+            app:summary="@string/report_issue_preference_summary"
+            app:persistent="false"/>
+
+        <Preference
+            app:key="quick_start_tour"
+            app:icon="@drawable/ic_settings_shortcut"
+            app:title="@string/onboarding_settings_title"
+            app:summary="@string/onboarding_settings_summary"
+            app:persistent="false"/>
 
     </PreferenceCategory>
 
