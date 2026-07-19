@@ -7,8 +7,6 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffColorFilter;
 import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
@@ -55,7 +53,8 @@ public final class LauncherAzGestureFxView extends View {
     /** Soft underglow blur for the active page tick; lazily built once the density is known. */
     private BlurMaskFilter pageTickGlow;
     private final Paint previewFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint focusedIconOutlinePaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private final FocusOutlineRenderer.RenderPaints focusedIconOutlinePaints =
+        new FocusOutlineRenderer.RenderPaints();
     private final TextPaint previewLabelPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final Path liquidBridgePath = new Path();
 
@@ -120,8 +119,15 @@ public final class LauncherAzGestureFxView extends View {
     private boolean focusedAppPreviewLaunchDismissing;
     private boolean focusedAppPreviewLabelEnabled;
     private boolean focusedIconRingEnabled = true;
-    @Nullable private android.graphics.Bitmap focusedIconOutlineMask;
+    @Nullable private FocusOutlineRenderer.Visual focusedIconOutlineVisual;
     private final RectF focusedIconOutlineRawBounds = new RectF();
+    @Nullable private FocusOutlineRenderer.Visual outgoingIconOutlineVisual;
+    private final RectF outgoingIconOutlineRawBounds = new RectF();
+    private float focusedIconOutlineAlpha = 1f;
+    private float focusedIconOutlineScale = 1f;
+    private float outgoingIconOutlineAlpha;
+    private float outgoingIconOutlineScale = 0.96f;
+    @Nullable private ValueAnimator focusedIconOutlineAnimator;
     @Nullable private String focusedAppPreviewLabel;
     private boolean darkThemeActive = true;
     private boolean capsuleDockStyle;
@@ -362,14 +368,85 @@ public final class LauncherAzGestureFxView extends View {
         invalidate();
     }
 
-    public void setFocusedIconOutline(@Nullable android.graphics.Bitmap mask, @Nullable RectF rawBounds) {
-        focusedIconOutlineMask = mask;
-        if (mask != null && rawBounds != null) {
+    public void setFocusedIconOutline(@Nullable FocusOutlineRenderer.Visual visual,
+                                      @Nullable RectF rawBounds) {
+        boolean valid = visual != null && rawBounds != null && !rawBounds.isEmpty();
+        if (valid && focusedIconOutlineVisual == visual) {
             focusedIconOutlineRawBounds.set(rawBounds);
+            invalidate();
+            return;
+        }
+        if (!valid && focusedIconOutlineVisual == null) return;
+
+        boolean reviveOutgoing = valid && outgoingIconOutlineVisual == visual;
+        float revivedAlpha = outgoingIconOutlineAlpha;
+        float revivedScale = outgoingIconOutlineScale;
+        if (focusedIconOutlineAnimator != null) {
+            ValueAnimator old = focusedIconOutlineAnimator;
+            focusedIconOutlineAnimator = null;
+            old.cancel();
+        }
+        outgoingIconOutlineVisual = focusedIconOutlineVisual;
+        outgoingIconOutlineRawBounds.set(focusedIconOutlineRawBounds);
+        outgoingIconOutlineAlpha = focusedIconOutlineAlpha;
+        outgoingIconOutlineScale = focusedIconOutlineScale;
+
+        focusedIconOutlineVisual = valid ? visual : null;
+        if (valid) {
+            focusedIconOutlineRawBounds.set(rawBounds);
+            focusedIconOutlineAlpha = reviveOutgoing ? revivedAlpha : 0f;
+            focusedIconOutlineScale = reviveOutgoing ? revivedScale : 1.04f;
         } else {
             focusedIconOutlineRawBounds.setEmpty();
+            focusedIconOutlineAlpha = 0f;
+            focusedIconOutlineScale = 1f;
         }
-        invalidate();
+
+        if (!FocusOutlineRenderer.animationsEnabled(getContext())) {
+            focusedIconOutlineAlpha = valid ? 1f : 0f;
+            focusedIconOutlineScale = 1f;
+            outgoingIconOutlineVisual = null;
+            outgoingIconOutlineRawBounds.setEmpty();
+            outgoingIconOutlineAlpha = 0f;
+            invalidate();
+            return;
+        }
+
+        final float incomingStartAlpha = focusedIconOutlineAlpha;
+        final float incomingStartScale = focusedIconOutlineScale;
+        final float outgoingStartAlpha = outgoingIconOutlineAlpha;
+        final float outgoingStartScale = outgoingIconOutlineScale;
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        focusedIconOutlineAnimator = animator;
+        animator.setDuration(160L);
+        animator.setInterpolator(new DecelerateInterpolator(1.45f));
+        animator.addUpdateListener(animation -> {
+            float progress = (float) animation.getAnimatedValue();
+            if (focusedIconOutlineVisual != null) {
+                focusedIconOutlineAlpha = lerp(incomingStartAlpha, 1f, progress);
+                focusedIconOutlineScale = FocusOutlineRenderer.incomingScale(
+                    incomingStartScale, progress);
+            }
+            if (outgoingIconOutlineVisual != null) {
+                outgoingIconOutlineAlpha = lerp(outgoingStartAlpha, 0f, progress);
+                outgoingIconOutlineScale = lerp(outgoingStartScale, 0.96f, progress);
+            }
+            invalidate();
+        });
+        animator.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(android.animation.Animator animation) {
+                if (focusedIconOutlineAnimator != animation) return;
+                focusedIconOutlineAnimator = null;
+                focusedIconOutlineAlpha = focusedIconOutlineVisual == null ? 0f : 1f;
+                focusedIconOutlineScale = 1f;
+                outgoingIconOutlineVisual = null;
+                outgoingIconOutlineRawBounds.setEmpty();
+                outgoingIconOutlineAlpha = 0f;
+                invalidate();
+            }
+        });
+        animator.start();
     }
 
     public void setDarkThemeActive(boolean active) {
@@ -389,6 +466,7 @@ public final class LauncherAzGestureFxView extends View {
     }
 
     public void clearDrag(boolean keepOverflowAffordance) {
+        setFocusedIconOutline(null, null);
         dragActive = false;
         hasFocus = false;
         hasAnchor = false;
@@ -474,6 +552,10 @@ public final class LauncherAzGestureFxView extends View {
             focusedAppPreviewSettleAnimator.cancel();
             focusedAppPreviewSettleAnimator = null;
         }
+        if (focusedIconOutlineAnimator != null) {
+            focusedIconOutlineAnimator.cancel();
+            focusedIconOutlineAnimator = null;
+        }
         cancelPageIndicatorAnimations();
         cancelSubtlePageIndicatorIdleFade();
     }
@@ -515,25 +597,29 @@ public final class LauncherAzGestureFxView extends View {
 
     /** Accent outline around the visible artwork, not the icon button's larger touch target. */
     private void drawFocusedIconRing(Canvas canvas) {
-        if (focusedIconOutlineMask != null && !focusedIconOutlineRawBounds.isEmpty()) {
+        int accent = FocusOutlineRenderer.resolveAccent(this);
+        if (outgoingIconOutlineVisual != null && !outgoingIconOutlineRawBounds.isEmpty()) {
+            focusDisplayRect.set(outgoingIconOutlineRawBounds);
+            focusDisplayRect.offset(-locationOnScreen[0], -locationOnScreen[1]);
+            FocusOutlineRenderer.draw(canvas, outgoingIconOutlineVisual, focusDisplayRect, accent,
+                outgoingIconOutlineAlpha, outgoingIconOutlineScale, focusedIconOutlinePaints);
+        }
+        if (focusedIconOutlineVisual != null && !focusedIconOutlineRawBounds.isEmpty()) {
             focusDisplayRect.set(focusedIconOutlineRawBounds);
             focusDisplayRect.offset(-locationOnScreen[0], -locationOnScreen[1]);
-            int color = withAlpha(boostColor(edgeTintColor, 1.22f, 1.10f), 235);
-            focusedIconOutlinePaint.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
-            canvas.drawBitmap(focusedIconOutlineMask, null, focusDisplayRect, focusedIconOutlinePaint);
-            focusedIconOutlinePaint.setColorFilter(null);
-            return;
+            FocusOutlineRenderer.draw(canvas, focusedIconOutlineVisual, focusDisplayRect, accent,
+                focusedIconOutlineAlpha, focusedIconOutlineScale, focusedIconOutlinePaints);
+        } else if (outgoingIconOutlineVisual == null && hasFocus && !focusRawRect.isEmpty()) {
+            // No artwork mask available (folder previews, views not yet measured): keep the ring
+            // present with the sibling rounded-rect treatment instead of showing nothing.
+            focusDisplayRect.set(focusRawRect);
+            focusDisplayRect.offset(-locationOnScreen[0], -locationOnScreen[1]);
+            float density = getResources().getDisplayMetrics().density;
+            FocusOutlineRenderer.drawRoundRectFallback(canvas, focusDisplayRect,
+                Math.min(focusDisplayRect.width(), focusDisplayRect.height()) * 0.28f, accent,
+                focusedIconOutlineAlpha > 0f ? focusedIconOutlineAlpha : 1f,
+                focusedIconOutlineScale > 0f ? focusedIconOutlineScale : 1f, density);
         }
-        float left = focusRawRect.left - locationOnScreen[0];
-        float top = focusRawRect.top - locationOnScreen[1];
-        float right = focusRawRect.right - locationOnScreen[0];
-        float bottom = focusRawRect.bottom - locationOnScreen[1];
-        focusDisplayRect.set(left, top, right, bottom);
-        focusDisplayRect.inset(-dp(2f), -dp(2f));
-        float radius = Math.min(focusDisplayRect.width(), focusDisplayRect.height()) * 0.5f;
-        glassStrokePaint.setStrokeWidth(dp(2f));
-        glassStrokePaint.setColor(withAlpha(boostColor(edgeTintColor, 1.22f, 1.10f), 235));
-        canvas.drawRoundRect(focusDisplayRect, radius, radius, glassStrokePaint);
     }
 
     private void drawFocusedAppPreviewIcon(Canvas canvas) {

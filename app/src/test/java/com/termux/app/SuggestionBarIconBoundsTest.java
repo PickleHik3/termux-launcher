@@ -7,11 +7,13 @@ import android.graphics.Rect;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(sdk = 28, manifest = Config.NONE)
 public class SuggestionBarIconBoundsTest {
 
     @Test
@@ -59,5 +61,34 @@ public class SuggestionBarIconBoundsTest {
 
         outline.recycle();
         source.recycle();
+    }
+
+    @Test
+    public void focusOutlineVisual_reservesStrokeAndSixDpHaloOutsideCleanArtwork() {
+        Bitmap cleanArtwork = Bitmap.createBitmap(7, 7, Bitmap.Config.ARGB_8888);
+        for (int y = 2; y <= 4; y++) {
+            for (int x = 2; x <= 4; x++) cleanArtwork.setPixel(x, y, Color.WHITE);
+        }
+
+        FocusOutlineRenderer.Visual visual = FocusOutlineRenderer.buildVisual(cleanArtwork, 1f);
+
+        // 1.5dp rounds to a 2px crisp contour; the halo reserves another 6px per edge.
+        assertEquals(8, visual.outerPadding);
+        assertEquals(23, visual.crispMask.getWidth());
+        assertEquals(23, visual.haloMask.getHeight());
+        // The clean artwork's centre remains a hole: no shadow-offset pixels entered the contour.
+        assertEquals(0, Color.alpha(visual.crispMask.getPixel(11, 11)));
+        assertEquals(0, Color.alpha(visual.haloMask.getPixel(11, 11)));
+
+        visual.crispMask.recycle();
+        visual.haloMask.recycle();
+        cleanArtwork.recycle();
+    }
+
+    @Test
+    public void focusOutlineIncomingScale_revivesThroughOvershootAndSettles() {
+        assertEquals(1.04f, FocusOutlineRenderer.incomingScale(0.98f, 0.45f), 0.0001f);
+        assertEquals(1f, FocusOutlineRenderer.incomingScale(0.98f, 1f), 0.0001f);
+        assertEquals(1.04f, FocusOutlineRenderer.incomingScale(1.04f, 0f), 0.0001f);
     }
 }

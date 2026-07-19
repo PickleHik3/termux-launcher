@@ -171,22 +171,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_BW_ICONS, value, false);
     }
 
-    public boolean isAppLauncherUnifyIconsEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_UNIFY_ICONS, TERMUX_APP.DEFAULT_APP_LAUNCHER_UNIFY_ICONS);
-    }
-
-    public void setAppLauncherUnifyIconsEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_UNIFY_ICONS, value, false);
-    }
-
-    public boolean isAppLauncherIconShadowEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_ICON_SHADOW, TERMUX_APP.DEFAULT_APP_LAUNCHER_ICON_SHADOW);
-    }
-
-    public void setAppLauncherIconShadowEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_ICON_SHADOW, value, false);
-    }
-
     public String getAppLauncherIconPackPackage() {
         return SharedPreferenceUtils.getString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_ICON_PACK_PACKAGE,
             TERMUX_APP.DEFAULT_APP_LAUNCHER_ICON_PACK_PACKAGE, true);

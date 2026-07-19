@@ -18,6 +18,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
+import android.content.res.Resources;
 import android.content.res.ColorStateList;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
@@ -33,7 +34,6 @@ import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.PorterDuff;
-import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
@@ -119,6 +119,7 @@ import com.termux.app.launcher.model.PinnedIconOverride;
 import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedFolderItem;
 import com.termux.app.launcher.model.PinnedItem;
+import com.termux.app.terminal.AccessoryStackLayoutPolicy;
 import com.termux.shared.theme.ThemeUtils;
 import com.termux.view.TerminalView;
 import com.termux.launcherctl.LauncherCtlNotificationListener;
@@ -169,14 +170,16 @@ public final class SuggestionBarView extends GridLayout {
     private float textSize = 12f;
     private boolean bandW = false;
     @Nullable private ColorFilter appIconColorFilter;
-    private boolean unifyIcons = true;
-    private boolean iconShadowEnabled = true;
-    private static final int ICON_SHADOW_COLOR = 0x73000000;
+    private static final int ICON_RENDER_PIPELINE_VERSION = 2;
+    private static final int ICON_SHADOW_COLOR = 0x47000000;
     /** Cache of harmonized icon drawables so resting and swipe-preview icons are identical (no size jump) and we don't rebuild bitmaps per frame. */
     private final LruCache<String, Drawable> normalizedIconCache = new LruCache<>(96);
     /** Visible alpha bounds per drawable; avoids rescanning custom/icon-pack artwork on every drag event. */
     private final Map<Drawable, RectF> drawableVisibleBoundsCache = new WeakHashMap<>();
-    private final Map<Drawable, FocusOutlineVisual> focusOutlineVisualCache = new WeakHashMap<>();
+    private final Map<Drawable, FocusOutlineRenderer.Visual> focusOutlineVisualCache = new WeakHashMap<>();
+    private final Map<View, ValueAnimator> terminalFocusOutlineAnimators = new WeakHashMap<>();
+    private final Map<View, Boolean> terminalFocusOutlineDirections = new WeakHashMap<>();
+    private final Map<View, FocusOutlineRenderer.OutlineDrawable> terminalFocusOutlineDrawables = new WeakHashMap<>();
     private int searchTolerance = 70;
     private float iconScale = 1.0f;
     private int appBarOpacity = 80;
@@ -295,7 +298,7 @@ public final class SuggestionBarView extends GridLayout {
     public static final class AzDragFocusResult {
         @Nullable public final LauncherAppEntry entry;
         @Nullable public final RectF iconBounds;
-        @Nullable public final Bitmap iconOutlineMask;
+        @Nullable public final FocusOutlineRenderer.Visual iconOutlineVisual;
         @Nullable public final RectF iconOutlineBounds;
         @Nullable public final View launchView;
         public final int edge;
@@ -305,7 +308,7 @@ public final class SuggestionBarView extends GridLayout {
         AzDragFocusResult(
             @Nullable LauncherAppEntry entry,
             @Nullable RectF iconBounds,
-            @Nullable Bitmap iconOutlineMask,
+            @Nullable FocusOutlineRenderer.Visual iconOutlineVisual,
             @Nullable RectF iconOutlineBounds,
             @Nullable View launchView,
             int edge,
@@ -314,7 +317,7 @@ public final class SuggestionBarView extends GridLayout {
         ) {
             this.entry = entry;
             this.iconBounds = iconBounds;
-            this.iconOutlineMask = iconOutlineMask;
+            this.iconOutlineVisual = iconOutlineVisual;
             this.iconOutlineBounds = iconOutlineBounds;
             this.launchView = launchView;
             this.edge = edge;
@@ -327,17 +330,14 @@ public final class SuggestionBarView extends GridLayout {
         }
     }
 
-    private static final class FocusOutlineVisual {
-        @NonNull final Bitmap mask;
-        final int viewWidth;
-        final int viewHeight;
-        final int outerPadding;
+    /** Display bitmap plus the clean, pre-shadow artwork used for focus contour extraction. */
+    private static final class RenderedIconDrawable extends BitmapDrawable {
+        @NonNull final Bitmap cleanArtwork;
 
-        FocusOutlineVisual(@NonNull Bitmap mask, int viewWidth, int viewHeight, int outerPadding) {
-            this.mask = mask;
-            this.viewWidth = viewWidth;
-            this.viewHeight = viewHeight;
-            this.outerPadding = outerPadding;
+        RenderedIconDrawable(@NonNull Resources resources, @NonNull Bitmap display,
+                             @NonNull Bitmap cleanArtwork) {
+            super(resources, display);
+            this.cleanArtwork = cleanArtwork;
         }
     }
 
@@ -491,27 +491,30 @@ public final class SuggestionBarView extends GridLayout {
             imageView.setColorFilter(appIconColorFilter);
     }
 
-    public void setUnifyIcons(boolean unifyIcons) {
-        if (this.unifyIcons == unifyIcons) return;
-        this.unifyIcons = unifyIcons;
-        invalidateRenderedIconCaches();
-    }
-
-    public void setIconShadowEnabled(boolean enabled) {
-        if (this.iconShadowEnabled == enabled) return;
-        this.iconShadowEnabled = enabled;
-        invalidateRenderedIconCaches();
-    }
-
     private void invalidateRenderedIconCaches() {
         normalizedIconCache.evictAll();
         drawableVisibleBoundsCache.clear();
         focusOutlineVisualCache.clear();
+        for (ValueAnimator animator : new ArrayList<>(terminalFocusOutlineAnimators.values())) {
+            if (animator != null) animator.cancel();
+        }
+        terminalFocusOutlineAnimators.clear();
+        terminalFocusOutlineDirections.clear();
+        for (Map.Entry<View, FocusOutlineRenderer.OutlineDrawable> entry
+                : new ArrayList<>(terminalFocusOutlineDrawables.entrySet())) {
+            View target = entry.getKey();
+            if (target != null && target.getForeground() == entry.getValue()) target.setForeground(null);
+        }
+        terminalFocusOutlineDrawables.clear();
         lastSurfaceRenderSignature = 0;
     }
 
     public void setIconScale(float iconScale) {
+        if (Math.abs(this.iconScale - iconScale) < 0.0001f) return;
         this.iconScale = iconScale;
+        invalidateRenderedIconCaches();
+        childLayoutPending = true;
+        requestLayout();
     }
 
     public void setDockRowHeightHintPx(int dockRowHeightHintPx) {
@@ -520,6 +523,7 @@ public final class SuggestionBarView extends GridLayout {
             return;
         }
         this.dockRowHeightHintPx = clamped;
+        invalidateRenderedIconCaches();
         childLayoutPending = true;
         requestLayout();
         invalidate();
@@ -1094,21 +1098,21 @@ public final class SuggestionBarView extends GridLayout {
         WeakReference<View> viewRef = azRenderedEntryTargets.get(key);
         View launchView = viewRef == null ? null : viewRef.get();
         RectF bounds = null;
-        Bitmap outlineMask = null;
+        FocusOutlineRenderer.Visual outlineVisual = null;
         RectF outlineBounds = null;
         if (launchView != null && launchView.isAttachedToWindow()) {
             bounds = resolveVisibleIconBoundsOnScreen(launchView);
             if (launchView instanceof ImageView) {
-                FocusOutlineVisual visual = resolveFocusOutlineVisual((ImageView) launchView);
+                FocusOutlineRenderer.Visual visual = resolveFocusOutlineVisual((ImageView) launchView);
                 if (visual != null) {
                     int[] viewLoc = new int[2];
                     launchView.getLocationOnScreen(viewLoc);
-                    outlineMask = visual.mask;
+                    outlineVisual = visual;
                     outlineBounds = new RectF(
                         viewLoc[0] - visual.outerPadding,
                         viewLoc[1] - visual.outerPadding,
-                        viewLoc[0] + visual.viewWidth + visual.outerPadding,
-                        viewLoc[1] + visual.viewHeight + visual.outerPadding
+                        viewLoc[0] + visual.sourceWidth + visual.outerPadding,
+                        viewLoc[1] + visual.sourceHeight + visual.outerPadding
                     );
                 }
             }
@@ -1116,32 +1120,38 @@ public final class SuggestionBarView extends GridLayout {
         if (bounds == null) {
             bounds = approximateAzSlotIconBounds(slot, azRenderedSlotCount, location, width, height);
         }
-        return new AzDragFocusResult(entry, bounds, outlineMask, outlineBounds, launchView, edge, pageLeft, pageRight);
+        return new AzDragFocusResult(entry, bounds, outlineVisual, outlineBounds, launchView, edge, pageLeft, pageRight);
     }
 
     @Nullable
-    private FocusOutlineVisual resolveFocusOutlineVisual(@NonNull ImageView imageView) {
+    private FocusOutlineRenderer.Visual resolveFocusOutlineVisual(@NonNull ImageView imageView) {
         Drawable drawable = imageView.getDrawable();
         int width = imageView.getWidth();
         int height = imageView.getHeight();
         if (drawable == null || width <= 0 || height <= 0 || drawable.getBounds().isEmpty()) {
             return null;
         }
-        FocusOutlineVisual cached = focusOutlineVisualCache.get(drawable);
-        if (cached != null && cached.viewWidth == width && cached.viewHeight == height) {
+        FocusOutlineRenderer.Visual cached = focusOutlineVisualCache.get(drawable);
+        if (cached != null && cached.sourceWidth == width && cached.sourceHeight == height) {
             return cached;
         }
 
+        // Focus geometry must come from clean artwork. The display bitmap deliberately contains a
+        // downward contact shadow, which would otherwise skew the alpha contour on every icon.
         Bitmap source = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas sourceCanvas = new Canvas(source);
         sourceCanvas.translate(imageView.getPaddingLeft(), imageView.getPaddingTop());
         sourceCanvas.concat(imageView.getImageMatrix());
-        drawable.draw(sourceCanvas);
-        int gap = Math.max(1, dp(1));
-        int stroke = Math.max(1, dp(2));
-        Bitmap mask = buildFocusOutlineMask(source, gap, stroke);
+        if (drawable instanceof RenderedIconDrawable) {
+            RenderedIconDrawable rendered = (RenderedIconDrawable) drawable;
+            Paint artworkPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+            sourceCanvas.drawBitmap(rendered.cleanArtwork, null, drawable.getBounds(), artworkPaint);
+        } else {
+            drawable.draw(sourceCanvas);
+        }
+        FocusOutlineRenderer.Visual built = FocusOutlineRenderer.buildVisual(
+            source, getResources().getDisplayMetrics().density);
         source.recycle();
-        FocusOutlineVisual built = new FocusOutlineVisual(mask, width, height, gap + stroke);
         focusOutlineVisualCache.put(drawable, built);
         return built;
     }
@@ -1149,53 +1159,7 @@ public final class SuggestionBarView extends GridLayout {
     /** Builds a crisp external contour from the icon alpha, including irregular icon-pack shapes. */
     @NonNull
     static Bitmap buildFocusOutlineMask(@NonNull Bitmap source, int gap, int stroke) {
-        int safeGap = Math.max(0, gap);
-        int safeStroke = Math.max(1, stroke);
-        int outer = safeGap + safeStroke;
-        int width = source.getWidth();
-        int height = source.getHeight();
-        int[] pixels = new int[width * height];
-        source.getPixels(pixels, 0, width, 0, 0, width, height);
-        int maxAlpha = 0;
-        for (int pixel : pixels) maxAlpha = Math.max(maxAlpha, pixel >>> 24);
-        int threshold = Math.max(8, Math.round(maxAlpha * 0.25f));
-        for (int i = 0; i < pixels.length; i++) {
-            pixels[i] = (pixels[i] >>> 24) >= threshold ? 0xFFFFFFFF : 0x00000000;
-        }
-        Bitmap binary = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        binary.setPixels(pixels, 0, width, 0, 0, width, height);
-        Bitmap result = Bitmap.createBitmap(width + (outer * 2), height + (outer * 2), Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(result);
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-        drawDilatedMask(canvas, binary, paint, outer, outer);
-        if (safeGap > 0) {
-            paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_OUT));
-            drawDilatedMask(canvas, binary, paint, outer, safeGap);
-            paint.setXfermode(null);
-        } else {
-            paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_OUT));
-            canvas.drawBitmap(binary, outer, outer, paint);
-            paint.setXfermode(null);
-        }
-        binary.recycle();
-        return result;
-    }
-
-    private static void drawDilatedMask(
-        @NonNull Canvas canvas,
-        @NonNull Bitmap mask,
-        @NonNull Paint paint,
-        int origin,
-        int radius
-    ) {
-        int radiusSquared = radius * radius;
-        for (int y = -radius; y <= radius; y++) {
-            for (int x = -radius; x <= radius; x++) {
-                if ((x * x) + (y * y) <= radiusSquared) {
-                    canvas.drawBitmap(mask, origin + x, origin + y, paint);
-                }
-            }
-        }
+        return FocusOutlineRenderer.buildFocusOutlineMask(source, gap, stroke);
     }
 
     /**
@@ -1259,15 +1223,21 @@ public final class SuggestionBarView extends GridLayout {
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
 
-        Drawable scanDrawable = drawable;
-        Drawable.ConstantState state = drawable.getConstantState();
-        if (state != null) {
-            scanDrawable = state.newDrawable(getResources()).mutate();
+        if (drawable instanceof RenderedIconDrawable) {
+            canvas.drawBitmap(((RenderedIconDrawable) drawable).cleanArtwork, null,
+                new Rect(0, 0, width, height),
+                new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG));
+        } else {
+            Drawable scanDrawable = drawable;
+            Drawable.ConstantState state = drawable.getConstantState();
+            if (state != null) {
+                scanDrawable = state.newDrawable(getResources()).mutate();
+            }
+            Rect oldBounds = new Rect(scanDrawable.getBounds());
+            scanDrawable.setBounds(0, 0, width, height);
+            scanDrawable.draw(canvas);
+            scanDrawable.setBounds(oldBounds);
         }
-        Rect oldBounds = new Rect(scanDrawable.getBounds());
-        scanDrawable.setBounds(0, 0, width, height);
-        scanDrawable.draw(canvas);
-        scanDrawable.setBounds(oldBounds);
 
         Rect visible = findVisibleAlphaBounds(bitmap);
         bitmap.recycle();
@@ -1982,6 +1952,12 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     public void clearTerminalSearchFocus() {
+        for (ValueAnimator animator : new ArrayList<>(terminalFocusOutlineAnimators.values())) {
+            if (animator != null) animator.cancel();
+        }
+        terminalFocusOutlineAnimators.clear();
+        terminalFocusOutlineDirections.clear();
+        terminalFocusOutlineDrawables.clear();
         for (View target : terminalSearchTargets) {
             if (target != null) target.setForeground(null);
         }
@@ -1991,47 +1967,95 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private void applyTerminalSearchFocusOutline() {
-        int accent = MaterialColors.getColor(this,
-            com.termux.shared.R.attr.termuxColorPrimary, 0xFFA6E6B3);
+        int accent = FocusOutlineRenderer.resolveAccent(this);
         for (int i = 0; i < terminalSearchTargets.size(); i++) {
             View target = terminalSearchTargets.get(i);
             if (target == null) continue;
             if (i != terminalSearchFocusIndex) {
-                target.setForeground(null);
+                animateTerminalFocusOutline(target, false, null);
                 continue;
             }
-            // Reuse the artwork-contour mask the A-Z drag focus draws, so the outline hugs the
-            // icon's actual shape instead of boxing the whole touch target.
-            Drawable outlineDrawable = null;
-            if (target instanceof ImageView) {
-                if (target.getWidth() <= 0) {
-                    // Focus is applied while the row is still being (re)built; the mask needs the
-                    // laid-out view size, so retry once layout has produced real bounds.
-                    final int focusAtPost = terminalSearchFocusIndex;
-                    target.post(() -> {
-                        if (terminalSearchFocusIndex == focusAtPost)
-                            applyTerminalSearchFocusOutline();
-                    });
-                }
-                FocusOutlineVisual visual = resolveFocusOutlineVisual((ImageView) target);
-                if (visual != null) {
-                    BitmapDrawable contour = new BitmapDrawable(getResources(), visual.mask);
-                    contour.setTint(accent);
-                    contour.setGravity(Gravity.CENTER);
-                    outlineDrawable = contour;
-                }
+            if (!(target instanceof ImageView)) continue;
+            if (target.getWidth() <= 0 || target.getHeight() <= 0) {
+                // Focus is applied while the row is still being built; wait for real image-matrix
+                // bounds instead of flashing a geometrically different fallback outline.
+                final int focusAtPost = terminalSearchFocusIndex;
+                target.post(() -> {
+                    if (terminalSearchFocusIndex == focusAtPost) applyTerminalSearchFocusOutline();
+                });
+                continue;
             }
-            if (outlineDrawable == null) {
-                GradientDrawable outline = new GradientDrawable();
-                outline.setShape(GradientDrawable.RECTANGLE);
-                outline.setColor(Color.TRANSPARENT);
-                outline.setCornerRadius(dp(14));
-                outline.setStroke(dp(2), accent);
-                outlineDrawable = outline;
+            FocusOutlineRenderer.Visual visual = resolveFocusOutlineVisual((ImageView) target);
+            if (visual == null) continue;
+            FocusOutlineRenderer.OutlineDrawable outline = terminalFocusOutlineDrawables.get(target);
+            if (outline == null) {
+                outline = new FocusOutlineRenderer.OutlineDrawable(visual, accent);
+                terminalFocusOutlineDrawables.put(target, outline);
             }
-            target.setForeground(outlineDrawable);
-            target.setForegroundGravity(Gravity.FILL);
+            animateTerminalFocusOutline(target, true, outline);
         }
+    }
+
+    private void animateTerminalFocusOutline(@NonNull View target, boolean incoming,
+                                             @Nullable FocusOutlineRenderer.OutlineDrawable requested) {
+        FocusOutlineRenderer.OutlineDrawable outline = requested != null
+            ? requested : terminalFocusOutlineDrawables.get(target);
+        if (outline == null) return;
+
+        ValueAnimator running = terminalFocusOutlineAnimators.get(target);
+        if (running != null) {
+            // Posted layout retries keep the existing transition; a real direction reversal starts
+            // from the drawable's current alpha/scale instead of guessing direction from geometry.
+            Boolean runningIncoming = terminalFocusOutlineDirections.get(target);
+            if (runningIncoming != null && runningIncoming == incoming) return;
+            terminalFocusOutlineAnimators.remove(target);
+            terminalFocusOutlineDirections.remove(target);
+            running.cancel();
+        }
+
+        if (incoming && target.getForeground() != outline) {
+            outline.setFocusAlpha(0f);
+            outline.setFocusScale(1.04f);
+            target.setForeground(outline);
+            target.setForegroundGravity(Gravity.FILL);
+        } else if (!incoming && target.getForeground() != outline) {
+            return;
+        }
+
+        if (!FocusOutlineRenderer.animationsEnabled(getContext())) {
+            terminalFocusOutlineDirections.remove(target);
+            outline.setFocusAlpha(incoming ? 1f : 0f);
+            outline.setFocusScale(incoming ? 1f : 0.96f);
+            if (!incoming && target.getForeground() == outline) target.setForeground(null);
+            return;
+        }
+
+        final float startAlpha = outline.getFocusAlpha();
+        final float startScale = outline.getFocusScale();
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        terminalFocusOutlineAnimators.put(target, animator);
+        terminalFocusOutlineDirections.put(target, incoming);
+        animator.setDuration(160L);
+        animator.setInterpolator(new DecelerateInterpolator(1.45f));
+        animator.addUpdateListener(animation -> {
+            float progress = (float) animation.getAnimatedValue();
+            outline.setFocusAlpha(lerp(startAlpha, incoming ? 1f : 0f, progress));
+            outline.setFocusScale(incoming
+                ? FocusOutlineRenderer.incomingScale(startScale, progress)
+                : lerp(startScale, 0.96f, progress));
+        });
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                if (terminalFocusOutlineAnimators.get(target) != animation) return;
+                terminalFocusOutlineAnimators.remove(target);
+                terminalFocusOutlineDirections.remove(target);
+                outline.setFocusAlpha(incoming ? 1f : 0f);
+                outline.setFocusScale(incoming ? 1f : 0.96f);
+                if (!incoming && target.getForeground() == outline) target.setForeground(null);
+            }
+        });
+        animator.start();
     }
 
     private void animatePinnedMutationFeedback() {
@@ -2060,8 +2084,9 @@ public final class SuggestionBarView extends GridLayout {
         signature = (31 * signature) + (azPreview ? 1 : 0);
         signature = (31 * signature) + (pinnedSurface ? 1 : 0);
         signature = (31 * signature) + (bandW ? 1 : 0);
-        signature = (31 * signature) + (unifyIcons ? 1 : 0);
-        signature = (31 * signature) + (iconShadowEnabled ? 1 : 0);
+        signature = (31 * signature) + ICON_RENDER_PIPELINE_VERSION;
+        signature = (31 * signature) + Float.floatToIntBits(iconScale);
+        signature = (31 * signature) + dockRowHeightHintPx;
         signature = (31 * signature) + Math.max(1, buttonCount);
         signature = (31 * signature) + pinnedPageIndex;
         signature = (31 * signature) + activeAzPageIndex;
@@ -2191,17 +2216,7 @@ public final class SuggestionBarView extends GridLayout {
         }
     }
 
-    /**
-     * Light-touch harmonization so default (non-icon-pack) icons read as a cohesive set on the glass
-     * dock WITHOUT reshaping them: each icon keeps its native silhouette but gets a consistent
-     * footprint/scale, a slight saturation nudge toward the dock's vibrancy, and a soft drop shadow
-     * (derived from the icon's own alpha) that lifts it off the glass. Returns {@code src} unchanged
-     * when the feature is off. The B&W color filter, if enabled, still stacks on top of the result.
-     */
-    /**
-     * Harmonized icon for an entry at {@code sizePx}, cached so the resting button and the
-     * swipe-preview draw the exact same bitmap (no size jump) without rebuilding per frame.
-     */
+    /** Always-on glass-dock icon treatment, cached across resting and swipe-preview rendering. */
     @Nullable
     private Drawable iconForDisplay(@NonNull LauncherAppEntry entry, int sizePx) {
         Drawable raw = entry.icon != null ? entry.icon : getContext().getPackageManager().getDefaultActivityIcon();
@@ -2209,34 +2224,31 @@ public final class SuggestionBarView extends GridLayout {
             return raw;
         }
         boolean cloneBadge = entry.appRef.clonedProfile;
-        // Both harmonization and the standalone shadow rebuild the bitmap. Clone/profile apps also
-        // rebuild once so their identity marker is consistent across dock, A-Z and swipe previews.
-        if (!unifyIcons && !iconShadowEnabled && !cloneBadge) return raw;
-        String key = (unifyIcons ? "u" : "") + (iconShadowEnabled ? "s" : "")
-            + (cloneBadge ? "c" : "") + (entry.iconPackArtwork ? "p" : "")
+        String key = "glass" + ICON_RENDER_PIPELINE_VERSION + (cloneBadge ? "c" : "")
+            + (entry.iconPackArtwork ? "p" : "")
             + stableEntryKey(entry) + "@" + sizePx;
         Drawable cached = normalizedIconCache.get(key);
         if (cached != null) {
             return cached;
         }
-        Drawable built = unifyIcons ? normalizeIcon(raw, sizePx, !entry.iconPackArtwork)
-            : (iconShadowEnabled ? shadowedIcon(raw, sizePx) : rasterizedIcon(raw, sizePx));
-        if (cloneBadge && built != null) built = addCloneBadge(built, sizePx);
+        Drawable built = normalizeIcon(raw, sizePx, !entry.iconPackArtwork, cloneBadge);
         if (built != null) {
             normalizedIconCache.put(key, built);
         }
         return built != null ? built : raw;
     }
 
-    private Drawable normalizeIcon(@Nullable Drawable src, int sizePx, boolean tuneSaturation) {
-        if (!unifyIcons || src == null || sizePx <= 0) {
+    private Drawable normalizeIcon(@Nullable Drawable src, int sizePx, boolean tuneSaturation,
+                                   boolean cloneBadge) {
+        if (src == null || sizePx <= 0) {
             return src;
         }
-        Bitmap out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(out);
+        Bitmap cleanArtwork = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
+        Canvas artworkCanvas = new Canvas(cleanArtwork);
 
-        // Inset leaves room for the soft shadow when it's on; otherwise icons fill the cell.
-        float inset = sizePx * (iconShadowEnabled ? 0.035f : 0.02f);
+        // Keep the prior unification footprint as the normalization baseline for every source,
+        // including icon-pack artwork. The native silhouette is never reshaped.
+        float inset = sizePx * 0.035f;
         int left = Math.round(inset);
         int top = Math.round(inset);
         int right = Math.round(sizePx - inset);
@@ -2252,10 +2264,6 @@ public final class SuggestionBarView extends GridLayout {
         src.draw(iconCanvas);
         src.setBounds(oldBounds);
 
-        if (iconShadowEnabled) {
-            drawIconShadow(canvas, iconBmp, iconRect, sizePx);
-        }
-
         // Saturation nudge toward the glass vibrancy (match, not grey), then draw the icon.
         Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         if (tuneSaturation) {
@@ -2263,57 +2271,20 @@ public final class SuggestionBarView extends GridLayout {
             saturate.setSaturation(0.92f);
             iconPaint.setColorFilter(new ColorMatrixColorFilter(saturate));
         }
-        canvas.drawBitmap(iconBmp, null, iconRect, iconPaint);
+        artworkCanvas.drawBitmap(iconBmp, null, iconRect, iconPaint);
         iconBmp.recycle();
+        if (cloneBadge) drawCloneBadge(artworkCanvas, sizePx);
 
-        return new BitmapDrawable(getResources(), out);
-    }
-
-    /** Wraps a raw icon (no harmonization) with just the soft drop shadow, preserving its colours. */
-    @Nullable
-    private Drawable shadowedIcon(@Nullable Drawable src, int sizePx) {
-        if (src == null || sizePx <= 0) return src;
-        Bitmap out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(out);
-        float inset = sizePx * 0.035f;
-        Rect iconRect = new Rect(Math.round(inset), Math.round(inset),
-            Math.round(sizePx - inset), Math.round(sizePx - inset));
-        Bitmap iconBmp = Bitmap.createBitmap(iconRect.width(), iconRect.height(), Bitmap.Config.ARGB_8888);
-        Canvas iconCanvas = new Canvas(iconBmp);
-        Rect oldBounds = new Rect(src.getBounds());
-        src.setBounds(0, 0, iconBmp.getWidth(), iconBmp.getHeight());
-        src.draw(iconCanvas);
-        src.setBounds(oldBounds);
-        drawIconShadow(canvas, iconBmp, iconRect, sizePx);
-        Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-        canvas.drawBitmap(iconBmp, null, iconRect, iconPaint);
-        iconBmp.recycle();
-        return new BitmapDrawable(getResources(), out);
-    }
-
-    @Nullable
-    private Drawable rasterizedIcon(@Nullable Drawable src, int sizePx) {
-        if (src == null || sizePx <= 0) return src;
-        Bitmap out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(out);
-        Rect oldBounds = new Rect(src.getBounds());
-        src.setBounds(0, 0, sizePx, sizePx);
-        src.draw(canvas);
-        src.setBounds(oldBounds);
-        return new BitmapDrawable(getResources(), out);
+        Bitmap display = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
+        Canvas displayCanvas = new Canvas(display);
+        drawIconShadow(displayCanvas, cleanArtwork);
+        displayCanvas.drawBitmap(cleanArtwork, 0f, 0f,
+            new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG));
+        return new RenderedIconDrawable(getResources(), display, cleanArtwork);
     }
 
     /** Small, neutral double-tile badge that remains legible over both bright and dark icons. */
-    @Nullable
-    private Drawable addCloneBadge(@Nullable Drawable src, int sizePx) {
-        if (src == null || sizePx <= 0) return src;
-        Bitmap out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(out);
-        Rect oldBounds = new Rect(src.getBounds());
-        src.setBounds(0, 0, sizePx, sizePx);
-        src.draw(canvas);
-        src.setBounds(oldBounds);
-
+    private void drawCloneBadge(@NonNull Canvas canvas, int sizePx) {
         float radius = Math.max(dp(6f), sizePx * 0.19f);
         float cx = sizePx - radius - Math.max(dp(1f), sizePx * 0.025f);
         float cy = sizePx - radius - Math.max(dp(1f), sizePx * 0.025f);
@@ -2334,16 +2305,15 @@ public final class SuggestionBarView extends GridLayout {
         paint.setColor(0xFF5B6CFF);
         canvas.drawRoundRect(cx - tile * 0.20f, cy - tile * 0.20f,
             cx + tile * 0.60f, cy + tile * 0.60f, corner, corner, paint);
-        return new BitmapDrawable(getResources(), out);
     }
 
-    /** Soft drop shadow derived from the icon's own alpha silhouette — lifts it off the glass. */
-    private void drawIconShadow(@NonNull Canvas canvas, @NonNull Bitmap iconBmp, @NonNull Rect iconRect, int sizePx) {
-        Bitmap alpha = iconBmp.extractAlpha();
+    /** Subtle silhouette contact shadow: 3dp feather, 1dp down, 28% black. */
+    private void drawIconShadow(@NonNull Canvas canvas, @NonNull Bitmap cleanArtwork) {
+        Bitmap alpha = cleanArtwork.extractAlpha();
         Paint shadowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         shadowPaint.setColor(ICON_SHADOW_COLOR);
-        shadowPaint.setMaskFilter(new BlurMaskFilter(Math.max(1f, sizePx * 0.06f), BlurMaskFilter.Blur.NORMAL));
-        canvas.drawBitmap(alpha, iconRect.left, iconRect.top + (sizePx * 0.045f), shadowPaint);
+        shadowPaint.setMaskFilter(new BlurMaskFilter(Math.max(1f, dp(3f)), BlurMaskFilter.Blur.NORMAL));
+        canvas.drawBitmap(alpha, 0f, dp(1f), shadowPaint);
         alpha.recycle();
     }
 
@@ -7966,8 +7936,7 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private float resolveIconFillRatio() {
-        float normalized = clamp01((iconScale - 1.0f) / 0.8f);
-        return 0.68f + (normalized * 0.16f);
+        return AccessoryStackLayoutPolicy.computeDockIconFillRatio(iconScale);
     }
 
     @NonNull

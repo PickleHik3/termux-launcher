@@ -1278,7 +1278,7 @@ public final class ExtraKeysView extends GridLayout {
         // The bubble is larger than the key so the secondary glyph reads prominently. Recenter the
         // popup origin (its top-left) so the enlarged bubble stays centred over the key, and clamp
         // X so it never runs off-screen.
-        // A touch bigger than the key so the secondary glyph reads, but no card behind it.
+        // A touch bigger than the key so the secondary glyph and its compact chip read clearly.
         mBubbleW = Math.round(mTravelKeyW * 1.2f);
         mBubbleH = Math.round(mTravelKeyH * 1.2f);
         int screenW = getResources().getDisplayMetrics().widthPixels;
@@ -1302,17 +1302,20 @@ public final class ExtraKeysView extends GridLayout {
         tv.setTypeface(button.getTypeface());
         tv.setTextColor(activeTextColor());
         tv.setText(mTravelSecondaryText);
-        // No background card — the glyph floats, kept legible by its own accent glow.
+        mTravelBubbleBg = buildFloatingSecondaryKeyBackground();
+        tv.setBackground(mTravelBubbleBg);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            tv.setElevation(dpToPx(3f));
+        }
 
         mTravelBubble = tv;
-        mTravelBubbleBg = null;
         mTravelPopup = new PopupWindow(tv, mBubbleW, mBubbleH, false);
         mTravelPopup.setClippingEnabled(false);
         mTravelPopup.setFocusable(false);
         mTravelPopup.setOutsideTouchable(false);
         mTravelPopup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            mTravelPopup.setElevation(dpToPx(8f));
+            mTravelPopup.setElevation(dpToPx(4f));
         }
         View root = getRootView();
         if (root == null) root = button;
@@ -1400,6 +1403,26 @@ public final class ExtraKeysView extends GridLayout {
 
     private int activeTextColor() {
         return mButtonActiveTextColor != 0 ? mButtonActiveTextColor : Color.WHITE;
+    }
+
+    /** Glass keycap container for the swipe-up secondary key; gesture geometry remains unchanged. */
+    @NonNull
+    private GradientDrawable buildFloatingSecondaryKeyBackground() {
+        int accent = feedbackTint();
+        int configuredBase = mButtonBackgroundColor;
+        int neutralBase = Color.alpha(configuredBase) > 24
+            ? configuredBase
+            : lerpColor(Color.rgb(12, 18, 24), activeTextColor(), 0.08f);
+        int fill = lerpColor(neutralBase, accent, 0.12f);
+        int border = lerpColor(accent, activeTextColor(), 0.16f);
+
+        GradientDrawable chip = new GradientDrawable();
+        chip.setShape(GradientDrawable.RECTANGLE);
+        chip.setCornerRadius(dpToPx(12f));
+        chip.setColor(withAlpha(fill, mKeyPressFeedbackBlurAvailable ? 174 : 224));
+        chip.setStroke(Math.max(1, Math.round(dpToPx(1f))), withAlpha(border, 148));
+        chip.setDither(true);
+        return chip;
     }
 
     private static int lerpColor(int a, int b, float t) {

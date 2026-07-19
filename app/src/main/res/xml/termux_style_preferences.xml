@@ -114,22 +114,10 @@
         app:title="@string/apps_bar_icons_header">
 
         <SwitchPreferenceCompat
-            app:key="app_launcher_unify_icons"
-            app:title="@string/termux_app_launcher_unify_icons_title"
-            app:summary="@string/termux_app_launcher_unify_icons_summary"
-            android:defaultValue="true" />
-
-        <SwitchPreferenceCompat
             app:key="app_launcher_bw_icons"
             app:title="@string/termux_app_launcher_bw_icons_title"
             app:summary="@string/termux_app_launcher_bw_icons_summary"
             android:defaultValue="false" />
-
-        <SwitchPreferenceCompat
-            app:key="app_launcher_icon_shadow"
-            app:title="@string/termux_app_launcher_icon_shadow_title"
-            app:summary="@string/termux_app_launcher_icon_shadow_summary"
-            android:defaultValue="true" />
 
         <Preference
             app:key="app_launcher_icon_pack_package"

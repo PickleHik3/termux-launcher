@@ -435,6 +435,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final boolean ACCESSORY_RENDER_TRACE = false;
     private static final float DEFAULT_DOCK_SIZE_PRESET_SHIFT = 0.27f;
     private static final float DEFAULT_DOCK_SIZE_MAX_PROGRESS = 1.18f;
+    private static final float[] DEFAULT_DOCK_ICON_PROGRESS_POINTS = {0.54f, 0.77f, 1.00f, 1.18f};
+    private static final float[] DEFAULT_DOCK_ICON_SCALE_POINTS = {
+        1.3068f, 1.487604f, 1.68f, 1.89072f
+    };
+    private static final float[] CAPSULE_DOCK_ICON_PROGRESS_POINTS = {0.27f, 0.50f, 0.73f, 1.00f};
+    private static final float[] CAPSULE_DOCK_ICON_SCALE_POINTS = {
+        1.7252f, 1.9633334f, 2.21312f, 2.508f
+    };
     private static volatile boolean sPendingStyleReloadRecreateActivity = true;
 
     private boolean mSeamlessStatusBackgroundActive;
@@ -1895,25 +1903,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private int resolveDockCapsuleAppsTopPaddingPx() {
-        // Push the icons down so they sit centered between the top-edge page indicator (now flush
-        // with the dock's top rim) and the A-Z row below. This is a FIXED ~14dp at the largest dock
-        // size, but at smaller dock sizes a fixed pad eats too large a share of the (short) row and
-        // crushes the icons — so scale it down with dock size so every size gets a fair icon size.
-        float progress = mPreferences != null
-            ? resolveDockSizeProgress(mPreferences.getAppLauncherBarHeightScale())
-            : 1f;
-        float dp = 6f + progress * 7f;
-        return Math.round(dp * getResources().getDisplayMetrics().density);
+        // Top space equals bottom padding plus the 3dp icon/A-Z indicator band. Together with the
+        // paired bottom formula this preserves the old total inset while centering the icon row.
+        int totalPadding = resolveDockCapsuleAppsTotalPaddingPx();
+        int indicatorBand = Math.round(dpToPx(3));
+        return Math.min(totalPadding, Math.max(0, (totalPadding + indicatorBand + 1) / 2));
     }
 
     private int resolveDockCapsuleAppsBottomPaddingPx() {
-        return Math.round(dpToPx(1));
+        return Math.max(0, resolveDockCapsuleAppsTotalPaddingPx() - resolveDockCapsuleAppsTopPaddingPx());
+    }
+
+    private int resolveDockCapsuleAppsTotalPaddingPx() {
+        float progress = mPreferences != null
+            ? resolveDockSizeProgress(mPreferences.getAppLauncherBarHeightScale())
+            : 1f;
+        float density = getResources().getDisplayMetrics().density;
+        // Exactly preserve the previous top (6dp + 7dp*progress) plus 1dp bottom budget.
+        return Math.round((6f + progress * 7f) * density) + Math.round(density);
     }
 
     private int resolveDefaultDockAppsTopPaddingPx() {
-        // The default dock draws its minimal page ticks in the top glass band. Reserve that band
-        // before laying out icons so the ticks never sit on top of the first row of app icons.
-        return Math.round(dpToPx(9));
+        // 6dp above equals 3dp below plus the fixed 3dp icon/A-Z band.
+        return Math.round(dpToPx(6));
+    }
+
+    private int resolveDefaultDockAppsBottomPaddingPx() {
+        return Math.round(dpToPx(3));
     }
 
     private int resolveDockCapsuleBottomGapPx() {
@@ -4318,8 +4334,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSuggestionBarView.setDefaultButtons(new ArrayList<>());
         mSuggestionBarView.setTextSize(10f);
         mSuggestionBarView.setBandW(mPreferences.isAppLauncherBwIconsEnabled());
-        mSuggestionBarView.setUnifyIcons(mPreferences.isAppLauncherUnifyIconsEnabled());
-        mSuggestionBarView.setIconShadowEnabled(mPreferences.isAppLauncherIconShadowEnabled());
         mSuggestionBarView.setIconScale(resolveDerivedDockIconScale());
         mSuggestionBarView.setDockRowHeightHintPx(resolveDockAppsBarHeightHintPx(buildDockLayoutMetrics(0).appsBarHeightPx));
         mSuggestionBarView.setAppBarOpacity(mPreferences.getAppBarOpacity());
@@ -4366,7 +4380,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         signature = (31 * signature) + stringSignature(mPreferences.getAppLauncherIconPackPackage());
         signature = (31 * signature) + stringSignature(mPreferences.getAppLauncherPinnedIconPackPackage());
         signature = (31 * signature) + (mPreferences.isAppLauncherBwIconsEnabled() ? 1 : 0);
-        signature = (31 * signature) + (mPreferences.isAppLauncherUnifyIconsEnabled() ? 1 : 0);
         return signature;
     }
 
@@ -4701,7 +4714,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mLauncherAzGestureFxOverlayView != null) {
             mLauncherAzGestureFxOverlayView.setFocusedIconOutline(
-                focusResult == null ? null : focusResult.iconOutlineMask,
+                focusResult == null ? null : focusResult.iconOutlineVisual,
                 focusResult == null ? null : focusResult.iconOutlineBounds
             );
         }
@@ -5868,7 +5881,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int extraKeysInset = isValarieDockStyle() ? resolveDockCapsuleExtraKeysInsetPx() : 0;
         int surfaceInset = isValarieDockStyle() ? resolveDockCapsuleHorizontalMarginPx() : 0;
         int appsTopPadding = isValarieDockStyle() ? resolveDockCapsuleAppsTopPaddingPx() : resolveDefaultDockAppsTopPaddingPx();
-        int appsBottomPadding = isValarieDockStyle() ? resolveDockCapsuleAppsBottomPaddingPx() : 0;
+        int appsBottomPadding = isValarieDockStyle() ? resolveDockCapsuleAppsBottomPaddingPx() : resolveDefaultDockAppsBottomPaddingPx();
         // The apps row reads with more side padding than the A–Z row because its icons are
         // space-between (half a slot of empty space at each edge). Trim the apps-row inset ~18%
         // so the icons sit closer to the edges and line up better with the A–Z row's letter span.
@@ -5900,7 +5913,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int resolveDockAppsBarHeightHintPx(int appsBarHeightPx) {
         int appsTopPadding = isValarieDockStyle() ? resolveDockCapsuleAppsTopPaddingPx() : resolveDefaultDockAppsTopPaddingPx();
-        int appsBottomPadding = isValarieDockStyle() ? resolveDockCapsuleAppsBottomPaddingPx() : 0;
+        int appsBottomPadding = isValarieDockStyle() ? resolveDockCapsuleAppsBottomPaddingPx() : resolveDefaultDockAppsBottomPaddingPx();
         return Math.max(0, appsBarHeightPx - appsTopPadding - appsBottomPadding);
     }
 
@@ -5922,15 +5935,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float normalizedScale = resolveDockSizeProgress(barHeightScale);
         float defaultDockProgress = resolveDefaultDockSizeProgress(barHeightScale);
         boolean appsRowEnabled = mPreferences.isAppLauncherAppsRowEnabled();
-        // The floating capsule needs its own (larger) size curve: the old capsule "large" was barely
-        // usable, so it becomes the new "default" and the presets fan out around it with meaningful
-        // steps below and headroom above. The default dock shifts its render curve so the current
-        // Large size becomes the visual Default without changing the shared preference buckets.
-        float heightFactor = isValarieDockStyle()
-            ? (1.12f + (normalizedScale * 0.60f))
-            : (1.00f + (defaultDockProgress * 0.52f));
         int appsBarHeightPx = appsRowEnabled
-            ? Math.max(0, Math.round(getDockBaseToolbarHeightPx() * heightFactor) + Math.max(0, additionalAppsBarHeightPx))
+            ? resolveDockAppsBarHeightPx(normalizedScale, defaultDockProgress,
+                Math.max(0, additionalAppsBarHeightPx))
             : 0;
 
         boolean azEnabled = appsRowEnabled && mPreferences.isAppLauncherAzRowEnabled();
@@ -5940,6 +5947,45 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int interRowGapPx = indicatorBandHeightPx;
 
         return new DockLayoutMetrics(appsBarHeightPx, indicatorBandHeightPx, azRowHeightPx, interRowGapPx);
+    }
+
+    /**
+     * Keeps the old row/icon result as each preset's baseline, then allocates enough extra row
+     * height for the new icon curve. This makes the requested icon-size bump real in pixels while
+     * preserving the smallest preset and the fixed A-Z/extra-keys heights.
+     */
+    private int resolveDockAppsBarHeightPx(float normalizedScale, float defaultDockProgress,
+                                           int additionalAppsBarHeightPx) {
+        boolean capsule = isValarieDockStyle();
+        float baselineHeightFactor = capsule
+            ? (1.12f + (normalizedScale * 0.60f))
+            : (1.00f + (defaultDockProgress * 0.52f));
+        int baselineRowHeightPx = Math.round(getDockBaseToolbarHeightPx() * baselineHeightFactor);
+        int verticalPaddingPx = capsule
+            ? resolveDockCapsuleAppsTopPaddingPx() + resolveDockCapsuleAppsBottomPaddingPx()
+            : resolveDefaultDockAppsTopPaddingPx() + resolveDefaultDockAppsBottomPaddingPx();
+        int twoDpPx = Math.round(dpToPx(2));
+        int minUsablePx = Math.round(dpToPx(24));
+        int baselineHintPx = Math.max(0, baselineRowHeightPx - verticalPaddingPx);
+        int baselineUsablePx = Math.max(minUsablePx, baselineHintPx - twoDpPx);
+
+        float baselineIconScale = capsule
+            ? (1.52f + (normalizedScale * 0.76f))
+            : (1.08f + (defaultDockProgress * 0.42f));
+        float targetIconScale = capsule
+            ? resolveCapsuleDockIconScaleForProgress(normalizedScale)
+            : resolveDefaultDockIconScaleForProgress(defaultDockProgress);
+        float requestedIconGrowth = targetIconScale / Math.max(0.0001f, baselineIconScale);
+        if (Math.abs(requestedIconGrowth - 1f) < 0.0001f) {
+            return Math.max(0, baselineRowHeightPx + additionalAppsBarHeightPx);
+        }
+
+        int baselineIconPx = Math.round(baselineUsablePx
+            * AccessoryStackLayoutPolicy.computeDockIconFillRatio(baselineIconScale));
+        int targetIconPx = Math.max(1, Math.round(baselineIconPx * requestedIconGrowth));
+        float targetFill = AccessoryStackLayoutPolicy.computeDockIconFillRatio(targetIconScale);
+        int targetUsablePx = Math.max(minUsablePx, Math.round(targetIconPx / targetFill));
+        return Math.max(0, targetUsablePx + twoDpPx + verticalPaddingPx + additionalAppsBarHeightPx);
     }
 
     private float resolveDockSizeProgress(float barHeightScale) {
@@ -5958,16 +6004,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float barHeightScale = mPreferences.getAppLauncherBarHeightScale();
         float normalized = resolveDockSizeProgress(barHeightScale);
         if (isValarieDockStyle()) {
-            // Capsule rides its own larger, wider icon curve. The default preset (~0.73 progress) now
-            // lands near the old capsule "largest" icon size, the top preset adds real headroom, and
-            // the smaller presets step down gently — so every capsule size is comfortably sized.
-            return 1.52f + (normalized * 0.76f);
+            return resolveCapsuleDockIconScaleForProgress(normalized);
         }
-        // The default edge-to-edge dock has a page-indicator band directly below the icons and a
-        // 1.08x press lift. Shift only this style so the current Large icon size becomes Default,
-        // then give Large a small amount of new headroom above it.
         float defaultDockProgress = resolveDefaultDockSizeProgress(barHeightScale);
-        return 1.08f + (defaultDockProgress * 0.42f);
+        return resolveDefaultDockIconScaleForProgress(defaultDockProgress);
+    }
+
+    static float resolveDefaultDockIconScaleForProgress(float defaultDockProgress) {
+        return AccessoryStackLayoutPolicy.interpolatePresetCurve(defaultDockProgress,
+            DEFAULT_DOCK_ICON_PROGRESS_POINTS, DEFAULT_DOCK_ICON_SCALE_POINTS);
+    }
+
+    static float resolveCapsuleDockIconScaleForProgress(float normalizedProgress) {
+        return AccessoryStackLayoutPolicy.interpolatePresetCurve(normalizedProgress,
+            CAPSULE_DOCK_ICON_PROGRESS_POINTS, CAPSULE_DOCK_ICON_SCALE_POINTS);
     }
 
     private void applyDockLayoutMetrics(@NonNull DockLayoutMetrics metrics) {
