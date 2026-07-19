@@ -772,8 +772,6 @@
                 <string name="termux_app_launcher_most_used_page_summary">Add an extra dock page showing your most-used apps.</string>
                 <string name="termux_app_launcher_bw_icons_title">Black &amp; white icons</string>
                 <string name="termux_app_launcher_bw_icons_summary">Render app icons in grayscale.</string>
-                <string name="termux_app_launcher_material_icons_title">Material colored icons</string>
-                <string name="termux_app_launcher_material_icons_summary">Recolor icons with the current Material theme while preserving their detail.</string>
                 <string name="termux_app_launcher_icon_shadow_title">Icon shadow</string>
                 <string name="termux_app_launcher_icon_shadow_summary">Soft drop shadow that lifts dock icons off the glass. Turn off for flat custom icon packs.</string>
                 <string name="termux_app_launcher_unify_icons_title">Unify app icons</string>

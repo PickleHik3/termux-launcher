@@ -138,10 +138,22 @@ public class DockEdgeGlowView extends View {
         }
         if (launchCollisionLevel > 0.02f) {
             rimPaint.setShader(null);
-            rimPaint.setStrokeWidth(density * (3.5f + 5f * launchCollisionLevel));
-            rimPaint.setColor(withAlpha(launchCollisionColor,
-                Math.round(118f * launchCollisionLevel)));
-            canvas.drawRoundRect(rimRect, r, r, rimPaint);
+            // Echo the impact inward in successively fainter bands. Because every band is an inset
+            // rounded rect, the response follows the capsule wall instead of exposing clipped
+            // circular lobes where the launch wave meets it.
+            for (int band = 0; band < 3; band++) {
+                float inward = density * band * (4.5f + 2.5f * launchCollisionLevel);
+                tmpRect.set(rimRect);
+                tmpRect.inset(inward, inward);
+                if (tmpRect.isEmpty()) break;
+                float bandFade = 1f - band * 0.28f;
+                rimPaint.setStrokeWidth(density
+                    * (3.2f + 3.8f * launchCollisionLevel - band * 0.55f));
+                rimPaint.setColor(withAlpha(launchCollisionColor,
+                    Math.round(112f * launchCollisionLevel * bandFade)));
+                canvas.drawRoundRect(tmpRect, Math.max(0f, r - inward),
+                    Math.max(0f, r - inward), rimPaint);
+            }
         }
         rimPaint.setShader(null);
         rimPaint.setStrokeWidth(density * (1.15f + (0.55f * touch)));

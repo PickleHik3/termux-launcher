@@ -64,7 +64,8 @@ public final class SettingsLayoutUtils {
         preference.setIconSpaceReserved(false);
 
         // Preferences that fully own their layout.
-        if (preference instanceof StatusCardPreference
+        if (preference instanceof SegmentedPillPreference
+            || preference instanceof StatusCardPreference
             || preference instanceof TaiRuntimeActionsPreference
             || preference instanceof TaiOverridesPreference
             || preference instanceof TaiCatalogFilterPreference

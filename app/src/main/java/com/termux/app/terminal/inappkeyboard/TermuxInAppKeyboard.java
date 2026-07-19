@@ -477,11 +477,18 @@ public final class TermuxInAppKeyboard {
     }
 
     /** Forwards the default-dock launch wave into the embedded key renderer. */
-    public void animateLaunchWave(int color, float originXOnScreen) {
+    public void animateLaunchWave(int color, float originXOnScreen, float originYOnScreen) {
         if (mKeyboardView == null || !isVisible()) return;
         int[] location = new int[2];
         mKeyboardView.getLocationOnScreen(location);
-        mKeyboardView.animateLaunchWave(color, originXOnScreen - location[0]);
+        mKeyboardView.animateLaunchWave(color, originXOnScreen - location[0],
+            originYOnScreen - location[1]);
+    }
+
+    /** Fades a launch modulation before keyboard or dock geometry is replaced. */
+    public void fadeOutLaunchWave() {
+        if (mKeyboardView != null)
+            mKeyboardView.fadeOutLaunchWave();
     }
 
     /** Applies strict activity-wide system-IME suppression while embedded mode is enabled. */

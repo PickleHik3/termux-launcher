@@ -126,12 +126,6 @@
             android:defaultValue="false" />
 
         <SwitchPreferenceCompat
-            app:key="app_launcher_material_icons"
-            app:title="@string/termux_app_launcher_material_icons_title"
-            app:summary="@string/termux_app_launcher_material_icons_summary"
-            android:defaultValue="false" />
-
-        <SwitchPreferenceCompat
             app:key="app_launcher_icon_shadow"
             app:title="@string/termux_app_launcher_icon_shadow_title"
             app:summary="@string/termux_app_launcher_icon_shadow_summary"

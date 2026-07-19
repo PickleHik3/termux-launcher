@@ -168,7 +168,6 @@ public final class SuggestionBarView extends GridLayout {
     private int maxButtonCount = 7;
     private float textSize = 12f;
     private boolean bandW = false;
-    private boolean materialIcons = false;
     @Nullable private ColorFilter appIconColorFilter;
     private boolean unifyIcons = true;
     private boolean iconShadowEnabled = true;
@@ -471,13 +470,6 @@ public final class SuggestionBarView extends GridLayout {
         lastSurfaceRenderSignature = 0;
     }
 
-    public void setMaterialIcons(boolean materialIcons) {
-        if (this.materialIcons == materialIcons) return;
-        this.materialIcons = materialIcons;
-        updateAppIconColorFilter();
-        lastSurfaceRenderSignature = 0;
-    }
-
     private void updateAppIconColorFilter() {
         if (bandW) {
             float[] grayscale = {
@@ -487,32 +479,9 @@ public final class SuggestionBarView extends GridLayout {
                 0, 0, 0, 1, 0
             };
             appIconColorFilter = new ColorMatrixColorFilter(grayscale);
-        } else if (materialIcons) {
-            int background = MaterialColors.getColor(getContext(),
-                com.google.android.material.R.attr.colorPrimaryContainer, 0xFFBFC8FF);
-            int foreground = MaterialColors.getColor(getContext(),
-                com.google.android.material.R.attr.colorOnPrimaryContainer, 0xFF101A44);
-            appIconColorFilter = materialTonalFilter(background, foreground);
         } else {
             appIconColorFilter = null;
         }
-    }
-
-    @NonNull
-    static ColorFilter materialTonalFilter(int background, int foreground) {
-        float redRange = (Color.red(foreground) - Color.red(background)) / 255f;
-        float greenRange = (Color.green(foreground) - Color.green(background)) / 255f;
-        float blueRange = (Color.blue(foreground) - Color.blue(background)) / 255f;
-        float[] tonal = {
-            0.2126f * redRange, 0.7152f * redRange, 0.0722f * redRange, 0,
-                Color.red(background),
-            0.2126f * greenRange, 0.7152f * greenRange, 0.0722f * greenRange, 0,
-                Color.green(background),
-            0.2126f * blueRange, 0.7152f * blueRange, 0.0722f * blueRange, 0,
-                Color.blue(background),
-            0, 0, 0, 1, 0
-        };
-        return new ColorMatrixColorFilter(tonal);
     }
 
     private void applyAppIconColorFilter(@NonNull ImageView imageView) {
@@ -2067,7 +2036,6 @@ public final class SuggestionBarView extends GridLayout {
         signature = (31 * signature) + (azPreview ? 1 : 0);
         signature = (31 * signature) + (pinnedSurface ? 1 : 0);
         signature = (31 * signature) + (bandW ? 1 : 0);
-        signature = (31 * signature) + (materialIcons ? 1 : 0);
         signature = (31 * signature) + (unifyIcons ? 1 : 0);
         signature = (31 * signature) + (iconShadowEnabled ? 1 : 0);
         signature = (31 * signature) + Math.max(1, buttonCount);

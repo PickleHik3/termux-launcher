@@ -18,7 +18,7 @@ import android.util.AttributeSet;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.animation.DecelerateInterpolator;
+import android.view.animation.LinearInterpolator;
 import java.util.Objects;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -78,9 +78,14 @@ public class Keyboard2View extends View
 
   private static final long PRESS_RAMP_MS = 72L;
   private static final long RELEASE_FADE_MS = 190L;
+  private static final long LAUNCH_WAVE_TRAVEL_MS = 250L;
+  private static final long LAUNCH_WAVE_TOTAL_MS = 400L;
+  private static final long LAUNCH_WAVE_FADE_MS = 80L;
   private ValueAnimator _launchWaveAnimator;
   private float _launchWaveProgress = -1f;
   private float _launchWaveOriginX;
+  private float _launchWaveOriginY;
+  private float _launchWaveOpacity;
   private int _launchWaveColor;
 
   private final RectF _tmpRect = new RectF();
@@ -147,29 +152,59 @@ public class Keyboard2View extends View
     setBackgroundColor(withOpacity(_theme.colorKeyboard, _theme.opacity));
   }
 
-  /** Brief host-triggered wave that tints and lifts each key as the dock ripple reaches it. */
-  public void animateLaunchWave(int color, float originX)
+  /** Brief host-triggered wave that subtly modulates each key as the dock front reaches it. */
+  public void animateLaunchWave(int color, float originX, float originY)
   {
     requireMainThread();
-    if (_launchWaveAnimator != null)
-      _launchWaveAnimator.cancel();
+    cancelLaunchWaveAnimator();
     _launchWaveColor = color;
-    _launchWaveOriginX = Math.max(0f, Math.min(getWidth(), originX));
-    _launchWaveAnimator = ValueAnimator.ofFloat(0f, 1f);
-    _launchWaveAnimator.setDuration(360L);
-    _launchWaveAnimator.setInterpolator(new DecelerateInterpolator(1.35f));
-    _launchWaveAnimator.addUpdateListener(animation -> {
-      _launchWaveProgress = (Float)animation.getAnimatedValue();
+    // Keep the real dock icon centre, including its normally-negative local Y. All key chips then
+    // sample one wavefront from that same source instead of behaving like independent emitters.
+    _launchWaveOriginX = originX;
+    _launchWaveOriginY = originY;
+    _launchWaveOpacity = 1f;
+    ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+    _launchWaveAnimator = animator;
+    animator.setDuration(LAUNCH_WAVE_TOTAL_MS);
+    animator.setInterpolator(new LinearInterpolator());
+    animator.addUpdateListener(animation -> {
+      _launchWaveProgress = (Float) animation.getAnimatedValue();
       invalidate();
     });
-    _launchWaveAnimator.addListener(new AnimatorListenerAdapter() {
+    animator.addListener(new AnimatorListenerAdapter() {
       @Override public void onAnimationEnd(Animator animation)
       {
-        _launchWaveProgress = -1f;
-        invalidate();
+        if (_launchWaveAnimator == animation)
+          resetLaunchWave();
       }
     });
-    _launchWaveAnimator.start();
+    animator.start();
+  }
+
+  /** Gracefully hands the key-chip modulation to a keyboard/style transition. */
+  public void fadeOutLaunchWave()
+  {
+    requireMainThread();
+    if (_launchWaveProgress < 0f || _launchWaveOpacity <= 0f)
+      return;
+    float startOpacity = _launchWaveOpacity;
+    cancelLaunchWaveAnimator();
+    ValueAnimator animator = ValueAnimator.ofFloat(startOpacity, 0f);
+    _launchWaveAnimator = animator;
+    animator.setDuration(LAUNCH_WAVE_FADE_MS);
+    animator.setInterpolator(new LinearInterpolator());
+    animator.addUpdateListener(animation -> {
+      _launchWaveOpacity = (Float) animation.getAnimatedValue();
+      invalidate();
+    });
+    animator.addListener(new AnimatorListenerAdapter() {
+      @Override public void onAnimationEnd(Animator animation)
+      {
+        if (_launchWaveAnimator == animation)
+          resetLaunchWave();
+      }
+    });
+    animator.start();
   }
 
   /** Per-key colors supplied by a host-side color-scheme editor. Null fields inherit the theme. */
@@ -780,11 +815,6 @@ public class Keyboard2View extends View
           float scale = 1f - 0.035f * fxStrength;
           canvas.scale(scale, scale, x + keyW / 2f, y + keyH / 2f);
         }
-        if (launchStrength > 0f)
-        {
-          float scale = 1f + 0.035f * launchStrength;
-          canvas.scale(scale, scale, x + keyW / 2f, y + keyH / 2f);
-        }
         Theme.Computed.Key tc_key;
         if (isKeyDown)
           tc_key = _tc.key_activated;
@@ -803,10 +833,12 @@ public class Keyboard2View extends View
         if (launchStrength > 0f)
         {
           _launchWavePaint.setColor(withAlpha(_launchWaveColor,
-              Math.round(92f * launchStrength)));
-          _tmpRect.set(x, y, x + keyW, y + keyH);
-          canvas.drawRoundRect(_tmpRect, tc_key.border_radius, tc_key.border_radius,
-              _launchWavePaint);
+              Math.round(30f * launchStrength)));
+          float chipInset = tc_key.border_width * 0.5f;
+          _tmpRect.set(x + chipInset, y + chipInset,
+              x + keyW - chipInset, y + keyH - chipInset);
+          float chipRadius = Math.max(0f, tc_key.border_radius - chipInset);
+          canvas.drawRoundRect(_tmpRect, chipRadius, chipRadius, _launchWavePaint);
         }
         if (touchFx != null && fxStrength > 0f)
           drawTouchFx(canvas, touchFx, x, y, keyW, keyH, tc_key.border_radius,
@@ -853,15 +885,41 @@ public class Keyboard2View extends View
   {
     if (_launchWaveProgress < 0f || getWidth() <= 0 || getHeight() <= 0)
       return 0f;
-    float maxRadius = (float)Math.hypot(getWidth(), getHeight()) * 0.92f;
-    float waveRadius = maxRadius * _launchWaveProgress;
-    float distance = (float)Math.hypot(keyX - _launchWaveOriginX, keyY);
-    float band = Math.max(18f, getHeight() * 0.16f);
-    float strength = 1f - Math.abs(distance - waveRadius) / band;
-    strength = Math.max(0f, Math.min(1f, strength));
-    // The wave fades before the bottom edge rather than pooling against it.
-    float bottomFade = 1f - Math.max(0f, keyY / Math.max(1f, getHeight()) - 0.72f) / 0.28f;
-    return strength * Math.max(0f, bottomFade) * (1f - 0.35f * _launchWaveProgress);
+    float farX = Math.max(Math.abs(_launchWaveOriginX),
+        Math.abs(getWidth() - _launchWaveOriginX));
+    float farY = Math.max(Math.abs(_launchWaveOriginY),
+        Math.abs(getHeight() - _launchWaveOriginY));
+    float maxRadius = Math.max(getWidth(), (float)Math.hypot(farX, farY));
+    float travel = Math.min(1f,
+        _launchWaveProgress * LAUNCH_WAVE_TOTAL_MS / LAUNCH_WAVE_TRAVEL_MS);
+    float easedTravel = travel * travel * (3f - 2f * travel);
+    float waveRadius = maxRadius * easedTravel;
+    float distance = (float)Math.hypot(keyX - _launchWaveOriginX,
+        keyY - _launchWaveOriginY);
+    float halfBand = getResources().getDisplayMetrics().density * 11f;
+    float delta = Math.abs(distance - waveRadius);
+    if (delta >= halfBand)
+      return 0f;
+    // A cosine shoulder keeps this a subtle brightness/tint pass over the existing chip geometry.
+    float strength = 0.5f + 0.5f
+        * (float)Math.cos(Math.PI * delta / Math.max(1f, halfBand));
+    return strength * _launchWaveOpacity;
+  }
+
+  private void cancelLaunchWaveAnimator()
+  {
+    ValueAnimator animator = _launchWaveAnimator;
+    _launchWaveAnimator = null;
+    if (animator != null)
+      animator.cancel();
+  }
+
+  private void resetLaunchWave()
+  {
+    _launchWaveAnimator = null;
+    _launchWaveProgress = -1f;
+    _launchWaveOpacity = 0f;
+    invalidate();
   }
 
   private void pruneReleasedTouchFx(long now)
@@ -952,8 +1010,9 @@ public class Keyboard2View extends View
   @Override
   public void onDetachedFromWindow()
   {
-    if (_launchWaveAnimator != null)
-      _launchWaveAnimator.cancel();
+    cancelLaunchWaveAnimator();
+    _launchWaveProgress = -1f;
+    _launchWaveOpacity = 0f;
     resetInputStateInternal(true);
     requestDisallowIntercept(false);
     super.onDetachedFromWindow();

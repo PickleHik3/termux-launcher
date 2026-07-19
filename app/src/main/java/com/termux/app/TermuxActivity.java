@@ -1509,7 +1509,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : (DockLaunchRippleView) accessorySurface.findViewWithTag("dock_launch_ripple");
         if (ripple == null || ripple.getWidth() <= 0 || ripple.getHeight() <= 0) return;
 
-        int color = resolveLaunchIconDominantColor(packageName, icon);
+        int color = boostLaunchRippleColor(resolveLaunchIconDominantColor(packageName, icon),
+            resolveDockAccentColor());
         int[] rippleLocation = new int[2];
         ripple.getLocationOnScreen(rippleLocation);
         float originX;
@@ -1527,24 +1528,40 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean capsule = isValarieDockStyle();
         RectF bounds = new RectF(0f, 0f, ripple.getWidth(), ripple.getHeight());
         float cornerRadius = capsule ? resolveDockCapsuleCornerRadiusPx(ripple.getHeight()) : 0f;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && mGlassParamsValid) {
-            // Reuse the dock's AGSL glass pass on the wave itself. The Canvas wave remains the
-            // all-API fallback, while API 33+ bends and softens it before the material tint/grain.
-            ripple.setRenderEffect(buildGlassRefractionEffect(
-                mGlassBlurPx, mGlassCapLeft, mGlassCapTop, mGlassCapRight, mGlassCapBottom,
-                mGlassRadiusPx));
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // The glass shader is stateful and belongs to the backdrop. Reusing it here mutates the
+            // same rounded-surface uniforms while a radial source is being drawn, which produced the
+            // audit's repeated oversized masks. Keep the launch wave a single Canvas composition.
             ripple.setRenderEffect(null);
         }
         DockEdgeGlowView edgeGlow = findViewById(R.id.accessory_edge_glow_fx);
         if (capsule && edgeGlow != null) edgeGlow.setVisibility(View.VISIBLE);
+        final boolean keyboardShownAtLaunch = isInAppKeyboardShown();
         ripple.startRipple(color, originX, originY, capsule, bounds, cornerRadius,
             edgeGlow == null ? null : (collisionColor, level) ->
-                edgeGlow.setLaunchCollisionState(collisionColor, level));
+                edgeGlow.setLaunchCollisionState(collisionColor, level),
+            () -> capsule == isValarieDockStyle()
+                && keyboardShownAtLaunch == isInAppKeyboardShown(),
+            () -> {
+                if (mInAppKeyboard != null) mInAppKeyboard.fadeOutLaunchWave();
+            });
 
-        if (!capsule && isInAppKeyboardShown() && mInAppKeyboard != null) {
-            mInAppKeyboard.animateLaunchWave(color, originX + rippleLocation[0]);
+        if (!capsule && keyboardShownAtLaunch && mInAppKeyboard != null) {
+            mInAppKeyboard.animateLaunchWave(color, originX + rippleLocation[0],
+                originY + rippleLocation[1]);
         }
+    }
+
+    /** Keeps an icon's hue legible after the low-alpha wave is composited through tinted glass. */
+    private static int boostLaunchRippleColor(int color, int fallbackAccent) {
+        float[] hsv = new float[3];
+        Color.colorToHSV(color, hsv);
+        if (hsv[1] < 0.08f) {
+            Color.colorToHSV(fallbackAccent, hsv);
+        }
+        hsv[1] = Math.max(0.72f, hsv[1]);
+        hsv[2] = Math.max(0.78f, hsv[2]);
+        return Color.HSVToColor(hsv);
     }
 
     private int resolveLaunchIconDominantColor(@NonNull String packageName,
@@ -4175,8 +4192,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSuggestionBarView.setDefaultButtons(new ArrayList<>());
         mSuggestionBarView.setTextSize(10f);
         mSuggestionBarView.setBandW(mPreferences.isAppLauncherBwIconsEnabled());
-        mSuggestionBarView.setMaterialIcons(
-            mPreferences.isAppLauncherMaterialIconsEnabled());
         mSuggestionBarView.setUnifyIcons(mPreferences.isAppLauncherUnifyIconsEnabled());
         mSuggestionBarView.setIconShadowEnabled(mPreferences.isAppLauncherIconShadowEnabled());
         mSuggestionBarView.setIconScale(resolveDerivedDockIconScale());
@@ -4225,8 +4240,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         signature = (31 * signature) + stringSignature(mPreferences.getAppLauncherIconPackPackage());
         signature = (31 * signature) + stringSignature(mPreferences.getAppLauncherPinnedIconPackPackage());
         signature = (31 * signature) + (mPreferences.isAppLauncherBwIconsEnabled() ? 1 : 0);
-        signature = (31 * signature)
-            + (mPreferences.isAppLauncherMaterialIconsEnabled() ? 1 : 0);
         signature = (31 * signature) + (mPreferences.isAppLauncherUnifyIconsEnabled() ? 1 : 0);
         return signature;
     }
