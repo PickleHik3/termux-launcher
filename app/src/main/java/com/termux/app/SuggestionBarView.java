@@ -2000,12 +2000,36 @@ public final class SuggestionBarView extends GridLayout {
                 target.setForeground(null);
                 continue;
             }
-            GradientDrawable outline = new GradientDrawable();
-            outline.setShape(GradientDrawable.RECTANGLE);
-            outline.setColor(Color.TRANSPARENT);
-            outline.setCornerRadius(dp(14));
-            outline.setStroke(dp(2), accent);
-            target.setForeground(outline);
+            // Reuse the artwork-contour mask the A-Z drag focus draws, so the outline hugs the
+            // icon's actual shape instead of boxing the whole touch target.
+            Drawable outlineDrawable = null;
+            if (target instanceof ImageView) {
+                if (target.getWidth() <= 0) {
+                    // Focus is applied while the row is still being (re)built; the mask needs the
+                    // laid-out view size, so retry once layout has produced real bounds.
+                    final int focusAtPost = terminalSearchFocusIndex;
+                    target.post(() -> {
+                        if (terminalSearchFocusIndex == focusAtPost)
+                            applyTerminalSearchFocusOutline();
+                    });
+                }
+                FocusOutlineVisual visual = resolveFocusOutlineVisual((ImageView) target);
+                if (visual != null) {
+                    BitmapDrawable contour = new BitmapDrawable(getResources(), visual.mask);
+                    contour.setTint(accent);
+                    contour.setGravity(Gravity.CENTER);
+                    outlineDrawable = contour;
+                }
+            }
+            if (outlineDrawable == null) {
+                GradientDrawable outline = new GradientDrawable();
+                outline.setShape(GradientDrawable.RECTANGLE);
+                outline.setColor(Color.TRANSPARENT);
+                outline.setCornerRadius(dp(14));
+                outline.setStroke(dp(2), accent);
+                outlineDrawable = outline;
+            }
+            target.setForeground(outlineDrawable);
             target.setForegroundGravity(Gravity.FILL);
         }
     }

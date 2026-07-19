@@ -446,6 +446,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private String mPendingAccessoryRenderReason;
     @Nullable private ViewTreeObserver.OnGlobalLayoutListener mAccessoryKeyboardLayoutListener;
     @Nullable private View.OnLayoutChangeListener mAccessoryLayoutChangeListener;
+    @Nullable private ViewTreeObserver.OnPreDrawListener mInAppKeyboardOpenPreDrawListener;
+    @Nullable private View mInAppKeyboardOpenPreDrawView;
+    private int mInAppKeyboardOpenRevealBlockedFrames;
+    private final Runnable mInAppKeyboardOpenRevealBackstopRunnable =
+        this::revealInAppKeyboardIfStillPending;
     @Nullable private ActivityResultLauncher<PickVisualMediaRequest> mWallpaperPickerLauncher;
     @Nullable private ActivityResultLauncher<CropImageContractOptions> mWallpaperCropLauncher;
     private final int[] mTmpParentLocation = new int[2];
@@ -459,6 +464,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mInAppKeyboardAvailableHeightPx;
     private boolean mInAppKeyboardHeightDirty = true;
     private boolean mHasMeasuredTerminalFlushPadding;
+    /** Keeps a unified glass keyboard hidden until the expanded dock+keyboard crop is installed. */
+    private boolean mPendingInAppKeyboardOpenReveal;
     /** Keeps the under-pill glass covering stale close geometry until dock-only layout settles. */
     private boolean mPendingInAppKeyboardCloseGeometry;
     private boolean mAccessoryBackdropDirty = true;
@@ -2210,6 +2217,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return toolbarShown && keyboardShown && !valarieDockStyle && keyboardGlassSurface;
     }
 
+    /** Only the blurred unified surface needs a destination-backdrop gate on a fresh open. */
+    static boolean shouldDeferInAppKeyboardReveal(boolean openingFromGone,
+                                                   boolean unifiedGlassSurface,
+                                                   boolean blurEnabled,
+                                                   boolean unifiedBackdropReady) {
+        return openingFromGone && unifiedGlassSurface && blurEnabled && !unifiedBackdropReady;
+    }
+
     private void ensureDecorNavBarSurfaceOverlay() {
         if (mDecorNavBarSurfaceOverlay != null) {
             return;
@@ -2726,7 +2741,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
         View surfaceHost = findViewById(R.id.accessory_surface_host);
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
+        View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
         if (backdrop == null || surfaceHost == null || accessoryContainer == null
+            || keyboardContainer == null || keyboardContainer.getVisibility() == View.GONE
             || backdrop.getDrawable() == null || backdrop.getVisibility() != View.VISIBLE) {
             return false;
         }
@@ -2747,6 +2764,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? horizontalOverscanPx : 0;
         Rect currentTarget = buildAccessoryBackdropTargetRect(
             surfaceHost, horizontalOverscanPx, seamOverscanPx);
+        // setLayoutParams() during pre-draw does not resize the ImageView until another layout.
+        // Treat that pass as unready so it is skipped instead of drawing the expanded surface with
+        // a dock-height blur child for one frame.
+        if (backdrop.getWidth() < currentTarget.width()
+            || backdrop.getHeight() < currentTarget.height()) {
+            return false;
+        }
         return mLastAccessoryBackdropBlurRadiusDp == state.blurRadiusDp
             && mLastAccessoryBackdropManagedSource == shouldUseManagedWallpaperBlurSource()
             && mLastAccessoryBackdropTargetRect.equals(currentTarget);
@@ -3348,6 +3372,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             clearAccessoryRenderEffectBackdrop();
             applyDecorNavBarSurfaceState(state);
             applyInAppKeyboardSurfaceState(state);
+            completePendingInAppKeyboardOpenReveal(state);
             completePendingInAppKeyboardCloseGeometry(state);
             configureAccessoryTopEdgeFx(false, state.barAlpha);
             configureExtraKeysDivider(false, 0f);
@@ -3414,8 +3439,98 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyDecorNavBarSurfaceState(state);
         applyInAppKeyboardSurfaceState(state);
         updateAccessoryRenderEffectBackdrop(state);
+        completePendingInAppKeyboardOpenReveal(state);
         completePendingInAppKeyboardCloseGeometry(state);
         updateAzOverflowAffordance();
+    }
+
+    /** Reveals keys in the same UI transaction that installs the destination unified backdrop. */
+    private void completePendingInAppKeyboardOpenReveal(@NonNull AccessoryRenderState state) {
+        if (!mPendingInAppKeyboardOpenReveal) {
+            return;
+        }
+        View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
+        if (keyboardContainer == null || !state.keyboardShown) {
+            mPendingInAppKeyboardOpenReveal = false;
+            removeInAppKeyboardOpenPreDrawGate();
+            return;
+        }
+        boolean unifiedGlassSurface = shouldUseUnifiedDefaultKeyboardGlassSurface(state);
+        if (unifiedGlassSurface && state.blurEnabled && !isUnifiedAccessoryBackdropReady(state)) {
+            return;
+        }
+        mPendingInAppKeyboardOpenReveal = false;
+        keyboardContainer.setVisibility(View.VISIBLE);
+        removeInAppKeyboardOpenPreDrawGate();
+    }
+
+    private void revealInAppKeyboardIfStillPending() {
+        if (mPendingInAppKeyboardOpenReveal) forceRevealInAppKeyboardNow();
+    }
+
+    /** Immediately reveals the keyboard regardless of backdrop readiness (fail-safe path). */
+    private void forceRevealInAppKeyboardNow() {
+        mPendingInAppKeyboardOpenReveal = false;
+        View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
+        if (keyboardContainer != null && keyboardContainer.getVisibility() == View.INVISIBLE)
+            keyboardContainer.setVisibility(View.VISIBLE);
+        removeInAppKeyboardOpenPreDrawGate();
+    }
+
+    /** Runs after destination layout but before its first draw, closing the one-frame stale-crop gap. */
+    private void installInAppKeyboardOpenPreDrawGate() {
+        if (mInAppKeyboardOpenPreDrawListener != null) {
+            return;
+        }
+        View gateView = findViewById(R.id.activity_termux_root_view);
+        if (gateView == null) {
+            // No view to gate on — reveal now rather than leaving the keyboard invisible.
+            forceRevealInAppKeyboardNow();
+            return;
+        }
+        mInAppKeyboardOpenPreDrawView = gateView;
+        mInAppKeyboardOpenRevealBlockedFrames = 0;
+        mInAppKeyboardOpenPreDrawListener = () -> {
+            if (!mPendingInAppKeyboardOpenReveal) {
+                removeInAppKeyboardOpenPreDrawGate();
+                return true;
+            }
+            // Posted render syncs run after traversal and would permit one draw with the old,
+            // dock-only crop. Refresh synchronously now that destination geometry is measurable.
+            applyAccessoryRenderState(buildAccessoryRenderState());
+            boolean readyToDraw = !mPendingInAppKeyboardOpenReveal;
+            if (!readyToDraw) {
+                // Fail-safe: the gate must never wedge the whole window if the backdrop cannot
+                // become ready (wallpaper unavailable, blur crop failing). Worst case after three
+                // blocked frames is the old one-frame mismatch, never a frozen UI.
+                if (++mInAppKeyboardOpenRevealBlockedFrames >= 3) {
+                    forceRevealInAppKeyboardNow();
+                    return true;
+                }
+                scheduleAccessoryRenderSync("inapp-keyboard:open-waiting-for-backdrop");
+            }
+            return readyToDraw;
+        };
+        gateView.getViewTreeObserver().addOnPreDrawListener(mInAppKeyboardOpenPreDrawListener);
+        // Backstop for windows that stop drawing entirely (or test environments with no draw
+        // pass): reveal shortly after install even if no pre-draw callback ever fires.
+        mAccessoryRenderHandler.removeCallbacks(mInAppKeyboardOpenRevealBackstopRunnable);
+        mAccessoryRenderHandler.postDelayed(mInAppKeyboardOpenRevealBackstopRunnable, 160L);
+    }
+
+    private void removeInAppKeyboardOpenPreDrawGate() {
+        mAccessoryRenderHandler.removeCallbacks(mInAppKeyboardOpenRevealBackstopRunnable);
+        View gateView = mInAppKeyboardOpenPreDrawView;
+        ViewTreeObserver.OnPreDrawListener listener = mInAppKeyboardOpenPreDrawListener;
+        mInAppKeyboardOpenPreDrawView = null;
+        mInAppKeyboardOpenPreDrawListener = null;
+        if (gateView == null || listener == null) {
+            return;
+        }
+        ViewTreeObserver observer = gateView.getViewTreeObserver();
+        if (observer.isAlive()) {
+            observer.removeOnPreDrawListener(listener);
+        }
     }
 
     /** Stops conservative close-seam coverage after dock-only destination layout is observed. */
@@ -3659,6 +3774,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAccessoryRenderSyncPending = false;
         mPendingAccessoryRenderReason = null;
         mPendingInAppKeyboardCloseGeometry = false;
+        removeInAppKeyboardOpenPreDrawGate();
         applyDockImeOffset(0);
         clearAccessoryRenderEffectBackdrop();
         hideDecorNavBarSurfaceOverlay(true);
@@ -5161,12 +5277,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             if (visible) {
                 mPendingInAppKeyboardCloseGeometry = false;
-                // Install the keyboard-local blurred glass while the container is still GONE, then
-                // expose keys and backing together. The cover remains until expanded unified
-                // geometry and its matching crop are ready.
-                applyInAppKeyboardSurfaceState(buildAccessoryRenderState());
-                keyboardContainer.setVisibility(View.VISIBLE);
+                AccessoryRenderState state = buildAccessoryRenderState();
+                boolean openingFromGone = keyboardContainer.getVisibility() == View.GONE;
+                boolean unifiedGlassSurface = shouldUseUnifiedDefaultKeyboardGlassSurface(state);
+                boolean backdropReady = isUnifiedAccessoryBackdropReady(state);
+                boolean deferReveal = mPendingInAppKeyboardOpenReveal
+                    || shouldDeferInAppKeyboardReveal(openingFromGone, unifiedGlassSurface,
+                        state.blurEnabled, backdropReady);
+                mPendingInAppKeyboardOpenReveal = deferReveal;
+                // INVISIBLE participates in destination layout without allowing a draw. The render
+                // pass can therefore install the expanded crop before keys and their glass backing
+                // become visible; non-unified surfaces keep the immediate path.
+                keyboardContainer.setVisibility(deferReveal ? View.INVISIBLE : View.VISIBLE);
+                applyInAppKeyboardSurfaceState(state);
+                if (deferReveal) {
+                    installInAppKeyboardOpenPreDrawGate();
+                }
             } else {
+                mPendingInAppKeyboardOpenReveal = false;
+                removeInAppKeyboardOpenPreDrawGate();
                 mPendingInAppKeyboardCloseGeometry = keyboardContainer.getVisibility() != View.GONE;
                 keyboardContainer.setVisibility(View.GONE);
             }

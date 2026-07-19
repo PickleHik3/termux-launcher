@@ -167,6 +167,20 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     }
 
     @Test
+    public void blurredUnifiedKeyboardRevealWaitsOnlyForDestinationBackdrop() {
+        assertTrue(TermuxActivity.shouldDeferInAppKeyboardReveal(
+            true, true, true, false));
+        assertFalse(TermuxActivity.shouldDeferInAppKeyboardReveal(
+            true, true, true, true));
+        assertFalse(TermuxActivity.shouldDeferInAppKeyboardReveal(
+            false, true, true, false));
+        assertFalse(TermuxActivity.shouldDeferInAppKeyboardReveal(
+            true, false, true, false));
+        assertFalse(TermuxActivity.shouldDeferInAppKeyboardReveal(
+            true, true, false, false));
+    }
+
+    @Test
     public void controllerIsCreatedLazilyWhenPreferenceBecomesEnabled() {
         TermuxAppSharedPreferences preferences = prepareActivity(false);
 
@@ -337,6 +351,13 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         assertEquals(0, appliedFlushPadding);
         int combinedHeight = TermuxActivity.computeAccessoryStackHeight(
             dockContentHeight, 0, keyboardHeight);
+        // The open reveal is gated on the first pre-draw pass. Robolectric never draws, and the
+        // blur backdrop cannot become ready headless, so drive the gate until its frame fail-safe
+        // reveals the keyboard.
+        for (int i = 0; i < 4 && keyboardContainer.getVisibility() != View.VISIBLE; i++) {
+            rootRelativeLayout.getViewTreeObserver().dispatchOnPreDraw();
+            ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        }
         assertEquals(View.VISIBLE, keyboardContainer.getVisibility());
         assertEquals(View.VISIBLE, toolbarPager.getVisibility());
         assertEquals(View.VISIBLE, appsBar.getVisibility());
