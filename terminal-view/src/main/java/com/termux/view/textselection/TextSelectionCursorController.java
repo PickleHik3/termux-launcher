@@ -105,6 +105,27 @@ public class TextSelectionCursorController implements CursorController {
         }
     }
 
+    /** Select all active rows, including scrollback, without synthesizing a long-press event. */
+    public void selectAll() {
+        if (terminalView.mEmulator == null)
+            return;
+        TerminalBuffer screen = terminalView.mEmulator.getScreen();
+        int scrollbackRows = Math.max(0,
+            screen.getActiveRows() - terminalView.mEmulator.mRows);
+        mSelX1 = 0;
+        mSelY1 = -scrollbackRows;
+        mSelX2 = Math.max(0, terminalView.mEmulator.mColumns - 1);
+        mSelY2 = Math.max(0, terminalView.mEmulator.mRows - 1);
+        mStartHandle.positionAtCursor(mSelX1, mSelY1, true);
+        mEndHandle.positionAtCursor(mSelX2 + 1, mSelY2, true);
+        if (!mIsSelectingText)
+            setActionModeCallBacks();
+        // Programmatic selection should be immediately dismissible; the 300ms guard only exists
+        // to protect a touch long-press from its own trailing events.
+        mShowStartTime = 0L;
+        mIsSelectingText = true;
+    }
+
     public void setActionModeCallBacks() {
         final ActionMode.Callback callback = new ActionMode.Callback() {
 

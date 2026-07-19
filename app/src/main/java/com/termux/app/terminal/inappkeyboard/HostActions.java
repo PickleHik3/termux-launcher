@@ -7,8 +7,15 @@ public interface HostActions {
 
     void copySelection();
 
-    /** Copy the whole visible terminal screen to the clipboard — the terminal "select all". */
-    default void copyScreen() {}
+    /** Select all terminal scrollback so a following copy action has ordinary editor semantics. */
+    default void selectAll() {}
+
+    /**
+     * Copy an active terminal selection, or the current prompt input when nothing is selected.
+     *
+     * @return whether the terminal input line should also be cleared with Ctrl+U
+     */
+    default boolean prepareCut() { return false; }
 
     void requestTextLayout();
 

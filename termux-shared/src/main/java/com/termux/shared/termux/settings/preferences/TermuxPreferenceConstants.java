@@ -188,6 +188,12 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_APP_LAUNCHER_BW_ICONS = false;
 
+        /** Defines the key for recoloring app icons with the active Material tonal palette. */
+        public static final String KEY_APP_LAUNCHER_MATERIAL_ICONS =
+            "app_launcher_material_icons";
+
+        public static final boolean DEFAULT_APP_LAUNCHER_MATERIAL_ICONS = false;
+
 
         /**
          * Defines the key for harmonizing app icons with the dock (consistent footprint, soft

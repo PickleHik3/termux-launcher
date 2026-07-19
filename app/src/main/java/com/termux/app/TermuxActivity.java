@@ -106,6 +106,7 @@ import com.termux.shared.android.PermissionUtils;
 import com.termux.shared.data.DataUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY;
+import com.termux.app.activities.OnboardingActivity;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.theme.TermuxThemeManager;
 import com.termux.shared.termux.crash.TermuxCrashUtils;
@@ -294,6 +295,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * If service connected before activity became visible and bootstrap/session start should be retried onStart().
      */
     private boolean mPendingBootstrapOnStart = false;
+    private boolean mShouldLaunchOnboardingAfterBootstrap = false;
 
     /**
      * Launch intent captured when bootstrap/session start is deferred to onStart().
@@ -413,6 +415,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final String ARG_TERMINAL_TOOLBAR_TEXT_INPUT = "terminal_toolbar_text_input";
 
     private static final String ARG_ACTIVITY_RECREATED = "activity_recreated";
+    private static final String ARG_SHOULD_LAUNCH_ONBOARDING = "should_launch_onboarding";
 
     private static final String LOG_TAG = "TermuxActivity";
     private static final int IN_APP_KEYBOARD_MARGIN_SLIDER_STEPS_PER_UNIT = 100;
@@ -609,8 +612,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onCreate(Bundle savedInstanceState) {
         Logger.logDebug(LOG_TAG, "onCreate");
         mIsOnResumeAfterOnCreate = true;
-        if (savedInstanceState != null)
+        if (savedInstanceState == null) {
+            mShouldLaunchOnboardingAfterBootstrap = OnboardingActivity.prepareAutomaticLaunch(this);
+        } else {
+            mShouldLaunchOnboardingAfterBootstrap = savedInstanceState.containsKey(
+                ARG_SHOULD_LAUNCH_ONBOARDING)
+                ? savedInstanceState.getBoolean(ARG_SHOULD_LAUNCH_ONBOARDING)
+                : OnboardingActivity.prepareAutomaticLaunch(this);
             mIsActivityRecreated = savedInstanceState.getBoolean(ARG_ACTIVITY_RECREATED, false);
+        }
         // Delete ReportInfo serialized object files from cache older than 14 days
         ReportActivity.deleteReportInfoFilesOlderThanXDays(this, 14, false);
         // Load Termux app SharedProperties from disk
@@ -736,6 +746,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             startBootstrapAndSession(pendingIntent);
         }
         maybeRecoverFromEmptySession("onStart");
+        scheduleOnboardingIfReady();
     
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onStart();
@@ -3563,7 +3574,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * keyboard cannot legitimately be visible, so IME-driven layout adjustments must not run.
      */
     public boolean isSystemImeSuppressedByInAppKeyboard() {
-        return mInAppKeyboard != null && mInAppKeyboard.isEnabled();
+        return mInAppKeyboard != null && mInAppKeyboard.isSystemImeSuppressed();
     }
 
     private void applyFullscreenMode() {
@@ -3708,6 +3719,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         saveTerminalToolbarTextInput(savedInstanceState);
         if (mInAppKeyboard != null)
             mInAppKeyboard.onSaveInstanceState(savedInstanceState);
+        savedInstanceState.putBoolean(ARG_SHOULD_LAUNCH_ONBOARDING,
+            mShouldLaunchOnboardingAfterBootstrap);
         savedInstanceState.putBoolean(ARG_ACTIVITY_RECREATED, true);
     }
 
@@ -3768,6 +3781,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
         mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
+        scheduleOnboardingIfReady();
     }
 
     private void startBootstrapAndSession(@Nullable Intent intent) {
@@ -3787,11 +3801,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
                 mEmptySessionRecoveryInProgress = false;
+                scheduleOnboardingIfReady();
             } catch (WindowManager.BadTokenException e) {
                 // Activity finished - ignore.
                 mEmptySessionRecoveryInProgress = false;
             }
         });
+    }
+
+    private void scheduleOnboardingIfReady() {
+        if (!mShouldLaunchOnboardingAfterBootstrap || !mIsVisible || mTermuxService == null
+            || mTermuxService.isTermuxSessionsEmpty() || isFinishing()) {
+            return;
+        }
+        mShouldLaunchOnboardingAfterBootstrap = false;
+        View content = findViewById(android.R.id.content);
+        if (content != null) {
+            content.postDelayed(() -> {
+                if (!isFinishing() && !isDestroyed()) {
+                    ActivityUtils.startActivity(this, OnboardingActivity.createIntent(this));
+                }
+            }, 350L);
+        }
     }
 
     private void maybeRecoverFromEmptySession(@NonNull String source) {
@@ -3964,6 +3995,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSuggestionBarView.setAppDataProvider(mLauncherAppDataProvider);
         mSuggestionBarView.setConfigRepository(mLauncherConfigRepository);
         mSuggestionBarView.setAppCatalogChangedListener(this::syncAzScrubLettersAndTint);
+        mSuggestionBarView.setNotificationPopupInteractionListener(
+            new SuggestionBarView.NotificationPopupInteractionListener() {
+                @Override
+                public void onNotificationPopupShown() {
+                    if (mInAppKeyboard != null)
+                        mInAppKeyboard.beginExternalTextInput();
+                }
+
+                @Override
+                public void onNotificationPopupDismissed() {
+                    if (mInAppKeyboard != null)
+                        mInAppKeyboard.endExternalTextInput();
+                }
+            });
         applySuggestionBarPreferences();
         applyDockLayoutMetrics(buildDockLayoutMetrics(0));
         if (isSuggestionBarEnabled()) {
@@ -4147,6 +4192,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSuggestionBarView.setDefaultButtons(new ArrayList<>());
         mSuggestionBarView.setTextSize(10f);
         mSuggestionBarView.setBandW(mPreferences.isAppLauncherBwIconsEnabled());
+        mSuggestionBarView.setMaterialIcons(
+            mPreferences.isAppLauncherMaterialIconsEnabled());
         mSuggestionBarView.setUnifyIcons(mPreferences.isAppLauncherUnifyIconsEnabled());
         mSuggestionBarView.setIconShadowEnabled(mPreferences.isAppLauncherIconShadowEnabled());
         mSuggestionBarView.setIconScale(resolveDerivedDockIconScale());
@@ -4195,6 +4242,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         signature = (31 * signature) + stringSignature(mPreferences.getAppLauncherIconPackPackage());
         signature = (31 * signature) + stringSignature(mPreferences.getAppLauncherPinnedIconPackPackage());
         signature = (31 * signature) + (mPreferences.isAppLauncherBwIconsEnabled() ? 1 : 0);
+        signature = (31 * signature)
+            + (mPreferences.isAppLauncherMaterialIconsEnabled() ? 1 : 0);
         signature = (31 * signature) + (mPreferences.isAppLauncherUnifyIconsEnabled() ? 1 : 0);
         return signature;
     }
@@ -5201,19 +5250,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         public void copySelection() {
             if (mTerminalView == null)
                 return;
-            String selectedText = mTerminalView.getStoredSelectedText();
+            String selectedText = mTerminalView.getSelectedText();
+            if (DataUtils.isNullOrEmpty(selectedText))
+                selectedText = mTerminalView.getStoredSelectedText();
             if (!DataUtils.isNullOrEmpty(selectedText))
                 ShareUtils.copyTextToClipboard(TermuxActivity.this, selectedText);
         }
 
         @Override
-        public void copyScreen() {
-            if (mTerminalView == null || mTerminalView.mEmulator == null)
+        public void selectAll() {
+            if (mTerminalView == null)
                 return;
-            String screenText = mTerminalView.mEmulator.getScreen()
-                .getTranscriptTextWithoutJoinedLines();
-            if (!DataUtils.isNullOrEmpty(screenText))
-                ShareUtils.copyTextToClipboard(TermuxActivity.this, screenText.trim());
+            mTerminalView.selectAllText();
+        }
+
+        @Override
+        public boolean prepareCut() {
+            if (mTerminalView == null)
+                return false;
+            String selectedText = mTerminalView.getSelectedText();
+            if (DataUtils.isNullOrEmpty(selectedText))
+                selectedText = mTerminalView.getStoredSelectedText();
+            if (!DataUtils.isNullOrEmpty(selectedText)) {
+                ShareUtils.copyTextToClipboard(TermuxActivity.this, selectedText);
+                mTerminalView.stopTextSelectionMode();
+                return false;
+            }
+            String currentInput = mTerminalView.getCurrentInput();
+            if (!DataUtils.isNullOrEmpty(currentInput))
+                ShareUtils.copyTextToClipboard(TermuxActivity.this, currentInput);
+            // Ctrl+U is the terminal-native cut for the current prompt line. Sending it even when
+            // the heuristic input reader returns empty also clears shells with custom prompts.
+            return true;
         }
 
         @Override

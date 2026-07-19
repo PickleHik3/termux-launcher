@@ -39,10 +39,15 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import juloo.keyboard2.Config;
 import juloo.keyboard2.Keyboard2View;
@@ -69,6 +74,14 @@ public class KeyboardColorSchemeFragment extends Fragment {
     private boolean mAdvanced;
     private MaterialButton mImportButton;
     private static final String STATE_ADVANCED = "advanced";
+    private static final int MAX_BASE16_BYTES = 262144;
+    private static final String BASE16_SCHEME_URL =
+        "https://raw.githubusercontent.com/tinted-theming/schemes/spec-0.11/base16/%s.yaml";
+    private final ExecutorService mImportExecutor = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "base16-theme-import");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private final ActivityResultLauncher<String[]> mBase16Picker = registerForActivityResult(
         new ActivityResultContracts.OpenDocument(), this::importBase16Uri);
@@ -220,10 +233,11 @@ public class KeyboardColorSchemeFragment extends Fragment {
             com.google.android.material.R.attr.materialButtonOutlinedStyle);
         mImportButton.setText(R.string.termux_keyboard_color_scheme_import_base16);
         mImportButton.setVisibility(mAdvanced ? View.VISIBLE : View.GONE);
-        mImportButton.setOnClickListener(view -> mBase16Picker.launch(new String[] {
-            "application/x-yaml", "text/yaml", "text/plain", "application/json", "*/*"
-        }));
-        advancedRow.addView(mImportButton);
+        mImportButton.setOnClickListener(view -> showBase16NameDialog());
+        LinearLayout.LayoutParams importParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        importParams.setMarginStart(dp(12));
+        advancedRow.addView(mImportButton, importParams);
         content.addView(advancedRow);
 
         HorizontalScrollView swatchScroller = new HorizontalScrollView(context);
@@ -411,7 +425,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
             char[] buffer = new char[4096];
             int count;
             while ((count = reader.read(buffer)) >= 0) {
-                if (text.length() + count > 262144)
+                if (text.length() + count > MAX_BASE16_BYTES)
                     throw new IOException("Theme file is too large");
                 text.append(buffer, 0, count);
             }
@@ -428,6 +442,158 @@ public class KeyboardColorSchemeFragment extends Fragment {
         } catch (IOException | SecurityException e) {
             Toast.makeText(requireContext(),
                 R.string.termux_keyboard_color_scheme_base16_read_error, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void showBase16NameDialog() {
+        EditText input = new EditText(requireContext());
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        input.setHint(R.string.termux_keyboard_color_scheme_base16_name_hint);
+        int horizontal = dp(24);
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+            .setTitle(R.string.termux_keyboard_color_scheme_base16_name_title)
+            .setMessage(R.string.termux_keyboard_color_scheme_base16_name_message)
+            .setView(input, horizontal, 0, horizontal, 0)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setNeutralButton(R.string.termux_keyboard_color_scheme_base16_choose_file,
+                (ignored, which) -> launchBase16FilePicker())
+            .setPositiveButton(R.string.termux_keyboard_color_scheme_base16_import, null)
+            .create();
+        dialog.setOnShowListener(ignored -> {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
+                String slug = normalizeBase16Name(input.getText().toString());
+                if (slug == null) {
+                    input.setError(getString(
+                        R.string.termux_keyboard_color_scheme_base16_name_error));
+                    return;
+                }
+                dialog.dismiss();
+                downloadBase16(slug);
+            });
+            input.requestFocus();
+        });
+        dialog.show();
+    }
+
+    private void launchBase16FilePicker() {
+        mBase16Picker.launch(new String[] {
+            "application/x-yaml", "text/yaml", "text/plain", "application/json", "*/*"
+        });
+    }
+
+    @Nullable
+    static String normalizeBase16Name(@Nullable String name) {
+        if (name == null) return null;
+        String normalized = name.trim().toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("base16-")) normalized = normalized.substring(7);
+        normalized = normalized.replaceAll("[\\s_]+", "-")
+            .replaceAll("[^a-z0-9-]", "-")
+            .replaceAll("-+", "-")
+            .replaceAll("^-|-$", "");
+        return normalized.isEmpty() || normalized.length() > 96 ? null : normalized;
+    }
+
+    private void downloadBase16(@NonNull String slug) {
+        Toast.makeText(requireContext(),
+            R.string.termux_keyboard_color_scheme_base16_downloading, Toast.LENGTH_SHORT).show();
+        mImportExecutor.execute(() -> {
+            Base16Download result = fetchBase16(slug);
+            if (!isAdded()) return;
+            requireActivity().runOnUiThread(() -> applyDownloadedBase16(result));
+        });
+    }
+
+    @NonNull
+    private static Base16Download fetchBase16(@NonNull String slug) {
+        HttpURLConnection connection = null;
+        try {
+            URL url = new URL(String.format(Locale.ROOT, BASE16_SCHEME_URL, slug));
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setConnectTimeout(8000);
+            connection.setReadTimeout(8000);
+            connection.setInstanceFollowRedirects(false);
+            connection.setRequestProperty("Accept", "text/yaml,text/plain");
+            int status = connection.getResponseCode();
+            if (status == HttpURLConnection.HTTP_NOT_FOUND)
+                return Base16Download.notFound();
+            if (status != HttpURLConnection.HTTP_OK)
+                return Base16Download.networkError();
+            try (InputStream stream = connection.getInputStream()) {
+                String text = readLimitedText(stream);
+                return text == null ? Base16Download.networkError()
+                    : Base16Download.success(text);
+            }
+        } catch (IOException | SecurityException ignored) {
+            return Base16Download.networkError();
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    @Nullable
+    private static String readLimitedText(@NonNull InputStream stream) throws IOException {
+        BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
+        StringBuilder text = new StringBuilder();
+        char[] buffer = new char[4096];
+        int count;
+        while ((count = reader.read(buffer)) >= 0) {
+            if (text.length() + count > MAX_BASE16_BYTES) return null;
+            text.append(buffer, 0, count);
+        }
+        return text.toString();
+    }
+
+    private void applyDownloadedBase16(@NonNull Base16Download result) {
+        if (!isAdded() || mKeyboard == null) return;
+        if (result.notFound) {
+            Toast.makeText(requireContext(),
+                R.string.termux_keyboard_color_scheme_base16_not_found, Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (result.text == null) {
+            Toast.makeText(requireContext(),
+                R.string.termux_keyboard_color_scheme_base16_network_error,
+                Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (!mScheme.importBase16(result.text)) {
+            Toast.makeText(requireContext(),
+                R.string.termux_keyboard_color_scheme_base16_error, Toast.LENGTH_LONG).show();
+            return;
+        }
+        mSelectedSwatch = 0;
+        persistAndRender();
+        createSwatches();
+        Toast.makeText(requireContext(),
+            R.string.termux_keyboard_color_scheme_base16_imported, Toast.LENGTH_SHORT).show();
+    }
+
+    @Override
+    public void onDestroy() {
+        mImportExecutor.shutdownNow();
+        super.onDestroy();
+    }
+
+    private static final class Base16Download {
+        @Nullable final String text;
+        final boolean notFound;
+
+        private Base16Download(@Nullable String text, boolean notFound) {
+            this.text = text;
+            this.notFound = notFound;
+        }
+
+        static Base16Download success(@NonNull String text) {
+            return new Base16Download(text, false);
+        }
+
+        static Base16Download notFound() {
+            return new Base16Download(null, true);
+        }
+
+        static Base16Download networkError() {
+            return new Base16Download(null, false);
         }
     }
 

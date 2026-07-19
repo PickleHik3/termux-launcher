@@ -10,11 +10,13 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Build;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.View;
 import java.util.Objects;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Map;
 
@@ -62,7 +64,15 @@ public class Keyboard2View extends View
   private OnKeyPaintListener _keyPaintListener;
   private String _lastPaintedKeyId;
   private final Paint _trailPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+  private final Paint _fxFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+  private final Paint _fxStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+  private final Paint _fxHaloPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final SparseArray<Trail> _trails = new SparseArray<Trail>();
+  private final SparseArray<TouchFx> _touchFx = new SparseArray<TouchFx>();
+  private final ArrayList<TouchFx> _releasedTouchFx = new ArrayList<TouchFx>();
+
+  private static final long PRESS_RAMP_MS = 72L;
+  private static final long RELEASE_FADE_MS = 190L;
 
   private final RectF _tmpRect = new RectF();
 
@@ -110,6 +120,11 @@ public class Keyboard2View extends View
     setOnTouchListener(this);
     _trailPaint.setStyle(Paint.Style.STROKE);
     _trailPaint.setStrokeCap(Paint.Cap.ROUND);
+    _fxFillPaint.setStyle(Paint.Style.FILL);
+    _fxStrokePaint.setStyle(Paint.Style.STROKE);
+    _fxStrokePaint.setStrokeCap(Paint.Cap.ROUND);
+    _fxHaloPaint.setStyle(Paint.Style.STROKE);
+    _fxHaloPaint.setStrokeCap(Paint.Cap.ROUND);
     applyTheme();
   }
 
@@ -117,6 +132,9 @@ public class Keyboard2View extends View
   {
     _trailPaint.setColor(_theme.pressedColor);
     _trailPaint.setStrokeWidth(_config.swipeTrailWidthPx);
+    _fxFillPaint.setColor(_theme.pressedColor);
+    _fxStrokePaint.setColor(_theme.pressedColor);
+    _fxHaloPaint.setColor(_theme.pressedColor);
     setBackgroundColor(withOpacity(_theme.colorKeyboard, _theme.opacity));
   }
 
@@ -293,6 +311,8 @@ public class Keyboard2View extends View
     _mods = Pointers.Modifiers.EMPTY;
     _pointers.reset();
     _trails.clear();
+    _touchFx.clear();
+    _releasedTouchFx.clear();
     if (notifyHandler)
       _config.handler.mods_changed(_mods);
     requestLayout();
@@ -426,6 +446,7 @@ public class Keyboard2View extends View
       case MotionEvent.ACTION_UP:
       case MotionEvent.ACTION_POINTER_UP:
         p = event.getActionIndex();
+        finishTouchFx(event.getPointerId(p));
         _pointers.onTouchUp(event.getPointerId(p));
         _trails.remove(event.getPointerId(p));
         if (event.getActionMasked() == MotionEvent.ACTION_UP)
@@ -441,6 +462,7 @@ public class Keyboard2View extends View
         KeyboardData.Key key = getKeyAtPosition(tx, ty);
         if (key != null)
         {
+          startTouchFx(event.getPointerId(p), key, tx, ty);
           _pointers.onTouchDown(tx, ty, event.getPointerId(p), key);
           if (_config.swipeTrailEnabled)
             _trails.put(event.getPointerId(p), new Trail(tx, ty));
@@ -450,12 +472,14 @@ public class Keyboard2View extends View
         for (p = 0; p < event.getPointerCount(); p++)
         {
           _pointers.onTouchMove(event.getX(p), event.getY(p), event.getPointerId(p));
+          updateTouchFx(event.getPointerId(p), event.getX(p), event.getY(p));
           Trail trail = _trails.get(event.getPointerId(p));
           if (trail != null)
             trail.update(event.getX(p), event.getY(p));
         }
         break;
       case MotionEvent.ACTION_CANCEL:
+        finishAllTouchFx();
         _pointers.onTouchCancelCommit();
         _trails.clear();
         requestDisallowIntercept(false);
@@ -463,9 +487,46 @@ public class Keyboard2View extends View
       default:
         return (false);
     }
-    if (_config.swipeTrailEnabled)
-      invalidate();
+    postInvalidateOnAnimation();
     return (true);
+  }
+
+  private void startTouchFx(int pointerId, KeyboardData.Key key, float x, float y)
+  {
+    TouchFx previous = _touchFx.get(pointerId);
+    if (previous != null)
+      releaseTouchFx(previous, SystemClock.uptimeMillis());
+    _touchFx.put(pointerId, new TouchFx(key, x, y, SystemClock.uptimeMillis()));
+  }
+
+  private void updateTouchFx(int pointerId, float x, float y)
+  {
+    TouchFx fx = _touchFx.get(pointerId);
+    if (fx != null)
+      fx.update(x, y, _config.swipeDistancePx);
+  }
+
+  private void finishTouchFx(int pointerId)
+  {
+    TouchFx fx = _touchFx.get(pointerId);
+    if (fx == null)
+      return;
+    _touchFx.remove(pointerId);
+    releaseTouchFx(fx, SystemClock.uptimeMillis());
+  }
+
+  private void finishAllTouchFx()
+  {
+    long now = SystemClock.uptimeMillis();
+    for (int i = 0; i < _touchFx.size(); i++)
+      releaseTouchFx(_touchFx.valueAt(i), now);
+    _touchFx.clear();
+  }
+
+  private void releaseTouchFx(TouchFx fx, long now)
+  {
+    fx.releasedAt = now;
+    _releasedTouchFx.add(fx);
   }
 
   private boolean onPaintTouch(MotionEvent event)
@@ -659,6 +720,9 @@ public class Keyboard2View extends View
   {
     if (_keyboard == null || _tc == null)
       return;
+    long now = SystemClock.uptimeMillis();
+    pruneReleasedTouchFx(now);
+    boolean animateNextFrame = false;
     float y = getPaddingTop() + _tc.margin_top;
     for (int rowIndex = 0; rowIndex < _keyboard.rows.size(); rowIndex++)
     {
@@ -673,6 +737,14 @@ public class Keyboard2View extends View
         x += k.shift * _keyWidth;
         float keyW = _keyWidth * k.width - _tc.horizontal_margin;
         boolean isKeyDown = _pointers.isKeyDown(k);
+        TouchFx touchFx = findTouchFx(k);
+        float fxStrength = touchFx == null ? 0f : touchFx.strength(now);
+        int keySave = canvas.save();
+        if (touchFx != null && !touchFx.swiped && fxStrength > 0f)
+        {
+          float scale = 1f - 0.035f * fxStrength;
+          canvas.scale(scale, scale, x + keyW / 2f, y + keyH / 2f);
+        }
         Theme.Computed.Key tc_key;
         if (isKeyDown)
           tc_key = _tc.key_activated;
@@ -688,6 +760,9 @@ public class Keyboard2View extends View
         drawKeyFrame(canvas, x, y, keyW, keyH, tc_key,
             isKeyDown || colorOverride == null ? null : colorOverride.keyBackground,
             isKeyDown || colorOverride == null ? null : colorOverride.borderColor);
+        if (touchFx != null && fxStrength > 0f)
+          drawTouchFx(canvas, touchFx, x, y, keyW, keyH, tc_key.border_radius,
+              fxStrength);
         if (k.keys[0] != null)
           drawLabel(canvas, k.keys[0], keyW / 2f + x, y, keyH, isKeyDown, tc_key,
               isKeyDown || colorOverride == null ? null : colorOverride.primaryLabel);
@@ -704,6 +779,9 @@ public class Keyboard2View extends View
           }
         }
         drawIndication(canvas, k, x, y, keyW, keyH, _tc);
+        canvas.restoreToCount(keySave);
+        if (touchFx != null && touchFx.needsFrame(now))
+          animateNextFrame = true;
         x += _keyWidth * k.width;
       }
       y += row.height * _tc.row_height;
@@ -712,9 +790,100 @@ public class Keyboard2View extends View
       for (int i = 0; i < _trails.size(); i++)
       {
         Trail trail = _trails.valueAt(i);
+        _fxHaloPaint.setStrokeWidth(Math.max(_config.swipeTrailWidthPx * 3.2f, 4f));
+        _fxHaloPaint.setColor(withAlpha(_theme.pressedColor, 42));
+        canvas.drawLine(trail.startX, trail.startY, trail.endX, trail.endY,
+            _fxHaloPaint);
         canvas.drawLine(trail.startX, trail.startY, trail.endX, trail.endY,
             _trailPaint);
       }
+    if (animateNextFrame || !_releasedTouchFx.isEmpty())
+      postInvalidateOnAnimation();
+  }
+
+  private void pruneReleasedTouchFx(long now)
+  {
+    for (int i = _releasedTouchFx.size() - 1; i >= 0; i--)
+      if (now - _releasedTouchFx.get(i).releasedAt >= RELEASE_FADE_MS)
+        _releasedTouchFx.remove(i);
+  }
+
+  private TouchFx findTouchFx(KeyboardData.Key key)
+  {
+    for (int i = _touchFx.size() - 1; i >= 0; i--)
+      if (_touchFx.valueAt(i).key == key)
+        return _touchFx.valueAt(i);
+    for (int i = _releasedTouchFx.size() - 1; i >= 0; i--)
+      if (_releasedTouchFx.get(i).key == key)
+        return _releasedTouchFx.get(i);
+    return null;
+  }
+
+  private void drawTouchFx(Canvas canvas, TouchFx fx, float x, float y,
+      float keyW, float keyH, float radius, float strength)
+  {
+    float inset = Math.max(1f, Math.min(keyW, keyH) * 0.055f);
+    _tmpRect.set(x + inset, y + inset, x + keyW - inset, y + keyH - inset);
+    if (!fx.swiped)
+    {
+      _fxFillPaint.setColor(withAlpha(_theme.pressedColor,
+          Math.round(42f * strength)));
+      canvas.drawRoundRect(_tmpRect, Math.max(0f, radius - inset),
+          Math.max(0f, radius - inset), _fxFillPaint);
+      _fxStrokePaint.setStrokeWidth(Math.max(1.2f, inset * 0.32f));
+      _fxStrokePaint.setColor(withAlpha(_theme.pressedColor,
+          Math.round(118f * strength)));
+      canvas.drawRoundRect(_tmpRect, Math.max(0f, radius - inset),
+          Math.max(0f, radius - inset), _fxStrokePaint);
+      return;
+    }
+
+    float cx = x + keyW / 2f;
+    float cy = y + keyH / 2f;
+    if (fx.isRotating())
+    {
+      float ringRadius = Math.min(keyW, keyH) * 0.31f;
+      _tmpRect.set(cx - ringRadius, cy - ringRadius, cx + ringRadius, cy + ringRadius);
+      float sweep = (float)Math.toDegrees(fx.angularTravel);
+      sweep = Math.max(-330f, Math.min(330f, sweep));
+      _fxHaloPaint.setStrokeWidth(Math.max(5f, ringRadius * 0.24f));
+      _fxHaloPaint.setColor(withAlpha(_theme.pressedColor,
+          Math.round(38f * strength)));
+      canvas.drawArc(_tmpRect, (float)Math.toDegrees(fx.firstAngle), sweep,
+          false, _fxHaloPaint);
+      _fxStrokePaint.setStrokeWidth(Math.max(1.8f, ringRadius * 0.075f));
+      _fxStrokePaint.setColor(withAlpha(_theme.pressedColor,
+          Math.round(205f * strength)));
+      canvas.drawArc(_tmpRect, (float)Math.toDegrees(fx.firstAngle), sweep,
+          false, _fxStrokePaint);
+      return;
+    }
+
+    float dx = fx.x - fx.downX;
+    float dy = fx.y - fx.downY;
+    float scale = Math.max(Math.abs(dx) / Math.max(1f, keyW * 0.40f),
+        Math.abs(dy) / Math.max(1f, keyH * 0.38f));
+    if (scale < 1f) scale = 1f;
+    float ex = cx + dx / scale;
+    float ey = cy + dy / scale;
+    _fxHaloPaint.setStrokeWidth(Math.max(5f, Math.min(keyW, keyH) * 0.17f));
+    _fxHaloPaint.setColor(withAlpha(_theme.pressedColor,
+        Math.round(44f * strength)));
+    canvas.drawLine(cx, cy, ex, ey, _fxHaloPaint);
+    _fxStrokePaint.setStrokeWidth(Math.max(1.8f, Math.min(keyW, keyH) * 0.045f));
+    _fxStrokePaint.setColor(withAlpha(_theme.pressedColor,
+        Math.round(220f * strength)));
+    canvas.drawLine(cx, cy, ex, ey, _fxStrokePaint);
+    _fxFillPaint.setColor(withAlpha(_theme.pressedColor,
+        Math.round(190f * strength)));
+    canvas.drawCircle(ex, ey, Math.max(2.2f, Math.min(keyW, keyH) * 0.055f),
+        _fxFillPaint);
+  }
+
+  private static int withAlpha(int color, int alpha)
+  {
+    return Color.argb(Math.max(0, Math.min(255, alpha)), Color.red(color),
+        Color.green(color), Color.blue(color));
   }
 
   @Override
@@ -888,6 +1057,77 @@ public class Keyboard2View extends View
     {
       endX = x;
       endY = y;
+    }
+  }
+
+  private static final class TouchFx
+  {
+    final KeyboardData.Key key;
+    final float downX;
+    final float downY;
+    final long downAt;
+    float x;
+    float y;
+    boolean swiped;
+    double firstAngle = Double.NaN;
+    double lastAngle = Double.NaN;
+    double angularTravel;
+    long releasedAt = -1L;
+
+    TouchFx(KeyboardData.Key key, float x, float y, long downAt)
+    {
+      this.key = key;
+      downX = x;
+      downY = y;
+      this.x = x;
+      this.y = y;
+      this.downAt = downAt;
+    }
+
+    void update(float x, float y, float swipeDistance)
+    {
+      this.x = x;
+      this.y = y;
+      float dx = x - downX;
+      float dy = y - downY;
+      float distance = (float)Math.hypot(dx, dy);
+      if (distance < swipeDistance * 0.72f)
+        return;
+      swiped = true;
+      double angle = Math.atan2(dy, dx);
+      if (Double.isNaN(firstAngle))
+        firstAngle = angle;
+      if (!Double.isNaN(lastAngle))
+      {
+        double delta = angle - lastAngle;
+        while (delta > Math.PI) delta -= Math.PI * 2.0;
+        while (delta < -Math.PI) delta += Math.PI * 2.0;
+        // Ignore a single across-center jump; a genuine circle produces a series of small deltas.
+        if (Math.abs(delta) < 1.25)
+          angularTravel += delta;
+      }
+      lastAngle = angle;
+    }
+
+    boolean isRotating()
+    {
+      return Math.abs(angularTravel) > 1.05;
+    }
+
+    float strength(long now)
+    {
+      float ramp = Math.min(1f, Math.max(0f, (now - downAt) / (float)PRESS_RAMP_MS));
+      if (releasedAt < 0L)
+        return ramp;
+      float fade = 1f - Math.min(1f,
+          Math.max(0f, (now - releasedAt) / (float)RELEASE_FADE_MS));
+      return ramp * fade;
+    }
+
+    boolean needsFrame(long now)
+    {
+      return (releasedAt < 0L && now - downAt < PRESS_RAMP_MS)
+          || (releasedAt >= 0L && now - releasedAt < RELEASE_FADE_MS);
     }
   }
 }

@@ -34,8 +34,7 @@ public class InAppKeyboardPaletteFactoryTest {
 
     @Test
     public void allStoredVariantsBuildPalettesWithReadableLabels() {
-        for (String variant : new String[] {"system", "light", "dark", "black",
-                "steel_teal", "mint_fuji", "neon_nightfall", "sakura_wood", "ink_plum"}) {
+        for (String variant : new String[] {"system", "light", "dark"}) {
             Theme.Palette palette = InAppKeyboardPaletteFactory.create(context, variant);
 
             assertNotNull(variant, palette);
@@ -65,41 +64,9 @@ public class InAppKeyboardPaletteFactoryTest {
     }
 
     @Test
-    public void blackVariantPinsNeutralSurfacesToBlack() {
-        Theme.Palette palette = InAppKeyboardPaletteFactory.create(context, "black");
-
-        assertEquals(Color.BLACK, palette.keyboardBackground);
-        assertEquals(Color.BLACK, palette.keyBackground);
-        assertEquals(Color.BLACK, palette.actionKeyBackground);
-        assertEquals(Color.BLACK, palette.spaceBarBackground);
-    }
-
-    @Test
-    public void fixedThemesUseDesignTokensForSurfaces() {
-        Theme.Palette steel = InAppKeyboardPaletteFactory.create(context, "steel_teal");
-        assertEquals(0xFFE9E7E2, steel.keyboardBackground);
-        assertEquals(0xFFF4F2EC, steel.keyBackground);
-        assertEquals(0xFF727A80, steel.actionKeyBackground);
-        assertEquals(0xFF727A80, steel.spaceBarBackground);
-        assertEquals(0xFF1C7A71, steel.activatedKeyBackground);
-        assertNull(steel.indicatorColors);
-
-        Theme.Palette neon = InAppKeyboardPaletteFactory.create(context, "neon_nightfall");
-        assertEquals(0xFF0D0D10, neon.keyboardBackground);
-        assertEquals(0xFF17171B, neon.keyBackground);
-        assertNull(neon.indicatorColors);
-
-        for (String variant : new String[] {"mint_fuji", "sakura_wood", "ink_plum"}) {
-            Theme.Palette palette = InAppKeyboardPaletteFactory.create(context, variant);
-            assertNull(variant + " has no indicator", palette.indicatorColors);
-        }
-    }
-
-    @Test
     public void glassVariantsAreTransparentWithReadableComposedLabels() {
         int base = InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(context);
-        for (String variant : new String[] {"system", "light", "dark", "black",
-                "steel_teal", "mint_fuji", "neon_nightfall", "sakura_wood", "ink_plum"}) {
+        for (String variant : new String[] {"system", "light", "dark"}) {
             Theme.Palette palette = InAppKeyboardPaletteFactory.createGlass(context, variant);
 
             assertEquals(variant, Color.TRANSPARENT, palette.keyboardBackground);
@@ -127,19 +94,7 @@ public class InAppKeyboardPaletteFactoryTest {
     }
 
     @Test
-    public void glassChipsKeepThemeIdentity() {
-        // Glass keeps each theme's own surface hue: neon stays dark, steel stays light.
-        Theme.Palette neon = InAppKeyboardPaletteFactory.createGlass(context, "neon_nightfall");
-        assertTrue("neon glass chips stay dark",
-            ColorUtils.calculateLuminance(ColorUtils.setAlphaComponent(
-                neon.keyBackground, 255)) < 0.2d);
-        assertNull("decorative indicator is removed from glass themes", neon.indicatorColors);
-
-        Theme.Palette steel = InAppKeyboardPaletteFactory.createGlass(context, "steel_teal");
-        assertTrue("steel glass chips stay light",
-            ColorUtils.calculateLuminance(ColorUtils.setAlphaComponent(
-                steel.keyBackground, 255)) > 0.6d);
-
+    public void legacyDockThemeMapsToGlassSystem() {
         // The legacy "dock" stored value maps onto glass system.
         Theme.Palette legacy = InAppKeyboardPaletteFactory.create(context, "dock");
         assertEquals(Color.TRANSPARENT, legacy.keyboardBackground);

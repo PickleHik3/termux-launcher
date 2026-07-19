@@ -21,20 +21,15 @@ public final class InAppKeyboardPaletteFactory {
     private InAppKeyboardPaletteFactory() {}
 
     /**
-     * Builds a palette for the stored preference values {@code system}, {@code light},
-     * {@code dark}, {@code black}, or one of the fixed design themes ({@code steel_teal},
-     * {@code mint_fuji}, {@code neon_nightfall}, {@code sakura_wood}, {@code ink_plum}).
-     * Unknown values safely use {@code system}. The legacy {@code dock} value maps to the
-     * glass rendition of the system theme.
+     * Builds a palette for the stored preference values {@code system}, {@code light}, or
+     * {@code dark}. Unknown values safely use {@code system}. The legacy {@code dock} value maps
+     * to the glass rendition of the system theme.
      */
     @NonNull
     public static Theme.Palette create(@NonNull Context context, String variant) {
         String normalizedVariant = variant == null ? "system" : variant;
         if ("dock".equals(normalizedVariant))
             return createGlass(context, "system");
-        DesignTheme fixed = designTheme(normalizedVariant);
-        if (fixed != null)
-            return createFixed(context, fixed);
         SourceRoles roles = resolve(context);
 
         int keyboard = roles.surface;
@@ -66,15 +61,6 @@ public final class InAppKeyboardPaletteFactory {
                 label = towardLuminance(label, 0.90d);
                 subLabel = towardLuminance(subLabel, 0.62d);
                 border = ColorUtils.setAlphaComponent(opaque(border), 184);
-                break;
-            case "black":
-                keyboard = Color.BLACK;
-                key = Color.BLACK;
-                action = Color.BLACK;
-                space = Color.BLACK;
-                activated = ColorUtils.compositeColors(
-                    ColorUtils.setAlphaComponent(roles.primary, 64), Color.BLACK);
-                border = ColorUtils.setAlphaComponent(opaque(border), 92);
                 break;
             case "system":
             default:
@@ -220,56 +206,6 @@ public final class InAppKeyboardPaletteFactory {
         );
     }
 
-    /**
-     * Fixed color-token themes from the KeyboardThemes design handoff. Tokens map onto the
-     * keyboard roles as: case = board, alpha = normal keys, mod = action keys + space bar,
-     * accent = activated/pressed key highlight, accent2 = locked-modifier legend,
-     * Decorative underglow strips are intentionally omitted from every scheme.
-     */
-    private static DesignTheme designTheme(@NonNull String variant) {
-        switch (variant) {
-            case "steel_teal":
-                return new DesignTheme(0xFFE9E7E2, 0xFFF4F2EC, 0xFF48484A,
-                    0xFF727A80, 0xFFF3F4F2, 0xFF1C7A71, 0xFFFFFFFF, 0xFF2B3034);
-            case "mint_fuji":
-                return new DesignTheme(0xFF141414, 0xFFF6F3EA, 0xFF2C2C2C,
-                    0xFFA4DCC4, 0xFF22463A, 0xFF90CDEE, 0xFF1D3F57, 0xFFB8EAD4);
-            case "neon_nightfall":
-                return new DesignTheme(0xFF0D0D10, 0xFF17171B, 0xFFF26AA6,
-                    0xFF141418, 0xFFC76BFF, 0xFFFF2D78, 0xFF12010A, 0xFF7C4DFF);
-            case "sakura_wood":
-                return new DesignTheme(0xFF5F4331, 0xFFE8DABF, 0xFF5C4832,
-                    0xFF8A5A3C, 0xFFF0E6D2, 0xFFB1502E, 0xFFF7EFE2, 0xFF7D8A5F);
-            case "ink_plum":
-                return new DesignTheme(0xFFC7C7C7, 0xFFFBFBFB, 0xFF1A1A1A,
-                    0xFFEDEDED, 0xFF1A1A1A, 0xFFC0241D, 0xFFFFFFFF, 0xFF2F2F2F);
-            default:
-                return null;
-        }
-    }
-
-    @NonNull
-    private static Theme.Palette createFixed(@NonNull Context context, @NonNull DesignTheme t) {
-        int label = ensureContrast(t.alphaText, t.alpha);
-        int subLabel = ensureContrast(
-            ColorUtils.blendARGB(t.alphaText, t.alpha, 0.25f), t.alpha);
-        int actionLabel = ensureContrast(t.modText, t.mod);
-        int actionSubLabel = ensureContrast(
-            ColorUtils.blendARGB(t.modText, t.mod, 0.25f), t.mod);
-        int activatedLabel = ensureContrast(t.accentText, t.accent);
-        int lockedLabel = ensureContrast(t.accent2, t.accent);
-        int border = ColorUtils.setAlphaComponent(
-            ColorUtils.blendARGB(t.alpha, t.alphaText, 0.4f), 150);
-
-        float density = context.getResources().getDisplayMetrics().density;
-        return new Theme.Palette(
-            t.caseColor, t.alpha, t.mod, t.mod, t.accent,
-            label, subLabel, activatedLabel, activatedLabel, lockedLabel,
-            border, true, 1f * density, 6f * density, 1f,
-            0.25f, 0.5f, actionLabel, actionSubLabel, null
-        );
-    }
-
     private static SourceRoles resolve(@NonNull Context context) {
         int surface = materialColor(context, com.google.android.material.R.attr.colorSurface,
             ContextCompat.getColor(context, R.color.termux_surface_base));
@@ -374,28 +310,6 @@ public final class InAppKeyboardPaletteFactory {
         int result = 17;
         for (int color : colors) result = 31 * result + color;
         return result;
-    }
-
-    private static final class DesignTheme {
-        final int caseColor;
-        final int alpha;
-        final int alphaText;
-        final int mod;
-        final int modText;
-        final int accent;
-        final int accentText;
-        final int accent2;
-        DesignTheme(int caseColor, int alpha, int alphaText, int mod, int modText,
-                    int accent, int accentText, int accent2) {
-            this.caseColor = caseColor;
-            this.alpha = alpha;
-            this.alphaText = alphaText;
-            this.mod = mod;
-            this.modText = modText;
-            this.accent = accent;
-            this.accentText = accentText;
-            this.accent2 = accent2;
-        }
     }
 
     private static final class SourceRoles {

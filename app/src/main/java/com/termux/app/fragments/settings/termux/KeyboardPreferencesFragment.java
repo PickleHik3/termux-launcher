@@ -141,7 +141,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             case "copy": return "Copy";
             case "paste": return "Paste";
             case "cut": return "Cut";
-            case "selectAll": return "Select all (copies the screen)";
+            case "selectAll": return "Select all terminal text";
             case "undo": return "Undo (Ctrl+_)";
             case "redo": return "Redo";
             case "delete_word": return "Delete word";

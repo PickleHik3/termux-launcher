@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="onboarding_hero_height">64dp</dimen>
+    <dimen name="onboarding_hero_margin_bottom">8dp</dimen>
+    <dimen name="onboarding_title_text_size">22sp</dimen>
+</resources>

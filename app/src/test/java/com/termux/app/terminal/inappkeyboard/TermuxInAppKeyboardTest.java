@@ -154,6 +154,31 @@ public class TermuxInAppKeyboardTest {
     }
 
     @Test
+    public void externalTextInputTemporarilyYieldsToSystemImeThenRestoresKeyboard() {
+        mPreferences.setInAppKeyboardEnabled(true);
+        mController.onCreate(null);
+        int geometrySyncs = mHost.geometrySyncCount;
+
+        mController.beginExternalTextInput();
+
+        assertFalse(mController.isVisible());
+        assertFalse(mController.isSystemImeSuppressed());
+        assertEquals(View.GONE, mHost.container.getVisibility());
+        assertFalse(KeyboardUtils.areDisableSoftKeyboardFlagsSet(mActivity));
+        assertTrue(mHost.geometrySyncCount > geometrySyncs);
+        assertEquals(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+            mActivity.getWindow().getAttributes().softInputMode
+                & WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST);
+
+        mController.endExternalTextInput();
+
+        assertTrue(mController.isVisible());
+        assertTrue(mController.isSystemImeSuppressed());
+        assertEquals(View.VISIBLE, mHost.container.getVisibility());
+        assertTrue(KeyboardUtils.areDisableSoftKeyboardFlagsSet(mActivity));
+    }
+
+    @Test
     public void savedHiddenVisibilityIsRestoredAcrossRecreation() throws Exception {
         mPreferences.setInAppKeyboardEnabled(true);
         mController.onCreate(null);

@@ -20,4 +20,13 @@ public class KeyboardColorSchemeFragmentTest {
         assertNull(KeyboardColorSchemeFragment.parseHexColor("#12345"));
         assertNull(KeyboardColorSchemeFragment.parseHexColor("#hello!"));
     }
+
+    @Test
+    public void normalizesTintedGalleryNamesToBase16Ids() {
+        assertEquals("catppuccin-mocha",
+            KeyboardColorSchemeFragment.normalizeBase16Name("Catppuccin Mocha"));
+        assertEquals("atelier-cave-light",
+            KeyboardColorSchemeFragment.normalizeBase16Name("base16-atelier_cave light"));
+        assertNull(KeyboardColorSchemeFragment.normalizeBase16Name("---"));
+    }
 }

@@ -171,6 +171,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_BW_ICONS, value, false);
     }
 
+    public boolean isAppLauncherMaterialIconsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_MATERIAL_ICONS,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_MATERIAL_ICONS);
+    }
+
+    public void setAppLauncherMaterialIconsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_MATERIAL_ICONS, value, false);
+    }
+
     public boolean isAppLauncherUnifyIconsEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_UNIFY_ICONS, TERMUX_APP.DEFAULT_APP_LAUNCHER_UNIFY_ICONS);
     }
@@ -481,12 +492,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             case "system":
             case "light":
             case "dark":
-            case "black":
-            case "steel_teal":
-            case "mint_fuji":
-            case "neon_nightfall":
-            case "sakura_wood":
-            case "ink_plum":
                 return true;
             default:
                 return false;

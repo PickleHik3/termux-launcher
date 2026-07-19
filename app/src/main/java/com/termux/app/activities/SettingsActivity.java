@@ -183,6 +183,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             configureTermuxFloatPreference(context);
             configureTermuxTaskerPreference(context);
             configureTermuxWidgetPreference(context);
+            configureQuickStartPreference(context);
             configureAboutPreference(context);
             configureOpenSourceLicensesPreference(context);
             configureDonatePreference(context);
@@ -216,6 +217,16 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 default:
                     pillPreference.setPill("OFF", PillPreference.Tone.NEUTRAL);
                     break;
+            }
+        }
+
+        private void configureQuickStartPreference(@NonNull Context context) {
+            Preference quickStartPreference = findPreference("quick_start_tour");
+            if (quickStartPreference != null) {
+                quickStartPreference.setOnPreferenceClickListener(preference -> {
+                    startActivity(OnboardingActivity.createIntent(context));
+                    return true;
+                });
             }
         }
 

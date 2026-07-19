@@ -1754,6 +1754,15 @@ public final class TerminalView extends View {
         invalidate();
     }
 
+    /** Select the complete active terminal buffer, including scrollback. */
+    public void selectAllText() {
+        if (mEmulator == null || !requestFocus())
+            return;
+        getTextSelectionCursorController().selectAll();
+        mClient.copyModeChanged(isSelectingText());
+        invalidate();
+    }
+
     public void stopTextSelectionMode() {
         if (hideTextSelectionCursors()) {
             mClient.copyModeChanged(isSelectingText());

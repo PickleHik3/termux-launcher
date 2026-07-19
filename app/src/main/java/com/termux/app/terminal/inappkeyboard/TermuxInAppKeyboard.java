@@ -77,6 +77,7 @@ public final class TermuxInAppKeyboard {
     private boolean mVisible;
     private boolean mDestroyed;
     private boolean mHeightAdjusting;
+    private boolean mExternalTextInputActive;
     private float mHeightScale = 1f;
     private float mKeyMarginScale = 1f;
     private float mKeyCornerRadiusDp = -1f;
@@ -131,7 +132,11 @@ public final class TermuxInAppKeyboard {
     }
 
     public boolean isVisible() {
-        return mEnabled && mVisible;
+        return mEnabled && mVisible && !mExternalTextInputActive;
+    }
+
+    public boolean isSystemImeSuppressed() {
+        return mEnabled && !mExternalTextInputActive;
     }
 
     public void onCreate(Bundle state) {
@@ -169,9 +174,10 @@ public final class TermuxInAppKeyboard {
     public void onResume() {
         if (!mEnabled || mDestroyed)
             return;
-        suppressSystemIme();
+        if (!mExternalTextInputActive)
+            suppressSystemIme();
         recheckLayout();
-        if (mVisible)
+        if (mVisible && !mExternalTextInputActive)
             showInternal();
     }
 
@@ -209,6 +215,7 @@ public final class TermuxInAppKeyboard {
         mVisible = false;
         mEnabled = false;
         mHeightAdjusting = false;
+        mExternalTextInputActive = false;
     }
 
     public void onSaveInstanceState(Bundle out) {
@@ -471,10 +478,10 @@ public final class TermuxInAppKeyboard {
 
     /** Applies strict activity-wide system-IME suppression while embedded mode is enabled. */
     public void suppressSystemIme() {
-        if (!mEnabled || mDestroyed || mHost == null)
+        if (!mEnabled || mDestroyed || mHost == null || mExternalTextInputActive)
             return;
         mHost.runOnMain(() -> {
-            if (!mEnabled || mDestroyed || mHost == null)
+            if (!mEnabled || mDestroyed || mHost == null || mExternalTextInputActive)
                 return;
             TerminalView terminalView = mHost.getTerminalView();
             Activity activity = findActivity(requireContainer().getContext());
@@ -508,6 +515,43 @@ public final class TermuxInAppKeyboard {
         });
     }
 
+    /** Temporarily yields to a real text field such as a notification RemoteInput reply. */
+    public void beginExternalTextInput() {
+        if (!mEnabled || mDestroyed || mHost == null || mExternalTextInputActive)
+            return;
+        mExternalTextInputActive = true;
+        resetInputPipeline();
+        setContainerVisible(false);
+        mHost.requestAccessoryGeometrySync();
+        mHost.runOnMain(() -> {
+            if (!mEnabled || mDestroyed || mHost == null || !mExternalTextInputActive)
+                return;
+            TerminalView terminalView = mHost.getTerminalView();
+            if (terminalView != null && mSystemImeFocusListener != null)
+                terminalView.setOnFocusChangeListener(null);
+            mSystemImeFocusListener = null;
+            Activity activity = findActivity(requireContainer().getContext());
+            if (activity == null) return;
+            KeyboardUtils.clearDisableSoftKeyboardFlags(activity);
+            int mode = activity.getWindow().getAttributes().softInputMode;
+            mode = (mode & ~(WindowManager.LayoutParams.SOFT_INPUT_MASK_STATE
+                | WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST))
+                | WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED
+                | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
+            activity.getWindow().setSoftInputMode(mode);
+        });
+    }
+
+    /** Restore the embedded keyboard and its terminal-wide IME suppression after external input. */
+    public void endExternalTextInput() {
+        if (!mEnabled || mDestroyed || mHost == null || !mExternalTextInputActive)
+            return;
+        mExternalTextInputActive = false;
+        if (mVisible)
+            showInternal();
+        suppressSystemIme();
+    }
+
     private void disable() {
         // Disable is a transition, so this restoration path can run only once per preference flip.
         hide(HideReason.PREFERENCE_DISABLED);
@@ -532,6 +576,10 @@ public final class TermuxInAppKeyboard {
     }
 
     private void showInternal() {
+        if (mExternalTextInputActive) {
+            setContainerVisible(false);
+            return;
+        }
         ensureKeyboardView();
         setContainerVisible(true);
         mHost.requestAccessoryGeometrySync();

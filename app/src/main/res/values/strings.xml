@@ -149,6 +149,75 @@
     <string name="settings_root_assistant_header">Assistant</string>
     <string name="settings_root_launcher_header">Launcher</string>
     <string name="settings_root_system_info_header">System &amp; Info</string>
+    <string name="onboarding_settings_title">Quick start tour</string>
+    <string name="onboarding_settings_summary">Learn the launcher surface, search, styling, shell bridge, and optional AI tools</string>
+    <string name="onboarding_activity_title">Quick start</string>
+    <string name="onboarding_brand">TERMUX LAUNCHER</string>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_back">Back</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_finish">Start exploring</string>
+    <string name="onboarding_progress">Step %1$d of %2$d</string>
+    <string name="onboarding_capture_number">%1$d / TL</string>
+    <string name="onboarding_choose_home">Choose default Home app</string>
+    <string name="onboarding_read_guide">Read the full guide</string>
+    <string name="onboarding_settings_unavailable">Android could not open that settings page.</string>
+
+    <string name="onboarding_welcome_eyebrow">WELCOME</string>
+    <string name="onboarding_welcome_title">Your terminal is now home</string>
+    <string name="onboarding_welcome_body">Termux Launcher keeps a real shell at the center of Android. Your sessions stay visible while familiar launcher controls sit within thumb reach.</string>
+    <string name="onboarding_welcome_code">HOME = TERMINAL + APPS</string>
+    <string name="onboarding_welcome_bullet_1">The app row keeps favorites one tap away.</string>
+    <string name="onboarding_welcome_bullet_2">The A–Z row reaches every installed app.</string>
+    <string name="onboarding_welcome_bullet_3">The dock and keyboard follow your wallpaper colors.</string>
+
+    <string name="onboarding_search_eyebrow">MOVE FAST</string>
+    <string name="onboarding_search_title">Open anything without leaving the prompt</string>
+    <string name="onboarding_search_body">Use the launcher like a touch UI, or drive it from terminal input. Ranking learns from what you open while pins always stay under your control.</string>
+    <string name="onboarding_search_code">%maps</string>
+    <string name="onboarding_search_bullet_1">Type % before a name to search apps from the terminal.</string>
+    <string name="onboarding_search_bullet_2">Drag across A–Z to filter; swipe up to launch the highlighted app.</string>
+    <string name="onboarding_search_bullet_3">Long-press an icon to pin, move, group, restyle, or inspect it.</string>
+
+    <string name="onboarding_style_eyebrow">MAKE IT YOURS</string>
+    <string name="onboarding_style_title">One Material palette, from prompt to dock</string>
+    <string name="onboarding_style_body">The terminal, dock, keyboard, icons, and tmux helpers can share Android’s wallpaper palette. Tune the glass instead of rebuilding your workspace.</string>
+    <string name="onboarding_style_code">Long-press Terminal  →  More  →  Appearance</string>
+    <string name="onboarding_style_bullet_1">Adjust terminal opacity, dock glass, spacing, and height.</string>
+    <string name="onboarding_style_bullet_2">Use themed, monochrome, or third-party icon packs.</string>
+    <string name="onboarding_style_bullet_3">Enable the in-app keyboard or keep your preferred Android keyboard.</string>
+
+    <string name="onboarding_shell_eyebrow">YOUR WORKSPACE</string>
+    <string name="onboarding_shell_title">Recreate the fish and tmux setup when you want it</string>
+    <string name="onboarding_shell_body">The illustrated guide includes a guided installer for the same secret-free fish, Oh My Posh, tmux, eza, and zoxide foundation used in the live launcher.</string>
+    <string name="onboarding_shell_code">~/setup-shell  # choose tmux, btop, or both</string>
+    <string name="onboarding_shell_bullet_1">Start with the launcher first; the shell makeover is optional.</string>
+    <string name="onboarding_shell_bullet_2">Use the repo examples as a safe base, then add your own aliases locally.</string>
+    <string name="onboarding_shell_bullet_3">Run launcherctl update-scripts after app updates without replacing your dotfiles.</string>
+
+    <string name="onboarding_bridge_eyebrow">SHELL + ANDROID</string>
+    <string name="onboarding_bridge_title">Turn launcher actions into commands</string>
+    <string name="onboarding_bridge_body">launcherctl is the authenticated bridge between your shell and Android. Use it directly, bind it to tmux keys, or call it from scripts and agents.</string>
+    <string name="onboarding_bridge_code">launcherctl launch maps</string>
+    <string name="onboarding_bridge_bullet_1">Launch apps and inspect CPU, memory, battery, thermal, and storage.</string>
+    <string name="onboarding_bridge_bullet_2">Read current media and notifications after granting listener access.</string>
+    <string name="onboarding_bridge_bullet_3">Use the local API, agent tools, or MCP bridge for automations.</string>
+
+    <string name="onboarding_optional_eyebrow">OPTIONAL POWER</string>
+    <string name="onboarding_optional_title">Add privileges and local AI only when you need them</string>
+    <string name="onboarding_optional_body">The everyday launcher works without special access. Shizuku and TAI are separate, opt-in layers with visible status and permission boundaries.</string>
+    <string name="onboarding_optional_code">Optional  ·  permission-gated  ·  local-first</string>
+    <string name="onboarding_optional_bullet_1">Shizuku adds lock, privileged shell, and richer system helpers.</string>
+    <string name="onboarding_optional_bullet_2">TAI hosts compatible language and embedding models on device.</string>
+    <string name="onboarding_optional_bullet_3">LauncherCtl exposes confirmation-gated tools to MCP-capable clients.</string>
+
+    <string name="onboarding_ready_eyebrow">READY</string>
+    <string name="onboarding_ready_title">Build the home screen that works like you do</string>
+    <string name="onboarding_ready_body">Start with the terminal and app search. Add tmux, Shizuku, notification access, or local AI later—nothing optional blocks the core launcher.</string>
+    <string name="onboarding_ready_code">Long-press Terminal  →  More  →  Quick start tour</string>
+    <string name="onboarding_ready_bullet_1">Set Termux Launcher as Home when you are comfortable.</string>
+    <string name="onboarding_ready_bullet_2">Open Settings to replay this tour or tune one feature at a time.</string>
+    <string name="onboarding_ready_bullet_3">Use the illustrated guide for recipes from beginner through advanced.</string>
     <string name="termux_preferences_title">Termux</string>
     <string name="termux_preferences_summary">Core terminal, input, and debugging settings</string>
 
@@ -232,6 +301,15 @@
                 <string name="termux_keyboard_color_scheme_done">Done</string>
                 <string name="termux_keyboard_color_scheme_advanced">Advanced</string>
                 <string name="termux_keyboard_color_scheme_import_base16">Import Base16</string>
+                <string name="termux_keyboard_color_scheme_base16_name_title">Import a Base16 scheme</string>
+                <string name="termux_keyboard_color_scheme_base16_name_message">Enter a Base16 name or ID from the Tinted Gallery.</string>
+                <string name="termux_keyboard_color_scheme_base16_name_hint">Catppuccin Mocha or base16-catppuccin-mocha</string>
+                <string name="termux_keyboard_color_scheme_base16_choose_file">Choose file</string>
+                <string name="termux_keyboard_color_scheme_base16_import">Import</string>
+                <string name="termux_keyboard_color_scheme_base16_name_error">Enter a theme name using letters, numbers, spaces, underscores, or hyphens.</string>
+                <string name="termux_keyboard_color_scheme_base16_downloading">Importing Base16 colors…</string>
+                <string name="termux_keyboard_color_scheme_base16_not_found">Theme not found. Check its Base16 ID in the Tinted Gallery.</string>
+                <string name="termux_keyboard_color_scheme_base16_network_error">Couldn’t download this theme. Check your connection and try again.</string>
                 <string name="termux_keyboard_color_scheme_base16_imported">Base16 colors imported</string>
                 <string name="termux_keyboard_color_scheme_base16_error">This file must contain all colors from base00 through base0F.</string>
                 <string name="termux_keyboard_color_scheme_base16_read_error">Couldn’t read this theme file.</string>
@@ -264,23 +342,11 @@
                     <item>System</item>
                     <item>Light</item>
                     <item>Dark</item>
-                    <item>Black</item>
-                    <item>Steel &amp; Teal</item>
-                    <item>Mint Fuji</item>
-                    <item>Neon Nightfall</item>
-                    <item>Sakura Wood</item>
-                    <item>Ink Plum</item>
                 </string-array>
                 <string-array name="termux_in_app_keyboard_theme_values">
                     <item>system</item>
                     <item>light</item>
                     <item>dark</item>
-                    <item>black</item>
-                    <item>steel_teal</item>
-                    <item>mint_fuji</item>
-                    <item>neon_nightfall</item>
-                    <item>sakura_wood</item>
-                    <item>ink_plum</item>
                 </string-array>
                 <string name="termux_in_app_keyboard_dock_match_title">Match dock</string>
                 <string name="termux_in_app_keyboard_dock_match_summary">Blend the keyboard with the dock — follow its shape, render on its frosted glass, or both.</string>
@@ -663,6 +729,8 @@
                 <string name="termux_app_launcher_most_used_page_summary">Add an extra dock page showing your most-used apps.</string>
                 <string name="termux_app_launcher_bw_icons_title">Black &amp; white icons</string>
                 <string name="termux_app_launcher_bw_icons_summary">Render app icons in grayscale.</string>
+                <string name="termux_app_launcher_material_icons_title">Material colored icons</string>
+                <string name="termux_app_launcher_material_icons_summary">Recolor icons with the current Material theme while preserving their detail.</string>
                 <string name="termux_app_launcher_icon_shadow_title">Icon shadow</string>
                 <string name="termux_app_launcher_icon_shadow_summary">Soft drop shadow that lifts dock icons off the glass. Turn off for flat custom icon packs.</string>
                 <string name="termux_app_launcher_unify_icons_title">Unify app icons</string>

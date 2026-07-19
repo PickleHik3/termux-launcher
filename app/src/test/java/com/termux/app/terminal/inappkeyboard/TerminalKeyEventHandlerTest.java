@@ -166,12 +166,13 @@ public class TerminalKeyEventHandlerTest {
                     assertEquals(pastes + 1, mHost.pastes);
                     break;
                 case CUT:
-                    assertEquals(copies + 1, mHost.copies);
-                    assertEquals(keys, mTerminal.keyCalls.size());
-                    assertEquals(logs + 1, mHost.logs.size());
+                    assertEquals(1, mHost.cuts);
+                    assertEquals(codePoints + 1, mTerminal.codePointCalls.size());
+                    assertEquals((int) 'u', last(mTerminal.codePointCalls).codePoint);
+                    assertTrue(last(mTerminal.codePointCalls).ctrl);
                     break;
                 case SELECT_ALL:
-                    assertEquals(1, mHost.screenCopies);
+                    assertEquals(1, mHost.selectAlls);
                     break;
                 case UNDO:
                     assertEquals(codePoints + 1, mTerminal.codePointCalls.size());
@@ -507,10 +508,10 @@ public class TerminalKeyEventHandlerTest {
     }
 
     @Test
-    public void selectAllCopiesWholeScreen() {
+    public void selectAllStartsTerminalSelection() {
         mHandler.key_up(KeyValue.getKeyByName("selectAll"), Pointers.Modifiers.EMPTY);
 
-        assertEquals(1, mHost.screenCopies);
+        assertEquals(1, mHost.selectAlls);
         assertEquals(0, mHost.copies);
     }
 
@@ -586,7 +587,8 @@ public class TerminalKeyEventHandlerTest {
 
         private int pastes;
         private int copies;
-        private int screenCopies;
+        private int selectAlls;
+        private int cuts;
         private int textLayouts;
         private int numericLayouts;
         private int greekLayouts;
@@ -610,8 +612,14 @@ public class TerminalKeyEventHandlerTest {
         }
 
         @Override
-        public void copyScreen() {
-            screenCopies++;
+        public void selectAll() {
+            selectAlls++;
+        }
+
+        @Override
+        public boolean prepareCut() {
+            cuts++;
+            return true;
         }
 
         @Override

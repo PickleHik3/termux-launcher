@@ -175,13 +175,11 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
                 mHostActions.paste();
                 break;
             case CUT:
-                mHostActions.copySelection();
-                mHostActions.debugLog("CUT reduced to terminal selection copy");
+                if (mHostActions.prepareCut())
+                    inputCodePoint('u', modifiers.withCtrl());
                 break;
             case SELECT_ALL:
-                // A terminal has no editable buffer to select; the closest analog is
-                // copying everything currently on screen.
-                mHostActions.copyScreen();
+                mHostActions.selectAll();
                 break;
             case UNDO:
                 // Readline/zsh line-editing undo.

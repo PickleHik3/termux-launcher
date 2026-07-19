@@ -15,6 +15,7 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
 import androidx.preference.SeekBarPreference;
+import androidx.preference.SwitchPreferenceCompat;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
@@ -56,8 +57,26 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         setPreferencesFromResource(R.xml.termux_style_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
         LauncherIconPackPreferenceController.configure(this, context);
+        configureIconColorPreferences();
         configureDockPreferencePresentation();
         updateDockBlurAvailability();
+    }
+
+    /** Grayscale and Material tonal recoloring are two exclusive presentation modes. */
+    private void configureIconColorPreferences() {
+        SwitchPreferenceCompat blackAndWhite = findPreference("app_launcher_bw_icons");
+        SwitchPreferenceCompat material = findPreference("app_launcher_material_icons");
+        if (blackAndWhite == null || material == null) return;
+        blackAndWhite.setOnPreferenceChangeListener((preference, newValue) -> {
+            if (Boolean.TRUE.equals(newValue) && material.isChecked())
+                material.setChecked(false);
+            return true;
+        });
+        material.setOnPreferenceChangeListener((preference, newValue) -> {
+            if (Boolean.TRUE.equals(newValue) && blackAndWhite.isChecked())
+                blackAndWhite.setChecked(false);
+            return true;
+        });
     }
 
     @Override
@@ -223,6 +242,12 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 break;
             case "app_launcher_bw_icons":
                 mPreferences.setAppLauncherBwIconsEnabled(value);
+                if (value) mPreferences.setAppLauncherMaterialIconsEnabled(false);
+                scheduleTermuxActivityStylingSync(false);
+                break;
+            case "app_launcher_material_icons":
+                mPreferences.setAppLauncherMaterialIconsEnabled(value);
+                if (value) mPreferences.setAppLauncherBwIconsEnabled(false);
                 scheduleTermuxActivityStylingSync(false);
                 break;
             case "app_launcher_unify_icons":
@@ -279,6 +304,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isTerminalDynamicColorsEnabled();
             case "app_launcher_bw_icons":
                 return mPreferences.isAppLauncherBwIconsEnabled();
+            case "app_launcher_material_icons":
+                return mPreferences.isAppLauncherMaterialIconsEnabled();
             case "app_launcher_unify_icons":
                 return mPreferences.isAppLauncherUnifyIconsEnabled();
             case "app_launcher_icon_shadow":
