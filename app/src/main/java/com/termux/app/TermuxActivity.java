@@ -1599,24 +1599,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int[] pixels = new int[size * size];
         bitmap.getPixels(pixels, 0, size, 0, 0, size, size);
         bitmap.recycle();
+        // Only chromatic pixels vote: adaptive icons are mostly white/neutral background, and letting
+        // that mass win pushed every launch color to the theme-accent fallback. Neutral-only icons
+        // still fall back below.
         int bestBucket = -1;
         int bestWeight = 0;
+        int opaqueCount = 0;
+        int chromaticCount = 0;
+        float[] hsv = new float[3];
         for (int pixel : pixels) {
             int alpha = Color.alpha(pixel);
             if (alpha < 64) continue;
+            opaqueCount++;
+            Color.colorToHSV(pixel, hsv);
+            if (hsv[1] < 0.18f || hsv[2] < 0.18f) continue;
+            chromaticCount++;
             int r = Color.red(pixel) >> 4;
             int g = Color.green(pixel) >> 4;
             int b = Color.blue(pixel) >> 4;
             int bucket = (r << 8) | (g << 4) | b;
-            int spread = Math.max(r, Math.max(g, b)) - Math.min(r, Math.min(g, b));
-            int weight = alpha + spread * 10;
+            int weight = Math.round(alpha * hsv[1]);
             buckets[bucket] += weight;
             if (buckets[bucket] > bestWeight) {
                 bestWeight = buckets[bucket];
                 bestBucket = bucket;
             }
         }
-        if (bestBucket < 0) return fallback;
+        if (bestBucket < 0 || opaqueCount == 0 || chromaticCount * 25 < opaqueCount)
+            return fallback;
         int r = ((bestBucket >> 8) & 0xF) * 17;
         int g = ((bestBucket >> 4) & 0xF) * 17;
         int b = (bestBucket & 0xF) * 17;

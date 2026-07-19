@@ -40,7 +40,7 @@ public final class DockLaunchRippleView extends View {
     private static final int WAVE_SAMPLES = 128;
 
     private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.DITHER_FLAG);
-    private final Path mWavePath = new Path();
+    private final Path mClipPath = new Path();
     private final RectF mSurface = new RectF();
     private final float[] mBoundaryDistances = new float[WAVE_SAMPLES];
     private float mOriginX;
@@ -66,9 +66,7 @@ public final class DockLaunchRippleView extends View {
 
     public DockLaunchRippleView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        mPaint.setStyle(Paint.Style.STROKE);
-        mPaint.setStrokeJoin(Paint.Join.ROUND);
-        mPaint.setStrokeCap(Paint.Cap.ROUND);
+        mPaint.setStyle(Paint.Style.FILL);
         setWillNotDraw(false);
         setVisibility(INVISIBLE);
     }
@@ -88,10 +86,12 @@ public final class DockLaunchRippleView extends View {
         // Preserve the mapped icon centre exactly whenever it lies on the dock surface.
         mOriginX = clamp(originX, mSurface.left, mSurface.right);
         mOriginY = clamp(originY, mSurface.top, mSurface.bottom);
-        mRingWidth = getResources().getDisplayMetrics().density * 22f;
+        mRingWidth = getResources().getDisplayMetrics().density * 30f;
         mCollisionListener = collisionListener;
         mStateValidator = stateValidator;
         mStateInvalidatedListener = stateInvalidatedListener;
+        mClipPath.reset();
+        mClipPath.addRoundRect(mSurface, mSurfaceRadius, mSurfaceRadius, Path.Direction.CW);
         computeWaveGeometry();
         mElapsedMs = 0f;
         mWaveRadius = 0f;
@@ -205,28 +205,38 @@ public final class DockLaunchRippleView extends View {
     protected void onDraw(Canvas canvas) {
         if (mOpacity <= 0f || mSurface.isEmpty()) return;
 
+        // The wave never warps to the dock outline; it stays a circular band and simply exits
+        // through this clip, so there is no border-hugging contour and no dent near a close wall.
+        int save = canvas.save();
+        canvas.clipPath(mClipPath);
+
         float flashProgress = clamp01(mElapsedMs / PRESS_FLASH_MS);
         if (flashProgress < 1f) drawPressFlash(canvas, flashProgress);
 
         float waveFadeIn = clamp01(mElapsedMs / 34f);
         float strength = waveFadeIn * mOpacity;
-        if (strength <= 0f) return;
-        buildWavePath(mWaveRadius);
-
-        // Overlapping strokes form one 22dp annulus. The brighter crest sits slightly ahead of the
-        // broad halo, leaving a soft low-alpha trail on the origin-facing side of the same band.
-        mPaint.setShader(null);
-        mPaint.setStrokeWidth(mRingWidth);
-        mPaint.setColor(withAlpha(mColor, Math.round(34f * strength)));
-        canvas.drawPath(mWavePath, mPaint);
-        buildWavePath(mWaveRadius + mRingWidth * 0.18f);
-        mPaint.setStrokeWidth(mRingWidth * 0.43f);
-        mPaint.setColor(withAlpha(mColor, Math.round(104f * strength)));
-        canvas.drawPath(mWavePath, mPaint);
-        mPaint.setStrokeWidth(Math.max(1f,
-            getResources().getDisplayMetrics().density * 2.1f));
-        mPaint.setColor(withAlpha(mColor, Math.round(178f * strength)));
-        canvas.drawPath(mWavePath, mPaint);
+        if (strength > 0f && mWaveRadius > 1f) {
+            // One soft filled annulus: transparent core, low-alpha trailing halo, brighter crest
+            // just behind the leading edge, then a feathered front. No stroked outline anywhere.
+            float outer = mWaveRadius + mRingWidth;
+            float innerStop = clamp01((mWaveRadius - mRingWidth * 1.35f) / outer);
+            float trailStop = clamp01((mWaveRadius - mRingWidth * 0.35f) / outer);
+            float crestStop = clamp01(mWaveRadius / outer);
+            trailStop = Math.max(trailStop, innerStop + 0.001f);
+            crestStop = Math.max(crestStop, trailStop + 0.001f);
+            int[] colors = {
+                Color.TRANSPARENT,
+                withAlpha(mColor, Math.round(46f * strength)),
+                withAlpha(mColor, Math.round(112f * strength)),
+                Color.TRANSPARENT
+            };
+            float[] stops = {innerStop, trailStop, crestStop, 1f};
+            mPaint.setShader(new RadialGradient(mOriginX, mOriginY, outer, colors, stops,
+                Shader.TileMode.CLAMP));
+            canvas.drawCircle(mOriginX, mOriginY, outer, mPaint);
+            mPaint.setShader(null);
+        }
+        canvas.restoreToCount(save);
     }
 
     private void drawPressFlash(Canvas canvas, float progress) {
@@ -236,28 +246,10 @@ public final class DockLaunchRippleView extends View {
         int alpha = Math.round(118f * (1f - progress) * mOpacity);
         int[] colors = {withAlpha(mColor, alpha), withAlpha(mColor, alpha / 3), Color.TRANSPARENT};
         float[] stops = {0f, 0.56f, 1f};
-        mPaint.setStyle(Paint.Style.FILL);
         mPaint.setShader(new RadialGradient(mOriginX, mOriginY, radius, colors, stops,
             Shader.TileMode.CLAMP));
         canvas.drawCircle(mOriginX, mOriginY, radius, mPaint);
         mPaint.setShader(null);
-        mPaint.setStyle(Paint.Style.STROKE);
-    }
-
-    private void buildWavePath(float radius) {
-        mWavePath.reset();
-        float edgeInset = mRingWidth * 0.55f;
-        for (int i = 0; i < WAVE_SAMPLES; i++) {
-            double angle = Math.PI * 2.0 * i / WAVE_SAMPLES;
-            // Once a ray reaches the wall it stops just inside it. Adjacent stopped samples spread
-            // tangentially along the rounded edge, visibly compressing the formerly circular front.
-            float rayRadius = Math.min(radius,
-                Math.max(0f, mBoundaryDistances[i] - edgeInset));
-            float x = mOriginX + (float) Math.cos(angle) * rayRadius;
-            float y = mOriginY + (float) Math.sin(angle) * rayRadius;
-            if (i == 0) mWavePath.moveTo(x, y); else mWavePath.lineTo(x, y);
-        }
-        mWavePath.close();
     }
 
     /** Binary-searches a ray against the rounded-rect signed-distance field. */
