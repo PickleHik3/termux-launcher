@@ -361,6 +361,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mAzPreviewAnchorSelectionIndex = 0;
     private float mAzGestureDownTouchX = 0f;
     private float mAzGestureDownTouchY = 0f;
+    private float mAzRecentMotionDx = 0f;
+    private float mAzRecentMotionDy = 0f;
+    private float mAzUpwardTravelRefY = 0f;
+    private float mAzLastScrubTouchX = 0f;
+    private float mAzLastScrubTouchY = 0f;
     private float mAzLastRawX = 0f;
     private float mAzLastRawY = 0f;
     private float mAzLastAnchorRawX = 0f;
@@ -378,9 +383,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final long AZ_EDGE_PAGE_COOLDOWN_MS = 520L;
     private static final long AZ_EDGE_DWELL_FRAME_MS = 16L;
     private static final long AZ_PREVIEW_TIMEOUT_REFRESH_MS = 5200L;
-    private static final float AZ_UPWARD_LOCK_TOUCH_Y_RATIO = 0.45f;
+    private static final float AZ_UPWARD_LOCK_TOUCH_Y_RATIO = 0.60f;
     private static final float AZ_RETURN_TOUCH_Y_RATIO = 0.55f;
-    private static final float AZ_UPWARD_DIRECTION_RATIO = 0.75f;
+    // Direction ratios compare against the smoothed RECENT motion vector, not displacement from
+    // touch-down: after a long horizontal letter scrub the old cumulative test demanded a
+    // near-vertical climb before the upward lock could engage.
+    private static final float AZ_UPWARD_DIRECTION_RATIO = 0.45f;
+    private static final float AZ_RETURN_DIRECTION_RATIO = 0.5f;
+    /** Per-event EMA weight for the recent-motion vector (higher = more responsive). */
+    private static final float AZ_RECENT_MOTION_ALPHA = 0.45f;
 
     private static final int CONTEXT_MENU_SELECT_URL_ID = 0;
 
@@ -4489,8 +4500,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mAzHasPreviewAnchor = false;
             mAzGestureDownTouchX = touchX;
             mAzGestureDownTouchY = touchY;
+            mAzRecentMotionDx = 0f;
+            mAzRecentMotionDy = 0f;
+            mAzUpwardTravelRefY = touchY;
+            mAzLastScrubTouchX = touchX;
+            mAzLastScrubTouchY = touchY;
             mAzScrubRowView.setInteractionMode(AzScrubRowView.InteractionMode.WAVE_TRACK);
             mAzScrubRowView.setLockedInlineLetter(null);
+        } else {
+            // Smooth per-event motion vector: intent classification below reads direction from
+            // this, so a slide-up right after a long horizontal scrub registers immediately.
+            float eventDx = touchX - mAzLastScrubTouchX;
+            float eventDy = touchY - mAzLastScrubTouchY;
+            mAzRecentMotionDx += (eventDx - mAzRecentMotionDx) * AZ_RECENT_MOTION_ALPHA;
+            mAzRecentMotionDy += (eventDy - mAzRecentMotionDy) * AZ_RECENT_MOTION_ALPHA;
+            mAzLastScrubTouchX = touchX;
+            mAzLastScrubTouchY = touchY;
+            // While still letter-scrubbing horizontally, keep re-anchoring the upward-travel
+            // reference so the climb is measured from where the finger actually turned upward.
+            if (mAzGestureMode == AzGestureMode.AZ_TRACKING
+                && Math.abs(mAzRecentMotionDx) > Math.abs(mAzRecentMotionDy) * 1.3f) {
+                mAzUpwardTravelRefY = touchY;
+            }
         }
 
         mAzLastRawX = rawX;
@@ -4524,18 +4555,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float unlockThreshold = rowHeight * AZ_RETURN_TOUCH_Y_RATIO;
         float unlockMaxBound = filterLowerBound + (rowHeight * 0.18f);
         float minUpwardTravel = Math.max(getResources().getDisplayMetrics().density * 10f, rowHeight * 0.22f);
-        float dyFromDown = touchY - mAzGestureDownTouchY;
-        float dxFromDown = touchX - mAzGestureDownTouchX;
+        // Intent from the smoothed recent motion vector, travel from the rolling upward reference:
+        // a diagonal thumb arc out of a horizontal scrub locks upward without a vertical climb.
+        boolean recentUpwardDominant = -mAzRecentMotionDy
+            >= Math.abs(mAzRecentMotionDx) * AZ_UPWARD_DIRECTION_RATIO;
         boolean upwardIntent = touchY <= (rowHeight * AZ_UPWARD_LOCK_TOUCH_Y_RATIO)
-            && dyFromDown <= -minUpwardTravel
-            && Math.abs(dyFromDown) >= (Math.abs(dxFromDown) * AZ_UPWARD_DIRECTION_RATIO);
+            && (mAzUpwardTravelRefY - touchY) >= minUpwardTravel
+            && recentUpwardDominant;
         // Once the drag starts on the AZ row, keep horizontal letter filtering captured below it.
         // This matches the visual wave tracking and avoids requiring exact vertical placement.
         boolean withinAzFilterBand = touchY >= filterUpperBound;
         boolean enteringUpwardLock = upwardIntent;
         boolean enteringIconTrack = isInAppsRowCorridor(rawY) || isInAzCaptureWedge(rawX, rawY);
-        boolean returningToUpwardTrack = touchY >= unlockThreshold && touchY <= unlockMaxBound;
-        boolean returningToIconTrack = !isInAppsRowCorridor(rawY) && !isInAzCaptureWedge(rawX, rawY) && isInAzReturnBand(rawY);
+        // Locked states are sticky: releasing them needs deliberate downward motion, not mere
+        // position drift near the row boundary while the thumb wanders sideways.
+        boolean recentDownwardDominant = mAzRecentMotionDy > 0f
+            && mAzRecentMotionDy >= Math.abs(mAzRecentMotionDx) * AZ_RETURN_DIRECTION_RATIO;
+        boolean returningToUpwardTrack = recentDownwardDominant
+            && touchY >= unlockThreshold && touchY <= unlockMaxBound;
+        boolean returningToIconTrack = recentDownwardDominant
+            && !isInAppsRowCorridor(rawY) && !isInAzCaptureWedge(rawX, rawY) && isInAzReturnBand(rawY);
 
         if (mAzGestureMode == AzGestureMode.AZ_TRACKING) {
             if (enteringIconTrack && mAzHasPreviewAnchor && phase != AzScrubRowView.GesturePhase.UP) {
@@ -4658,8 +4697,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         float wedgeTravel = Math.max(dpToPx(24), startY - topLimit);
         float progress = Math.max(0f, Math.min(1f, (startY - rawY) / wedgeTravel));
-        float targetHalfWidth = Math.max(dpToPx(28), mAppsRowRawBounds.width() * 0.14f);
-        float halfWidth = dpToPx(10) + (targetHalfWidth * progress);
+        // Wide enough at the base for a natural thumb arc (~±45° cone) instead of demanding a
+        // straight vertical rise out of the locked letter.
+        float targetHalfWidth = Math.max(dpToPx(40), mAppsRowRawBounds.width() * 0.18f);
+        float halfWidth = dpToPx(22) + (targetHalfWidth * progress);
         return Math.abs(rawX - mAzLockedAnchorRawX) <= halfWidth;
     }
 
