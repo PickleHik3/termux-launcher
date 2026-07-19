@@ -755,12 +755,14 @@
                 <string name="termux_app_bar_opacity_summary">Controls the complete dock material. 0 is transparent; 100 is opaque.</string>
                 <string name="termux_dock_glass_grain_title">Glass grain</string>
                 <string name="termux_dock_glass_grain_summary">Subtle film grain over the dock glass. 0 disables it.</string>
-                <string name="termux_dock_tune_live_title">Tune dock live</string>
-                <string name="termux_dock_tune_live_summary">Adjust blur, opacity, and grain on the home screen.</string>
+                <string name="termux_dock_tune_live_title">Live glass preview</string>
+                <string name="termux_dock_tune_live_summary">Fine-tune blur, opacity, and grain while watching the real dock.</string>
+                <string name="termux_dock_tuning_title">Dock glass</string>
                 <string name="termux_dock_tuning_blur">Blur</string>
                 <string name="termux_dock_tuning_opacity">Opacity</string>
                 <string name="termux_dock_tuning_grain">Grain</string>
-                <string name="termux_dock_tuning_done">Finish dock tuning</string>
+                <string name="termux_dock_tuning_done">Done</string>
+                <string name="termux_dock_tuning_cancel">Revert and close</string>
                 <string name="termux_dock_tuning_value_dp">%1$d dp</string>
                 <string name="termux_dock_tuning_value_percent">%1$d%%</string>
                 <string name="termux_app_launcher_row_haptics_title">Row haptics</string>

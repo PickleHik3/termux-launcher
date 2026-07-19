@@ -5386,15 +5386,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         TextView opacityValue = findViewById(R.id.dock_tuning_opacity_value);
         TextView grainValue = findViewById(R.id.dock_tuning_grain_value);
         View confirm = findViewById(R.id.dock_tuning_confirm);
+        View dismiss = findViewById(R.id.dock_tuning_dismiss);
         if (controls == null || blur == null || opacity == null || grain == null
             || blurValue == null || opacityValue == null || grainValue == null || confirm == null) {
             mDockTuningMode = false;
             return;
         }
         controls.setVisibility(View.VISIBLE);
-        blur.setProgress(mPreferences.getExtraKeysBlurRadius());
-        opacity.setProgress(mPreferences.getAppBarOpacity());
-        grain.setProgress(mPreferences.getDockGlassGrain());
+        final int initialBlur = mPreferences.getExtraKeysBlurRadius();
+        final int initialOpacity = mPreferences.getAppBarOpacity();
+        final int initialGrain = mPreferences.getDockGlassGrain();
+        blur.setProgress(initialBlur);
+        opacity.setProgress(initialOpacity);
+        grain.setProgress(initialGrain);
         updateDockTuningValueBadges(blurValue, opacityValue, grainValue,
             blur.getProgress(), opacity.getProgress(), grain.getProgress());
         blur.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
@@ -5425,6 +5429,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         });
         confirm.setOnClickListener(view -> exitDockTuningMode());
+        if (dismiss != null) {
+            dismiss.setOnClickListener(view -> {
+                // Dismiss reverts to the values captured when tuning began.
+                mPreferences.setExtraKeysBlurRadius(initialBlur);
+                mPreferences.setAppBarOpacity(initialOpacity);
+                mPreferences.setDockGlassGrain(initialGrain);
+                applyDockTuningPreview(true);
+                exitDockTuningMode();
+            });
+        }
         controls.bringToFront();
     }
 

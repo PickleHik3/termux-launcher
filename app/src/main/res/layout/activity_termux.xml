@@ -443,35 +443,70 @@
             app:strokeColor="?attr/termuxColorOnSurfaceVariant"
             app:strokeWidth="1dp">
 
-            <FrameLayout
+            <RelativeLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
 
+                <!-- Blur and scrim track the content's measured bounds; letting them use
+                     match_parent inside a wrap_content FrameLayout made the card fill the
+                     whole area above the dock (default View onMeasure expands under AT_MOST). -->
                 <com.github.mmin18.widget.RealtimeBlurView
                     android:id="@+id/dock_tuning_blur_backdrop"
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_alignTop="@+id/dock_tuning_content"
+                    android:layout_alignBottom="@+id/dock_tuning_content"
                     app:realtimeBlurRadius="14dp"
                     app:realtimeOverlayColor="@android:color/transparent" />
 
                 <View
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_alignTop="@+id/dock_tuning_content"
+                    android:layout_alignBottom="@+id/dock_tuning_content"
                     android:alpha="0.72"
                     android:background="?attr/termuxColorSurfacePanelHigh" />
 
                 <LinearLayout
+                    android:id="@+id/dock_tuning_content"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:paddingStart="12dp"
-                    android:paddingTop="8dp"
-                    android:paddingEnd="8dp"
-                    android:paddingBottom="8dp">
+                    android:paddingStart="16dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="12dp">
 
                     <LinearLayout
                         android:layout_width="match_parent"
-                        android:layout_height="34dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/termux_dock_tuning_title"
+                            android:textColor="?attr/termuxColorOnSurface"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/dock_tuning_dismiss"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="@string/termux_dock_tuning_cancel"
+                            android:gravity="center"
+                            android:text="✕"
+                            android:textColor="?attr/termuxColorOnSurfaceVariant"
+                            android:textSize="16sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="36dp"
                         android:gravity="center_vertical"
                         android:orientation="horizontal">
 
@@ -485,7 +520,7 @@
                         <SeekBar
                             android:id="@+id/dock_tuning_blur_slider"
                             android:layout_width="0dp"
-                            android:layout_height="34dp"
+                            android:layout_height="36dp"
                             android:layout_weight="1"
                             android:max="30"
                             android:splitTrack="false" />
@@ -493,15 +528,15 @@
                         <TextView
                             android:id="@+id/dock_tuning_blur_value"
                             android:layout_width="48dp"
-                            android:layout_height="24dp"
+                            android:layout_height="wrap_content"
                             android:gravity="center"
-                            android:textColor="?attr/termuxColorOnSurface"
+                            android:textColor="?attr/termuxColorOnSurfaceVariant"
                             android:textSize="11sp" />
                     </LinearLayout>
 
                     <LinearLayout
                         android:layout_width="match_parent"
-                        android:layout_height="34dp"
+                        android:layout_height="36dp"
                         android:gravity="center_vertical"
                         android:orientation="horizontal">
 
@@ -515,7 +550,7 @@
                         <SeekBar
                             android:id="@+id/dock_tuning_opacity_slider"
                             android:layout_width="0dp"
-                            android:layout_height="34dp"
+                            android:layout_height="36dp"
                             android:layout_weight="1"
                             android:max="100"
                             android:splitTrack="false" />
@@ -523,15 +558,15 @@
                         <TextView
                             android:id="@+id/dock_tuning_opacity_value"
                             android:layout_width="48dp"
-                            android:layout_height="24dp"
+                            android:layout_height="wrap_content"
                             android:gravity="center"
-                            android:textColor="?attr/termuxColorOnSurface"
+                            android:textColor="?attr/termuxColorOnSurfaceVariant"
                             android:textSize="11sp" />
                     </LinearLayout>
 
                     <LinearLayout
                         android:layout_width="match_parent"
-                        android:layout_height="34dp"
+                        android:layout_height="36dp"
                         android:gravity="center_vertical"
                         android:orientation="horizontal">
 
@@ -545,7 +580,7 @@
                         <SeekBar
                             android:id="@+id/dock_tuning_grain_slider"
                             android:layout_width="0dp"
-                            android:layout_height="34dp"
+                            android:layout_height="36dp"
                             android:layout_weight="1"
                             android:max="100"
                             android:splitTrack="false" />
@@ -553,25 +588,29 @@
                         <TextView
                             android:id="@+id/dock_tuning_grain_value"
                             android:layout_width="48dp"
-                            android:layout_height="24dp"
+                            android:layout_height="wrap_content"
                             android:gravity="center"
-                            android:textColor="?attr/termuxColorOnSurface"
+                            android:textColor="?attr/termuxColorOnSurfaceVariant"
                             android:textSize="11sp" />
                     </LinearLayout>
 
                     <TextView
                         android:id="@+id/dock_tuning_confirm"
-                        android:layout_width="40dp"
-                        android:layout_height="32dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
                         android:layout_gravity="end"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="@string/termux_dock_tuning_done"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/dock_tuning_done_pill"
                         android:gravity="center"
-                        android:text="✓"
-                        android:textColor="?attr/termuxColorOnSurface"
-                        android:textSize="20sp" />
+                        android:minWidth="88dp"
+                        android:paddingStart="20dp"
+                        android:paddingEnd="20dp"
+                        android:text="@string/termux_dock_tuning_done"
+                        android:textColor="?attr/termuxColorOnAccentContainer"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
                 </LinearLayout>
-            </FrameLayout>
+            </RelativeLayout>
         </com.google.android.material.card.MaterialCardView>
 
         <com.termux.app.LauncherAzGestureFxView
