@@ -2,7 +2,9 @@ package com.termux.app.fragments.settings.termux;
 
 import android.app.WallpaperInfo;
 import android.app.WallpaperManager;
+import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.Build;
 import android.os.Handler;
@@ -58,6 +60,7 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         SettingsLayoutUtils.applyScreenLayout(this);
         LauncherIconPackPreferenceController.configure(this, context);
         configureDockPreferencePresentation();
+        configureLiveDockTuningAction();
         updateDockBlurAvailability();
     }
 
@@ -116,6 +119,23 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
                 return true;
             });
         }
+    }
+
+    private void configureLiveDockTuningAction() {
+        Preference tuningPreference = findPreference("tune_dock_live");
+        if (tuningPreference == null)
+            return;
+        tuningPreference.setOnPreferenceClickListener(preference -> {
+            Activity activity = getActivity();
+            if (activity == null)
+                return false;
+            Intent intent = new Intent(activity, TermuxActivity.class)
+                .putExtra(TermuxActivity.EXTRA_DOCK_TUNING, true)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            activity.startActivity(intent);
+            activity.finish();
+            return true;
+        });
     }
 
     private void updateBarHeightSummary(@NonNull SeekBarPreference preference, int value) {
@@ -246,6 +266,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherAzRowEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
+            case "app_launcher_row_haptics":
+                mPreferences.setAppLauncherRowHapticsEnabled(value);
+                scheduleTermuxActivityStylingSync(false);
+                break;
             case "app_launcher_az_double_tap_lock":
                 mPreferences.setAppLauncherAzDoubleTapLockEnabled(value);
                 break;
@@ -282,6 +306,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isAppLauncherMostUsedPageEnabled();
             case "app_launcher_az_row_enabled":
                 return mPreferences.isAppLauncherAzRowEnabled();
+            case "app_launcher_row_haptics":
+                return mPreferences.isAppLauncherRowHapticsEnabled();
             case "app_launcher_az_double_tap_lock":
                 return mPreferences.isAppLauncherAzDoubleTapLockEnabled();
             default:

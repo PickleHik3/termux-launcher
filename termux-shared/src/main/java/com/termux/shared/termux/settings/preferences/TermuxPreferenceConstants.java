@@ -223,6 +223,11 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_APP_LAUNCHER_AZ_ROW_ENABLED = true;
 
+        /** Defines whether A-Z and app-row focus changes emit subtle haptic ticks. */
+        public static final String KEY_APP_LAUNCHER_ROW_HAPTICS = "app_launcher_row_haptics";
+
+        public static final boolean DEFAULT_APP_LAUNCHER_ROW_HAPTICS = true;
+
         /**
          * Defines the key for enabling double-tap on A-Z row to lock screen.
          */

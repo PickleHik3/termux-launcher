@@ -187,6 +187,7 @@ public final class SuggestionBarView extends GridLayout {
     private int blurRadiusDp = 10;
     private int inheritedTintColor = 0;
     private boolean notificationBadgesEnabled = false;
+    private boolean rowHapticsEnabled = true;
     @NonNull private Set<String> notificationBadgePackages = Collections.emptySet();
     @Nullable private LauncherNotificationBadgeStore.Listener notificationBadgeListener;
     private int dockRowHeightHintPx = 0;
@@ -1357,9 +1358,14 @@ public final class SuggestionBarView extends GridLayout {
         if (key.equals(azFocusedEntryKey) && target == azFocusedView) {
             return;
         }
+        boolean movedBetweenApps = azFocusedEntryKey != null
+            && !azFocusedEntryKey.equals(key);
         clearAzFocusedEntry();
         azFocusedEntryKey = key;
         azFocusedView = target;
+        if (rowHapticsEnabled && movedBetweenApps) {
+            performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+        }
         if ((now - lastAzFocusBounceUptimeMs) >= AZ_FOCUS_BOUNCE_COOLDOWN_MS) {
             lastAzFocusBounceUptimeMs = now;
             animateAzFocusAlpha(target);
@@ -1956,9 +1962,18 @@ public final class SuggestionBarView extends GridLayout {
     public boolean moveTerminalSearchFocus(int delta) {
         int count = terminalSearchEntries.size();
         if (count == 0) return false;
+        int previousFocusIndex = terminalSearchFocusIndex;
         terminalSearchFocusIndex = Math.floorMod(terminalSearchFocusIndex + delta, count);
+        if (rowHapticsEnabled && RowHapticTickHelper.isBoundaryCrossing(
+            previousFocusIndex, terminalSearchFocusIndex)) {
+            performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+        }
         applyTerminalSearchFocusOutline();
         return true;
+    }
+
+    public void setRowHapticsEnabled(boolean enabled) {
+        rowHapticsEnabled = enabled;
     }
 
     public boolean launchFocusedTerminalSearchEntry() {

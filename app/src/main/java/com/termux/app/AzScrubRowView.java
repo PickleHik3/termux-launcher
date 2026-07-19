@@ -11,6 +11,7 @@ import android.graphics.Typeface;
 import android.os.Build;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
+import android.view.HapticFeedbackConstants;
 import android.view.ViewConfiguration;
 
 import androidx.annotation.NonNull;
@@ -97,6 +98,8 @@ public final class AzScrubRowView extends AppCompatTextView {
     private int activeLetterIndex = -1;
     static final float LETTER_SLOT_HYSTERESIS_RATIO = 0.22f;
     private boolean interactionRenderActive;
+    private boolean rowHapticsEnabled = true;
+    private int lastHapticLetterIndex = -1;
 
     public AzScrubRowView(Context context) {
         super(context);
@@ -246,6 +249,10 @@ public final class AzScrubRowView extends AppCompatTextView {
 
     public void setScrubCallback(@Nullable ScrubCallback callback) {
         this.callback = callback;
+    }
+
+    public void setRowHapticsEnabled(boolean enabled) {
+        rowHapticsEnabled = enabled;
     }
 
     public void setVisibleLetters(@NonNull Set<Character> letters) {
@@ -433,6 +440,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                 updateInteractionRenderLayer(true);
                 activeTouchX = x;
                 activeLetterIndex = indexOfVisibleLetter(letter);
+                lastHapticLetterIndex = activeLetterIndex;
                 waveStrength = 1f;
                 if (interactionMode == InteractionMode.WAVE_TRACK) {
                     lockedInlineLetter = null;
@@ -454,6 +462,12 @@ public final class AzScrubRowView extends AppCompatTextView {
                     event.getRawX(), event.getRawY(), event.getEventTime(), GesturePhase.DOWN);
                 return true;
             case MotionEvent.ACTION_MOVE:
+                int nextHapticLetterIndex = indexOfVisibleLetter(letter);
+                if (rowHapticsEnabled && RowHapticTickHelper.isBoundaryCrossing(
+                    lastHapticLetterIndex, nextHapticLetterIndex)) {
+                    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                }
+                lastHapticLetterIndex = nextHapticLetterIndex;
                 activeTouchX = x;
                 waveStrength = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK ? 0.92f : 1f;
                 updateInteractionLayerOffset();
@@ -462,6 +476,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                     event.getRawX(), event.getRawY(), event.getEventTime(), GesturePhase.MOVE);
                 return true;
             case MotionEvent.ACTION_UP:
+                lastHapticLetterIndex = -1;
                 lastTapUpTimeMs = event.getEventTime();
                 lastTapUpX = x;
                 if (!suppressUpScrub) {
@@ -482,6 +497,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                 }
                 return true;
             case MotionEvent.ACTION_CANCEL:
+                lastHapticLetterIndex = -1;
                 suppressUpScrub = false;
                 callback.onCancel();
                 if (interactionMode == InteractionMode.WAVE_TRACK) {

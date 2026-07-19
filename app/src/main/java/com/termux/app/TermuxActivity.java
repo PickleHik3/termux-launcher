@@ -126,6 +126,7 @@ import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
 import com.termux.shared.termux.theme.TermuxThemeUtils;
 import com.termux.shared.theme.NightMode;
 import com.termux.shared.theme.ThemeUtils;
+import com.termux.shared.view.KeyboardUtils;
 import com.termux.shared.view.ViewUtils;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
@@ -172,6 +173,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     public static final String EXTRA_IN_APP_KEYBOARD_HEIGHT_ADJUST =
         "com.termux.app.extra.IN_APP_KEYBOARD_HEIGHT_ADJUST";
+    public static final String EXTRA_DOCK_TUNING =
+        "com.termux.app.extra.DOCK_TUNING";
 
     /**
      * The connection to the {@link TermuxService}. Requested in {@link #onCreate(Bundle)} with a call to
@@ -204,6 +207,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mInAppKeyboardHeightDragStartY;
     private float mInAppKeyboardHeightDragStartScale;
     private float mInAppKeyboardUnscaledDragHeight;
+    private boolean mDockTuningMode;
 
     /**
      * Termux app shared preferences manager.
@@ -464,6 +468,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private View.OnLayoutChangeListener mAccessoryLayoutChangeListener;
     @Nullable private ViewTreeObserver.OnPreDrawListener mInAppKeyboardOpenPreDrawListener;
     @Nullable private View mInAppKeyboardOpenPreDrawView;
+    @Nullable private ViewTreeObserver.OnPreDrawListener mInAppKeyboardClosePreDrawListener;
+    @Nullable private View mInAppKeyboardClosePreDrawView;
     private int mInAppKeyboardOpenRevealBlockedFrames;
     private final Runnable mInAppKeyboardOpenRevealBackstopRunnable =
         this::revealInAppKeyboardIfStillPending;
@@ -619,8 +625,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         initializeInAppKeyboard(savedInstanceState);
         // Only a fresh launch may enter adjust mode: after process death the system re-delivers
         // the original launch intent with the extra still set, which must not re-enter it.
-        if (savedInstanceState == null)
+        if (savedInstanceState == null) {
             handleInAppKeyboardHeightAdjustIntent(getIntent());
+            handleDockTuningIntent(getIntent());
+        }
         setSettingsButtonView();
         setNewSessionButtonView();
         setToggleKeyboardView();
@@ -654,6 +662,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         super.onNewIntent(intent);
         setIntent(intent);
         handleInAppKeyboardHeightAdjustIntent(intent);
+        handleDockTuningIntent(intent);
         if (isLauncherHomeIntent(intent)) {
             mLastLaunchWasLauncherEntry = true;
         }
@@ -2680,12 +2689,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                      @NonNull View surfaceHost) {
         View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
         if (wallpaperFrame == null) {
-            return mInAppKeyboardBackdropBitmap;
+            return mInAppKeyboardBackdropDirty ? null : mInAppKeyboardBackdropBitmap;
         }
 
         Rect targetRect = buildInAppKeyboardBackdropTargetRect(state, surfaceHost);
         if (targetRect == null) {
-            return mInAppKeyboardBackdropBitmap;
+            return mInAppKeyboardBackdropDirty ? null : mInAppKeyboardBackdropBitmap;
         }
         boolean usingManagedWallpaperSource = shouldUseManagedWallpaperBlurSource();
         if (!mInAppKeyboardBackdropDirty &&
@@ -2698,7 +2707,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         Bitmap blurredBackdrop = createCachedAccessoryWallpaperBlurCrop(state, targetRect, wallpaperFrame);
         if (blurredBackdrop == null) {
-            return mInAppKeyboardBackdropBitmap;
+            // A previous-geometry crop is worse than tint-only glass: BitmapDrawable would scale it
+            // into the new keyboard height and briefly sample the wrong wallpaper region.
+            return mLastInAppKeyboardBackdropTargetRect.equals(targetRect)
+                ? mInAppKeyboardBackdropBitmap : null;
         }
         mInAppKeyboardBackdropBitmap = blurredBackdrop;
         mInAppKeyboardBackdropDirty = false;
@@ -3219,7 +3231,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (backdrop == null || surfaceHost == null || accessoryContainer == null || wallpaperFrame == null ||
             accessoryContainer.getWidth() <= 0 || accessoryContainer.getHeight() <= 0) {
-            if (backdrop != null && backdrop.getDrawable() != null && shouldUseAccessoryRenderEffectBlur(state)) {
+            if (backdrop != null && shouldUseAccessoryRenderEffectBlur(state)
+                && isAccessoryBackdropCropHeightCompatible(backdrop, backdrop.getHeight())) {
                 backdrop.setVisibility(View.VISIBLE);
             } else {
                 clearAccessoryRenderEffectBackdrop();
@@ -3243,17 +3256,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mLastAccessoryBackdropBlurRadiusDp == state.blurRadiusDp &&
             mLastAccessoryBackdropManagedSource == usingManagedWallpaperSource &&
             mLastAccessoryBackdropTargetRect.equals(backdropTargetRect) &&
-            backdrop.getDrawable() != null) {
+            isAccessoryBackdropCropHeightCompatible(backdrop, backdropTargetRect.height())) {
             backdrop.setVisibility(View.VISIBLE);
             return;
         }
         Bitmap wallpaperBackdrop = createCachedAccessoryWallpaperBlurCrop(
             state, backdropTargetRect, wallpaperFrame);
         if (wallpaperBackdrop == null) {
-            if (backdrop.getDrawable() != null) {
+            if (isAccessoryBackdropCropHeightCompatible(backdrop, backdropTargetRect.height())) {
                 backdrop.setVisibility(View.VISIBLE);
             } else {
-                clearAccessoryRenderEffectBackdrop();
+                // Never scale the keyboard-era crop into dock-only bounds on close. A subsequent
+                // recovery pass can restore blur; this frame keeps the tint layer without stale
+                // wallpaper brightness.
+                backdrop.setImageDrawable(null);
+                backdrop.setVisibility(View.GONE);
+                mAccessoryBackdropDirty = true;
             }
             return;
         }
@@ -3300,6 +3318,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             clearInAppKeyboardBackdrop();
         }
+    }
+
+    private boolean isAccessoryBackdropCropHeightCompatible(@NonNull ImageView backdrop,
+                                                             int destinationHeight) {
+        Drawable drawable = backdrop.getDrawable();
+        if (!(drawable instanceof BitmapDrawable) || destinationHeight <= 0)
+            return false;
+        Bitmap bitmap = ((BitmapDrawable) drawable).getBitmap();
+        return bitmap != null && !bitmap.isRecycled()
+            && bitmap.getHeight() == destinationHeight
+            && backdrop.getHeight() == destinationHeight;
     }
 
     @Nullable
@@ -3566,11 +3595,72 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (destinationLayoutReady) {
             mPendingInAppKeyboardCloseGeometry = false;
+            mInAppKeyboardBackdropDirty = true;
             // Re-evaluate the strip once without the conservative close overscan. At this point the
             // measured dock bottom is stable, so the exact seam crop can replace the safe cover.
             mDecorNavBarBackdropDirty = true;
             scheduleAccessoryRenderSync("inapp-keyboard:close-ready");
         }
+    }
+
+    /** Rebuilds dock-only blur after close layout and before that geometry is allowed to draw. */
+    private void installInAppKeyboardClosePreDrawCorrection() {
+        if (mInAppKeyboardClosePreDrawListener != null)
+            return;
+        View gateView = findViewById(R.id.activity_termux_root_view);
+        if (gateView == null)
+            return;
+        mInAppKeyboardClosePreDrawView = gateView;
+        mInAppKeyboardClosePreDrawListener = () -> {
+            AccessoryRenderState state = buildAccessoryRenderState();
+            if (!state.keyboardShown) {
+                mAccessoryBackdropDirty = true;
+                applyAccessoryRenderState(state);
+            }
+            if (!isDockBackdropSafeForCurrentDestination(state))
+                return false;
+            removeInAppKeyboardClosePreDrawCorrection();
+            return true;
+        };
+        gateView.getViewTreeObserver().addOnPreDrawListener(mInAppKeyboardClosePreDrawListener);
+    }
+
+    private boolean isDockBackdropSafeForCurrentDestination(@NonNull AccessoryRenderState state) {
+        if (!shouldUseAccessoryRenderEffectBlur(state))
+            return true;
+        ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
+        View surfaceHost = findViewById(R.id.accessory_surface_host);
+        if (backdrop == null || surfaceHost == null || backdrop.getDrawable() == null
+            || backdrop.getVisibility() != View.VISIBLE) {
+            return true;
+        }
+        int horizontalOverscanPx = computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp);
+        int seamOverscanPx = !isValarieDockStyle() && shouldShowDecorNavBarSurface(state)
+            ? horizontalOverscanPx : 0;
+        Rect target = buildAccessoryBackdropTargetRect(
+            surfaceHost, horizontalOverscanPx, seamOverscanPx);
+        return isAccessoryBackdropCropHeightCompatible(backdrop, target.height());
+    }
+
+    private void removeInAppKeyboardClosePreDrawCorrection() {
+        View gateView = mInAppKeyboardClosePreDrawView;
+        ViewTreeObserver.OnPreDrawListener listener = mInAppKeyboardClosePreDrawListener;
+        mInAppKeyboardClosePreDrawView = null;
+        mInAppKeyboardClosePreDrawListener = null;
+        if (gateView == null || listener == null)
+            return;
+        ViewTreeObserver observer = gateView.getViewTreeObserver();
+        if (observer.isAlive())
+            observer.removeOnPreDrawListener(listener);
+    }
+
+    /** Invalidates geometry-dependent crops while preserving the shared full-frame blur. */
+    private void invalidateInAppKeyboardTransitionBackdropCrops() {
+        mInAppKeyboardBackdropDirty = true;
+        mLastInAppKeyboardBackdropTargetRect.setEmpty();
+        mAccessoryBackdropDirty = true;
+        mLastAccessoryBackdropTargetRect.setEmpty();
+        mDecorNavBarBackdropDirty = true;
     }
 
     private void applyRealtimeBlurRadius(View blurView, int blurRadiusDp) {
@@ -3792,6 +3882,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAccessoryRenderSyncPending = false;
         mPendingInAppKeyboardCloseGeometry = false;
         removeInAppKeyboardOpenPreDrawGate();
+        removeInAppKeyboardClosePreDrawCorrection();
         applyDockImeOffset(0);
         clearAccessoryRenderEffectBackdrop();
         hideDecorNavBarSurfaceOverlay(true);
@@ -4345,6 +4436,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSuggestionBarView.setBlurConfig(dockBlurEnabled(blurRadiusDp), blurRadiusDp);
         mSuggestionBarView.setInheritedTintColor(resolveAccessoryGlassBaseColor());
         mSuggestionBarView.setNotificationBadgesEnabled(mPreferences.isAppLauncherNotificationDotsEnabled());
+        boolean rowHapticsEnabled = mPreferences.isAppLauncherRowHapticsEnabled();
+        mSuggestionBarView.setRowHapticsEnabled(rowHapticsEnabled);
+        if (mAzScrubRowView != null)
+            mAzScrubRowView.setRowHapticsEnabled(rowHapticsEnabled);
         mSuggestionBarView.setMostUsedPageEnabled(mPreferences.isAppLauncherMostUsedPageEnabled());
         mSuggestionBarView.setAppDataProvider(mLauncherAppDataProvider);
         mSuggestionBarView.setConfigRepository(mLauncherConfigRepository);
@@ -5272,6 +5367,100 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mInAppKeyboard.beginHeightAdjustment();
     }
 
+    private void handleDockTuningIntent(@Nullable Intent intent) {
+        if (intent == null || !intent.getBooleanExtra(EXTRA_DOCK_TUNING, false))
+            return;
+        intent.removeExtra(EXTRA_DOCK_TUNING);
+        enterDockTuningMode();
+    }
+
+    private void enterDockTuningMode() {
+        if (mPreferences == null)
+            return;
+        mDockTuningMode = true;
+        View controls = findViewById(R.id.dock_tuning_controls);
+        SeekBar blur = findViewById(R.id.dock_tuning_blur_slider);
+        SeekBar opacity = findViewById(R.id.dock_tuning_opacity_slider);
+        SeekBar grain = findViewById(R.id.dock_tuning_grain_slider);
+        TextView blurValue = findViewById(R.id.dock_tuning_blur_value);
+        TextView opacityValue = findViewById(R.id.dock_tuning_opacity_value);
+        TextView grainValue = findViewById(R.id.dock_tuning_grain_value);
+        View confirm = findViewById(R.id.dock_tuning_confirm);
+        if (controls == null || blur == null || opacity == null || grain == null
+            || blurValue == null || opacityValue == null || grainValue == null || confirm == null) {
+            mDockTuningMode = false;
+            return;
+        }
+        controls.setVisibility(View.VISIBLE);
+        blur.setProgress(mPreferences.getExtraKeysBlurRadius());
+        opacity.setProgress(mPreferences.getAppBarOpacity());
+        grain.setProgress(mPreferences.getDockGlassGrain());
+        updateDockTuningValueBadges(blurValue, opacityValue, grainValue,
+            blur.getProgress(), opacity.getProgress(), grain.getProgress());
+        blur.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                blurValue.setText(getString(R.string.termux_dock_tuning_value_dp, progress));
+                if (fromUser) {
+                    mPreferences.setExtraKeysBlurRadius(progress);
+                    applyDockTuningPreview(true);
+                }
+            }
+        });
+        opacity.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                opacityValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
+                if (fromUser) {
+                    mPreferences.setAppBarOpacity(progress);
+                    applyDockTuningPreview(false);
+                }
+            }
+        });
+        grain.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                grainValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
+                if (fromUser) {
+                    mPreferences.setDockGlassGrain(progress);
+                    applyDockTuningPreview(false);
+                }
+            }
+        });
+        confirm.setOnClickListener(view -> exitDockTuningMode());
+        controls.bringToFront();
+    }
+
+    private void updateDockTuningValueBadges(@NonNull TextView blurValue,
+                                             @NonNull TextView opacityValue,
+                                             @NonNull TextView grainValue,
+                                             int blur, int opacity, int grain) {
+        blurValue.setText(getString(R.string.termux_dock_tuning_value_dp, blur));
+        opacityValue.setText(getString(R.string.termux_dock_tuning_value_percent, opacity));
+        grainValue.setText(getString(R.string.termux_dock_tuning_value_percent, grain));
+    }
+
+    private void applyDockTuningPreview(boolean blurChanged) {
+        if (blurChanged)
+            clearCachedAccessoryWallpaperBlur();
+        mAccessoryBackdropDirty = true;
+        mDecorNavBarBackdropDirty = true;
+        mInAppKeyboardBackdropDirty = true;
+        applySuggestionBarPreferences();
+        applyAccessoryRenderState(buildAccessoryRenderState());
+        scheduleAccessoryRenderSync("dock-tuning:preview");
+    }
+
+    private void exitDockTuningMode() {
+        mDockTuningMode = false;
+        View controls = findViewById(R.id.dock_tuning_controls);
+        if (controls != null)
+            controls.setVisibility(View.GONE);
+    }
+
+    private abstract static class SimpleSeekBarChangeListener
+        implements SeekBar.OnSeekBarChangeListener {
+        @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+        @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+    }
+
     public boolean isInAppKeyboardEnabled() {
         return mInAppKeyboard != null && mInAppKeyboard.isEnabled();
     }
@@ -5279,6 +5468,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void suppressSystemImeForInAppKeyboard() {
         if (isInAppKeyboardEnabled())
             mInAppKeyboard.suppressSystemIme();
+    }
+
+    /** Temporarily gives the toolbar EditText ownership of the system IME. */
+    public void beginTerminalToolbarExternalTextInput(@NonNull EditText editText) {
+        if (mInAppKeyboard != null && mInAppKeyboard.isEnabled()) {
+            mInAppKeyboard.beginExternalTextInput();
+        }
+        onSystemImeRequested();
+        editText.post(() -> {
+            if (!editText.hasFocus())
+                editText.requestFocus();
+            KeyboardUtils.showSoftKeyboard(TermuxActivity.this, editText);
+        });
+    }
+
+    /** Restores the embedded keyboard's prior visibility and system-IME suppression. */
+    public void endTerminalToolbarExternalTextInput() {
+        if (mInAppKeyboard != null)
+            mInAppKeyboard.endExternalTextInput();
     }
 
     private final class InAppKeyboardActivityHost implements InAppKeyboardHost {
@@ -5295,9 +5503,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return;
             }
             if (visible) {
+                boolean openingFromGone = keyboardContainer.getVisibility() == View.GONE;
+                removeInAppKeyboardClosePreDrawCorrection();
+                if (openingFromGone)
+                    invalidateInAppKeyboardTransitionBackdropCrops();
                 mPendingInAppKeyboardCloseGeometry = false;
                 AccessoryRenderState state = buildAccessoryRenderState();
-                boolean openingFromGone = keyboardContainer.getVisibility() == View.GONE;
                 boolean unifiedGlassSurface = shouldUseUnifiedDefaultKeyboardGlassSurface(state);
                 boolean backdropReady = unifiedGlassSurface
                     ? isUnifiedAccessoryBackdropReady(state)
@@ -5315,10 +5526,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     installInAppKeyboardOpenPreDrawGate();
                 }
             } else {
+                boolean closingToGone = keyboardContainer.getVisibility() != View.GONE;
+                if (closingToGone)
+                    invalidateInAppKeyboardTransitionBackdropCrops();
                 mPendingInAppKeyboardOpenReveal = false;
                 removeInAppKeyboardOpenPreDrawGate();
-                mPendingInAppKeyboardCloseGeometry = keyboardContainer.getVisibility() != View.GONE;
+                mPendingInAppKeyboardCloseGeometry = closingToGone;
                 keyboardContainer.setVisibility(View.GONE);
+                if (closingToGone)
+                    installInAppKeyboardClosePreDrawCorrection();
             }
         }
 
@@ -6530,7 +6746,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @SuppressLint("RtlHardcoded")
     @Override
     public void onBackPressed() {
-        if (getDrawer().isDrawerOpen(Gravity.LEFT)) {
+        if (mDockTuningMode) {
+            exitDockTuningMode();
+        } else if (getDrawer().isDrawerOpen(Gravity.LEFT)) {
             getDrawer().closeDrawers();
         } else if (!getDrawer().isDrawerOpen(Gravity.LEFT)) {
             getDrawer().openDrawer(Gravity.LEFT);

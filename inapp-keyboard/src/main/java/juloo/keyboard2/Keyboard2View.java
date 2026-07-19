@@ -77,8 +77,8 @@ public class Keyboard2View extends View
   private final SparseArray<TouchFx> _touchFx = new SparseArray<TouchFx>();
   private final ArrayList<TouchFx> _releasedTouchFx = new ArrayList<TouchFx>();
 
-  private static final long PRESS_RAMP_MS = 72L;
-  private static final long RELEASE_FADE_MS = 190L;
+  private static final long PRESS_RAMP_MS = 60L;
+  private static final long RELEASE_FADE_MS = 150L;
   private static final long LAUNCH_WAVE_TRAVEL_MS = 250L;
   private static final long LAUNCH_WAVE_TOTAL_MS = 400L;
   private static final long LAUNCH_WAVE_FADE_MS = 80L;
@@ -872,7 +872,7 @@ public class Keyboard2View extends View
           canvas.drawRoundRect(_tmpRect, chipRadius, chipRadius, _launchWavePaint);
         }
         if (touchFx != null && fxStrength > 0f)
-          drawTouchFx(canvas, touchFx, x, y, keyW, keyH, tc_key.border_radius,
+          drawTouchFx(canvas, touchFx, x, y, keyW, keyH, tc_key,
               fxStrength);
         if (k.keys[0] != null)
           drawLabel(canvas, k.keys[0], keyW / 2f + x, y, keyH, isKeyDown, tc_key,
@@ -972,21 +972,25 @@ public class Keyboard2View extends View
   }
 
   private void drawTouchFx(Canvas canvas, TouchFx fx, float x, float y,
-      float keyW, float keyH, float radius, float strength)
+      float keyW, float keyH, Theme.Computed.Key keyTheme, float strength)
   {
+    float radius = keyTheme.border_radius;
     float inset = Math.max(1f, Math.min(keyW, keyH) * 0.055f);
     _tmpRect.set(x + inset, y + inset, x + keyW - inset, y + keyH - inset);
     if (!fx.swiped)
     {
+      // Fill the existing chip interior instead of drawing a second inset outline. The activated
+      // frame supplies the accent tint; these low-alpha overlays lift that fill and its gradient
+      // while the chip's one normal border remains the only stroke.
+      float chipInset = keyTheme.border_width * 0.5f;
+      _tmpRect.set(x + chipInset, y + chipInset,
+          x + keyW - chipInset, y + keyH - chipInset);
       _fxFillPaint.setColor(withAlpha(_theme.pressedColor,
-          Math.round(42f * strength)));
-      canvas.drawRoundRect(_tmpRect, Math.max(0f, radius - inset),
-          Math.max(0f, radius - inset), _fxFillPaint);
-      _fxStrokePaint.setStrokeWidth(Math.max(1.2f, inset * 0.32f));
-      _fxStrokePaint.setColor(withAlpha(_theme.pressedColor,
-          Math.round(118f * strength)));
-      canvas.drawRoundRect(_tmpRect, Math.max(0f, radius - inset),
-          Math.max(0f, radius - inset), _fxStrokePaint);
+          Math.round(28f * strength)));
+      float chipRadius = Math.max(0f, radius - chipInset);
+      canvas.drawRoundRect(_tmpRect, chipRadius, chipRadius, _fxFillPaint);
+      _fxFillPaint.setColor(withAlpha(Color.WHITE, Math.round(12f * strength)));
+      canvas.drawRoundRect(_tmpRect, chipRadius, chipRadius, _fxFillPaint);
       return;
     }
 
