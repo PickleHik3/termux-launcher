@@ -162,6 +162,49 @@
     <string name="onboarding_choose_home">Choose default Home app</string>
     <string name="onboarding_read_guide">Read the full guide</string>
     <string name="onboarding_settings_unavailable">Android could not open that settings page.</string>
+    <string name="onboarding_next_arrow">Next →</string>
+    <string name="onboarding_set_home">Set Termux as home</string>
+    <string name="onboarding_install_starter_profile">Install the starter profile</string>
+    <string name="onboarding_explore_first">Explore first</string>
+    <string name="onboarding_starter_profile_todo">The starter profile installer is not available yet.</string>
+
+    <string name="onboarding_new_welcome_kicker">Welcome</string>
+    <string name="onboarding_new_welcome_title">A full Termux terminal as your Android home</string>
+    <string name="onboarding_new_welcome_body">Termux reimagined as a home launcher. You get the full Termux terminal and package ecosystem, alongside an app dock, instant search, an on-device AI backend, and enough Material polish to make it feel at home on Android.</string>
+    <string name="onboarding_new_launch_kicker">Launch</string>
+    <string name="onboarding_new_launch_title">Open anything, your way</string>
+    <string name="onboarding_new_launch_body">Tap an app in the dock, or scrub across the A–Z rail to filter. Slide upwards into the results and let go over an app to launch it. From the terminal, type % followed by an app name to search instantly.</string>
+    <string name="onboarding_new_personalise_kicker">Personalise</string>
+    <string name="onboarding_new_personalise_title">Glass that follows your wallpaper</string>
+    <string name="onboarding_new_personalise_body">The terminal, dock, and keyboard share colours from your wallpaper, with a glass finish you can tune to your liking. Adjust the blur, spacing, colours, and icon packs anytime under Settings → Appearance.</string>
+    <string name="onboarding_new_notifications_kicker">Notifications</string>
+    <string name="onboarding_new_notifications_title">Reply to notifications, made easy</string>
+    <string name="onboarding_new_notifications_body">Quickly respond to your messages and alerts by swiping up from a pinned app icon that has a pending notification — without leaving home.</string>
+    <string name="onboarding_new_ready_kicker">You’re set</string>
+    <string name="onboarding_new_ready_title">Set it as home and go</string>
+    <string name="onboarding_new_ready_body">That covers the launcher itself. From here you can shape the shell however you like, or start with the prebuilt profile and tweak it as you go — Fish, tmux, an Oh My Posh prompt, Shizuku system stats, Material theming, extra keys, zoxide, eza, and more.</string>
+
+    <string name="onboarding_chip_full_terminal">full terminal</string>
+    <string name="onboarding_chip_app_dock">app dock</string>
+    <string name="onboarding_chip_ai_backends">LiteRT &amp; MNN backends</string>
+    <string name="onboarding_chip_percent_search">% search</string>
+    <string name="onboarding_chip_az_rail">A–Z rail</string>
+    <string name="onboarding_chip_long_press">long-press to pin</string>
+    <string name="onboarding_chip_material_palette">Material palette</string>
+    <string name="onboarding_chip_glass_blur">glass &amp; blur</string>
+    <string name="onboarding_chip_icon_packs">icon packs</string>
+    <string name="onboarding_chip_swipe_up">swipe up</string>
+    <string name="onboarding_chip_inline_reply">inline reply</string>
+    <string name="onboarding_chip_pinned_apps">pinned apps</string>
+
+    <string name="onboarding_duration_20">▶ 20s tour</string>
+    <string name="onboarding_duration_15">▶ 15s</string>
+    <string name="onboarding_duration_10">▶ 10s</string>
+    <string name="onboarding_media_home">Drop the full-screen recording (1080×2300): launcher home + dock</string>
+    <string name="onboarding_media_search">Drop the full-screen recording (1080×2300): app search + A–Z swipe</string>
+    <string name="onboarding_media_appearance">Drop the full-screen recording (1080×2300): appearance / theming panel</string>
+    <string name="onboarding_media_notifications">Drop the full-screen recording (1080×2300): swipe up from a pinned icon to reply</string>
+    <string name="onboarding_media_ready">Drop the full-screen recording (1080×2300): tmux / Shizuku / on-device AI</string>
 
     <string name="onboarding_welcome_eyebrow">WELCOME</string>
     <string name="onboarding_welcome_title">Your terminal is now home</string>
@@ -783,6 +826,7 @@
                 <string name="termux_app_launcher_dock_style_summary">Choose the dock surface shape.</string>
                 <string name="termux_app_launcher_dock_style_default">Default</string>
                 <string name="termux_app_launcher_dock_style_valarie_capsule">Valarie capsule</string>
+                <string name="termux_app_launcher_dock_style_capsule">Capsule</string>
                 <string name="termux_app_launcher_display_app_names_title">Display app names</string>
                 <string name="termux_app_launcher_display_app_names_summary">Show a compact name pill above the focused app while scrubbing the dock.</string>
                 <string name="termux_app_launcher_icon_scale_title">Icon scaling</string>

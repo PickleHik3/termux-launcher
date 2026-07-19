@@ -202,6 +202,14 @@
                     app:realtimeBlurRadius="10dp"
                     app:realtimeOverlayColor="@android:color/transparent" />
 
+                <com.termux.app.DockLaunchRippleView
+                    android:id="@+id/accessory_launch_ripple_underlay"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clickable="false"
+                    android:focusable="false"
+                    android:tag="dock_launch_ripple" />
+
                 <View
                     android:id="@+id/extrakeys_background"
                     android:layout_width="match_parent"

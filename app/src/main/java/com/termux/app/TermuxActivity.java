@@ -60,6 +60,7 @@ import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.util.DisplayMetrics;
+import android.util.LruCache;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
@@ -89,6 +90,7 @@ import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherConfigRepository;
 import com.termux.app.launcher.LauncherLockAccessibilityAccess;
 import com.termux.app.launcher.LockAccessibilityService;
+import com.termux.app.launcher.TerminalAppSearchKeyDecision;
 import com.termux.launcherctl.LauncherCtlApiServer;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
@@ -136,7 +138,6 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsAnimationCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsCompat.Type;
@@ -320,6 +321,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int mNavBarHeight;
     private int mImeLiftPx;
+    /** Set only after this activity explicitly requests a system IME in its current visible run. */
+    private boolean mAcceptSystemImeInsets;
+    private final LruCache<String, Integer> mLaunchIconColorCache = new LruCache<>(64);
 
     /** Reactive glass-plank physics for the dock (tilt, specular, accent rim glow). */
     @Nullable private DockPlankController mDockPlankController;
@@ -455,11 +459,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mInAppKeyboardAvailableHeightPx;
     private boolean mInAppKeyboardHeightDirty = true;
     private boolean mHasMeasuredTerminalFlushPadding;
-    private long mDelayRootMarginAdjustmentsUntilUptimeMs;
-    private boolean mImeTransitionInProgress;
     /** Keeps the under-pill glass covering stale close geometry until dock-only layout settles. */
     private boolean mPendingInAppKeyboardCloseGeometry;
-    private boolean mFadeAccessoryBlurAfterImeRestore;
     private boolean mAccessoryBackdropDirty = true;
     private int mLastAccessoryBackdropBlurRadiusDp = -1;
     private boolean mLastAccessoryBackdropManagedSource;
@@ -489,17 +490,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private long mManagedWallpaperWindowBackgroundLength = -1L;
     @Nullable private Drawable mSystemWallpaperWindowBackground;
     private int mSystemWallpaperWindowBackgroundId = -1;
-    @Nullable private Boolean mPendingImeGeometryVisible;
     @Nullable private WallpaperManager.OnColorsChangedListener mWallpaperColorsChangedListener;
     private final Handler mAccessoryRenderHandler = new Handler(Looper.getMainLooper());
-    private final Runnable mDeferredImeGeometryRunnable = () -> {
-        Boolean visible = mPendingImeGeometryVisible;
-        mPendingImeGeometryVisible = null;
-        if (visible == null) {
-            return;
-        }
-        applyAccessoryGeometryIfNeeded(true, visible ? "ime:open:deferred" : "ime:close:deferred");
-    };
     private final Runnable mAccessoryBlurHeartbeatRunnable = new Runnable() {
         @Override
         public void run() {
@@ -534,69 +526,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         scheduleAccessoryRenderSync("blur:recovery");
     };
-    private final Runnable mRestoreAccessoryBlurAfterImeRunnable = () -> {
-        if (!mIsVisible) {
-            return;
-        }
-        mImeTransitionInProgress = false;
-        mAccessoryBackdropDirty = true;
-        mDecorNavBarBackdropDirty = true;
-        mInAppKeyboardBackdropDirty = true;
-        mFadeAccessoryBlurAfterImeRestore = shouldFadeAccessoryBlurAfterImeRestore();
-        prepareAccessoryBlurRestoreFade();
-        updateAccessoryRenderEffectBackdrop(buildAccessoryRenderState());
-        applyDecorNavBarSurfaceState(buildAccessoryRenderState());
-        startAccessoryBlurRestoreFade();
-        mFadeAccessoryBlurAfterImeRestore = false;
-        restartAccessoryBlurHeartbeat();
-        scheduleAccessoryBlurRecovery();
-    };
-    private final WindowInsetsAnimationCompat.Callback mDockImeAnimationCallback =
-        new WindowInsetsAnimationCompat.Callback(WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
-            @NonNull
-            @Override
-            public WindowInsetsAnimationCompat.BoundsCompat onStart(
-                @NonNull WindowInsetsAnimationCompat animation,
-                @NonNull WindowInsetsAnimationCompat.BoundsCompat bounds
-            ) {
-                if ((animation.getTypeMask() & Type.ime()) != 0) {
-                    beginImeTransitionBlurPause();
-                    mDelayRootMarginAdjustmentsUntilUptimeMs = SystemClock.uptimeMillis() + 180L;
-                    applySmoothDockImeOffset(0);
-                }
-                return bounds;
-            }
-
-            @NonNull
-            @Override
-            public WindowInsetsCompat onProgress(
-                @NonNull WindowInsetsCompat insets,
-                @NonNull List<WindowInsetsAnimationCompat> runningAnimations
-            ) {
-                boolean imeAnimationRunning = false;
-                for (WindowInsetsAnimationCompat animation : runningAnimations) {
-                    if ((animation.getTypeMask() & Type.ime()) != 0) {
-                        imeAnimationRunning = true;
-                        break;
-                    }
-                }
-                if (imeAnimationRunning) {
-                    mDelayRootMarginAdjustmentsUntilUptimeMs = SystemClock.uptimeMillis() + 80L;
-                    applySmoothDockImeOffset(computeDockImeLiftPx(insets));
-                }
-                return insets;
-            }
-
-            @Override
-            public void onEnd(@NonNull WindowInsetsAnimationCompat animation) {
-                if ((animation.getTypeMask() & Type.ime()) != 0) {
-                    mDelayRootMarginAdjustmentsUntilUptimeMs = SystemClock.uptimeMillis() + 40L;
-                    applySmoothDockImeOffset(0);
-                    mPendingImeGeometryVisible = null;
-                    scheduleImeTransitionBlurRestore();
-                }
-            }
-        };
     private final Runnable mAccessoryRenderSyncRunnable = () -> {
         mAccessoryRenderSyncPending = false;
         String reason = mPendingAccessoryRenderReason == null ? "unknown" : mPendingAccessoryRenderReason;
@@ -657,16 +586,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             WindowInsetsCompat insetsCompat = WindowInsetsCompat.toWindowInsetsCompat(insets, v);
             mNavBarHeight = insetsCompat.getInsets(Type.systemBars()).bottom;
             mImeLiftPx = computeDockImeLiftPx(insetsCompat);
+            applyDockImeOffset(0);
             applyTerminalOverlayInsets(insetsCompat);
             configureExtraKeysBackground();
             return insetsCompat.toWindowInsets();
         });
         applySeamlessStatusBackgroundModeIfNeeded();
         ViewCompat.requestApplyInsets(content);
-        View accessoryContainer = findViewById(R.id.accessory_stack_container);
-        if (accessoryContainer != null) {
-            ViewCompat.setWindowInsetsAnimationCallback(accessoryContainer, mDockImeAnimationCallback);
-        }
         applyFullscreenMode();
         // Must be done every time activity is created in order to registerForActivityResult,
         // Even if the logic of launching is based on user input.
@@ -733,8 +659,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logDebug(LOG_TAG, "onStart");
     
         if (mIsInvalidState) return;
-    
+
         mIsVisible = true;
+        resetInheritedImeLayoutState();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.setHostVisible(true);
             scheduleLauncherCatalogWarmup();
@@ -849,7 +776,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // up, nav bars reported hidden) and there is no later dispatch to correct it — a stale
         // lift here renders the dock and keyboard in the top third of the screen. Drop it and
         // ask for a fresh pass.
-        mImeLiftPx = 0;
+        resetInheritedImeLayoutState();
         View contentView = findViewById(android.R.id.content);
         if (contentView != null)
             androidx.core.view.ViewCompat.requestApplyInsets(contentView);
@@ -858,6 +785,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mInAppKeyboard != null) {
             mInAppKeyboard.onPreferencesReloaded();
             mInAppKeyboard.onResume();
+            if (mInAppKeyboard.isExternalTextInputActive())
+                onSystemImeRequested();
         }
         if (sPendingStyleReloadOnNextResume) {
             boolean recreateActivity = consumePendingStyleReloadRecreateActivity();
@@ -1570,6 +1499,111 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } catch (Throwable t) {
             return false;
         }
+    }
+
+    private void playAppLaunchRipple(@NonNull String packageName, @Nullable Drawable icon,
+                                     @Nullable View sourceView) {
+        if (isReducedMotionEnabled()) return;
+        View accessorySurface = findViewById(R.id.accessory_surface_host);
+        DockLaunchRippleView ripple = accessorySurface == null ? null
+            : (DockLaunchRippleView) accessorySurface.findViewWithTag("dock_launch_ripple");
+        if (ripple == null || ripple.getWidth() <= 0 || ripple.getHeight() <= 0) return;
+
+        int color = resolveLaunchIconDominantColor(packageName, icon);
+        int[] rippleLocation = new int[2];
+        ripple.getLocationOnScreen(rippleLocation);
+        float originX;
+        float originY;
+        if (sourceView != null && sourceView.isAttachedToWindow()) {
+            int[] sourceLocation = new int[2];
+            sourceView.getLocationOnScreen(sourceLocation);
+            originX = sourceLocation[0] + sourceView.getWidth() * 0.5f - rippleLocation[0];
+            originY = sourceLocation[1] + sourceView.getHeight() * 0.5f - rippleLocation[1];
+        } else {
+            originX = ripple.getWidth() * 0.5f;
+            originY = ripple.getHeight() * 0.5f;
+        }
+
+        boolean capsule = isValarieDockStyle();
+        RectF bounds = new RectF(0f, 0f, ripple.getWidth(), ripple.getHeight());
+        float cornerRadius = capsule ? resolveDockCapsuleCornerRadiusPx(ripple.getHeight()) : 0f;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && mGlassParamsValid) {
+            // Reuse the dock's AGSL glass pass on the wave itself. The Canvas wave remains the
+            // all-API fallback, while API 33+ bends and softens it before the material tint/grain.
+            ripple.setRenderEffect(buildGlassRefractionEffect(
+                mGlassBlurPx, mGlassCapLeft, mGlassCapTop, mGlassCapRight, mGlassCapBottom,
+                mGlassRadiusPx));
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            ripple.setRenderEffect(null);
+        }
+        DockEdgeGlowView edgeGlow = findViewById(R.id.accessory_edge_glow_fx);
+        if (capsule && edgeGlow != null) edgeGlow.setVisibility(View.VISIBLE);
+        ripple.startRipple(color, originX, originY, capsule, bounds, cornerRadius,
+            edgeGlow == null ? null : (collisionColor, level) ->
+                edgeGlow.setLaunchCollisionState(collisionColor, level));
+
+        if (!capsule && isInAppKeyboardShown() && mInAppKeyboard != null) {
+            mInAppKeyboard.animateLaunchWave(color, originX + rippleLocation[0]);
+        }
+    }
+
+    private int resolveLaunchIconDominantColor(@NonNull String packageName,
+                                               @Nullable Drawable sourceIcon) {
+        Integer cached = mLaunchIconColorCache.get(packageName);
+        if (cached != null) return cached;
+        Drawable drawable = sourceIcon;
+        if (drawable == null) {
+            try {
+                drawable = getPackageManager().getApplicationIcon(packageName);
+            } catch (Throwable ignored) {
+            }
+        }
+        int fallback = resolveDockAccentColor();
+        int color = extractDominantIconColor(drawable, fallback);
+        mLaunchIconColorCache.put(packageName, color);
+        return color;
+    }
+
+    static int extractDominantIconColor(@Nullable Drawable drawable, int fallback) {
+        if (drawable == null) return fallback;
+        final int size = 40;
+        Bitmap bitmap;
+        try {
+            bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap);
+            Rect oldBounds = drawable.copyBounds();
+            drawable.setBounds(0, 0, size, size);
+            drawable.draw(canvas);
+            drawable.setBounds(oldBounds);
+        } catch (Throwable throwable) {
+            return fallback;
+        }
+        int[] buckets = new int[4096];
+        int[] pixels = new int[size * size];
+        bitmap.getPixels(pixels, 0, size, 0, 0, size, size);
+        bitmap.recycle();
+        int bestBucket = -1;
+        int bestWeight = 0;
+        for (int pixel : pixels) {
+            int alpha = Color.alpha(pixel);
+            if (alpha < 64) continue;
+            int r = Color.red(pixel) >> 4;
+            int g = Color.green(pixel) >> 4;
+            int b = Color.blue(pixel) >> 4;
+            int bucket = (r << 8) | (g << 4) | b;
+            int spread = Math.max(r, Math.max(g, b)) - Math.min(r, Math.min(g, b));
+            int weight = alpha + spread * 10;
+            buckets[bucket] += weight;
+            if (buckets[bucket] > bestWeight) {
+                bestWeight = buckets[bucket];
+                bestBucket = bucket;
+            }
+        }
+        if (bestBucket < 0) return fallback;
+        int r = ((bestBucket >> 8) & 0xF) * 17;
+        int g = ((bestBucket >> 4) & 0xF) * 17;
+        int b = (bestBucket & 0xF) * 17;
+        return Color.rgb(r, g, b);
     }
 
     private void applyGlassSurfaceColor(int viewId, int surfaceColor) {
@@ -2802,86 +2836,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    private void beginImeTransitionBlurPause() {
-        mAccessoryRenderHandler.removeCallbacks(mRestoreAccessoryBlurAfterImeRunnable);
-        if (mImeTransitionInProgress) {
-            return;
-        }
-        mImeTransitionInProgress = true;
-        setAccessoryBlurLayerAlpha(1f);
-    }
-
-    private void scheduleImeTransitionBlurRestore() {
-        mAccessoryRenderHandler.removeCallbacks(mRestoreAccessoryBlurAfterImeRunnable);
-        mAccessoryRenderHandler.postDelayed(mRestoreAccessoryBlurAfterImeRunnable, 90L);
-    }
-
-    private void prepareAccessoryBlurRestoreFade() {
-        AccessoryRenderState state = buildAccessoryRenderState();
-        if (!state.toolbarShown || !state.blurEnabled) {
-            setAccessoryBlurLayerAlpha(1f);
-            return;
-        }
-        setAccessoryBlurLayerAlpha(mFadeAccessoryBlurAfterImeRestore ? 0f : 1f);
-    }
-
-    private void startAccessoryBlurRestoreFade() {
-        AccessoryRenderState state = buildAccessoryRenderState();
-        if (!state.toolbarShown || !state.blurEnabled || !mFadeAccessoryBlurAfterImeRestore) {
-            setAccessoryBlurLayerAlpha(1f);
-            return;
-        }
-        animateAccessoryBlurLayer(findViewById(R.id.extrakeys_backgroundblur));
-        animateAccessoryBlurLayer(findViewById(R.id.accessory_blur_backdrop));
-        animateAccessoryBlurLayer(mDecorNavBarBlurBackdrop);
-    }
-
-    private boolean shouldFadeAccessoryBlurAfterImeRestore() {
-        ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
-        boolean accessoryBackdropMissing = backdrop == null
-            || backdrop.getVisibility() != View.VISIBLE
-            || backdrop.getDrawable() == null
-            || backdrop.getAlpha() <= 0f;
-        if (accessoryBackdropMissing) {
-            return true;
-        }
-        ImageView decorBackdrop = mDecorNavBarBlurBackdrop;
-        if (!shouldUseDockDecorNavBarSurface(buildAccessoryRenderState())) {
-            return false;
-        }
-        return decorBackdrop == null
-            || decorBackdrop.getVisibility() != View.VISIBLE
-            || decorBackdrop.getDrawable() == null
-            || decorBackdrop.getAlpha() <= 0f;
-    }
-
-    private void setAccessoryBlurLayerAlpha(float alpha) {
-        float targetAlpha = Math.max(0f, Math.min(1f, alpha));
-        setAccessoryBlurLayerAlpha(findViewById(R.id.extrakeys_backgroundblur), targetAlpha);
-        setAccessoryBlurLayerAlpha(findViewById(R.id.accessory_blur_backdrop), targetAlpha);
-        setAccessoryBlurLayerAlpha(mDecorNavBarBlurBackdrop, targetAlpha);
-    }
-
-    private void setAccessoryBlurLayerAlpha(@Nullable View view, float alpha) {
-        if (view == null) {
-            return;
-        }
-        view.animate().cancel();
-        view.setAlpha(alpha);
-    }
-
-    private void animateAccessoryBlurLayer(@Nullable View view) {
-        if (view == null || view.getVisibility() != View.VISIBLE) {
-            return;
-        }
-        float targetAlpha = 1f;
-        view.animate()
-            .alpha(targetAlpha)
-            .setDuration(140L)
-            .withEndAction(() -> view.setAlpha(targetAlpha))
-            .start();
-    }
-
     private boolean isAccessoryBlurHealthy(@NonNull AccessoryRenderState state) {
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
         if (accessoryContainer == null || accessoryContainer.getVisibility() != View.VISIBLE) {
@@ -3219,16 +3173,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyAccessoryBackdropOverscan(backdrop, surfaceHost, horizontalOverscanPx, seamOverscanPx);
         Rect backdropTargetRect = buildAccessoryBackdropTargetRect(surfaceHost, horizontalOverscanPx,
             seamOverscanPx);
-        // Keep the existing backdrop through an IME show/hide animation ONLY while its geometry still
-        // covers the current target. On keyboard OFF->ON the unified surface host grows to span
-        // dock+keyboard, so the old dock-sized backdrop would leave the new keyboard band showing raw,
-        // unblurred wallpaper for the length of the transition (the "flash"). When the target grew,
-        // recapture immediately instead of deferring to the end of the IME animation.
-        if (mImeTransitionInProgress && backdrop.getDrawable() != null
-            && mLastAccessoryBackdropTargetRect.equals(backdropTargetRect)) {
-            backdrop.setVisibility(View.VISIBLE);
-            return;
-        }
         if (!mAccessoryBackdropDirty &&
             mLastAccessoryBackdropBlurRadiusDp == state.blurRadiusDp &&
             mLastAccessoryBackdropManagedSource == usingManagedWallpaperSource &&
@@ -3531,7 +3475,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyTerminalSurfaceAppearance();
     }
 
-    private void applySmoothDockImeOffset(int imeLiftPx) {
+    private void applyDockImeOffset(int imeLiftPx) {
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
         if (accessoryContainer == null) {
             return;
@@ -3549,9 +3493,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * lift too would double it.
      */
     private int computeDockImeLiftPx(@NonNull WindowInsetsCompat insets) {
-        // The embedded keyboard suppresses the system IME entirely, so any IME inset seen here
-        // is a stale snapshot from the app we resumed from — never a reason to lift the dock.
-        if (isInAppKeyboardShown()) {
+        // Insets can retain the previous app's mid-transition IME snapshot across a home resume.
+        // Accept them only after an input flow in this activity explicitly requested the IME.
+        if (!mAcceptSystemImeInsets || isSystemImeSuppressedByInAppKeyboard()) {
             return 0;
         }
         if (!insets.isVisible(Type.ime())) {
@@ -3575,6 +3519,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     public boolean isSystemImeSuppressedByInAppKeyboard() {
         return mInAppKeyboard != null && mInAppKeyboard.isSystemImeSuppressed();
+    }
+
+    public boolean shouldAcceptSystemImeLayout() {
+        return mAcceptSystemImeInsets;
+    }
+
+    /** Marks subsequent IME insets as activity-owned rather than inherited from the previous app. */
+    public void onSystemImeRequested() {
+        mAcceptSystemImeInsets = true;
+        View content = findViewById(android.R.id.content);
+        if (content != null)
+            ViewCompat.requestApplyInsets(content);
+    }
+
+    private void resetInheritedImeLayoutState() {
+        mAcceptSystemImeInsets = false;
+        mImeLiftPx = 0;
+        applyDockImeOffset(0);
     }
 
     private void applyFullscreenMode() {
@@ -3667,15 +3629,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAccessoryRenderHandler.removeCallbacks(mAccessoryRenderSyncRunnable);
         mAccessoryRenderHandler.removeCallbacks(mAccessoryBlurHeartbeatRunnable);
         mAccessoryRenderHandler.removeCallbacks(mAccessoryBlurRecoveryRunnable);
-        mAccessoryRenderHandler.removeCallbacks(mDeferredImeGeometryRunnable);
-        mAccessoryRenderHandler.removeCallbacks(mRestoreAccessoryBlurAfterImeRunnable);
         mAccessoryRenderSyncPending = false;
         mPendingAccessoryRenderReason = null;
-        mImeTransitionInProgress = false;
         mPendingInAppKeyboardCloseGeometry = false;
-        mFadeAccessoryBlurAfterImeRestore = false;
-        setAccessoryBlurLayerAlpha(1f);
-        applySmoothDockImeOffset(0);
+        applyDockImeOffset(0);
         clearAccessoryRenderEffectBackdrop();
         hideDecorNavBarSurfaceOverlay(true);
         mAzGestureHandler.removeCallbacks(mPackageRefreshRunnable);
@@ -3854,7 +3811,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAzGestureHandler.removeCallbacks(mPackageRefreshRunnable);
         mAccessoryRenderHandler.removeCallbacks(mAccessoryRenderSyncRunnable);
         mAccessoryRenderHandler.removeCallbacks(mAccessoryBlurHeartbeatRunnable);
-        mAccessoryRenderHandler.removeCallbacks(mDeferredImeGeometryRunnable);
         mAccessoryRenderSyncPending = false;
         mPendingAccessoryRenderReason = null;
         if (mTerminalView != null) {
@@ -4009,6 +3965,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mInAppKeyboard.endExternalTextInput();
                 }
             });
+        mSuggestionBarView.setLaunchRippleListener(this::playAppLaunchRipple);
         applySuggestionBarPreferences();
         applyDockLayoutMetrics(buildDockLayoutMetrics(0));
         if (isSuggestionBarEnabled()) {
@@ -4126,6 +4083,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return false;
     }
 
+    /** Consumes navigation only while a literal app-search command is visible in the normal buffer. */
+    public boolean handleTerminalAppSearchKey(int keyCode) {
+        if (mTerminalView == null || mSuggestionBarView == null) return false;
+        boolean literalMode = mSuggestionBarExplicitSearchActive
+            && mTerminalView.isCurrentInputAppSearchMode();
+        TerminalAppSearchKeyDecision.Action action = TerminalAppSearchKeyDecision.decide(
+            literalMode, mTerminalView.isAlternateBufferActive(),
+            mSuggestionBarView.getTerminalSearchResultCount(), keyCode);
+        switch (action) {
+            case PREVIOUS:
+                return mSuggestionBarView.moveTerminalSearchFocus(-1);
+            case NEXT:
+                return mSuggestionBarView.moveTerminalSearchFocus(1);
+            case LAUNCH:
+                mSuggestionBarExplicitSearchActive = false;
+                return mSuggestionBarView.launchFocusedTerminalSearchEntry();
+            case EXIT:
+                mSuggestionBarExplicitSearchActive = false;
+                mSuggestionBarView.clearTerminalSearchFocus();
+                mSuggestionBarView.reloadWithInput("", mTerminalView);
+                return false;
+            default:
+                if (mSuggestionBarExplicitSearchActive && !literalMode) {
+                    mSuggestionBarExplicitSearchActive = false;
+                    mSuggestionBarView.clearTerminalSearchFocus();
+                }
+                return false;
+        }
+    }
+
     public boolean shouldProcessSuggestionBarCodePoint(int codePoint, boolean ctrlDown) {
         if (ctrlDown || !isSuggestionBarEnabled() || mSuggestionBarView == null) {
             return false;
@@ -4135,10 +4122,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         char[] chars = Character.toChars(codePoint);
         return chars.length == 1 && chars[0] == getSuggestionBarSplitChar();
-    }
-
-    public boolean shouldDelayRootMarginAdjustments() {
-        return SystemClock.uptimeMillis() < mDelayRootMarginAdjustmentsUntilUptimeMs;
     }
 
     public boolean shouldDelaySoftKeyboardShowOnResume() {
@@ -5233,6 +5216,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         public void restoreLegacySoftKeyboardState() {
             if (mTermuxTerminalViewClient != null)
                 mTermuxTerminalViewClient.setSoftKeyboardState(false, true);
+        }
+
+        @Override
+        public void onExternalTextInputStarted() {
+            onSystemImeRequested();
+        }
+
+        @Override
+        public void onExternalTextInputEnded() {
+            resetInheritedImeLayoutState();
         }
 
         @Override

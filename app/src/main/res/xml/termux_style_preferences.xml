@@ -45,6 +45,12 @@
         app:key="termux_extrakeys_appsbar"
         app:title="@string/termux_extrakeys_appsbar_header">
 
+        <com.termux.app.fragments.settings.SegmentedPillPreference
+            app:key="app_launcher_dock_style"
+            app:title="@string/termux_app_launcher_dock_style_title"
+            app:summary="@string/termux_app_launcher_dock_style_summary"
+            android:defaultValue="default" />
+
         <androidx.preference.SeekBarPreference
             app:key="extrakeys_blur_radius"
             app:title="@string/termux_extrakeys_blur_radius_title"
@@ -94,14 +100,6 @@
             app:summary="@string/termux_app_launcher_bar_height_summary"
             app:showSeekBarValue="false"
             app:updatesContinuously="true" />
-
-        <ListPreference
-            app:key="app_launcher_dock_style"
-            app:title="@string/termux_app_launcher_dock_style_title"
-            app:summary="@string/termux_app_launcher_dock_style_summary"
-            app:entries="@array/app_launcher_dock_style_entries"
-            app:entryValues="@array/app_launcher_dock_style_values"
-            app:useSimpleSummaryProvider="true" />
 
         <SwitchPreferenceCompat
             app:key="app_launcher_display_app_names"

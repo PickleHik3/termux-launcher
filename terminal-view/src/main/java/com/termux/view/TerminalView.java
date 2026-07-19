@@ -765,6 +765,43 @@ public final class TerminalView extends View {
         return null;
     }
 
+    /**
+     * Returns true only for a literal split-prefixed command at the cursor in the normal buffer.
+     * This deliberately avoids the permissive space fallback used by legacy suggestion parsing.
+     */
+    public boolean isCurrentInputAppSearchMode() {
+        if (mEmulator == null || isAlternateBufferActive()) return false;
+        int row = mEmulator.getCursorRow();
+        int cursor = mEmulator.getCursorCol();
+        String line = mEmulator.getScreen().getSelectedText(0, row, 99, row);
+        return hasAppSearchPrefixInLine(line, cursor, mSplitChar);
+    }
+
+    static boolean hasAppSearchPrefixInLine(String line, int cursor, char splitChar) {
+        if (line == null || splitChar == ' ') return false;
+        int end = Math.max(0, Math.min(cursor, line.length()));
+        int split = line.lastIndexOf(splitChar, Math.max(0, end - 1));
+        if (split < 0) return false;
+        if (split > 0 && "$#>❯λ".indexOf(line.charAt(split - 1)) < 0) {
+            int prompt = -1;
+            for (int i = split - 1; i >= 0; i--) {
+                if ("$#>❯λ".indexOf(line.charAt(i)) >= 0) {
+                    prompt = i;
+                    break;
+                }
+            }
+            int commandStart = prompt + 1;
+            for (int i = commandStart; i < split; i++) {
+                if (!Character.isWhitespace(line.charAt(i))) return false;
+            }
+        }
+        for (int i = split + 1; i < end; i++) {
+            char c = line.charAt(i);
+            if (!Character.isLetter(c) && c != ' ') return false;
+        }
+        return true;
+    }
+
     public boolean isAlternateBufferActive() {
         return mEmulator != null && mEmulator.isAlternateBufferActive();
     }

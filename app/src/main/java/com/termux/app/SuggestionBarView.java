@@ -142,6 +142,11 @@ import java.util.concurrent.TimeUnit;
 
 public final class SuggestionBarView extends GridLayout {
 
+    public interface LaunchRippleListener {
+        void onLaunchRipple(@NonNull String packageName, @Nullable Drawable icon,
+                            @Nullable View sourceView);
+    }
+
     private static final String LOG_TAG = "SuggestionBarView";
     private static final char[] AZ_ORDER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#".toCharArray();
     private static final int POPUP_MAX_WIDTH_DP = 320;
@@ -156,6 +161,10 @@ public final class SuggestionBarView extends GridLayout {
     private static final int PINNED_FOLDER_STROKE_COLOR = 0x33FFFFFF;
 
     private List<LauncherAppEntry> allApps = new ArrayList<>();
+    @Nullable private LaunchRippleListener launchRippleListener;
+    private final List<LauncherAppEntry> terminalSearchEntries = new ArrayList<>();
+    private final List<View> terminalSearchTargets = new ArrayList<>();
+    private int terminalSearchFocusIndex = -1;
     private int maxButtonCount = 7;
     private float textSize = 12f;
     private boolean bandW = false;
@@ -1652,7 +1661,9 @@ public final class SuggestionBarView extends GridLayout {
         }
 
         this.lastTerminalView = terminalView;
-        this.lastInput = input == null ? "" : input;
+        String nextInput = input == null ? "" : input;
+        if (!nextInput.trim().equals(lastInput.trim())) clearTerminalSearchFocus();
+        this.lastInput = nextInput;
         final int requestGeneration = ++searchGeneration;
         if (activeAzLetter != null && !this.lastInput.trim().isEmpty()) {
             activeAzLetter = null;
@@ -1823,6 +1834,7 @@ public final class SuggestionBarView extends GridLayout {
         setAlpha(1f);
         removeAllViews();
         clearAzFocusedEntry();
+        clearTerminalSearchFocus();
         lastAzResolvedSlot = -1;
         launchTargetViews.clear();
         launchTargetViewsByPackage.clear();
@@ -1882,6 +1894,10 @@ public final class SuggestionBarView extends GridLayout {
             }
 
             View dragTarget = resolvePrimaryPressTarget(view);
+            if (!azPreview && !TextUtils.isEmpty(lastInput.trim())) {
+                terminalSearchEntries.add(entry);
+                terminalSearchTargets.add(dragTarget);
+            }
             if (azPreview && renderCol >= 0 && renderCol < buttonCount) {
                 azRenderedSlotEntries.put(renderCol, entry);
                 azRenderedEntryTargets.put(stableEntryKey(entry), new WeakReference<>(dragTarget));
@@ -1958,6 +1974,10 @@ public final class SuggestionBarView extends GridLayout {
             setOnLongClickListener(null);
             setOnDragListener(null);
         }
+        if (!terminalSearchEntries.isEmpty()) {
+            terminalSearchFocusIndex = 0;
+            applyTerminalSearchFocusOutline();
+        }
         if (overflowInteractionListener != null) {
             overflowInteractionListener.onOverflowInteractionChanged(rowInteractionActive);
         }
@@ -1967,6 +1987,57 @@ public final class SuggestionBarView extends GridLayout {
             scheduleStableDrawReleaseIfPossible();
         } else {
             invalidate();
+        }
+    }
+
+    public int getTerminalSearchResultCount() {
+        return terminalSearchEntries.size();
+    }
+
+    public boolean moveTerminalSearchFocus(int delta) {
+        int count = terminalSearchEntries.size();
+        if (count == 0) return false;
+        terminalSearchFocusIndex = Math.floorMod(terminalSearchFocusIndex + delta, count);
+        applyTerminalSearchFocusOutline();
+        return true;
+    }
+
+    public boolean launchFocusedTerminalSearchEntry() {
+        int index = terminalSearchFocusIndex;
+        if (index < 0 || index >= terminalSearchEntries.size()) return false;
+        LauncherAppEntry entry = terminalSearchEntries.get(index);
+        View source = index < terminalSearchTargets.size() ? terminalSearchTargets.get(index) : null;
+        clearTerminalSearchFocus();
+        launchEntry(entry, lastTerminalView, source);
+        return true;
+    }
+
+    public void clearTerminalSearchFocus() {
+        for (View target : terminalSearchTargets) {
+            if (target != null) target.setForeground(null);
+        }
+        terminalSearchEntries.clear();
+        terminalSearchTargets.clear();
+        terminalSearchFocusIndex = -1;
+    }
+
+    private void applyTerminalSearchFocusOutline() {
+        int accent = MaterialColors.getColor(this,
+            com.termux.shared.R.attr.termuxColorPrimary, 0xFFA6E6B3);
+        for (int i = 0; i < terminalSearchTargets.size(); i++) {
+            View target = terminalSearchTargets.get(i);
+            if (target == null) continue;
+            if (i != terminalSearchFocusIndex) {
+                target.setForeground(null);
+                continue;
+            }
+            GradientDrawable outline = new GradientDrawable();
+            outline.setShape(GradientDrawable.RECTANGLE);
+            outline.setColor(Color.TRANSPARENT);
+            outline.setCornerRadius(dp(14));
+            outline.setStroke(dp(2), accent);
+            target.setForeground(outline);
+            target.setForegroundGravity(Gravity.FILL);
         }
     }
 
@@ -2325,9 +2396,15 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private void launchEntry(@NonNull LauncherAppEntry entry, @Nullable TerminalView terminalView, @Nullable View launchSourceView) {
+        launchEntry(entry, terminalView, launchSourceView, true);
+    }
+
+    private void launchEntry(@NonNull LauncherAppEntry entry, @Nullable TerminalView terminalView,
+                             @Nullable View launchSourceView, boolean playRipple) {
         if (entry.appRef.packageName.startsWith("injected.test")) {
             return;
         }
+        if (playRipple) dispatchLaunchRipple(entry, launchSourceView);
         Context context = getContext();
         if (entry.appRef.clonedProfile) {
             LaunchAnimationContext launchAnimationContext = shouldUseTouchLaunchAnimation(launchSourceView)
@@ -2452,7 +2529,25 @@ public final class SuggestionBarView extends GridLayout {
     private void launchEntryFromTouch(@NonNull View sourceView, @NonNull LauncherAppEntry entry, @Nullable TerminalView terminalView) {
         boolean touchAnimation = shouldUseTouchLaunchAnimation(sourceView);
         long launchDelay = touchAnimation ? APP_LAUNCH_TOUCH_DELAY_MS : 0L;
-        postDelayed(() -> launchEntry(entry, terminalView, touchAnimation ? sourceView : null), launchDelay);
+        dispatchLaunchRipple(entry, sourceView);
+        Runnable launch = () -> launchEntry(entry, terminalView,
+            touchAnimation ? sourceView : null, false);
+        if (launchDelay == 0L) {
+            launch.run();
+        } else {
+            postDelayed(launch, launchDelay);
+        }
+    }
+
+    public void setLaunchRippleListener(@Nullable LaunchRippleListener listener) {
+        launchRippleListener = listener;
+    }
+
+    private void dispatchLaunchRipple(@NonNull LauncherAppEntry entry, @Nullable View sourceView) {
+        if (launchRippleListener == null) return;
+        Drawable icon = sourceView instanceof ImageView
+            ? ((ImageView) sourceView).getDrawable() : null;
+        launchRippleListener.onLaunchRipple(entry.appRef.packageName, icon, sourceView);
     }
 
     private List<LauncherAppEntry> entriesForPinnedItems(@NonNull List<PinnedItem> source) {
@@ -7391,7 +7486,13 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private boolean shouldUseTouchLaunchAnimation(@Nullable View sourceView) {
-        return sourceView != null;
+        if (sourceView == null) return false;
+        try {
+            return android.provider.Settings.Global.getFloat(getContext().getContentResolver(),
+                android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f;
+        } catch (Throwable ignored) {
+            return true;
+        }
     }
 
     private void animateLaunchPressDown(@NonNull View sourceView) {

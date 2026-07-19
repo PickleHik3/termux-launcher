@@ -476,6 +476,14 @@ public final class TermuxInAppKeyboard {
         selectRelativeLayout(-1);
     }
 
+    /** Forwards the default-dock launch wave into the embedded key renderer. */
+    public void animateLaunchWave(int color, float originXOnScreen) {
+        if (mKeyboardView == null || !isVisible()) return;
+        int[] location = new int[2];
+        mKeyboardView.getLocationOnScreen(location);
+        mKeyboardView.animateLaunchWave(color, originXOnScreen - location[0]);
+    }
+
     /** Applies strict activity-wide system-IME suppression while embedded mode is enabled. */
     public void suppressSystemIme() {
         if (!mEnabled || mDestroyed || mHost == null || mExternalTextInputActive)
@@ -495,8 +503,10 @@ public final class TermuxInAppKeyboard {
             KeyboardUtils.hideSoftKeyboard(activity, terminalView);
             KeyboardUtils.setDisableSoftKeyboardFlags(activity);
             int softInputMode = activity.getWindow().getAttributes().softInputMode;
-            softInputMode = (softInputMode & ~WindowManager.LayoutParams.SOFT_INPUT_MASK_STATE)
-                | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN;
+            softInputMode = (softInputMode & ~(WindowManager.LayoutParams.SOFT_INPUT_MASK_STATE
+                | WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST))
+                | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
+                | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING;
             activity.getWindow().setSoftInputMode(softInputMode);
             Log.i("KBTRACE", "suppress after visible=" + mVisible
                 + " container=" + requireContainer().getVisibility()
@@ -520,6 +530,7 @@ public final class TermuxInAppKeyboard {
         if (!mEnabled || mDestroyed || mHost == null || mExternalTextInputActive)
             return;
         mExternalTextInputActive = true;
+        mHost.onExternalTextInputStarted();
         resetInputPipeline();
         setContainerVisible(false);
         mHost.requestAccessoryGeometrySync();
@@ -542,11 +553,17 @@ public final class TermuxInAppKeyboard {
         });
     }
 
+    /** Returns whether an explicit launcher-owned text field currently owns the system IME. */
+    public boolean isExternalTextInputActive() {
+        return mExternalTextInputActive;
+    }
+
     /** Restore the embedded keyboard and its terminal-wide IME suppression after external input. */
     public void endExternalTextInput() {
         if (!mEnabled || mDestroyed || mHost == null || !mExternalTextInputActive)
             return;
         mExternalTextInputActive = false;
+        mHost.onExternalTextInputEnded();
         if (mVisible)
             showInternal();
         suppressSystemIme();

@@ -91,7 +91,7 @@ public class TermuxInAppKeyboardTest {
         assertEquals(1, mHost.attachCount);
         assertTrue(KeyboardUtils.areDisableSoftKeyboardFlagsSet(mActivity));
         int suppressedMode = mActivity.getWindow().getAttributes().softInputMode;
-        assertEquals(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN,
+        assertEquals(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING,
             suppressedMode & WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST);
         assertEquals(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN,
             suppressedMode & WindowManager.LayoutParams.SOFT_INPUT_MASK_STATE);

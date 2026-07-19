@@ -1,5 +1,8 @@
 package juloo.keyboard2;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.media.AudioManager;
@@ -15,6 +18,7 @@ import android.util.AttributeSet;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.animation.DecelerateInterpolator;
 import java.util.Objects;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -67,12 +71,17 @@ public class Keyboard2View extends View
   private final Paint _fxFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _fxStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _fxHaloPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+  private final Paint _launchWavePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final SparseArray<Trail> _trails = new SparseArray<Trail>();
   private final SparseArray<TouchFx> _touchFx = new SparseArray<TouchFx>();
   private final ArrayList<TouchFx> _releasedTouchFx = new ArrayList<TouchFx>();
 
   private static final long PRESS_RAMP_MS = 72L;
   private static final long RELEASE_FADE_MS = 190L;
+  private ValueAnimator _launchWaveAnimator;
+  private float _launchWaveProgress = -1f;
+  private float _launchWaveOriginX;
+  private int _launchWaveColor;
 
   private final RectF _tmpRect = new RectF();
 
@@ -136,6 +145,31 @@ public class Keyboard2View extends View
     _fxStrokePaint.setColor(_theme.pressedColor);
     _fxHaloPaint.setColor(_theme.pressedColor);
     setBackgroundColor(withOpacity(_theme.colorKeyboard, _theme.opacity));
+  }
+
+  /** Brief host-triggered wave that tints and lifts each key as the dock ripple reaches it. */
+  public void animateLaunchWave(int color, float originX)
+  {
+    requireMainThread();
+    if (_launchWaveAnimator != null)
+      _launchWaveAnimator.cancel();
+    _launchWaveColor = color;
+    _launchWaveOriginX = Math.max(0f, Math.min(getWidth(), originX));
+    _launchWaveAnimator = ValueAnimator.ofFloat(0f, 1f);
+    _launchWaveAnimator.setDuration(360L);
+    _launchWaveAnimator.setInterpolator(new DecelerateInterpolator(1.35f));
+    _launchWaveAnimator.addUpdateListener(animation -> {
+      _launchWaveProgress = (Float)animation.getAnimatedValue();
+      invalidate();
+    });
+    _launchWaveAnimator.addListener(new AnimatorListenerAdapter() {
+      @Override public void onAnimationEnd(Animator animation)
+      {
+        _launchWaveProgress = -1f;
+        invalidate();
+      }
+    });
+    _launchWaveAnimator.start();
   }
 
   /** Per-key colors supplied by a host-side color-scheme editor. Null fields inherit the theme. */
@@ -739,10 +773,16 @@ public class Keyboard2View extends View
         boolean isKeyDown = _pointers.isKeyDown(k);
         TouchFx touchFx = findTouchFx(k);
         float fxStrength = touchFx == null ? 0f : touchFx.strength(now);
+        float launchStrength = launchWaveStrength(x + keyW / 2f, y + keyH / 2f);
         int keySave = canvas.save();
         if (touchFx != null && !touchFx.swiped && fxStrength > 0f)
         {
           float scale = 1f - 0.035f * fxStrength;
+          canvas.scale(scale, scale, x + keyW / 2f, y + keyH / 2f);
+        }
+        if (launchStrength > 0f)
+        {
+          float scale = 1f + 0.035f * launchStrength;
           canvas.scale(scale, scale, x + keyW / 2f, y + keyH / 2f);
         }
         Theme.Computed.Key tc_key;
@@ -760,6 +800,14 @@ public class Keyboard2View extends View
         drawKeyFrame(canvas, x, y, keyW, keyH, tc_key,
             isKeyDown || colorOverride == null ? null : colorOverride.keyBackground,
             isKeyDown || colorOverride == null ? null : colorOverride.borderColor);
+        if (launchStrength > 0f)
+        {
+          _launchWavePaint.setColor(withAlpha(_launchWaveColor,
+              Math.round(92f * launchStrength)));
+          _tmpRect.set(x, y, x + keyW, y + keyH);
+          canvas.drawRoundRect(_tmpRect, tc_key.border_radius, tc_key.border_radius,
+              _launchWavePaint);
+        }
         if (touchFx != null && fxStrength > 0f)
           drawTouchFx(canvas, touchFx, x, y, keyW, keyH, tc_key.border_radius,
               fxStrength);
@@ -799,6 +847,21 @@ public class Keyboard2View extends View
       }
     if (animateNextFrame || !_releasedTouchFx.isEmpty())
       postInvalidateOnAnimation();
+  }
+
+  private float launchWaveStrength(float keyX, float keyY)
+  {
+    if (_launchWaveProgress < 0f || getWidth() <= 0 || getHeight() <= 0)
+      return 0f;
+    float maxRadius = (float)Math.hypot(getWidth(), getHeight()) * 0.92f;
+    float waveRadius = maxRadius * _launchWaveProgress;
+    float distance = (float)Math.hypot(keyX - _launchWaveOriginX, keyY);
+    float band = Math.max(18f, getHeight() * 0.16f);
+    float strength = 1f - Math.abs(distance - waveRadius) / band;
+    strength = Math.max(0f, Math.min(1f, strength));
+    // The wave fades before the bottom edge rather than pooling against it.
+    float bottomFade = 1f - Math.max(0f, keyY / Math.max(1f, getHeight()) - 0.72f) / 0.28f;
+    return strength * Math.max(0f, bottomFade) * (1f - 0.35f * _launchWaveProgress);
   }
 
   private void pruneReleasedTouchFx(long now)
@@ -889,6 +952,8 @@ public class Keyboard2View extends View
   @Override
   public void onDetachedFromWindow()
   {
+    if (_launchWaveAnimator != null)
+      _launchWaveAnimator.cancel();
     resetInputStateInternal(true);
     requestDisallowIntercept(false);
     super.onDetachedFromWindow();

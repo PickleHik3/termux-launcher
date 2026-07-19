@@ -129,7 +129,16 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
     @Override
     public void onGlobalLayout() {
         if (mActivity == null || !mActivity.isVisible()) return;
-        if (mActivity.shouldDelayRootMarginAdjustments()) return;
+
+        // A resumed launcher may inherit the previous app's visible-frame/IME snapshot. Until an
+        // input flow in this activity requests the IME, force the terminal and dock to the bottom.
+        if (!mActivity.shouldAcceptSystemImeLayout()) {
+            FrameLayout.LayoutParams inheritedParams = (FrameLayout.LayoutParams) getLayoutParams();
+            if (inheritedParams.bottomMargin != 0) commitBottomMargin(inheritedParams, 0);
+            marginBottom = 0;
+            lastMarginBottom = 0;
+            return;
+        }
 
         // The embedded keyboard suppresses the system IME for the whole activity; any "IME
         // visible" reading below is then a stale visible-frame artifact carried over from the

@@ -123,6 +123,7 @@ public class TerminalToolbarViewPager {
                             mActivity.suppressSystemImeForInAppKeyboard();
                             return;
                         }
+                        mActivity.onSystemImeRequested();
                         KeyboardUtils.showSoftKeyboard(mActivity, editText);
                     }, 120);
                 }

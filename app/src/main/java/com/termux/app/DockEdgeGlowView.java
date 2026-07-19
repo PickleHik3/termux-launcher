@@ -43,6 +43,8 @@ public class DockEdgeGlowView extends View {
     private float glowLevel = 0f;       // 0..1 overall intensity (fades in on press, out on release)
     private float tiltAmount = 0f;      // 0..1 normalized plank tilt magnitude
     private float hotAngleDeg = -90f;   // perimeter angle the edge light pools toward (screen space)
+    private int launchCollisionColor = accentColor;
+    private float launchCollisionLevel;
 
     public DockEdgeGlowView(Context context) {
         super(context);
@@ -104,6 +106,13 @@ public class DockEdgeGlowView extends View {
         invalidate();
     }
 
+    /** Brief inward wall response when a capsule launch wave reaches its rounded boundary. */
+    public void setLaunchCollisionState(int color, float level) {
+        launchCollisionColor = color;
+        launchCollisionLevel = clamp01(level);
+        invalidate();
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         int w = getWidth();
@@ -124,8 +133,15 @@ public class DockEdgeGlowView extends View {
         // backdrop (API 33+). This view only adds the INTERACTIVE response on touch: an accent rim
         // that swells under the finger and a specular catch-light that glides with the tilt. At rest
         // (touch == 0) it draws nothing, so there is no static "inside rim" line over the glass.
-        if (touch <= 0.02f && tiltAmount <= 0.02f) {
+        if (touch <= 0.02f && tiltAmount <= 0.02f && launchCollisionLevel <= 0.02f) {
             return;
+        }
+        if (launchCollisionLevel > 0.02f) {
+            rimPaint.setShader(null);
+            rimPaint.setStrokeWidth(density * (3.5f + 5f * launchCollisionLevel));
+            rimPaint.setColor(withAlpha(launchCollisionColor,
+                Math.round(118f * launchCollisionLevel)));
+            canvas.drawRoundRect(rimRect, r, r, rimPaint);
         }
         rimPaint.setShader(null);
         rimPaint.setStrokeWidth(density * (1.15f + (0.55f * touch)));

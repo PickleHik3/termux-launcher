@@ -53,6 +53,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import androidx.annotation.NonNull;
 import androidx.drawerlayout.widget.DrawerLayout;
 
 public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
@@ -214,7 +215,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 return;
             }
             if (!KeyboardUtils.areDisableSoftKeyboardFlagsSet(mActivity))
-                KeyboardUtils.showSoftKeyboard(mActivity, mActivity.getTerminalView());
+                showSystemSoftKeyboard(mActivity.getTerminalView());
             else
                 Logger.logVerbose(LOG_TAG, "Not showing soft keyboard onSingleTapUp since its disabled");
         }
@@ -249,8 +250,19 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     @SuppressLint("RtlHardcoded")
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent e, TerminalSession currentSession) {
+        if (mActivity.handleTerminalAppSearchKey(keyCode))
+            return true;
         if (mSuggestionBarCallback != null && mActivity.shouldProcessSuggestionBarKeyEvent(keyCode)) {
-            mSuggestionBarCallback.reloadSuggestionBar(keyCode == KeyEvent.KEYCODE_DEL, keyCode == KeyEvent.KEYCODE_ENTER);
+            if (keyCode == KeyEvent.KEYCODE_DEL) {
+                // TerminalView invokes the client before writing the backspace; refresh from the
+                // emulator on the next main-loop turn so deleting '%' removes focus immediately.
+                TerminalView terminalView = mActivity.getTerminalView();
+                if (terminalView != null)
+                    terminalView.post(() ->
+                        mSuggestionBarCallback.reloadSuggestionBar(true, false));
+            } else {
+                mSuggestionBarCallback.reloadSuggestionBar(false, keyCode == KeyEvent.KEYCODE_ENTER);
+            }
         }
         if (handleVirtualKeys(keyCode, e, true))
             return true;
@@ -566,7 +578,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                     mActivity.getTerminalView().postDelayed(getShowSoftKeyboardRunnable(), 500);
                     mActivity.getTerminalView().requestFocus();
                 } else
-                    KeyboardUtils.showSoftKeyboard(mActivity, mActivity.getTerminalView());
+                    showSystemSoftKeyboard(mActivity.getTerminalView());
             }
         } else // If soft keyboard toggle behaviour is show/hide
         {
@@ -577,6 +589,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             } else {
                 Logger.logVerbose(LOG_TAG, "Showing/Hiding soft keyboard on toggle");
                 KeyboardUtils.clearDisableSoftKeyboardFlags(mActivity);
+                mActivity.onSystemImeRequested();
                 KeyboardUtils.toggleSoftKeyboard(mActivity);
             }
         }
@@ -638,7 +651,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                         return;
                     }
                     Logger.logVerbose(LOG_TAG, "Showing soft keyboard for toolbar text input on focus change");
-                    KeyboardUtils.showSoftKeyboard(mActivity, textInputView);
+                    showSystemSoftKeyboard(textInputView);
                     return;
                 }
                 if (hasFocus || textInputViewHasFocus) {
@@ -667,7 +680,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 mActivity.getTerminalView().postDelayed(getShowSoftKeyboardRunnable(), 140);
                 mActivity.getTerminalView().postDelayed(getShowSoftKeyboardRunnable(), 320);
             } else {
-                KeyboardUtils.showSoftKeyboard(mActivity, mActivity.getTerminalView());
+                showSystemSoftKeyboard(mActivity.getTerminalView());
                 mActivity.getTerminalView().postDelayed(getShowSoftKeyboardRunnable(), 300);
             }
         }
@@ -681,10 +694,15 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                     suppressSystemImeForInAppKeyboard();
                     return;
                 }
-                KeyboardUtils.showSoftKeyboard(mActivity, mActivity.getTerminalView());
+                showSystemSoftKeyboard(mActivity.getTerminalView());
             };
         }
         return mShowSoftKeyboardRunnable;
+    }
+
+    private void showSystemSoftKeyboard(@NonNull View target) {
+        mActivity.onSystemImeRequested();
+        KeyboardUtils.showSoftKeyboard(mActivity, target);
     }
 
     private boolean isInAppKeyboardEnabled() {

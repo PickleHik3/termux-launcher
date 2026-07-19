@@ -113,6 +113,7 @@
             android:taskAffinity=".TermuxActivity"
             android:resizeableActivity="true"
             android:theme="@style/Theme.TermuxActivity.DayNight.NoActionBar"
+            android:windowSoftInputMode="stateAlwaysHidden|adjustNothing"
             tools:targetApi="o">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

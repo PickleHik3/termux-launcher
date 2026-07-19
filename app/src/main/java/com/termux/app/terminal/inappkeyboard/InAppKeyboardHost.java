@@ -48,6 +48,12 @@ public interface InAppKeyboardHost extends HostActions {
     /** Re-run the pre-in-app-keyboard soft-input policy exactly once after disabling the feature. */
     void restoreLegacySoftKeyboardState();
 
+    /** Allows stable IME insets after an activity-owned external text-input request. */
+    default void onExternalTextInputStarted() {}
+
+    /** Drops any late IME snapshot after the external text-input surface closes. */
+    default void onExternalTextInputEnded() {}
+
     /** Execute a view mutation on the activity main thread. */
     void runOnMain(Runnable runnable);
 }
