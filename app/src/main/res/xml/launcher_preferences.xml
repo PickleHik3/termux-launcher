@@ -19,6 +19,13 @@
             android:defaultValue="true" />
 
         <SwitchPreferenceCompat
+            app:key="app_launcher_row_haptics"
+            app:title="@string/termux_app_launcher_row_haptics_title"
+            app:summary="@string/termux_app_launcher_row_haptics_summary"
+            app:dependency="app_launcher_apps_row_enabled"
+            android:defaultValue="true" />
+
+        <SwitchPreferenceCompat
             app:key="app_launcher_notification_dots"
             app:title="@string/termux_app_launcher_notification_dots_title"
             app:summary="@string/termux_app_launcher_notification_dots_summary"

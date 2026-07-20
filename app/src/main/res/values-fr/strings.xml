@@ -60,7 +60,6 @@
     <string name="action_kill_process">Tuer le processus (%d)</string>
     <string name="action_style_terminal">Style</string>
     <string name="action_set_background_image">Définir l\'image d\'arrière-plan</string>
-    <string name="action_remove_background_image">Supprimer l\'image d\'arrière-plan</string>
     <string name="action_toggle_keep_screen_on">Gardez l\'écran allumé</string>
     <string name="action_open_help">Aide</string>
     <string name="bootstrap_error_title">Impossible d\'installer le bootstrap</string>

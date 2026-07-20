@@ -20,6 +20,35 @@ public final class AccessoryStackLayoutPolicy {
         return Math.round(safeDensity * (3f + (Math.max(0f, safeIconScale - 1f) * 2f)));
     }
 
+    /** Mirrors SuggestionBarView's icon-to-row fill curve so row sizing can grow without clipping. */
+    public static float computeDockIconFillRatio(float iconScale) {
+        float normalized = Math.max(0f, Math.min(1f, (iconScale - 1f) / 0.8f));
+        return 0.68f + (normalized * 0.16f);
+    }
+
+    /** Piecewise-linear preset curve with endpoint extrapolation for legacy free-form values. */
+    public static float interpolatePresetCurve(float progress, float[] progressPoints,
+                                               float[] valuePoints) {
+        if (progressPoints == null || valuePoints == null || progressPoints.length == 0
+            || progressPoints.length != valuePoints.length) {
+            throw new IllegalArgumentException("Preset progress/value arrays must have equal non-zero length");
+        }
+        if (progressPoints.length == 1) return valuePoints[0];
+        int segment = 0;
+        if (progress >= progressPoints[progressPoints.length - 1]) {
+            segment = progressPoints.length - 2;
+        } else {
+            while (segment < progressPoints.length - 2 && progress > progressPoints[segment + 1]) {
+                segment++;
+            }
+        }
+        float startProgress = progressPoints[segment];
+        float endProgress = progressPoints[segment + 1];
+        if (Math.abs(endProgress - startProgress) < 0.000001f) return valuePoints[segment];
+        float fraction = (progress - startProgress) / (endProgress - startProgress);
+        return valuePoints[segment] + ((valuePoints[segment + 1] - valuePoints[segment]) * fraction);
+    }
+
     public static int computePageIndicatorBandHeightPx(boolean azEnabled, float density) {
         if (!azEnabled)
             return 0;

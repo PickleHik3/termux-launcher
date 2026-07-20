@@ -113,6 +113,7 @@
             android:taskAffinity=".TermuxActivity"
             android:resizeableActivity="true"
             android:theme="@style/Theme.TermuxActivity.DayNight.NoActionBar"
+            android:windowSoftInputMode="stateAlwaysHidden|adjustNothing"
             tools:targetApi="o">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -156,6 +157,14 @@
             android:label="@string/application_name"
             android:parentActivityName=".app.TermuxActivity"
             android:resizeableActivity="true"
+            tools:targetApi="o" />
+
+        <activity
+            android:name=".app.activities.OnboardingActivity"
+            android:exported="false"
+            android:label="@string/onboarding_activity_title"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.TermuxApp.Onboarding"
             tools:targetApi="o" />
 
         <activity

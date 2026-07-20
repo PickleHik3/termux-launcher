@@ -19,7 +19,8 @@ import android.view.View;
 final class DockPlankController implements Choreographer.FrameCallback {
 
     private static final float MAX_TILT_DEG = 4f;
-    private static final float DT = 1f / 60f;
+    private static final float MIN_DT = 1f / 120f;
+    private static final float MAX_DT = 1f / 30f;
     private static final float SETTLE_EPSILON = 4e-4f;
 
     private final View mPlank;       // the transformed slab (whole dock stack)
@@ -34,6 +35,7 @@ final class DockPlankController implements Choreographer.FrameCallback {
     // Hinge mode (edge-to-edge "normal" dock): pivot at the screen-bottom edge so the bar tips back
     // from the bottom toward the finger, instead of the capsule's free-floating centre tilt+dip.
     private boolean mHingeMode = false;
+    private long mLastFrameTimeNanos;
 
     // Spring channels: tilt about X/Y, press dip, rim glow, and the specular's horizontal position.
     private final Spring mRx = new Spring(0f, 170f, 17f);
@@ -169,6 +171,7 @@ final class DockPlankController implements Choreographer.FrameCallback {
     private void kick() {
         if (!mFrameScheduled) {
             mFrameScheduled = true;
+            mLastFrameTimeNanos = 0L;
             Choreographer.getInstance().postFrameCallback(this);
         }
     }
@@ -176,13 +179,19 @@ final class DockPlankController implements Choreographer.FrameCallback {
     @Override
     public void doFrame(long frameTimeNanos) {
         mFrameScheduled = false;
+        // First frame has no prior timestamp; use the minimum stable timestep.
+        float dt = mLastFrameTimeNanos == 0L
+            ? MIN_DT
+            : (frameTimeNanos - mLastFrameTimeNanos) / 1_000_000_000f;
+        mLastFrameTimeNanos = frameTimeNanos;
+        dt = Math.max(MIN_DT, Math.min(MAX_DT, dt));
         boolean moving = false;
-        moving |= mRx.tick(mReducedMotion);
-        moving |= mRy.tick(mReducedMotion);
-        moving |= mPress.tick(mReducedMotion);
-        moving |= mGlowLevel.tick(mReducedMotion);
-        moving |= mLightX.tick(mReducedMotion);
-        moving |= mLightY.tick(mReducedMotion);
+        moving |= mRx.tick(mReducedMotion, dt);
+        moving |= mRy.tick(mReducedMotion, dt);
+        moving |= mPress.tick(mReducedMotion, dt);
+        moving |= mGlowLevel.tick(mReducedMotion, dt);
+        moving |= mLightX.tick(mReducedMotion, dt);
+        moving |= mLightY.tick(mReducedMotion, dt);
         applyToViews();
         if (moving) {
             kick();
@@ -269,15 +278,15 @@ final class DockPlankController implements Choreographer.FrameCallback {
         }
 
         /** @return true if the spring is still in motion and needs another frame. */
-        boolean tick(boolean reduced) {
+        boolean tick(boolean reduced, float dt) {
             if (reduced) {
                 value = target;
                 vel = 0f;
                 return false;
             }
             float accel = stiffness * (target - value) - damping * vel;
-            vel += accel * DT;
-            value += vel * DT;
+            vel += accel * dt;
+            value += vel * dt;
             return Math.abs(target - value) > SETTLE_EPSILON || Math.abs(vel) > SETTLE_EPSILON;
         }
     }

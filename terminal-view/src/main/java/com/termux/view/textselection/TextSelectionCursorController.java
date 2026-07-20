@@ -12,6 +12,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import androidx.annotation.Nullable;
 import com.termux.terminal.TerminalBuffer;
+import com.termux.terminal.TerminalRow;
 import com.termux.terminal.WcWidth;
 import com.termux.view.R;
 import com.termux.view.TerminalView;
@@ -94,15 +95,43 @@ public class TextSelectionCursorController implements CursorController {
         mSelX1 = mSelX2 = columnAndRow[0];
         mSelY1 = mSelY2 = columnAndRow[1];
         TerminalBuffer screen = terminalView.mEmulator.getScreen();
-        if (!" ".equals(screen.getSelectedText(mSelX1, mSelY1, mSelX1, mSelY1))) {
-            // Selecting something other than whitespace. Expand to word.
-            while (mSelX1 > 0 && !"".equals(screen.getSelectedText(mSelX1 - 1, mSelY1, mSelX1 - 1, mSelY1))) {
+        TerminalRow line = screen.allocateFullLineIfNecessary(screen.externalToInternalRow(mSelY1));
+        char[] text = line.mText;
+        int startIndex = line.findStartOfColumn(mSelX1);
+        if (startIndex >= 0 && startIndex < text.length && text[startIndex] != ' ') {
+            // Selecting something other than whitespace. Expand to word by reading the row text once.
+            while (mSelX1 > 0) {
+                int prevIndex = line.findStartOfColumn(mSelX1 - 1);
+                if (prevIndex < 0 || prevIndex >= text.length || text[prevIndex] == ' ') break;
                 mSelX1--;
             }
-            while (mSelX2 < terminalView.mEmulator.mColumns - 1 && !"".equals(screen.getSelectedText(mSelX2 + 1, mSelY1, mSelX2 + 1, mSelY1))) {
+            while (mSelX2 < terminalView.mEmulator.mColumns - 1) {
+                int nextIndex = line.findStartOfColumn(mSelX2 + 1);
+                if (nextIndex < 0 || nextIndex >= text.length || text[nextIndex] == ' ') break;
                 mSelX2++;
             }
         }
+    }
+
+    /** Select all active rows, including scrollback, without synthesizing a long-press event. */
+    public void selectAll() {
+        if (terminalView.mEmulator == null)
+            return;
+        TerminalBuffer screen = terminalView.mEmulator.getScreen();
+        int scrollbackRows = Math.max(0,
+            screen.getActiveRows() - terminalView.mEmulator.mRows);
+        mSelX1 = 0;
+        mSelY1 = -scrollbackRows;
+        mSelX2 = Math.max(0, terminalView.mEmulator.mColumns - 1);
+        mSelY2 = Math.max(0, terminalView.mEmulator.mRows - 1);
+        mStartHandle.positionAtCursor(mSelX1, mSelY1, true);
+        mEndHandle.positionAtCursor(mSelX2 + 1, mSelY2, true);
+        if (!mIsSelectingText)
+            setActionModeCallBacks();
+        // Programmatic selection should be immediately dismissible; the 300ms guard only exists
+        // to protect a touch long-press from its own trailing events.
+        mShowStartTime = 0L;
+        mIsSelectingText = true;
     }
 
     public void setActionModeCallBacks() {

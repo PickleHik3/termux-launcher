@@ -183,9 +183,11 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             configureTermuxFloatPreference(context);
             configureTermuxTaskerPreference(context);
             configureTermuxWidgetPreference(context);
+            configureQuickStartPreference(context);
             configureAboutPreference(context);
             configureOpenSourceLicensesPreference(context);
             configureDonatePreference(context);
+            configureReportIssuePreference(context);
         }
 
         @Override
@@ -216,6 +218,16 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 default:
                     pillPreference.setPill("OFF", PillPreference.Tone.NEUTRAL);
                     break;
+            }
+        }
+
+        private void configureQuickStartPreference(@NonNull Context context) {
+            Preference quickStartPreference = findPreference("quick_start_tour");
+            if (quickStartPreference != null) {
+                quickStartPreference.setOnPreferenceClickListener(preference -> {
+                    startActivity(OnboardingActivity.createIntent(context));
+                    return true;
+                });
             }
         }
 
@@ -342,6 +354,16 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 return new String(output.toByteArray(), StandardCharsets.UTF_8);
             } catch (IOException e) {
                 return "Unable to read bundled license text: " + e.getMessage();
+            }
+        }
+
+        private void configureReportIssuePreference(@NonNull Context context) {
+            Preference reportIssuePreference = findPreference("report_issue");
+            if (reportIssuePreference != null) {
+                reportIssuePreference.setOnPreferenceClickListener(preference -> {
+                    ShareUtils.openUrl(context, "https://github.com/PickleHik3/termux-launcher/issues");
+                    return true;
+                });
             }
         }
 

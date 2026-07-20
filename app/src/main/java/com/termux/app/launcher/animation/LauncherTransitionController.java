@@ -35,7 +35,7 @@ public final class LauncherTransitionController {
     }
 
     public boolean isLauncherAnimationEnabled() {
-        return true;
+        return preferences.isAppLauncherAnimationsEnabled();
     }
 
     public boolean isSafeModeEnabled() {

@@ -93,6 +93,7 @@
     <string name="wallpaper_target_lock_screen">Lock Screen</string>
     <string name="wallpaper_target_home_and_lock_screen">Home &amp; Lock Screen</string>
     <string name="action_open_settings">Settings</string>
+    <string name="action_glass_lab">Glass Lab</string>
     <string name="msg_generating_report">Generating Report</string>
     <string name="msg_add_termux_debug_info">Add &TERMUX_APP_NAME; debug info to report?</string>
 
@@ -149,6 +150,118 @@
     <string name="settings_root_assistant_header">Assistant</string>
     <string name="settings_root_launcher_header">Launcher</string>
     <string name="settings_root_system_info_header">System &amp; Info</string>
+    <string name="onboarding_settings_title">Quick start tour</string>
+    <string name="onboarding_settings_summary">Learn the launcher surface, search, styling, shell bridge, and optional AI tools</string>
+    <string name="onboarding_activity_title">Quick start</string>
+    <string name="onboarding_brand">TERMUX LAUNCHER</string>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_back">Back</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_finish">Start exploring</string>
+    <string name="onboarding_progress">Step %1$d of %2$d</string>
+    <string name="onboarding_capture_number">%1$d / TL</string>
+    <string name="onboarding_choose_home">Choose default Home app</string>
+    <string name="onboarding_read_guide">Read the full guide</string>
+    <string name="onboarding_settings_unavailable">Android could not open that settings page.</string>
+    <string name="onboarding_next_arrow">Next →</string>
+    <string name="onboarding_set_home">Set Termux as home</string>
+    <string name="onboarding_install_starter_profile">Install the starter profile</string>
+    <string name="onboarding_explore_first">Explore first</string>
+    <string name="onboarding_starter_profile_todo">The starter profile installer is not available yet.</string>
+
+    <string name="onboarding_new_welcome_kicker">Welcome</string>
+    <string name="onboarding_new_welcome_title">A full Termux terminal as your Android home</string>
+    <string name="onboarding_new_welcome_body">Termux reimagined as a home launcher. You get the full Termux terminal and package ecosystem, alongside an app dock, instant search, an on-device AI backend, and enough Material polish to make it feel at home on Android.</string>
+    <string name="onboarding_new_launch_kicker">Launch</string>
+    <string name="onboarding_new_launch_title">Open anything, your way</string>
+    <string name="onboarding_new_launch_body">Tap an app in the dock, or scrub across the A–Z rail to filter. Slide upwards into the results and let go over an app to launch it. From the terminal, type % followed by an app name to search instantly.</string>
+    <string name="onboarding_new_personalise_kicker">Personalise</string>
+    <string name="onboarding_new_personalise_title">Glass that follows your wallpaper</string>
+    <string name="onboarding_new_personalise_body">The terminal, dock, and keyboard share colours from your wallpaper, with a glass finish you can tune to your liking. Adjust the blur, spacing, colours, and icon packs anytime under Settings → Appearance.</string>
+    <string name="onboarding_new_notifications_kicker">Notifications</string>
+    <string name="onboarding_new_notifications_title">Reply to notifications, made easy</string>
+    <string name="onboarding_new_notifications_body">Quickly respond to your messages and alerts by swiping up from a pinned app icon that has a pending notification — without leaving home.</string>
+    <string name="onboarding_new_ready_kicker">You’re set</string>
+    <string name="onboarding_new_ready_title">Set it as home and go</string>
+    <string name="onboarding_new_ready_body">That covers the launcher itself. From here you can shape the shell however you like, or start with the prebuilt profile and tweak it as you go — Fish, tmux, an Oh My Posh prompt, Shizuku system stats, Material theming, extra keys, zoxide, eza, and more.</string>
+
+    <string name="onboarding_chip_full_terminal">full terminal</string>
+    <string name="onboarding_chip_app_dock">app dock</string>
+    <string name="onboarding_chip_ai_backends">LiteRT &amp; MNN backends</string>
+    <string name="onboarding_chip_percent_search">% search</string>
+    <string name="onboarding_chip_az_rail">A–Z rail</string>
+    <string name="onboarding_chip_long_press">long-press to pin</string>
+    <string name="onboarding_chip_material_palette">Material palette</string>
+    <string name="onboarding_chip_glass_blur">glass &amp; blur</string>
+    <string name="onboarding_chip_icon_packs">icon packs</string>
+    <string name="onboarding_chip_swipe_up">swipe up</string>
+    <string name="onboarding_chip_inline_reply">inline reply</string>
+    <string name="onboarding_chip_pinned_apps">pinned apps</string>
+
+    <string name="onboarding_duration_20">▶ 20s tour</string>
+    <string name="onboarding_duration_15">▶ 15s</string>
+    <string name="onboarding_duration_10">▶ 10s</string>
+    <string name="onboarding_media_home">Drop the full-screen recording (1080×2300): launcher home + dock</string>
+    <string name="onboarding_media_search">Drop the full-screen recording (1080×2300): app search + A–Z swipe</string>
+    <string name="onboarding_media_appearance">Drop the full-screen recording (1080×2300): appearance / theming panel</string>
+    <string name="onboarding_media_notifications">Drop the full-screen recording (1080×2300): swipe up from a pinned icon to reply</string>
+    <string name="onboarding_media_ready">Drop the full-screen recording (1080×2300): tmux / Shizuku / on-device AI</string>
+
+    <string name="onboarding_welcome_eyebrow">WELCOME</string>
+    <string name="onboarding_welcome_title">Your terminal is now home</string>
+    <string name="onboarding_welcome_body">Termux Launcher keeps a real shell at the center of Android. Your sessions stay visible while familiar launcher controls sit within thumb reach.</string>
+    <string name="onboarding_welcome_code">HOME = TERMINAL + APPS</string>
+    <string name="onboarding_welcome_bullet_1">The app row keeps favorites one tap away.</string>
+    <string name="onboarding_welcome_bullet_2">The A–Z row reaches every installed app.</string>
+    <string name="onboarding_welcome_bullet_3">The dock and keyboard follow your wallpaper colors.</string>
+
+    <string name="onboarding_search_eyebrow">MOVE FAST</string>
+    <string name="onboarding_search_title">Open anything without leaving the prompt</string>
+    <string name="onboarding_search_body">Use the launcher like a touch UI, or drive it from terminal input. Ranking learns from what you open while pins always stay under your control.</string>
+    <string name="onboarding_search_code">%maps</string>
+    <string name="onboarding_search_bullet_1">Type % before a name to search apps from the terminal.</string>
+    <string name="onboarding_search_bullet_2">Drag across A–Z to filter; swipe up to launch the highlighted app.</string>
+    <string name="onboarding_search_bullet_3">Long-press an icon to pin, move, group, restyle, or inspect it.</string>
+
+    <string name="onboarding_style_eyebrow">MAKE IT YOURS</string>
+    <string name="onboarding_style_title">One Material palette, from prompt to dock</string>
+    <string name="onboarding_style_body">The terminal, dock, keyboard, icons, and tmux helpers can share Android’s wallpaper palette. Tune the glass instead of rebuilding your workspace.</string>
+    <string name="onboarding_style_code">Long-press Terminal  →  More  →  Appearance</string>
+    <string name="onboarding_style_bullet_1">Adjust terminal opacity, dock glass, spacing, and height.</string>
+    <string name="onboarding_style_bullet_2">Use themed, monochrome, or third-party icon packs.</string>
+    <string name="onboarding_style_bullet_3">Enable the in-app keyboard or keep your preferred Android keyboard.</string>
+
+    <string name="onboarding_shell_eyebrow">YOUR WORKSPACE</string>
+    <string name="onboarding_shell_title">Recreate the fish and tmux setup when you want it</string>
+    <string name="onboarding_shell_body">The illustrated guide includes a guided installer for the same secret-free fish, Oh My Posh, tmux, eza, and zoxide foundation used in the live launcher.</string>
+    <string name="onboarding_shell_code">~/setup-shell  # choose tmux, btop, or both</string>
+    <string name="onboarding_shell_bullet_1">Start with the launcher first; the shell makeover is optional.</string>
+    <string name="onboarding_shell_bullet_2">Use the repo examples as a safe base, then add your own aliases locally.</string>
+    <string name="onboarding_shell_bullet_3">Run launcherctl update-scripts after app updates without replacing your dotfiles.</string>
+
+    <string name="onboarding_bridge_eyebrow">SHELL + ANDROID</string>
+    <string name="onboarding_bridge_title">Turn launcher actions into commands</string>
+    <string name="onboarding_bridge_body">launcherctl is the authenticated bridge between your shell and Android. Use it directly, bind it to tmux keys, or call it from scripts and agents.</string>
+    <string name="onboarding_bridge_code">launcherctl launch maps</string>
+    <string name="onboarding_bridge_bullet_1">Launch apps and inspect CPU, memory, battery, thermal, and storage.</string>
+    <string name="onboarding_bridge_bullet_2">Read current media and notifications after granting listener access.</string>
+    <string name="onboarding_bridge_bullet_3">Use the local API, agent tools, or MCP bridge for automations.</string>
+
+    <string name="onboarding_optional_eyebrow">OPTIONAL POWER</string>
+    <string name="onboarding_optional_title">Add privileges and local AI only when you need them</string>
+    <string name="onboarding_optional_body">The everyday launcher works without special access. Shizuku and TAI are separate, opt-in layers with visible status and permission boundaries.</string>
+    <string name="onboarding_optional_code">Optional  ·  permission-gated  ·  local-first</string>
+    <string name="onboarding_optional_bullet_1">Shizuku adds lock, privileged shell, and richer system helpers.</string>
+    <string name="onboarding_optional_bullet_2">TAI hosts compatible language and embedding models on device.</string>
+    <string name="onboarding_optional_bullet_3">LauncherCtl exposes confirmation-gated tools to MCP-capable clients.</string>
+
+    <string name="onboarding_ready_eyebrow">READY</string>
+    <string name="onboarding_ready_title">Build the home screen that works like you do</string>
+    <string name="onboarding_ready_body">Start with the terminal and app search. Add tmux, Shizuku, notification access, or local AI later—nothing optional blocks the core launcher.</string>
+    <string name="onboarding_ready_code">Long-press Terminal  →  More  →  Quick start tour</string>
+    <string name="onboarding_ready_bullet_1">Set Termux Launcher as Home when you are comfortable.</string>
+    <string name="onboarding_ready_bullet_2">Open Settings to replay this tour or tune one feature at a time.</string>
+    <string name="onboarding_ready_bullet_3">Use the illustrated guide for recipes from beginner through advanced.</string>
     <string name="termux_preferences_title">Termux</string>
     <string name="termux_preferences_summary">Core terminal, input, and debugging settings</string>
 
@@ -166,6 +279,7 @@
     <string name="apps_bar_search_header">Launcher · Search</string>
     <string name="apps_bar_soft_keyboard_header">Soft Keyboard Behavior</string>
     <string name="apps_bar_icons_header">Icons</string>
+    <string name="personalization_header">Personalization</string>
     <string name="apps_bar_visual_header">Visual</string>
     <string name="apps_bar_maintenance_header">Defaults</string>
     <string name="apps_bar_permissions_header">Permissions</string>
@@ -210,6 +324,106 @@
                 <string name="termux_soft_keyboard_enabled_title">Soft Keyboard Enabled</string>
                 <string name="termux_soft_keyboard_enabled_off">Soft keyboard will be disabled.</string>
                 <string name="termux_soft_keyboard_enabled_on">Soft keyboard will be enabled. (Default)</string>
+
+                <!-- In-app Keyboard -->
+                <string name="termux_keyboard_preferences_title">Keyboard</string>
+                <string name="termux_keyboard_preferences_summary">Built-in terminal keyboard — themes, feedback and keys</string>
+                <string name="termux_keyboard_appearance_header">Appearance</string>
+                <string name="termux_keyboard_typing_header">Typing &amp; feedback</string>
+                <string name="termux_keyboard_advanced_header">Advanced</string>
+                <string name="termux_keyboard_credits_header">About this keyboard</string>
+                <string name="termux_keyboard_credits_text">If you like this keyboard, support its amazing developer ❤</string>
+                <string name="termux_keyboard_credits_summary">Powered by Unexpected Keyboard, an open-source project by Jules Aguillon.</string>
+                <string name="termux_keyboard_credits_github_title">Unexpected Keyboard on GitHub</string>
+                <string name="termux_keyboard_credits_play_title">Unexpected Keyboard on Google Play</string>
+                <string name="termux_in_app_keyboard_enabled_title">Use built-in keyboard</string>
+                <string name="termux_in_app_keyboard_enabled_summary">Type in the terminal with the launcher’s own keyboard instead of the Android keyboard. It stays ready when you switch back from other apps.</string>
+                <string name="termux_in_app_keyboard_theme_title">Theme</string>
+                <string name="termux_keyboard_color_scheme_title">Color scheme creator</string>
+                <string name="termux_keyboard_color_scheme_summary">Paint the background and legends of individual keys.</string>
+                <string name="termux_keyboard_color_scheme_colors">Colors</string>
+                <string name="termux_keyboard_color_scheme_edit">Edit</string>
+                <string name="termux_keyboard_color_scheme_done">Done</string>
+                <string name="termux_keyboard_color_scheme_advanced">Advanced</string>
+                <string name="termux_keyboard_color_scheme_import_base16">Import Base16</string>
+                <string name="termux_keyboard_color_scheme_base16_name_title">Import a Base16 scheme</string>
+                <string name="termux_keyboard_color_scheme_base16_name_message">Enter a Base16 name or ID from the Tinted Gallery.</string>
+                <string name="termux_keyboard_color_scheme_base16_name_hint">Catppuccin Mocha or base16-catppuccin-mocha</string>
+                <string name="termux_keyboard_color_scheme_base16_choose_file">Choose file</string>
+                <string name="termux_keyboard_color_scheme_base16_import">Import</string>
+                <string name="termux_keyboard_color_scheme_base16_name_error">Enter a theme name using letters, numbers, spaces, underscores, or hyphens.</string>
+                <string name="termux_keyboard_color_scheme_base16_downloading">Importing Base16 colors…</string>
+                <string name="termux_keyboard_color_scheme_base16_not_found">Theme not found. Check its Base16 ID in the Tinted Gallery.</string>
+                <string name="termux_keyboard_color_scheme_base16_network_error">Couldn’t download this theme. Check your connection and try again.</string>
+                <string name="termux_keyboard_color_scheme_base16_imported">Base16 colors imported</string>
+                <string name="termux_keyboard_color_scheme_base16_error">This file must contain all colors from base00 through base0F.</string>
+                <string name="termux_keyboard_color_scheme_base16_read_error">Couldn’t read this theme file.</string>
+                <string name="termux_keyboard_color_scheme_reset">Reset</string>
+                <string name="termux_keyboard_color_scheme_reset_title">Reset color scheme?</string>
+                <string name="termux_keyboard_color_scheme_reset_message">Remove all per-key colors and restore the current Material swatches.</string>
+                <string name="termux_keyboard_color_scheme_instructions">Choose a color and role, then tap or drag across keys to paint them. Tap Edit to enter exact hex colors.</string>
+                <string name="termux_keyboard_color_scheme_key_bg">Key bg</string>
+                <string name="termux_keyboard_color_scheme_key_border">Key border</string>
+                <string name="termux_keyboard_color_scheme_primary">Primary</string>
+                <string name="termux_keyboard_color_scheme_secondary">Secondary</string>
+                <string name="termux_keyboard_color_scheme_secondary_bottom">Secondary bottom override</string>
+                <string name="termux_keyboard_color_scheme_swatch">Color swatch %1$d</string>
+                <string name="termux_keyboard_color_scheme_hex_title">Enter hex color</string>
+                <string name="termux_keyboard_color_scheme_hex_error">Use #RRGGBB or #AARRGGBB</string>
+                <string name="termux_in_app_keyboard_height_adjust_title">Size &amp; shape</string>
+                <string name="termux_in_app_keyboard_height_adjust_summary">Drag to resize the keyboard, or fine-tune key spacing and corner radius.</string>
+                <string name="termux_in_app_keyboard_height_adjust_handle">Drag to adjust keyboard height</string>
+                <string name="termux_in_app_keyboard_height_adjust_confirm">Confirm keyboard adjustments</string>
+                <string name="termux_in_app_keyboard_height_adjust_cancel">Cancel keyboard adjustments</string>
+                <string name="termux_in_app_keyboard_height_adjust_confirm_symbol">✓</string>
+                <string name="termux_in_app_keyboard_height_adjust_cancel_symbol">✗</string>
+                <string name="termux_in_app_keyboard_key_spacing">Key spacing</string>
+                <string name="termux_in_app_keyboard_key_spacing_slider">Adjust space between keyboard keys</string>
+                <string name="termux_in_app_keyboard_key_corner_radius">Corner radius</string>
+                <string name="termux_in_app_keyboard_key_corner_radius_slider">Adjust keyboard key corner radius</string>
+                <string name="termux_in_app_keyboard_custom_layout_title">Custom layout</string>
+                <string name="termux_in_app_keyboard_custom_layout_summary">Load your own layout from ~/.termux/keyboard/layout.xml</string>
+                <string name="termux_keyboard_docs_header">Layout documentation</string>
+                <string name="termux_keyboard_docs_layouts_title">Creating custom layouts</string>
+                <string name="termux_keyboard_docs_layouts_summary">How to write your own layout.xml</string>
+                <string name="termux_keyboard_docs_keys_title">Possible key values</string>
+                <string name="termux_keyboard_docs_keys_summary">Every key name and value you can use in a layout</string>
+                <string-array name="termux_in_app_keyboard_theme_entries">
+                    <item>System</item>
+                    <item>Light</item>
+                    <item>Dark</item>
+                </string-array>
+                <string-array name="termux_in_app_keyboard_theme_values">
+                    <item>system</item>
+                    <item>light</item>
+                    <item>dark</item>
+                </string-array>
+                <string name="termux_in_app_keyboard_dock_match_title">Match dock</string>
+                <string name="termux_in_app_keyboard_dock_match_summary">Blend the keyboard with the dock — follow its shape, render on its frosted glass, or both.</string>
+                <string-array name="termux_in_app_keyboard_dock_match_entries">
+                    <item>None</item>
+                    <item>Shape</item>
+                    <item>Glass</item>
+                    <item>Shape + glass</item>
+                </string-array>
+                <string-array name="termux_in_app_keyboard_dock_match_values">
+                    <item>none</item>
+                    <item>shape</item>
+                    <item>glass</item>
+                    <item>both</item>
+                </string-array>
+                <string name="termux_in_app_keyboard_haptics_title">Vibrate on keypress</string>
+                <string name="termux_in_app_keyboard_haptics_summary">Gentle haptic tick for every key.</string>
+                <string name="termux_in_app_keyboard_key_sound_title">Keypress sound</string>
+                <string name="termux_in_app_keyboard_key_sound_summary">Uses the system touch-sound volume.</string>
+                <string name="termux_in_app_keyboard_font_title">Font</string>
+                <string name="termux_in_app_keyboard_font_summary_default">System default typeface.</string>
+                <string name="termux_in_app_keyboard_font_summary_custom">Custom font: %1$s</string>
+                <string name="termux_in_app_keyboard_font_pick">Choose font file…</string>
+                <string name="termux_in_app_keyboard_font_reset">Use system default</string>
+                <string name="termux_in_app_keyboard_font_error">Could not read that file as a font.</string>
+                <string name="termux_in_app_keyboard_extra_keys_title">Add keys to the keyboard</string>
+                <string name="termux_in_app_keyboard_extra_keys_summary">Choose extra editing and navigation keys to show on the layout.</string>
 
                 <!-- Soft Keyboard Only If No Hardware-->
                 <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Soft Keyboard Only If No Hardware</string>
@@ -541,12 +755,33 @@
                 
                 <string name="termux_terminal_background_opacity_title">Opacity</string>
             <!-- Extra Keys Category -->
-                <string name="termux_extrakeys_blur_radius_title">Blur</string>
-                <string name="termux_extrakeys_blur_live_wallpaper_note">For best alignment, set wallpapers through the launcher. Live wallpapers should set Blur to 0.</string>
-                <string name="termux_extrakeys_blur_live_wallpaper_active_note">Dock blur is not available while using a live wallpaper. Blur has been set to 0.</string>
-                <string name="termux_app_bar_opacity_title">Opacity</string>
+                <string name="termux_extrakeys_blur_radius_title">Blur strength</string>
+                <string name="termux_extrakeys_blur_live_wallpaper_note">Controls background blur in dp. Set to 0 for clear glass.</string>
+                <string name="termux_extrakeys_blur_live_wallpaper_active_note">Temporarily unavailable with a live wallpaper. Your value is preserved.</string>
+                <string name="termux_app_bar_opacity_title">Glass opacity</string>
+                <string name="termux_app_bar_opacity_summary">Controls the complete dock material. 0 is transparent; 100 is opaque.</string>
                 <string name="termux_dock_glass_grain_title">Glass grain</string>
                 <string name="termux_dock_glass_grain_summary">Subtle film grain over the dock glass. 0 disables it.</string>
+                <string name="termux_dock_tune_live_title">Glass Labs</string>
+                <string name="termux_dock_tune_live_summary">Tune the terminal, dock and sessions menu.</string>
+                <string name="termux_dock_tuning_title">Appearance</string>
+                <string name="termux_dock_tuning_blur">Blur</string>
+                <string name="termux_dock_tuning_opacity">Opacity</string>
+                <string name="termux_dock_tuning_grain">Grain</string>
+                <string name="termux_dock_tuning_style">Style</string>
+                <string name="termux_dock_tuning_size">Size</string>
+                <string name="termux_dock_tuning_icons">Per page</string>
+                <string name="termux_dock_tuning_terminal">Opacity</string>
+                <string name="termux_dock_tuning_sessions">Opacity</string>
+                <string name="termux_dock_tuning_section_dock">Dock</string>
+                <string name="termux_dock_tuning_section_terminal">Terminal</string>
+                <string name="termux_dock_tuning_section_sessions">Sessions</string>
+                <string name="termux_dock_tuning_done">Done</string>
+                <string name="termux_dock_tuning_cancel">Revert and close</string>
+                <string name="termux_dock_tuning_value_dp">%1$d dp</string>
+                <string name="termux_dock_tuning_value_percent">%1$d%%</string>
+                <string name="termux_app_launcher_row_haptics_title">Row haptics</string>
+                <string name="termux_app_launcher_row_haptics_summary">Subtle ticks while sliding across letters and apps.</string>
 
             <!-- App Launcher Category -->
             <string name="termux_app_launcher_header">Behavior</string>
@@ -554,8 +789,8 @@
             <string name="termux_app_launcher_layout_header">Dock layout</string>
             <string name="termux_app_launcher_appearance_header">Icons</string>
 
-                <string name="termux_app_launcher_button_count_title">Icon count</string>
-                <string name="termux_app_launcher_button_count_summary">Set the number of icons shown in the app launcher bar.</string>
+                <string name="termux_app_launcher_button_count_title">Icons per page</string>
+                <string name="termux_app_launcher_button_count_summary">Set the number of icon slots on each dock page.</string>
                 <string name="termux_app_launcher_input_char_title">Input split character</string>
                 <string name="termux_app_launcher_input_char_summary">Character used to start app search when typing in the terminal. Default: %</string>
                 <string name="termux_app_launcher_default_buttons_title">Default apps</string>
@@ -564,10 +799,6 @@
                 <string name="termux_app_launcher_most_used_page_summary">Add an extra dock page showing your most-used apps.</string>
                 <string name="termux_app_launcher_bw_icons_title">Black &amp; white icons</string>
                 <string name="termux_app_launcher_bw_icons_summary">Render app icons in grayscale.</string>
-                <string name="termux_app_launcher_icon_shadow_title">Icon shadow</string>
-                <string name="termux_app_launcher_icon_shadow_summary">Soft drop shadow that lifts dock icons off the glass. Turn off for flat custom icon packs.</string>
-                <string name="termux_app_launcher_unify_icons_title">Unify app icons</string>
-                <string name="termux_app_launcher_unify_icons_summary">Harmonize default icons with the dock: consistent size, soft shadow, and a subtle vibrancy match. Turn off to show raw app icons.</string>
                 <string name="termux_app_launcher_icon_pack_title">Icon pack</string>
                 <string name="termux_app_launcher_icon_pack_summary">Use icons from an installed launcher icon pack.</string>
                 <string name="termux_app_launcher_pinned_icon_pack_title">Pinned icon pack</string>
@@ -616,6 +847,7 @@
                 <string name="termux_app_launcher_dock_style_summary">Choose the dock surface shape.</string>
                 <string name="termux_app_launcher_dock_style_default">Default</string>
                 <string name="termux_app_launcher_dock_style_valarie_capsule">Valarie capsule</string>
+                <string name="termux_app_launcher_dock_style_capsule">Capsule</string>
                 <string name="termux_app_launcher_display_app_names_title">Display app names</string>
                 <string name="termux_app_launcher_display_app_names_summary">Show a compact name pill above the focused app while scrubbing the dock.</string>
                 <string name="termux_app_launcher_icon_scale_title">Icon scaling</string>
@@ -716,5 +948,9 @@
     <!-- Donate Preference -->
     <string name="donate_preference_title">Donate</string>
     <string name="donate_preference_summary">Support development</string>
+
+    <!-- Report Issue Preference -->
+    <string name="report_issue_preference_title">Send feedback</string>
+    <string name="report_issue_preference_summary">Report a bug or suggest an idea on GitHub</string>
 
 </resources>

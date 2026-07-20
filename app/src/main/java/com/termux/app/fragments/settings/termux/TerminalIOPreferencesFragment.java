@@ -3,6 +3,7 @@ package com.termux.app.fragments.settings.termux;
 import android.content.Context;
 import android.os.Bundle;
 import androidx.annotation.Keep;
+import androidx.annotation.Nullable;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
 import com.termux.R;

@@ -23,7 +23,6 @@
     <string name="action_kill_process">İşlemi sonlandır (%d)</string>
     <string name="action_style_terminal">Tarzı düzenle</string>
     <string name="action_font_and_color">Yazı tipi ve Renk</string>
-    <string name="action_remove_background_image">Arka plan resmini kaldır</string>
     <string name="action_toggle_keep_screen_on">Ekranı açık tut</string>
     <string name="msg_generating_report">Rapor oluşturuluyor</string>
     <string name="error_styling_not_installed">&TERMUX_STYLING_APP_NAME; Eklenti uygulaması yüklü değil.</string>

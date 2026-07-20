@@ -45,6 +45,13 @@
             app:summary="@string/termux_launcher_preferences_summary"
             app:fragment="com.termux.app.fragments.settings.termux.LauncherPreferencesFragment"/>
 
+        <Preference
+            app:key="keyboard"
+            app:icon="@drawable/ic_settings_keyboard"
+            app:title="@string/termux_keyboard_preferences_title"
+            app:summary="@string/termux_keyboard_preferences_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.KeyboardPreferencesFragment"/>
+
     </PreferenceCategory>
 
     <PreferenceCategory
@@ -108,6 +115,20 @@
             app:summary="@string/donate_preference_summary"
             app:persistent="false"
             app:isPreferenceVisible="false"/>
+
+        <Preference
+            app:key="report_issue"
+            app:icon="@drawable/ic_settings_info"
+            app:title="@string/report_issue_preference_title"
+            app:summary="@string/report_issue_preference_summary"
+            app:persistent="false"/>
+
+        <Preference
+            app:key="quick_start_tour"
+            app:icon="@drawable/ic_settings_shortcut"
+            app:title="@string/onboarding_settings_title"
+            app:summary="@string/onboarding_settings_summary"
+            app:persistent="false"/>
 
     </PreferenceCategory>
 

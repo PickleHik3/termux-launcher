@@ -12,7 +12,14 @@ set -q EDITOR; or set -gx EDITOR nvim
 fish_add_path "$HOME/.local/bin" "$HOME/.termux/bin"
 
 function __load_termux_material_colors
+    set -l shell_colors "$HOME/.termux/material-colors.sh"
     set -l colors "$HOME/.termux/material-colors.properties"
+
+    if test -r "$shell_colors"
+        source "$shell_colors"
+        return
+    end
+
     test -r "$colors"; or return
 
     while read -l line
@@ -28,7 +35,27 @@ function __load_termux_material_colors
 end
 
 __load_termux_material_colors
-functions --erase __load_termux_material_colors
+
+# The launcher rewrites its Material exports when light/dark mode or wallpaper
+# colors change. Existing shells should adopt them without being restarted.
+set -g __termux_material_colors_signature ""
+function __refresh_termux_material_colors --on-event fish_prompt
+    set -l colors "$HOME/.termux/material-colors.sh"
+    test -r "$colors"; or set colors "$HOME/.termux/material-colors.properties"
+    test -r "$colors"; or return
+
+    set -l signature (command stat -c '%Y:%s' "$colors" 2>/dev/null)
+    test -n "$signature"; or return
+    test "$signature" = "$__termux_material_colors_signature"; and return
+
+    __load_termux_material_colors
+    set -g __termux_material_colors_signature "$signature"
+
+    if set -q TMUX
+        set -l tmux_theme "$HOME/.tmux/plugins/termux-launcher-tmux/scripts/material-theme.tmux"
+        test -x "$tmux_theme"; and command "$tmux_theme" >/dev/null 2>&1
+    end
+end
 
 set -q TERMUX_MATERIAL_ERROR; or set -gx TERMUX_MATERIAL_ERROR "#F2B8B5"
 set -q TERMUX_MATERIAL_ON_PRIMARY; or set -gx TERMUX_MATERIAL_ON_PRIMARY "#003826"

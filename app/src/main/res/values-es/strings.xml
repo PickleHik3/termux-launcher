@@ -63,7 +63,6 @@
     <string name="action_style_terminal">Estilo</string>
     <string name="action_font_and_color">Fuentes y Colores</string>
     <string name="action_set_background_image">Seleccionar Fondo de pantalla</string>
-    <string name="action_remove_background_image">Remover Fondo de pantalla</string>
     <string name="action_toggle_keep_screen_on">Mantener pantalla encendida</string>
     <string name="action_open_help">Ayuda</string>
     <string name="action_open_settings">Ajustes</string>
@@ -183,7 +182,6 @@
     <string name="termux_monet_background_enabled_title">Fondo estilo Monet (no estable)</string>
     <string name="termux_monet_background_enabled_on">El fondo estilo Monet será habilitado.</string>
     <string name="termux_monet_background_enabled_off">El fondo de la terminal estilo Monet está deshabilitado. Convierte el estilo del fondo de la terminal en Monet. (Defecto)</string>
-    <string name="termux_extrakeys_header">Teclas adicionales</string>
     <string name="termux_extrakeys_blur_enabled_title">Fondo desenfocado de las teclas adicionales</string>
     <string name="termux_extrakeys_blur_enabled_off">El fondo desenfocado de las teclas adicionales está deshabilitado. Añade un fondo transparente y desenfocado a las teclas extra. (Puede afectar el rendimiento) (Defecto)</string>
     <string name="termux_extrakeys_blur_enabled_on">El fondo desenfocado de las teclas adicionales será habilitado.</string>

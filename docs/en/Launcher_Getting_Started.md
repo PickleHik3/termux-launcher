@@ -2,24 +2,34 @@
 
 This page is the main setup guide for Termux Launcher. Start here, then use the smaller reference pages only when you need them:
 
+- [Illustrated web guide](https://picklehik3.github.io/termux-launcher-site/#wiki) for the current live screenshots and recordings.
 - [LauncherCtl](LauncherCtl_API.md) for launching apps and reading launcher data from the shell.
 - [Termux AI](Termux_AI.md) for the local on-device AI endpoint.
 - [Developer docs](Developer_Docs.md) for advanced API, runtime, helper-script, and security details.
 
 ## 1. Install Termux Launcher
 
-1. Download and install the latest APK from [Releases](https://github.com/PickleHik3/termux-launcher/releases).
-2. Open the app normally once. This lets Termux finish its first-run bootstrap.
-3. If you want to switch Termux from `pkg`/`apt` to `pacman`, do that before setting Termux Launcher as your Home app. That keeps fail-safe mode easy to reach. See the Termux wiki page for [switching package manager](https://wiki.termux.com/wiki/Switching_package_manager).
-4. Set Termux Launcher as your Android Home app.
+1. Download the latest APK from [Releases](https://github.com/PickleHik3/termux-launcher/releases).
+2. Pick the package edition that matches what you need:
+   - **Standard (`com.termux`)** replaces a regular Termux installation and works with matching `com.termux` add-ons.
+   - **VAJ (`io.vaj.tl`)** installs beside regular Termux and needs add-ons built for the same package/signing family.
+3. Open the app normally once and let the Termux bootstrap finish.
+4. Follow the seven-step Quick start tour. It explains the core launcher before the optional shell, Shizuku, and AI layers.
+5. Confirm the terminal, dock, and your must-have apps work. Only then set Termux Launcher as your Home app.
 
 You can do that from Android settings, or from inside Termux Launcher:
 
 ```text
-Long press Terminal -> More -> Apps Bar -> Set as home launcher
+Quick start tour -> Choose default Home app
 ```
 
-Termux Launcher cannot be installed beside the regular Termux app because both use the same package identity. If terminal drawing or input becomes slow after an update, run:
+You can replay the tour later from:
+
+```text
+Long press Terminal -> More -> Quick start tour
+```
+
+Existing installations are not interrupted by the automatic tour after an upgrade. If terminal drawing or input becomes slow after an update, run:
 
 ```sh
 termux-reload-settings
@@ -56,6 +66,7 @@ Long press Terminal -> More
 
 Useful places:
 
+- **Quick start tour:** Replay the beginner walkthrough at any time.
 - **Appearance:** Terminal opacity, blur, dock size, compact dock spacing, monochrome icons, and Terminal Material colors.
 - **Apps Bar:** Input split character, app ranking reset, Home launcher shortcut, and lock-screen behavior.
 - **TAI / Termux AI:** Local model downloads, imports, runtime settings, API port, and API token.
@@ -87,7 +98,7 @@ launcherctl token rotate
 
 Media and notification commands need Android notification listener access. For endpoint files, authentication, and scripting examples, see [LauncherCtl](LauncherCtl_API.md).
 
-## 5. Optional Shell and tmux Setup
+## 5. Optional Guarded Shell and tmux Setup
 
 tmux is recommended if you want a persistent terminal workspace. My broader shell setup usually includes:
 
@@ -98,37 +109,31 @@ tmux is recommended if you want a persistent terminal workspace. My broader shel
 - zoxide
 - btop through Shizuku `rish`
 
-Install the common packages first if you want that style of setup:
-
-```sh
-pkg i -y tmux curl jq git fish oh-my-posh eza zoxide termux-api
-```
-
 Terminal Material colors are enabled by default. Leave the toggle on if you want the tmux theme to follow your wallpaper:
 
 ```text
 Long press Terminal -> More -> Appearance -> Terminal Material colors
 ```
 
-Download the repo dotfiles if you want the matching fish, Oh My Posh, and tmux defaults:
+The repository contains secret-free templates derived from the live development setup. Use the guarded installer instead of replacing your dotfiles with direct `curl -o` commands:
 
 ```sh
-mkdir -p ~/.config/fish ~/.config/ohmyposh ~/.tmux
-curl -fsSL "https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/config.fish" -o ~/.config/fish/config.fish
-curl -fsSL "https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/termux-launcher.omp.json" -o ~/.config/ohmyposh/termux-launcher.omp.json
-curl -fsSL "https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/tmux.conf" -o ~/.tmux.conf
-curl -fsSL "https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/material-theme.tmux" -o ~/.tmux/material-theme.tmux
-```
-
-The fish config keeps a single `fish_auto_tmux` toggle, loads the `termux-launcher` Oh My Posh theme, and uses `eza` and `zoxide` when they are installed.
-
-The optional setup script can install the [termux-launcher-tmux](https://github.com/PickleHik3/termux-launcher-tmux) theme/plugin integration and the optional `btop` wrapper that runs through Shizuku `rish`:
-
-```sh
-curl -fsSL "https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-tmux-btop" -o ~/setup-tmux-btop
+curl -fsSLo ~/setup-tmux-btop \
+  "https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-tmux-btop"
+sed -n '1,240p' ~/setup-tmux-btop
 chmod 700 ~/setup-tmux-btop
 ~/setup-tmux-btop
 ```
+
+Reading the downloaded script before running it is a useful shell habit. The installer adds missing packages, but it protects existing work:
+
+- existing fish and Oh My Posh configuration files are left in place;
+- only missing Termux Launcher lines are appended to `.tmux.conf`;
+- an existing tmux plugin is fast-forwarded only when its checkout is clean;
+- local plugin edits stop the update instead of being overwritten;
+- the Shizuku `btop` wrapper is installed only when you choose it and `rish` works.
+
+The public fish template keeps a `fish_auto_tmux` toggle, loads the `termux-launcher` Oh My Posh theme, and enables eza and zoxide when installed. Private aliases, hostnames, tokens, and API keys from the development phone are intentionally not included.
 
 The script asks what to install:
 
@@ -136,7 +141,7 @@ The script asks what to install:
 - **tmux only:** theme and status helpers only.
 - **btop only:** only the Shizuku `btop` helper.
 
-The tmux plugin includes an `Alt + e` keybind reference.
+The tmux plugin includes an `Alt + e` keybind reference. If you prefer manual setup, inspect the files in [`docs/en/examples`](examples/) and merge the parts you want into your own configuration after making backups.
 
 If you have already completed setup and later update the APK, refresh only the repo-owned helper scripts with:
 

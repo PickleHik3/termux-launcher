@@ -14,7 +14,6 @@
     <string name="msg_select_url_copied_to_clipboard">Adres URL skopiowany do schowka</string>
     <string name="title_restore_background_image">Wykryto obraz tła. Czy chcesz je przywrócić\?</string>
     <string name="msg_disabling_terminal_toolbar">Pasek narzędzi został ukryty</string>
-    <string name="action_remove_background_image">Usuń obraz tła</string>
     <string name="action_toggle_keep_screen_on">Nie wyłączaj ekranu</string>
     <string name="error_termux_service_start_failed_general">Nie udało się uruchomić usługi TermuxService. Sprawdź komunikat wyjątku w logcat.</string>
     <string name="action_reset_terminal">Resetuj</string>

@@ -8,7 +8,8 @@
         app:min="1"
         android:max="20"
         android:defaultValue="7"
-        app:showSeekBarValue="true" />
+        app:showSeekBarValue="true"
+        app:updatesContinuously="true" />
 
     <androidx.preference.SeekBarPreference
         app:key="app_launcher_bar_height_percent"
@@ -17,7 +18,8 @@
         app:min="0"
         android:max="3"
         android:defaultValue="2"
-        app:showSeekBarValue="false" />
+        app:showSeekBarValue="false"
+        app:updatesContinuously="true" />
 
     <SwitchPreferenceCompat
         app:key="app_launcher_display_app_names"

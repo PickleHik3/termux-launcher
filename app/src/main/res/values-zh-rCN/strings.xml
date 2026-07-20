@@ -156,7 +156,6 @@
     <!-- Donate Preference -->
     <string name="donate_preference_title">捐赠</string>
     <string name="action_font_and_color">字体和配色</string>
-    <string name="action_remove_background_image">移除背景图片</string>
     <string name="action_set_background_image">设置背景图片</string>
     <string name="error_background_image_loading_failed">无法加载背景图片，正在设置背景颜色。</string>
     <string name="error_background_image_loading_from_gallery_failed">无法加载图片，尝试使用其他的图片。</string>

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shaw Imperial layout for shavian alphabet, see https://www.shavian.info/keyboards/ -->
+<keyboard name="Shaw Imperial" script="shavian">
+  <row>
+    <key key0="𐑶" key2="1" key4="loc esc"/>
+    <key key0="𐑬" key1="~" key2="2" key3="\@"/>
+    <key key0="𐑫" key1="!" key2="3" key3="\#"/>
+    <key key0="𐑜" key2="4" key3="$"/>
+    <key key0="𐑖" key1="𐑠" key2="5" key3="%"/>
+    <key key0="𐑗" key2="6" key3="^"/>
+    <key key0="𐑙" key2="7" key3="&amp;"/>
+    <key key0="𐑘" key2="8" key3="*"/>
+    <key key0="𐑡" key2="9" key3="(" key4=")"/>
+    <key key0="𐑔" key2="0"/>
+  </row>
+  <row>
+    <key key0="𐑭" key1="loc tab" key2="𐑸" key3="`"/>
+    <key key0="𐑷" key2="𐑹"/>
+    <key key0="𐑵" key2="𐑿"/>
+    <key key0="𐑱" key2="𐑺"/>
+    <key key0="𐑳" key2="𐑻"/>
+    <key key0="𐑓" key2="-" key3="_"/>
+    <key key0="𐑞" key2="=" key3="+"/>
+    <key key0="𐑤" key4="}" key3="{"/>
+    <key key0="𐑥" key3="[" key4="]"/>
+    <key key0="𐑣" key2="|" key3="\\"/>
+  </row>
+  <row>
+    <key key0="𐑪"/>
+    <key key0="𐑨"/>
+    <key key0="𐑦" key1="𐑾" key2="𐑽"/>
+    <key key0="𐑩" key2="𐑼"/>
+    <key key0="𐑧"/>
+    <key key0="𐑐"/>
+    <key key0="𐑯"/>
+    <key key0="𐑑"/>
+    <key key0="𐑮"/>
+    <key key0="𐑕"/>
+  </row>
+  <row>
+    <key key0="𐑲"/>
+    <key key0="𐑴"/>
+    <key key0="𐑰"/>
+    <key key0="𐑚"/>
+    <key key0="𐑝" key2="&lt;" key3="."/>
+    <key key0="𐑟" key2="&gt;" key3=","/>
+    <key key0="𐑒" key2="\?" key3="/"/>
+    <key key0="𐑢" key2=":" key3=";"/>
+    <key key0="𐑛" key2="&quot;" key3="'"/>
+    <key role="action" key0="backspace" key2="delete"/>
+  </row>
+</keyboard>

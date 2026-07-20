@@ -2,6 +2,7 @@ package com.termux.app.terminal.io;
 
 import android.content.Intent;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
@@ -69,6 +70,19 @@ public class TerminalToolbarViewPager {
                 });
 
                 final EditText editText = layout.findViewById(R.id.terminal_toolbar_text_input);
+                editText.setOnTouchListener((view, event) -> {
+                    if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                        mActivity.beginTerminalToolbarExternalTextInput(editText);
+                    }
+                    return false;
+                });
+                editText.setOnFocusChangeListener((view, hasFocus) -> {
+                    if (hasFocus) {
+                        mActivity.beginTerminalToolbarExternalTextInput(editText);
+                    } else {
+                        mActivity.endTerminalToolbarExternalTextInput();
+                    }
+                });
                 if (mSavedTextInput != null) {
                     editText.setText(mSavedTextInput);
                     mSavedTextInput = null;
@@ -113,12 +127,20 @@ public class TerminalToolbarViewPager {
         @Override
         public void onPageSelected(int position) {
             if (position == 0) {
+                mActivity.endTerminalToolbarExternalTextInput();
                 mActivity.getTerminalView().requestFocus();
             } else {
                 final EditText editText = mTerminalToolbarViewPager.findViewById(R.id.terminal_toolbar_text_input);
                 if (editText != null) {
                     editText.requestFocus();
-                    editText.postDelayed(() -> KeyboardUtils.showSoftKeyboard(mActivity, editText), 120);
+                    editText.postDelayed(() -> {
+                        if (mActivity.isInAppKeyboardEnabled()) {
+                            mActivity.beginTerminalToolbarExternalTextInput(editText);
+                            return;
+                        }
+                        mActivity.onSystemImeRequested();
+                        KeyboardUtils.showSoftKeyboard(mActivity, editText);
+                    }, 120);
                 }
             }
         }
