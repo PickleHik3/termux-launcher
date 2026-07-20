@@ -67,6 +67,7 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.RelativeLayout;
+import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -76,6 +77,8 @@ import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import com.github.mmin18.widget.AndroidStockBlurImpl;
 import com.github.mmin18.widget.RealtimeBlurView;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.canhub.cropper.CropImage;
@@ -85,6 +88,7 @@ import com.canhub.cropper.CropImageOptions;
 import com.canhub.cropper.CropImageView;
 import com.termux.R;
 import com.termux.app.api.file.FileReceiverActivity;
+import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.launcher.animation.LauncherTransitionController;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherConfigRepository;
@@ -208,6 +212,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mInAppKeyboardHeightDragStartScale;
     private float mInAppKeyboardUnscaledDragHeight;
     private boolean mDockTuningMode;
+    private ViewTreeObserver.OnGlobalLayoutListener mDockTuningLayoutListener;
 
     /**
      * Termux app shared preferences manager.
@@ -413,6 +418,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int CONTEXT_MENU_RESET_TERMINAL_ID = 7;
 
     private static final int CONTEXT_MENU_KILL_PROCESS_ID = 8;
+
+    private static final int CONTEXT_MENU_GLASS_LAB_ID = 9;
 
     private static final class TerminalActionItem {
         final int id;
@@ -5382,13 +5389,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         SeekBar blur = findViewById(R.id.dock_tuning_blur_slider);
         SeekBar opacity = findViewById(R.id.dock_tuning_opacity_slider);
         SeekBar grain = findViewById(R.id.dock_tuning_grain_slider);
+        SeekBar terminal = findViewById(R.id.dock_tuning_terminal_slider);
+        SeekBar sessions = findViewById(R.id.dock_tuning_sessions_slider);
+        SeekBar size = findViewById(R.id.dock_tuning_size_slider);
+        SeekBar icons = findViewById(R.id.dock_tuning_icons_slider);
         TextView blurValue = findViewById(R.id.dock_tuning_blur_value);
         TextView opacityValue = findViewById(R.id.dock_tuning_opacity_value);
         TextView grainValue = findViewById(R.id.dock_tuning_grain_value);
+        TextView terminalValue = findViewById(R.id.dock_tuning_terminal_value);
+        TextView sessionsValue = findViewById(R.id.dock_tuning_sessions_value);
+        TextView sizeValue = findViewById(R.id.dock_tuning_size_value);
+        TextView iconsValue = findViewById(R.id.dock_tuning_icons_value);
+        MaterialButtonToggleGroup styleGroup = findViewById(R.id.dock_tuning_style_group);
         View confirm = findViewById(R.id.dock_tuning_confirm);
         View dismiss = findViewById(R.id.dock_tuning_dismiss);
         if (controls == null || blur == null || opacity == null || grain == null
-            || blurValue == null || opacityValue == null || grainValue == null || confirm == null) {
+            || terminal == null || sessions == null || size == null || icons == null
+            || blurValue == null || opacityValue == null || grainValue == null
+            || terminalValue == null || sessionsValue == null || sizeValue == null
+            || iconsValue == null || styleGroup == null || confirm == null) {
             mDockTuningMode = false;
             return;
         }
@@ -5396,11 +5415,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final int initialBlur = mPreferences.getExtraKeysBlurRadius();
         final int initialOpacity = mPreferences.getAppBarOpacity();
         final int initialGrain = mPreferences.getDockGlassGrain();
+        final int initialTerminal = mPreferences.getTerminalBackgroundOpacity();
+        final int initialSessions = mPreferences.getSessionsOpacity();
+        final float initialBarHeight = mPreferences.getAppLauncherBarHeightScale();
+        final int initialSizeIndex = nearestDockSizePresetIndex(initialBarHeight);
+        final int initialButtonCount = mPreferences.getAppLauncherButtonCount();
+        final String initialStyle = mPreferences.getAppLauncherDockStyle();
+
         blur.setProgress(initialBlur);
         opacity.setProgress(initialOpacity);
         grain.setProgress(initialGrain);
-        updateDockTuningValueBadges(blurValue, opacityValue, grainValue,
-            blur.getProgress(), opacity.getProgress(), grain.getProgress());
+        terminal.setProgress(initialTerminal);
+        sessions.setProgress(initialSessions);
+        size.setProgress(initialSizeIndex);
+        icons.setProgress(Math.max(1, Math.min(20, initialButtonCount)));
+        blurValue.setText(getString(R.string.termux_dock_tuning_value_dp, initialBlur));
+        opacityValue.setText(getString(R.string.termux_dock_tuning_value_percent, initialOpacity));
+        grainValue.setText(getString(R.string.termux_dock_tuning_value_percent, initialGrain));
+        terminalValue.setText(getString(R.string.termux_dock_tuning_value_percent, initialTerminal));
+        sessionsValue.setText(getString(R.string.termux_dock_tuning_value_percent, initialSessions));
+        sizeValue.setText(dockSizePresetLabel(initialSizeIndex));
+        iconsValue.setText(Integer.toString(Math.max(1, initialButtonCount)));
+        styleGroup.check(SegmentedPillPreference.VALUE_CAPSULE.equals(initialStyle)
+            ? R.id.dock_tuning_style_capsule : R.id.dock_tuning_style_default);
+
         blur.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 blurValue.setText(getString(R.string.termux_dock_tuning_value_dp, progress));
@@ -5428,6 +5466,54 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             }
         });
+        terminal.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                terminalValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
+                if (fromUser) {
+                    mPreferences.setTerminalBackgroundOpacity(progress);
+                    applyDockTuningStructuralPreview();
+                }
+            }
+        });
+        sessions.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                sessionsValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
+                if (fromUser) {
+                    mPreferences.setSessionsOpacity(progress);
+                    applyDockTuningStructuralPreview();
+                }
+            }
+        });
+        size.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                int index = Math.max(0, Math.min(DOCK_TUNING_SIZE_PRESETS.length - 1, progress));
+                sizeValue.setText(dockSizePresetLabel(index));
+                if (fromUser) {
+                    mPreferences.setAppLauncherBarHeightScale(DOCK_TUNING_SIZE_PRESETS[index]);
+                    applyDockTuningStructuralPreview();
+                }
+            }
+        });
+        icons.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                int count = Math.max(1, progress);
+                iconsValue.setText(Integer.toString(count));
+                if (fromUser) {
+                    mPreferences.setAppLauncherButtonCount(count);
+                    applyDockTuningStructuralPreview();
+                }
+            }
+        });
+        styleGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (!isChecked)
+                return;
+            String style = checkedId == R.id.dock_tuning_style_capsule
+                ? SegmentedPillPreference.VALUE_CAPSULE : SegmentedPillPreference.VALUE_DEFAULT;
+            if (!style.equals(mPreferences.getAppLauncherDockStyle())) {
+                mPreferences.setAppLauncherDockStyle(style);
+                applyDockTuningStructuralPreview();
+            }
+        });
         confirm.setOnClickListener(view -> exitDockTuningMode());
         if (dismiss != null) {
             dismiss.setOnClickListener(view -> {
@@ -5435,20 +5521,77 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.setExtraKeysBlurRadius(initialBlur);
                 mPreferences.setAppBarOpacity(initialOpacity);
                 mPreferences.setDockGlassGrain(initialGrain);
-                applyDockTuningPreview(true);
+                mPreferences.setTerminalBackgroundOpacity(initialTerminal);
+                mPreferences.setSessionsOpacity(initialSessions);
+                mPreferences.setAppLauncherBarHeightScale(initialBarHeight);
+                mPreferences.setAppLauncherButtonCount(initialButtonCount);
+                mPreferences.setAppLauncherDockStyle(initialStyle);
+                applyDockTuningStructuralPreview();
                 exitDockTuningMode();
             });
         }
         controls.bringToFront();
+        registerDockTuningLayoutListener(controls);
+        controls.post(this::adjustDockTuningCardHeight);
     }
 
-    private void updateDockTuningValueBadges(@NonNull TextView blurValue,
-                                             @NonNull TextView opacityValue,
-                                             @NonNull TextView grainValue,
-                                             int blur, int opacity, int grain) {
-        blurValue.setText(getString(R.string.termux_dock_tuning_value_dp, blur));
-        opacityValue.setText(getString(R.string.termux_dock_tuning_value_percent, opacity));
-        grainValue.setText(getString(R.string.termux_dock_tuning_value_percent, grain));
+    private void registerDockTuningLayoutListener(@NonNull View controls) {
+        if (mDockTuningLayoutListener != null)
+            return;
+        mDockTuningLayoutListener = this::adjustDockTuningCardHeight;
+        controls.getViewTreeObserver().addOnGlobalLayoutListener(mDockTuningLayoutListener);
+    }
+
+    private void unregisterDockTuningLayoutListener() {
+        if (mDockTuningLayoutListener == null)
+            return;
+        View controls = findViewById(R.id.dock_tuning_controls);
+        if (controls != null)
+            controls.getViewTreeObserver().removeOnGlobalLayoutListener(mDockTuningLayoutListener);
+        mDockTuningLayoutListener = null;
+    }
+
+    /**
+     * Caps the scrollable slider region so the header and Done button always stay on screen above
+     * the accessory stack (dock, and the in-app keyboard when shown), regardless of screen size or
+     * density. When the content fits it stays wrap-content; when it would overflow it scrolls.
+     */
+    private void adjustDockTuningCardHeight() {
+        if (!mDockTuningMode)
+            return;
+        View controls = findViewById(R.id.dock_tuning_controls);
+        ScrollView scroll = findViewById(R.id.dock_tuning_scroll);
+        View headerRow = findViewById(R.id.dock_tuning_header_row);
+        View done = findViewById(R.id.dock_tuning_confirm);
+        View stack = findViewById(R.id.accessory_stack_container);
+        if (controls == null || scroll == null || headerRow == null || done == null || stack == null)
+            return;
+        if (controls.getVisibility() != View.VISIBLE)
+            return;
+        View scrollChild = scroll.getChildCount() > 0 ? scroll.getChildAt(0) : null;
+        if (scrollChild == null)
+            return;
+
+        int topLimit = Math.max(mLastStatusBarInsetTop, Math.round(dpToPx(24))) + Math.round(dpToPx(8));
+        int cardMarginBottom = Math.round(dpToPx(10));
+        int availableCard = (stack.getTop() - cardMarginBottom) - topLimit;
+        // Chrome outside the scroll region: card top/bottom padding (10 + 12), Done top margin (6),
+        // plus the measured header and Done heights.
+        int chrome = Math.round(dpToPx(10 + 12 + 6)) + headerRow.getHeight() + done.getHeight();
+        int maxScroll = availableCard - chrome;
+        int minScroll = Math.round(dpToPx(96));
+        if (maxScroll < minScroll)
+            maxScroll = minScroll;
+
+        int natural = scrollChild.getMeasuredHeight();
+        if (natural <= 0)
+            natural = scrollChild.getHeight();
+        ViewGroup.LayoutParams lp = scroll.getLayoutParams();
+        int target = (natural > maxScroll) ? maxScroll : ViewGroup.LayoutParams.WRAP_CONTENT;
+        if (lp.height != target) {
+            lp.height = target;
+            scroll.setLayoutParams(lp);
+        }
     }
 
     private void applyDockTuningPreview(boolean blurChanged) {
@@ -5462,8 +5605,54 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         scheduleAccessoryRenderSync("dock-tuning:preview");
     }
 
+    /** Broader live re-apply for controls that change dock geometry, terminal, or sessions surfaces. */
+    private void applyDockTuningStructuralPreview() {
+        updateAppLauncherBarHeight();
+        applyTerminalSurfaceAppearance();
+        applyDockTuningPreview(true);
+        applyAccessoryGeometryIfNeeded(true, "dock-tuning:structural");
+    }
+
+    private static final float[] DOCK_TUNING_SIZE_PRESETS = {1.72f, 1.95f, 2.18f, 2.45f};
+
+    private int nearestDockSizePresetIndex(float scale) {
+        int best = 0;
+        float bestDistance = Float.MAX_VALUE;
+        for (int i = 0; i < DOCK_TUNING_SIZE_PRESETS.length; i++) {
+            float distance = Math.abs(scale - DOCK_TUNING_SIZE_PRESETS[i]);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = i;
+            }
+        }
+        return best;
+    }
+
+    @NonNull
+    private String dockSizePresetLabel(int index) {
+        switch (Math.max(0, Math.min(DOCK_TUNING_SIZE_PRESETS.length - 1, index))) {
+            case 0:
+                return getString(R.string.termux_dock_preset_smallest);
+            case 1:
+                return getString(R.string.termux_dock_preset_small);
+            case 2:
+                return getString(R.string.termux_dock_preset_default);
+            default:
+                return getString(R.string.termux_dock_preset_large);
+        }
+    }
+
     private void exitDockTuningMode() {
         mDockTuningMode = false;
+        unregisterDockTuningLayoutListener();
+        ScrollView scroll = findViewById(R.id.dock_tuning_scroll);
+        if (scroll != null) {
+            ViewGroup.LayoutParams lp = scroll.getLayoutParams();
+            if (lp.height != ViewGroup.LayoutParams.WRAP_CONTENT) {
+                lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                scroll.setLayoutParams(lp);
+            }
+        }
         View controls = findViewById(R.id.dock_tuning_controls);
         if (controls != null)
             controls.setVisibility(View.GONE);
@@ -6710,6 +6899,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case CONTEXT_MENU_KILL_PROCESS_ID:
                 showKillSessionDialog(session);
                 return true;
+            case CONTEXT_MENU_GLASS_LAB_ID:
+                enterDockTuningMode();
+                return true;
             default:
                 return false;
         }
@@ -6733,6 +6925,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? R.string.action_disable_background_image
                 : R.string.action_enable_background_image)
         ));
+        items.add(new TerminalActionItem(CONTEXT_MENU_GLASS_LAB_ID, getString(R.string.action_glass_lab)));
         // Appearance and Apps & Access are reachable from the Settings page; keep this sheet lean.
         items.add(new TerminalActionItem(CONTEXT_MENU_SETTINGS_ID, getString(R.string.action_open_settings)));
         items.add(new TerminalActionItem(CONTEXT_MENU_RESET_TERMINAL_ID, getString(R.string.action_reset_terminal)));

@@ -19,99 +19,12 @@
             app:title="@string/termux_use_system_wallpaper_title"
             app:summary="@string/termux_use_system_wallpaper_summary"
             android:defaultValue="true" />
-    </PreferenceCategory>
-
-    <PreferenceCategory
-        app:key="termux_terminal_background"
-        app:title="@string/termux_terminal_background_header">
 
         <SwitchPreferenceCompat
             app:key="terminal_dynamic_colors_enabled"
             app:title="@string/termux_terminal_dynamic_colors_title"
             app:summary="@string/termux_terminal_dynamic_colors_summary"
             android:defaultValue="true" />
-
-        <androidx.preference.SeekBarPreference
-            app:key="terminal_background_opacity"
-            app:title="@string/termux_terminal_background_opacity_title"
-            android:min="0"
-            android:max="100"
-            android:defaultValue="100"
-            app:showSeekBarValue="true" />
-
-    </PreferenceCategory>
-
-    <PreferenceCategory
-        app:key="termux_extrakeys_appsbar"
-        app:title="@string/termux_extrakeys_appsbar_header">
-
-        <com.termux.app.fragments.settings.SegmentedPillPreference
-            app:key="app_launcher_dock_style"
-            app:title="@string/termux_app_launcher_dock_style_title"
-            app:summary="@string/termux_app_launcher_dock_style_summary"
-            android:defaultValue="default" />
-
-        <Preference
-            app:key="tune_dock_live"
-            app:title="@string/termux_dock_tune_live_title"
-            app:summary="@string/termux_dock_tune_live_summary" />
-
-        <androidx.preference.SeekBarPreference
-            app:key="extrakeys_blur_radius"
-            app:title="@string/termux_extrakeys_blur_radius_title"
-            app:summary="@string/termux_extrakeys_blur_live_wallpaper_note"
-            android:min="0"
-            android:max="30"
-            android:defaultValue="10"
-            app:showSeekBarValue="true"
-            app:updatesContinuously="true" />
-
-        <androidx.preference.SeekBarPreference
-            app:key="app_bar_opacity"
-            app:title="@string/termux_app_bar_opacity_title"
-            android:min="0"
-            android:max="100"
-            android:defaultValue="50"
-            app:summary="@string/termux_app_bar_opacity_summary"
-            app:showSeekBarValue="true"
-            app:updatesContinuously="true" />
-
-        <androidx.preference.SeekBarPreference
-            app:key="dock_glass_grain"
-            app:title="@string/termux_dock_glass_grain_title"
-            app:summary="@string/termux_dock_glass_grain_summary"
-            android:min="0"
-            android:max="100"
-            android:defaultValue="12"
-            app:showSeekBarValue="true"
-            app:updatesContinuously="true" />
-
-        <androidx.preference.SeekBarPreference
-            app:key="app_launcher_button_count"
-            app:title="@string/termux_app_launcher_button_count_title"
-            app:summary="@string/termux_app_launcher_button_count_summary"
-            app:min="1"
-            android:max="20"
-            android:defaultValue="7"
-            app:showSeekBarValue="true"
-            app:updatesContinuously="true" />
-
-        <androidx.preference.SeekBarPreference
-            app:key="app_launcher_bar_height_percent"
-            app:title="@string/termux_app_launcher_bar_height_title"
-            app:min="0"
-            android:max="3"
-            android:defaultValue="2"
-            app:summary="@string/termux_app_launcher_bar_height_summary"
-            app:showSeekBarValue="false"
-            app:updatesContinuously="true" />
-
-        <SwitchPreferenceCompat
-            app:key="app_launcher_display_app_names"
-            app:title="@string/termux_app_launcher_display_app_names_title"
-            app:summary="@string/termux_app_launcher_display_app_names_summary"
-            android:defaultValue="true" />
-
     </PreferenceCategory>
 
     <PreferenceCategory
@@ -137,16 +50,14 @@
     </PreferenceCategory>
 
     <PreferenceCategory
-        app:key="termux_sessions"
-        app:title="@string/termux_sessions_header">
+        app:key="personalization"
+        app:title="@string/personalization_header">
 
-        <androidx.preference.SeekBarPreference
-            app:key="sessions_opacity"
-            app:title="@string/termux_sessions_opacity_title"
-            android:min="0"
-            android:max="100"
-            android:defaultValue="50"
-            app:showSeekBarValue="true" />
+        <Preference
+            app:key="tune_dock_live"
+            app:title="@string/termux_dock_tune_live_title"
+            app:summary="@string/termux_dock_tune_live_summary" />
+
     </PreferenceCategory>
 
 </PreferenceScreen>

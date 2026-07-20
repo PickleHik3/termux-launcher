@@ -155,8 +155,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public boolean isAppLauncherDisplayAppNamesEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DISPLAY_APP_NAMES,
-            TERMUX_APP.DEFAULT_APP_LAUNCHER_DISPLAY_APP_NAMES);
+        // App names are always shown; no longer user-configurable.
+        return true;
     }
 
     public void setAppLauncherDisplayAppNamesEnabled(boolean value) {
