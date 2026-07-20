@@ -5,13 +5,19 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.res.AssetFileDescriptor;
 import android.graphics.Color;
+import android.graphics.Matrix;
+import android.graphics.SurfaceTexture;
 import android.graphics.drawable.GradientDrawable;
+import android.media.MediaPlayer;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
+import android.view.Surface;
+import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -69,6 +75,12 @@ public final class OnboardingActivity extends AppCompatActivity {
             R.string.onboarding_new_ready_body, R.string.onboarding_media_ready, 0}
     };
 
+    /** Looping preview clip per page; plays in the panel above the text card. */
+    private static final int[] PAGE_VIDEO = {
+        R.raw.onboarding_welcome, R.raw.onboarding_launch, R.raw.onboarding_personalize,
+        R.raw.onboarding_notifications, R.raw.onboarding_ready
+    };
+
     private static final int[][] PAGE_CHIPS = {
         {R.string.onboarding_chip_full_terminal, R.string.onboarding_chip_app_dock,
             R.string.onboarding_chip_ai_backends},
@@ -83,6 +95,15 @@ public final class OnboardingActivity extends AppCompatActivity {
 
     private int mPage;
     private GestureDetector mGestureDetector;
+    private View mVideoFrame;
+    private TextureView mVideo;
+    private View mSheet;
+    private MediaPlayer mPlayer;
+    private Surface mSurface;
+    private boolean mSurfaceReady;
+    private int mVideoWidth;
+    private int mVideoHeight;
+    private int mTopInset;
     private TextView mPlaceholder;
     private TextView mDuration;
     private TextView mKicker;
@@ -149,8 +170,131 @@ public final class OnboardingActivity extends AppCompatActivity {
         bindViews();
         applyEdgeToEdgeInsets();
         configureSwipeNavigation();
+        configureVideo();
         mPage = savedInstanceState == null ? 0 : clampPage(savedInstanceState.getInt(STATE_PAGE, 0));
         renderPage();
+    }
+
+    /** Wire the preview surface and keep the video panel sized to the space above the card. */
+    private void configureVideo() {
+        mVideo.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+            @Override
+            public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surface, int w, int h) {
+                mSurface = new Surface(surface);
+                mSurfaceReady = true;
+                startVideo(PAGE_VIDEO[mPage]);
+            }
+
+            @Override
+            public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture surface, int w, int h) {
+                applyVideoTransform();
+            }
+
+            @Override
+            public boolean onSurfaceTextureDestroyed(@NonNull SurfaceTexture surface) {
+                mSurfaceReady = false;
+                releasePlayer();
+                if (mSurface != null) {
+                    mSurface.release();
+                    mSurface = null;
+                }
+                return true;
+            }
+
+            @Override
+            public void onSurfaceTextureUpdated(@NonNull SurfaceTexture surface) {
+            }
+        });
+        // The card height changes per page; keep the video panel ending just above it.
+        mSheet.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            int cardTop = mSheet.getTop();
+            if (cardTop <= 0)
+                return;
+            int desired = Math.max(0, cardTop - mTopInset - dp(10));
+            ViewGroup.MarginLayoutParams params =
+                (ViewGroup.MarginLayoutParams) mVideoFrame.getLayoutParams();
+            if (params.height != desired) {
+                params.height = desired;
+                mVideoFrame.setLayoutParams(params);
+            }
+            applyVideoTransform();
+        });
+    }
+
+    private void startVideo(int rawRes) {
+        if (!mSurfaceReady || mSurface == null)
+            return;
+        releasePlayer();
+        try {
+            MediaPlayer player = new MediaPlayer();
+            player.setSurface(mSurface);
+            player.setVolume(0f, 0f);
+            try (AssetFileDescriptor afd = getResources().openRawResourceFd(rawRes)) {
+                player.setDataSource(afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
+            }
+            player.setOnVideoSizeChangedListener((mp, w, h) -> {
+                mVideoWidth = w;
+                mVideoHeight = h;
+                applyVideoTransform();
+            });
+            player.setOnPreparedListener(mp -> {
+                mp.setLooping(true);
+                mVideoWidth = mp.getVideoWidth();
+                mVideoHeight = mp.getVideoHeight();
+                applyVideoTransform();
+                mp.start();
+                mVideoFrame.setVisibility(View.VISIBLE);
+                mPlaceholder.setVisibility(View.GONE);
+            });
+            player.setOnErrorListener((mp, what, extra) -> {
+                showPlaceholderFallback();
+                return true;
+            });
+            player.prepareAsync();
+            mPlayer = player;
+        } catch (Exception e) {
+            showPlaceholderFallback();
+        }
+    }
+
+    /** Letterbox/pillarbox the clip within the panel — the TextureView stretches by default. */
+    private void applyVideoTransform() {
+        if (mVideoWidth <= 0 || mVideoHeight <= 0)
+            return;
+        int viewWidth = mVideo.getWidth();
+        int viewHeight = mVideo.getHeight();
+        if (viewWidth == 0 || viewHeight == 0) {
+            mVideo.post(this::applyVideoTransform);
+            return;
+        }
+        float viewRatio = (float) viewWidth / viewHeight;
+        float videoRatio = (float) mVideoWidth / mVideoHeight;
+        float scaleX = 1f;
+        float scaleY = 1f;
+        if (videoRatio > viewRatio)
+            scaleY = viewRatio / videoRatio;
+        else
+            scaleX = videoRatio / viewRatio;
+        Matrix matrix = new Matrix();
+        matrix.setScale(scaleX, scaleY, viewWidth / 2f, viewHeight / 2f);
+        mVideo.setTransform(matrix);
+    }
+
+    private void releasePlayer() {
+        if (mPlayer != null) {
+            try {
+                mPlayer.reset();
+                mPlayer.release();
+            } catch (Exception ignored) {
+            }
+            mPlayer = null;
+        }
+    }
+
+    private void showPlaceholderFallback() {
+        releasePlayer();
+        mVideoFrame.setVisibility(View.GONE);
+        mPlaceholder.setVisibility(View.VISIBLE);
     }
 
     private void applySystemBars() {
@@ -163,6 +307,9 @@ public final class OnboardingActivity extends AppCompatActivity {
     }
 
     private void bindViews() {
+        mVideoFrame = findViewById(R.id.onboarding_video_frame);
+        mVideo = findViewById(R.id.onboarding_video);
+        mSheet = findViewById(R.id.onboarding_sheet);
         mPlaceholder = findViewById(R.id.onboarding_media_placeholder);
         mDuration = findViewById(R.id.onboarding_duration_badge);
         mKicker = findViewById(R.id.onboarding_kicker);
@@ -206,6 +353,12 @@ public final class OnboardingActivity extends AppCompatActivity {
             Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
             topBar.setPadding(topBar.getPaddingLeft(), topBarPadding + bars.top,
                 topBar.getPaddingRight(), topBar.getPaddingBottom());
+            // Keep the preview clear of the status bar; sit it just below the top chrome.
+            mTopInset = bars.top + dp(52);
+            ViewGroup.MarginLayoutParams videoLayout =
+                (ViewGroup.MarginLayoutParams) mVideoFrame.getLayoutParams();
+            videoLayout.topMargin = mTopInset;
+            mVideoFrame.setLayoutParams(videoLayout);
             ViewGroup.MarginLayoutParams durationLayout =
                 (ViewGroup.MarginLayoutParams) mDuration.getLayoutParams();
             durationLayout.topMargin = durationTopMargin + bars.top;
@@ -276,6 +429,8 @@ public final class OnboardingActivity extends AppCompatActivity {
         mFinalActions.setVisibility(finalPage ? View.VISIBLE : View.GONE);
         mNavigation.setVisibility(finalPage ? View.GONE : View.VISIBLE);
         mBackButton.setVisibility(mPage == 0 ? View.INVISIBLE : View.VISIBLE);
+        if (mSurfaceReady)
+            startVideo(PAGE_VIDEO[mPage]);
         mTitle.sendAccessibilityEvent(
             android.view.accessibility.AccessibilityEvent.TYPE_VIEW_FOCUSED);
     }
@@ -366,6 +521,37 @@ public final class OnboardingActivity extends AppCompatActivity {
     public void onBackPressed() {
         if (mPage > 0) showPreviousPage();
         else super.onBackPressed();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (mPlayer != null && mPlayer.isPlaying())
+            mPlayer.pause();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (mPlayer != null && mSurfaceReady) {
+            // Player may still be preparing after a quick pause/resume; ignore if not ready.
+            try {
+                mPlayer.start();
+            } catch (IllegalStateException ignored) {
+            }
+        } else if (mSurfaceReady) {
+            startVideo(PAGE_VIDEO[mPage]);
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        releasePlayer();
+        if (mSurface != null) {
+            mSurface.release();
+            mSurface = null;
+        }
+        super.onDestroy();
     }
 
     @Override

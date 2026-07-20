@@ -12,6 +12,19 @@
         android:layout_height="match_parent"
         android:background="@drawable/onboarding_media_placeholder">
 
+        <FrameLayout
+            android:id="@+id/onboarding_video_frame"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="top"
+            android:background="#070D0A">
+
+            <TextureView
+                android:id="@+id/onboarding_video"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </FrameLayout>
+
         <TextView
             android:id="@+id/onboarding_media_placeholder"
             android:layout_width="match_parent"
@@ -102,12 +115,6 @@
         android:layout_marginBottom="14dp"
         android:background="@drawable/onboarding_frosted_sheet"
         android:clipToOutline="true">
-
-        <com.github.mmin18.widget.RealtimeBlurView
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            app:realtimeBlurRadius="28dp"
-            app:realtimeOverlayColor="#520D1410" />
 
         <ScrollView
             android:id="@+id/onboarding_sheet_scroll"
