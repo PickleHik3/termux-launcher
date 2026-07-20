@@ -82,6 +82,22 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        app:key="keyboard_docs"
+        app:title="@string/termux_keyboard_docs_header">
+
+        <Preference
+            app:key="keyboard_docs_layouts"
+            app:summary="@string/termux_keyboard_docs_layouts_summary"
+            app:title="@string/termux_keyboard_docs_layouts_title" />
+
+        <Preference
+            app:key="keyboard_docs_keys"
+            app:summary="@string/termux_keyboard_docs_keys_summary"
+            app:title="@string/termux_keyboard_docs_keys_title" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
         app:key="keyboard_credits"
         app:title="@string/termux_keyboard_credits_header">
 

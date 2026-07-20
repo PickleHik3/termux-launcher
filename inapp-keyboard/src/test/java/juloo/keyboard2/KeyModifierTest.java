@@ -32,4 +32,31 @@ public class KeyModifierTest
     assertEquals(KeyEvent.KEYCODE_SPACE, KeyModifier.modify(
         KeyValue.getKeyByName("space"), ctrl).getKeyevent());
   }
+
+  /** Regression: the clockwise-circle / round-trip gesture must capitalize a
+      letter even when the layout's modmap binds Fn for that letter, as our
+      terminal layouts do. Local deviation from upstream (Shift beats Fn). */
+  @Test
+  public void gestureCapitalizesLettersEvenWhenModmapBindsFn()
+  {
+    KeyValue gesture = KeyValue.makeInternalModifier(KeyValue.Modifier.GESTURE);
+    KeyValue g = KeyValue.makeCharKey('g');
+    Modmap mm = new Modmap();
+    mm.add(Modmap.M.Fn, g, KeyValue.getKeyByName("end"));
+    KeyModifier.set_modmap(mm);
+    assertEquals('G', KeyModifier.modify(g, gesture).getChar());
+  }
+
+  /** The Fn binding still wins for keys where Shift is a no-op (non-letters). */
+  @Test
+  public void gestureUsesModmapFnWhenShiftIsNoOp()
+  {
+    KeyValue gesture = KeyValue.makeInternalModifier(KeyValue.Modifier.GESTURE);
+    KeyValue left = KeyValue.getKeyByName("left");
+    KeyValue home = KeyValue.getKeyByName("home");
+    Modmap mm = new Modmap();
+    mm.add(Modmap.M.Fn, left, home);
+    KeyModifier.set_modmap(mm);
+    assertEquals(home, KeyModifier.modify(left, gesture));
+  }
 }

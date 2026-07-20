@@ -43,11 +43,17 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_EXTRA_KEYS = "in_app_keyboard_extra_keys";
     private static final String KEY_CREDITS_GITHUB = "keyboard_credits_github";
     private static final String KEY_CREDITS_PLAY = "keyboard_credits_play";
+    private static final String KEY_DOCS_LAYOUTS = "keyboard_docs_layouts";
+    private static final String KEY_DOCS_KEYS = "keyboard_docs_keys";
 
     private static final String UPSTREAM_GITHUB_URL =
         "https://github.com/Julow/Unexpected-Keyboard";
     private static final String UPSTREAM_PLAY_URL =
         "https://play.google.com/store/apps/details?id=juloo.keyboard2";
+    private static final String DOCS_LAYOUTS_URL =
+        "https://github.com/Julow/Unexpected-Keyboard/blob/master/doc/Custom-layouts.md";
+    private static final String DOCS_KEYS_URL =
+        "https://github.com/Julow/Unexpected-Keyboard/blob/master/doc/Possible-key-values.md";
 
     private static final String FONT_DIR_NAME = "inapp-keyboard";
     private static final String FONT_FILE_NAME = "label-font.ttf";
@@ -98,6 +104,8 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         if (extraKeysPreference != null)
             populateExtraKeysEntries(extraKeysPreference);
 
+        bindLinkPreference(KEY_DOCS_LAYOUTS, DOCS_LAYOUTS_URL);
+        bindLinkPreference(KEY_DOCS_KEYS, DOCS_KEYS_URL);
         bindLinkPreference(KEY_CREDITS_GITHUB, UPSTREAM_GITHUB_URL);
         bindLinkPreference(KEY_CREDITS_PLAY, UPSTREAM_PLAY_URL);
 

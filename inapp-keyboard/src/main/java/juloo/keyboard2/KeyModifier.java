@@ -417,16 +417,22 @@ public final class KeyModifier
   /** Modify a key affected by a round-trip or a clockwise circle gesture. */
   private static KeyValue apply_gesture(KeyValue k)
   {
+    // Local deviation from upstream: a Shift that actually changes the key
+    // (i.e. letters) wins over a modmap Fn binding, so the clockwise-circle and
+    // round-trip gestures still capitalize letters even when a layout binds Fn
+    // for every letter (as our terminal layouts do). Keys where Shift is a
+    // no-op (digits, symbols) and non-Char kinds fall through to the modmap Fn
+    // mapping unchanged, and the Fn key itself is unaffected. Upstream consults
+    // the modmap Fn binding first.
     KeyValue modified = apply_shift(k);
+    if (modified != null && !modified.equals(k))
+      return modified;
     if (_modmap != null)
     {
       modified = _modmap.get(Modmap.M.Fn, k);
       if (modified != null)
         return modified;
     }
-    modified = apply_shift(k);
-    if (modified != null && !modified.equals(k))
-      return modified;
     modified = apply_fn(k);
     if (modified != null && !modified.equals(k))
       return modified;

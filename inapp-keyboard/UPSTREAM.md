@@ -72,6 +72,12 @@ resources, and generated layout-picker metadata.
   upstream text sizing are unchanged.
 - `Gesture` receives circle sensitivity; `Pointers` receives configuration,
   uses the main looper, exposes reset, and cancels pending callbacks.
+- `KeyModifier.apply_gesture` (clockwise-circle / round-trip) tries `apply_shift`
+  first and returns it when Shift changes the key (i.e. letters), consulting the
+  modmap `Fn` binding only afterwards. Upstream consults the modmap `Fn` binding
+  first, which made the circle gesture yield the Fn key instead of a capital on
+  our terminal layouts that bind `<fn>` for every letter. Non-letters and
+  non-`Char` kinds still fall through to the Fn binding unchanged.
 - `KeyboardData` has no static resource cache and enforces 16 rows, 32 keys per
   row, and 512 keys total, with public parse location details.
 - `LayoutModifier.modify` is pure and composes the curated bottom row, the

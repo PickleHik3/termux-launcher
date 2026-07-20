@@ -381,6 +381,11 @@
                 <string name="termux_in_app_keyboard_key_corner_radius_slider">Adjust keyboard key corner radius</string>
                 <string name="termux_in_app_keyboard_custom_layout_title">Custom layout</string>
                 <string name="termux_in_app_keyboard_custom_layout_summary">Load your own layout from ~/.termux/keyboard/layout.xml</string>
+                <string name="termux_keyboard_docs_header">Layout documentation</string>
+                <string name="termux_keyboard_docs_layouts_title">Creating custom layouts</string>
+                <string name="termux_keyboard_docs_layouts_summary">How to write your own layout.xml</string>
+                <string name="termux_keyboard_docs_keys_title">Possible key values</string>
+                <string name="termux_keyboard_docs_keys_summary">Every key name and value you can use in a layout</string>
                 <string-array name="termux_in_app_keyboard_theme_entries">
                     <item>System</item>
                     <item>Light</item>
