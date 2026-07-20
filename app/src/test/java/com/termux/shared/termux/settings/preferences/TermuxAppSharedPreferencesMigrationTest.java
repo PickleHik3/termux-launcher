@@ -11,6 +11,7 @@ public class TermuxAppSharedPreferencesMigrationTest {
     public void launcherVisualDefaultsEnableMaterialColorsAndAppNames() {
         assertTrue(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERMINAL_DYNAMIC_COLORS_ENABLED);
         assertTrue(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DISPLAY_APP_NAMES);
+        assertTrue(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_ROW_HAPTICS);
     }
 
     @Test

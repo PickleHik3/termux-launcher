@@ -12,6 +12,7 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
 
 - **Termux** — GPLv3-only — Copyright Termux contributors.
 - **Termux:Monet** — GPLv3-only — Copyright Termux:Monet contributors.
+- **[Unexpected-Keyboard](https://github.com/Julow/Unexpected-Keyboard)** — GPL-3.0 — Copyright Jules Aguillon (Julow) and Unexpected-Keyboard contributors. Vendored and modified as the `inapp-keyboard/` module (upstream commit `38836e440d8ca779d572b52601c6b2ad10f3bb7f` recorded in `inapp-keyboard/UPSTREAM.md`); modifications include removal of the IME service and adaptation as an embedded view. See `inapp-keyboard/UPSTREAM.md`.
 - **Terminal Emulator for Android** — Apache-2.0 — Copyright Jack Palevich and contributors.
 - **Android Open Source Project / Launcher3** — Apache-2.0 — portions of terminal compatibility,
   `termux-am-library`, and launcher gesture navigation.

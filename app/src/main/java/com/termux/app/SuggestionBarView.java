@@ -16,8 +16,9 @@ import android.app.RemoteInput;
 import android.content.ClipData;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.ContextWrapper;
 import android.content.Intent;
-import android.content.res.ColorStateList;
+import android.content.res.Resources;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.content.pm.ShortcutInfo;
@@ -25,13 +26,13 @@ import android.net.Uri;
 import android.graphics.Bitmap;
 import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.PorterDuff;
-import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
@@ -61,7 +62,9 @@ import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.ViewTreeObserver;
+import android.view.WindowInsets;
 import android.view.WindowManager;
+import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
@@ -88,9 +91,6 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
-import androidx.recyclerview.widget.ItemTouchHelper;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
 
 import com.github.mmin18.widget.RealtimeBlurView;
 import com.google.android.material.color.MaterialColors;
@@ -115,6 +115,7 @@ import com.termux.app.launcher.model.PinnedIconOverride;
 import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedFolderItem;
 import com.termux.app.launcher.model.PinnedItem;
+import com.termux.app.terminal.AccessoryStackLayoutPolicy;
 import com.termux.shared.theme.ThemeUtils;
 import com.termux.view.TerminalView;
 import com.termux.launcherctl.LauncherCtlNotificationListener;
@@ -138,6 +139,11 @@ import java.util.concurrent.TimeUnit;
 
 public final class SuggestionBarView extends GridLayout {
 
+    public interface LaunchRippleListener {
+        void onLaunchRipple(@NonNull String packageName, @Nullable Drawable icon,
+                            @Nullable View sourceView);
+    }
+
     private static final String LOG_TAG = "SuggestionBarView";
     private static final char[] AZ_ORDER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#".toCharArray();
     private static final int POPUP_MAX_WIDTH_DP = 320;
@@ -148,21 +154,32 @@ public final class SuggestionBarView extends GridLayout {
     private static final float PICKUP_X_AXIS_SLOP_FACTOR = 0.9f;
     private static final float PICKUP_Y_INTENT_SLOP_FACTOR = 1.8f;
     private static final float MENU_SELECTION_ARM_SLOP_FACTOR = 0.8f;
+    private static final float PAGE_SWIPE_COMMIT_DISTANCE_DP = 42f;
+    private static final float PAGE_SWIPE_COMMIT_WIDTH_RATIO = 0.30f;
+    private static final float PAGE_SWIPE_FLING_MIN_DISPLACEMENT_DP = 28f;
+    private static final float PAGE_SWIPE_FLING_VELOCITY_PX_PER_SEC = 900f;
     private static final int PINNED_FOLDER_FILL_COLOR = 0x26FFFFFF;
     private static final int PINNED_FOLDER_STROKE_COLOR = 0x33FFFFFF;
 
     private List<LauncherAppEntry> allApps = new ArrayList<>();
+    @Nullable private LaunchRippleListener launchRippleListener;
+    private final List<LauncherAppEntry> terminalSearchEntries = new ArrayList<>();
+    private final List<View> terminalSearchTargets = new ArrayList<>();
+    private int terminalSearchFocusIndex = -1;
     private int maxButtonCount = 7;
     private float textSize = 12f;
     private boolean bandW = false;
-    private boolean unifyIcons = true;
-    private boolean iconShadowEnabled = true;
-    private static final int ICON_SHADOW_COLOR = 0x73000000;
+    @Nullable private ColorFilter appIconColorFilter;
+    private static final int ICON_RENDER_PIPELINE_VERSION = 2;
+    private static final int ICON_SHADOW_COLOR = 0x47000000;
     /** Cache of harmonized icon drawables so resting and swipe-preview icons are identical (no size jump) and we don't rebuild bitmaps per frame. */
     private final LruCache<String, Drawable> normalizedIconCache = new LruCache<>(96);
     /** Visible alpha bounds per drawable; avoids rescanning custom/icon-pack artwork on every drag event. */
     private final Map<Drawable, RectF> drawableVisibleBoundsCache = new WeakHashMap<>();
-    private final Map<Drawable, FocusOutlineVisual> focusOutlineVisualCache = new WeakHashMap<>();
+    private final Map<Drawable, FocusOutlineRenderer.Visual> focusOutlineVisualCache = new WeakHashMap<>();
+    private final Map<View, ValueAnimator> terminalFocusOutlineAnimators = new WeakHashMap<>();
+    private final Map<View, Boolean> terminalFocusOutlineDirections = new WeakHashMap<>();
+    private final Map<View, FocusOutlineRenderer.OutlineDrawable> terminalFocusOutlineDrawables = new WeakHashMap<>();
     private int searchTolerance = 70;
     private float iconScale = 1.0f;
     private int appBarOpacity = 80;
@@ -170,6 +187,7 @@ public final class SuggestionBarView extends GridLayout {
     private int blurRadiusDp = 10;
     private int inheritedTintColor = 0;
     private boolean notificationBadgesEnabled = false;
+    private boolean rowHapticsEnabled = true;
     @NonNull private Set<String> notificationBadgePackages = Collections.emptySet();
     @Nullable private LauncherNotificationBadgeStore.Listener notificationBadgeListener;
     private int dockRowHeightHintPx = 0;
@@ -183,6 +201,11 @@ public final class SuggestionBarView extends GridLayout {
     private final Paint swipePreviewBadgeStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint swipePreviewFolderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint swipePreviewFolderStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Rect swipePreviewIconBounds = new Rect();
+    private final int[] azDragRowLocation = new int[2];
+    private final int[] azDragViewLocation = new int[2];
+    private final RectF azDragIconBoundsScratch = new RectF();
+    private final RectF azDragOutlineBoundsScratch = new RectF();
 
     private LauncherAppDataProvider appDataProvider;
     private LauncherConfigRepository configRepository;
@@ -197,6 +220,8 @@ public final class SuggestionBarView extends GridLayout {
     private PopupWindow appContextPopupWindow;
     private PopupWindow shortcutsPopupWindow;
     private PopupWindow notificationPopupWindow;
+    @Nullable private PopupWindow notificationInteractionPopup;
+    @Nullable private NotificationPopupInteractionListener notificationPopupInteractionListener;
     @Nullable private String notificationPopupPackage;
     @NonNull private Set<String> notificationPopupKeys = Collections.emptySet();
     @Nullable private Dialog iconPickerDialog;
@@ -221,6 +246,7 @@ public final class SuggestionBarView extends GridLayout {
     private int swipePreviewPageIndex = -1;
     @NonNull private List<LauncherAppEntry> swipePreviewEntries = Collections.emptyList();
     @NonNull private List<PinnedItem> swipePreviewPinnedItems = Collections.emptyList();
+    @NonNull private List<List<LauncherAppEntry>> swipePreviewFolderEntries = Collections.emptyList();
     @Nullable private ValueAnimator swipePreviewReboundAnimator;
     private VelocityTracker swipeVelocityTracker;
     private boolean pageSwitchAnimating = false;
@@ -279,7 +305,7 @@ public final class SuggestionBarView extends GridLayout {
     public static final class AzDragFocusResult {
         @Nullable public final LauncherAppEntry entry;
         @Nullable public final RectF iconBounds;
-        @Nullable public final Bitmap iconOutlineMask;
+        @Nullable public final FocusOutlineRenderer.Visual iconOutlineVisual;
         @Nullable public final RectF iconOutlineBounds;
         @Nullable public final View launchView;
         public final int edge;
@@ -289,7 +315,7 @@ public final class SuggestionBarView extends GridLayout {
         AzDragFocusResult(
             @Nullable LauncherAppEntry entry,
             @Nullable RectF iconBounds,
-            @Nullable Bitmap iconOutlineMask,
+            @Nullable FocusOutlineRenderer.Visual iconOutlineVisual,
             @Nullable RectF iconOutlineBounds,
             @Nullable View launchView,
             int edge,
@@ -298,7 +324,7 @@ public final class SuggestionBarView extends GridLayout {
         ) {
             this.entry = entry;
             this.iconBounds = iconBounds;
-            this.iconOutlineMask = iconOutlineMask;
+            this.iconOutlineVisual = iconOutlineVisual;
             this.iconOutlineBounds = iconOutlineBounds;
             this.launchView = launchView;
             this.edge = edge;
@@ -311,23 +337,25 @@ public final class SuggestionBarView extends GridLayout {
         }
     }
 
-    private static final class FocusOutlineVisual {
-        @NonNull final Bitmap mask;
-        final int viewWidth;
-        final int viewHeight;
-        final int outerPadding;
+    /** Display bitmap plus the clean, pre-shadow artwork used for focus contour extraction. */
+    private static final class RenderedIconDrawable extends BitmapDrawable {
+        @NonNull final Bitmap cleanArtwork;
 
-        FocusOutlineVisual(@NonNull Bitmap mask, int viewWidth, int viewHeight, int outerPadding) {
-            this.mask = mask;
-            this.viewWidth = viewWidth;
-            this.viewHeight = viewHeight;
-            this.outerPadding = outerPadding;
+        RenderedIconDrawable(@NonNull Resources resources, @NonNull Bitmap display,
+                             @NonNull Bitmap cleanArtwork) {
+            super(resources, display);
+            this.cleanArtwork = cleanArtwork;
         }
     }
 
     public interface OverflowInteractionListener {
         void onOverflowInteractionChanged(boolean interacting);
         default void onOverflowPagePositionChanged(float pagePosition) {}
+    }
+
+    public interface NotificationPopupInteractionListener {
+        void onNotificationPopupShown();
+        void onNotificationPopupDismissed();
     }
 
     private interface IconOverrideApplier {
@@ -445,30 +473,55 @@ public final class SuggestionBarView extends GridLayout {
     public void setBandW(boolean bandW) {
         if (this.bandW == bandW) return;
         this.bandW = bandW;
+        updateAppIconColorFilter();
         lastSurfaceRenderSignature = 0;
     }
 
-    public void setUnifyIcons(boolean unifyIcons) {
-        if (this.unifyIcons == unifyIcons) return;
-        this.unifyIcons = unifyIcons;
-        invalidateRenderedIconCaches();
+    private void updateAppIconColorFilter() {
+        if (bandW) {
+            float[] grayscale = {
+                0.33f, 0.33f, 0.33f, 0, 0,
+                0.33f, 0.33f, 0.33f, 0, 0,
+                0.33f, 0.33f, 0.33f, 0, 0,
+                0, 0, 0, 1, 0
+            };
+            appIconColorFilter = new ColorMatrixColorFilter(grayscale);
+        } else {
+            appIconColorFilter = null;
+        }
     }
 
-    public void setIconShadowEnabled(boolean enabled) {
-        if (this.iconShadowEnabled == enabled) return;
-        this.iconShadowEnabled = enabled;
-        invalidateRenderedIconCaches();
+    private void applyAppIconColorFilter(@NonNull ImageView imageView) {
+        if (appIconColorFilter == null)
+            imageView.clearColorFilter();
+        else
+            imageView.setColorFilter(appIconColorFilter);
     }
 
     private void invalidateRenderedIconCaches() {
         normalizedIconCache.evictAll();
         drawableVisibleBoundsCache.clear();
         focusOutlineVisualCache.clear();
+        for (ValueAnimator animator : new ArrayList<>(terminalFocusOutlineAnimators.values())) {
+            if (animator != null) animator.cancel();
+        }
+        terminalFocusOutlineAnimators.clear();
+        terminalFocusOutlineDirections.clear();
+        for (Map.Entry<View, FocusOutlineRenderer.OutlineDrawable> entry
+                : new ArrayList<>(terminalFocusOutlineDrawables.entrySet())) {
+            View target = entry.getKey();
+            if (target != null && target.getForeground() == entry.getValue()) target.setForeground(null);
+        }
+        terminalFocusOutlineDrawables.clear();
         lastSurfaceRenderSignature = 0;
     }
 
     public void setIconScale(float iconScale) {
+        if (Math.abs(this.iconScale - iconScale) < 0.0001f) return;
         this.iconScale = iconScale;
+        invalidateRenderedIconCaches();
+        childLayoutPending = true;
+        requestLayout();
     }
 
     public void setDockRowHeightHintPx(int dockRowHeightHintPx) {
@@ -477,6 +530,7 @@ public final class SuggestionBarView extends GridLayout {
             return;
         }
         this.dockRowHeightHintPx = clamped;
+        invalidateRenderedIconCaches();
         childLayoutPending = true;
         requestLayout();
         invalidate();
@@ -618,6 +672,11 @@ public final class SuggestionBarView extends GridLayout {
 
     public void setOverflowInteractionListener(@Nullable OverflowInteractionListener listener) {
         overflowInteractionListener = listener;
+    }
+
+    public void setNotificationPopupInteractionListener(
+        @Nullable NotificationPopupInteractionListener listener) {
+        notificationPopupInteractionListener = listener;
     }
 
     public void setHostVisible(boolean visible) {
@@ -997,10 +1056,9 @@ public final class SuggestionBarView extends GridLayout {
             return new AzDragFocusResult(null, null, null, null, null, AZ_EDGE_NONE, pageLeft, pageRight);
         }
 
-        int[] location = new int[2];
-        getLocationOnScreen(location);
-        float localX = rawX - location[0];
-        float localY = rawY - location[1];
+        getLocationOnScreen(azDragRowLocation);
+        float localX = rawX - azDragRowLocation[0];
+        float localY = rawY - azDragRowLocation[1];
         float width = Math.max(1f, getWidth());
         float height = Math.max(1f, getHeight());
 
@@ -1022,7 +1080,7 @@ public final class SuggestionBarView extends GridLayout {
         int candidateSlot = clamp((int) ((clampedX / width) * azRenderedSlotCount), 0, azRenderedSlotCount - 1);
         int slot = candidateSlot;
         if (lastAzResolvedSlot >= 0 && lastAzResolvedSlot < azRenderedSlotCount && candidateSlot != lastAzResolvedSlot) {
-            float hysteresis = slotWidth * 0.22f;
+            float hysteresis = slotWidth * AzScrubRowView.LETTER_SLOT_HYSTERESIS_RATIO;
             if (candidateSlot > lastAzResolvedSlot) {
                 float boundary = (lastAzResolvedSlot + 1) * slotWidth;
                 if (clampedX < boundary + hysteresis) {
@@ -1045,55 +1103,72 @@ public final class SuggestionBarView extends GridLayout {
         String key = stableEntryKey(entry);
         WeakReference<View> viewRef = azRenderedEntryTargets.get(key);
         View launchView = viewRef == null ? null : viewRef.get();
-        RectF bounds = null;
-        Bitmap outlineMask = null;
-        RectF outlineBounds = null;
+        boolean hasBounds = false;
+        FocusOutlineRenderer.Visual outlineVisual = null;
+        boolean hasOutlineBounds = false;
         if (launchView != null && launchView.isAttachedToWindow()) {
-            bounds = resolveVisibleIconBoundsOnScreen(launchView);
+            resolveVisibleIconBoundsOnScreen(launchView, azDragIconBoundsScratch);
+            hasBounds = !azDragIconBoundsScratch.isEmpty();
             if (launchView instanceof ImageView) {
-                FocusOutlineVisual visual = resolveFocusOutlineVisual((ImageView) launchView);
+                FocusOutlineRenderer.Visual visual = resolveFocusOutlineVisual((ImageView) launchView);
                 if (visual != null) {
-                    int[] viewLoc = new int[2];
-                    launchView.getLocationOnScreen(viewLoc);
-                    outlineMask = visual.mask;
-                    outlineBounds = new RectF(
-                        viewLoc[0] - visual.outerPadding,
-                        viewLoc[1] - visual.outerPadding,
-                        viewLoc[0] + visual.viewWidth + visual.outerPadding,
-                        viewLoc[1] + visual.viewHeight + visual.outerPadding
+                    launchView.getLocationOnScreen(azDragViewLocation);
+                    outlineVisual = visual;
+                    azDragOutlineBoundsScratch.set(
+                        azDragViewLocation[0] - visual.outerPadding,
+                        azDragViewLocation[1] - visual.outerPadding,
+                        azDragViewLocation[0] + visual.sourceWidth + visual.outerPadding,
+                        azDragViewLocation[1] + visual.sourceHeight + visual.outerPadding
                     );
+                    hasOutlineBounds = true;
                 }
             }
         }
-        if (bounds == null) {
-            bounds = approximateAzSlotIconBounds(slot, azRenderedSlotCount, location, width, height);
+        if (!hasBounds) {
+            approximateAzSlotIconBounds(
+                slot, azRenderedSlotCount, azDragRowLocation, width, height, azDragIconBoundsScratch);
         }
-        return new AzDragFocusResult(entry, bounds, outlineMask, outlineBounds, launchView, edge, pageLeft, pageRight);
+        return new AzDragFocusResult(
+            entry,
+            new RectF(azDragIconBoundsScratch),
+            outlineVisual,
+            hasOutlineBounds ? new RectF(azDragOutlineBoundsScratch) : null,
+            launchView,
+            edge,
+            pageLeft,
+            pageRight
+        );
     }
 
     @Nullable
-    private FocusOutlineVisual resolveFocusOutlineVisual(@NonNull ImageView imageView) {
+    private FocusOutlineRenderer.Visual resolveFocusOutlineVisual(@NonNull ImageView imageView) {
         Drawable drawable = imageView.getDrawable();
         int width = imageView.getWidth();
         int height = imageView.getHeight();
         if (drawable == null || width <= 0 || height <= 0 || drawable.getBounds().isEmpty()) {
             return null;
         }
-        FocusOutlineVisual cached = focusOutlineVisualCache.get(drawable);
-        if (cached != null && cached.viewWidth == width && cached.viewHeight == height) {
+        FocusOutlineRenderer.Visual cached = focusOutlineVisualCache.get(drawable);
+        if (cached != null && cached.sourceWidth == width && cached.sourceHeight == height) {
             return cached;
         }
 
+        // Focus geometry must come from clean artwork. The display bitmap deliberately contains a
+        // downward contact shadow, which would otherwise skew the alpha contour on every icon.
         Bitmap source = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas sourceCanvas = new Canvas(source);
         sourceCanvas.translate(imageView.getPaddingLeft(), imageView.getPaddingTop());
         sourceCanvas.concat(imageView.getImageMatrix());
-        drawable.draw(sourceCanvas);
-        int gap = Math.max(1, dp(1));
-        int stroke = Math.max(1, dp(2));
-        Bitmap mask = buildFocusOutlineMask(source, gap, stroke);
+        if (drawable instanceof RenderedIconDrawable) {
+            RenderedIconDrawable rendered = (RenderedIconDrawable) drawable;
+            Paint artworkPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+            sourceCanvas.drawBitmap(rendered.cleanArtwork, null, drawable.getBounds(), artworkPaint);
+        } else {
+            drawable.draw(sourceCanvas);
+        }
+        FocusOutlineRenderer.Visual built = FocusOutlineRenderer.buildVisual(
+            source, getResources().getDisplayMetrics().density);
         source.recycle();
-        FocusOutlineVisual built = new FocusOutlineVisual(mask, width, height, gap + stroke);
         focusOutlineVisualCache.put(drawable, built);
         return built;
     }
@@ -1101,53 +1176,7 @@ public final class SuggestionBarView extends GridLayout {
     /** Builds a crisp external contour from the icon alpha, including irregular icon-pack shapes. */
     @NonNull
     static Bitmap buildFocusOutlineMask(@NonNull Bitmap source, int gap, int stroke) {
-        int safeGap = Math.max(0, gap);
-        int safeStroke = Math.max(1, stroke);
-        int outer = safeGap + safeStroke;
-        int width = source.getWidth();
-        int height = source.getHeight();
-        int[] pixels = new int[width * height];
-        source.getPixels(pixels, 0, width, 0, 0, width, height);
-        int maxAlpha = 0;
-        for (int pixel : pixels) maxAlpha = Math.max(maxAlpha, pixel >>> 24);
-        int threshold = Math.max(8, Math.round(maxAlpha * 0.25f));
-        for (int i = 0; i < pixels.length; i++) {
-            pixels[i] = (pixels[i] >>> 24) >= threshold ? 0xFFFFFFFF : 0x00000000;
-        }
-        Bitmap binary = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        binary.setPixels(pixels, 0, width, 0, 0, width, height);
-        Bitmap result = Bitmap.createBitmap(width + (outer * 2), height + (outer * 2), Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(result);
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-        drawDilatedMask(canvas, binary, paint, outer, outer);
-        if (safeGap > 0) {
-            paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_OUT));
-            drawDilatedMask(canvas, binary, paint, outer, safeGap);
-            paint.setXfermode(null);
-        } else {
-            paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_OUT));
-            canvas.drawBitmap(binary, outer, outer, paint);
-            paint.setXfermode(null);
-        }
-        binary.recycle();
-        return result;
-    }
-
-    private static void drawDilatedMask(
-        @NonNull Canvas canvas,
-        @NonNull Bitmap mask,
-        @NonNull Paint paint,
-        int origin,
-        int radius
-    ) {
-        int radiusSquared = radius * radius;
-        for (int y = -radius; y <= radius; y++) {
-            for (int x = -radius; x <= radius; x++) {
-                if ((x * x) + (y * y) <= radiusSquared) {
-                    canvas.drawBitmap(mask, origin + x, origin + y, paint);
-                }
-            }
-        }
+        return FocusOutlineRenderer.buildFocusOutlineMask(source, gap, stroke);
     }
 
     /**
@@ -1155,28 +1184,26 @@ public final class SuggestionBarView extends GridLayout {
      * and legacy/custom Android icons commonly include asymmetric transparent padding; using the
      * whole view makes the focus ring oversized and visibly off-center.
      */
-    @Nullable
-    private RectF resolveVisibleIconBoundsOnScreen(@NonNull View launchView) {
-        int[] viewLoc = new int[2];
-        launchView.getLocationOnScreen(viewLoc);
-        RectF fallback = new RectF(
-            viewLoc[0],
-            viewLoc[1],
-            viewLoc[0] + launchView.getWidth(),
-            viewLoc[1] + launchView.getHeight()
+    private void resolveVisibleIconBoundsOnScreen(@NonNull View launchView, @NonNull RectF out) {
+        launchView.getLocationOnScreen(azDragViewLocation);
+        out.set(
+            azDragViewLocation[0],
+            azDragViewLocation[1],
+            azDragViewLocation[0] + launchView.getWidth(),
+            azDragViewLocation[1] + launchView.getHeight()
         );
         if (!(launchView instanceof ImageView)) {
-            return fallback;
+            return;
         }
 
         ImageView imageView = (ImageView) launchView;
         Drawable drawable = imageView.getDrawable();
         if (drawable == null) {
-            return fallback;
+            return;
         }
         Rect drawableBounds = drawable.getBounds();
         if (drawableBounds.isEmpty()) {
-            return fallback;
+            return;
         }
 
         RectF normalizedVisibleBounds = drawableVisibleBoundsCache.get(drawable);
@@ -1184,18 +1211,20 @@ public final class SuggestionBarView extends GridLayout {
             normalizedVisibleBounds = measureDrawableVisibleBounds(drawable);
             drawableVisibleBoundsCache.put(drawable, normalizedVisibleBounds);
         }
-        RectF mapped = new RectF(
+        azDragOutlineBoundsScratch.set(
             drawableBounds.left + (normalizedVisibleBounds.left * drawableBounds.width()),
             drawableBounds.top + (normalizedVisibleBounds.top * drawableBounds.height()),
             drawableBounds.left + (normalizedVisibleBounds.right * drawableBounds.width()),
             drawableBounds.top + (normalizedVisibleBounds.bottom * drawableBounds.height())
         );
-        imageView.getImageMatrix().mapRect(mapped);
-        mapped.offset(
-            viewLoc[0] + imageView.getPaddingLeft(),
-            viewLoc[1] + imageView.getPaddingTop()
+        imageView.getImageMatrix().mapRect(azDragOutlineBoundsScratch);
+        azDragOutlineBoundsScratch.offset(
+            azDragViewLocation[0] + imageView.getPaddingLeft(),
+            azDragViewLocation[1] + imageView.getPaddingTop()
         );
-        return mapped.width() > 0f && mapped.height() > 0f ? mapped : fallback;
+        if (azDragOutlineBoundsScratch.width() > 0f && azDragOutlineBoundsScratch.height() > 0f) {
+            out.set(azDragOutlineBoundsScratch);
+        }
     }
 
     @NonNull
@@ -1211,15 +1240,21 @@ public final class SuggestionBarView extends GridLayout {
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
 
-        Drawable scanDrawable = drawable;
-        Drawable.ConstantState state = drawable.getConstantState();
-        if (state != null) {
-            scanDrawable = state.newDrawable(getResources()).mutate();
+        if (drawable instanceof RenderedIconDrawable) {
+            canvas.drawBitmap(((RenderedIconDrawable) drawable).cleanArtwork, null,
+                new Rect(0, 0, width, height),
+                new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG));
+        } else {
+            Drawable scanDrawable = drawable;
+            Drawable.ConstantState state = drawable.getConstantState();
+            if (state != null) {
+                scanDrawable = state.newDrawable(getResources()).mutate();
+            }
+            Rect oldBounds = new Rect(scanDrawable.getBounds());
+            scanDrawable.setBounds(0, 0, width, height);
+            scanDrawable.draw(canvas);
+            scanDrawable.setBounds(oldBounds);
         }
-        Rect oldBounds = new Rect(scanDrawable.getBounds());
-        scanDrawable.setBounds(0, 0, width, height);
-        scanDrawable.draw(canvas);
-        scanDrawable.setBounds(oldBounds);
 
         Rect visible = findVisibleAlphaBounds(bitmap);
         bitmap.recycle();
@@ -1265,14 +1300,14 @@ public final class SuggestionBarView extends GridLayout {
             : new Rect();
     }
 
-    @NonNull
-    private RectF approximateAzSlotIconBounds(int slot, int slotCount, @NonNull int[] rowLocation, float width, float height) {
+    private void approximateAzSlotIconBounds(int slot, int slotCount, @NonNull int[] rowLocation,
+                                             float width, float height, @NonNull RectF out) {
         float safeSlotCount = Math.max(1, slotCount);
         float slotWidth = width / safeSlotCount;
         float cx = (slotWidth * slot) + (slotWidth * 0.5f);
         float cy = height * 0.5f;
         float size = iconSizePx();
-        return new RectF(
+        out.set(
             rowLocation[0] + cx - (size * 0.5f),
             rowLocation[1] + cy - (size * 0.5f),
             rowLocation[0] + cx + (size * 0.5f),
@@ -1323,9 +1358,14 @@ public final class SuggestionBarView extends GridLayout {
         if (key.equals(azFocusedEntryKey) && target == azFocusedView) {
             return;
         }
+        boolean movedBetweenApps = azFocusedEntryKey != null
+            && !azFocusedEntryKey.equals(key);
         clearAzFocusedEntry();
         azFocusedEntryKey = key;
         azFocusedView = target;
+        if (rowHapticsEnabled && movedBetweenApps) {
+            performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+        }
         if ((now - lastAzFocusBounceUptimeMs) >= AZ_FOCUS_BOUNCE_COOLDOWN_MS) {
             lastAzFocusBounceUptimeMs = now;
             animateAzFocusAlpha(target);
@@ -1511,8 +1551,12 @@ public final class SuggestionBarView extends GridLayout {
             float dx = event.getX() - swipeDownX;
             float dy = event.getY() - swipeDownY;
             float vx = swipeVelocityTracker == null ? 0f : swipeVelocityTracker.getXVelocity();
-            float threshold = dp(28);
-            boolean swipeQualified = Math.abs(dx) > threshold || Math.abs(vx) > 900f;
+            float commitDistance = resolvePageSwipeCommitDistancePx();
+            boolean distanceCommit = Math.abs(dx) > commitDistance;
+            boolean velocityCommit = Math.abs(dx) >= dp(PAGE_SWIPE_FLING_MIN_DISPLACEMENT_DP)
+                && Math.abs(vx) > PAGE_SWIPE_FLING_VELOCITY_PX_PER_SEC
+                && Math.signum(dx) == Math.signum(vx);
+            boolean swipeQualified = distanceCommit || velocityCommit;
             if (swipeQualified && Math.abs(dx) > Math.abs(dy) * 1.2f &&
                 TextUtils.isEmpty(lastInput.trim())) {
                 int pageDelta = dx < 0 ? 1 : -1;
@@ -1582,7 +1626,9 @@ public final class SuggestionBarView extends GridLayout {
         }
 
         this.lastTerminalView = terminalView;
-        this.lastInput = input == null ? "" : input;
+        String nextInput = input == null ? "" : input;
+        if (!nextInput.trim().equals(lastInput.trim())) clearTerminalSearchFocus();
+        this.lastInput = nextInput;
         final int requestGeneration = ++searchGeneration;
         if (activeAzLetter != null && !this.lastInput.trim().isEmpty()) {
             activeAzLetter = null;
@@ -1753,6 +1799,7 @@ public final class SuggestionBarView extends GridLayout {
         setAlpha(1f);
         removeAllViews();
         clearAzFocusedEntry();
+        clearTerminalSearchFocus();
         lastAzResolvedSlot = -1;
         launchTargetViews.clear();
         launchTargetViewsByPackage.clear();
@@ -1812,6 +1859,10 @@ public final class SuggestionBarView extends GridLayout {
             }
 
             View dragTarget = resolvePrimaryPressTarget(view);
+            if (!azPreview && !TextUtils.isEmpty(lastInput.trim())) {
+                terminalSearchEntries.add(entry);
+                terminalSearchTargets.add(dragTarget);
+            }
             if (azPreview && renderCol >= 0 && renderCol < buttonCount) {
                 azRenderedSlotEntries.put(renderCol, entry);
                 azRenderedEntryTargets.put(stableEntryKey(entry), new WeakReference<>(dragTarget));
@@ -1888,6 +1939,10 @@ public final class SuggestionBarView extends GridLayout {
             setOnLongClickListener(null);
             setOnDragListener(null);
         }
+        if (!terminalSearchEntries.isEmpty()) {
+            terminalSearchFocusIndex = 0;
+            applyTerminalSearchFocusOutline();
+        }
         if (overflowInteractionListener != null) {
             overflowInteractionListener.onOverflowInteractionChanged(rowInteractionActive);
         }
@@ -1898,6 +1953,144 @@ public final class SuggestionBarView extends GridLayout {
         } else {
             invalidate();
         }
+    }
+
+    public int getTerminalSearchResultCount() {
+        return terminalSearchEntries.size();
+    }
+
+    public boolean moveTerminalSearchFocus(int delta) {
+        int count = terminalSearchEntries.size();
+        if (count == 0) return false;
+        int previousFocusIndex = terminalSearchFocusIndex;
+        terminalSearchFocusIndex = Math.floorMod(terminalSearchFocusIndex + delta, count);
+        if (rowHapticsEnabled && RowHapticTickHelper.isBoundaryCrossing(
+            previousFocusIndex, terminalSearchFocusIndex)) {
+            performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+        }
+        applyTerminalSearchFocusOutline();
+        return true;
+    }
+
+    public void setRowHapticsEnabled(boolean enabled) {
+        rowHapticsEnabled = enabled;
+    }
+
+    public boolean launchFocusedTerminalSearchEntry() {
+        int index = terminalSearchFocusIndex;
+        if (index < 0 || index >= terminalSearchEntries.size()) return false;
+        LauncherAppEntry entry = terminalSearchEntries.get(index);
+        View source = index < terminalSearchTargets.size() ? terminalSearchTargets.get(index) : null;
+        clearTerminalSearchFocus();
+        launchEntry(entry, lastTerminalView, source);
+        return true;
+    }
+
+    public void clearTerminalSearchFocus() {
+        for (ValueAnimator animator : new ArrayList<>(terminalFocusOutlineAnimators.values())) {
+            if (animator != null) animator.cancel();
+        }
+        terminalFocusOutlineAnimators.clear();
+        terminalFocusOutlineDirections.clear();
+        terminalFocusOutlineDrawables.clear();
+        for (View target : terminalSearchTargets) {
+            if (target != null) target.setForeground(null);
+        }
+        terminalSearchEntries.clear();
+        terminalSearchTargets.clear();
+        terminalSearchFocusIndex = -1;
+    }
+
+    private void applyTerminalSearchFocusOutline() {
+        int accent = FocusOutlineRenderer.resolveAccent(this);
+        for (int i = 0; i < terminalSearchTargets.size(); i++) {
+            View target = terminalSearchTargets.get(i);
+            if (target == null) continue;
+            if (i != terminalSearchFocusIndex) {
+                animateTerminalFocusOutline(target, false, null);
+                continue;
+            }
+            if (!(target instanceof ImageView)) continue;
+            if (target.getWidth() <= 0 || target.getHeight() <= 0) {
+                // Focus is applied while the row is still being built; wait for real image-matrix
+                // bounds instead of flashing a geometrically different fallback outline.
+                final int focusAtPost = terminalSearchFocusIndex;
+                target.post(() -> {
+                    if (terminalSearchFocusIndex == focusAtPost) applyTerminalSearchFocusOutline();
+                });
+                continue;
+            }
+            FocusOutlineRenderer.Visual visual = resolveFocusOutlineVisual((ImageView) target);
+            if (visual == null) continue;
+            FocusOutlineRenderer.OutlineDrawable outline = terminalFocusOutlineDrawables.get(target);
+            if (outline == null) {
+                outline = new FocusOutlineRenderer.OutlineDrawable(visual, accent);
+                terminalFocusOutlineDrawables.put(target, outline);
+            }
+            animateTerminalFocusOutline(target, true, outline);
+        }
+    }
+
+    private void animateTerminalFocusOutline(@NonNull View target, boolean incoming,
+                                             @Nullable FocusOutlineRenderer.OutlineDrawable requested) {
+        FocusOutlineRenderer.OutlineDrawable outline = requested != null
+            ? requested : terminalFocusOutlineDrawables.get(target);
+        if (outline == null) return;
+
+        ValueAnimator running = terminalFocusOutlineAnimators.get(target);
+        if (running != null) {
+            // Posted layout retries keep the existing transition; a real direction reversal starts
+            // from the drawable's current alpha/scale instead of guessing direction from geometry.
+            Boolean runningIncoming = terminalFocusOutlineDirections.get(target);
+            if (runningIncoming != null && runningIncoming == incoming) return;
+            terminalFocusOutlineAnimators.remove(target);
+            terminalFocusOutlineDirections.remove(target);
+            running.cancel();
+        }
+
+        if (incoming && target.getForeground() != outline) {
+            outline.setFocusAlpha(0f);
+            outline.setFocusScale(1.04f);
+            target.setForeground(outline);
+            target.setForegroundGravity(Gravity.FILL);
+        } else if (!incoming && target.getForeground() != outline) {
+            return;
+        }
+
+        if (!FocusOutlineRenderer.animationsEnabled(getContext())) {
+            terminalFocusOutlineDirections.remove(target);
+            outline.setFocusAlpha(incoming ? 1f : 0f);
+            outline.setFocusScale(incoming ? 1f : 0.96f);
+            if (!incoming && target.getForeground() == outline) target.setForeground(null);
+            return;
+        }
+
+        final float startAlpha = outline.getFocusAlpha();
+        final float startScale = outline.getFocusScale();
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        terminalFocusOutlineAnimators.put(target, animator);
+        terminalFocusOutlineDirections.put(target, incoming);
+        animator.setDuration(160L);
+        animator.setInterpolator(new DecelerateInterpolator(1.45f));
+        animator.addUpdateListener(animation -> {
+            float progress = (float) animation.getAnimatedValue();
+            outline.setFocusAlpha(lerp(startAlpha, incoming ? 1f : 0f, progress));
+            outline.setFocusScale(incoming
+                ? FocusOutlineRenderer.incomingScale(startScale, progress)
+                : lerp(startScale, 0.96f, progress));
+        });
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                if (terminalFocusOutlineAnimators.get(target) != animation) return;
+                terminalFocusOutlineAnimators.remove(target);
+                terminalFocusOutlineDirections.remove(target);
+                outline.setFocusAlpha(incoming ? 1f : 0f);
+                outline.setFocusScale(incoming ? 1f : 0.96f);
+                if (!incoming && target.getForeground() == outline) target.setForeground(null);
+            }
+        });
+        animator.start();
     }
 
     private void animatePinnedMutationFeedback() {
@@ -1926,8 +2119,9 @@ public final class SuggestionBarView extends GridLayout {
         signature = (31 * signature) + (azPreview ? 1 : 0);
         signature = (31 * signature) + (pinnedSurface ? 1 : 0);
         signature = (31 * signature) + (bandW ? 1 : 0);
-        signature = (31 * signature) + (unifyIcons ? 1 : 0);
-        signature = (31 * signature) + (iconShadowEnabled ? 1 : 0);
+        signature = (31 * signature) + ICON_RENDER_PIPELINE_VERSION;
+        signature = (31 * signature) + Float.floatToIntBits(iconScale);
+        signature = (31 * signature) + dockRowHeightHintPx;
         signature = (31 * signature) + Math.max(1, buttonCount);
         signature = (31 * signature) + pinnedPageIndex;
         signature = (31 * signature) + activeAzPageIndex;
@@ -2057,17 +2251,7 @@ public final class SuggestionBarView extends GridLayout {
         }
     }
 
-    /**
-     * Light-touch harmonization so default (non-icon-pack) icons read as a cohesive set on the glass
-     * dock WITHOUT reshaping them: each icon keeps its native silhouette but gets a consistent
-     * footprint/scale, a slight saturation nudge toward the dock's vibrancy, and a soft drop shadow
-     * (derived from the icon's own alpha) that lifts it off the glass. Returns {@code src} unchanged
-     * when the feature is off. The B&W color filter, if enabled, still stacks on top of the result.
-     */
-    /**
-     * Harmonized icon for an entry at {@code sizePx}, cached so the resting button and the
-     * swipe-preview draw the exact same bitmap (no size jump) without rebuilding per frame.
-     */
+    /** Always-on glass-dock icon treatment, cached across resting and swipe-preview rendering. */
     @Nullable
     private Drawable iconForDisplay(@NonNull LauncherAppEntry entry, int sizePx) {
         Drawable raw = entry.icon != null ? entry.icon : getContext().getPackageManager().getDefaultActivityIcon();
@@ -2075,34 +2259,31 @@ public final class SuggestionBarView extends GridLayout {
             return raw;
         }
         boolean cloneBadge = entry.appRef.clonedProfile;
-        // Both harmonization and the standalone shadow rebuild the bitmap. Clone/profile apps also
-        // rebuild once so their identity marker is consistent across dock, A-Z and swipe previews.
-        if (!unifyIcons && !iconShadowEnabled && !cloneBadge) return raw;
-        String key = (unifyIcons ? "u" : "") + (iconShadowEnabled ? "s" : "")
-            + (cloneBadge ? "c" : "") + (entry.iconPackArtwork ? "p" : "")
+        String key = "glass" + ICON_RENDER_PIPELINE_VERSION + (cloneBadge ? "c" : "")
+            + (entry.iconPackArtwork ? "p" : "")
             + stableEntryKey(entry) + "@" + sizePx;
         Drawable cached = normalizedIconCache.get(key);
         if (cached != null) {
             return cached;
         }
-        Drawable built = unifyIcons ? normalizeIcon(raw, sizePx, !entry.iconPackArtwork)
-            : (iconShadowEnabled ? shadowedIcon(raw, sizePx) : rasterizedIcon(raw, sizePx));
-        if (cloneBadge && built != null) built = addCloneBadge(built, sizePx);
+        Drawable built = normalizeIcon(raw, sizePx, !entry.iconPackArtwork, cloneBadge);
         if (built != null) {
             normalizedIconCache.put(key, built);
         }
         return built != null ? built : raw;
     }
 
-    private Drawable normalizeIcon(@Nullable Drawable src, int sizePx, boolean tuneSaturation) {
-        if (!unifyIcons || src == null || sizePx <= 0) {
+    private Drawable normalizeIcon(@Nullable Drawable src, int sizePx, boolean tuneSaturation,
+                                   boolean cloneBadge) {
+        if (src == null || sizePx <= 0) {
             return src;
         }
-        Bitmap out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(out);
+        Bitmap cleanArtwork = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
+        Canvas artworkCanvas = new Canvas(cleanArtwork);
 
-        // Inset leaves room for the soft shadow when it's on; otherwise icons fill the cell.
-        float inset = sizePx * (iconShadowEnabled ? 0.035f : 0.02f);
+        // Keep the prior unification footprint as the normalization baseline for every source,
+        // including icon-pack artwork. The native silhouette is never reshaped.
+        float inset = sizePx * 0.035f;
         int left = Math.round(inset);
         int top = Math.round(inset);
         int right = Math.round(sizePx - inset);
@@ -2118,10 +2299,6 @@ public final class SuggestionBarView extends GridLayout {
         src.draw(iconCanvas);
         src.setBounds(oldBounds);
 
-        if (iconShadowEnabled) {
-            drawIconShadow(canvas, iconBmp, iconRect, sizePx);
-        }
-
         // Saturation nudge toward the glass vibrancy (match, not grey), then draw the icon.
         Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         if (tuneSaturation) {
@@ -2129,57 +2306,20 @@ public final class SuggestionBarView extends GridLayout {
             saturate.setSaturation(0.92f);
             iconPaint.setColorFilter(new ColorMatrixColorFilter(saturate));
         }
-        canvas.drawBitmap(iconBmp, null, iconRect, iconPaint);
+        artworkCanvas.drawBitmap(iconBmp, null, iconRect, iconPaint);
         iconBmp.recycle();
+        if (cloneBadge) drawCloneBadge(artworkCanvas, sizePx);
 
-        return new BitmapDrawable(getResources(), out);
-    }
-
-    /** Wraps a raw icon (no harmonization) with just the soft drop shadow, preserving its colours. */
-    @Nullable
-    private Drawable shadowedIcon(@Nullable Drawable src, int sizePx) {
-        if (src == null || sizePx <= 0) return src;
-        Bitmap out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(out);
-        float inset = sizePx * 0.035f;
-        Rect iconRect = new Rect(Math.round(inset), Math.round(inset),
-            Math.round(sizePx - inset), Math.round(sizePx - inset));
-        Bitmap iconBmp = Bitmap.createBitmap(iconRect.width(), iconRect.height(), Bitmap.Config.ARGB_8888);
-        Canvas iconCanvas = new Canvas(iconBmp);
-        Rect oldBounds = new Rect(src.getBounds());
-        src.setBounds(0, 0, iconBmp.getWidth(), iconBmp.getHeight());
-        src.draw(iconCanvas);
-        src.setBounds(oldBounds);
-        drawIconShadow(canvas, iconBmp, iconRect, sizePx);
-        Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-        canvas.drawBitmap(iconBmp, null, iconRect, iconPaint);
-        iconBmp.recycle();
-        return new BitmapDrawable(getResources(), out);
-    }
-
-    @Nullable
-    private Drawable rasterizedIcon(@Nullable Drawable src, int sizePx) {
-        if (src == null || sizePx <= 0) return src;
-        Bitmap out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(out);
-        Rect oldBounds = new Rect(src.getBounds());
-        src.setBounds(0, 0, sizePx, sizePx);
-        src.draw(canvas);
-        src.setBounds(oldBounds);
-        return new BitmapDrawable(getResources(), out);
+        Bitmap display = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
+        Canvas displayCanvas = new Canvas(display);
+        drawIconShadow(displayCanvas, cleanArtwork);
+        displayCanvas.drawBitmap(cleanArtwork, 0f, 0f,
+            new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG));
+        return new RenderedIconDrawable(getResources(), display, cleanArtwork);
     }
 
     /** Small, neutral double-tile badge that remains legible over both bright and dark icons. */
-    @Nullable
-    private Drawable addCloneBadge(@Nullable Drawable src, int sizePx) {
-        if (src == null || sizePx <= 0) return src;
-        Bitmap out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(out);
-        Rect oldBounds = new Rect(src.getBounds());
-        src.setBounds(0, 0, sizePx, sizePx);
-        src.draw(canvas);
-        src.setBounds(oldBounds);
-
+    private void drawCloneBadge(@NonNull Canvas canvas, int sizePx) {
         float radius = Math.max(dp(6f), sizePx * 0.19f);
         float cx = sizePx - radius - Math.max(dp(1f), sizePx * 0.025f);
         float cy = sizePx - radius - Math.max(dp(1f), sizePx * 0.025f);
@@ -2200,16 +2340,15 @@ public final class SuggestionBarView extends GridLayout {
         paint.setColor(0xFF5B6CFF);
         canvas.drawRoundRect(cx - tile * 0.20f, cy - tile * 0.20f,
             cx + tile * 0.60f, cy + tile * 0.60f, corner, corner, paint);
-        return new BitmapDrawable(getResources(), out);
     }
 
-    /** Soft drop shadow derived from the icon's own alpha silhouette — lifts it off the glass. */
-    private void drawIconShadow(@NonNull Canvas canvas, @NonNull Bitmap iconBmp, @NonNull Rect iconRect, int sizePx) {
-        Bitmap alpha = iconBmp.extractAlpha();
+    /** Subtle silhouette contact shadow: 3dp feather, 1dp down, 28% black. */
+    private void drawIconShadow(@NonNull Canvas canvas, @NonNull Bitmap cleanArtwork) {
+        Bitmap alpha = cleanArtwork.extractAlpha();
         Paint shadowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         shadowPaint.setColor(ICON_SHADOW_COLOR);
-        shadowPaint.setMaskFilter(new BlurMaskFilter(Math.max(1f, sizePx * 0.06f), BlurMaskFilter.Blur.NORMAL));
-        canvas.drawBitmap(alpha, iconRect.left, iconRect.top + (sizePx * 0.045f), shadowPaint);
+        shadowPaint.setMaskFilter(new BlurMaskFilter(Math.max(1f, dp(3f)), BlurMaskFilter.Blur.NORMAL));
+        canvas.drawBitmap(alpha, 0f, dp(1f), shadowPaint);
         alpha.recycle();
     }
 
@@ -2231,18 +2370,7 @@ public final class SuggestionBarView extends GridLayout {
         imageButton.setLayoutParams(new FrameLayout.LayoutParams(size, size, Gravity.CENTER));
         imageButton.setMinimumHeight(size);
         imageButton.setMinimumWidth(size);
-        if (bandW) {
-            float[] colorMatrix = {
-                0.33f, 0.33f, 0.33f, 0, 0,
-                0.33f, 0.33f, 0.33f, 0, 0,
-                0.33f, 0.33f, 0.33f, 0, 0,
-                0, 0, 0, 1, 0
-            };
-            ColorFilter colorFilter = new ColorMatrixColorFilter(colorMatrix);
-            imageButton.setColorFilter(colorFilter);
-        } else {
-            icon.clearColorFilter();
-        }
+        applyAppIconColorFilter(imageButton);
         imageButton.setOnClickListener(v -> launchEntryFromTouch(v, entry, lastTerminalView));
         imageButton.setContentDescription(entry.label);
         registerLaunchTarget(entry.appRef, imageButton);
@@ -2265,9 +2393,15 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private void launchEntry(@NonNull LauncherAppEntry entry, @Nullable TerminalView terminalView, @Nullable View launchSourceView) {
+        launchEntry(entry, terminalView, launchSourceView, true);
+    }
+
+    private void launchEntry(@NonNull LauncherAppEntry entry, @Nullable TerminalView terminalView,
+                             @Nullable View launchSourceView, boolean playRipple) {
         if (entry.appRef.packageName.startsWith("injected.test")) {
             return;
         }
+        if (playRipple) dispatchLaunchRipple(entry, launchSourceView);
         Context context = getContext();
         if (entry.appRef.clonedProfile) {
             LaunchAnimationContext launchAnimationContext = shouldUseTouchLaunchAnimation(launchSourceView)
@@ -2392,7 +2526,25 @@ public final class SuggestionBarView extends GridLayout {
     private void launchEntryFromTouch(@NonNull View sourceView, @NonNull LauncherAppEntry entry, @Nullable TerminalView terminalView) {
         boolean touchAnimation = shouldUseTouchLaunchAnimation(sourceView);
         long launchDelay = touchAnimation ? APP_LAUNCH_TOUCH_DELAY_MS : 0L;
-        postDelayed(() -> launchEntry(entry, terminalView, touchAnimation ? sourceView : null), launchDelay);
+        dispatchLaunchRipple(entry, sourceView);
+        Runnable launch = () -> launchEntry(entry, terminalView,
+            touchAnimation ? sourceView : null, false);
+        if (launchDelay == 0L) {
+            launch.run();
+        } else {
+            postDelayed(launch, launchDelay);
+        }
+    }
+
+    public void setLaunchRippleListener(@Nullable LaunchRippleListener listener) {
+        launchRippleListener = listener;
+    }
+
+    private void dispatchLaunchRipple(@NonNull LauncherAppEntry entry, @Nullable View sourceView) {
+        if (launchRippleListener == null) return;
+        Drawable icon = sourceView instanceof ImageView
+            ? ((ImageView) sourceView).getDrawable() : null;
+        launchRippleListener.onLaunchRipple(entry.appRef.packageName, icon, sourceView);
     }
 
     private List<LauncherAppEntry> entriesForPinnedItems(@NonNull List<PinnedItem> source) {
@@ -2677,321 +2829,6 @@ public final class SuggestionBarView extends GridLayout {
         });
     }
 
-    private void showUnifiedPinEditor(final int slotIndex, @Nullable final PinnedItem pinnedAtSlot) {
-        if (configRepository == null) return;
-        if (allApps == null || allApps.isEmpty()) reloadAllApps();
-
-        BottomSheetDialog dialog = new BottomSheetDialog(getContext());
-        LinearLayout root = new LinearLayout(getContext());
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), dp(16), dp(20), dp(16));
-        root.setClipToOutline(true);
-        GradientDrawable sheetBg = new GradientDrawable();
-        sheetBg.setCornerRadii(new float[] {
-            dp(28), dp(28), dp(28), dp(28),
-            dp(12), dp(12), dp(12), dp(12)
-        });
-        sheetBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xFA));
-        sheetBg.setStroke(dp(1), withAlphaComponent(resolveLauncherOutlineColor(), 0x55));
-        root.setBackground(sheetBg);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            root.setElevation(dp(16));
-        }
-
-        final List<LauncherAppEntry> source = new ArrayList<>(allApps);
-        final List<PinOption> options = buildPinOptions(source, pinnedItems);
-
-        final Set<String> selectedIds = new LinkedHashSet<>();
-        final List<PinnedItem> orderedSelected = new ArrayList<>();
-        for (PinnedItem item : pinnedItems) {
-            String stable = stableIdForPinnedItem(item);
-            if (stable == null || !selectedIds.add(stable)) continue;
-            orderedSelected.add(clonePinnedItem(item));
-        }
-
-        TextView title = new TextView(getContext());
-        title.setText("Edit pinned apps");
-        title.setTextColor(resolveLauncherTextColor());
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setTextSize(22f);
-        title.setIncludeFontPadding(false);
-
-        TextView subtitle = new TextView(getContext());
-        subtitle.setText("Choose apps, drag to reorder, or create a folder from the selected pins.");
-        subtitle.setTextColor(resolveLauncherSubtleTextColor());
-        subtitle.setTextSize(13f);
-        subtitle.setPadding(0, dp(6), 0, dp(16));
-
-        TextView selectedTitle = new TextView(getContext());
-        selectedTitle.setText("Pinned order");
-        selectedTitle.setTextColor(resolveLauncherTextColor());
-        selectedTitle.setTypeface(Typeface.DEFAULT_BOLD);
-        selectedTitle.setTextSize(13f);
-        selectedTitle.setAllCaps(true);
-        selectedTitle.setLetterSpacing(0.08f);
-        selectedTitle.setPadding(0, 0, 0, dp(8));
-
-        final ListView[] listViewHolder = new ListView[1];
-        final OrderedPinnedAdapter[] orderedAdapterHolder = new OrderedPinnedAdapter[1];
-        orderedAdapterHolder[0] = new OrderedPinnedAdapter(source, orderedSelected, position -> {
-            if (position < 0 || position >= orderedSelected.size()) return;
-            String stable = stableIdForPinnedItem(orderedSelected.get(position));
-            orderedSelected.remove(position);
-            if (stable != null) selectedIds.remove(stable);
-            orderedAdapterHolder[0].notifyDataSetChanged();
-            ListView lv = listViewHolder[0];
-            if (lv != null) syncListChecks(lv, options, selectedIds);
-        });
-        final OrderedPinnedAdapter orderedAdapter = orderedAdapterHolder[0];
-        RecyclerView orderedRecycler = new RecyclerView(getContext());
-        orderedRecycler.setLayoutManager(new LinearLayoutManager(getContext()));
-        orderedRecycler.setAdapter(orderedAdapter);
-        orderedRecycler.setOverScrollMode(OVER_SCROLL_NEVER);
-        orderedRecycler.setClipToPadding(false);
-        orderedRecycler.setPadding(0, dp(4), 0, dp(4));
-        GradientDrawable orderedBg = new GradientDrawable();
-        orderedBg.setCornerRadius(dp(18));
-        orderedBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xAA));
-        orderedBg.setStroke(dp(1), withAlphaComponent(resolveLauncherOutlineColor(), 0x44));
-        orderedRecycler.setBackground(orderedBg);
-
-        ItemTouchHelper touchHelper = new ItemTouchHelper(new ItemTouchHelper.SimpleCallback(
-            ItemTouchHelper.UP | ItemTouchHelper.DOWN,
-            ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT) {
-            @Override
-            public boolean onMove(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder, @NonNull RecyclerView.ViewHolder target) {
-                int from = viewHolder.getAdapterPosition();
-                int to = target.getAdapterPosition();
-                if (from == RecyclerView.NO_POSITION || to == RecyclerView.NO_POSITION) {
-                    return false;
-                }
-                if (from < 0 || to < 0 || from >= orderedSelected.size() || to >= orderedSelected.size()) {
-                    return false;
-                }
-                Collections.swap(orderedSelected, from, to);
-                orderedAdapter.notifyItemMoved(from, to);
-                return true;
-            }
-
-            @Override
-            public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
-                int pos = viewHolder.getAdapterPosition();
-                if (pos == RecyclerView.NO_POSITION) return;
-                if (pos < 0 || pos >= orderedSelected.size()) return;
-                String stable = stableIdForPinnedItem(orderedSelected.get(pos));
-                orderedSelected.remove(pos);
-                if (stable != null) selectedIds.remove(stable);
-                orderedAdapter.notifyItemRemoved(pos);
-                ListView lv = listViewHolder[0];
-                if (lv != null) syncListChecks(lv, options, selectedIds);
-            }
-        });
-        touchHelper.attachToRecyclerView(orderedRecycler);
-
-        TextView allAppsTitle = new TextView(getContext());
-        allAppsTitle.setText("Apps");
-        allAppsTitle.setTextColor(resolveLauncherTextColor());
-        allAppsTitle.setTypeface(Typeface.DEFAULT_BOLD);
-        allAppsTitle.setTextSize(13f);
-        allAppsTitle.setAllCaps(true);
-        allAppsTitle.setLetterSpacing(0.08f);
-        allAppsTitle.setPadding(0, dp(18), 0, dp(8));
-
-        EditText searchInput = new EditText(getContext());
-        searchInput.setHint("Search apps");
-        searchInput.setSingleLine(true);
-        searchInput.setTextColor(resolveLauncherTextColor());
-        searchInput.setHintTextColor(resolveLauncherSubtleTextColor());
-        searchInput.setTextSize(15f);
-        searchInput.setMinHeight(dp(48));
-        searchInput.setPadding(dp(14), 0, dp(14), 0);
-        GradientDrawable searchBg = new GradientDrawable();
-        searchBg.setCornerRadius(dp(16));
-        searchBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xC8));
-        searchBg.setStroke(dp(1), withAlphaComponent(resolveLauncherOutlineColor(), 0x55));
-        searchInput.setBackground(searchBg);
-
-        ListView listView = new ListView(getContext());
-        listViewHolder[0] = listView;
-        listView.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE);
-        listView.setDivider(null);
-        listView.setDividerHeight(0);
-        listView.setCacheColorHint(0x00000000);
-        listView.setSelector(new ColorDrawable(0x00000000));
-        listView.setClipToPadding(false);
-        listView.setPadding(0, dp(6), 0, dp(6));
-        GradientDrawable listBg = new GradientDrawable();
-        listBg.setCornerRadius(dp(18));
-        listBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0x88));
-        listBg.setStroke(dp(1), withAlphaComponent(resolveLauncherOutlineColor(), 0x33));
-        listView.setBackground(listBg);
-        final List<PinOption> filteredOptions = new ArrayList<>(options);
-        final List<String> filteredLabels = new ArrayList<>();
-        for (PinOption option : options) filteredLabels.add(option.label);
-        ArrayAdapter<String> adapter = new ArrayAdapter<String>(getContext(), android.R.layout.simple_list_item_multiple_choice, filteredLabels) {
-            @NonNull
-            @Override
-            public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
-                View view = super.getView(position, convertView, parent);
-                if (view instanceof TextView) {
-                    TextView textView = (TextView) view;
-                    textView.setTextColor(resolveLauncherTextColor());
-                    textView.setTextSize(15f);
-                    textView.setMinHeight(dp(46));
-                    textView.setGravity(Gravity.CENTER_VERTICAL);
-                    textView.setPadding(dp(14), 0, dp(14), 0);
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && textView instanceof android.widget.CheckedTextView) {
-                        int[][] states = new int[][] {
-                            new int[] {android.R.attr.state_checked},
-                            new int[] {}
-                        };
-                        int[] colors = new int[] {
-                            MaterialColors.getColor(SuggestionBarView.this, com.google.android.material.R.attr.colorPrimary,
-                                ContextCompat.getColor(getContext(), R.color.termux_accent_container)),
-                            resolveLauncherSubtleTextColor()
-                        };
-                        ((android.widget.CheckedTextView) textView).setCheckMarkTintList(new ColorStateList(states, colors));
-                    }
-                }
-                GradientDrawable rowBg = new GradientDrawable();
-                rowBg.setCornerRadius(dp(14));
-                rowBg.setColor(listView.isItemChecked(position)
-                    ? blendColors(withAlphaComponent(inheritedTintColor, 0x33), withAlphaComponent(resolveLauncherPanelColor(), 0xCC), 0.45f)
-                    : 0x00000000);
-                view.setBackground(rowBg);
-                return view;
-            }
-        };
-        listView.setAdapter(adapter);
-        listView.setOnTouchListener((v, event) -> {
-            v.getParent().requestDisallowInterceptTouchEvent(true);
-            return false;
-        });
-
-        syncListChecksFiltered(listView, filteredOptions, selectedIds);
-
-        searchInput.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                String query = stringValue(s).trim();
-                filteredOptions.clear();
-                filteredLabels.clear();
-                for (PinOption option : options) {
-                    if (matchesLookupQuery(query, option.searchKey)) {
-                        filteredOptions.add(option);
-                        filteredLabels.add(option.label);
-                    }
-                }
-                adapter.notifyDataSetChanged();
-                syncListChecksFiltered(listView, filteredOptions, selectedIds);
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) { }
-        });
-
-        listView.setOnItemClickListener((parent, view, position, id) -> {
-            if (position < 0 || position >= filteredOptions.size()) return;
-            PinOption option = filteredOptions.get(position);
-            String stable = option.id;
-            if (listView.isItemChecked(position)) {
-                if (selectedIds.contains(stable)) return;
-                selectedIds.add(stable);
-                orderedSelected.add(clonePinnedItem(option.item));
-                orderedAdapter.notifyDataSetChanged();
-            } else {
-                selectedIds.remove(stable);
-                removePinnedByStableId(orderedSelected, stable);
-                orderedAdapter.notifyDataSetChanged();
-            }
-            syncListChecksFiltered(listView, filteredOptions, selectedIds);
-            adapter.notifyDataSetChanged();
-        });
-
-        LinearLayout buttons = new LinearLayout(getContext());
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        buttons.setGravity(Gravity.CENTER_VERTICAL);
-
-        ImageButton folderAction = new ImageButton(getContext());
-        folderAction.setImageResource(R.drawable.ic_create_new_folder_24);
-        folderAction.setContentDescription("Create folder at this slot");
-        styleIconButton(folderAction, dp(6));
-        GradientDrawable folderActionBg = new GradientDrawable();
-        folderActionBg.setShape(GradientDrawable.OVAL);
-        folderActionBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xD8));
-        folderActionBg.setStroke(dp(1), withAlphaComponent(resolveLauncherOutlineColor(), 0x55));
-        folderAction.setBackground(folderActionBg);
-
-        Button cancel = new Button(getContext());
-        cancel.setText("Cancel");
-        styleGhostButton(cancel);
-        cancel.setOnClickListener(v -> dialog.dismiss());
-
-        Button save = new Button(getContext());
-        save.setText("Save");
-        styleGhostButton(save);
-
-        final boolean[] folderMode = new boolean[] {false};
-        final Runnable refreshFolderModeUi = () -> {
-            save.setText(folderMode[0] ? "Create" : "Save");
-            folderAction.setAlpha(folderMode[0] ? 1f : 0.6f);
-        };
-        folderAction.setOnClickListener(v -> {
-            folderMode[0] = !folderMode[0];
-            refreshFolderModeUi.run();
-        });
-        refreshFolderModeUi.run();
-
-        save.setOnClickListener(v -> {
-            if (folderMode[0]) {
-                List<AppRef> folderApps = new ArrayList<>();
-                for (PinnedItem item : orderedSelected) {
-                    if (item instanceof PinnedAppItem) {
-                        folderApps.add(((PinnedAppItem) item).appRef);
-                    }
-                }
-                createOrReplaceFolderAtSlot(slotIndex, folderApps);
-            } else {
-                applyPinnedSelection(orderedSelected);
-            }
-            dialog.dismiss();
-            reloadWithInput("", lastTerminalView);
-        });
-
-        LinearLayout.LayoutParams folderActionParams = new LinearLayout.LayoutParams(dp(30), dp(30));
-        folderActionParams.setMargins(0, 0, dp(12), 0);
-        buttons.addView(folderAction, folderActionParams);
-        buttons.addView(new View(getContext()), new LinearLayout.LayoutParams(0, 0, 1f));
-        buttons.addView(cancel);
-        buttons.addView(save);
-
-        orderedRecycler.setOnTouchListener((v, event) -> {
-            v.getParent().requestDisallowInterceptTouchEvent(true);
-            return false;
-        });
-
-        root.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(subtitle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(selectedTitle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(orderedRecycler, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(160)));
-        root.addView(allAppsTitle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        LinearLayout.LayoutParams searchParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        searchParams.setMargins(0, 0, 0, dp(10));
-        root.addView(searchInput, searchParams);
-        root.addView(listView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(250)));
-        root.addView(buttons, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        dialog.setContentView(root);
-        dialog.show();
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(0x00000000));
-            dialog.getWindow().setDimAmount(0.35f);
-        }
-    }
-
     private void showFolderContentsEditor(final int folderIndex, @NonNull final PinnedFolderItem folder) {
         if (allApps == null || allApps.isEmpty()) reloadAllApps();
 
@@ -3121,31 +2958,6 @@ public final class SuggestionBarView extends GridLayout {
         dialog.show();
     }
 
-    private void createOrReplaceFolderAtSlot(int slotIndex, @NonNull List<AppRef> selectedOrdered) {
-        List<PinnedAppItem> normalized = normalizePinnedAppItemsFromRefs(selectedOrdered);
-        if (normalized.isEmpty()) {
-            return;
-        }
-        if (normalized.size() == 1) {
-            PinnedAppItem appItem = normalized.get(0);
-            if (slotIndex >= 0 && slotIndex < pinnedItems.size()) {
-                pinnedItems.set(slotIndex, appItem);
-            } else {
-                pinnedItems.add(appItem);
-            }
-            persistPinsAndReload();
-            return;
-        }
-        PinnedFolderItem folder = new PinnedFolderItem(UUID.randomUUID().toString(), "Folder");
-        folder.apps.addAll(normalized);
-        if (slotIndex >= 0 && slotIndex < pinnedItems.size()) {
-            pinnedItems.set(slotIndex, folder);
-        } else {
-            pinnedItems.add(folder);
-        }
-        persistPinsAndReload();
-    }
-
     private View createFolderPreviewButton(@NonNull PinnedFolderItem folder) {
         NotificationBadgeFrame root = new NotificationBadgeFrame(getContext());
         Set<String> folderPackages = new HashSet<>();
@@ -3206,55 +3018,6 @@ public final class SuggestionBarView extends GridLayout {
 
     private int pinnedFolderMiniIconMarginPx() {
         return dp(1);
-    }
-
-    private void applyPinnedSelection(@NonNull List<PinnedItem> selectedOrdered) {
-        List<PinnedItem> rebuilt = new ArrayList<>();
-        for (PinnedItem item : selectedOrdered) {
-            if (item == null) continue;
-            rebuilt.add(clonePinnedItem(item));
-        }
-        pinnedItems = rebuilt;
-        configRepository.savePinnedItems(pinnedItems);
-    }
-
-    private void showPinnedAppOptions(int index, PinnedAppItem item) {
-        String[] options = new String[] {
-            "Replace app",
-            "Change icon",
-            "Reset icon",
-            "Unpin",
-            "Move to folder",
-            "Create folder"
-        };
-
-        new MaterialAlertDialogBuilder(getContext())
-            .setTitle("Pinned app")
-            .setItems(options, (dialog, which) -> {
-                switch (which) {
-                    case 0:
-                        showReplacePinnedApp(index);
-                        break;
-                    case 1:
-                        showPinnedIconPackPicker(index, item);
-                        break;
-                    case 2:
-                        resetPinnedIcon(index, item);
-                        break;
-                    case 3:
-                        removePinnedAt(index);
-                        break;
-                    case 4:
-                        showMovePinnedAppToFolder(index, item);
-                        break;
-                    case 5:
-                        showCreateFolderWithSeed(index, item);
-                        break;
-                    default:
-                        break;
-                }
-            })
-            .show();
     }
 
     private void resetPinnedIcon(int index, @NonNull PinnedAppItem item) {
@@ -3623,37 +3386,6 @@ public final class SuggestionBarView extends GridLayout {
             labelView.setText(item.label);
             return cell;
         }
-    }
-
-    private void showFolderItemOptions(int index, PinnedFolderItem folder) {
-        String[] options = new String[] {
-            "Open folder",
-            "Edit folder apps",
-            "Folder settings",
-            "Unpin folder"
-        };
-
-        new MaterialAlertDialogBuilder(getContext())
-            .setTitle(folder.title)
-            .setItems(options, (dialog, which) -> {
-                switch (which) {
-                    case 0:
-                        showFolderPopup(folder, null);
-                        break;
-                    case 1:
-                        showFolderAppEditor(folder);
-                        break;
-                    case 2:
-                        showFolderSettings(folder);
-                        break;
-                    case 3:
-                        removePinnedAt(index);
-                        break;
-                    default:
-                        break;
-                }
-            })
-            .show();
     }
 
     private void showReplacePinnedApp(int index) {
@@ -5096,6 +4828,32 @@ public final class SuggestionBarView extends GridLayout {
         @Nullable Runnable onDismiss,
         int requestedWidth
     ) {
+        return buildPopupWindow(content, tintBase, tightWrap, onDismiss, requestedWidth, 0, true);
+    }
+
+    @NonNull
+    private PopupWindow buildPopupWindow(
+        @NonNull View content,
+        int tintBase,
+        boolean tightWrap,
+        @Nullable Runnable onDismiss,
+        int requestedWidth,
+        int minimumOpacityPercent
+    ) {
+        return buildPopupWindow(content, tintBase, tightWrap, onDismiss, requestedWidth,
+            minimumOpacityPercent, true);
+    }
+
+    @NonNull
+    private PopupWindow buildPopupWindow(
+        @NonNull View content,
+        int tintBase,
+        boolean tightWrap,
+        @Nullable Runnable onDismiss,
+        int requestedWidth,
+        int minimumOpacityPercent,
+        boolean showVerticalScrollbar
+    ) {
         int screenW = getResources().getDisplayMetrics().widthPixels;
         int screenH = getResources().getDisplayMetrics().heightPixels;
         int maxWidth = popupMaxWidth(screenW);
@@ -5119,7 +4877,7 @@ public final class SuggestionBarView extends GridLayout {
         ScrollView scrollView = new ScrollView(getContext());
         scrollView.setFillViewport(true);
         scrollView.setOverScrollMode(OVER_SCROLL_NEVER);
-        scrollView.setVerticalScrollBarEnabled(true);
+        scrollView.setVerticalScrollBarEnabled(showVerticalScrollbar);
         scrollView.setScrollbarFadingEnabled(false);
         scrollView.setFadingEdgeLength(dp(18));
         scrollView.setVerticalFadingEdgeEnabled(true);
@@ -5129,7 +4887,7 @@ public final class SuggestionBarView extends GridLayout {
         FrameLayout popupRoot = new FrameLayout(getContext());
         GradientDrawable panelBg = new GradientDrawable();
         panelBg.setCornerRadius(dp(14));
-        int alpha = clamp(appBarOpacity, 0, 100);
+        int alpha = clamp(Math.max(appBarOpacity, minimumOpacityPercent), 0, 100);
         int overlayColor = (((int) (255f * (alpha / 100f))) << 24) | (tintBase & 0x00FFFFFF);
         panelBg.setColor(overlayColor);
         popupRoot.setBackground(panelBg);
@@ -5290,12 +5048,36 @@ public final class SuggestionBarView extends GridLayout {
         @NonNull LauncherAppEntry entry,
         @NonNull View anchor
     ) {
+        showNotificationPopup(entry, anchor, false);
+    }
+
+    private void showNotificationPopup(
+        @NonNull LauncherAppEntry entry,
+        @NonNull View anchor,
+        boolean foregroundRetried
+    ) {
         List<StatusBarNotification> notifications =
             LauncherNotificationBadgeStore.getNotificationsForPackage(entry.appRef.packageName);
         if (notifications.isEmpty()) return;
         dismissNotificationPopup();
         dismissAppContextPopup();
         dismissFolderPopup();
+
+        Activity hostActivity = findHostActivity();
+        if (!foregroundRetried && hostActivity != null && !hostActivity.hasWindowFocus()) {
+            // A translucent call can leave the launcher visible while another task still owns the
+            // focused window. Bring this user-selected reply surface forward before attaching its
+            // PopupWindow, otherwise Android cannot route an input connection to it.
+            Intent foregroundIntent = new Intent(hostActivity, hostActivity.getClass());
+            foregroundIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            hostActivity.startActivity(foregroundIntent);
+            postDelayed(() -> {
+                if (isAttachedToWindow() && anchor.isAttachedToWindow())
+                    showNotificationPopup(entry, anchor, true);
+            }, 120L);
+            return;
+        }
 
         LinearLayout shell = new LinearLayout(getContext());
         shell.setOrientation(LinearLayout.VERTICAL);
@@ -5320,12 +5102,16 @@ public final class SuggestionBarView extends GridLayout {
         shell.addView(header, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        List<NotificationReplyTarget> replyTargets = new ArrayList<>();
         for (int i = 0; i < notifications.size(); i++) {
             if (i > 0) addNotificationDivider(shell);
-            addNotificationCard(shell, notifications.get(i));
+            NotificationReplyTarget target = addNotificationCard(shell, notifications.get(i));
+            if (target != null) replyTargets.add(target);
         }
 
-        int tintBase = inheritedTintColor & 0x00FFFFFF;
+        // Notification content must remain readable even when the dock itself is configured as
+        // nearly transparent. Keep the Material surface hue and let blur provide the glass feel.
+        int tintBase = resolveLauncherPanelColor() & 0x00FFFFFF;
         final PopupWindow[] holder = new PopupWindow[1];
         int popupWidth = notificationPopupWidth(notifications);
         notificationPopupWindow = buildPopupWindow(shell, tintBase, false, () -> {
@@ -5334,24 +5120,93 @@ public final class SuggestionBarView extends GridLayout {
                 notificationPopupPackage = null;
                 notificationPopupKeys = Collections.emptySet();
             }
-        }, popupWidth);
+            if (notificationInteractionPopup == holder[0]) {
+                notificationInteractionPopup = null;
+                if (notificationPopupInteractionListener != null)
+                    notificationPopupInteractionListener.onNotificationPopupDismissed();
+            }
+        }, popupWidth, 88, false);
         holder[0] = notificationPopupWindow;
+        // Focusability is a window creation concern on current Android releases. Retrofitting it
+        // with PopupWindow.update() can leave a focused EditText whose window is never registered
+        // as the IME target.
+        notificationPopupWindow.setFocusable(true);
+        notificationPopupWindow.setInputMethodMode(PopupWindow.INPUT_METHOD_NEEDED);
+        notificationPopupWindow.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                | WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED);
+        notificationInteractionPopup = notificationPopupWindow;
         notificationPopupPackage = entry.appRef.packageName;
         Set<String> shownKeys = new HashSet<>();
         for (StatusBarNotification sbn : notifications) {
             shownKeys.add(sbn.getKey() + "@" + sbn.getPostTime());
         }
         notificationPopupKeys = Collections.unmodifiableSet(shownKeys);
-        // Keep this window non-focusable when it first opens. Taking focus here closes an active
-        // terminal IME, moves the dock, and leaves a popup positioned against stale coordinates.
-        // Inline reply promotes the popup to a focusable IME target only when Reply is touched.
+        // Keep this window non-focusable for its first layout. The external-input handoff below
+        // removes the embedded keyboard before an available inline reply requests IME focus.
         showPopupAtAnchor(notificationPopupWindow, anchor);
+        applyNotificationPopupDim(notificationPopupWindow);
+        if (notificationPopupInteractionListener != null)
+            notificationPopupInteractionListener.onNotificationPopupShown();
+        // With several conversations, choosing the first reply field for the user is surprising.
+        // Auto-focus only when there is exactly one possible reply destination.
+        NotificationReplyTarget finalAutoReplyTarget = shouldAutoOpenNotificationReply(
+            replyTargets.size()) ? replyTargets.get(0) : null;
+        if (finalAutoReplyTarget != null) {
+            post(() -> {
+                if (notificationPopupWindow != holder[0] || !holder[0].isShowing()) return;
+                showInlineReply(finalAutoReplyTarget.actionHost, finalAutoReplyTarget.action,
+                    finalAutoReplyTarget.remoteInputs, finalAutoReplyTarget.freeform,
+                    finalAutoReplyTarget.recipient);
+            });
+        }
+    }
+
+    static boolean shouldAutoOpenNotificationReply(int replyTargetCount) {
+        return replyTargetCount == 1;
+    }
+
+    @Nullable
+    private Activity findHostActivity() {
+        Context context = getContext();
+        while (context instanceof ContextWrapper) {
+            if (context instanceof Activity) return (Activity) context;
+            Context base = ((ContextWrapper) context).getBaseContext();
+            if (base == context) break;
+            context = base;
+        }
+        return context instanceof Activity ? (Activity) context : null;
+    }
+
+    private void applyNotificationPopupDim(@NonNull PopupWindow popup) {
+        View content = popup.getContentView();
+        if (content == null) return;
+        content.post(() -> {
+            if (!popup.isShowing()) return;
+            View popupDecor = content.getRootView();
+            ViewGroup.LayoutParams rawParams = popupDecor.getLayoutParams();
+            if (!(rawParams instanceof WindowManager.LayoutParams)) return;
+            WindowManager.LayoutParams params = (WindowManager.LayoutParams) rawParams;
+            params.flags |= WindowManager.LayoutParams.FLAG_DIM_BEHIND;
+            params.dimAmount = 0.74f;
+            WindowManager windowManager =
+                (WindowManager) getContext().getSystemService(Context.WINDOW_SERVICE);
+            if (windowManager != null) {
+                try {
+                    windowManager.updateViewLayout(popupDecor, params);
+                } catch (IllegalArgumentException ignored) {
+                    // The popup may have been dismissed between posting and applying the dim.
+                }
+            }
+        });
     }
 
     private int notificationPopupWidth(@NonNull List<StatusBarNotification> notifications) {
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        int preferredWidth = screenWidth / 2;
+        int preferredWidth = notifications.size() > 1
+            ? screenWidth - dp(32) : screenWidth / 2;
         int requiredActionWidth = 0;
+        boolean hasReplyAction = false;
         Paint actionTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         actionTextPaint.setTextSize(11.5f * getResources().getDisplayMetrics().scaledDensity);
         actionTextPaint.setTypeface(Typeface.DEFAULT_BOLD);
@@ -5365,6 +5220,8 @@ public final class SuggestionBarView extends GridLayout {
                     if (action == null || action.actionIntent == null) continue;
                     String title = TextUtils.isEmpty(action.title) ? "Action" : action.title.toString();
                     rowWidth += notificationActionMeasuredWidth(actionTextPaint, title);
+                    if (firstFreeformRemoteInput(action.getRemoteInputs()) != null)
+                        hasReplyAction = true;
                     actionCount++;
                 }
             }
@@ -5375,6 +5232,8 @@ public final class SuggestionBarView extends GridLayout {
             if (actionCount > 1) rowWidth += dp(4) * (actionCount - 1);
             requiredActionWidth = Math.max(requiredActionWidth, rowWidth);
         }
+        if (hasReplyAction && notifications.size() == 1)
+            preferredWidth = Math.max(preferredWidth, (int) (screenWidth * 0.72f));
         return adaptiveNotificationPopupWidth(
             preferredWidth,
             requiredActionWidth,
@@ -5396,12 +5255,13 @@ public final class SuggestionBarView extends GridLayout {
         return Math.max(dp(52), (int) Math.ceil(paint.measureText(title)) + dp(20));
     }
 
-    private void addNotificationCard(
+    @Nullable
+    private NotificationReplyTarget addNotificationCard(
         @NonNull LinearLayout shell,
         @NonNull StatusBarNotification sbn
     ) {
         Notification notification = sbn.getNotification();
-        if (notification == null) return;
+        if (notification == null) return null;
         Bundle extras = notification.extras;
         CharSequence title = firstNotificationText(extras,
             Notification.EXTRA_TITLE, Notification.EXTRA_TITLE_BIG);
@@ -5464,6 +5324,7 @@ public final class SuggestionBarView extends GridLayout {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         int actionIndex = 0;
+        NotificationReplyTarget replyTarget = null;
         if (notification.actions != null) {
             for (Notification.Action action : notification.actions) {
                 if (action == null || action.actionIntent == null) continue;
@@ -5472,8 +5333,12 @@ public final class SuggestionBarView extends GridLayout {
                 RemoteInput[] remoteInputs = action.getRemoteInputs();
                 RemoteInput freeform = firstFreeformRemoteInput(remoteInputs);
                 if (freeform != null) {
+                    if (replyTarget == null) {
+                        replyTarget = new NotificationReplyTarget(
+                            actionHost, action, remoteInputs, freeform, title);
+                    }
                     actionButton.setOnClickListener(v ->
-                        showInlineReply(actionHost, action, remoteInputs, freeform));
+                        showInlineReply(actionHost, action, remoteInputs, freeform, title));
                 } else {
                     actionButton.setOnClickListener(v ->
                         sendNotificationIntent(action.actionIntent, null, null));
@@ -5503,47 +5368,92 @@ public final class SuggestionBarView extends GridLayout {
         }
         shell.addView(card, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return replyTarget;
+    }
+
+    private static final class NotificationReplyTarget {
+        @NonNull final FrameLayout actionHost;
+        @NonNull final Notification.Action action;
+        @NonNull final RemoteInput[] remoteInputs;
+        @NonNull final RemoteInput freeform;
+        @Nullable final CharSequence recipient;
+
+        NotificationReplyTarget(@NonNull FrameLayout actionHost,
+            @NonNull Notification.Action action, @NonNull RemoteInput[] remoteInputs,
+            @NonNull RemoteInput freeform, @Nullable CharSequence recipient) {
+            this.actionHost = actionHost;
+            this.action = action;
+            this.remoteInputs = remoteInputs;
+            this.freeform = freeform;
+            this.recipient = recipient;
+        }
     }
 
     private void showInlineReply(
         @NonNull FrameLayout actionHost,
         @NonNull Notification.Action action,
         @NonNull RemoteInput[] remoteInputs,
-        @NonNull RemoteInput freeform
+        @NonNull RemoteInput freeform,
+        @Nullable CharSequence recipient
     ) {
         LinearLayout row = new LinearLayout(getContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(4), dp(3), dp(4), dp(3));
+        GradientDrawable composerBg = new GradientDrawable();
+        composerBg.setCornerRadius(dp(12));
+        composerBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xF4));
+        composerBg.setStroke(Math.max(1, dp(1)),
+            withAlphaComponent(resolveLauncherOutlineColor(), 0x70));
+        row.setBackground(composerBg);
+
         EditText reply = new EditText(getContext());
         reply.setSingleLine(true);
-        reply.setHint(TextUtils.isEmpty(freeform.getLabel()) ? "Reply" : freeform.getLabel());
+        if (!TextUtils.isEmpty(recipient)) {
+            reply.setHint("Reply to " + recipient);
+        } else {
+            reply.setHint(TextUtils.isEmpty(freeform.getLabel()) ? "Reply" : freeform.getLabel());
+        }
         reply.setTextColor(resolveLauncherTextColor());
         reply.setHintTextColor(resolveLauncherSubtleTextColor());
-        reply.setTextSize(12.5f);
-        reply.setPadding(dp(8), 0, dp(8), 0);
-        GradientDrawable replyBg = new GradientDrawable();
-        replyBg.setCornerRadius(dp(9));
-        replyBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0x72));
-        replyBg.setStroke(Math.max(1, dp(1)), withAlphaComponent(resolveLauncherOutlineColor(), 0x66));
-        reply.setBackground(replyBg);
+        reply.setTextSize(13f);
+        reply.setPadding(dp(10), 0, dp(8), 0);
+        reply.setBackgroundColor(Color.TRANSPARENT);
+        reply.setImeOptions(EditorInfo.IME_ACTION_SEND);
         reply.setOnTouchListener((view, event) -> {
             if (event != null && event.getActionMasked() == MotionEvent.ACTION_DOWN) {
                 enableNotificationReplyInput(reply);
             }
             return false;
         });
-        row.addView(reply, new LinearLayout.LayoutParams(0, dp(38), 1f));
+        row.addView(reply, new LinearLayout.LayoutParams(0, dp(40), 1f));
 
-        Button send = notificationActionButton("Send");
+        Button send = notificationSendButton();
         LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, dp(38));
-        sendLp.leftMargin = dp(6);
+            dp(62), dp(36));
         row.addView(send, sendLp);
-        send.setOnClickListener(v -> {
-            CharSequence value = reply.getText();
+        Runnable sendReply = () -> {
+            String value = reply.getText().toString().trim();
             if (TextUtils.isEmpty(value)) return;
-            sendNotificationIntent(action.actionIntent, remoteInputs, value);
-            reply.setText("");
+            if (sendNotificationIntent(action.actionIntent, remoteInputs, value))
+                dismissNotificationPopup();
+        };
+        send.setOnClickListener(v -> sendReply.run());
+        reply.setOnEditorActionListener((view, actionId, event) -> {
+            if (actionId != EditorInfo.IME_ACTION_SEND) return false;
+            sendReply.run();
+            return true;
+        });
+        send.setEnabled(false);
+        send.setAlpha(0.45f);
+        reply.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                boolean enabled = !TextUtils.isEmpty(s == null ? null : s.toString().trim());
+                send.setEnabled(enabled);
+                send.setAlpha(enabled ? 1f : 0.45f);
+            }
+            @Override public void afterTextChanged(Editable editable) {}
         });
         actionHost.removeAllViews();
         actionHost.addView(row, new FrameLayout.LayoutParams(
@@ -5551,26 +5461,63 @@ public final class SuggestionBarView extends GridLayout {
         enableNotificationReplyInput(reply);
     }
 
+    @NonNull
+    private Button notificationSendButton() {
+        Button send = new Button(getContext());
+        send.setText("Send");
+        send.setAllCaps(false);
+        send.setSingleLine(true);
+        send.setTextSize(11.5f);
+        send.setTypeface(Typeface.DEFAULT_BOLD);
+        send.setTextColor(MaterialColors.getColor(this,
+            com.google.android.material.R.attr.colorOnPrimaryContainer,
+            resolveLauncherTextColor()));
+        send.setMinWidth(0);
+        send.setMinimumWidth(0);
+        send.setMinHeight(0);
+        send.setMinimumHeight(0);
+        send.setPadding(dp(8), 0, dp(8), 0);
+        GradientDrawable background = new GradientDrawable();
+        background.setCornerRadius(dp(9));
+        background.setColor(MaterialColors.getColor(this,
+            com.google.android.material.R.attr.colorPrimaryContainer,
+            resolveLauncherPanelColor()));
+        send.setBackground(background);
+        return send;
+    }
+
     private void enableNotificationReplyInput(@NonNull EditText reply) {
         PopupWindow popup = notificationPopupWindow;
         if (popup == null || !popup.isShowing()) return;
-        if (!popup.isFocusable()) {
-            popup.setFocusable(true);
-            popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NEEDED);
-            popup.setSoftInputMode(
-                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
-                    | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
-            popup.update();
+        popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NEEDED);
+        popup.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+        popup.update();
+        applyNotificationPopupDim(popup);
+        reply.post(() -> requestNotificationReplyIme(reply, popup, 0));
+    }
+
+    private void requestNotificationReplyIme(
+        @NonNull EditText reply,
+        @NonNull PopupWindow popup,
+        int attempt
+    ) {
+        if (notificationPopupWindow != popup || !popup.isShowing()) return;
+        reply.requestFocus();
+        InputMethodManager inputMethodManager =
+            (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (inputMethodManager != null)
+            inputMethodManager.showSoftInput(reply, InputMethodManager.SHOW_IMPLICIT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+            && reply.getWindowInsetsController() != null) {
+            reply.getWindowInsetsController().show(WindowInsets.Type.ime());
         }
-        reply.post(() -> {
-            if (notificationPopupWindow != popup || !popup.isShowing()) return;
-            reply.requestFocus();
-            InputMethodManager inputMethodManager =
-                (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-            if (inputMethodManager != null) {
-                inputMethodManager.showSoftInput(reply, InputMethodManager.SHOW_IMPLICIT);
-            }
-        });
+        // Bringing the launcher above a translucent call or overlay is asynchronous. Retry only
+        // while this reply field has not yet acquired window focus.
+        if (!reply.hasWindowFocus() && attempt < 4) {
+            reply.postDelayed(() -> requestNotificationReplyIme(reply, popup, attempt + 1), 90L);
+        }
     }
 
     @Nullable
@@ -5592,7 +5539,7 @@ public final class SuggestionBarView extends GridLayout {
         return null;
     }
 
-    private void sendNotificationIntent(
+    private boolean sendNotificationIntent(
         @NonNull PendingIntent pendingIntent,
         @Nullable RemoteInput[] remoteInputs,
         @Nullable CharSequence reply
@@ -5610,8 +5557,10 @@ public final class SuggestionBarView extends GridLayout {
                 RemoteInput.addResultsToIntent(remoteInputs, fillIn, results);
             }
             pendingIntent.send(getContext(), 0, fillIn);
+            return true;
         } catch (PendingIntent.CanceledException exception) {
             Log.d(LOG_TAG, "Notification action is no longer available: " + exception.getMessage());
+            return false;
         }
     }
 
@@ -5747,129 +5696,6 @@ public final class SuggestionBarView extends GridLayout {
         return displayLabels.toArray(new String[0]);
     }
 
-    private static final class OrderedPinnedAdapter extends RecyclerView.Adapter<OrderedPinnedAdapter.RowHolder> {
-        interface DeleteCallback {
-            void onDelete(int position);
-        }
-
-        private final List<LauncherAppEntry> source;
-        private final List<PinnedItem> ordered;
-        private final DeleteCallback deleteCallback;
-
-        OrderedPinnedAdapter(List<LauncherAppEntry> source, List<PinnedItem> ordered, DeleteCallback deleteCallback) {
-            this.source = source;
-            this.ordered = ordered;
-            this.deleteCallback = deleteCallback;
-        }
-
-        @NonNull
-        @Override
-        public RowHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            LinearLayout row = new LinearLayout(parent.getContext());
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(dpStatic(parent, 6), dpStatic(parent, 8), dpStatic(parent, 4), dpStatic(parent, 8));
-            final int textColor = resolveLauncherTextColor(parent);
-
-            ImageView drag = new ImageView(parent.getContext());
-            drag.setImageResource(R.drawable.ic_drag_indicator_24);
-            drag.setColorFilter(textColor);
-            LinearLayout.LayoutParams dragParams = new LinearLayout.LayoutParams(dpStatic(parent, 20), dpStatic(parent, 20));
-            dragParams.setMargins(0, 0, dpStatic(parent, 8), 0);
-            row.addView(drag, dragParams);
-
-            ImageView folder = new ImageView(parent.getContext());
-            folder.setImageResource(R.drawable.ic_folder_24);
-            folder.setColorFilter(textColor);
-            LinearLayout.LayoutParams folderParams = new LinearLayout.LayoutParams(dpStatic(parent, 18), dpStatic(parent, 18));
-            folderParams.setMargins(0, 0, dpStatic(parent, 6), 0);
-            row.addView(folder, folderParams);
-
-            TextView label = new TextView(parent.getContext());
-            label.setTextColor(textColor);
-            label.setSingleLine(true);
-            label.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-            ImageButton delete = new ImageButton(parent.getContext());
-            delete.setImageResource(R.drawable.ic_delete_sweep_24);
-            delete.setColorFilter(textColor);
-            delete.setBackgroundColor(0x00000000);
-            delete.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-            delete.setPadding(dpStatic(parent, 2), dpStatic(parent, 2), dpStatic(parent, 2), dpStatic(parent, 2));
-            delete.setLayoutParams(new LinearLayout.LayoutParams(dpStatic(parent, 24), dpStatic(parent, 24)));
-
-            row.addView(label);
-            row.addView(delete);
-            return new RowHolder(row, label, folder, delete);
-        }
-
-        @Override
-        public void onBindViewHolder(@NonNull RowHolder holder, int position) {
-            PinnedItem item = ordered.get(position);
-            holder.label.setText(resolveLabel(source, item));
-            holder.folder.setVisibility(item instanceof PinnedFolderItem ? View.VISIBLE : View.GONE);
-            holder.delete.setOnClickListener(v -> {
-                if (deleteCallback != null) {
-                    deleteCallback.onDelete(holder.getAdapterPosition());
-                }
-            });
-        }
-
-        @Override
-        public int getItemCount() {
-            return ordered.size();
-        }
-
-        private static String resolveLabel(List<LauncherAppEntry> source, PinnedItem item) {
-            if (item instanceof PinnedFolderItem) {
-                String title = ((PinnedFolderItem) item).title;
-                return TextUtils.isEmpty(title) ? "Folder" : title;
-            }
-            if (item instanceof PinnedAppItem) {
-                AppRef ref = ((PinnedAppItem) item).appRef;
-                String stable = ref.stableId();
-                for (LauncherAppEntry entry : source) {
-                    if (stable.equals(entry.appRef.stableId()) || entry.appRef.packageName.equals(ref.packageName)) {
-                        return entry.label;
-                    }
-                }
-                return ref.packageName;
-            }
-            return "Pinned item";
-        }
-
-        static final class RowHolder extends RecyclerView.ViewHolder {
-            final TextView label;
-            final ImageView folder;
-            final ImageButton delete;
-
-            RowHolder(@NonNull View itemView, TextView label, ImageView folder, ImageButton delete) {
-                super(itemView);
-                this.label = label;
-                this.folder = folder;
-                this.delete = delete;
-            }
-        }
-
-        private static int dpStatic(@NonNull ViewGroup parent, int value) {
-            return Math.round(value * parent.getResources().getDisplayMetrics().density);
-        }
-    }
-
-    private static final class PinOption {
-        final String id;
-        final String label;
-        final String searchKey;
-        final PinnedItem item;
-
-        PinOption(String id, String label, String searchKey, PinnedItem item) {
-            this.id = id;
-            this.label = label;
-            this.searchKey = searchKey;
-            this.item = item;
-        }
-    }
-
     private static final class MenuActionRow {
         @NonNull final TextView rowView;
         @NonNull final Runnable action;
@@ -5923,17 +5749,6 @@ public final class SuggestionBarView extends GridLayout {
             this.downRawX = downRawX;
             this.downRawY = downRawY;
         }
-    }
-
-    private List<PinOption> buildPinOptions(@NonNull List<LauncherAppEntry> apps, @NonNull List<PinnedItem> currentPinned) {
-        List<PinOption> out = new ArrayList<>();
-        List<String> labels = buildDisplayLabels(apps);
-        for (int i = 0; i < apps.size(); i++) {
-            LauncherAppEntry app = apps.get(i);
-            AppRef ref = resolveForSelectionRef(app.appRef);
-            out.add(new PinOption(ref.stableId(), labels.get(i), buildSearchableAppText(app), new PinnedAppItem(ref)));
-        }
-        return out;
     }
 
     @NonNull
@@ -6037,15 +5852,6 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     @NonNull
-    private List<PinnedAppItem> normalizePinnedAppItemsFromRefs(@NonNull List<AppRef> refs) {
-        List<PinnedAppItem> apps = new ArrayList<>();
-        for (AppRef ref : refs) {
-            apps.add(new PinnedAppItem(ref));
-        }
-        return normalizePinnedAppItems(apps);
-    }
-
-    @NonNull
     private static Map<String, PinnedIconOverride> folderIconOverridesByStableId(@NonNull PinnedFolderItem folder) {
         Map<String, PinnedIconOverride> overrides = new HashMap<>();
         for (PinnedAppItem folderApp : folder.apps) {
@@ -6082,18 +5888,6 @@ public final class SuggestionBarView extends GridLayout {
         }
         folder.apps.add(new PinnedAppItem(resolved, app.iconOverride));
         return true;
-    }
-
-    private static void syncListChecks(@NonNull ListView listView, @NonNull List<PinOption> options, @NonNull Set<String> selectedIds) {
-        for (int i = 0; i < options.size(); i++) {
-            listView.setItemChecked(i, selectedIds.contains(options.get(i).id));
-        }
-    }
-
-    private static void syncListChecksFiltered(@NonNull ListView listView, @NonNull List<PinOption> options, @NonNull Set<String> selectedIds) {
-        for (int i = 0; i < options.size(); i++) {
-            listView.setItemChecked(i, selectedIds.contains(options.get(i).id));
-        }
     }
 
     private static void syncFolderChecks(@NonNull ListView listView, @NonNull List<LauncherAppEntry> apps, @NonNull Set<String> selectedIds) {
@@ -6269,26 +6063,6 @@ public final class SuggestionBarView extends GridLayout {
                     pinnedItems.set(i, new PinnedAppItem(resolveForSelectionRef(surviving.appRef), surviving.iconOverride));
                     break;
                 }
-            }
-        }
-    }
-
-    @Nullable
-    private static String stableIdForPinnedItem(@Nullable PinnedItem item) {
-        if (item instanceof PinnedAppItem) {
-            return ((PinnedAppItem) item).appRef.stableId();
-        }
-        if (item instanceof PinnedFolderItem) {
-            return "folder:" + ((PinnedFolderItem) item).id;
-        }
-        return null;
-    }
-
-    private static void removePinnedByStableId(@NonNull List<PinnedItem> items, @NonNull String stableId) {
-        for (int i = items.size() - 1; i >= 0; i--) {
-            String itemStableId = stableIdForPinnedItem(items.get(i));
-            if (stableId.equals(itemStableId)) {
-                items.remove(i);
             }
         }
     }
@@ -6514,7 +6288,7 @@ public final class SuggestionBarView extends GridLayout {
             return;
         }
         float width = Math.max(1f, getWidth());
-        float commitDistance = Math.max(dp(42f), width * 0.30f);
+        float commitDistance = resolvePageSwipeCommitDistancePx();
         float rawProgress = clamp01(Math.abs(dx) / commitDistance);
         float easedProgress = (float) Math.sin(rawProgress * (Math.PI * 0.5f));
         float resistance = 1f;
@@ -6533,6 +6307,11 @@ public final class SuggestionBarView extends GridLayout {
         swipePagePosition = clampFloat(base + signedProgress, 0f, Math.max(0, pageCount - 1));
         notifyOverflowPagePositionChanged();
         invalidate();
+    }
+
+    private float resolvePageSwipeCommitDistancePx() {
+        return Math.max(dp(PAGE_SWIPE_COMMIT_DISTANCE_DP),
+            Math.max(1f, getWidth()) * PAGE_SWIPE_COMMIT_WIDTH_RATIO);
     }
 
     private boolean hasGesturePageSurface() {
@@ -6560,6 +6339,7 @@ public final class SuggestionBarView extends GridLayout {
             swipePreviewPageIndex = -1;
             swipePreviewEntries = Collections.emptyList();
             swipePreviewPinnedItems = Collections.emptyList();
+            swipePreviewFolderEntries = Collections.emptyList();
             return;
         }
         if (swipePreviewDirection == direction && swipePreviewPageIndex == targetPage && !swipePreviewEntries.isEmpty()) {
@@ -6571,6 +6351,7 @@ public final class SuggestionBarView extends GridLayout {
             ? Collections.emptyList()
             : buildSwipePreviewPinnedItems(targetPage);
         swipePreviewEntries = buildSwipePreviewEntries(targetPage);
+        swipePreviewFolderEntries = buildSwipePreviewFolderEntries(swipePreviewPinnedItems);
     }
 
     private int resolveSwipePreviewTargetPage(int pageDelta) {
@@ -6619,6 +6400,32 @@ public final class SuggestionBarView extends GridLayout {
         return pageItems;
     }
 
+    @NonNull
+    private List<List<LauncherAppEntry>> buildSwipePreviewFolderEntries(
+        @NonNull List<PinnedItem> previewItems
+    ) {
+        if (previewItems.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<List<LauncherAppEntry>> resolved = new ArrayList<>(previewItems.size());
+        for (PinnedItem item : previewItems) {
+            if (!(item instanceof PinnedFolderItem)) {
+                resolved.add(Collections.emptyList());
+                continue;
+            }
+            List<LauncherAppEntry> folderEntries = new ArrayList<>(4);
+            for (PinnedAppItem folderApp : ((PinnedFolderItem) item).apps) {
+                if (folderEntries.size() >= 4) break;
+                LauncherAppEntry entry = resolvePinnedApp(folderApp);
+                if (entry != null && entry.icon != null) {
+                    folderEntries.add(entry);
+                }
+            }
+            resolved.add(folderEntries);
+        }
+        return resolved;
+    }
+
     private void drawSwipePreviewPage(@NonNull Canvas canvas) {
         if (swipePreviewEntries.isEmpty() || swipePreviewDirection == 0 || getWidth() <= 0 || getHeight() <= 0) {
             return;
@@ -6643,7 +6450,10 @@ public final class SuggestionBarView extends GridLayout {
                 ? swipePreviewPinnedItems.get(i)
                 : null;
             if (pinnedItem instanceof PinnedFolderItem) {
-                drawSwipePreviewFolder(canvas, (PinnedFolderItem) pinnedItem, cx, cy, iconSize, previewAlpha);
+                List<LauncherAppEntry> folderEntries = i < swipePreviewFolderEntries.size()
+                    ? swipePreviewFolderEntries.get(i) : Collections.emptyList();
+                drawSwipePreviewFolder(canvas, (PinnedFolderItem) pinnedItem, folderEntries,
+                    cx, cy, iconSize, previewAlpha);
             } else {
                 drawSwipePreviewIcon(canvas, entry, cx, cy, iconSize, previewAlpha);
             }
@@ -6653,6 +6463,7 @@ public final class SuggestionBarView extends GridLayout {
     private void drawSwipePreviewFolder(
         @NonNull Canvas canvas,
         @NonNull PinnedFolderItem folder,
+        @NonNull List<LauncherAppEntry> miniEntries,
         float cx,
         float cy,
         int iconSize,
@@ -6667,14 +6478,6 @@ public final class SuggestionBarView extends GridLayout {
 
         int miniSize = Math.max(dp(9), Math.round(iconSize * 0.42f));
         float miniGap = pinnedFolderMiniIconMarginPx() * 2f;
-        List<LauncherAppEntry> miniEntries = new ArrayList<>();
-        for (PinnedAppItem folderApp : folder.apps) {
-            if (miniEntries.size() >= 4) break;
-            LauncherAppEntry entry = resolvePinnedApp(folderApp);
-            if (entry == null || entry.icon == null) continue;
-            miniEntries.add(entry);
-        }
-
         int count = miniEntries.size();
         if (count == 1) {
             drawSwipePreviewIcon(canvas, miniEntries.get(0), cx, cy, miniSize, alpha, false);
@@ -6737,12 +6540,15 @@ public final class SuggestionBarView extends GridLayout {
         }
         int half = Math.max(1, iconSize / 2);
         int saveAlpha = icon.getAlpha();
-        Rect oldBounds = new Rect(icon.getBounds());
+        ColorFilter oldFilter = icon.getColorFilter();
+        swipePreviewIconBounds.set(icon.getBounds());
         icon.setBounds(Math.round(cx) - half, Math.round(cy) - half, Math.round(cx) + half, Math.round(cy) + half);
         icon.setAlpha(alpha);
+        icon.setColorFilter(appIconColorFilter);
         icon.draw(canvas);
+        icon.setColorFilter(oldFilter);
         icon.setAlpha(saveAlpha);
-        icon.setBounds(oldBounds);
+        icon.setBounds(swipePreviewIconBounds);
         if (showBadge && notificationBadgesEnabled && notificationBadgePackages.contains(entry.appRef.packageName)) {
             drawSwipePreviewBadge(canvas, cx + (iconSize * 0.30f), cy - (iconSize * 0.30f), iconSize);
         }
@@ -6774,6 +6580,7 @@ public final class SuggestionBarView extends GridLayout {
         swipePreviewPageIndex = -1;
         swipePreviewEntries = Collections.emptyList();
         swipePreviewPinnedItems = Collections.emptyList();
+        swipePreviewFolderEntries = Collections.emptyList();
     }
 
     private void runSwipePreviewPageSwitch(
@@ -7030,17 +6837,7 @@ public final class SuggestionBarView extends GridLayout {
         button.setMinimumWidth(sizePx);
         button.setMinimumHeight(sizePx);
         button.setLayoutParams(new ViewGroup.LayoutParams(sizePx, sizePx));
-        if (bandW) {
-            float[] colorMatrix = {
-                0.33f, 0.33f, 0.33f, 0, 0,
-                0.33f, 0.33f, 0.33f, 0, 0,
-                0.33f, 0.33f, 0.33f, 0, 0,
-                0, 0, 0, 1, 0
-            };
-            button.setColorFilter(new ColorMatrixColorFilter(colorMatrix));
-        } else {
-            icon.clearColorFilter();
-        }
+        applyAppIconColorFilter(button);
         button.setOnClickListener(v -> launchEntryFromTouch(v, entry, lastTerminalView));
         bindAppContextLongPress(button, entry, -1, sourceFolder, resolveForSelectionRef(entry.appRef), false);
         button.setContentDescription(entry.label);
@@ -7121,7 +6918,13 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private boolean shouldUseTouchLaunchAnimation(@Nullable View sourceView) {
-        return sourceView != null;
+        if (sourceView == null) return false;
+        try {
+            return android.provider.Settings.Global.getFloat(getContext().getContentResolver(),
+                android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f;
+        } catch (Throwable ignored) {
+            return true;
+        }
     }
 
     private void animateLaunchPressDown(@NonNull View sourceView) {
@@ -7296,26 +7099,31 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private void scheduleStableDrawReleaseIfPossible() {
-        if (!hostVisible || !suppressDrawUntilStableLayout || stableLayoutRerenderPosted || !hasStableRenderBounds()) {
+        if (!hostVisible || !suppressDrawUntilStableLayout || stableLayoutRerenderPosted) {
+            return;
+        }
+        // The timeout must be able to expire even while render bounds never stabilize (e.g. the
+        // bar stuck at a collapsed height after a crash-restart mid-layout) — otherwise draw
+        // suppression holds the bar blank indefinitely.
+        if (hasStableDrawSuppressionExpired()) {
+            releaseStableDrawSuppression();
+            return;
+        }
+        if (!hasStableRenderBounds()) {
+            postDelayed(this::scheduleStableDrawReleaseIfPossible, 16L);
             return;
         }
         stableLayoutRerenderPosted = true;
         post(() -> {
             stableLayoutRerenderPosted = false;
+            if (hasStableDrawSuppressionExpired()) {
+                releaseStableDrawSuppression();
+                return;
+            }
             if (!hostVisible || !isAttachedToWindow() || !hasStableRenderBounds()) {
                 return;
             }
             if (!hasStableChildLayout()) {
-                long suppressedForMs = stableLayoutSuppressedSinceUptimeMs == 0L
-                    ? 0L
-                    : SystemClock.uptimeMillis() - stableLayoutSuppressedSinceUptimeMs;
-                if (suppressedForMs >= STABLE_LAYOUT_MAX_SUPPRESS_MS) {
-                    suppressDrawUntilStableLayout = false;
-                    childLayoutPending = false;
-                    stableLayoutSuppressedSinceUptimeMs = 0L;
-                    invalidate();
-                    return;
-                }
                 if (suppressDrawUntilStableLayout) {
                     postDelayed(this::scheduleStableDrawReleaseIfPossible, 16L);
                 }
@@ -7329,13 +7137,18 @@ public final class SuggestionBarView extends GridLayout {
         });
     }
 
-    private void rerenderCurrentSurface() {
-        if (activeAzLetter != null) {
-            renderButtons(activeAzCandidates, true);
-            captureAzRenderState(activeAzLetter, activeAzPageIndex, Math.max(1, maxButtonCount), activeAzCandidates);
-            return;
-        }
-        reloadWithInput(lastInput, lastTerminalView);
+    private boolean hasStableDrawSuppressionExpired() {
+        if (!suppressDrawUntilStableLayout || stableLayoutSuppressedSinceUptimeMs == 0L)
+            return false;
+        return SystemClock.uptimeMillis() - stableLayoutSuppressedSinceUptimeMs
+            >= STABLE_LAYOUT_MAX_SUPPRESS_MS;
+    }
+
+    private void releaseStableDrawSuppression() {
+        suppressDrawUntilStableLayout = false;
+        childLayoutPending = false;
+        stableLayoutSuppressedSinceUptimeMs = 0L;
+        invalidate();
     }
 
     private static float lerp(float start, float end, float t) {
@@ -7439,7 +7252,10 @@ public final class SuggestionBarView extends GridLayout {
     /** Pages occupied by the user's persisted pinned items (excludes the dynamic most-used page). */
     private int getRealPinnedPagesCount() {
         int totalPinned = pinnedItems == null ? 0 : pinnedItems.size();
-        int perPage = Math.max(1, pinnedItemsPerPage);
+        // Compute fresh instead of reading the pinnedItemsPerPage field: the field is 1 until
+        // the first successful pinned render and after az/non-pinned renders, so reading it here
+        // would report one page per pinned item (the "dozens of empty page ticks" failure).
+        int perPage = Math.max(1, computePinnedItemsPerPage());
         if (totalPinned <= 0) return 1;
         return (totalPinned + perPage - 1) / perPage;
     }
@@ -7581,8 +7397,7 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private float resolveIconFillRatio() {
-        float normalized = clamp01((iconScale - 1.0f) / 0.8f);
-        return 0.68f + (normalized * 0.16f);
+        return AccessoryStackLayoutPolicy.computeDockIconFillRatio(iconScale);
     }
 
     @NonNull

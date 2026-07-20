@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <declare-styleable name="keyboard">
+    <attr name="colorKeyboard" format="color"/>
+    <attr name="colorKey" format="color"/>
+    <attr name="colorKeyActivated" format="color"/>
+    <attr name="colorKeyAction" format="color"/>
+    <attr name="colorKeySpaceBar" format="color"/>
+    <attr name="colorLabel" format="color"/>
+    <attr name="colorLabelPressed" format="color"/>
+    <attr name="colorLabelActivated" format="color"/>
+    <attr name="colorLabelLocked" format="color"/>
+    <attr name="secondaryDimming" format="float"/>
+    <attr name="greyedDimming" format="float"/>
+    <attr name="colorSubLabel" format="color"/>
+    <attr name="keyBorderRadius" format="dimension"/>
+    <attr name="keyBorderWidth" format="dimension"/>
+    <attr name="keyBorderWidthActivated" format="dimension"/>
+    <attr name="keyBorderWidthAction" format="dimension"/>
+    <attr name="keyBorderWidthSpaceBar" format="dimension"/>
+    <attr name="keyBorderColorLeft" format="color"/>
+    <attr name="keyBorderColorTop" format="color"/>
+    <attr name="keyBorderColorRight" format="color"/>
+    <attr name="keyBorderColorBottom" format="color"/>
+  </declare-styleable>
+
+  <style name="BaseTheme">
+    <item name="android:forceDarkAllowed">false</item>
+    <item name="keyBorderRadius">5dp</item>
+    <item name="keyBorderWidth">0dp</item>
+    <item name="keyBorderWidthActivated">0dp</item>
+    <item name="keyBorderWidthAction">0dp</item>
+    <item name="keyBorderWidthSpaceBar">0dp</item>
+    <item name="secondaryDimming">0.25</item>
+    <item name="greyedDimming">0.5</item>
+  </style>
+
+  <style name="Light" parent="BaseTheme">
+    <item name="android:isLightTheme">true</item>
+    <item name="colorKeyboard">#e3e3e3</item>
+    <item name="colorKey">#cccccc</item>
+    <item name="colorKeyActivated">#e3e3e3</item>
+    <item name="colorKeyAction">#d9d9d9</item>
+    <item name="colorKeySpaceBar">#dedede</item>
+    <item name="keyBorderWidth">0.6dp</item>
+    <item name="keyBorderColorLeft">#cccccc</item>
+    <item name="keyBorderColorTop">#eeeeee</item>
+    <item name="keyBorderColorRight">#cccccc</item>
+    <item name="keyBorderColorBottom">#aaaaaa</item>
+    <item name="colorLabel">#000000</item>
+    <item name="colorLabelPressed">#000000</item>
+    <item name="colorLabelActivated">#0066cc</item>
+    <item name="colorLabelLocked">#33cc33</item>
+    <item name="colorSubLabel">#333333</item>
+  </style>
+
+  <style name="Dark" parent="BaseTheme">
+    <item name="android:isLightTheme">false</item>
+    <item name="colorKeyboard">#1b1b1b</item>
+    <item name="colorKey">#333333</item>
+    <item name="colorKeyActivated">#1b1b1b</item>
+    <item name="colorKeyAction">#262626</item>
+    <item name="colorKeySpaceBar">#2b2b2b</item>
+    <item name="keyBorderWidth">1.2dp</item>
+    <item name="keyBorderColorLeft">#404040</item>
+    <item name="keyBorderColorTop">#404040</item>
+    <item name="keyBorderColorRight">#404040</item>
+    <item name="keyBorderColorBottom">#404040</item>
+    <item name="colorLabel">#ffffff</item>
+    <item name="colorLabelPressed">#ffffff</item>
+    <item name="colorLabelActivated">#3399ff</item>
+    <item name="colorLabelLocked">#33cc33</item>
+    <item name="colorSubLabel">#cccccc</item>
+  </style>
+
+  <style name="Black" parent="BaseTheme">
+    <item name="android:isLightTheme">false</item>
+    <item name="colorKeyboard">#000000</item>
+    <item name="colorKey">#000000</item>
+    <item name="colorKeyActivated">#333333</item>
+    <item name="colorKeyAction">#000000</item>
+    <item name="colorKeySpaceBar">#000000</item>
+    <item name="keyBorderRadius">1dp</item>
+    <item name="keyBorderWidthActivated">1dp</item>
+    <item name="keyBorderColorLeft">#2a2a2a</item>
+    <item name="keyBorderColorTop">#2a2a2a</item>
+    <item name="keyBorderColorRight">#2a2a2a</item>
+    <item name="keyBorderColorBottom">#2a2a2a</item>
+    <item name="colorLabel">#eeeeee</item>
+    <item name="colorLabelPressed">#eeeeee</item>
+    <item name="colorLabelActivated">#009dff</item>
+    <item name="colorLabelLocked">#00ff26</item>
+    <item name="colorSubLabel">#bbbbbb</item>
+  </style>
+</resources>

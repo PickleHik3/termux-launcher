@@ -23,15 +23,15 @@ public class LauncherAzGestureFxViewTest {
         view.setFocusedIconRingEnabled(true);
         RectF bounds = new RectF(100, 40, 180, 120);
 
-        view.updateDrag(true, 140, 80, true, 140, 220, bounds,
+        view.updateDrag(true, 140, bounds,
             LauncherAzGestureFxView.InteractionMode.LETTER_TRACK);
         assertEquals(View.GONE, view.getVisibility());
 
-        view.updateDrag(true, 140, 80, true, 140, 220, bounds,
+        view.updateDrag(true, 140, bounds,
             LauncherAzGestureFxView.InteractionMode.ICON_TRACK_LOCKED);
         assertEquals(View.VISIBLE, view.getVisibility());
 
-        view.updateDrag(true, 140, 80, true, 140, 220, null,
+        view.updateDrag(true, 140, null,
             LauncherAzGestureFxView.InteractionMode.ICON_TRACK_LOCKED);
         assertEquals(View.GONE, view.getVisibility());
     }

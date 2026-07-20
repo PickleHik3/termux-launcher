@@ -59,20 +59,20 @@ public final class MaterialTerminalColorScheme {
 
         props.setProperty("color0", hex(dark ? darken(neutral, 0.72f) : darken(subtleText, 0.38f)));
         props.setProperty("color1", hex(tintToward(error, errorContainer, dark ? 0.12f : 0.18f)));
-        props.setProperty("color2", hex(materialAnsi("#5CF19E", "#0B6B3A", secondary, dark)));
-        props.setProperty("color3", hex(materialAnsi("#FFD740", "#8A5A00", tertiary, dark)));
-        props.setProperty("color4", hex(materialAnsi("#40C4FF", "#00639B", primary, dark)));
-        props.setProperty("color5", hex(materialAnsi("#FF4081", "#A23A6F", primary, dark)));
-        props.setProperty("color6", hex(materialAnsi("#64FCDA", "#006D63", secondary, dark)));
+        props.setProperty("color2", hex(materialAnsi("#5CF19E", "#00753B", secondary, dark)));
+        props.setProperty("color3", hex(materialAnsi("#FFD740", "#855000", tertiary, dark)));
+        props.setProperty("color4", hex(materialAnsi("#40C4FF", "#005FA8", primary, dark)));
+        props.setProperty("color5", hex(materialAnsi("#FF4081", "#9C2764", primary, dark)));
+        props.setProperty("color6", hex(materialAnsi("#64FCDA", "#00746C", secondary, dark)));
         props.setProperty("color7", hex(dark ? lighten(neutral, 0.72f) : darken(neutral, 0.54f)));
 
         props.setProperty("color8", hex(dark ? lighten(neutral, 0.34f) : darken(subtleText, 0.18f)));
         props.setProperty("color9", hex(dark ? lighten(error, 0.22f) : lighten(error, 0.16f)));
-        props.setProperty("color10", hex(materialAnsi("#B9F6CA", "#228C55", secondary, dark)));
-        props.setProperty("color11", hex(materialAnsi("#FFE57F", "#A76F00", tertiary, dark)));
-        props.setProperty("color12", hex(materialAnsi("#80D8FF", "#1976A8", primary, dark)));
-        props.setProperty("color13", hex(materialAnsi("#FF80AB", "#B84F83", primary, dark)));
-        props.setProperty("color14", hex(materialAnsi("#A7FDEB", "#008577", secondary, dark)));
+        props.setProperty("color10", hex(materialAnsi("#B9F6CA", "#00844A", secondary, dark)));
+        props.setProperty("color11", hex(materialAnsi("#FFE57F", "#956000", tertiary, dark)));
+        props.setProperty("color12", hex(materialAnsi("#80D8FF", "#006DAF", primary, dark)));
+        props.setProperty("color13", hex(materialAnsi("#FF80AB", "#AD3774", primary, dark)));
+        props.setProperty("color14", hex(materialAnsi("#A7FDEB", "#008078", secondary, dark)));
         props.setProperty("color15", hex(foreground));
 
         return props;
@@ -202,7 +202,9 @@ public final class MaterialTerminalColorScheme {
     @ColorInt
     private static int materialAnsi(String darkBaseHex, String lightBaseHex, @ColorInt int materialColor, boolean dark) {
         int semanticBase = Color.parseColor(dark ? darkBaseHex : lightBaseHex);
-        return tintToward(semanticBase, materialColor, dark ? 0.42f : 0.36f);
+        // Light palettes need the ANSI hue to remain distinct. A stronger
+        // Material blend makes greens, blues and cyans converge into gray.
+        return tintToward(semanticBase, materialColor, dark ? 0.42f : 0.18f);
     }
 
     @ColorInt

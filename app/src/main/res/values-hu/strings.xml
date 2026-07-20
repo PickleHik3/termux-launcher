@@ -161,7 +161,6 @@
     <string name="action_set_background_image">Háttérkép beállítása</string>
     <string name="action_font_and_color">Betűtípus és Szín</string>
     <string name="error_background_image_loading_failed">Nem sikerült betölteni a háttérképet. Háttérszín beállítása.</string>
-    <string name="action_remove_background_image">Háttérkép eltávolítása</string>
     <string name="termux_terminal_view_activity_remove_off">Amint az összes terminál munkamenetet bezárta, &TERMUX_APP_NAME; bezáródik, és látható marad a legutóbbi alkalmazásoknál.</string>
     <string name="termux_terminal_view_activity_remove_title">A legutóbbi alkalmazások közötti maradás megakadályozása</string>
     <string name="termux_style_preferences_title">&TERMUX_APP_NAME; Kinézet</string>

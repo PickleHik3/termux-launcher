@@ -8,6 +8,7 @@ import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
@@ -59,12 +60,16 @@ import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.util.DisplayMetrics;
+import android.util.LruCache;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.RelativeLayout;
+import android.widget.ScrollView;
+import android.widget.SeekBar;
+import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.ArrayAdapter;
 import androidx.activity.result.ActivityResultLauncher;
@@ -72,6 +77,8 @@ import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import com.github.mmin18.widget.AndroidStockBlurImpl;
 import com.github.mmin18.widget.RealtimeBlurView;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.canhub.cropper.CropImage;
@@ -81,17 +88,21 @@ import com.canhub.cropper.CropImageOptions;
 import com.canhub.cropper.CropImageView;
 import com.termux.R;
 import com.termux.app.api.file.FileReceiverActivity;
+import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.launcher.animation.LauncherTransitionController;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherConfigRepository;
 import com.termux.app.launcher.LauncherLockAccessibilityAccess;
 import com.termux.app.launcher.LockAccessibilityService;
+import com.termux.app.launcher.TerminalAppSearchKeyDecision;
 import com.termux.launcherctl.LauncherCtlApiServer;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
 import com.termux.app.terminal.TermuxActivityRootView;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
+import com.termux.app.terminal.inappkeyboard.InAppKeyboardHost;
+import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.terminal.io.TermuxTerminalExtraKeys;
 import com.termux.shared.activities.ReportActivity;
 import com.termux.shared.activity.ActivityUtils;
@@ -101,6 +112,7 @@ import com.termux.shared.android.PermissionUtils;
 import com.termux.shared.data.DataUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY;
+import com.termux.app.activities.OnboardingActivity;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.theme.TermuxThemeManager;
 import com.termux.shared.termux.crash.TermuxCrashUtils;
@@ -110,6 +122,7 @@ import com.termux.app.terminal.TermuxSessionsListViewController;
 import com.termux.app.terminal.io.TerminalToolbarViewPager;
 import com.termux.app.terminal.TermuxTerminalViewClient;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
+import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxUtils;
@@ -117,6 +130,7 @@ import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
 import com.termux.shared.termux.theme.TermuxThemeUtils;
 import com.termux.shared.theme.NightMode;
 import com.termux.shared.theme.ThemeUtils;
+import com.termux.shared.view.KeyboardUtils;
 import com.termux.shared.view.ViewUtils;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
@@ -129,7 +143,6 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsAnimationCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsCompat.Type;
@@ -148,6 +161,8 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 
+import juloo.keyboard2.Keyboard2View;
+
 /**
  * A terminal emulator activity.
  * <p/>
@@ -159,6 +174,11 @@ import java.io.InputStream;
  * about memory leaks.
  */
 public final class TermuxActivity extends AppCompatActivity implements ServiceConnection, SuggestionBarCallback {
+
+    public static final String EXTRA_IN_APP_KEYBOARD_HEIGHT_ADJUST =
+        "com.termux.app.extra.IN_APP_KEYBOARD_HEIGHT_ADJUST";
+    public static final String EXTRA_DOCK_TUNING =
+        "com.termux.app.extra.DOCK_TUNING";
 
     /**
      * The connection to the {@link TermuxService}. Requested in {@link #onCreate(Bundle)} with a call to
@@ -183,6 +203,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      *  {@link TerminalSession} and {@link TermuxActivity}.
      */
     TermuxTerminalSessionActivityClient mTermuxTerminalSessionActivityClient;
+
+    /** Activity-scoped embedded-keyboard controller and its currently attached renderer. */
+    @Nullable private TermuxInAppKeyboard mInAppKeyboard;
+    @Nullable private View mAttachedInAppKeyboardView;
+    private boolean mInAppKeyboardShiftLocked;
+    private float mInAppKeyboardHeightDragStartY;
+    private float mInAppKeyboardHeightDragStartScale;
+    private float mInAppKeyboardUnscaledDragHeight;
+    private boolean mDockTuningMode;
+    private ViewTreeObserver.OnGlobalLayoutListener mDockTuningLayoutListener;
 
     /**
      * Termux app shared preferences manager.
@@ -213,6 +243,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     SuggestionBarView mSuggestionBarView;
     private boolean mSuggestionBarExplicitSearchActive;
     AzScrubRowView mAzScrubRowView;
+    @Nullable private View mAzTerminalToolbarView;
     LauncherAzGestureFxView mLauncherAzGestureFxUnderlayView;
     LauncherAzGestureFxView mLauncherAzGestureFxOverlayView;
     LauncherAzGestureFxView mLauncherAzGestureFxLabelOverlayView;
@@ -275,6 +306,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * If service connected before activity became visible and bootstrap/session start should be retried onStart().
      */
     private boolean mPendingBootstrapOnStart = false;
+    private boolean mShouldLaunchOnboardingAfterBootstrap = false;
 
     /**
      * Launch intent captured when bootstrap/session start is deferred to onStart().
@@ -299,9 +331,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int mNavBarHeight;
     private int mImeLiftPx;
+    /** Set only after this activity explicitly requests a system IME in its current visible run. */
+    private boolean mAcceptSystemImeInsets;
+    private final LruCache<String, Integer> mLaunchIconColorCache = new LruCache<>(64);
 
     /** Reactive glass-plank physics for the dock (tilt, specular, accent rim glow). */
     @Nullable private DockPlankController mDockPlankController;
+    @Nullable private View mDockPlankTarget;
     private boolean mDockPlankTouchInside = false;
     private float mDockPlankLeft = 0f;
     private float mDockPlankTop = 0f;
@@ -318,7 +354,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ICON_TRACKING_LOCKED
     }
     @NonNull private AzGestureMode mAzGestureMode = AzGestureMode.IDLE;
-    @Nullable private Runnable mAzEdgePagingRunnable;
+    @Nullable private Choreographer.FrameCallback mAzEdgePagingFrameCallback;
     @Nullable private SuggestionBarView.AzDragFocusResult mAzCurrentFocusResult;
     @Nullable private Runnable mAzOverflowRefreshRunnable;
     private int mAzEdgePagingEdge = SuggestionBarView.AZ_EDGE_NONE;
@@ -333,8 +369,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mAzHasPreviewAnchor = false;
     private char mAzPreviewAnchorLetter = '#';
     private int mAzPreviewAnchorSelectionIndex = 0;
-    private float mAzGestureDownTouchX = 0f;
-    private float mAzGestureDownTouchY = 0f;
+    private float mAzRecentMotionDx = 0f;
+    private float mAzRecentMotionDy = 0f;
+    private long mAzLastMotionEventTimeMs = 0L;
+    private float mAzUpwardTravelRefY = 0f;
+    private float mAzLastScrubTouchX = 0f;
+    private float mAzLastScrubTouchY = 0f;
     private float mAzLastRawX = 0f;
     private float mAzLastRawY = 0f;
     private float mAzLastAnchorRawX = 0f;
@@ -343,18 +383,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mAzLockedAnchorRawY = 0f;
     private final RectF mAzRowRawBounds = new RectF();
     private final RectF mAppsRowRawBounds = new RectF();
-    private final RectF mIndicatorBandRawBounds = new RectF();
     private final RectF mExtraKeysRawBounds = new RectF();
     private final RectF mAzFocusLetterRawBounds = new RectF();
+    private final int[] mAzViewLocation = new int[2];
     private final AzScrubRowView.LetterVisualMetrics mAzLetterVisualMetrics = new AzScrubRowView.LetterVisualMetrics();
     private static final long AZ_EDGE_PAGE_INITIAL_DELAY_MS = 560L;
     private static final long AZ_EDGE_PAGE_REPEAT_INTERVAL_MS = 420L;
     private static final long AZ_EDGE_PAGE_COOLDOWN_MS = 520L;
-    private static final long AZ_EDGE_DWELL_FRAME_MS = 16L;
     private static final long AZ_PREVIEW_TIMEOUT_REFRESH_MS = 5200L;
-    private static final float AZ_UPWARD_LOCK_TOUCH_Y_RATIO = 0.45f;
+    private static final float AZ_UPWARD_LOCK_TOUCH_Y_RATIO = 0.60f;
     private static final float AZ_RETURN_TOUCH_Y_RATIO = 0.55f;
-    private static final float AZ_UPWARD_DIRECTION_RATIO = 0.75f;
+    // Direction ratios compare against the smoothed RECENT motion vector, not displacement from
+    // touch-down: after a long horizontal letter scrub the old cumulative test demanded a
+    // near-vertical climb before the upward lock could engage.
+    private static final float AZ_UPWARD_DIRECTION_RATIO = 0.45f;
+    private static final float AZ_RETURN_DIRECTION_RATIO = 0.5f;
+    /** Time constant for recent pointer velocity; independent of touch sampling rate. */
+    private static final float AZ_RECENT_MOTION_TAU_MS = 50f;
 
     private static final int CONTEXT_MENU_SELECT_URL_ID = 0;
 
@@ -373,6 +418,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int CONTEXT_MENU_RESET_TERMINAL_ID = 7;
 
     private static final int CONTEXT_MENU_KILL_PROCESS_ID = 8;
+
+    private static final int CONTEXT_MENU_GLASS_LAB_ID = 9;
 
     private static final class TerminalActionItem {
         final int id;
@@ -393,8 +440,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final String ARG_TERMINAL_TOOLBAR_TEXT_INPUT = "terminal_toolbar_text_input";
 
     private static final String ARG_ACTIVITY_RECREATED = "activity_recreated";
+    private static final String ARG_SHOULD_LAUNCH_ONBOARDING = "should_launch_onboarding";
 
     private static final String LOG_TAG = "TermuxActivity";
+    private static final int IN_APP_KEYBOARD_MARGIN_SLIDER_STEPS_PER_UNIT = 100;
+    private static final int IN_APP_KEYBOARD_RADIUS_SLIDER_STEPS_PER_DP = 10;
     private static final int ACCESSORY_BLUR_DOWNSAMPLE_FACTOR = 4;
     private static final long ACCESSORY_BLUR_BACKSTOP_MS = 300_000L;
     private static volatile boolean sPendingStyleReloadOnNextResume = false;
@@ -403,9 +453,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int SUGGESTION_BAR_MAX_INPUT_CHARS = 10;
     private static final long EMPTY_SESSION_RECOVERY_DEBOUNCE_MS = 1500L;
     private static final long ACCESSORY_BLUR_RECOVERY_RETRY_MS = 120L;
-    private static final boolean ACCESSORY_RENDER_TRACE = false;
     private static final float DEFAULT_DOCK_SIZE_PRESET_SHIFT = 0.27f;
     private static final float DEFAULT_DOCK_SIZE_MAX_PROGRESS = 1.18f;
+    private static final float[] DEFAULT_DOCK_ICON_PROGRESS_POINTS = {0.54f, 0.77f, 1.00f, 1.18f};
+    private static final float[] DEFAULT_DOCK_ICON_SCALE_POINTS = {
+        1.3068f, 1.487604f, 1.68f, 1.89072f
+    };
+    private static final float[] CAPSULE_DOCK_ICON_PROGRESS_POINTS = {0.27f, 0.50f, 0.73f, 1.00f};
+    private static final float[] CAPSULE_DOCK_ICON_SCALE_POINTS = {
+        1.7252f, 1.9633334f, 2.21312f, 2.508f
+    };
     private static volatile boolean sPendingStyleReloadRecreateActivity = true;
 
     private boolean mSeamlessStatusBackgroundActive;
@@ -414,20 +471,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mEmptySessionRecoveryInProgress;
     private boolean mAccessoryRenderSyncPending;
     private boolean mLastImeVisible;
-    @Nullable private String mPendingAccessoryRenderReason;
     @Nullable private ViewTreeObserver.OnGlobalLayoutListener mAccessoryKeyboardLayoutListener;
     @Nullable private View.OnLayoutChangeListener mAccessoryLayoutChangeListener;
+    @Nullable private ViewTreeObserver.OnPreDrawListener mInAppKeyboardOpenPreDrawListener;
+    @Nullable private View mInAppKeyboardOpenPreDrawView;
+    @Nullable private ViewTreeObserver.OnPreDrawListener mInAppKeyboardClosePreDrawListener;
+    @Nullable private View mInAppKeyboardClosePreDrawView;
+    private int mInAppKeyboardOpenRevealBlockedFrames;
+    private final Runnable mInAppKeyboardOpenRevealBackstopRunnable =
+        this::revealInAppKeyboardIfStillPending;
     @Nullable private ActivityResultLauncher<PickVisualMediaRequest> mWallpaperPickerLauncher;
     @Nullable private ActivityResultLauncher<CropImageContractOptions> mWallpaperCropLauncher;
     private final int[] mTmpParentLocation = new int[2];
     private final int[] mTmpViewLocation = new int[2];
-    private long mLastAccessoryRenderSyncUptimeMs;
     private long mLastAccessoryGeometryApplyUptimeMs;
     private int mAppliedTerminalFlushPaddingPx;
-    private boolean mHasMeasuredTerminalFlushPadding;
-    private long mDelayRootMarginAdjustmentsUntilUptimeMs;
-    private boolean mImeTransitionInProgress;
-    private boolean mFadeAccessoryBlurAfterImeRestore;
+    private boolean mAppliedInAppKeyboardShown;
+    private int mDesiredInAppKeyboardHeightPx;
+    private int mInAppKeyboardMeasureWidthPx;
+    private int mInAppKeyboardAvailableHeightPx;
+    private boolean mInAppKeyboardHeightDirty = true;
+    /** Keeps a unified glass keyboard hidden until the expanded dock+keyboard crop is installed. */
+    private boolean mPendingInAppKeyboardOpenReveal;
+    /** Keeps the under-pill glass covering stale close geometry until dock-only layout settles. */
+    private boolean mPendingInAppKeyboardCloseGeometry;
     private boolean mAccessoryBackdropDirty = true;
     private int mLastAccessoryBackdropBlurRadiusDp = -1;
     private boolean mLastAccessoryBackdropManagedSource;
@@ -439,22 +506,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mLastDecorNavBarBackdropBlurRadiusDp = -1;
     private boolean mLastDecorNavBarBackdropManagedSource;
     @NonNull private final Rect mLastDecorNavBarBackdropTargetRect = new Rect();
+    private boolean mInAppKeyboardBackdropDirty = true;
+    private int mLastInAppKeyboardBackdropBlurRadiusDp = -1;
+    private boolean mLastInAppKeyboardBackdropManagedSource;
+    @NonNull private final Rect mLastInAppKeyboardBackdropTargetRect = new Rect();
+    @Nullable private Bitmap mInAppKeyboardBackdropBitmap;
+    /** One wallpaper-frame blur shared by dock, keyboard, and gesture-nav crops. */
+    @Nullable private Bitmap mCachedAccessoryWallpaperBlurBitmap;
+    @NonNull private final Rect mCachedAccessoryWallpaperBlurFrameRect = new Rect();
+    private int mCachedAccessoryWallpaperBlurRadiusDp = -1;
+    private boolean mCachedAccessoryWallpaperBlurManagedSource;
+    private int mCachedAccessoryWallpaperBlurSystemId = -1;
+    private long mCachedAccessoryWallpaperBlurManagedLastModified = -1L;
+    private long mCachedAccessoryWallpaperBlurManagedLength = -1L;
     @Nullable private Drawable mManagedWallpaperWindowBackground;
     private long mManagedWallpaperWindowBackgroundLastModified = -1L;
     private long mManagedWallpaperWindowBackgroundLength = -1L;
     @Nullable private Drawable mSystemWallpaperWindowBackground;
     private int mSystemWallpaperWindowBackgroundId = -1;
-    @Nullable private Boolean mPendingImeGeometryVisible;
     @Nullable private WallpaperManager.OnColorsChangedListener mWallpaperColorsChangedListener;
     private final Handler mAccessoryRenderHandler = new Handler(Looper.getMainLooper());
-    private final Runnable mDeferredImeGeometryRunnable = () -> {
-        Boolean visible = mPendingImeGeometryVisible;
-        mPendingImeGeometryVisible = null;
-        if (visible == null) {
-            return;
-        }
-        applyAccessoryGeometryIfNeeded(true, visible ? "ime:open:deferred" : "ime:close:deferred");
-    };
     private final Runnable mAccessoryBlurHeartbeatRunnable = new Runnable() {
         @Override
         public void run() {
@@ -468,6 +539,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!isAccessoryBlurHealthy(state)) {
                 mAccessoryBackdropDirty = true;
                 mDecorNavBarBackdropDirty = true;
+                mInAppKeyboardBackdropDirty = true;
                 scheduleAccessoryRenderSync("blur:backstop");
             }
             mAccessoryRenderHandler.postDelayed(this, ACCESSORY_BLUR_BACKSTOP_MS);
@@ -484,87 +556,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!isAccessoryBlurHealthy(state)) {
             mAccessoryBackdropDirty = true;
             mDecorNavBarBackdropDirty = true;
+            mInAppKeyboardBackdropDirty = true;
         }
         scheduleAccessoryRenderSync("blur:recovery");
     };
-    private final Runnable mRestoreAccessoryBlurAfterImeRunnable = () -> {
-        if (!mIsVisible) {
-            return;
-        }
-        mImeTransitionInProgress = false;
-        mAccessoryBackdropDirty = true;
-        mDecorNavBarBackdropDirty = true;
-        mFadeAccessoryBlurAfterImeRestore = shouldFadeAccessoryBlurAfterImeRestore();
-        prepareAccessoryBlurRestoreFade();
-        updateAccessoryRenderEffectBackdrop(buildAccessoryRenderState());
-        applyDecorNavBarSurfaceState(buildAccessoryRenderState());
-        startAccessoryBlurRestoreFade();
-        mFadeAccessoryBlurAfterImeRestore = false;
-        restartAccessoryBlurHeartbeat();
-        scheduleAccessoryBlurRecovery();
-    };
-    private final WindowInsetsAnimationCompat.Callback mDockImeAnimationCallback =
-        new WindowInsetsAnimationCompat.Callback(WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
-            @NonNull
-            @Override
-            public WindowInsetsAnimationCompat.BoundsCompat onStart(
-                @NonNull WindowInsetsAnimationCompat animation,
-                @NonNull WindowInsetsAnimationCompat.BoundsCompat bounds
-            ) {
-                if ((animation.getTypeMask() & Type.ime()) != 0) {
-                    beginImeTransitionBlurPause();
-                    mDelayRootMarginAdjustmentsUntilUptimeMs = SystemClock.uptimeMillis() + 180L;
-                    applySmoothDockImeOffset(0);
-                }
-                return bounds;
-            }
-
-            @NonNull
-            @Override
-            public WindowInsetsCompat onProgress(
-                @NonNull WindowInsetsCompat insets,
-                @NonNull List<WindowInsetsAnimationCompat> runningAnimations
-            ) {
-                boolean imeAnimationRunning = false;
-                for (WindowInsetsAnimationCompat animation : runningAnimations) {
-                    if ((animation.getTypeMask() & Type.ime()) != 0) {
-                        imeAnimationRunning = true;
-                        break;
-                    }
-                }
-                if (imeAnimationRunning) {
-                    mDelayRootMarginAdjustmentsUntilUptimeMs = SystemClock.uptimeMillis() + 80L;
-                    applySmoothDockImeOffset(computeDockImeLiftPx(insets));
-                }
-                return insets;
-            }
-
-            @Override
-            public void onEnd(@NonNull WindowInsetsAnimationCompat animation) {
-                if ((animation.getTypeMask() & Type.ime()) != 0) {
-                    mDelayRootMarginAdjustmentsUntilUptimeMs = SystemClock.uptimeMillis() + 40L;
-                    applySmoothDockImeOffset(0);
-                    mPendingImeGeometryVisible = null;
-                    scheduleImeTransitionBlurRestore();
-                }
-            }
-        };
     private final Runnable mAccessoryRenderSyncRunnable = () -> {
         mAccessoryRenderSyncPending = false;
-        String reason = mPendingAccessoryRenderReason == null ? "unknown" : mPendingAccessoryRenderReason;
-        mPendingAccessoryRenderReason = null;
         configureExtraKeysBackground();
-        syncTerminalOverlayBottomInsetToAccessoryHeight();
         enforceAccessoryFxInvariants();
-        logAccessoryRenderSnapshot(reason);
     };
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         Logger.logDebug(LOG_TAG, "onCreate");
         mIsOnResumeAfterOnCreate = true;
-        if (savedInstanceState != null)
+        if (savedInstanceState == null) {
+            mShouldLaunchOnboardingAfterBootstrap = OnboardingActivity.prepareAutomaticLaunch(this);
+        } else {
+            mShouldLaunchOnboardingAfterBootstrap = savedInstanceState.containsKey(
+                ARG_SHOULD_LAUNCH_ONBOARDING)
+                ? savedInstanceState.getBoolean(ARG_SHOULD_LAUNCH_ONBOARDING)
+                : OnboardingActivity.prepareAutomaticLaunch(this);
             mIsActivityRecreated = savedInstanceState.getBoolean(ARG_ACTIVITY_RECREATED, false);
+        }
         // Delete ReportInfo serialized object files from cache older than 14 days
         ReportActivity.deleteReportInfoFilesOlderThanXDays(this, 14, false);
         // Load Termux app SharedProperties from disk
@@ -601,16 +615,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             WindowInsetsCompat insetsCompat = WindowInsetsCompat.toWindowInsetsCompat(insets, v);
             mNavBarHeight = insetsCompat.getInsets(Type.systemBars()).bottom;
             mImeLiftPx = computeDockImeLiftPx(insetsCompat);
+            applyDockImeOffset(0);
             applyTerminalOverlayInsets(insetsCompat);
             configureExtraKeysBackground();
             return insetsCompat.toWindowInsets();
         });
         applySeamlessStatusBackgroundModeIfNeeded();
         ViewCompat.requestApplyInsets(content);
-        View accessoryContainer = findViewById(R.id.accessory_stack_container);
-        if (accessoryContainer != null) {
-            ViewCompat.setWindowInsetsAnimationCallback(accessoryContainer, mDockImeAnimationCallback);
-        }
         applyFullscreenMode();
         // Must be done every time activity is created in order to registerForActivityResult,
         // Even if the logic of launching is based on user input.
@@ -618,6 +629,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastLaunchWasLauncherEntry = isLauncherHomeIntent(getIntent());
         setTermuxTerminalViewAndClients();
         setTerminalToolbarView(savedInstanceState);
+        initializeInAppKeyboard(savedInstanceState);
+        // Only a fresh launch may enter adjust mode: after process death the system re-delivers
+        // the original launch intent with the extra still set, which must not re-enter it.
+        if (savedInstanceState == null) {
+            handleInAppKeyboardHeightAdjustIntent(getIntent());
+            handleDockTuningIntent(getIntent());
+        }
         setSettingsButtonView();
         setNewSessionButtonView();
         setToggleKeyboardView();
@@ -650,6 +668,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        handleInAppKeyboardHeightAdjustIntent(intent);
+        handleDockTuningIntent(intent);
         if (isLauncherHomeIntent(intent)) {
             mLastLaunchWasLauncherEntry = true;
         }
@@ -671,8 +691,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logDebug(LOG_TAG, "onStart");
     
         if (mIsInvalidState) return;
-    
+
         mIsVisible = true;
+        resetInheritedImeLayoutState();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.setHostVisible(true);
             scheduleLauncherCatalogWarmup();
@@ -684,11 +705,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             startBootstrapAndSession(pendingIntent);
         }
         maybeRecoverFromEmptySession("onStart");
+        scheduleOnboardingIfReady();
     
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onStart();
         if (mTermuxTerminalViewClient != null)
             mTermuxTerminalViewClient.onStart();
+        if (mInAppKeyboard != null) {
+            mInAppKeyboard.onStart();
+        }
         updateWindowBackgroundForCurrentSession();
     
         if (mPreferences.isTerminalMarginAdjustmentEnabled()) {
@@ -732,7 +757,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         switch (ev.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
-                View plank = findViewById(R.id.accessory_stack_container);
+                View plank = mDockPlankTarget;
                 mDockPlankTouchInside = false;
                 if (plank == null || plank.getVisibility() != View.VISIBLE
                     || plank.getWidth() <= 0 || plank.getHeight() <= 0) {
@@ -779,6 +804,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logVerbose(LOG_TAG, "onResume");
         if (mIsInvalidState)
             return;
+        // The last insets snapshot can be from mid-transition out of the previous app (IME still
+        // up, nav bars reported hidden) and there is no later dispatch to correct it — a stale
+        // lift here renders the dock and keyboard in the top third of the screen. Drop it and
+        // ask for a fresh pass.
+        resetInheritedImeLayoutState();
+        View contentView = findViewById(android.R.id.content);
+        if (contentView != null)
+            androidx.core.view.ViewCompat.requestApplyInsets(contentView);
+        // Preferences may have changed while the settings activity covered this one.
+        initializeInAppKeyboard(null);
+        if (mInAppKeyboard != null) {
+            mInAppKeyboard.onPreferencesReloaded();
+            mInAppKeyboard.onResume();
+            if (mInAppKeyboard.isExternalTextInputActive())
+                onSystemImeRequested();
+        }
         if (sPendingStyleReloadOnNextResume) {
             boolean recreateActivity = consumePendingStyleReloadRecreateActivity();
             reloadActivityStyling(recreateActivity);
@@ -812,11 +853,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // notification with the crash details if it did
         TermuxCrashUtils.notifyAppCrashFromCrashLogFile(this, LOG_TAG);
         mIsOnResumeAfterOnCreate = false;
-    }
-
-    private void configureViewVisibility(int viewId, boolean isVisible) {
-        View view = findViewById(viewId);
-        view.setVisibility(isVisible ? View.VISIBLE : View.GONE);
     }
 
     private void applyTerminalSurfaceAppearance() {
@@ -953,6 +989,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         try {
             WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
             mWallpaperColorsChangedListener = (WallpaperColors colors, int which) -> {
+                clearCachedAccessoryWallpaperBlur();
                 if (!mIsVisible) {
                     return;
                 }
@@ -1009,12 +1046,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ContextCompat.getColor(this, R.color.termux_primary));
     }
 
-    /** Warm wallpaper-derived tertiary (the ochre in the prototype) used for the glass wash. */
-    private int resolveDockTertiaryColor() {
-        return MaterialColors.getColor(this, com.google.android.material.R.attr.colorTertiary,
-            resolveDockAccentColor());
-    }
-
     /**
      * Builds the Material-tinted glass surface: an opaque neutral base with a faint top-down sheen
      * layered on top. The earlier corner-to-corner (TL->BR) accent wash read as a "digital"
@@ -1026,45 +1057,132 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private Drawable buildDockGlassSurface(float barAlpha) {
+        return buildDockGlassSurface(barAlpha, 0f, 1f);
+    }
+
+    /**
+     * Builds the dock/keyboard glass tint. The vertical light model — thin cool sheen at the top, a
+     * faint accent edge, a clear see-through middle, then a soft dark "foot" at the bottom that
+     * suggests the slab's thickness — normally spans the full surface height ({@code sliceStart=0},
+     * {@code sliceEnd=1}).
+     *
+     * <p>When the keyboard is shown, the glass is split across two stacked surfaces (the keyboard
+     * host, then the shorter under-pill nav strip below it). Rendering the full model on each would
+     * put a dark foot at the keyboard's own bottom AND another at the strip's bottom — a dark band
+     * mid-slab and an over-tinted strip. Instead both surfaces render adjacent slices of ONE model
+     * spanning keyboard+strip: the keyboard uses {@code [0, f]} and the strip {@code [f, 1]}, so the
+     * single foot lands under the pill exactly as it does for the keyboard-off dock (which draws one
+     * gradient over dock+nav). This keeps the two states looking identical.</p>
+     */
+    @NonNull
+    private Drawable buildDockGlassSurface(float barAlpha, float sliceStart, float sliceEnd) {
+        return buildDockGlassSurface(barAlpha, sliceStart, sliceEnd, true);
+    }
+
+    /**
+     * @param withFoot when false the dark bottom "foot" of the light model is dropped. The default
+     *     dock stack (in-content dock/keyboard + under-pill nav strip) sets this false so the strip
+     *     is not darker than the dock body — the foot would otherwise land under the pill and read as
+     *     a darker nav band. The floating capsule veil / controls bar keep the foot for slab depth.
+     */
+    @NonNull
+    private Drawable buildDockGlassSurface(float barAlpha, float sliceStart, float sliceEnd,
+                                           boolean withFoot) {
         int base = resolveAccessoryGlassBaseColor();
         int accent = resolveDockAccentColor();
         float clamped = barAlpha < 0f ? 0f : (barAlpha > 1f ? 1f : barAlpha);
-        // Keep opacity in this tint drawable instead of applying it to the host view. The AGSL
-        // wallpaper backdrop is a separate layer below this one and must remain fully active; only
-        // the dock's material surface, sheen and grain should respond to the opacity preference.
+        // Opacity controls the colored material wash and its lighting. The wallpaper blur and
+        // grain are independent physical layers: reducing tint should reveal more frost/texture,
+        // not cross-fade back to sharp wallpaper.
         int baseAlpha = dockGlassBaseAlpha(clamped);
         int topSheenAlpha = Math.round(16f * clamped);
         int midSheenAlpha = Math.round(8f * clamped);
-        int bottomFootAlpha = Math.round(20f * clamped);
+        int bottomFootAlpha = withFoot ? Math.round(20f * clamped) : 0;
         GradientDrawable baseLayer = new GradientDrawable();
         baseLayer.setColor(withAlphaComponent(base, baseAlpha));
         baseLayer.setDither(true);
-        // Vertical glass light model, held roughly constant so the slab still reads as glass even at
-        // low opacity: a thin cool sheen at the top, a faint saturated accent edge tint, a clear
-        // see-through middle, then a soft dark "foot" at the bottom that suggests the slab's
-        // thickness. The crisp thin top/bottom edge highlights are drawn by DockEdgeGlowView.
+
+        int[] sliceColors = dockGlassLightModelSlice(accent, topSheenAlpha, midSheenAlpha,
+            bottomFootAlpha, sliceStart, sliceEnd);
         GradientDrawable lightLayer = new GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            new int[] {
-                // No broad white sheen — a near-white wash over the wallpaper reads as frosted
-                // plastic. A faint cool accent lift at the top keeps the glass tinted, not milky.
-                withAlphaComponent(accent, topSheenAlpha),
-                withAlphaComponent(accent, midSheenAlpha),
-                Color.TRANSPARENT,
-                withAlphaComponent(Color.BLACK, bottomFootAlpha)
-            }
-        );
+            GradientDrawable.Orientation.TOP_BOTTOM, sliceColors);
         lightLayer.setDither(true);
 
+        java.util.List<Drawable> layers = new java.util.ArrayList<>();
+        layers.add(baseLayer);
+        layers.add(lightLayer);
         // Optional film grain over the frosted glass — reads as real glass texture instead of a flat
         // blur. Amount is user-controlled (Appearance > Glass grain); 0 omits the layer entirely.
         int grain = mPreferences != null
             ? mPreferences.getDockGlassGrain()
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
         if (grain > 0) {
-            return new LayerDrawable(new Drawable[] { baseLayer, lightLayer, buildDockGrainLayer(grain, clamped) });
+            layers.add(buildDockGrainLayer(grain));
         }
-        return new LayerDrawable(new Drawable[] { baseLayer, lightLayer });
+        return new LayerDrawable(layers.toArray(new Drawable[0]));
+    }
+
+    /** Model stop positions for the vertical glass light model, matched to {@link #dockGlassLightModelColorAt}. */
+    private static final float[] DOCK_GLASS_MODEL_STOPS = {0f, 0.33f, 0.67f, 1f};
+
+    /**
+     * Samples the vertical glass light model over {@code [sliceStart, sliceEnd]} (fractions of the
+     * full model height) and returns the colors for a top-to-bottom gradient across that slice. The
+     * slice's own model stops are included so the sheen/foot shape is preserved rather than reduced
+     * to a straight two-color ramp.
+     */
+    @NonNull
+    private int[] dockGlassLightModelSlice(int accent, int topSheenAlpha, int midSheenAlpha,
+                                           int bottomFootAlpha, float sliceStart, float sliceEnd) {
+        float start = Math.max(0f, Math.min(1f, sliceStart));
+        float end = Math.max(start, Math.min(1f, sliceEnd));
+        java.util.List<Integer> colors = new java.util.ArrayList<>();
+        colors.add(dockGlassLightModelColorAt(start, accent, topSheenAlpha, midSheenAlpha, bottomFootAlpha));
+        for (float stop : DOCK_GLASS_MODEL_STOPS) {
+            if (stop > start && stop < end) {
+                colors.add(dockGlassLightModelColorAt(stop, accent, topSheenAlpha, midSheenAlpha, bottomFootAlpha));
+            }
+        }
+        colors.add(dockGlassLightModelColorAt(end, accent, topSheenAlpha, midSheenAlpha, bottomFootAlpha));
+        int[] result = new int[colors.size()];
+        for (int i = 0; i < result.length; i++) {
+            result[i] = colors.get(i);
+        }
+        return result;
+    }
+
+    /**
+     * Color of the vertical glass light model at {@code pos} in [0,1]: accent sheen at the top
+     * ([0,0.33]), fading to a clear see-through middle ([0.33,0.67]), then to a dark foot at the
+     * bottom ([0.67,1]). No broad white wash — a near-white sheen reads as frosted plastic.
+     */
+    private int dockGlassLightModelColorAt(float pos, int accent, int topSheenAlpha,
+                                           int midSheenAlpha, int bottomFootAlpha) {
+        int sheenTop = withAlphaComponent(accent, topSheenAlpha);
+        int sheenMid = withAlphaComponent(accent, midSheenAlpha);
+        int clear = Color.TRANSPARENT;
+        int foot = withAlphaComponent(Color.BLACK, bottomFootAlpha);
+        if (pos <= 0.33f) {
+            return lerpArgb(sheenTop, sheenMid, pos / 0.33f);
+        }
+        if (pos <= 0.67f) {
+            return lerpArgb(sheenMid, clear, (pos - 0.33f) / 0.34f);
+        }
+        return lerpArgb(clear, foot, (pos - 0.67f) / 0.33f);
+    }
+
+    /** Straight ARGB interpolation (alpha included) between two colors. */
+    private static int lerpArgb(int a, int b, float t) {
+        t = t < 0f ? 0f : (t > 1f ? 1f : t);
+        int aa = Color.alpha(a), ab = Color.alpha(b);
+        int ra = Color.red(a), rb = Color.red(b);
+        int ga = Color.green(a), gb = Color.green(b);
+        int ba = Color.blue(a), bb = Color.blue(b);
+        return Color.argb(
+            Math.round(aa + (ab - aa) * t),
+            Math.round(ra + (rb - ra) * t),
+            Math.round(ga + (gb - ga) * t),
+            Math.round(ba + (bb - ba) * t));
     }
 
     /** Cached static monochrome noise tile for the dock-glass grain. */
@@ -1087,28 +1205,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mDockGrainBitmap;
     }
 
-    /** A tiled grain layer whose strength scales with both grain and dock-surface opacity. */
+    /** A tiled grain layer whose strength is controlled only by the grain preference. */
     @NonNull
-    private Drawable buildDockGrainLayer(int grainPercent, float surfaceAlpha) {
+    private Drawable buildDockGrainLayer(int grainPercent) {
         BitmapDrawable grain = new BitmapDrawable(getResources(), getDockGrainBitmap());
         grain.setTileModeXY(Shader.TileMode.REPEAT, Shader.TileMode.REPEAT);
         grain.setDither(true);
         // Cap the strength so even at 100% it stays a texture, not visual static.
-        float clampedSurfaceAlpha = Math.max(0f, Math.min(1f, surfaceAlpha));
-        grain.setAlpha(Math.round(Math.max(0, Math.min(100, grainPercent)) / 100f * 60f * clampedSurfaceAlpha));
+        grain.setAlpha(dockGlassGrainAlpha(grainPercent));
         return grain;
     }
 
-    /**
-     * Max tint alpha at 100% dock opacity. This deliberately remains below 255 so the AGSL-blurred
-     * wallpaper continues to carry the glass body instead of being hidden by an opaque card.
-     */
-    static final int DOCK_GLASS_BASE_MAX_ALPHA = 140;
-    static final float DOCK_GLASS_OPACITY_OFFSET = 0.30f;
+    static int dockGlassGrainAlpha(int grainPercent) {
+        return Math.round(Math.max(0, Math.min(100, grainPercent)) / 100f * 60f);
+    }
 
+    static boolean dockBlurEnabled(int blurRadiusDp) {
+        return blurRadiusDp > 0;
+    }
+
+    /** Literal opacity endpoint: 100% is an opaque material and 0% is fully transparent. */
+    static final int DOCK_GLASS_BASE_MAX_ALPHA = 255;
     static int dockGlassBaseAlpha(float opacity) {
-        float adjustedOpacity = Math.max(0f, Math.min(1f, opacity + DOCK_GLASS_OPACITY_OFFSET));
-        return Math.round(adjustedOpacity * DOCK_GLASS_BASE_MAX_ALPHA);
+        float clampedOpacity = Math.max(0f, Math.min(1f, opacity));
+        return Math.round(clampedOpacity * DOCK_GLASS_BASE_MAX_ALPHA);
     }
 
     /** Cached light-scatter filter applied to the blurred wallpaper backdrop. */
@@ -1320,23 +1440,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Lazily wires the reactive glass-plank controller to the inflated dock views. */
     private void setupDockPlankFx() {
-        View plank = findViewById(R.id.accessory_stack_container);
+        View plank = findViewById(isInAppKeyboardShown()
+            ? R.id.accessory_surface_host : R.id.accessory_stack_container);
         if (plank == null) {
             return;
         }
-        if (mDockPlankController == null) {
+        if (mDockPlankController == null || mDockPlankTarget != plank) {
+            if (mDockPlankController != null)
+                mDockPlankController.reset();
             View specular = findViewById(R.id.accessory_specular_fx);
             View glow = findViewById(R.id.accessory_edge_glow_fx);
             mDockPlankController = new DockPlankController(plank, specular, glow);
+            mDockPlankTarget = plank;
         }
         mDockPlankController.setReducedMotion(isReducedMotionEnabled());
     }
 
     /** Refreshes the plank FX drawables (accent/shape may change) and enables it for a shown dock. */
-    private void refreshDockPlankFx() {
-        if (mDockPlankController == null) {
-            setupDockPlankFx();
-        }
+    private void refreshDockPlankFx(float materialAlpha) {
+        setupDockPlankFx();
         if (mDockPlankController == null) {
             return;
         }
@@ -1344,6 +1466,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View specular = findViewById(R.id.accessory_specular_fx);
         if (specular != null) {
             specular.setBackground(buildDockSpecularDrawable(accent));
+            specular.setAlpha(materialAlpha);
         }
         View glow = findViewById(R.id.accessory_edge_glow_fx);
         if (glow instanceof DockEdgeGlowView) {
@@ -1351,6 +1474,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int surfaceHeightPx = surfaceHost != null ? surfaceHost.getHeight() : 0;
             float radius = isValarieDockStyle() ? resolveDockCapsuleCornerRadiusPx(surfaceHeightPx) : 0f;
             DockEdgeGlowView glowView = (DockEdgeGlowView) glow;
+            glowView.setAlpha(materialAlpha);
             glowView.setAccentColor(accent);
             glowView.setCornerRadiusPx(radius);
             // Feather the rim into a soft glow instead of a hard outline (API 31+). The view draws
@@ -1396,6 +1520,138 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } catch (Throwable t) {
             return false;
         }
+    }
+
+    private void playAppLaunchRipple(@NonNull String packageName, @Nullable Drawable icon,
+                                     @Nullable View sourceView) {
+        if (isReducedMotionEnabled()) return;
+        View accessorySurface = findViewById(R.id.accessory_surface_host);
+        DockLaunchRippleView ripple = accessorySurface == null ? null
+            : (DockLaunchRippleView) accessorySurface.findViewWithTag("dock_launch_ripple");
+        if (ripple == null || ripple.getWidth() <= 0 || ripple.getHeight() <= 0) return;
+
+        int color = boostLaunchRippleColor(resolveLaunchIconDominantColor(packageName, icon),
+            resolveDockAccentColor());
+        int[] rippleLocation = new int[2];
+        ripple.getLocationOnScreen(rippleLocation);
+        float originX;
+        float originY;
+        if (sourceView != null && sourceView.isAttachedToWindow()) {
+            int[] sourceLocation = new int[2];
+            sourceView.getLocationOnScreen(sourceLocation);
+            originX = sourceLocation[0] + sourceView.getWidth() * 0.5f - rippleLocation[0];
+            originY = sourceLocation[1] + sourceView.getHeight() * 0.5f - rippleLocation[1];
+        } else {
+            originX = ripple.getWidth() * 0.5f;
+            originY = ripple.getHeight() * 0.5f;
+        }
+
+        boolean capsule = isValarieDockStyle();
+        RectF bounds = new RectF(0f, 0f, ripple.getWidth(), ripple.getHeight());
+        float cornerRadius = capsule ? resolveDockCapsuleCornerRadiusPx(ripple.getHeight()) : 0f;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // The glass shader is stateful and belongs to the backdrop. Reusing it here mutates the
+            // same rounded-surface uniforms while a radial source is being drawn, which produced the
+            // audit's repeated oversized masks. Keep the launch wave a single Canvas composition.
+            ripple.setRenderEffect(null);
+        }
+        DockEdgeGlowView edgeGlow = findViewById(R.id.accessory_edge_glow_fx);
+        if (capsule && edgeGlow != null) edgeGlow.setVisibility(View.VISIBLE);
+        final boolean keyboardShownAtLaunch = isInAppKeyboardShown();
+        ripple.startRipple(color, originX, originY, capsule, bounds, cornerRadius,
+            edgeGlow == null ? null : (collisionColor, level) ->
+                edgeGlow.setLaunchCollisionState(collisionColor, level),
+            () -> capsule == isValarieDockStyle()
+                && keyboardShownAtLaunch == isInAppKeyboardShown(),
+            () -> {
+                if (mInAppKeyboard != null) mInAppKeyboard.fadeOutLaunchWave();
+            });
+
+        if (!capsule && keyboardShownAtLaunch && mInAppKeyboard != null) {
+            mInAppKeyboard.animateLaunchWave(color, originX + rippleLocation[0],
+                originY + rippleLocation[1]);
+        }
+    }
+
+    /** Keeps an icon's hue legible after the low-alpha wave is composited through tinted glass. */
+    private static int boostLaunchRippleColor(int color, int fallbackAccent) {
+        float[] hsv = new float[3];
+        Color.colorToHSV(color, hsv);
+        if (hsv[1] < 0.08f) {
+            Color.colorToHSV(fallbackAccent, hsv);
+        }
+        hsv[1] = Math.max(0.72f, hsv[1]);
+        hsv[2] = Math.max(0.78f, hsv[2]);
+        return Color.HSVToColor(hsv);
+    }
+
+    private int resolveLaunchIconDominantColor(@NonNull String packageName,
+                                               @Nullable Drawable sourceIcon) {
+        Integer cached = mLaunchIconColorCache.get(packageName);
+        if (cached != null) return cached;
+        Drawable drawable = sourceIcon;
+        if (drawable == null) {
+            try {
+                drawable = getPackageManager().getApplicationIcon(packageName);
+            } catch (Throwable ignored) {
+            }
+        }
+        int fallback = resolveDockAccentColor();
+        int color = extractDominantIconColor(drawable, fallback);
+        mLaunchIconColorCache.put(packageName, color);
+        return color;
+    }
+
+    static int extractDominantIconColor(@Nullable Drawable drawable, int fallback) {
+        if (drawable == null) return fallback;
+        final int size = 40;
+        Bitmap bitmap;
+        try {
+            bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap);
+            Rect oldBounds = drawable.copyBounds();
+            drawable.setBounds(0, 0, size, size);
+            drawable.draw(canvas);
+            drawable.setBounds(oldBounds);
+        } catch (Throwable throwable) {
+            return fallback;
+        }
+        int[] buckets = new int[4096];
+        int[] pixels = new int[size * size];
+        bitmap.getPixels(pixels, 0, size, 0, 0, size, size);
+        bitmap.recycle();
+        // Only chromatic pixels vote: adaptive icons are mostly white/neutral background, and letting
+        // that mass win pushed every launch color to the theme-accent fallback. Neutral-only icons
+        // still fall back below.
+        int bestBucket = -1;
+        int bestWeight = 0;
+        int opaqueCount = 0;
+        int chromaticCount = 0;
+        float[] hsv = new float[3];
+        for (int pixel : pixels) {
+            int alpha = Color.alpha(pixel);
+            if (alpha < 64) continue;
+            opaqueCount++;
+            Color.colorToHSV(pixel, hsv);
+            if (hsv[1] < 0.18f || hsv[2] < 0.18f) continue;
+            chromaticCount++;
+            int r = Color.red(pixel) >> 4;
+            int g = Color.green(pixel) >> 4;
+            int b = Color.blue(pixel) >> 4;
+            int bucket = (r << 8) | (g << 4) | b;
+            int weight = Math.round(alpha * hsv[1]);
+            buckets[bucket] += weight;
+            if (buckets[bucket] > bestWeight) {
+                bestWeight = buckets[bucket];
+                bestBucket = bucket;
+            }
+        }
+        if (bestBucket < 0 || opaqueCount == 0 || chromaticCount * 25 < opaqueCount)
+            return fallback;
+        int r = ((bestBucket >> 8) & 0xF) * 17;
+        int g = ((bestBucket >> 4) & 0xF) * 17;
+        int b = (bestBucket & 0xF) * 17;
+        return Color.rgb(r, g, b);
     }
 
     private void applyGlassSurfaceColor(int viewId, int surfaceColor) {
@@ -1494,47 +1750,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mPreferences.getTerminalBackgroundOpacity() > 0;
     }
 
-    @Nullable
-    private Rect resolveAccessoryContentBounds() {
-        View accessoryContainer = findViewById(R.id.accessory_stack_container);
-        if (accessoryContainer == null || accessoryContainer.getWidth() <= 0 || accessoryContainer.getHeight() <= 0) {
-            return null;
-        }
-        Rect containerRect = new Rect();
-        if (!accessoryContainer.getGlobalVisibleRect(containerRect)) {
-            return null;
-        }
-        int top = Integer.MAX_VALUE;
-        int bottom = Integer.MIN_VALUE;
-        int[] candidateIds = {
-            R.id.apps_bar_viewpager,
-            R.id.apps_bar_az_row,
-            R.id.terminal_toolbar_view_pager
-        };
-        for (int candidateId : candidateIds) {
-            View candidate = findViewById(candidateId);
-            if (candidate == null || candidate.getVisibility() != View.VISIBLE || candidate.getHeight() <= 0) {
-                continue;
-            }
-            Rect candidateRect = new Rect();
-            if (!candidate.getGlobalVisibleRect(candidateRect)) {
-                continue;
-            }
-            candidateRect.offset(-containerRect.left, -containerRect.top);
-            top = Math.min(top, candidateRect.top);
-            bottom = Math.max(bottom, candidateRect.bottom);
-        }
-        if (top == Integer.MAX_VALUE || bottom <= top) {
-            return null;
-        }
-        return new Rect(
-            0,
-            Math.max(0, top),
-            accessoryContainer.getWidth(),
-            Math.min(accessoryContainer.getHeight(), bottom)
-        );
-    }
-
     private void applyAccessoryLayerBounds(int viewId, @Nullable Rect bounds) {
         View view = findViewById(viewId);
         if (view == null) {
@@ -1561,6 +1776,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 targetHeight = parentView.getHeight();
             }
         }
+        if (bounds != null) {
+            targetTop = Math.max(0, bounds.top);
+            targetHeight = Math.max(0, bounds.height());
+        }
         if (capsuleSurface && targetWidth > 0) {
             int horizontalMargin = resolveDockCapsuleHorizontalMarginPx();
             targetLeftMargin = horizontalMargin;
@@ -1576,6 +1795,51 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             params.rightMargin = targetRightMargin;
             params.bottomMargin = 0;
             params.width = targetWidth;
+            params.height = targetHeight;
+            view.setLayoutParams(params);
+        }
+    }
+
+    /** Positions the dock glass behind either the dock rows alone or the unified default stack. */
+    private void applyAccessorySurfaceBounds(@NonNull AccessoryRenderState state) {
+        View surface = findViewById(R.id.accessory_surface_host);
+        if (surface == null)
+            return;
+        ViewGroup.LayoutParams layoutParams = surface.getLayoutParams();
+        if (layoutParams instanceof RelativeLayout.LayoutParams) {
+            RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) layoutParams;
+            boolean unified = shouldUseUnifiedDefaultKeyboardGlassSurface(state);
+            boolean rulesChanged = false;
+            if (unified) {
+                rulesChanged = params.getRule(RelativeLayout.ABOVE) != 0
+                    || params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != RelativeLayout.TRUE;
+                params.removeRule(RelativeLayout.ABOVE);
+                params.addRule(RelativeLayout.ALIGN_PARENT_TOP, RelativeLayout.TRUE);
+            } else {
+                rulesChanged = params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != 0
+                    || params.getRule(RelativeLayout.ABOVE) != R.id.inapp_keyboard_container;
+                params.removeRule(RelativeLayout.ALIGN_PARENT_TOP);
+                params.addRule(RelativeLayout.ABOVE, R.id.inapp_keyboard_container);
+                params.alignWithParent = true;
+            }
+            if (rulesChanged)
+                surface.setLayoutParams(params);
+        }
+        Rect bounds = state.keyboardShown && !shouldUseUnifiedDefaultKeyboardGlassSurface(state)
+            ? buildToolbarOnlyAccessoryBounds(state) : null;
+        applyAccessoryLayerBounds(R.id.accessory_surface_host, bounds);
+    }
+
+    private void applyAccessoryLayerVerticalBounds(int viewId, @Nullable Rect bounds) {
+        View view = findViewById(viewId);
+        if (view == null || !(view.getLayoutParams() instanceof RelativeLayout.LayoutParams))
+            return;
+        RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) view.getLayoutParams();
+        int targetTop = bounds == null ? 0 : Math.max(0, bounds.top);
+        int targetHeight = bounds == null
+            ? ViewGroup.LayoutParams.MATCH_PARENT : Math.max(0, bounds.height());
+        if (params.topMargin != targetTop || params.height != targetHeight) {
+            params.topMargin = targetTop;
             params.height = targetHeight;
             view.setLayoutParams(params);
         }
@@ -1604,25 +1868,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private int resolveDockCapsuleAppsTopPaddingPx() {
-        // Push the icons down so they sit centered between the top-edge page indicator (now flush
-        // with the dock's top rim) and the A-Z row below. This is a FIXED ~14dp at the largest dock
-        // size, but at smaller dock sizes a fixed pad eats too large a share of the (short) row and
-        // crushes the icons — so scale it down with dock size so every size gets a fair icon size.
-        float progress = mPreferences != null
-            ? resolveDockSizeProgress(mPreferences.getAppLauncherBarHeightScale())
-            : 1f;
-        float dp = 6f + progress * 7f;
-        return Math.round(dp * getResources().getDisplayMetrics().density);
+        // Top space equals bottom padding plus the 3dp icon/A-Z indicator band. Together with the
+        // paired bottom formula this preserves the old total inset while centering the icon row.
+        int totalPadding = resolveDockCapsuleAppsTotalPaddingPx();
+        int indicatorBand = Math.round(dpToPx(3));
+        return Math.min(totalPadding, Math.max(0, (totalPadding + indicatorBand + 1) / 2));
     }
 
     private int resolveDockCapsuleAppsBottomPaddingPx() {
-        return Math.round(dpToPx(1));
+        return Math.max(0, resolveDockCapsuleAppsTotalPaddingPx() - resolveDockCapsuleAppsTopPaddingPx());
+    }
+
+    private int resolveDockCapsuleAppsTotalPaddingPx() {
+        float progress = mPreferences != null
+            ? resolveDockSizeProgress(mPreferences.getAppLauncherBarHeightScale())
+            : 1f;
+        float density = getResources().getDisplayMetrics().density;
+        // Exactly preserve the previous top (6dp + 7dp*progress) plus 1dp bottom budget.
+        return Math.round((6f + progress * 7f) * density) + Math.round(density);
     }
 
     private int resolveDefaultDockAppsTopPaddingPx() {
-        // The default dock draws its minimal page ticks in the top glass band. Reserve that band
-        // before laying out icons so the ticks never sit on top of the first row of app icons.
-        return Math.round(dpToPx(9));
+        // 6dp above equals 3dp below plus the fixed 3dp icon/A-Z band.
+        return Math.round(dpToPx(6));
+    }
+
+    private int resolveDefaultDockAppsBottomPaddingPx() {
+        return Math.round(dpToPx(3));
     }
 
     private int resolveDockCapsuleBottomGapPx() {
@@ -1674,7 +1946,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // No white top highlight band — it read as a plastic sheen. The crisp glass top edge is now
         // produced by the AGSL refraction shader on the backdrop. Keep only a faint shadow seam.
         int highlight = Color.TRANSPARENT;
-        int shadow = withAlphaComponent(resolveAccessoryOutlineColor(), Math.round(18f * Math.max(0.40f, barAlpha)));
+        int shadow = withAlphaComponent(resolveAccessoryOutlineColor(), Math.round(18f * Math.max(0f, barAlpha)));
         GradientDrawable edge = new GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
             new int[] { highlight, shadow, Color.TRANSPARENT }
@@ -1684,16 +1956,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** The subtle hairline between the A–Z row and the extra-keys (3rd) row, per the design. */
-    private void configureExtraKeysDivider(boolean visible) {
+    private void configureExtraKeysDivider(boolean visible, float materialAlpha) {
         View divider = findViewById(R.id.extrakeys_divider);
         if (divider == null) {
             return;
         }
-        if (!visible) {
+        if (!visible || materialAlpha <= 0f) {
             divider.setVisibility(View.GONE);
             return;
         }
-        divider.setBackgroundColor(withAlphaComponent(resolveAccessoryOutlineColor(), 70));
+        divider.setBackgroundColor(withAlphaComponent(resolveAccessoryOutlineColor(),
+            Math.round(70f * Math.max(0f, Math.min(1f, materialAlpha)))));
         divider.setVisibility(View.VISIBLE);
     }
 
@@ -1707,14 +1980,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final class AccessoryRenderState {
         final boolean toolbarShown;
+        final boolean keyboardShown;
+        final int keyboardHeight;
         final boolean blurEnabled;
         final boolean appsRowEnabled;
         final boolean azRowEnabled;
         final float barAlpha;
         final int blurRadiusDp;
 
-        AccessoryRenderState(boolean toolbarShown, boolean blurEnabled, boolean appsRowEnabled, boolean azRowEnabled, float barAlpha, int blurRadiusDp) {
+        AccessoryRenderState(boolean toolbarShown, boolean keyboardShown, int keyboardHeight,
+                             boolean blurEnabled, boolean appsRowEnabled, boolean azRowEnabled,
+                             float barAlpha, int blurRadiusDp) {
             this.toolbarShown = toolbarShown;
+            this.keyboardShown = keyboardShown;
+            this.keyboardHeight = Math.max(0, keyboardHeight);
             this.blurEnabled = blurEnabled;
             this.appsRowEnabled = appsRowEnabled;
             this.azRowEnabled = azRowEnabled;
@@ -1748,19 +2027,82 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @NonNull
     private AccessoryRenderState buildAccessoryRenderState() {
+        boolean keyboardShown = isInAppKeyboardShown();
+        int keyboardHeight = keyboardShown ? measureInAppKeyboardHeight() : 0;
         if (mPreferences == null) {
-            return new AccessoryRenderState(false, false, false, false, 1.0f, 0);
+            return new AccessoryRenderState(false, keyboardShown, keyboardHeight,
+                false, false, false, 1.0f, 0);
         }
         boolean appsRowEnabled = mPreferences.isAppLauncherAppsRowEnabled();
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
+        float barAlpha = mPreferences.getAppBarOpacity() / 100f;
         return new AccessoryRenderState(
             mPreferences.shouldShowTerminalToolbar(),
-            blurRadiusDp > 0,
+            keyboardShown,
+            keyboardHeight,
+            dockBlurEnabled(blurRadiusDp),
             appsRowEnabled,
             appsRowEnabled && mPreferences.isAppLauncherAzRowEnabled(),
-            mPreferences.getAppBarOpacity() / 100f,
+            barAlpha,
             blurRadiusDp
         );
+    }
+
+    private boolean isInAppKeyboardShown() {
+        View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
+        if (mInAppKeyboard != null) {
+            return mInAppKeyboard.isVisible();
+        }
+        return keyboardContainer != null && keyboardContainer.getVisibility() != View.GONE;
+    }
+
+    private int measureInAppKeyboardHeight() {
+        View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
+        if (keyboardContainer == null)
+            return 0;
+        View availableRoot = findViewById(R.id.activity_termux_root_relative_layout);
+        int width = availableRoot != null ? availableRoot.getWidth() : 0;
+        int availableHeight = availableRoot != null ? availableRoot.getHeight() : 0;
+        DisplayMetrics metrics = getResources().getDisplayMetrics();
+        if (width <= 0)
+            width = metrics.widthPixels;
+        if (availableHeight <= 0)
+            availableHeight = metrics.heightPixels;
+        if (mAttachedInAppKeyboardView instanceof Keyboard2View) {
+            // The keyboard is measured here against the full content root, but RelativeLayout later
+            // measures it inside the shorter exact accessory stack. Keep its fractional height cap
+            // tied to this stable root height so both AT_MOST passes resolve identically.
+            ((Keyboard2View) mAttachedInAppKeyboardView)
+                .setHeightCapReferencePx(Math.max(0, availableHeight));
+        }
+        if (!mInAppKeyboardHeightDirty && mDesiredInAppKeyboardHeightPx > 0
+            && mInAppKeyboardMeasureWidthPx == width
+            && mInAppKeyboardAvailableHeightPx == availableHeight) {
+            return mDesiredInAppKeyboardHeightPx;
+        }
+        // Measure the wrap-content keyboard independently of accessory_stack_container. The stack's
+        // current exact height may have been computed from an older keyboard measurement, so using
+        // its normal parent-provided spec here creates a shrinking feedback loop. This AT_MOST spec
+        // is always based on the full content root and lets Keyboard2View apply its orientation cap.
+        keyboardContainer.measure(
+            View.MeasureSpec.makeMeasureSpec(Math.max(0, width), View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(Math.max(0, availableHeight), View.MeasureSpec.AT_MOST));
+        mDesiredInAppKeyboardHeightPx = Math.max(0, keyboardContainer.getMeasuredHeight());
+        mInAppKeyboardMeasureWidthPx = width;
+        mInAppKeyboardAvailableHeightPx = availableHeight;
+        mInAppKeyboardHeightDirty = false;
+        return mDesiredInAppKeyboardHeightPx;
+    }
+
+    static boolean shouldShowAccessoryStack(boolean toolbarShown, boolean keyboardShown) {
+        return toolbarShown || keyboardShown;
+    }
+
+    static int computeAccessoryStackHeight(int dockContentHeight, int terminalFlushPadding,
+                                           int keyboardHeight) {
+        return Math.max(0, dockContentHeight)
+            + Math.max(0, terminalFlushPadding)
+            + Math.max(0, keyboardHeight);
     }
 
     private int getEffectiveExtraKeysBlurRadius() {
@@ -1811,15 +2153,70 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private boolean shouldShowDecorNavBarSurface(@NonNull AccessoryRenderState state) {
-        // Style-dependent: the edge-to-edge "normal" dock extends its glass under the gesture pill
-        // (the decor band matches the dock surface). The floating Valarie capsule does NOT — its
-        // under-pill strip shows the unified full-screen background dim (terminal opacity) so the
-        // capsule reads as floating over the terminal surface.
-        return state.toolbarShown
-            && mNavBarHeight > 0
-            && !mLastImeVisible
-            && !isImeVisible()
-            && !isValarieDockStyle();
+        // Floating capsules leave the gesture-pill inset showing wallpaper; edge-to-edge surfaces
+        // (dock glass, or the embedded keyboard's own background) continue under the pill. The
+        // keyboard's shape is decoupled from the dock style via the dock-match mode, so it owns
+        // its own capsule decision.
+        return shouldShowDecorNavBarSurface(state.toolbarShown, state.keyboardShown,
+            mNavBarHeight, mLastImeVisible || isImeVisible(), isValarieDockStyle(),
+            isInAppKeyboardCapsule());
+    }
+
+    static boolean shouldShowDecorNavBarSurface(boolean toolbarShown, boolean keyboardShown,
+                                                int navBarHeight, boolean imeVisible,
+                                                boolean valarieDockStyle,
+                                                boolean keyboardCapsule) {
+        if (navBarHeight <= 0 || imeVisible)
+            return false;
+        if (keyboardShown)
+            return !keyboardCapsule;
+        return toolbarShown && !valarieDockStyle;
+    }
+
+    private boolean shouldUseDockDecorNavBarSurface(@NonNull AccessoryRenderState state) {
+        // The dock body always renders in-content (accessory_surface_host + refraction), in front of
+        // the terminal dim, in BOTH keyboard states — so keyboard-off no longer routes the dock
+        // through the behind-content decor overlay (which the terminal dim darkened, making it read
+        // darker than the keyboard-on dock). The decor overlay is now the under-pill nav strip only.
+        return false;
+    }
+
+    /**
+     * The default edge-to-edge dock and a glass-matched keyboard are one rectangular material.
+     * Render one backdrop through both instead of placing two independently cropped glass layers
+     * next to each other. Floating/capsule styling deliberately remains on its separate path.
+     */
+    private boolean shouldUseUnifiedDefaultKeyboardGlassSurface(@NonNull AccessoryRenderState state) {
+        return shouldUseUnifiedDefaultKeyboardGlassSurface(state.toolbarShown,
+            state.keyboardShown, isValarieDockStyle(), isInAppKeyboardGlassSurface());
+    }
+
+    static boolean shouldUseUnifiedDefaultKeyboardGlassSurface(boolean toolbarShown,
+                                                                boolean keyboardShown,
+                                                                boolean valarieDockStyle,
+                                                                boolean keyboardGlassSurface) {
+        return toolbarShown && keyboardShown && !valarieDockStyle && keyboardGlassSurface;
+    }
+
+    /**
+     * Any blurred glass keyboard needs a destination-backdrop gate on a fresh open — the unified
+     * default-dock surface waits on the shared accessory crop, the capsule/local surface waits on
+     * its own keyboard backdrop bitmap. Without the gate the first frame draws base-color glass.
+     */
+    static boolean shouldDeferInAppKeyboardReveal(boolean openingFromGone,
+                                                   boolean glassSurface,
+                                                   boolean blurEnabled,
+                                                   boolean backdropReady) {
+        return openingFromGone && glassSurface && blurEnabled && !backdropReady;
+    }
+
+    /** Readiness of the keyboard-local (non-unified) blurred backdrop for the current target. */
+    private boolean isInAppKeyboardLocalBackdropReady(@NonNull AccessoryRenderState state) {
+        View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
+        if (surfaceHost == null) return true;
+        if (mInAppKeyboardBackdropBitmap == null || mInAppKeyboardBackdropDirty) return false;
+        Rect targetRect = buildInAppKeyboardBackdropTargetRect(state, surfaceHost);
+        return targetRect == null || mLastInAppKeyboardBackdropTargetRect.equals(targetRect);
     }
 
     private void ensureDecorNavBarSurfaceOverlay() {
@@ -1858,7 +2255,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             0,
             Gravity.BOTTOM
         );
-        decorRoot.addView(surfaceOverlay, 0, overlayParams);
+        // Add as the TOPMOST decor child (not index 0). At index 0 the overlay sat behind the
+        // activity content, so the terminal/root dim (activity_termux_root_view's background, set by
+        // applyUnifiedBackgroundDim) composited OVER the finished nav glass — while the dock, being a
+        // descendant of that root, draws after the dim and stays bright. That fixed, opacity- and
+        // wallpaper-independent darkening of the under-pill strip is removed by drawing the strip
+        // after the dim, matching the dock. The strip is non-clickable/non-focusable and confined to
+        // the gesture-nav inset, and the system gesture pill renders above the app window regardless.
+        decorRoot.addView(surfaceOverlay, overlayParams);
 
         mDecorNavBarSurfaceOverlay = surfaceOverlay;
         mDecorNavBarBlurBackdrop = blurBackdrop;
@@ -1932,14 +2336,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyDecorNavBarSurfaceBounds(overlay, true);
 
         if (mDecorNavBarTintOverlay != null) {
-            // Only the normal (edge-to-edge) dock reaches here. Match the dock's own material-tinted
-            // glass surface so the under-pill strip is a seamless continuation of the dock.
-            mDecorNavBarTintOverlay.setBackground(buildDockGlassSurface(state.barAlpha));
+            if (state.keyboardShown && !isInAppKeyboardGlassSurface()) {
+                // The activity content ends at fitSystemWindows' bottom boundary. Continue the
+                // opaque keyboard surface through the decor-owned gesture-navigation inset.
+                mDecorNavBarTintOverlay.setBackgroundColor(resolveInAppKeyboardBackgroundColor());
+            } else {
+                // The under-pill strip is the bottom slice [f, 1] of the shared light model; the
+                // in-content surface above it (dock stack when keyboard-off, keyboard host when
+                // keyboard-on) renders [0, f]. Both states stack a content-level surface + this
+                // nav-only strip, so a single foot lands under the pill identically either way.
+                mDecorNavBarTintOverlay.setBackground(
+                    buildDockGlassSurface(state.barAlpha, defaultDockGlassFootFraction(), 1f, false));
+            }
             mDecorNavBarTintOverlay.setAlpha(1f);
             mDecorNavBarTintOverlay.setVisibility(View.VISIBLE);
         }
 
-        if (state.blurEnabled) {
+        if (state.blurEnabled && (!state.keyboardShown || isInAppKeyboardGlassSurface())) {
             updateDecorNavBarBackdrop(state);
         } else {
             clearDecorNavBarBackdrop();
@@ -1949,7 +2362,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     @Nullable
-    private Rect buildDecorNavBarBackdropTargetRect() {
+    private Rect buildDecorNavBarBackdropTargetRect(int topOverscanPx) {
         if (getWindow() == null || getWindow().getDecorView() == null || resolveDecorNavBarSurfaceHeightPx() <= 0) {
             return null;
         }
@@ -1965,9 +2378,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int bottomMargin = 0;
         int surfaceHeight = Math.min(Math.max(1, resolveDecorNavBarSurfaceHeightPx()), decorHeight);
         int bottom = mTmpParentLocation[1] + decorHeight - bottomMargin;
+        // Overscan the crop UPWARD past the strip top (the seam with the dock/keyboard) so the
+        // refraction edge band lands above the visible strip; the dock overscans down by the same
+        // amount, so their blurred wallpaper meets seamlessly at the seam.
+        int top = Math.max(mTmpParentLocation[1], bottom - surfaceHeight - Math.max(0, topOverscanPx));
         return new Rect(
             mTmpParentLocation[0] + horizontalMargin,
-            bottom - surfaceHeight,
+            top,
             mTmpParentLocation[0] + decorWidth - horizontalMargin,
             bottom
         );
@@ -1977,11 +2394,420 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mNavBarHeight <= 0) {
             return 0;
         }
+        if (isValarieDockStyle()) {
+            View accessoryContainer = findViewById(R.id.accessory_stack_container);
+            int dockHeight = accessoryContainer != null ? Math.max(0, accessoryContainer.getHeight()) : 0;
+            return dockHeight + mNavBarHeight + resolveDockCapsuleBottomGapPx();
+        }
+        // Default dock renders its body in-content; the decor overlay is the under-pill nav strip
+        // only. Size it from the in-content surface's actual bottom edge down to the screen bottom
+        // rather than from mNavBarHeight — the content's applied bottom inset can differ from the
+        // system-bars height by a few px, which otherwise leaves a thin wallpaper gap (or an overlap)
+        // between the dock/keyboard bottom and the strip. This makes them meet exactly.
+        int measured = measuredUnderPillStripHeightPx();
+        int targetHeight = measured > 0 ? measured : mNavBarHeight;
+        if (mPendingInAppKeyboardCloseGeometry) {
+            // Closing makes the keyboard GONE before RelativeLayout has produced dock-only bounds.
+            // During that pass measuredUnderPillStripHeightPx() samples the old full-height host and
+            // misses the newly restored flush padding, exposing a sharp wallpaper seam. Oversizing
+            // the decor glass by that known inset is safe (it sits behind the dock) and keeps the
+            // seam covered until the destination layout is observed.
+            View accessoryContainer = findViewById(R.id.accessory_stack_container);
+            int pendingFlushInset = accessoryContainer != null
+                ? Math.max(0, accessoryContainer.getPaddingBottom()) : 0;
+            targetHeight = Math.max(targetHeight, mNavBarHeight + pendingFlushInset);
+        }
+        return targetHeight;
+    }
+
+    /**
+     * Distance from the in-content surface's bottom edge (keyboard host when shown, else the dock
+     * stack) to the screen bottom, so the under-pill decor strip fills exactly that span. Returns 0
+     * when geometry is not yet laid out (callers fall back to {@code mNavBarHeight}).
+     */
+    private int measuredUnderPillStripHeightPx() {
+        if (getWindow() == null || getWindow().getDecorView() == null) {
+            return 0;
+        }
+        // Use the glass host, not the stack container: the container has a bottom padding (flush
+        // centering) so its glass surface ends a few px above the container bottom. Sizing from the
+        // container left that padding band uncovered — the ~3-4dp wallpaper gap the user saw.
+        View content = findViewById(isInAppKeyboardShown()
+            ? R.id.inapp_keyboard_view_host : R.id.accessory_surface_host);
+        if (content == null || content.getHeight() <= 0 || content.getWidth() <= 0) {
+            return 0;
+        }
+        View decorView = getWindow().getDecorView();
+        if (decorView.getHeight() <= 0) {
+            return 0;
+        }
+        int[] decorLoc = new int[2];
+        int[] contentLoc = new int[2];
+        decorView.getLocationOnScreen(decorLoc);
+        content.getLocationOnScreen(contentLoc);
+        int screenBottom = decorLoc[1] + decorView.getHeight();
+        int contentBottom = contentLoc[1] + content.getHeight();
+        int height = screenBottom - contentBottom;
+        // Guard against transient layouts that would collapse or overshoot the strip.
+        if (height <= 0 || height > mNavBarHeight * 3) {
+            return 0;
+        }
+        return height;
+    }
+
+    private int resolveInAppKeyboardBackgroundColor() {
+        if (mAttachedInAppKeyboardView instanceof Keyboard2View)
+            return ((Keyboard2View) mAttachedInAppKeyboardView).getKeyboardBackgroundColor();
+        return MaterialColors.getColor(this,
+            com.google.android.material.R.attr.colorSurface,
+            ContextCompat.getColor(this, R.color.termux_surface_base));
+    }
+
+    /** True when the dock-match mode renders the keyboard on the dock's glass surface. */
+    private boolean isInAppKeyboardGlassSurface() {
+        if (mPreferences == null)
+            return false;
+        String mode = mPreferences.getInAppKeyboardDockMatch();
+        return "glass".equals(mode) || "both".equals(mode);
+    }
+
+    /**
+     * Fraction of the combined content+under-pill glass height occupied by the in-content surface
+     * (the keyboard host when the keyboard is shown, otherwise the dock stack). The content surface
+     * and the under-pill nav strip render adjacent slices ({@code [0, f]} and {@code [f, 1]}) of one
+     * shared light model so a single dark foot lands under the pill in both keyboard states. Returns
+     * 1 (no slicing) for the floating capsule or when there is no gesture-nav strip below.
+     */
+    private float defaultDockGlassFootFraction() {
+        if (isValarieDockStyle()) {
+            return 1f;
+        }
+        int navHeight = mNavBarHeight;
+        if (navHeight <= 0) {
+            return 1f;
+        }
+        View contentHost = findViewById(isInAppKeyboardShown()
+            ? R.id.inapp_keyboard_view_host : R.id.accessory_stack_container);
+        int contentHeight = contentHost != null ? contentHost.getHeight() : 0;
+        if (contentHeight <= 0) {
+            return 1f;
+        }
+        return contentHeight / (float) (contentHeight + navHeight);
+    }
+
+    /** True when the dock-match mode makes the keyboard shape follow the dock style. */
+    private boolean isInAppKeyboardShapeMatch() {
+        if (mPreferences == null)
+            return false;
+        String mode = mPreferences.getInAppKeyboardDockMatch();
+        return "shape".equals(mode) || "both".equals(mode);
+    }
+
+    /** True when the keyboard renders as a floating capsule (shape match under Valarie). */
+    private boolean isInAppKeyboardCapsule() {
+        return isValarieDockStyle() && isInAppKeyboardShapeMatch();
+    }
+
+    /**
+     * Applies the in-app keyboard's surface treatment: capsule shape (margins + rounded clip +
+     * inner padding) when the Valarie dock style is active, and the dock's blurred-wallpaper +
+     * tinted-glass stack behind the keys when the dock-match mode enables glass. The glass stack is
+     * rendered as the host's background drawable (a pre-blurred wallpaper crop under the same
+     * tint used by {@link #buildDockGlassSurface}) so the wrap-content keyboard measurement is
+     * never affected by extra sibling views.
+     */
+    private void applyInAppKeyboardSurfaceState(@NonNull AccessoryRenderState state) {
+        View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
+        if (surfaceHost == null) {
+            return;
+        }
+        if (!state.keyboardShown) {
+            surfaceHost.setBackground(null);
+            clearInAppKeyboardBackdrop();
+            return;
+        }
+
+        boolean capsule = isInAppKeyboardCapsule();
+        boolean glassTheme = isInAppKeyboardGlassSurface();
+        int horizontalMargin = capsule ? resolveDockCapsuleHorizontalMarginPx() : 0;
+        int bottomMargin = capsule ? resolveDockCapsuleBottomGapPx() : 0;
+        int topMargin = capsule ? Math.round(dpToPx(4)) : 0;
+        int innerPadding = capsule ? Math.round(dpToPx(6)) : 0;
+        ViewGroup.LayoutParams layoutParams = surfaceHost.getLayoutParams();
+        if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) layoutParams;
+            if (params.leftMargin != horizontalMargin || params.rightMargin != horizontalMargin
+                || params.topMargin != topMargin || params.bottomMargin != bottomMargin) {
+                params.leftMargin = horizontalMargin;
+                params.rightMargin = horizontalMargin;
+                params.topMargin = topMargin;
+                params.bottomMargin = bottomMargin;
+                surfaceHost.setLayoutParams(params);
+                mInAppKeyboardHeightDirty = true;
+                mInAppKeyboardBackdropDirty = true;
+            }
+        }
+        if (surfaceHost.getPaddingLeft() != innerPadding
+            || surfaceHost.getPaddingTop() != innerPadding
+            || surfaceHost.getPaddingRight() != innerPadding
+            || surfaceHost.getPaddingBottom() != innerPadding) {
+            surfaceHost.setPadding(innerPadding, innerPadding, innerPadding, innerPadding);
+            mInAppKeyboardHeightDirty = true;
+            mInAppKeyboardBackdropDirty = true;
+        }
+
+        float cornerRadiusPx = capsule ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
+        applyInAppKeyboardSurfaceClip(surfaceHost, capsule, cornerRadiusPx);
+        if (shouldUseUnifiedDefaultKeyboardGlassSurface(state)) {
+            // Once accessory_surface_host has actually laid out at the expanded height and its
+            // matching crop is installed, the transparent keyboard exposes that one unified
+            // material. Until then, keep a keyboard-local glass background in place: changing the
+            // RelativeLayout rules above only requests layout, so clearing this background here
+            // would expose sharp wallpaper for a frame (or the whole IME transition).
+            if (isUnifiedAccessoryBackdropReady(state)) {
+                surfaceHost.setBackground(null);
+                clearInAppKeyboardBackdrop();
+            } else {
+                Bitmap previousBackdrop = mInAppKeyboardBackdropBitmap;
+                Drawable background = buildInAppKeyboardSurfaceBackground(
+                    state, surfaceHost, false, glassTheme, 0f);
+                surfaceHost.setBackground(background);
+                recycleSupersededInAppKeyboardBackdrop(previousBackdrop, surfaceHost.getBackground());
+            }
+            return;
+        }
+        Bitmap previousBackdrop = mInAppKeyboardBackdropBitmap;
+        Drawable background = buildInAppKeyboardSurfaceBackground(
+            state, surfaceHost, capsule, glassTheme, cornerRadiusPx);
+        surfaceHost.setBackground(background);
+        recycleSupersededInAppKeyboardBackdrop(previousBackdrop, surfaceHost.getBackground());
+    }
+
+    /** Rounded clip for the capsule keyboard; rectangular bounds clip for the default style. */
+    private void applyInAppKeyboardSurfaceClip(@NonNull View surfaceHost, boolean capsule,
+                                               float cornerRadiusPx) {
+        if (!capsule) {
+            surfaceHost.setOutlineProvider(ViewOutlineProvider.BOUNDS);
+            surfaceHost.setClipToOutline(true);
+            return;
+        }
+        surfaceHost.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, android.graphics.Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cornerRadiusPx);
+            }
+        });
+        surfaceHost.setClipToOutline(true);
+    }
+
+    @Nullable
+    private Drawable buildInAppKeyboardSurfaceBackground(@NonNull AccessoryRenderState state,
+                                                         @NonNull View surfaceHost,
+                                                         boolean capsule, boolean glassTheme,
+                                                         float cornerRadiusPx) {
+        java.util.List<Drawable> layers = new java.util.ArrayList<>();
+        if (glassTheme) {
+            if (state.blurEnabled) {
+                Bitmap blurredBackdrop = obtainInAppKeyboardBackdropBitmap(state, surfaceHost);
+                if (blurredBackdrop != null) {
+                    BitmapDrawable backdrop = new BitmapDrawable(getResources(), blurredBackdrop);
+                    // Same content-aware light scatter the dock backdrop uses — one material.
+                    backdrop.setColorFilter(glassFrostFilter());
+                    backdrop.setAlpha(255);
+                    layers.add(backdrop);
+                }
+            }
+            // Render only the keyboard's slice of the shared light model; the under-pill nav strip
+            // renders the remainder so the single foot lands under the pill (see the slice overload).
+            layers.add(buildDockGlassSurface(state.barAlpha, 0f, defaultDockGlassFootFraction(), false));
+        } else if (capsule) {
+            // Opaque themes fill the capsule with the keyboard's own background color so the
+            // inner padding ring stays seamless with the keys.
+            GradientDrawable fill = new GradientDrawable();
+            fill.setColor(resolveInAppKeyboardBackgroundColor());
+            fill.setCornerRadius(cornerRadiusPx);
+            layers.add(fill);
+        }
+        if (capsule) {
+            GradientDrawable ring = new GradientDrawable();
+            ring.setColor(Color.TRANSPARENT);
+            ring.setCornerRadius(cornerRadiusPx);
+            ring.setStroke(Math.max(1, Math.round(dpToPx(1))),
+                withAlphaComponent(resolveAccessoryOutlineColor(), 18));
+            layers.add(ring);
+        }
+        if (layers.isEmpty()) {
+            return null;
+        }
+        Drawable material = layers.size() == 1
+            ? layers.get(0) : new LayerDrawable(layers.toArray(new Drawable[0]));
+        // A BitmapDrawable reports its captured bitmap dimensions as its minimum size. Since this
+        // drawable is installed on a wrap-content host, exposing that intrinsic size feeds the old
+        // backdrop height back into layout and creates a blank band below a subsequently shorter
+        // keyboard layout. Decoration must follow content geometry, never define it.
+        return new LayoutNeutralDrawable(material);
+    }
+
+    private void clearInAppKeyboardBackdrop() {
+        Bitmap previousBackdrop = mInAppKeyboardBackdropBitmap;
+        mInAppKeyboardBackdropBitmap = null;
+        mInAppKeyboardBackdropDirty = true;
+        mLastInAppKeyboardBackdropBlurRadiusDp = -1;
+        mLastInAppKeyboardBackdropManagedSource = false;
+        mLastInAppKeyboardBackdropTargetRect.setEmpty();
+        recycleSupersededInAppKeyboardBackdrop(previousBackdrop, null);
+    }
+
+    private void recycleSupersededInAppKeyboardBackdrop(@Nullable Bitmap previousBackdrop,
+                                                         @Nullable Drawable installedBackground) {
+        if (previousBackdrop == null || previousBackdrop == mInAppKeyboardBackdropBitmap
+            || previousBackdrop == mCachedAccessoryWallpaperBlurBitmap
+            || previousBackdrop.isRecycled()
+            || drawableReferencesBitmap(installedBackground, previousBackdrop)) {
+            return;
+        }
+        previousBackdrop.recycle();
+    }
+
+    private boolean drawableReferencesBitmap(@Nullable Drawable drawable, @NonNull Bitmap bitmap) {
+        if (drawable instanceof BitmapDrawable) {
+            return ((BitmapDrawable) drawable).getBitmap() == bitmap;
+        }
+        if (drawable instanceof LayoutNeutralDrawable) {
+            return drawableReferencesBitmap(((LayoutNeutralDrawable) drawable).mSource, bitmap);
+        }
+        if (drawable instanceof LayerDrawable) {
+            LayerDrawable layers = (LayerDrawable) drawable;
+            for (int i = 0; i < layers.getNumberOfLayers(); i++) {
+                if (drawableReferencesBitmap(layers.getDrawable(i), bitmap)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Blurred wallpaper crop behind the keyboard, cached until its geometry, blur radius, or
+     * wallpaper source changes. Returns the last good bitmap while a recapture is unavailable.
+     */
+    @Nullable
+    private Bitmap obtainInAppKeyboardBackdropBitmap(@NonNull AccessoryRenderState state,
+                                                     @NonNull View surfaceHost) {
+        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+        if (wallpaperFrame == null) {
+            return mInAppKeyboardBackdropDirty ? null : mInAppKeyboardBackdropBitmap;
+        }
+
+        Rect targetRect = buildInAppKeyboardBackdropTargetRect(state, surfaceHost);
+        if (targetRect == null) {
+            return mInAppKeyboardBackdropDirty ? null : mInAppKeyboardBackdropBitmap;
+        }
+        boolean usingManagedWallpaperSource = shouldUseManagedWallpaperBlurSource();
+        if (!mInAppKeyboardBackdropDirty &&
+            mLastInAppKeyboardBackdropBlurRadiusDp == state.blurRadiusDp &&
+            mLastInAppKeyboardBackdropManagedSource == usingManagedWallpaperSource &&
+            mLastInAppKeyboardBackdropTargetRect.equals(targetRect) &&
+            mInAppKeyboardBackdropBitmap != null) {
+            return mInAppKeyboardBackdropBitmap;
+        }
+
+        Bitmap blurredBackdrop = createCachedAccessoryWallpaperBlurCrop(state, targetRect, wallpaperFrame);
+        if (blurredBackdrop == null) {
+            // A previous-geometry crop is worse than tint-only glass: BitmapDrawable would scale it
+            // into the new keyboard height and briefly sample the wrong wallpaper region.
+            return mLastInAppKeyboardBackdropTargetRect.equals(targetRect)
+                ? mInAppKeyboardBackdropBitmap : null;
+        }
+        mInAppKeyboardBackdropBitmap = blurredBackdrop;
+        mInAppKeyboardBackdropDirty = false;
+        mLastInAppKeyboardBackdropBlurRadiusDp = state.blurRadiusDp;
+        mLastInAppKeyboardBackdropManagedSource = usingManagedWallpaperSource;
+        mLastInAppKeyboardBackdropTargetRect.set(targetRect);
+        return mInAppKeyboardBackdropBitmap;
+    }
+
+    /**
+     * Returns the keyboard crop even during its first pre-layout render. The accessory stack is
+     * bottom-anchored, so its already-laid-out bottom remains a stable reference while the new
+     * keyboard height is waiting for layout.
+     */
+    @Nullable
+    private Rect buildInAppKeyboardBackdropTargetRect(@NonNull AccessoryRenderState state,
+                                                       @NonNull View surfaceHost) {
+        if (surfaceHost.getWidth() > 0 && surfaceHost.getHeight() > 0) {
+            surfaceHost.getLocationOnScreen(mTmpViewLocation);
+            return new Rect(
+                mTmpViewLocation[0],
+                mTmpViewLocation[1],
+                mTmpViewLocation[0] + surfaceHost.getWidth(),
+                mTmpViewLocation[1] + surfaceHost.getHeight()
+            );
+        }
+
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
-        int dockHeight = accessoryContainer != null ? Math.max(0, accessoryContainer.getHeight()) : 0;
-        return isValarieDockStyle()
-            ? dockHeight + mNavBarHeight + resolveDockCapsuleBottomGapPx()
-            : mNavBarHeight + dockHeight;
+        if (accessoryContainer == null || state.keyboardHeight <= 0) {
+            return null;
+        }
+        accessoryContainer.getLocationOnScreen(mTmpViewLocation);
+        int width = accessoryContainer.getWidth();
+        if (width <= 0) {
+            width = getResources().getDisplayMetrics().widthPixels;
+        }
+        int bottom = mTmpViewLocation[1] + accessoryContainer.getHeight();
+        if (bottom <= 0) {
+            Rect frameRect = getManagedWallpaperFrameRect();
+            bottom = frameRect.bottom;
+        }
+        return new Rect(
+            mTmpViewLocation[0],
+            Math.max(0, bottom - state.keyboardHeight),
+            mTmpViewLocation[0] + Math.max(1, width),
+            Math.max(1, bottom)
+        );
+    }
+
+    /** True only after both expanded layout geometry and its matching unified crop are installed. */
+    private boolean isUnifiedAccessoryBackdropReady(@NonNull AccessoryRenderState state) {
+        if (!shouldUseUnifiedDefaultKeyboardGlassSurface(state)) {
+            return false;
+        }
+        ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
+        View surfaceHost = findViewById(R.id.accessory_surface_host);
+        View accessoryContainer = findViewById(R.id.accessory_stack_container);
+        View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
+        if (backdrop == null || surfaceHost == null || accessoryContainer == null
+            || keyboardContainer == null || keyboardContainer.getVisibility() == View.GONE
+            || backdrop.getDrawable() == null || backdrop.getVisibility() != View.VISIBLE) {
+            return false;
+        }
+        ViewGroup.LayoutParams containerParams = accessoryContainer.getLayoutParams();
+        int expectedHeight = containerParams != null && containerParams.height > 0
+            ? containerParams.height : accessoryContainer.getHeight();
+        if (expectedHeight <= 0 || surfaceHost.getHeight() < expectedHeight) {
+            return false;
+        }
+        // Before expanded layout, both values above can still describe the old dock-only state and
+        // therefore appear consistent. A unified dock+keyboard host must be taller than the
+        // keyboard portion by itself.
+        if (surfaceHost.getHeight() <= state.keyboardHeight) {
+            return false;
+        }
+        int horizontalOverscanPx = computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp);
+        int seamOverscanPx = !isValarieDockStyle() && shouldShowDecorNavBarSurface(state)
+            ? horizontalOverscanPx : 0;
+        Rect currentTarget = buildAccessoryBackdropTargetRect(
+            surfaceHost, horizontalOverscanPx, seamOverscanPx);
+        // setLayoutParams() during pre-draw does not resize the ImageView until another layout.
+        // Treat that pass as unready so it is skipped instead of drawing the expanded surface with
+        // a dock-height blur child for one frame.
+        if (backdrop.getWidth() < currentTarget.width()
+            || backdrop.getHeight() < currentTarget.height()) {
+            return false;
+        }
+        return mLastAccessoryBackdropBlurRadiusDp == state.blurRadiusDp
+            && mLastAccessoryBackdropManagedSource == shouldUseManagedWallpaperBlurSource()
+            && mLastAccessoryBackdropTargetRect.equals(currentTarget);
     }
 
     private void clearDecorNavBarBackdrop() {
@@ -2006,7 +2832,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (backdrop == null || overlay == null || wallpaperFrame == null) {
             return;
         }
-        Rect targetRect = buildDecorNavBarBackdropTargetRect();
+        backdrop.setAlpha(1f);
+        // Overscan the strip's blur bitmap upward past the seam with the dock/keyboard (default dock
+        // only) so the refraction edge band clears the visible seam and meets the dock's downward
+        // overscan. The bitmap is taller than the overlay; a negative top margin pushes the overscan
+        // above the overlay where clipChildren hides it.
+        int topOverscanPx = !isValarieDockStyle()
+            ? computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp) : 0;
+        Rect targetRect = buildDecorNavBarBackdropTargetRect(topOverscanPx);
         if (targetRect == null) {
             if (backdrop.getDrawable() != null) {
                 backdrop.setVisibility(View.VISIBLE);
@@ -2014,6 +2847,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 clearDecorNavBarBackdrop();
             }
             return;
+        }
+        if (backdrop.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams bp = (FrameLayout.LayoutParams) backdrop.getLayoutParams();
+            int surfaceHeight = Math.max(1, resolveDecorNavBarSurfaceHeightPx());
+            int targetBackdropHeight = surfaceHeight + Math.max(0, topOverscanPx);
+            if (bp.height != targetBackdropHeight || bp.topMargin != -topOverscanPx) {
+                bp.height = targetBackdropHeight;
+                bp.width = FrameLayout.LayoutParams.MATCH_PARENT;
+                bp.topMargin = -topOverscanPx;
+                bp.gravity = Gravity.TOP | Gravity.START;
+                backdrop.setLayoutParams(bp);
+            }
         }
 
         boolean usingManagedWallpaperSource = shouldUseManagedWallpaperBlurSource();
@@ -2026,7 +2871,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
-        Bitmap wallpaperBackdrop = createWallpaperBackdropBitmapForRect(targetRect, wallpaperFrame);
+        Bitmap wallpaperBackdrop = createCachedAccessoryWallpaperBlurCrop(state, targetRect, wallpaperFrame);
         if (wallpaperBackdrop == null) {
             if (backdrop.getDrawable() != null) {
                 backdrop.setVisibility(View.VISIBLE);
@@ -2037,26 +2882,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            float blurRadiusPx = ViewUtils.dpToPx(this, Math.max(0, state.blurRadiusDp));
             backdrop.setImageBitmap(wallpaperBackdrop);
-            backdrop.setRenderEffect(RenderEffect.createBlurEffect(blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP));
+            // Use the SAME AGSL glass refraction the content dock/keyboard backdrop uses (API 33+),
+            // not a plain blur, so this decor surface reads as the same material in both states: the
+            // keyboard-off dock+nav overlay and the keyboard-on under-pill strip now match the
+            // refraction-lit content dock instead of being a flatter, darker plain blur. Falls back
+            // to plain blur when the shader is unavailable (< API 33 or shader failure).
+            RenderEffect glass = buildGlassRefractionEffect(0f, 0f, 0f,
+                Math.max(1, targetRect.width()), Math.max(1, targetRect.height()), 0f);
+            backdrop.setRenderEffect(glass);
         } else {
-            Bitmap blurredBackdrop = createPreBlurredWallpaperBackdropBitmap(wallpaperBackdrop, state.blurRadiusDp);
-            if (blurredBackdrop == null) {
-                wallpaperBackdrop.recycle();
-                if (backdrop.getDrawable() != null) {
-                    backdrop.setVisibility(View.VISIBLE);
-                } else {
-                    clearDecorNavBarBackdrop();
-                }
-                return;
-            }
-            backdrop.setImageBitmap(blurredBackdrop);
-            if (blurredBackdrop != wallpaperBackdrop) {
-                wallpaperBackdrop.recycle();
-            }
+            backdrop.setImageBitmap(wallpaperBackdrop);
         }
 
+        // Same content-aware light scatter the dock and keyboard backdrops apply, so the
+        // under-pill strip reads as the same glass material rather than a plain blur.
+        backdrop.setColorFilter(glassFrostFilter());
         backdrop.setVisibility(View.VISIBLE);
         mDecorNavBarBackdropDirty = false;
         mLastDecorNavBarBackdropBlurRadiusDp = state.blurRadiusDp;
@@ -2080,84 +2921,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    private void beginImeTransitionBlurPause() {
-        mAccessoryRenderHandler.removeCallbacks(mRestoreAccessoryBlurAfterImeRunnable);
-        if (mImeTransitionInProgress) {
-            return;
-        }
-        mImeTransitionInProgress = true;
-        setAccessoryBlurLayerAlpha(1f);
-    }
-
-    private void scheduleImeTransitionBlurRestore() {
-        mAccessoryRenderHandler.removeCallbacks(mRestoreAccessoryBlurAfterImeRunnable);
-        mAccessoryRenderHandler.postDelayed(mRestoreAccessoryBlurAfterImeRunnable, 90L);
-    }
-
-    private void prepareAccessoryBlurRestoreFade() {
-        AccessoryRenderState state = buildAccessoryRenderState();
-        if (!state.toolbarShown || !state.blurEnabled) {
-            setAccessoryBlurLayerAlpha(1f);
-            return;
-        }
-        setAccessoryBlurLayerAlpha(mFadeAccessoryBlurAfterImeRestore ? 0f : 1f);
-    }
-
-    private void startAccessoryBlurRestoreFade() {
-        AccessoryRenderState state = buildAccessoryRenderState();
-        if (!state.toolbarShown || !state.blurEnabled || !mFadeAccessoryBlurAfterImeRestore) {
-            setAccessoryBlurLayerAlpha(1f);
-            return;
-        }
-        animateAccessoryBlurLayer(findViewById(R.id.extrakeys_backgroundblur));
-        animateAccessoryBlurLayer(findViewById(R.id.accessory_blur_backdrop));
-        animateAccessoryBlurLayer(mDecorNavBarBlurBackdrop);
-    }
-
-    private boolean shouldFadeAccessoryBlurAfterImeRestore() {
-        ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
-        boolean accessoryBackdropMissing = backdrop == null
-            || backdrop.getVisibility() != View.VISIBLE
-            || backdrop.getDrawable() == null
-            || backdrop.getAlpha() <= 0f;
-        if (accessoryBackdropMissing) {
-            return true;
-        }
-        ImageView decorBackdrop = mDecorNavBarBlurBackdrop;
-        if (!shouldShowDecorNavBarSurface(buildAccessoryRenderState())) {
-            return false;
-        }
-        return decorBackdrop == null
-            || decorBackdrop.getVisibility() != View.VISIBLE
-            || decorBackdrop.getDrawable() == null
-            || decorBackdrop.getAlpha() <= 0f;
-    }
-
-    private void setAccessoryBlurLayerAlpha(float alpha) {
-        setAccessoryBlurLayerAlpha(findViewById(R.id.extrakeys_backgroundblur), alpha);
-        setAccessoryBlurLayerAlpha(findViewById(R.id.accessory_blur_backdrop), alpha);
-        setAccessoryBlurLayerAlpha(mDecorNavBarBlurBackdrop, alpha);
-    }
-
-    private void setAccessoryBlurLayerAlpha(@Nullable View view, float alpha) {
-        if (view == null) {
-            return;
-        }
-        view.animate().cancel();
-        view.setAlpha(alpha);
-    }
-
-    private void animateAccessoryBlurLayer(@Nullable View view) {
-        if (view == null || view.getVisibility() != View.VISIBLE) {
-            return;
-        }
-        view.animate()
-            .alpha(1f)
-            .setDuration(140L)
-            .withEndAction(() -> view.setAlpha(1f))
-            .start();
-    }
-
     private boolean isAccessoryBlurHealthy(@NonNull AccessoryRenderState state) {
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
         if (accessoryContainer == null || accessoryContainer.getVisibility() != View.VISIBLE) {
@@ -2169,7 +2932,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean accessoryHealthy = backdrop != null
                 && backdrop.getVisibility() == View.VISIBLE
                 && backdrop.getDrawable() != null;
-            if (shouldShowDecorNavBarSurface(state)) {
+            if (shouldUseDockDecorNavBarSurface(state)) {
                 boolean decorHealthy = mDecorNavBarBlurBackdrop != null
                     && mDecorNavBarBlurBackdrop.getVisibility() == View.VISIBLE
                     && mDecorNavBarBlurBackdrop.getDrawable() != null;
@@ -2200,14 +2963,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return Math.max(0, Math.round((blurRadiusPx * 2f) + (density * 2f)));
     }
 
-    private void applyAccessoryBackdropOverscan(@NonNull ImageView backdrop, @NonNull View surfaceHost, int horizontalOverscanPx) {
+    private void applyAccessoryBackdropOverscan(@NonNull ImageView backdrop, @NonNull View surfaceHost,
+                                                int horizontalOverscanPx, int bottomOverscanPx) {
         ViewGroup.LayoutParams layoutParams = backdrop.getLayoutParams();
         if (!(layoutParams instanceof FrameLayout.LayoutParams)) {
             return;
         }
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) layoutParams;
         int targetWidth = Math.max(1, surfaceHost.getWidth() + (horizontalOverscanPx * 2));
-        int targetHeight = Math.max(1, surfaceHost.getHeight());
+        // Grow the bitmap DOWN past the surface (clipped by the host) so the refraction's bottom edge
+        // band falls below the visible seam with the under-pill strip, not on it.
+        int targetHeight = Math.max(1, surfaceHost.getHeight() + bottomOverscanPx);
         int targetLeftMargin = -horizontalOverscanPx;
         int targetTopMargin = 0;
         if (params.width != targetWidth || params.height != targetHeight ||
@@ -2224,13 +2990,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     @NonNull
-    private Rect buildAccessoryBackdropTargetRect(@NonNull View surfaceHost, int horizontalOverscanPx) {
+    private Rect buildAccessoryBackdropTargetRect(@NonNull View surfaceHost, int horizontalOverscanPx,
+                                                  int bottomOverscanPx) {
         surfaceHost.getLocationOnScreen(mTmpViewLocation);
         return new Rect(
             mTmpViewLocation[0] - horizontalOverscanPx,
             mTmpViewLocation[1],
             mTmpViewLocation[0] + Math.max(1, surfaceHost.getWidth()) + horizontalOverscanPx,
-            mTmpViewLocation[1] + Math.max(1, surfaceHost.getHeight())
+            mTmpViewLocation[1] + Math.max(1, surfaceHost.getHeight()) + bottomOverscanPx
         );
     }
 
@@ -2369,20 +3136,110 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /**
+     * Returns the one pre-blurred wallpaper frame used by every accessory glass surface. Geometry
+     * changes only crop this bitmap; they never capture and blur a second, visually different copy.
+     */
+    @Nullable
+    private Bitmap obtainCachedAccessoryWallpaperBlur(@NonNull AccessoryRenderState state,
+                                                       @NonNull View wallpaperFrame) {
+        Rect frameRect = getManagedWallpaperFrameRect();
+        boolean managedSource = shouldUseManagedWallpaperBlurSource();
+        int systemWallpaperId = getCurrentSystemWallpaperId();
+        File managedFile = managedSource ? getManagedWallpaperExactFile() : null;
+        long managedLastModified = managedFile != null ? managedFile.lastModified() : -1L;
+        long managedLength = managedFile != null ? managedFile.length() : -1L;
+        if (mCachedAccessoryWallpaperBlurBitmap != null
+            && !mCachedAccessoryWallpaperBlurBitmap.isRecycled()
+            && mCachedAccessoryWallpaperBlurRadiusDp == state.blurRadiusDp
+            && mCachedAccessoryWallpaperBlurManagedSource == managedSource
+            && mCachedAccessoryWallpaperBlurSystemId == systemWallpaperId
+            && mCachedAccessoryWallpaperBlurManagedLastModified == managedLastModified
+            && mCachedAccessoryWallpaperBlurManagedLength == managedLength
+            && mCachedAccessoryWallpaperBlurFrameRect.equals(frameRect)) {
+            return mCachedAccessoryWallpaperBlurBitmap;
+        }
+
+        Bitmap wallpaperBitmap = createWallpaperBackdropBitmapForRect(frameRect, wallpaperFrame);
+        if (wallpaperBitmap == null) {
+            return null;
+        }
+        Bitmap blurredBitmap = createPreBlurredWallpaperBackdropBitmap(wallpaperBitmap, state.blurRadiusDp);
+        if (blurredBitmap == null) {
+            wallpaperBitmap.recycle();
+            return null;
+        }
+        if (blurredBitmap != wallpaperBitmap) {
+            wallpaperBitmap.recycle();
+        }
+        clearCachedAccessoryWallpaperBlur();
+        mCachedAccessoryWallpaperBlurBitmap = blurredBitmap;
+        mCachedAccessoryWallpaperBlurFrameRect.set(frameRect);
+        mCachedAccessoryWallpaperBlurRadiusDp = state.blurRadiusDp;
+        mCachedAccessoryWallpaperBlurManagedSource = managedSource;
+        mCachedAccessoryWallpaperBlurSystemId = systemWallpaperId;
+        mCachedAccessoryWallpaperBlurManagedLastModified = managedLastModified;
+        mCachedAccessoryWallpaperBlurManagedLength = managedLength;
+        return blurredBitmap;
+    }
+
+    /** Crops the shared full-frame blur in screen coordinates, clamping any overscan at its edges. */
+    @Nullable
+    private Bitmap createCachedAccessoryWallpaperBlurCrop(@NonNull AccessoryRenderState state,
+                                                           @NonNull Rect targetRect,
+                                                           @NonNull View wallpaperFrame) {
+        Bitmap fullBlur = obtainCachedAccessoryWallpaperBlur(state, wallpaperFrame);
+        if (fullBlur == null) {
+            return null;
+        }
+        int width = Math.max(1, targetRect.width());
+        int height = Math.max(1, targetRect.height());
+        Bitmap crop = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(crop);
+        BitmapShader shader = new BitmapShader(fullBlur, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        Matrix matrix = new Matrix();
+        matrix.setTranslate(
+            mCachedAccessoryWallpaperBlurFrameRect.left - targetRect.left,
+            mCachedAccessoryWallpaperBlurFrameRect.top - targetRect.top);
+        shader.setLocalMatrix(matrix);
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        paint.setShader(shader);
+        canvas.drawRect(0f, 0f, width, height, paint);
+        return crop;
+    }
+
+    private void clearCachedAccessoryWallpaperBlur() {
+        if (mCachedAccessoryWallpaperBlurBitmap != null
+            && !mCachedAccessoryWallpaperBlurBitmap.isRecycled()) {
+            mCachedAccessoryWallpaperBlurBitmap.recycle();
+        }
+        mCachedAccessoryWallpaperBlurBitmap = null;
+        mCachedAccessoryWallpaperBlurFrameRect.setEmpty();
+        mCachedAccessoryWallpaperBlurRadiusDp = -1;
+        mCachedAccessoryWallpaperBlurManagedSource = false;
+        mCachedAccessoryWallpaperBlurSystemId = -1;
+        mCachedAccessoryWallpaperBlurManagedLastModified = -1L;
+        mCachedAccessoryWallpaperBlurManagedLength = -1L;
+    }
+
     private void updateAccessoryRenderEffectBackdrop(@NonNull AccessoryRenderState state) {
         ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
         View surfaceHost = findViewById(R.id.accessory_surface_host);
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
         boolean usingManagedWallpaperSource = shouldUseManagedWallpaperBlurSource();
         View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
-        applyAccessoryLayerBounds(R.id.accessory_surface_host, null);
-        if (shouldShowDecorNavBarSurface(state) && !isValarieDockStyle()) {
+        if (backdrop != null) {
+            backdrop.setAlpha(1f);
+        }
+        applyAccessorySurfaceBounds(state);
+        if (shouldUseDockDecorNavBarSurface(state) && !isValarieDockStyle()) {
             clearAccessoryRenderEffectBackdrop();
             return;
         }
         if (backdrop == null || surfaceHost == null || accessoryContainer == null || wallpaperFrame == null ||
             accessoryContainer.getWidth() <= 0 || accessoryContainer.getHeight() <= 0) {
-            if (backdrop != null && backdrop.getDrawable() != null && shouldUseAccessoryRenderEffectBlur(state)) {
+            if (backdrop != null && shouldUseAccessoryRenderEffectBlur(state)
+                && isAccessoryBackdropCropHeightCompatible(backdrop, backdrop.getHeight())) {
                 backdrop.setVisibility(View.VISIBLE);
             } else {
                 clearAccessoryRenderEffectBackdrop();
@@ -2393,69 +3250,64 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             clearAccessoryRenderEffectBackdrop();
             return;
         }
-        if (mImeTransitionInProgress && backdrop.getDrawable() != null) {
-            backdrop.setVisibility(View.VISIBLE);
-            return;
-        }
-
         int horizontalOverscanPx = computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp);
-        applyAccessoryBackdropOverscan(backdrop, surfaceHost, horizontalOverscanPx);
-        Rect backdropTargetRect = buildAccessoryBackdropTargetRect(surfaceHost, horizontalOverscanPx);
+        // When the under-pill decor strip abuts the dock/keyboard bottom (default dock only), overscan
+        // the bitmap downward past that seam so the refraction edge band lands below it — the strip
+        // overscans upward by the same amount, so the two surfaces' blurred wallpaper meets seamlessly.
+        int seamOverscanPx = !isValarieDockStyle() && shouldShowDecorNavBarSurface(state)
+            ? horizontalOverscanPx : 0;
+        applyAccessoryBackdropOverscan(backdrop, surfaceHost, horizontalOverscanPx, seamOverscanPx);
+        Rect backdropTargetRect = buildAccessoryBackdropTargetRect(surfaceHost, horizontalOverscanPx,
+            seamOverscanPx);
         if (!mAccessoryBackdropDirty &&
             mLastAccessoryBackdropBlurRadiusDp == state.blurRadiusDp &&
             mLastAccessoryBackdropManagedSource == usingManagedWallpaperSource &&
             mLastAccessoryBackdropTargetRect.equals(backdropTargetRect) &&
-            backdrop.getDrawable() != null) {
+            isAccessoryBackdropCropHeightCompatible(backdrop, backdropTargetRect.height())) {
             backdrop.setVisibility(View.VISIBLE);
             return;
         }
-        Bitmap wallpaperBackdrop = createWallpaperBackdropBitmapForRect(backdropTargetRect, wallpaperFrame);
+        Bitmap wallpaperBackdrop = createCachedAccessoryWallpaperBlurCrop(
+            state, backdropTargetRect, wallpaperFrame);
         if (wallpaperBackdrop == null) {
-            if (backdrop.getDrawable() != null) {
+            if (isAccessoryBackdropCropHeightCompatible(backdrop, backdropTargetRect.height())) {
                 backdrop.setVisibility(View.VISIBLE);
             } else {
-                clearAccessoryRenderEffectBackdrop();
+                // Never scale the keyboard-era crop into dock-only bounds on close. A subsequent
+                // recovery pass can restore blur; this frame keeps the tint layer without stale
+                // wallpaper brightness.
+                backdrop.setImageDrawable(null);
+                backdrop.setVisibility(View.GONE);
+                mAccessoryBackdropDirty = true;
             }
             return;
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            float blurRadiusPx = ViewUtils.dpToPx(this, Math.max(0, state.blurRadiusDp));
             backdrop.setImageBitmap(wallpaperBackdrop);
             // The capsule sits inside the (horizontally overscanned) backdrop bitmap: left/right are
             // inset by the overscan, top/bottom span the full height. Hand that rect to the shader so
             // refraction happens at the real dock edge.
             float capLeft = horizontalOverscanPx;
             float capRight = horizontalOverscanPx + Math.max(1, surfaceHost.getWidth());
-            float capBottom = Math.max(1, surfaceHost.getHeight());
+            // Put the shader's bottom edge at the overscanned bitmap bottom (below the visible seam)
+            // so the visible dock bottom reads as interior glass, not a refracting edge.
+            float capBottom = Math.max(1, surfaceHost.getHeight()) + seamOverscanPx;
             float radiusPx = isValarieDockStyle()
                 ? resolveDockCapsuleCornerRadiusPx(surfaceHost.getHeight())
                 : 0f;
-            RenderEffect glass = buildGlassRefractionEffect(blurRadiusPx, capLeft, 0f, capRight, capBottom, radiusPx);
+            RenderEffect glass = buildGlassRefractionEffect(0f, capLeft, 0f, capRight, capBottom, radiusPx);
             // Remember the dock params so a key-press lens can rebuild this effect cheaply (no recapture).
-            mGlassBlurPx = blurRadiusPx;
+            mGlassBlurPx = 0f;
             mGlassCapLeft = capLeft;
             mGlassCapTop = 0f;
             mGlassCapRight = capRight;
             mGlassCapBottom = capBottom;
             mGlassRadiusPx = radiusPx;
             mGlassParamsValid = (glass != null);
-            backdrop.setRenderEffect(glass != null
-                ? glass
-                : RenderEffect.createBlurEffect(blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP));
+            backdrop.setRenderEffect(glass);
         } else {
-            Bitmap blurredBackdrop = createPreBlurredWallpaperBackdropBitmap(wallpaperBackdrop, state.blurRadiusDp);
-            if (blurredBackdrop == null) {
-                wallpaperBackdrop.recycle();
-                if (backdrop.getDrawable() != null) {
-                    backdrop.setVisibility(View.VISIBLE);
-                } else {
-                    clearAccessoryRenderEffectBackdrop();
-                }
-                return;
-            }
-            backdrop.setImageBitmap(blurredBackdrop);
-            wallpaperBackdrop.recycle();
+            backdrop.setImageBitmap(wallpaperBackdrop);
         }
         // Content-aware light scatter — the frost that makes the blur read as glass, not plastic.
         backdrop.setColorFilter(glassFrostFilter());
@@ -2464,6 +3316,45 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastAccessoryBackdropBlurRadiusDp = state.blurRadiusDp;
         mLastAccessoryBackdropManagedSource = usingManagedWallpaperSource;
         mLastAccessoryBackdropTargetRect.set(backdropTargetRect);
+        // The keyboard-local cover is deliberately retained until this expanded crop is ready.
+        // Remove it now so dock and keyboard switch atomically to the unified material.
+        if (isUnifiedAccessoryBackdropReady(state)) {
+            View keyboardSurfaceHost = findViewById(R.id.inapp_keyboard_view_host);
+            if (keyboardSurfaceHost != null) {
+                keyboardSurfaceHost.setBackground(null);
+            }
+            clearInAppKeyboardBackdrop();
+        }
+    }
+
+    private boolean isAccessoryBackdropCropHeightCompatible(@NonNull ImageView backdrop,
+                                                             int destinationHeight) {
+        Drawable drawable = backdrop.getDrawable();
+        if (!(drawable instanceof BitmapDrawable) || destinationHeight <= 0)
+            return false;
+        Bitmap bitmap = ((BitmapDrawable) drawable).getBitmap();
+        return bitmap != null && !bitmap.isRecycled()
+            && bitmap.getHeight() == destinationHeight
+            && backdrop.getHeight() == destinationHeight;
+    }
+
+    @Nullable
+    private Rect buildToolbarOnlyAccessoryBounds(@NonNull AccessoryRenderState state) {
+        if (!state.toolbarShown)
+            return null;
+        View accessoryContainer = findViewById(R.id.accessory_stack_container);
+        if (accessoryContainer == null)
+            return null;
+        ViewGroup.LayoutParams params = accessoryContainer.getLayoutParams();
+        int totalHeight = params != null && params.height > 0
+            ? params.height : accessoryContainer.getHeight();
+        int toolbarHeight = Math.max(0, totalHeight - state.keyboardHeight);
+        if (toolbarHeight <= 0)
+            return null;
+        int width = accessoryContainer.getWidth();
+        if (width <= 0)
+            width = getResources().getDisplayMetrics().widthPixels;
+        return new Rect(0, 0, Math.max(0, width), toolbarHeight);
     }
 
     private void applyAccessoryRenderState(@NonNull AccessoryRenderState state) {
@@ -2478,8 +3369,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View azFxUnderlay = findViewById(R.id.apps_bar_az_fx_underlay);
         View azFxOverlay = findViewById(R.id.apps_bar_az_fx_overlay);
         View azLabelOverlay = findViewById(R.id.apps_bar_az_label_overlay);
+        Rect toolbarOnlyBounds = state.keyboardShown ? buildToolbarOnlyAccessoryBounds(state) : null;
+        applyAccessorySurfaceBounds(state);
+        applyAccessoryLayerVerticalBounds(R.id.apps_bar_az_fx_underlay, toolbarOnlyBounds);
+        applyAccessoryLayerVerticalBounds(R.id.apps_bar_az_fx_overlay, toolbarOnlyBounds);
         boolean useRenderEffectBlur = shouldUseAccessoryRenderEffectBlur(state);
-        boolean useDecorSurface = shouldShowDecorNavBarSurface(state);
+        boolean useDecorSurface = shouldUseDockDecorNavBarSurface(state);
         applyAccessoryAmbientVeil(accessoryContainer, state);
 
         if (extraKeysBackgroundBlur != null && !useRenderEffectBlur && !useDecorSurface) {
@@ -2492,7 +3387,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (!state.toolbarShown) {
             if (accessoryContainer != null) {
-                accessoryContainer.setVisibility(View.GONE);
+                accessoryContainer.setVisibility(
+                    shouldShowAccessoryStack(false, state.keyboardShown) ? View.VISIBLE : View.GONE);
             }
             if (extraKeysBackgroundBlur != null) {
                 extraKeysBackgroundBlur.setVisibility(View.GONE);
@@ -2526,8 +3422,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             clearAccessoryRenderEffectBackdrop();
             applyDecorNavBarSurfaceState(state);
+            applyInAppKeyboardSurfaceState(state);
+            completePendingInAppKeyboardOpenReveal(state);
+            completePendingInAppKeyboardCloseGeometry(state);
             configureAccessoryTopEdgeFx(false, state.barAlpha);
-            configureExtraKeysDivider(false);
+            configureExtraKeysDivider(false, 0f);
             resetAzOverflowAffordanceState();
             if (mDockPlankController != null) {
                 mDockPlankController.setEnabled(false);
@@ -2535,9 +3434,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
-        if (accessoryContainer != null) {
-            accessoryContainer.setVisibility(View.VISIBLE);
-        }
+        if (accessoryContainer != null)
+            accessoryContainer.setVisibility(
+                shouldShowAccessoryStack(true, state.keyboardShown) ? View.VISIBLE : View.GONE);
         if (accessorySurfaceHost != null) {
             accessorySurfaceHost.setVisibility(View.VISIBLE);
         }
@@ -2569,23 +3468,206 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         if (extraKeysBackground != null) {
             extraKeysBackground.setVisibility(useDecorSurface && !isValarieDockStyle() ? View.GONE : View.VISIBLE);
-            extraKeysBackground.setBackground(buildDockGlassSurface(state.barAlpha));
+            // Keyboard-off, the dock continues into the under-pill nav strip, so it renders the top
+            // slice [0, f] of the shared model (strip renders [f, 1]) — one foot under the pill.
+            // Keyboard-on, the dock is a distinct plank above the keyboard, so it keeps the full model.
+            extraKeysBackground.setBackground(buildDockGlassSurface(state.barAlpha,
+                0f, state.keyboardShown ? 1f : defaultDockGlassFootFraction(), false));
             // Opacity is baked into the drawable (translucent base) so the glass light model survives.
             extraKeysBackground.setAlpha(1f);
         }
-        refreshDockPlankFx();
+        refreshDockPlankFx(state.barAlpha);
 
         if (extraKeysBackgroundBlur != null) {
+            extraKeysBackgroundBlur.setAlpha(1f);
             extraKeysBackgroundBlur.setVisibility(
                 state.blurEnabled && !useRenderEffectBlur && !useDecorSurface ? View.VISIBLE : View.GONE
             );
         }
         configureAccessoryTopEdgeFx(true, state.barAlpha);
         // Thin material hairline at the seam between the A–Z row and the extra-keys row.
-        configureExtraKeysDivider(state.appsRowEnabled);
+        configureExtraKeysDivider(state.appsRowEnabled, state.barAlpha);
         applyDecorNavBarSurfaceState(state);
+        applyInAppKeyboardSurfaceState(state);
         updateAccessoryRenderEffectBackdrop(state);
+        completePendingInAppKeyboardOpenReveal(state);
+        completePendingInAppKeyboardCloseGeometry(state);
         updateAzOverflowAffordance();
+    }
+
+    /** Reveals keys in the same UI transaction that installs the destination unified backdrop. */
+    private void completePendingInAppKeyboardOpenReveal(@NonNull AccessoryRenderState state) {
+        if (!mPendingInAppKeyboardOpenReveal) {
+            return;
+        }
+        View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
+        if (keyboardContainer == null || !state.keyboardShown) {
+            mPendingInAppKeyboardOpenReveal = false;
+            removeInAppKeyboardOpenPreDrawGate();
+            return;
+        }
+        boolean unifiedGlassSurface = shouldUseUnifiedDefaultKeyboardGlassSurface(state);
+        boolean backdropReady = unifiedGlassSurface
+            ? isUnifiedAccessoryBackdropReady(state)
+            : isInAppKeyboardLocalBackdropReady(state);
+        if (isInAppKeyboardGlassSurface() && state.blurEnabled && !backdropReady) {
+            return;
+        }
+        mPendingInAppKeyboardOpenReveal = false;
+        keyboardContainer.setVisibility(View.VISIBLE);
+        removeInAppKeyboardOpenPreDrawGate();
+    }
+
+    private void revealInAppKeyboardIfStillPending() {
+        if (mPendingInAppKeyboardOpenReveal) forceRevealInAppKeyboardNow();
+    }
+
+    /** Immediately reveals the keyboard regardless of backdrop readiness (fail-safe path). */
+    private void forceRevealInAppKeyboardNow() {
+        mPendingInAppKeyboardOpenReveal = false;
+        View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
+        if (keyboardContainer != null && keyboardContainer.getVisibility() == View.INVISIBLE)
+            keyboardContainer.setVisibility(View.VISIBLE);
+        removeInAppKeyboardOpenPreDrawGate();
+    }
+
+    /** Runs after destination layout but before its first draw, closing the one-frame stale-crop gap. */
+    private void installInAppKeyboardOpenPreDrawGate() {
+        if (mInAppKeyboardOpenPreDrawListener != null) {
+            return;
+        }
+        View gateView = findViewById(R.id.activity_termux_root_view);
+        if (gateView == null) {
+            // No view to gate on — reveal now rather than leaving the keyboard invisible.
+            forceRevealInAppKeyboardNow();
+            return;
+        }
+        mInAppKeyboardOpenPreDrawView = gateView;
+        mInAppKeyboardOpenRevealBlockedFrames = 0;
+        mInAppKeyboardOpenPreDrawListener = () -> {
+            if (!mPendingInAppKeyboardOpenReveal) {
+                removeInAppKeyboardOpenPreDrawGate();
+                return true;
+            }
+            // Posted render syncs run after traversal and would permit one draw with the old,
+            // dock-only crop. Refresh synchronously now that destination geometry is measurable.
+            applyAccessoryRenderState(buildAccessoryRenderState());
+            boolean readyToDraw = !mPendingInAppKeyboardOpenReveal;
+            if (!readyToDraw) {
+                // Fail-safe: the gate must never wedge the whole window if the backdrop cannot
+                // become ready (wallpaper unavailable, blur crop failing). Worst case after three
+                // blocked frames is the old one-frame mismatch, never a frozen UI.
+                if (++mInAppKeyboardOpenRevealBlockedFrames >= 3) {
+                    forceRevealInAppKeyboardNow();
+                    return true;
+                }
+                scheduleAccessoryRenderSync("inapp-keyboard:open-waiting-for-backdrop");
+            }
+            return readyToDraw;
+        };
+        gateView.getViewTreeObserver().addOnPreDrawListener(mInAppKeyboardOpenPreDrawListener);
+        // Backstop for windows that stop drawing entirely (or test environments with no draw
+        // pass): reveal shortly after install even if no pre-draw callback ever fires.
+        mAccessoryRenderHandler.removeCallbacks(mInAppKeyboardOpenRevealBackstopRunnable);
+        mAccessoryRenderHandler.postDelayed(mInAppKeyboardOpenRevealBackstopRunnable, 160L);
+    }
+
+    private void removeInAppKeyboardOpenPreDrawGate() {
+        mAccessoryRenderHandler.removeCallbacks(mInAppKeyboardOpenRevealBackstopRunnable);
+        View gateView = mInAppKeyboardOpenPreDrawView;
+        ViewTreeObserver.OnPreDrawListener listener = mInAppKeyboardOpenPreDrawListener;
+        mInAppKeyboardOpenPreDrawView = null;
+        mInAppKeyboardOpenPreDrawListener = null;
+        if (gateView == null || listener == null) {
+            return;
+        }
+        ViewTreeObserver observer = gateView.getViewTreeObserver();
+        if (observer.isAlive()) {
+            observer.removeOnPreDrawListener(listener);
+        }
+    }
+
+    /** Stops conservative close-seam coverage after dock-only destination layout is observed. */
+    private void completePendingInAppKeyboardCloseGeometry(@NonNull AccessoryRenderState state) {
+        View accessoryContainer = findViewById(R.id.accessory_stack_container);
+        ViewGroup.LayoutParams accessoryParams = accessoryContainer != null
+            ? accessoryContainer.getLayoutParams() : null;
+        int expectedAccessoryHeight = accessoryParams != null && accessoryParams.height > 0
+            ? accessoryParams.height : 0;
+        boolean destinationLayoutReady = accessoryContainer != null
+            && expectedAccessoryHeight > 0
+            && accessoryContainer.getHeight() == expectedAccessoryHeight;
+        if (!mPendingInAppKeyboardCloseGeometry || state.keyboardShown || accessoryContainer == null) {
+            return;
+        }
+        if (destinationLayoutReady) {
+            mPendingInAppKeyboardCloseGeometry = false;
+            mInAppKeyboardBackdropDirty = true;
+            // Re-evaluate the strip once without the conservative close overscan. At this point the
+            // measured dock bottom is stable, so the exact seam crop can replace the safe cover.
+            mDecorNavBarBackdropDirty = true;
+            scheduleAccessoryRenderSync("inapp-keyboard:close-ready");
+        }
+    }
+
+    /** Rebuilds dock-only blur after close layout and before that geometry is allowed to draw. */
+    private void installInAppKeyboardClosePreDrawCorrection() {
+        if (mInAppKeyboardClosePreDrawListener != null)
+            return;
+        View gateView = findViewById(R.id.activity_termux_root_view);
+        if (gateView == null)
+            return;
+        mInAppKeyboardClosePreDrawView = gateView;
+        mInAppKeyboardClosePreDrawListener = () -> {
+            AccessoryRenderState state = buildAccessoryRenderState();
+            if (!state.keyboardShown) {
+                mAccessoryBackdropDirty = true;
+                applyAccessoryRenderState(state);
+            }
+            if (!isDockBackdropSafeForCurrentDestination(state))
+                return false;
+            removeInAppKeyboardClosePreDrawCorrection();
+            return true;
+        };
+        gateView.getViewTreeObserver().addOnPreDrawListener(mInAppKeyboardClosePreDrawListener);
+    }
+
+    private boolean isDockBackdropSafeForCurrentDestination(@NonNull AccessoryRenderState state) {
+        if (!shouldUseAccessoryRenderEffectBlur(state))
+            return true;
+        ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
+        View surfaceHost = findViewById(R.id.accessory_surface_host);
+        if (backdrop == null || surfaceHost == null || backdrop.getDrawable() == null
+            || backdrop.getVisibility() != View.VISIBLE) {
+            return true;
+        }
+        int horizontalOverscanPx = computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp);
+        int seamOverscanPx = !isValarieDockStyle() && shouldShowDecorNavBarSurface(state)
+            ? horizontalOverscanPx : 0;
+        Rect target = buildAccessoryBackdropTargetRect(
+            surfaceHost, horizontalOverscanPx, seamOverscanPx);
+        return isAccessoryBackdropCropHeightCompatible(backdrop, target.height());
+    }
+
+    private void removeInAppKeyboardClosePreDrawCorrection() {
+        View gateView = mInAppKeyboardClosePreDrawView;
+        ViewTreeObserver.OnPreDrawListener listener = mInAppKeyboardClosePreDrawListener;
+        mInAppKeyboardClosePreDrawView = null;
+        mInAppKeyboardClosePreDrawListener = null;
+        if (gateView == null || listener == null)
+            return;
+        ViewTreeObserver observer = gateView.getViewTreeObserver();
+        if (observer.isAlive())
+            observer.removeOnPreDrawListener(listener);
+    }
+
+    /** Invalidates geometry-dependent crops while preserving the shared full-frame blur. */
+    private void invalidateInAppKeyboardTransitionBackdropCrops() {
+        mInAppKeyboardBackdropDirty = true;
+        mLastInAppKeyboardBackdropTargetRect.setEmpty();
+        mAccessoryBackdropDirty = true;
+        mLastAccessoryBackdropTargetRect.setEmpty();
+        mDecorNavBarBackdropDirty = true;
     }
 
     private void applyRealtimeBlurRadius(View blurView, int blurRadiusDp) {
@@ -2650,7 +3732,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyTerminalSurfaceAppearance();
     }
 
-    private void applySmoothDockImeOffset(int imeLiftPx) {
+    private void applyDockImeOffset(int imeLiftPx) {
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
         if (accessoryContainer == null) {
             return;
@@ -2668,6 +3750,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * lift too would double it.
      */
     private int computeDockImeLiftPx(@NonNull WindowInsetsCompat insets) {
+        // Insets can retain the previous app's mid-transition IME snapshot across a home resume.
+        // Accept them only after an input flow in this activity explicitly requested the IME.
+        if (!mAcceptSystemImeInsets || isSystemImeSuppressedByInAppKeyboard()) {
+            return 0;
+        }
+        if (!insets.isVisible(Type.ime())) {
+            return 0;
+        }
         if (insets.isVisible(Type.navigationBars())) {
             return 0;
         }
@@ -2678,6 +3768,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** True while the dock is being lifted above the IME via insets instead of the root-view probe. */
     public boolean isDockImeLiftActive() {
         return mImeLiftPx > 0;
+    }
+
+    /**
+     * True while the embedded keyboard holds activity-wide system-IME suppression — the system
+     * keyboard cannot legitimately be visible, so IME-driven layout adjustments must not run.
+     */
+    public boolean isSystemImeSuppressedByInAppKeyboard() {
+        return mInAppKeyboard != null && mInAppKeyboard.isSystemImeSuppressed();
+    }
+
+    public boolean shouldAcceptSystemImeLayout() {
+        return mAcceptSystemImeInsets;
+    }
+
+    /** Marks subsequent IME insets as activity-owned rather than inherited from the previous app. */
+    public void onSystemImeRequested() {
+        mAcceptSystemImeInsets = true;
+        View content = findViewById(android.R.id.content);
+        if (content != null)
+            ViewCompat.requestApplyInsets(content);
+    }
+
+    private void resetInheritedImeLayoutState() {
+        mAcceptSystemImeInsets = false;
+        mImeLiftPx = 0;
+        applyDockImeOffset(0);
     }
 
     private void applyFullscreenMode() {
@@ -2755,6 +3871,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTermuxTerminalSessionActivityClient.onStop();
         if (mTermuxTerminalViewClient != null)
             mTermuxTerminalViewClient.onStop();
+        if (mInAppKeyboard != null)
+            mInAppKeyboard.onStop();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.setHostVisible(false);
         }
@@ -2768,14 +3886,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAccessoryRenderHandler.removeCallbacks(mAccessoryRenderSyncRunnable);
         mAccessoryRenderHandler.removeCallbacks(mAccessoryBlurHeartbeatRunnable);
         mAccessoryRenderHandler.removeCallbacks(mAccessoryBlurRecoveryRunnable);
-        mAccessoryRenderHandler.removeCallbacks(mDeferredImeGeometryRunnable);
-        mAccessoryRenderHandler.removeCallbacks(mRestoreAccessoryBlurAfterImeRunnable);
         mAccessoryRenderSyncPending = false;
-        mPendingAccessoryRenderReason = null;
-        mImeTransitionInProgress = false;
-        mFadeAccessoryBlurAfterImeRestore = false;
-        setAccessoryBlurLayerAlpha(1f);
-        applySmoothDockImeOffset(0);
+        mPendingInAppKeyboardCloseGeometry = false;
+        removeInAppKeyboardOpenPreDrawGate();
+        removeInAppKeyboardClosePreDrawCorrection();
+        applyDockImeOffset(0);
         clearAccessoryRenderEffectBackdrop();
         hideDecorNavBarSurfaceOverlay(true);
         mAzGestureHandler.removeCallbacks(mPackageRefreshRunnable);
@@ -2787,8 +3902,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onDestroy() {
         super.onDestroy();
         Logger.logDebug(LOG_TAG, "onDestroy");
+        clearCachedAccessoryWallpaperBlur();
         if (mIsInvalidState)
             return;
+        if (mInAppKeyboard != null) {
+            mTermuxTerminalViewClient.setInAppKeyboardController(null);
+            mInAppKeyboard.onDestroy();
+            mInAppKeyboard = null;
+        }
         clearAccessoryRenderEffectBackdrop();
         removeDecorNavBarSurfaceOverlay();
         if (mSuggestionBarView != null) {
@@ -2811,6 +3932,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logVerbose(LOG_TAG, "onSaveInstanceState");
         super.onSaveInstanceState(savedInstanceState);
         saveTerminalToolbarTextInput(savedInstanceState);
+        if (mInAppKeyboard != null)
+            mInAppKeyboard.onSaveInstanceState(savedInstanceState);
+        savedInstanceState.putBoolean(ARG_SHOULD_LAUNCH_ONBOARDING,
+            mShouldLaunchOnboardingAfterBootstrap);
         savedInstanceState.putBoolean(ARG_ACTIVITY_RECREATED, true);
     }
 
@@ -2820,6 +3945,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         super.onConfigurationChanged(newConfig);
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColors(true);
+        if (mInAppKeyboard != null) {
+            mInAppKeyboardShiftLocked = false;
+            mInAppKeyboard.onConfigurationChanged(newConfig);
+        }
         updateWindowBackgroundForCurrentSession();
     }
 
@@ -2867,6 +3996,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
         mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
+        scheduleOnboardingIfReady();
     }
 
     private void startBootstrapAndSession(@Nullable Intent intent) {
@@ -2886,11 +4016,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
                 mEmptySessionRecoveryInProgress = false;
+                scheduleOnboardingIfReady();
             } catch (WindowManager.BadTokenException e) {
                 // Activity finished - ignore.
                 mEmptySessionRecoveryInProgress = false;
             }
         });
+    }
+
+    private void scheduleOnboardingIfReady() {
+        if (!mShouldLaunchOnboardingAfterBootstrap || !mIsVisible || mTermuxService == null
+            || mTermuxService.isTermuxSessionsEmpty() || isFinishing()) {
+            return;
+        }
+        mShouldLaunchOnboardingAfterBootstrap = false;
+        View content = findViewById(android.R.id.content);
+        if (content != null) {
+            content.postDelayed(() -> {
+                if (!isFinishing() && !isDestroyed()) {
+                    ActivityUtils.startActivity(this, OnboardingActivity.createIntent(this));
+                }
+            }, 350L);
+        }
     }
 
     private void maybeRecoverFromEmptySession(@NonNull String source) {
@@ -2922,9 +4069,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAzGestureHandler.removeCallbacks(mPackageRefreshRunnable);
         mAccessoryRenderHandler.removeCallbacks(mAccessoryRenderSyncRunnable);
         mAccessoryRenderHandler.removeCallbacks(mAccessoryBlurHeartbeatRunnable);
-        mAccessoryRenderHandler.removeCallbacks(mDeferredImeGeometryRunnable);
         mAccessoryRenderSyncPending = false;
-        mPendingAccessoryRenderReason = null;
         if (mTerminalView != null) {
             mTerminalView.onContextMenuClosed(null);
         }
@@ -3007,6 +4152,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void setSuggestionBarView() {
         final FrameLayout appsBarContainer = findViewById(R.id.apps_bar_viewpager);
         mAzScrubRowView = findViewById(R.id.apps_bar_az_row);
+        mAzTerminalToolbarView = findViewById(R.id.terminal_toolbar_view_pager);
         mLauncherAzGestureFxUnderlayView = findViewById(R.id.apps_bar_az_fx_underlay);
         mLauncherAzGestureFxOverlayView = findViewById(R.id.apps_bar_az_fx_overlay);
         mLauncherAzGestureFxLabelOverlayView = findViewById(R.id.apps_bar_az_label_overlay);
@@ -3063,6 +4209,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSuggestionBarView.setAppDataProvider(mLauncherAppDataProvider);
         mSuggestionBarView.setConfigRepository(mLauncherConfigRepository);
         mSuggestionBarView.setAppCatalogChangedListener(this::syncAzScrubLettersAndTint);
+        mSuggestionBarView.setNotificationPopupInteractionListener(
+            new SuggestionBarView.NotificationPopupInteractionListener() {
+                @Override
+                public void onNotificationPopupShown() {
+                    if (mInAppKeyboard != null)
+                        mInAppKeyboard.beginExternalTextInput();
+                }
+
+                @Override
+                public void onNotificationPopupDismissed() {
+                    if (mInAppKeyboard != null)
+                        mInAppKeyboard.endExternalTextInput();
+                }
+            });
+        mSuggestionBarView.setLaunchRippleListener(this::playAppLaunchRipple);
         applySuggestionBarPreferences();
         applyDockLayoutMetrics(buildDockLayoutMetrics(0));
         if (isSuggestionBarEnabled()) {
@@ -3081,8 +4242,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mAzScrubRowView != null) {
             mAzScrubRowView.setScrubCallback(new AzScrubRowView.ScrubCallback() {
                 @Override
-                public void onScrub(char letter, int selectionIndex, float touchX, float touchY, float rawX, float rawY, @NonNull AzScrubRowView.GesturePhase phase) {
-                    handleAzGestureScrub(letter, selectionIndex, touchX, touchY, rawX, rawY, phase);
+                public void onScrub(char letter, int selectionIndex, float touchX, float touchY,
+                                    float rawX, float rawY, long eventTimeMs,
+                                    @NonNull AzScrubRowView.GesturePhase phase) {
+                    handleAzGestureScrub(letter, selectionIndex, touchX, touchY, rawX, rawY,
+                        eventTimeMs, phase);
                 }
 
                 @Override
@@ -3180,6 +4344,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return false;
     }
 
+    /** Consumes navigation only while a literal app-search command is visible in the normal buffer. */
+    public boolean handleTerminalAppSearchKey(int keyCode) {
+        if (mTerminalView == null || mSuggestionBarView == null) return false;
+        boolean literalMode = mSuggestionBarExplicitSearchActive
+            && mTerminalView.isCurrentInputAppSearchMode();
+        TerminalAppSearchKeyDecision.Action action = TerminalAppSearchKeyDecision.decide(
+            literalMode, mTerminalView.isAlternateBufferActive(),
+            mSuggestionBarView.getTerminalSearchResultCount(), keyCode);
+        switch (action) {
+            case PREVIOUS:
+                return mSuggestionBarView.moveTerminalSearchFocus(-1);
+            case NEXT:
+                return mSuggestionBarView.moveTerminalSearchFocus(1);
+            case LAUNCH:
+                mSuggestionBarExplicitSearchActive = false;
+                return mSuggestionBarView.launchFocusedTerminalSearchEntry();
+            case EXIT:
+                mSuggestionBarExplicitSearchActive = false;
+                mSuggestionBarView.clearTerminalSearchFocus();
+                mSuggestionBarView.reloadWithInput("", mTerminalView);
+                return false;
+            default:
+                if (mSuggestionBarExplicitSearchActive && !literalMode) {
+                    mSuggestionBarExplicitSearchActive = false;
+                    mSuggestionBarView.clearTerminalSearchFocus();
+                }
+                return false;
+        }
+    }
+
     public boolean shouldProcessSuggestionBarCodePoint(int codePoint, boolean ctrlDown) {
         if (ctrlDown || !isSuggestionBarEnabled() || mSuggestionBarView == null) {
             return false;
@@ -3189,10 +4383,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         char[] chars = Character.toChars(codePoint);
         return chars.length == 1 && chars[0] == getSuggestionBarSplitChar();
-    }
-
-    public boolean shouldDelayRootMarginAdjustments() {
-        return SystemClock.uptimeMillis() < mDelayRootMarginAdjustmentsUntilUptimeMs;
     }
 
     public boolean shouldDelaySoftKeyboardShowOnResume() {
@@ -3246,15 +4436,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSuggestionBarView.setDefaultButtons(new ArrayList<>());
         mSuggestionBarView.setTextSize(10f);
         mSuggestionBarView.setBandW(mPreferences.isAppLauncherBwIconsEnabled());
-        mSuggestionBarView.setUnifyIcons(mPreferences.isAppLauncherUnifyIconsEnabled());
-        mSuggestionBarView.setIconShadowEnabled(mPreferences.isAppLauncherIconShadowEnabled());
         mSuggestionBarView.setIconScale(resolveDerivedDockIconScale());
         mSuggestionBarView.setDockRowHeightHintPx(resolveDockAppsBarHeightHintPx(buildDockLayoutMetrics(0).appsBarHeightPx));
         mSuggestionBarView.setAppBarOpacity(mPreferences.getAppBarOpacity());
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
-        mSuggestionBarView.setBlurConfig(blurRadiusDp > 0, blurRadiusDp);
+        mSuggestionBarView.setBlurConfig(dockBlurEnabled(blurRadiusDp), blurRadiusDp);
         mSuggestionBarView.setInheritedTintColor(resolveAccessoryGlassBaseColor());
         mSuggestionBarView.setNotificationBadgesEnabled(mPreferences.isAppLauncherNotificationDotsEnabled());
+        boolean rowHapticsEnabled = mPreferences.isAppLauncherRowHapticsEnabled();
+        mSuggestionBarView.setRowHapticsEnabled(rowHapticsEnabled);
+        if (mAzScrubRowView != null)
+            mAzScrubRowView.setRowHapticsEnabled(rowHapticsEnabled);
         mSuggestionBarView.setMostUsedPageEnabled(mPreferences.isAppLauncherMostUsedPageEnabled());
         mSuggestionBarView.setAppDataProvider(mLauncherAppDataProvider);
         mSuggestionBarView.setConfigRepository(mLauncherConfigRepository);
@@ -3294,7 +4486,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         signature = (31 * signature) + stringSignature(mPreferences.getAppLauncherIconPackPackage());
         signature = (31 * signature) + stringSignature(mPreferences.getAppLauncherPinnedIconPackPackage());
         signature = (31 * signature) + (mPreferences.isAppLauncherBwIconsEnabled() ? 1 : 0);
-        signature = (31 * signature) + (mPreferences.isAppLauncherUnifyIconsEnabled() ? 1 : 0);
         return signature;
     }
 
@@ -3340,7 +4531,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mLauncherAzGestureFxUnderlayView != null) {
             mLauncherAzGestureFxUnderlayView.setColors(orbColor, edgeColor);
             mLauncherAzGestureFxUnderlayView.setDarkThemeActive(isNightThemeActive());
-            mLauncherAzGestureFxUnderlayView.setCapsuleDockStyle(isValarieDockStyle());
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 mLauncherAzGestureFxUnderlayView.setElevation(0f);
                 mLauncherAzGestureFxUnderlayView.setTranslationZ(-dpToPx(8));
@@ -3349,7 +4539,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mLauncherAzGestureFxOverlayView != null) {
             mLauncherAzGestureFxOverlayView.setColors(orbColor, edgeColor);
             mLauncherAzGestureFxOverlayView.setDarkThemeActive(isNightThemeActive());
-            mLauncherAzGestureFxOverlayView.setCapsuleDockStyle(isValarieDockStyle());
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 mLauncherAzGestureFxOverlayView.setElevation(dpToPx(30));
                 mLauncherAzGestureFxOverlayView.setTranslationZ(dpToPx(30));
@@ -3392,6 +4581,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float touchY,
         float rawX,
         float rawY,
+        long eventTimeMs,
         @NonNull AzScrubRowView.GesturePhase phase
     ) {
         if (!isAzRowEnabled() || mSuggestionBarView == null || mAzScrubRowView == null) {
@@ -3402,22 +4592,42 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mAzGestureMode = AzGestureMode.AZ_TRACKING;
             mAzHasLockedSelection = false;
             mAzHasPreviewAnchor = false;
-            mAzGestureDownTouchX = touchX;
-            mAzGestureDownTouchY = touchY;
+            mAzRecentMotionDx = 0f;
+            mAzRecentMotionDy = 0f;
+            mAzLastMotionEventTimeMs = eventTimeMs;
+            mAzUpwardTravelRefY = touchY;
+            mAzLastScrubTouchX = touchX;
+            mAzLastScrubTouchY = touchY;
             mAzScrubRowView.setInteractionMode(AzScrubRowView.InteractionMode.WAVE_TRACK);
             mAzScrubRowView.setLockedInlineLetter(null);
+        } else {
+            // Smooth pointer velocity by elapsed event time: intent classification below reads its
+            // direction, so behavior stays consistent across touch-controller sampling rates.
+            long dtMs = Math.max(1L, eventTimeMs - mAzLastMotionEventTimeMs);
+            float eventVelocityX = (touchX - mAzLastScrubTouchX) / dtMs;
+            float eventVelocityY = (touchY - mAzLastScrubTouchY) / dtMs;
+            float alpha = (float) (1d - Math.exp(-dtMs / AZ_RECENT_MOTION_TAU_MS));
+            mAzRecentMotionDx += (eventVelocityX - mAzRecentMotionDx) * alpha;
+            mAzRecentMotionDy += (eventVelocityY - mAzRecentMotionDy) * alpha;
+            mAzLastMotionEventTimeMs = eventTimeMs;
+            mAzLastScrubTouchX = touchX;
+            mAzLastScrubTouchY = touchY;
+            // While still letter-scrubbing horizontally, keep re-anchoring the upward-travel
+            // reference so the climb is measured from where the finger actually turned upward.
+            if (mAzGestureMode == AzGestureMode.AZ_TRACKING
+                && Math.abs(mAzRecentMotionDx) > Math.abs(mAzRecentMotionDy) * 1.3f) {
+                mAzUpwardTravelRefY = touchY;
+            }
         }
 
         mAzLastRawX = rawX;
         mAzLastRawY = rawY;
-        int[] azLoc = new int[2];
-        mAzScrubRowView.getLocationOnScreen(azLoc);
-        mAzLastAnchorRawX = azLoc[0] + touchX;
-        mAzLastAnchorRawY = azLoc[1] + (mAzScrubRowView.getHeight() * 0.5f);
+        mAzScrubRowView.getLocationOnScreen(mAzViewLocation);
+        mAzLastAnchorRawX = mAzViewLocation[0] + touchX;
+        mAzLastAnchorRawY = mAzViewLocation[1] + (mAzScrubRowView.getHeight() * 0.5f);
         populateRawBounds(mAzScrubRowView, mAzRowRawBounds);
         populateRawBounds(mSuggestionBarView, mAppsRowRawBounds);
-        populateRawBounds(findViewById(R.id.apps_bar_indicator_band), mIndicatorBandRawBounds);
-        populateRawBounds(findViewById(R.id.terminal_toolbar_view_pager), mExtraKeysRawBounds);
+        populateRawBounds(mAzTerminalToolbarView, mExtraKeysRawBounds);
 
         if (letter == AzScrubRowView.PINNED_APPS_SYMBOL) {
             mSuggestionBarView.clearAzFocusedEntry();
@@ -3430,7 +4640,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAzGestureActive = true;
         cancelAzOverflowRefresh();
         float rowHeight = Math.max(1f, mAzScrubRowView.getHeight());
-        View extraKeysRow = findViewById(R.id.terminal_toolbar_view_pager);
+        View extraKeysRow = mAzTerminalToolbarView;
         float extraKeysHeight = (extraKeysRow != null && extraKeysRow.getHeight() > 0)
             ? extraKeysRow.getHeight()
             : (rowHeight * 1.2f);
@@ -3439,18 +4649,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float unlockThreshold = rowHeight * AZ_RETURN_TOUCH_Y_RATIO;
         float unlockMaxBound = filterLowerBound + (rowHeight * 0.18f);
         float minUpwardTravel = Math.max(getResources().getDisplayMetrics().density * 10f, rowHeight * 0.22f);
-        float dyFromDown = touchY - mAzGestureDownTouchY;
-        float dxFromDown = touchX - mAzGestureDownTouchX;
+        // Intent from the smoothed recent motion vector, travel from the rolling upward reference:
+        // a diagonal thumb arc out of a horizontal scrub locks upward without a vertical climb.
+        boolean recentUpwardDominant = -mAzRecentMotionDy
+            >= Math.abs(mAzRecentMotionDx) * AZ_UPWARD_DIRECTION_RATIO;
         boolean upwardIntent = touchY <= (rowHeight * AZ_UPWARD_LOCK_TOUCH_Y_RATIO)
-            && dyFromDown <= -minUpwardTravel
-            && Math.abs(dyFromDown) >= (Math.abs(dxFromDown) * AZ_UPWARD_DIRECTION_RATIO);
+            && (mAzUpwardTravelRefY - touchY) >= minUpwardTravel
+            && recentUpwardDominant;
         // Once the drag starts on the AZ row, keep horizontal letter filtering captured below it.
         // This matches the visual wave tracking and avoids requiring exact vertical placement.
         boolean withinAzFilterBand = touchY >= filterUpperBound;
         boolean enteringUpwardLock = upwardIntent;
         boolean enteringIconTrack = isInAppsRowCorridor(rawY) || isInAzCaptureWedge(rawX, rawY);
-        boolean returningToUpwardTrack = touchY >= unlockThreshold && touchY <= unlockMaxBound;
-        boolean returningToIconTrack = !isInAppsRowCorridor(rawY) && !isInAzCaptureWedge(rawX, rawY) && isInAzReturnBand(rawY);
+        // Locked states are sticky: releasing them needs deliberate downward motion, not mere
+        // position drift near the row boundary while the thumb wanders sideways.
+        boolean recentDownwardDominant = mAzRecentMotionDy > 0f
+            && mAzRecentMotionDy >= Math.abs(mAzRecentMotionDx) * AZ_RETURN_DIRECTION_RATIO;
+        boolean returningToUpwardTrack = recentDownwardDominant
+            && touchY >= unlockThreshold && touchY <= unlockMaxBound;
+        boolean returningToIconTrack = recentDownwardDominant
+            && !isInAppsRowCorridor(rawY) && !isInAzCaptureWedge(rawX, rawY) && isInAzReturnBand(rawY);
 
         if (mAzGestureMode == AzGestureMode.AZ_TRACKING) {
             if (enteringIconTrack && mAzHasPreviewAnchor && phase != AzScrubRowView.GesturePhase.UP) {
@@ -3512,7 +4730,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean launched = false;
             if (mAzGestureMode == AzGestureMode.ICON_TRACKING_LOCKED && focusResult != null && focusResult.hasFocusEntry()) {
                 if (mLauncherAzGestureFxLabelOverlayView != null) {
-                    mLauncherAzGestureFxLabelOverlayView.playLaunchBloom(rawX, rawY);
+                    mLauncherAzGestureFxLabelOverlayView.dismissFocusedAppPreviewForLaunch();
                 }
                 launched = mSuggestionBarView.launchAzFocusedEntry(focusResult);
             }
@@ -3573,8 +4791,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         float wedgeTravel = Math.max(dpToPx(24), startY - topLimit);
         float progress = Math.max(0f, Math.min(1f, (startY - rawY) / wedgeTravel));
-        float targetHalfWidth = Math.max(dpToPx(28), mAppsRowRawBounds.width() * 0.14f);
-        float halfWidth = dpToPx(10) + (targetHalfWidth * progress);
+        // Wide enough at the base for a natural thumb arc (~±45° cone) instead of demanding a
+        // straight vertical rise out of the locked letter.
+        float targetHalfWidth = Math.max(dpToPx(40), mAppsRowRawBounds.width() * 0.18f);
+        float halfWidth = dpToPx(22) + (targetHalfWidth * progress);
         return Math.abs(rawX - mAzLockedAnchorRawX) <= halfWidth;
     }
 
@@ -3599,8 +4819,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         populateRawBounds(mAzScrubRowView, mAzRowRawBounds);
         populateRawBounds(mSuggestionBarView, mAppsRowRawBounds);
-        populateRawBounds(findViewById(R.id.apps_bar_indicator_band), mIndicatorBandRawBounds);
-        populateRawBounds(findViewById(R.id.terminal_toolbar_view_pager), mExtraKeysRawBounds);
+        populateRawBounds(mAzTerminalToolbarView, mExtraKeysRawBounds);
         applyAzFxRowBounds();
         LauncherAzGestureFxView.InteractionMode interactionMode =
             mAzGestureMode == AzGestureMode.ICON_TRACKING_LOCKED
@@ -3629,7 +4848,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mLauncherAzGestureFxOverlayView != null) {
             mLauncherAzGestureFxOverlayView.setFocusedIconOutline(
-                focusResult == null ? null : focusResult.iconOutlineMask,
+                focusResult == null ? null : focusResult.iconOutlineVisual,
                 focusResult == null ? null : focusResult.iconOutlineBounds
             );
         }
@@ -3640,29 +4859,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int pageCount = mSuggestionBarView != null ? mSuggestionBarView.getAzVisiblePageCount() : 1;
         applyAzFxInteractionOverflowState(overflowActive, canLeft, canRight, currentPagePosition, pageCount, overflowActive, true, -1);
 
-        float leftProximity = 0f;
-        float rightProximity = 0f;
-        if (mSuggestionBarView != null && interactionMode == LauncherAzGestureFxView.InteractionMode.ICON_TRACK_LOCKED) {
-            int[] loc = new int[2];
-            mSuggestionBarView.getLocationOnScreen(loc);
-            float localX = mAzLastRawX - loc[0];
-            float width = Math.max(1f, mSuggestionBarView.getWidth());
-            float edgeZone = Math.max(28f * getResources().getDisplayMetrics().density, width * 0.12f);
-            if (canLeft && localX <= edgeZone) {
-                leftProximity = Math.max(0f, 1f - (localX / Math.max(1f, edgeZone)));
-            }
-            if (canRight && localX >= width - edgeZone) {
-                rightProximity = Math.max(0f, 1f - ((width - localX) / Math.max(1f, edgeZone)));
-            }
-        }
-        applyAzFxEdgeProximity(leftProximity, rightProximity);
         applyAzFxDrag(
             mAzGestureActive,
             mAzLastRawX,
-            mAzLastRawY,
-            true,
-            mAzLastAnchorRawX,
-            mAzLastAnchorRawY,
             focusBounds,
             interactionMode
         );
@@ -3688,9 +4887,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             out.setEmpty();
             return;
         }
-        int[] loc = new int[2];
-        view.getLocationOnScreen(loc);
-        out.set(loc[0], loc[1], loc[0] + view.getWidth(), loc[1] + view.getHeight());
+        view.getLocationOnScreen(mAzViewLocation);
+        out.set(mAzViewLocation[0], mAzViewLocation[1],
+            mAzViewLocation[0] + view.getWidth(), mAzViewLocation[1] + view.getHeight());
     }
 
     private void updateAzOverflowAffordance() {
@@ -3703,8 +4902,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         populateRawBounds(mAzScrubRowView, mAzRowRawBounds);
         populateRawBounds(mSuggestionBarView, mAppsRowRawBounds);
-        populateRawBounds(findViewById(R.id.apps_bar_indicator_band), mIndicatorBandRawBounds);
-        populateRawBounds(findViewById(R.id.terminal_toolbar_view_pager), mExtraKeysRawBounds);
+        populateRawBounds(mAzTerminalToolbarView, mExtraKeysRawBounds);
         applyAzFxRowBounds();
         boolean azOverflowActive = mSuggestionBarView.hasAzOverflowPages();
         boolean interactionActive = mSuggestionBarInteractionActive;
@@ -3755,13 +4953,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void applyAzFxRowBounds() {
         if (mLauncherAzGestureFxUnderlayView != null) {
-            mLauncherAzGestureFxUnderlayView.setRowBounds(mAzRowRawBounds, mAppsRowRawBounds, mIndicatorBandRawBounds, mExtraKeysRawBounds);
+            mLauncherAzGestureFxUnderlayView.setRowBounds(mAppsRowRawBounds);
         }
         if (mLauncherAzGestureFxOverlayView != null) {
-            mLauncherAzGestureFxOverlayView.setRowBounds(mAzRowRawBounds, mAppsRowRawBounds, mIndicatorBandRawBounds, mExtraKeysRawBounds);
+            mLauncherAzGestureFxOverlayView.setRowBounds(mAppsRowRawBounds);
         }
         if (mLauncherAzGestureFxLabelOverlayView != null) {
-            mLauncherAzGestureFxLabelOverlayView.setRowBounds(mAzRowRawBounds, mAppsRowRawBounds, mIndicatorBandRawBounds, mExtraKeysRawBounds);
+            mLauncherAzGestureFxLabelOverlayView.setRowBounds(mAppsRowRawBounds);
         }
     }
 
@@ -3803,24 +5001,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    private void applyAzFxEdgeProximity(float leftProximity, float rightProximity) {
+    private void applyAzFxDrag(boolean active, float rawX, @Nullable RectF focusedBoundsRaw,
+                               @NonNull LauncherAzGestureFxView.InteractionMode mode) {
         if (mLauncherAzGestureFxUnderlayView != null) {
-            mLauncherAzGestureFxUnderlayView.setEdgeProximity(leftProximity, rightProximity);
+            mLauncherAzGestureFxUnderlayView.updateDrag(active, rawX, focusedBoundsRaw, mode);
         }
         if (mLauncherAzGestureFxOverlayView != null) {
-            mLauncherAzGestureFxOverlayView.setEdgeProximity(leftProximity, rightProximity);
-        }
-    }
-
-    private void applyAzFxDrag(boolean active, float rawX, float rawY, boolean anchorVisible, float anchorRawX, float anchorRawY, @Nullable RectF focusedBoundsRaw, @NonNull LauncherAzGestureFxView.InteractionMode mode) {
-        if (mLauncherAzGestureFxUnderlayView != null) {
-            mLauncherAzGestureFxUnderlayView.updateDrag(active, rawX, rawY, anchorVisible, anchorRawX, anchorRawY, focusedBoundsRaw, mode);
-        }
-        if (mLauncherAzGestureFxOverlayView != null) {
-            mLauncherAzGestureFxOverlayView.updateDrag(active, rawX, rawY, anchorVisible, anchorRawX, anchorRawY, focusedBoundsRaw, mode);
+            mLauncherAzGestureFxOverlayView.updateDrag(active, rawX, focusedBoundsRaw, mode);
         }
         if (mLauncherAzGestureFxLabelOverlayView != null) {
-            mLauncherAzGestureFxLabelOverlayView.updateDrag(active, rawX, rawY, false, anchorRawX, anchorRawY, focusedBoundsRaw, mode);
+            mLauncherAzGestureFxLabelOverlayView.updateDrag(active, rawX, focusedBoundsRaw, mode);
         }
     }
 
@@ -3858,7 +5048,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyAzFxEdgeDwellProgress(0f, mAzLastRawX, mAzLastRawY);
             return;
         }
-        if (mAzEdgePagingRunnable != null && mAzEdgePagingEdge == focusResult.edge) {
+        if (mAzEdgePagingFrameCallback != null && mAzEdgePagingEdge == focusResult.edge) {
             updateAzEdgeDwellProgress(now);
             return;
         }
@@ -3866,9 +5056,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAzEdgePagingEdge = focusResult.edge;
         mAzEdgeDwellStartUptimeMs = now;
         updateAzEdgeDwellProgress(now);
-        mAzEdgePagingRunnable = new Runnable() {
-            @Override
-            public void run() {
+        mAzEdgePagingFrameCallback = frameTimeNanos -> {
                 if (!mAzGestureActive || mSuggestionBarView == null) {
                     stopAzEdgePagingLoop();
                     return;
@@ -3883,13 +5071,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 long frameNow = SystemClock.uptimeMillis();
                 if (frameNow < mAzEdgePageCooldownUntilUptimeMs || mAzEdgeRequiresReentry) {
                     applyAzFxEdgeDwellProgress(0f, mAzLastRawX, mAzLastRawY);
-                    mAzGestureHandler.postDelayed(this, AZ_EDGE_DWELL_FRAME_MS);
+                    postNextAzEdgePagingFrame();
                     return;
                 }
                 long dwellMs = frameNow - mAzEdgeDwellStartUptimeMs;
                 updateAzEdgeDwellProgress(frameNow);
                 if (dwellMs < AZ_EDGE_PAGE_INITIAL_DELAY_MS) {
-                    mAzGestureHandler.postDelayed(this, AZ_EDGE_DWELL_FRAME_MS);
+                    postNextAzEdgePagingFrame();
                     return;
                 }
                 int pageDelta = mAzEdgePagingEdge == SuggestionBarView.AZ_EDGE_LEFT ? -1 : 1;
@@ -3902,7 +5090,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 mAzEdgePageCooldownUntilUptimeMs = frameNow + AZ_EDGE_PAGE_COOLDOWN_MS;
                 mAzEdgeRequiresReentry = true;
-                mAzEdgePagingRunnable = null;
+                mAzEdgePagingFrameCallback = null;
                 applyAzFxEdgeDwellProgress(0f, mAzLastRawX, mAzLastRawY);
                 mAzGestureHandler.postDelayed(() -> {
                     if (!mAzGestureActive || mSuggestionBarView == null) return;
@@ -3911,15 +5099,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     updateAzOverlayState(afterSwitch, mAzLockedLetter);
                     updateAzEdgePagingLoop(afterSwitch);
                 }, AZ_EDGE_PAGE_REPEAT_INTERVAL_MS);
-            }
         };
-        mAzGestureHandler.postDelayed(mAzEdgePagingRunnable, AZ_EDGE_DWELL_FRAME_MS);
+        postNextAzEdgePagingFrame();
+    }
+
+    private void postNextAzEdgePagingFrame() {
+        if (mAzEdgePagingFrameCallback != null) {
+            Choreographer.getInstance().postFrameCallback(mAzEdgePagingFrameCallback);
+        }
     }
 
     private void stopAzEdgePagingLoop() {
-        if (mAzEdgePagingRunnable != null) {
-            mAzGestureHandler.removeCallbacks(mAzEdgePagingRunnable);
-            mAzEdgePagingRunnable = null;
+        if (mAzEdgePagingFrameCallback != null) {
+            Choreographer.getInstance().removeFrameCallback(mAzEdgePagingFrameCallback);
+            mAzEdgePagingFrameCallback = null;
         }
         mAzEdgePagingEdge = SuggestionBarView.AZ_EDGE_NONE;
         mAzEdgeDwellStartUptimeMs = 0L;
@@ -4160,6 +5353,726 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTermuxTerminalSessionActivityClient.onCreate();
     }
 
+    private void initializeInAppKeyboard(@Nullable Bundle savedInstanceState) {
+        if (mInAppKeyboard != null || mPreferences == null
+            || !mPreferences.isInAppKeyboardEnabled())
+            return;
+        mInAppKeyboard = new TermuxInAppKeyboard(new InAppKeyboardActivityHost(), mPreferences);
+        mTermuxTerminalViewClient.setInAppKeyboardController(mInAppKeyboard);
+        mInAppKeyboard.onCreate(savedInstanceState);
+    }
+
+    private void handleInAppKeyboardHeightAdjustIntent(@Nullable Intent intent) {
+        if (intent == null
+            || !intent.getBooleanExtra(EXTRA_IN_APP_KEYBOARD_HEIGHT_ADJUST, false))
+            return;
+        intent.removeExtra(EXTRA_IN_APP_KEYBOARD_HEIGHT_ADJUST);
+        if (mPreferences != null && !mPreferences.isInAppKeyboardEnabled())
+            mPreferences.setInAppKeyboardEnabled(true);
+        initializeInAppKeyboard(null);
+        if (mInAppKeyboard != null)
+            mInAppKeyboard.beginHeightAdjustment();
+    }
+
+    private void handleDockTuningIntent(@Nullable Intent intent) {
+        if (intent == null || !intent.getBooleanExtra(EXTRA_DOCK_TUNING, false))
+            return;
+        intent.removeExtra(EXTRA_DOCK_TUNING);
+        enterDockTuningMode();
+    }
+
+    private void enterDockTuningMode() {
+        if (mPreferences == null)
+            return;
+        mDockTuningMode = true;
+        View controls = findViewById(R.id.dock_tuning_controls);
+        SeekBar blur = findViewById(R.id.dock_tuning_blur_slider);
+        SeekBar opacity = findViewById(R.id.dock_tuning_opacity_slider);
+        SeekBar grain = findViewById(R.id.dock_tuning_grain_slider);
+        SeekBar terminal = findViewById(R.id.dock_tuning_terminal_slider);
+        SeekBar sessions = findViewById(R.id.dock_tuning_sessions_slider);
+        SeekBar size = findViewById(R.id.dock_tuning_size_slider);
+        SeekBar icons = findViewById(R.id.dock_tuning_icons_slider);
+        TextView blurValue = findViewById(R.id.dock_tuning_blur_value);
+        TextView opacityValue = findViewById(R.id.dock_tuning_opacity_value);
+        TextView grainValue = findViewById(R.id.dock_tuning_grain_value);
+        TextView terminalValue = findViewById(R.id.dock_tuning_terminal_value);
+        TextView sessionsValue = findViewById(R.id.dock_tuning_sessions_value);
+        TextView sizeValue = findViewById(R.id.dock_tuning_size_value);
+        TextView iconsValue = findViewById(R.id.dock_tuning_icons_value);
+        MaterialButtonToggleGroup styleGroup = findViewById(R.id.dock_tuning_style_group);
+        View confirm = findViewById(R.id.dock_tuning_confirm);
+        View dismiss = findViewById(R.id.dock_tuning_dismiss);
+        if (controls == null || blur == null || opacity == null || grain == null
+            || terminal == null || sessions == null || size == null || icons == null
+            || blurValue == null || opacityValue == null || grainValue == null
+            || terminalValue == null || sessionsValue == null || sizeValue == null
+            || iconsValue == null || styleGroup == null || confirm == null) {
+            mDockTuningMode = false;
+            return;
+        }
+        controls.setVisibility(View.VISIBLE);
+        final int initialBlur = mPreferences.getExtraKeysBlurRadius();
+        final int initialOpacity = mPreferences.getAppBarOpacity();
+        final int initialGrain = mPreferences.getDockGlassGrain();
+        final int initialTerminal = mPreferences.getTerminalBackgroundOpacity();
+        final int initialSessions = mPreferences.getSessionsOpacity();
+        final float initialBarHeight = mPreferences.getAppLauncherBarHeightScale();
+        final int initialSizeIndex = nearestDockSizePresetIndex(initialBarHeight);
+        final int initialButtonCount = mPreferences.getAppLauncherButtonCount();
+        final String initialStyle = mPreferences.getAppLauncherDockStyle();
+
+        blur.setProgress(initialBlur);
+        opacity.setProgress(initialOpacity);
+        grain.setProgress(initialGrain);
+        terminal.setProgress(initialTerminal);
+        sessions.setProgress(initialSessions);
+        size.setProgress(initialSizeIndex);
+        icons.setProgress(Math.max(1, Math.min(20, initialButtonCount)));
+        blurValue.setText(getString(R.string.termux_dock_tuning_value_dp, initialBlur));
+        opacityValue.setText(getString(R.string.termux_dock_tuning_value_percent, initialOpacity));
+        grainValue.setText(getString(R.string.termux_dock_tuning_value_percent, initialGrain));
+        terminalValue.setText(getString(R.string.termux_dock_tuning_value_percent, initialTerminal));
+        sessionsValue.setText(getString(R.string.termux_dock_tuning_value_percent, initialSessions));
+        sizeValue.setText(dockSizePresetLabel(initialSizeIndex));
+        iconsValue.setText(Integer.toString(Math.max(1, initialButtonCount)));
+        styleGroup.check(SegmentedPillPreference.VALUE_CAPSULE.equals(initialStyle)
+            ? R.id.dock_tuning_style_capsule : R.id.dock_tuning_style_default);
+
+        blur.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                blurValue.setText(getString(R.string.termux_dock_tuning_value_dp, progress));
+                if (fromUser) {
+                    mPreferences.setExtraKeysBlurRadius(progress);
+                    applyDockTuningPreview(true);
+                }
+            }
+        });
+        opacity.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                opacityValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
+                if (fromUser) {
+                    mPreferences.setAppBarOpacity(progress);
+                    applyDockTuningPreview(false);
+                }
+            }
+        });
+        grain.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                grainValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
+                if (fromUser) {
+                    mPreferences.setDockGlassGrain(progress);
+                    applyDockTuningPreview(false);
+                }
+            }
+        });
+        terminal.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                terminalValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
+                if (fromUser) {
+                    mPreferences.setTerminalBackgroundOpacity(progress);
+                    applyDockTuningStructuralPreview();
+                }
+            }
+        });
+        sessions.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                sessionsValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
+                if (fromUser) {
+                    mPreferences.setSessionsOpacity(progress);
+                    applyDockTuningStructuralPreview();
+                }
+            }
+        });
+        size.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                int index = Math.max(0, Math.min(DOCK_TUNING_SIZE_PRESETS.length - 1, progress));
+                sizeValue.setText(dockSizePresetLabel(index));
+                if (fromUser) {
+                    mPreferences.setAppLauncherBarHeightScale(DOCK_TUNING_SIZE_PRESETS[index]);
+                    applyDockTuningStructuralPreview();
+                }
+            }
+        });
+        icons.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                int count = Math.max(1, progress);
+                iconsValue.setText(Integer.toString(count));
+                if (fromUser) {
+                    mPreferences.setAppLauncherButtonCount(count);
+                    applyDockTuningStructuralPreview();
+                }
+            }
+        });
+        styleGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (!isChecked)
+                return;
+            String style = checkedId == R.id.dock_tuning_style_capsule
+                ? SegmentedPillPreference.VALUE_CAPSULE : SegmentedPillPreference.VALUE_DEFAULT;
+            if (!style.equals(mPreferences.getAppLauncherDockStyle())) {
+                mPreferences.setAppLauncherDockStyle(style);
+                applyDockTuningStructuralPreview();
+            }
+        });
+        confirm.setOnClickListener(view -> exitDockTuningMode());
+        if (dismiss != null) {
+            dismiss.setOnClickListener(view -> {
+                // Dismiss reverts to the values captured when tuning began.
+                mPreferences.setExtraKeysBlurRadius(initialBlur);
+                mPreferences.setAppBarOpacity(initialOpacity);
+                mPreferences.setDockGlassGrain(initialGrain);
+                mPreferences.setTerminalBackgroundOpacity(initialTerminal);
+                mPreferences.setSessionsOpacity(initialSessions);
+                mPreferences.setAppLauncherBarHeightScale(initialBarHeight);
+                mPreferences.setAppLauncherButtonCount(initialButtonCount);
+                mPreferences.setAppLauncherDockStyle(initialStyle);
+                applyDockTuningStructuralPreview();
+                exitDockTuningMode();
+            });
+        }
+        controls.bringToFront();
+        registerDockTuningLayoutListener(controls);
+        controls.post(this::adjustDockTuningCardHeight);
+    }
+
+    private void registerDockTuningLayoutListener(@NonNull View controls) {
+        if (mDockTuningLayoutListener != null)
+            return;
+        mDockTuningLayoutListener = this::adjustDockTuningCardHeight;
+        controls.getViewTreeObserver().addOnGlobalLayoutListener(mDockTuningLayoutListener);
+    }
+
+    private void unregisterDockTuningLayoutListener() {
+        if (mDockTuningLayoutListener == null)
+            return;
+        View controls = findViewById(R.id.dock_tuning_controls);
+        if (controls != null)
+            controls.getViewTreeObserver().removeOnGlobalLayoutListener(mDockTuningLayoutListener);
+        mDockTuningLayoutListener = null;
+    }
+
+    /**
+     * Caps the scrollable slider region so the header and Done button always stay on screen above
+     * the accessory stack (dock, and the in-app keyboard when shown), regardless of screen size or
+     * density. When the content fits it stays wrap-content; when it would overflow it scrolls.
+     */
+    private void adjustDockTuningCardHeight() {
+        if (!mDockTuningMode)
+            return;
+        View controls = findViewById(R.id.dock_tuning_controls);
+        ScrollView scroll = findViewById(R.id.dock_tuning_scroll);
+        View headerRow = findViewById(R.id.dock_tuning_header_row);
+        View done = findViewById(R.id.dock_tuning_confirm);
+        View stack = findViewById(R.id.accessory_stack_container);
+        if (controls == null || scroll == null || headerRow == null || done == null || stack == null)
+            return;
+        if (controls.getVisibility() != View.VISIBLE)
+            return;
+        View scrollChild = scroll.getChildCount() > 0 ? scroll.getChildAt(0) : null;
+        if (scrollChild == null)
+            return;
+
+        int topLimit = Math.max(mLastStatusBarInsetTop, Math.round(dpToPx(24))) + Math.round(dpToPx(8));
+        int cardMarginBottom = Math.round(dpToPx(10));
+        int availableCard = (stack.getTop() - cardMarginBottom) - topLimit;
+        // Chrome outside the scroll region: card top/bottom padding (10 + 12), Done top margin (6),
+        // plus the measured header and Done heights.
+        int chrome = Math.round(dpToPx(10 + 12 + 6)) + headerRow.getHeight() + done.getHeight();
+        int maxScroll = availableCard - chrome;
+        int minScroll = Math.round(dpToPx(96));
+        if (maxScroll < minScroll)
+            maxScroll = minScroll;
+
+        int natural = scrollChild.getMeasuredHeight();
+        if (natural <= 0)
+            natural = scrollChild.getHeight();
+        ViewGroup.LayoutParams lp = scroll.getLayoutParams();
+        int target = (natural > maxScroll) ? maxScroll : ViewGroup.LayoutParams.WRAP_CONTENT;
+        if (lp.height != target) {
+            lp.height = target;
+            scroll.setLayoutParams(lp);
+        }
+    }
+
+    private void applyDockTuningPreview(boolean blurChanged) {
+        if (blurChanged)
+            clearCachedAccessoryWallpaperBlur();
+        mAccessoryBackdropDirty = true;
+        mDecorNavBarBackdropDirty = true;
+        mInAppKeyboardBackdropDirty = true;
+        applySuggestionBarPreferences();
+        applyAccessoryRenderState(buildAccessoryRenderState());
+        scheduleAccessoryRenderSync("dock-tuning:preview");
+    }
+
+    /** Broader live re-apply for controls that change dock geometry, terminal, or sessions surfaces. */
+    private void applyDockTuningStructuralPreview() {
+        updateAppLauncherBarHeight();
+        applyTerminalSurfaceAppearance();
+        applyDockTuningPreview(true);
+        applyAccessoryGeometryIfNeeded(true, "dock-tuning:structural");
+    }
+
+    private static final float[] DOCK_TUNING_SIZE_PRESETS = {1.72f, 1.95f, 2.18f, 2.45f};
+
+    private int nearestDockSizePresetIndex(float scale) {
+        int best = 0;
+        float bestDistance = Float.MAX_VALUE;
+        for (int i = 0; i < DOCK_TUNING_SIZE_PRESETS.length; i++) {
+            float distance = Math.abs(scale - DOCK_TUNING_SIZE_PRESETS[i]);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = i;
+            }
+        }
+        return best;
+    }
+
+    @NonNull
+    private String dockSizePresetLabel(int index) {
+        switch (Math.max(0, Math.min(DOCK_TUNING_SIZE_PRESETS.length - 1, index))) {
+            case 0:
+                return getString(R.string.termux_dock_preset_smallest);
+            case 1:
+                return getString(R.string.termux_dock_preset_small);
+            case 2:
+                return getString(R.string.termux_dock_preset_default);
+            default:
+                return getString(R.string.termux_dock_preset_large);
+        }
+    }
+
+    private void exitDockTuningMode() {
+        mDockTuningMode = false;
+        unregisterDockTuningLayoutListener();
+        ScrollView scroll = findViewById(R.id.dock_tuning_scroll);
+        if (scroll != null) {
+            ViewGroup.LayoutParams lp = scroll.getLayoutParams();
+            if (lp.height != ViewGroup.LayoutParams.WRAP_CONTENT) {
+                lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                scroll.setLayoutParams(lp);
+            }
+        }
+        View controls = findViewById(R.id.dock_tuning_controls);
+        if (controls != null)
+            controls.setVisibility(View.GONE);
+    }
+
+    private abstract static class SimpleSeekBarChangeListener
+        implements SeekBar.OnSeekBarChangeListener {
+        @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+        @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+    }
+
+    public boolean isInAppKeyboardEnabled() {
+        return mInAppKeyboard != null && mInAppKeyboard.isEnabled();
+    }
+
+    public void suppressSystemImeForInAppKeyboard() {
+        if (isInAppKeyboardEnabled())
+            mInAppKeyboard.suppressSystemIme();
+    }
+
+    /** Temporarily gives the toolbar EditText ownership of the system IME. */
+    public void beginTerminalToolbarExternalTextInput(@NonNull EditText editText) {
+        if (mInAppKeyboard != null && mInAppKeyboard.isEnabled()) {
+            mInAppKeyboard.beginExternalTextInput();
+        }
+        onSystemImeRequested();
+        editText.post(() -> {
+            if (!editText.hasFocus())
+                editText.requestFocus();
+            KeyboardUtils.showSoftKeyboard(TermuxActivity.this, editText);
+        });
+    }
+
+    /** Restores the embedded keyboard's prior visibility and system-IME suppression. */
+    public void endTerminalToolbarExternalTextInput() {
+        if (mInAppKeyboard != null)
+            mInAppKeyboard.endExternalTextInput();
+    }
+
+    private final class InAppKeyboardActivityHost implements InAppKeyboardHost {
+
+        @Override
+        public View getKeyboardContainer() {
+            return findViewById(R.id.inapp_keyboard_container);
+        }
+
+        @Override
+        public void setKeyboardContainerVisible(boolean visible) {
+            View keyboardContainer = getKeyboardContainer();
+            if (keyboardContainer == null) {
+                return;
+            }
+            if (visible) {
+                boolean openingFromGone = keyboardContainer.getVisibility() == View.GONE;
+                removeInAppKeyboardClosePreDrawCorrection();
+                if (openingFromGone)
+                    invalidateInAppKeyboardTransitionBackdropCrops();
+                mPendingInAppKeyboardCloseGeometry = false;
+                AccessoryRenderState state = buildAccessoryRenderState();
+                boolean unifiedGlassSurface = shouldUseUnifiedDefaultKeyboardGlassSurface(state);
+                boolean backdropReady = unifiedGlassSurface
+                    ? isUnifiedAccessoryBackdropReady(state)
+                    : isInAppKeyboardLocalBackdropReady(state);
+                boolean deferReveal = mPendingInAppKeyboardOpenReveal
+                    || shouldDeferInAppKeyboardReveal(openingFromGone,
+                        isInAppKeyboardGlassSurface(), state.blurEnabled, backdropReady);
+                mPendingInAppKeyboardOpenReveal = deferReveal;
+                // INVISIBLE participates in destination layout without allowing a draw. The render
+                // pass can therefore install the expanded crop before keys and their glass backing
+                // become visible; non-unified surfaces keep the immediate path.
+                keyboardContainer.setVisibility(deferReveal ? View.INVISIBLE : View.VISIBLE);
+                applyInAppKeyboardSurfaceState(state);
+                if (deferReveal) {
+                    installInAppKeyboardOpenPreDrawGate();
+                }
+            } else {
+                boolean closingToGone = keyboardContainer.getVisibility() != View.GONE;
+                if (closingToGone)
+                    invalidateInAppKeyboardTransitionBackdropCrops();
+                mPendingInAppKeyboardOpenReveal = false;
+                removeInAppKeyboardOpenPreDrawGate();
+                mPendingInAppKeyboardCloseGeometry = closingToGone;
+                keyboardContainer.setVisibility(View.GONE);
+                if (closingToGone)
+                    installInAppKeyboardClosePreDrawCorrection();
+            }
+        }
+
+        @Override
+        public void attachKeyboardView(View keyboardView) {
+            FrameLayout host = findViewById(R.id.inapp_keyboard_view_host);
+            if (host == null)
+                return;
+            ViewParent parent = keyboardView.getParent();
+            if (parent instanceof ViewGroup)
+                ((ViewGroup) parent).removeView(keyboardView);
+            host.removeAllViews();
+            host.addView(keyboardView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+            mAttachedInAppKeyboardView = keyboardView;
+            mDesiredInAppKeyboardHeightPx = 0;
+            mInAppKeyboardHeightDirty = true;
+        }
+
+        @Override
+        public void detachKeyboardView() {
+            FrameLayout host = findViewById(R.id.inapp_keyboard_view_host);
+            if (host != null)
+                host.removeAllViews();
+            mAttachedInAppKeyboardView = null;
+            mDesiredInAppKeyboardHeightPx = 0;
+            mInAppKeyboardHeightDirty = true;
+        }
+
+        @Override
+        public void requestAccessoryGeometrySync() {
+            requestInAppKeyboardGeometrySync();
+        }
+
+        @Override
+        public void invalidateKeyboardMeasurement() {
+            // The measurement cache is keyed by the available bounds, which do not change while
+            // the user previews keyboard geometry. Explicitly invalidate both our cached result
+            // and Android's same-spec measurement cache before the following geometry sync.
+            mDesiredInAppKeyboardHeightPx = 0;
+            mInAppKeyboardMeasureWidthPx = 0;
+            mInAppKeyboardAvailableHeightPx = 0;
+            mInAppKeyboardHeightDirty = true;
+            if (mAttachedInAppKeyboardView != null)
+                mAttachedInAppKeyboardView.forceLayout();
+            View keyboardContainer = getKeyboardContainer();
+            if (keyboardContainer != null)
+                keyboardContainer.forceLayout();
+        }
+
+        @Override
+        public void setKeyboardHeightAdjustmentVisible(boolean visible) {
+            setInAppKeyboardHeightAdjustmentVisible(visible);
+        }
+
+        @Override
+        public TerminalView getTerminalView() {
+            return mTerminalView;
+        }
+
+        @Override
+        public TerminalSession getCurrentSession() {
+            return TermuxActivity.this.getCurrentSession();
+        }
+
+        @Override
+        public void restoreLegacySoftKeyboardState() {
+            if (mTermuxTerminalViewClient != null)
+                mTermuxTerminalViewClient.setSoftKeyboardState(false, true);
+        }
+
+        @Override
+        public void onExternalTextInputStarted() {
+            onSystemImeRequested();
+        }
+
+        @Override
+        public void onExternalTextInputEnded() {
+            resetInheritedImeLayoutState();
+        }
+
+        @Override
+        public void runOnMain(Runnable runnable) {
+            TermuxActivity.this.runOnUiThread(runnable);
+        }
+
+        @Override
+        public void paste() {
+            if (mTermuxTerminalSessionActivityClient != null)
+                mTermuxTerminalSessionActivityClient.onPasteTextFromClipboard(getCurrentSession());
+        }
+
+        @Override
+        public void copySelection() {
+            if (mTerminalView == null)
+                return;
+            String selectedText = mTerminalView.getSelectedText();
+            if (DataUtils.isNullOrEmpty(selectedText))
+                selectedText = mTerminalView.getStoredSelectedText();
+            if (!DataUtils.isNullOrEmpty(selectedText))
+                ShareUtils.copyTextToClipboard(TermuxActivity.this, selectedText);
+        }
+
+        @Override
+        public void selectAll() {
+            if (mTerminalView == null)
+                return;
+            mTerminalView.selectAllText();
+        }
+
+        @Override
+        public boolean prepareCut() {
+            if (mTerminalView == null)
+                return false;
+            String selectedText = mTerminalView.getSelectedText();
+            if (DataUtils.isNullOrEmpty(selectedText))
+                selectedText = mTerminalView.getStoredSelectedText();
+            if (!DataUtils.isNullOrEmpty(selectedText)) {
+                ShareUtils.copyTextToClipboard(TermuxActivity.this, selectedText);
+                mTerminalView.stopTextSelectionMode();
+                return false;
+            }
+            String currentInput = mTerminalView.getCurrentInput();
+            if (!DataUtils.isNullOrEmpty(currentInput))
+                ShareUtils.copyTextToClipboard(TermuxActivity.this, currentInput);
+            // Ctrl+U is the terminal-native cut for the current prompt line. Sending it even when
+            // the heuristic input reader returns empty also clears shells with custom prompts.
+            return true;
+        }
+
+        @Override
+        public void requestTextLayout() {
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.requestTextLayout();
+        }
+
+        @Override
+        public void requestNumericLayout() {
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.requestNumericLayout();
+        }
+
+        @Override
+        public void requestGreekMathLayout() {
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.requestGreekMathLayout();
+        }
+
+        @Override
+        public void requestForwardLayout() {
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.requestForwardLayout();
+        }
+
+        @Override
+        public void requestBackwardLayout() {
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.requestBackwardLayout();
+        }
+
+        @Override
+        public void openKeyboardSettings() {
+            ActivityUtils.startActivity(TermuxActivity.this,
+                SettingsActivity.createFragmentIntent(TermuxActivity.this,
+                    com.termux.app.fragments.settings.termux.KeyboardPreferencesFragment.class,
+                    R.string.termux_keyboard_preferences_title));
+        }
+
+        @Override
+        public void hideKeyboard() {
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.hide(TermuxInAppKeyboard.HideReason.USER_EVENT);
+        }
+
+        @Override
+        public void setComposePending(boolean pending) {
+            if (mAttachedInAppKeyboardView instanceof Keyboard2View)
+                ((Keyboard2View) mAttachedInAppKeyboardView).set_compose_pending(pending);
+        }
+
+        @Override
+        public void toggleCapsLock() {
+            mInAppKeyboardShiftLocked = !mInAppKeyboardShiftLocked;
+            if (mAttachedInAppKeyboardView instanceof Keyboard2View)
+                ((Keyboard2View) mAttachedInAppKeyboardView).setShiftLocked(mInAppKeyboardShiftLocked);
+        }
+
+        @Override
+        public void debugLog(String message) {
+            Logger.logDebug(LOG_TAG, message);
+        }
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private void setInAppKeyboardHeightAdjustmentVisible(boolean visible) {
+        View controls = findViewById(R.id.inapp_keyboard_height_adjust_controls);
+        View handle = findViewById(R.id.inapp_keyboard_height_adjust_handle);
+        View handleIndicator = findViewById(
+            R.id.inapp_keyboard_height_adjust_handle_indicator);
+        View confirm = findViewById(R.id.inapp_keyboard_height_adjust_confirm);
+        View cancel = findViewById(R.id.inapp_keyboard_height_adjust_cancel);
+        TextView spacingLabel = findViewById(R.id.inapp_keyboard_key_spacing_label);
+        SeekBar spacingSlider = findViewById(R.id.inapp_keyboard_key_spacing_slider);
+        TextView radiusLabel = findViewById(R.id.inapp_keyboard_key_corner_radius_label);
+        SeekBar radiusSlider = findViewById(
+            R.id.inapp_keyboard_key_corner_radius_slider);
+        if (controls == null || handle == null || handleIndicator == null
+            || confirm == null || cancel == null || spacingLabel == null
+            || spacingSlider == null || radiusLabel == null || radiusSlider == null)
+            return;
+        controls.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (!visible) {
+            handle.setOnTouchListener(null);
+            confirm.setOnClickListener(null);
+            cancel.setOnClickListener(null);
+            spacingSlider.setOnSeekBarChangeListener(null);
+            radiusSlider.setOnSeekBarChangeListener(null);
+            return;
+        }
+
+        if (isInAppKeyboardGlassSurface()) {
+            // The glass keyboard is transparent; give the controls the same tint so
+            // they stay readable over the terminal instead of inheriting a transparent background.
+            controls.setBackground(buildDockGlassSurface(
+                mPreferences != null ? mPreferences.getAppBarOpacity() / 100f : 1f));
+        } else {
+            controls.setBackgroundColor(resolveInAppKeyboardBackgroundColor());
+        }
+        if (mAttachedInAppKeyboardView instanceof Keyboard2View) {
+            int controlColor = ((Keyboard2View) mAttachedInAppKeyboardView)
+                .getKeyboardLabelColor();
+            ColorStateList controlTint = ColorStateList.valueOf(controlColor);
+            handleIndicator.setBackgroundColor(controlColor);
+            ((TextView) confirm).setTextColor(controlColor);
+            ((TextView) cancel).setTextColor(controlColor);
+            spacingLabel.setTextColor(controlColor);
+            radiusLabel.setTextColor(controlColor);
+            spacingSlider.setProgressTintList(controlTint);
+            spacingSlider.setThumbTintList(controlTint);
+            radiusSlider.setProgressTintList(controlTint);
+            radiusSlider.setThumbTintList(controlTint);
+        }
+        spacingSlider.setMax(Math.round(
+            TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_MARGIN_SCALE
+                * IN_APP_KEYBOARD_MARGIN_SLIDER_STEPS_PER_UNIT));
+        spacingSlider.setProgress(Math.round(mInAppKeyboard.getKeyMarginScale()
+            * IN_APP_KEYBOARD_MARGIN_SLIDER_STEPS_PER_UNIT));
+        radiusSlider.setMax(Math.round(
+            TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP
+                * IN_APP_KEYBOARD_RADIUS_SLIDER_STEPS_PER_DP));
+        radiusSlider.setProgress(Math.round(mInAppKeyboard.getEffectiveKeyCornerRadiusDp()
+            * IN_APP_KEYBOARD_RADIUS_SLIDER_STEPS_PER_DP));
+        spacingSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser && mInAppKeyboard != null)
+                    mInAppKeyboard.previewKeyMarginScale(
+                        progress / (float) IN_APP_KEYBOARD_MARGIN_SLIDER_STEPS_PER_UNIT);
+            }
+
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        radiusSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser && mInAppKeyboard != null)
+                    mInAppKeyboard.previewKeyCornerRadiusDp(
+                        progress / (float) IN_APP_KEYBOARD_RADIUS_SLIDER_STEPS_PER_DP);
+            }
+
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        confirm.setOnClickListener(view -> {
+            if (mInAppKeyboard != null) {
+                mInAppKeyboard.confirmHeightAdjustment();
+                // Match termux-reload-settings exactly. That command omits the recreate extra,
+                // whose default is true; the full activity rebuild is what clears the stale
+                // exact accessory height left behind by a downward keyboard resize.
+                reloadActivityStyling(true);
+            }
+        });
+        cancel.setOnClickListener(view -> {
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.cancelHeightAdjustment();
+        });
+        handle.setOnTouchListener((view, event) -> {
+            if (mInAppKeyboard == null || !mInAppKeyboard.isHeightAdjusting())
+                return false;
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    mInAppKeyboardHeightDragStartY = event.getRawY();
+                    mInAppKeyboardHeightDragStartScale = mInAppKeyboard.getHeightScale();
+                    int renderedHeight = mAttachedInAppKeyboardView == null
+                        ? 0 : mAttachedInAppKeyboardView.getMeasuredHeight();
+                    mInAppKeyboardUnscaledDragHeight = Math.max(1f,
+                        renderedHeight / mInAppKeyboardHeightDragStartScale);
+                    view.getParent().requestDisallowInterceptTouchEvent(true);
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    float scale = TermuxInAppKeyboard.calculateHeightScaleForDrag(
+                        mInAppKeyboardHeightDragStartScale,
+                        event.getRawY() - mInAppKeyboardHeightDragStartY,
+                        mInAppKeyboardUnscaledDragHeight);
+                    mInAppKeyboard.previewHeightScale(scale);
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    view.getParent().requestDisallowInterceptTouchEvent(false);
+                    return true;
+                default:
+                    return false;
+            }
+        });
+    }
+
+    private void requestInAppKeyboardGeometrySync() {
+        View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
+        mDesiredInAppKeyboardHeightPx = 0;
+        mInAppKeyboardHeightDirty = true;
+        if (keyboardContainer != null)
+            keyboardContainer.requestLayout();
+        applyAccessoryGeometryIfNeeded(true, "inapp-keyboard");
+        if (keyboardContainer != null) {
+            keyboardContainer.post(() -> {
+                if (!isFinishing() && !isDestroyed())
+                    applyAccessoryGeometryIfNeeded(true, "inapp-keyboard:layout");
+            });
+        }
+    }
+
     private void setTermuxSessionsListView() {
         ListView termuxSessionsListView = findViewById(R.id.terminal_sessions_list);
         mTermuxSessionListViewController = new TermuxSessionsListViewController(this, mTermuxService.getTermuxSessions());
@@ -4215,13 +6128,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         toolbarLayoutParams.height = toolbarHeightPx;
         terminalToolbarViewPager.setLayoutParams(toolbarLayoutParams);
 
+        AccessoryRenderState state = buildAccessoryRenderState();
         DockLayoutMetrics dockMetrics = buildDockLayoutMetrics(0);
         applyDockLayoutMetrics(dockMetrics);
-        int accessoryBottomMarginPx = resolveAccessoryStackBottomMarginPx();
-        int dockContentHeightPx = dockMetrics.combinedHeight(toolbarHeightPx);
-        int terminalFlushPaddingPx = resolveTerminalFlushDockPaddingPx(dockContentHeightPx, accessoryBottomMarginPx);
+        int accessoryBottomMarginPx = resolveAccessoryStackBottomMarginPx(state);
+        // Preserve the legacy (GONE) toolbar-only layout params byte-for-byte when no embedded
+        // keyboard is present. Once the keyboard is shown, hidden toolbar rows contribute zero.
+        int dockContentHeightPx = state.keyboardShown && !state.toolbarShown
+            ? 0 : dockMetrics.combinedHeight(toolbarHeightPx);
+        int accessoryContentHeightPx = computeAccessoryStackHeight(
+            dockContentHeightPx, 0, state.keyboardHeight);
+        // The embedded keyboard suspends flush absorption: its height is user-scaled and its
+        // surface defines its own boundary, so the split remainder halves would surface as
+        // wallpaper bands above the gesture-navigation inset instead of hiding in dock glass.
+        int terminalFlushPaddingPx = state.keyboardShown ? 0
+            : resolveTerminalFlushDockPaddingPx(accessoryContentHeightPx, accessoryBottomMarginPx);
         mAppliedTerminalFlushPaddingPx = terminalFlushPaddingPx;
-        int combinedHeight = dockContentHeightPx + terminalFlushPaddingPx;
+        int combinedHeight = computeAccessoryStackHeight(
+            dockContentHeightPx, terminalFlushPaddingPx, state.keyboardHeight);
         // Split the absorbed remainder around the dock rows so they stay visually centered in the
         // taller glass instead of hugging its bottom edge.
         int flushBottomInsetPx = terminalFlushPaddingPx / 2;
@@ -4237,15 +6161,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             accessoryStackContainer,
             accessoryBottomMarginPx
         );
-        if (requestTerminalResize && (accessoryHeightChanged || accessoryMarginChanged) && mTerminalView != null) {
+        boolean keyboardShownChanged = state.keyboardShown != mAppliedInAppKeyboardShown;
+        mAppliedInAppKeyboardShown = state.keyboardShown;
+        if (shouldRequestTerminalResize(requestTerminalResize, accessoryHeightChanged,
+            accessoryMarginChanged, keyboardShownChanged) && mTerminalView != null) {
             mTerminalView.post(mTerminalView::updateSize);
         }
         scheduleAccessoryRenderSync("setTerminalToolbarHeight");
     }
 
-    private int resolveTerminalFlushDockPaddingPx(int dockContentHeightPx, int accessoryBottomMarginPx) {
-        if (mPreferences == null || !mPreferences.isTerminalFlushDockEnabled())
-            return 0;
+    static boolean shouldRequestTerminalResize(boolean requested, boolean heightChanged,
+                                               boolean marginChanged, boolean keyboardShownChanged) {
+        return requested && (heightChanged || marginChanged || keyboardShownChanged);
+    }
+
+    private int resolveTerminalFlushDockPaddingPx(int accessoryContentHeightPx,
+                                                  int accessoryBottomMarginPx) {
+        // Always-on since the flush-dock toggle was removed from Screen settings: the stored
+        // preference (possibly still false from the short-lived toggle) must not gate this,
+        // or the sub-line remainder band above the dock returns with no UI to fix it.
         if (mTerminalView == null || mTerminalView.mRenderer == null
             || mTerminalView.getWidth() <= 0 || mTerminalView.getHeight() <= 0)
             return mAppliedTerminalFlushPaddingPx;
@@ -4255,15 +6189,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View rootRelativeLayout = findViewById(R.id.activity_termux_root_relative_layout);
         if (rootRelativeLayout == null || rootRelativeLayout.getHeight() <= 0)
             return mAppliedTerminalFlushPaddingPx;
-        // Structural base: the height the terminal will settle at once the dock content (without
-        // any flush padding) is laid out. Deliberately NOT derived from the terminal's current
+        // Structural base: the height the terminal will settle at once all accessory content
+        // (without any flush padding) is laid out. Deliberately NOT derived from the terminal's current
         // height — mid-relayout passes (e.g. multi-row extra keys toggling with the IME) would
         // feed the previously applied padding back in and make the result oscillate.
         rootRelativeLayout.getLocationInWindow(mTmpViewLocation);
         int accessoryBottomWindowY = mTmpViewLocation[1] + rootRelativeLayout.getHeight() - accessoryBottomMarginPx;
         mTerminalView.getLocationInWindow(mTmpViewLocation);
         int terminalTopWindowY = mTmpViewLocation[1];
-        int baseTerminalHeightPx = accessoryBottomWindowY - dockContentHeightPx - terminalTopWindowY;
+        int baseTerminalHeightPx = accessoryBottomWindowY - accessoryContentHeightPx - terminalTopWindowY;
         if (baseTerminalHeightPx <= 0)
             return mAppliedTerminalFlushPaddingPx;
         int availableTerminalHeightPx = Math.max(0,
@@ -4303,7 +6237,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
-    private int resolveAccessoryStackBottomMarginPx() {
+    private int resolveAccessoryStackBottomMarginPx(@NonNull AccessoryRenderState state) {
+        // The embedded keyboard is an ordinary bottom child. Root/decor inset policy already keeps
+        // it above navigation bars, so a floating-dock gap must not be inserted beneath it.
+        if (state.keyboardShown)
+            return mImeLiftPx;
         // The capsule floats, so it keeps its bottom gap even when the keyboard is up — otherwise it
         // sits flush against the keyboard. Non-capsule styles stay flush.
         if (!isValarieDockStyle()) {
@@ -4366,7 +6304,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int extraKeysInset = isValarieDockStyle() ? resolveDockCapsuleExtraKeysInsetPx() : 0;
         int surfaceInset = isValarieDockStyle() ? resolveDockCapsuleHorizontalMarginPx() : 0;
         int appsTopPadding = isValarieDockStyle() ? resolveDockCapsuleAppsTopPaddingPx() : resolveDefaultDockAppsTopPaddingPx();
-        int appsBottomPadding = isValarieDockStyle() ? resolveDockCapsuleAppsBottomPaddingPx() : 0;
+        int appsBottomPadding = isValarieDockStyle() ? resolveDockCapsuleAppsBottomPaddingPx() : resolveDefaultDockAppsBottomPaddingPx();
         // The apps row reads with more side padding than the A–Z row because its icons are
         // space-between (half a slot of empty space at each edge). Trim the apps-row inset ~18%
         // so the icons sit closer to the edges and line up better with the A–Z row's letter span.
@@ -4398,7 +6336,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int resolveDockAppsBarHeightHintPx(int appsBarHeightPx) {
         int appsTopPadding = isValarieDockStyle() ? resolveDockCapsuleAppsTopPaddingPx() : resolveDefaultDockAppsTopPaddingPx();
-        int appsBottomPadding = isValarieDockStyle() ? resolveDockCapsuleAppsBottomPaddingPx() : 0;
+        int appsBottomPadding = isValarieDockStyle() ? resolveDockCapsuleAppsBottomPaddingPx() : resolveDefaultDockAppsBottomPaddingPx();
         return Math.max(0, appsBarHeightPx - appsTopPadding - appsBottomPadding);
     }
 
@@ -4420,15 +6358,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float normalizedScale = resolveDockSizeProgress(barHeightScale);
         float defaultDockProgress = resolveDefaultDockSizeProgress(barHeightScale);
         boolean appsRowEnabled = mPreferences.isAppLauncherAppsRowEnabled();
-        // The floating capsule needs its own (larger) size curve: the old capsule "large" was barely
-        // usable, so it becomes the new "default" and the presets fan out around it with meaningful
-        // steps below and headroom above. The default dock shifts its render curve so the current
-        // Large size becomes the visual Default without changing the shared preference buckets.
-        float heightFactor = isValarieDockStyle()
-            ? (1.12f + (normalizedScale * 0.60f))
-            : (1.00f + (defaultDockProgress * 0.52f));
         int appsBarHeightPx = appsRowEnabled
-            ? Math.max(0, Math.round(getDockBaseToolbarHeightPx() * heightFactor) + Math.max(0, additionalAppsBarHeightPx))
+            ? resolveDockAppsBarHeightPx(normalizedScale, defaultDockProgress,
+                Math.max(0, additionalAppsBarHeightPx))
             : 0;
 
         boolean azEnabled = appsRowEnabled && mPreferences.isAppLauncherAzRowEnabled();
@@ -4438,6 +6370,45 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int interRowGapPx = indicatorBandHeightPx;
 
         return new DockLayoutMetrics(appsBarHeightPx, indicatorBandHeightPx, azRowHeightPx, interRowGapPx);
+    }
+
+    /**
+     * Keeps the old row/icon result as each preset's baseline, then allocates enough extra row
+     * height for the new icon curve. This makes the requested icon-size bump real in pixels while
+     * preserving the smallest preset and the fixed A-Z/extra-keys heights.
+     */
+    private int resolveDockAppsBarHeightPx(float normalizedScale, float defaultDockProgress,
+                                           int additionalAppsBarHeightPx) {
+        boolean capsule = isValarieDockStyle();
+        float baselineHeightFactor = capsule
+            ? (1.12f + (normalizedScale * 0.60f))
+            : (1.00f + (defaultDockProgress * 0.52f));
+        int baselineRowHeightPx = Math.round(getDockBaseToolbarHeightPx() * baselineHeightFactor);
+        int verticalPaddingPx = capsule
+            ? resolveDockCapsuleAppsTopPaddingPx() + resolveDockCapsuleAppsBottomPaddingPx()
+            : resolveDefaultDockAppsTopPaddingPx() + resolveDefaultDockAppsBottomPaddingPx();
+        int twoDpPx = Math.round(dpToPx(2));
+        int minUsablePx = Math.round(dpToPx(24));
+        int baselineHintPx = Math.max(0, baselineRowHeightPx - verticalPaddingPx);
+        int baselineUsablePx = Math.max(minUsablePx, baselineHintPx - twoDpPx);
+
+        float baselineIconScale = capsule
+            ? (1.52f + (normalizedScale * 0.76f))
+            : (1.08f + (defaultDockProgress * 0.42f));
+        float targetIconScale = capsule
+            ? resolveCapsuleDockIconScaleForProgress(normalizedScale)
+            : resolveDefaultDockIconScaleForProgress(defaultDockProgress);
+        float requestedIconGrowth = targetIconScale / Math.max(0.0001f, baselineIconScale);
+        if (Math.abs(requestedIconGrowth - 1f) < 0.0001f) {
+            return Math.max(0, baselineRowHeightPx + additionalAppsBarHeightPx);
+        }
+
+        int baselineIconPx = Math.round(baselineUsablePx
+            * AccessoryStackLayoutPolicy.computeDockIconFillRatio(baselineIconScale));
+        int targetIconPx = Math.max(1, Math.round(baselineIconPx * requestedIconGrowth));
+        float targetFill = AccessoryStackLayoutPolicy.computeDockIconFillRatio(targetIconScale);
+        int targetUsablePx = Math.max(minUsablePx, Math.round(targetIconPx / targetFill));
+        return Math.max(0, targetUsablePx + twoDpPx + verticalPaddingPx + additionalAppsBarHeightPx);
     }
 
     private float resolveDockSizeProgress(float barHeightScale) {
@@ -4456,16 +6427,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float barHeightScale = mPreferences.getAppLauncherBarHeightScale();
         float normalized = resolveDockSizeProgress(barHeightScale);
         if (isValarieDockStyle()) {
-            // Capsule rides its own larger, wider icon curve. The default preset (~0.73 progress) now
-            // lands near the old capsule "largest" icon size, the top preset adds real headroom, and
-            // the smaller presets step down gently — so every capsule size is comfortably sized.
-            return 1.52f + (normalized * 0.76f);
+            return resolveCapsuleDockIconScaleForProgress(normalized);
         }
-        // The default edge-to-edge dock has a page-indicator band directly below the icons and a
-        // 1.08x press lift. Shift only this style so the current Large icon size becomes Default,
-        // then give Large a small amount of new headroom above it.
         float defaultDockProgress = resolveDefaultDockSizeProgress(barHeightScale);
-        return 1.08f + (defaultDockProgress * 0.42f);
+        return resolveDefaultDockIconScaleForProgress(defaultDockProgress);
+    }
+
+    static float resolveDefaultDockIconScaleForProgress(float defaultDockProgress) {
+        return AccessoryStackLayoutPolicy.interpolatePresetCurve(defaultDockProgress,
+            DEFAULT_DOCK_ICON_PROGRESS_POINTS, DEFAULT_DOCK_ICON_SCALE_POINTS);
+    }
+
+    static float resolveCapsuleDockIconScaleForProgress(float normalizedProgress) {
+        return AccessoryStackLayoutPolicy.interpolatePresetCurve(normalizedProgress,
+            CAPSULE_DOCK_ICON_PROGRESS_POINTS, CAPSULE_DOCK_ICON_SCALE_POINTS);
     }
 
     private void applyDockLayoutMetrics(@NonNull DockLayoutMetrics metrics) {
@@ -4924,6 +6899,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case CONTEXT_MENU_KILL_PROCESS_ID:
                 showKillSessionDialog(session);
                 return true;
+            case CONTEXT_MENU_GLASS_LAB_ID:
+                enterDockTuningMode();
+                return true;
             default:
                 return false;
         }
@@ -4947,6 +6925,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? R.string.action_disable_background_image
                 : R.string.action_enable_background_image)
         ));
+        items.add(new TerminalActionItem(CONTEXT_MENU_GLASS_LAB_ID, getString(R.string.action_glass_lab)));
         // Appearance and Apps & Access are reachable from the Settings page; keep this sheet lean.
         items.add(new TerminalActionItem(CONTEXT_MENU_SETTINGS_ID, getString(R.string.action_open_settings)));
         items.add(new TerminalActionItem(CONTEXT_MENU_RESET_TERMINAL_ID, getString(R.string.action_reset_terminal)));
@@ -4974,7 +6953,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @SuppressLint("RtlHardcoded")
     @Override
     public void onBackPressed() {
-        if (getDrawer().isDrawerOpen(Gravity.LEFT)) {
+        if (mDockTuningMode) {
+            exitDockTuningMode();
+        } else if (getDrawer().isDrawerOpen(Gravity.LEFT)) {
             getDrawer().closeDrawers();
         } else if (!getDrawer().isDrawerOpen(Gravity.LEFT)) {
             getDrawer().openDrawer(Gravity.LEFT);
@@ -5334,6 +7315,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         mAccessoryBackdropDirty = true;
         mDecorNavBarBackdropDirty = true;
+        mInAppKeyboardBackdropDirty = true;
         scheduleAccessoryRenderSync("window:focus");
         restartAccessoryBlurHeartbeat();
         scheduleAccessoryBlurRecovery();
@@ -5624,6 +7606,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 });
                 return;
             }
+            if (v.getId() == R.id.inapp_keyboard_container) {
+                // The desired height was measured independently before the stack height was set.
+                // Only retry if the laid-out child disagrees; equality is the stable terminal state
+                // and prevents layout -> requestLayout -> layout cycles.
+                if (height != mDesiredInAppKeyboardHeightPx) {
+                    v.post(() -> {
+                        if (!isFinishing() && !isDestroyed()
+                            && v.getHeight() != mDesiredInAppKeyboardHeightPx) {
+                            mDesiredInAppKeyboardHeightPx = 0;
+                            mInAppKeyboardHeightDirty = true;
+                            applyAccessoryGeometryIfNeeded(true, "inapp-keyboard:height");
+                        }
+                    });
+                } else {
+                    scheduleAccessoryRenderSync("inapp-keyboard:layout");
+                }
+                return;
+            }
             scheduleAccessoryRenderSync("accessory:layout");
         };
         int[] watchIds = {
@@ -5632,7 +7632,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             R.id.apps_bar_viewpager,
             R.id.apps_bar_indicator_band,
             R.id.apps_bar_az_row,
-            R.id.terminal_toolbar_view_pager
+            R.id.terminal_toolbar_view_pager,
+            R.id.inapp_keyboard_container
         };
         for (int watchId : watchIds) {
             View watchView = findViewById(watchId);
@@ -5652,7 +7653,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             R.id.apps_bar_viewpager,
             R.id.apps_bar_indicator_band,
             R.id.apps_bar_az_row,
-            R.id.terminal_toolbar_view_pager
+            R.id.terminal_toolbar_view_pager,
+            R.id.inapp_keyboard_container
         };
         for (int watchId : watchIds) {
             View watchView = findViewById(watchId);
@@ -5693,17 +7695,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mAccessoryBackdropDirty = true;
             mDecorNavBarBackdropDirty = true;
         }
-        mPendingAccessoryRenderReason = reason;
         if (mAccessoryRenderSyncPending) {
             return;
         }
         mAccessoryRenderSyncPending = true;
         mAccessoryRenderHandler.post(mAccessoryRenderSyncRunnable);
-    }
-
-    private void syncTerminalOverlayBottomInsetToAccessoryHeight() {
-        // Terminal glass layers now live inside terminal_surface_host, which already ends above the
-        // accessory stack. There is no separate terminal inset layer left to sync here.
     }
 
     private void enforceAccessoryFxInvariants() {
@@ -5722,29 +7718,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         updateAzOverflowAffordance();
-    }
-
-    private void logAccessoryRenderSnapshot(@NonNull String reason) {
-        if (!ACCESSORY_RENDER_TRACE) {
-            return;
-        }
-        View accessoryContainer = findViewById(R.id.accessory_stack_container);
-        View azFxOverlay = findViewById(R.id.apps_bar_az_fx_overlay);
-        View azFxUnderlay = findViewById(R.id.apps_bar_az_fx_underlay);
-        View appsBar = findViewById(R.id.apps_bar_viewpager);
-        long now = SystemClock.uptimeMillis();
-        long delta = mLastAccessoryRenderSyncUptimeMs == 0L ? 0L : now - mLastAccessoryRenderSyncUptimeMs;
-        mLastAccessoryRenderSyncUptimeMs = now;
-        Logger.logVerbose(
-            LOG_TAG,
-            "AccessorySync reason=" + reason +
-                " dt=" + delta +
-                " ime=" + mLastImeVisible +
-                " accessoryVis=" + (accessoryContainer != null ? accessoryContainer.getVisibility() : -1) +
-                " appsBarVis=" + (appsBar != null ? appsBar.getVisibility() : -1) +
-                " fxU=" + (azFxUnderlay != null ? azFxUnderlay.getVisibility() : -1) +
-                " fxO=" + (azFxOverlay != null ? azFxOverlay.getVisibility() : -1)
-        );
     }
 
     private void scheduleSuggestionBarPackageRefresh(boolean immediate, boolean forceCatalogRefresh) {
@@ -5926,6 +7899,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncTerminalWallpaperRenderingMode();
         updateWindowBackgroundForCurrentSession();
         FileReceiverActivity.updateFileReceiverActivityComponentsState(this);
+        initializeInAppKeyboard(null);
+        if (mInAppKeyboard != null)
+            mInAppKeyboard.onPreferencesReloaded();
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onReloadActivityStyling();
         if (mTermuxTerminalViewClient != null)
@@ -6027,6 +8003,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mSource.setColorFilter(colorFilter);
             invalidateSelf();
         }
+
+        @Override
+        public int getOpacity() {
+            return mSource.getOpacity();
+        }
+    }
+
+    /** Drawable delegate whose pixels participate in rendering but never in wrap-content sizing. */
+    static final class LayoutNeutralDrawable extends Drawable {
+        @NonNull private final Drawable mSource;
+
+        LayoutNeutralDrawable(@NonNull Drawable source) {
+            mSource = source;
+        }
+
+        @Override
+        public void draw(@NonNull Canvas canvas) {
+            mSource.setBounds(getBounds());
+            mSource.draw(canvas);
+        }
+
+        @Override
+        protected void onBoundsChange(Rect bounds) {
+            mSource.setBounds(bounds);
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+            mSource.setAlpha(alpha);
+            invalidateSelf();
+        }
+
+        @Override
+        public void setColorFilter(@Nullable ColorFilter colorFilter) {
+            mSource.setColorFilter(colorFilter);
+            invalidateSelf();
+        }
+
+        @Override public int getIntrinsicWidth() { return 0; }
+        @Override public int getIntrinsicHeight() { return 0; }
+        @Override public int getMinimumWidth() { return 0; }
+        @Override public int getMinimumHeight() { return 0; }
 
         @Override
         public int getOpacity() {

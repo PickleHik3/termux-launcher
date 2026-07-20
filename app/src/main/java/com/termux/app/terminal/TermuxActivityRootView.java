@@ -78,8 +78,12 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
     private static final String LOG_TAG = "TermuxActivityRootView";
 
     private static int mStatusBarHeight;
+    /** Suppresses duplicate layout commits that arrive within roughly one display frame. */
     private static final long MIN_MARGIN_UPDATE_INTERVAL_MS = 18L;
+    /** Treats one-pixel visible-frame drift as measurement noise. */
     private static final int BOTTOM_MARGIN_NOISE_PX = 1;
+    /** Lets the visible-frame probe settle before resetting a workaround margin. */
+    private static final long MARGIN_RESET_SETTLE_MS = 40L;
 
     private long mLastMarginCommitTimeMs;
 
@@ -129,7 +133,30 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
     @Override
     public void onGlobalLayout() {
         if (mActivity == null || !mActivity.isVisible()) return;
-        if (mActivity.shouldDelayRootMarginAdjustments()) return;
+
+        // A resumed launcher may inherit the previous app's visible-frame/IME snapshot. Until an
+        // input flow in this activity requests the IME, force the terminal and dock to the bottom.
+        if (!mActivity.shouldAcceptSystemImeLayout()) {
+            FrameLayout.LayoutParams inheritedParams = (FrameLayout.LayoutParams) getLayoutParams();
+            if (inheritedParams.bottomMargin != 0) commitBottomMargin(inheritedParams, 0);
+            marginBottom = 0;
+            lastMarginBottom = 0;
+            return;
+        }
+
+        // The embedded keyboard suppresses the system IME for the whole activity; any "IME
+        // visible" reading below is then a stale visible-frame artifact carried over from the
+        // app we resumed from, and lifting the root for it shoves the terminal and keyboard
+        // toward the top of the screen.
+        if (mActivity.isSystemImeSuppressedByInAppKeyboard()) {
+            FrameLayout.LayoutParams suppressedParams = (FrameLayout.LayoutParams) getLayoutParams();
+            if (suppressedParams.bottomMargin != 0) {
+                commitBottomMargin(suppressedParams, 0);
+            }
+            marginBottom = 0;
+            lastMarginBottom = 0;
+            return;
+        }
 
         // While system bars are hidden the visible-frame probe below is unreliable and the dock is
         // lifted above the IME via insets instead; keep the root margin at 0 so both mechanisms
@@ -209,7 +236,7 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
                 // if its greater than 0, which was already above the keyboard creating x2x margin.
                 // Adding time check since moving split screen divider in landscape causes jitter
                 // and prevents some infinite loops
-                if ((System.currentTimeMillis() - lastMarginBottomTime) > 40) {
+                if ((System.currentTimeMillis() - lastMarginBottomTime) > MARGIN_RESET_SETTLE_MS) {
                     lastMarginBottomTime = System.currentTimeMillis();
                     marginBottom = 0;
                 } else {
@@ -227,7 +254,7 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
             // onGlobalLayout: Bottom margin already equals 0
             if (isVisibleBecauseExtraMargin) {
                 // Adding time check since prevents infinite loops, like in landscape mode in freeform mode in Taskbar
-                if ((System.currentTimeMillis() - lastMarginBottomExtraTime) > 40) {
+                if ((System.currentTimeMillis() - lastMarginBottomExtraTime) > MARGIN_RESET_SETTLE_MS) {
                     if (root_view_logging_enabled)
                         Logger.logVerbose(LOG_TAG, "Resetting margin since visible due to extra margin");
                     lastMarginBottomExtraTime = System.currentTimeMillis();
@@ -321,7 +348,8 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
         if (params.bottomMargin == targetBottomMargin) return;
         long now = SystemClock.uptimeMillis();
         int delta = Math.abs(params.bottomMargin - targetBottomMargin);
-        if (delta <= 1 && (now - mLastMarginCommitTimeMs) < MIN_MARGIN_UPDATE_INTERVAL_MS) return;
+        if (delta <= BOTTOM_MARGIN_NOISE_PX
+            && (now - mLastMarginCommitTimeMs) < MIN_MARGIN_UPDATE_INTERVAL_MS) return;
         params.setMargins(0, 0, 0, targetBottomMargin);
         setLayoutParams(params);
         mLastMarginCommitTimeMs = now;

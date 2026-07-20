@@ -30,7 +30,6 @@
     <string name="action_autofill_password">ป้อนรหัสผ่านอัตโนมัติ</string>
     <string name="action_reset_terminal">รีเซ็ต</string>
     <string name="action_set_background_image">ตั้งภาพพื้นหลัง</string>
-    <string name="action_remove_background_image">ลบภาพพื้นหลัง</string>
     <string name="action_open_settings">ตั้งค่า</string>
     <string name="action_report_issue">รายงานปัญหา</string>
     <string name="action_font_and_color">ฟอนต์และสี</string>

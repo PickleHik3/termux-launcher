@@ -41,7 +41,6 @@
     <string name="action_reset_terminal">Lähtesta</string>
     <string name="action_kill_process">Peata protsess (%d)</string>
     <string name="action_toggle_keep_screen_on">Hoia ekraan sisse lülitatuna</string>
-    <string name="action_remove_background_image">Eemalda taustapilt</string>
     <string name="action_open_help">Abi</string>
     <string name="action_open_settings">Sätted</string>
     <string name="action_styling_install">Paigalda</string>

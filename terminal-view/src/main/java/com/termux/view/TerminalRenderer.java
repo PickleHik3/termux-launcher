@@ -28,6 +28,7 @@ public final class TerminalRenderer {
     final Typeface mItalicTypeface;
 
     private final Paint mTextPaint = new Paint();
+    private Typeface mCurrentTypeface;
 
     /**
      * The width of a single mono spaced character obtained by {@link Paint#measureText(String)} on a single 'X'.
@@ -50,6 +51,7 @@ public final class TerminalRenderer {
     final int mFontLineSpacingAndAscent;
 
     private final float[] asciiMeasures = new float[127];
+    private final RectF mSixelRect = new RectF();
 
     /**
      * The width of a single mono spaced character obtained by {@link Paint#measureText(String)} on a single 'X'.
@@ -150,8 +152,8 @@ public final class TerminalRenderer {
                     if (bm != null) {
                         float left = horizontalOffset + column * mFontWidth;
                         float top = heightOffset - mFontLineSpacing;
-                        RectF r = new RectF(left, top, left + mFontWidth, top + mFontLineSpacing);
-                        canvas.drawBitmap(mEmulator.getScreen().getSixelBitmap(codePoint, style), mEmulator.getScreen().getSixelRect(codePoint, style), r, null);
+                        mSixelRect.set(left, top, left + mFontWidth, top + mFontLineSpacing);
+                        canvas.drawBitmap(mEmulator.getScreen().getSixelBitmap(codePoint, style), mEmulator.getScreen().getSixelRect(codePoint, style), mSixelRect, null);
                     }
                     column += 1;
                     measuredWidthForRun = 0.f;
@@ -281,9 +283,11 @@ public final class TerminalRenderer {
                 blue = blue * 2 / 3;
                 foreColor = 0xFF000000 + (red << 16) + (green << 8) + blue;
             }
-            mTextPaint.setTypeface(mTypeface);
-            if (italic)
-                mTextPaint.setTypeface(mItalicTypeface);
+            Typeface desiredTypeface = italic ? mItalicTypeface : mTypeface;
+            if (desiredTypeface != mCurrentTypeface) {
+                mTextPaint.setTypeface(desiredTypeface);
+                mCurrentTypeface = desiredTypeface;
+            }
             mTextPaint.setFakeBoldText(bold);
             mTextPaint.setUnderlineText(underline);
             mTextPaint.setTextSkewX(0.f);

@@ -63,7 +63,6 @@
     <string name="action_style_terminal">Gaya</string>
     <string name="action_font_and_color">Huruf dan Warna</string>
     <string name="action_set_background_image">Atur gambar latar belakang</string>
-    <string name="action_remove_background_image">Hapus gambar latar belakang</string>
     <string name="action_toggle_keep_screen_on">Biarkan layar tetap menyala</string>
     <string name="notification_action_wake_lock">Dapatkan wakelock</string>
     <string name="notification_action_wake_unlock">Lepaskan wakelock</string>

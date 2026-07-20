@@ -31,7 +31,6 @@ public class DockEdgeGlowView extends View {
     private static final float MAX_TILT_DEG = 4f;
 
     private final Paint rimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rimRect = new RectF();
     private final RectF tmpRect = new RectF();
     private final Matrix sweepMatrix = new Matrix();
@@ -43,6 +42,17 @@ public class DockEdgeGlowView extends View {
     private float glowLevel = 0f;       // 0..1 overall intensity (fades in on press, out on release)
     private float tiltAmount = 0f;      // 0..1 normalized plank tilt magnitude
     private float hotAngleDeg = -90f;   // perimeter angle the edge light pools toward (screen space)
+    private int launchCollisionColor = accentColor;
+    private float launchCollisionLevel;
+
+    // Cached SweepGradient: rebuild only when color/size inputs change.
+    private SweepGradient mSweepGradient;
+    private int mSweepAccent;
+    private int mSweepHot;
+    private int mSweepFaint;
+    private int mSweepDim;
+    private float mSweepW;
+    private float mSweepH;
 
     public DockEdgeGlowView(Context context) {
         super(context);
@@ -64,8 +74,6 @@ public class DockEdgeGlowView extends View {
         rimPaint.setStrokeCap(Paint.Cap.ROUND);
         rimPaint.setStrokeJoin(Paint.Join.ROUND);
         rimPaint.setDither(true);
-        fillPaint.setStyle(Paint.Style.FILL);
-        fillPaint.setDither(true);
         setWillNotDraw(false);
     }
 
@@ -104,6 +112,13 @@ public class DockEdgeGlowView extends View {
         invalidate();
     }
 
+    /** Brief inward wall response when a capsule launch wave reaches its rounded boundary. */
+    public void setLaunchCollisionState(int color, float level) {
+        launchCollisionColor = color;
+        launchCollisionLevel = clamp01(level);
+        invalidate();
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         int w = getWidth();
@@ -124,8 +139,27 @@ public class DockEdgeGlowView extends View {
         // backdrop (API 33+). This view only adds the INTERACTIVE response on touch: an accent rim
         // that swells under the finger and a specular catch-light that glides with the tilt. At rest
         // (touch == 0) it draws nothing, so there is no static "inside rim" line over the glass.
-        if (touch <= 0.02f && tiltAmount <= 0.02f) {
+        if (touch <= 0.02f && tiltAmount <= 0.02f && launchCollisionLevel <= 0.02f) {
             return;
+        }
+        if (launchCollisionLevel > 0.02f) {
+            rimPaint.setShader(null);
+            // Echo the impact inward in successively fainter bands. Because every band is an inset
+            // rounded rect, the response follows the capsule wall instead of exposing clipped
+            // circular lobes where the launch wave meets it.
+            for (int band = 0; band < 3; band++) {
+                float inward = density * band * (4.5f + 2.5f * launchCollisionLevel);
+                tmpRect.set(rimRect);
+                tmpRect.inset(inward, inward);
+                if (tmpRect.isEmpty()) break;
+                float bandFade = 1f - band * 0.28f;
+                rimPaint.setStrokeWidth(density
+                    * (3.2f + 3.8f * launchCollisionLevel - band * 0.55f));
+                rimPaint.setColor(withAlpha(launchCollisionColor,
+                    Math.round(112f * launchCollisionLevel * bandFade)));
+                canvas.drawRoundRect(tmpRect, Math.max(0f, r - inward),
+                    Math.max(0f, r - inward), rimPaint);
+            }
         }
         rimPaint.setShader(null);
         rimPaint.setStrokeWidth(density * (1.15f + (0.55f * touch)));
@@ -150,10 +184,21 @@ public class DockEdgeGlowView extends View {
             sweepColors[2] = faint;
             sweepColors[3] = dim;
             sweepColors[4] = hot;
-            SweepGradient sweep = new SweepGradient(cx, cy, sweepColors, sweepStops);
-            sweepMatrix.setRotate(hotAngleDeg, cx, cy);
-            sweep.setLocalMatrix(sweepMatrix);
-            rimPaint.setShader(sweep);
+            if (mSweepGradient == null || mSweepAccent != accentColor || mSweepHot != hot
+                || mSweepFaint != faint || mSweepDim != dim || mSweepW != w || mSweepH != h) {
+                mSweepAccent = accentColor;
+                mSweepHot = hot;
+                mSweepFaint = faint;
+                mSweepDim = dim;
+                mSweepW = w;
+                mSweepH = h;
+                // Create a unit gradient at the origin; the local matrix positions/rotates it.
+                mSweepGradient = new SweepGradient(0f, 0f, sweepColors, sweepStops);
+            }
+            sweepMatrix.setTranslate(cx, cy);
+            sweepMatrix.postRotate(hotAngleDeg);
+            mSweepGradient.setLocalMatrix(sweepMatrix);
+            rimPaint.setShader(mSweepGradient);
             rimPaint.setStrokeWidth((density * 1.6f) + (density * 2.4f * Math.max(tiltAmount, touch * 0.45f)));
             rimPaint.setColor(Color.WHITE); // colour comes from the shader
             canvas.drawRoundRect(rimRect, r, r, rimPaint);

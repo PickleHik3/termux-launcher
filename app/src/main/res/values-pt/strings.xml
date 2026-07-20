@@ -62,7 +62,6 @@
     <string name="action_style_terminal">Aparência</string>
     <string name="action_font_and_color">Fontes e Cores</string>
     <string name="action_set_background_image">Definir Papel de parede</string>
-    <string name="action_remove_background_image">Remover Papel de parede</string>
     <string name="action_toggle_keep_screen_on">Manter a tela ativa</string>
     <string name="action_open_help">Ajuda</string>
     <string name="action_open_settings">Configurações</string>

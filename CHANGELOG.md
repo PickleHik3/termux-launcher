@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.29-vaj
+
+VAJ edition (`io.vaj.tl`), pinned to the verified aarch64 APT bootstrap and the signed `https://repo.pathayam.xyz stable main` repository.
+
+### Added
+
+- **Built-in terminal keyboard** — an embedded on-screen keyboard (a trimmed Unexpected-Keyboard port) for the terminal: themes, a per-key color-scheme creator, dock-matched glass, size/shape and key-spacing tuning, optional key haptics and press sounds, a custom label font, configurable extra keys, custom `~/.termux/keyboard/layout.xml` support, and a settings page linking the upstream layout docs.
+- **Onboarding tour** — a replayable first-run showcase with per-page screen-recording preview clips; reachable from Settings → System & Info → Quick start tour.
+- **Glass Labs** — a live appearance tuner for the terminal, dock, and sessions menu (style, size, per-page icon count, blur/opacity/grain).
+
+### Changed
+
+- Unified the glass treatment across dock, keyboard, sessions menu, and navigation strip.
+- Improved adaptive light-mode terminal colors.
+- Moved the quick-start tour into Settings → System & Info and added a feedback link.
+
+### Fixed
+
+- The rotate/circle gesture now capitalizes letters even when a custom layout binds Fn to every letter (Shift now wins over the Fn modmap for letter keys).
+- A-Z rail swipe-up intent is classified from recent motion, with sticky locks, to stop accidental launches.
+- Per-icon ripple color extraction and softer ripple rendering; artwork-hugging search focus outline; dock-style pill rendering.
+
 ## 0.2.28-vaj
 
 VAJ edition (`io.vaj.tl`), pinned to the verified aarch64 APT bootstrap and the signed `https://repo.pathayam.xyz stable main` repository.

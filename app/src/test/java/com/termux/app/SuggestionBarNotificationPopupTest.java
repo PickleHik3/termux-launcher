@@ -29,4 +29,11 @@ public class SuggestionBarNotificationPopupTest {
     public void adaptiveWidth_capsOversizedActionRows() {
         assertEquals(900, SuggestionBarView.adaptiveNotificationPopupWidth(500, 1100, 240, 900));
     }
+
+    @Test
+    public void autoReply_opensOnlyForOneUnambiguousDestination() {
+        org.junit.Assert.assertFalse(SuggestionBarView.shouldAutoOpenNotificationReply(0));
+        org.junit.Assert.assertTrue(SuggestionBarView.shouldAutoOpenNotificationReply(1));
+        org.junit.Assert.assertFalse(SuggestionBarView.shouldAutoOpenNotificationReply(2));
+    }
 }

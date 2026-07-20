@@ -24,6 +24,12 @@ import java.util.Calendar;
 public final class LauncherIconResolver {
     private static final int COMPOSE_SIZE_PX = 192;
 
+    // Guarded by the synchronized composeUnmappedIcon() method; result bitmaps remain per call.
+    private final Paint composePaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private final Rect composeFullBounds = new Rect(0, 0, COMPOSE_SIZE_PX, COMPOSE_SIZE_PX);
+    private final Rect composeTargetBounds = new Rect();
+    private final Rect composeOldDrawableBounds = new Rect();
+
     public static final class ResolvedIcon {
         @Nullable public final Drawable drawable;
         public final boolean iconPackArtwork;
@@ -200,7 +206,7 @@ public final class LauncherIconResolver {
     }
 
     @Nullable
-    private Drawable composeUnmappedIcon(
+    private synchronized Drawable composeUnmappedIcon(
         @NonNull IconPack pack,
         @NonNull AppRef ref,
         @Nullable Drawable systemFallback
@@ -215,27 +221,26 @@ public final class LauncherIconResolver {
 
         Bitmap result = Bitmap.createBitmap(COMPOSE_SIZE_PX, COMPOSE_SIZE_PX, Bitmap.Config.ARGB_8888);
         Canvas resultCanvas = new Canvas(result);
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-        drawLayer(resultCanvas, back, new Rect(0, 0, COMPOSE_SIZE_PX, COMPOSE_SIZE_PX));
+        drawLayer(resultCanvas, back, composeFullBounds);
 
         Bitmap foreground = Bitmap.createBitmap(COMPOSE_SIZE_PX, COMPOSE_SIZE_PX, Bitmap.Config.ARGB_8888);
         Canvas foregroundCanvas = new Canvas(foreground);
         float safeScale = Math.max(0.1f, Math.min(1.5f, pack.scale));
         int targetSize = Math.max(1, Math.round(COMPOSE_SIZE_PX * safeScale));
         int offset = (COMPOSE_SIZE_PX - targetSize) / 2;
-        drawLayer(foregroundCanvas, systemIcon,
-            new Rect(offset, offset, offset + targetSize, offset + targetSize));
+        composeTargetBounds.set(offset, offset, offset + targetSize, offset + targetSize);
+        drawLayer(foregroundCanvas, systemIcon, composeTargetBounds);
         if (mask != null) {
             Bitmap maskBitmap = Bitmap.createBitmap(COMPOSE_SIZE_PX, COMPOSE_SIZE_PX, Bitmap.Config.ARGB_8888);
-            drawLayer(new Canvas(maskBitmap), mask, new Rect(0, 0, COMPOSE_SIZE_PX, COMPOSE_SIZE_PX));
-            paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_OUT));
-            foregroundCanvas.drawBitmap(maskBitmap, 0f, 0f, paint);
-            paint.setXfermode(null);
+            drawLayer(new Canvas(maskBitmap), mask, composeFullBounds);
+            composePaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_OUT));
+            foregroundCanvas.drawBitmap(maskBitmap, 0f, 0f, composePaint);
+            composePaint.setXfermode(null);
             maskBitmap.recycle();
         }
-        resultCanvas.drawBitmap(foreground, 0f, 0f, paint);
+        resultCanvas.drawBitmap(foreground, 0f, 0f, composePaint);
         foreground.recycle();
-        drawLayer(resultCanvas, upon, new Rect(0, 0, COMPOSE_SIZE_PX, COMPOSE_SIZE_PX));
+        drawLayer(resultCanvas, upon, composeFullBounds);
         return new BitmapDrawable(context.getResources(), result);
     }
 
@@ -251,16 +256,16 @@ public final class LauncherIconResolver {
         return loadDrawableFromPack(packageName, names.get(index));
     }
 
-    private static void drawLayer(
+    private void drawLayer(
         @NonNull Canvas canvas,
         @Nullable Drawable drawable,
         @NonNull Rect bounds
     ) {
         if (drawable == null) return;
-        Rect oldBounds = new Rect(drawable.getBounds());
+        composeOldDrawableBounds.set(drawable.getBounds());
         drawable.setBounds(bounds);
         drawable.draw(canvas);
-        drawable.setBounds(oldBounds);
+        drawable.setBounds(composeOldDrawableBounds);
     }
 
     @Nullable

@@ -29,7 +29,6 @@
     <string name="title_confirm_kill_process">واقعا این نشست را می‌کشید؟</string>
     <string name="action_font_and_color">فونت و رنگ</string>
     <string name="action_set_background_image">نشاندن تصویر پس‌زمینه</string>
-    <string name="action_remove_background_image">برداشتن تصویر پس‌زمینه</string>
     <string name="action_open_help">راهنما</string>
     <string name="action_styling_install">نصب</string>
     <string name="notification_action_exit">خروج</string>

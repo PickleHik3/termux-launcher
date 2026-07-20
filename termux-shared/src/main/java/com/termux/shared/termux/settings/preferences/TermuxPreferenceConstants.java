@@ -188,22 +188,6 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_APP_LAUNCHER_BW_ICONS = false;
 
-
-        /**
-         * Defines the key for harmonizing app icons with the dock (consistent footprint, soft
-         * shadow, slight saturation match) without requiring a custom icon pack.
-         */
-        public static final String KEY_APP_LAUNCHER_UNIFY_ICONS = "app_launcher_unify_icons";
-
-        public static final boolean DEFAULT_APP_LAUNCHER_UNIFY_ICONS = true;
-
-        /**
-         * Defines the key for the soft drop shadow behind dock app icons.
-         */
-        public static final String KEY_APP_LAUNCHER_ICON_SHADOW = "app_launcher_icon_shadow";
-
-        public static final boolean DEFAULT_APP_LAUNCHER_ICON_SHADOW = true;
-
         /**
          * Defines the selected launcher icon-pack package.
          */
@@ -217,13 +201,6 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_APP_LAUNCHER_PINNED_ICON_PACK_PACKAGE = "app_launcher_pinned_icon_pack_package";
 
         public static final String DEFAULT_APP_LAUNCHER_PINNED_ICON_PACK_PACKAGE = "";
-
-        /**
-         * Defines the key for app launcher icon scale.
-         */
-        public static final String KEY_APP_LAUNCHER_ICON_SCALE = "app_launcher_icon_scale";
-
-        public static final float DEFAULT_APP_LAUNCHER_ICON_SCALE = 1.55f;
 
         /**
          * Defines the key for typed pinned apps/folders launcher configuration.
@@ -245,6 +222,11 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_APP_LAUNCHER_AZ_ROW_ENABLED = "app_launcher_az_row_enabled";
 
         public static final boolean DEFAULT_APP_LAUNCHER_AZ_ROW_ENABLED = true;
+
+        /** Defines whether A-Z and app-row focus changes emit subtle haptic ticks. */
+        public static final String KEY_APP_LAUNCHER_ROW_HAPTICS = "app_launcher_row_haptics";
+
+        public static final boolean DEFAULT_APP_LAUNCHER_ROW_HAPTICS = true;
 
         /**
          * Defines the key for enabling double-tap on A-Z row to lock screen.
@@ -287,6 +269,107 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_SOFT_KEYBOARD_ENABLED = "soft_keyboard_enabled";
 
         public static final boolean DEFAULT_VALUE_KEY_SOFT_KEYBOARD_ENABLED = true;
+
+        /**
+         * Defines the key for whether the in-app keyboard will be enabled.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_ENABLED = "in_app_keyboard_enabled";
+
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_ENABLED = false;
+
+        /**
+         * Defines the key for the in-app keyboard color theme.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_THEME = "in_app_keyboard_theme";
+
+        public static final String DEFAULT_IN_APP_KEYBOARD_THEME = "system";
+
+        /** JSON containing user-edited swatches and per-key keyboard color assignments. */
+        public static final String KEY_IN_APP_KEYBOARD_COLOR_SCHEME =
+            "in_app_keyboard_color_scheme";
+
+        public static final String DEFAULT_IN_APP_KEYBOARD_COLOR_SCHEME = "";
+
+        /**
+         * Defines the key for how the in-app keyboard matches the launcher dock:
+         * {@code none}, {@code shape} (capsule geometry follows the dock style),
+         * {@code glass} (the theme is rendered on the dock's glass surface), or {@code both}.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_DOCK_MATCH = "in_app_keyboard_dock_match";
+
+        public static final String DEFAULT_IN_APP_KEYBOARD_DOCK_MATCH = "both";
+
+        /** Defines the key for whether keypresses trigger haptic feedback. */
+        public static final String KEY_IN_APP_KEYBOARD_HAPTICS_ENABLED =
+            "in_app_keyboard_haptics_enabled";
+
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_HAPTICS_ENABLED = true;
+
+        /** Defines the key for whether keypresses play the system keypress sound. */
+        public static final String KEY_IN_APP_KEYBOARD_KEY_SOUND_ENABLED =
+            "in_app_keyboard_key_sound_enabled";
+
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_KEY_SOUND_ENABLED = false;
+
+        /**
+         * Defines the key for the absolute path of a user-imported label font file,
+         * or an empty string for the system default typeface.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_FONT_PATH = "in_app_keyboard_font_path";
+
+        public static final String DEFAULT_IN_APP_KEYBOARD_FONT_PATH = "";
+
+        /**
+         * Defines the key for the comma-joined list of extra key names merged into the in-app
+         * keyboard layout. An empty string means "none enabled"; the
+         * {@link #DEFAULT_IN_APP_KEYBOARD_EXTRA_KEYS} sentinel means the user never chose a
+         * selection and the built-in defaults apply.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_EXTRA_KEYS = "in_app_keyboard_extra_keys";
+
+        public static final String DEFAULT_IN_APP_KEYBOARD_EXTRA_KEYS = "__default__";
+
+        /** Defines the persisted height scale for the in-app keyboard. */
+        public static final String KEY_IN_APP_KEYBOARD_HEIGHT_SCALE = "in_app_keyboard_height_scale";
+
+        // Default-dock baseline tuned on Pong (1080x2412). Height is drag-based, so retain the
+        // exact confirmed value; spacing and radius below are discrete slider steps.
+        public static final float DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.0830541f;
+
+        /** Default keyboard height for the Valarie capsule dock, tuned on Pong. */
+        public static final float DEFAULT_VALARIE_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.1109314f;
+
+        public static final float MIN_IN_APP_KEYBOARD_HEIGHT_SCALE = 0.5f;
+
+        public static final float MAX_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.6f;
+
+        /** Defines the persisted multiplier for both in-app keyboard key-margin ratios. */
+        public static final String KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE =
+            "in_app_keyboard_key_margin_scale";
+
+        public static final float DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 2.96f;
+
+        /** Default key spacing for the Valarie capsule dock, tuned on Pong. */
+        public static final float DEFAULT_VALARIE_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 2.57f;
+
+        public static final float MIN_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 0.0f;
+
+        // The default margin ratios are ~2-3px on a 1080p-wide keyboard, so a small multiplier
+        // ceiling is visually imperceptible; 8x tops out around a clearly visible 18-24px gap.
+        public static final float MAX_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 8.0f;
+
+        /** Defines the persisted key corner radius in dp, or -1 for the palette default. */
+        public static final String KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP =
+            "in_app_keyboard_key_corner_radius_dp";
+
+        public static final float DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 2.7f;
+
+        /** Default key radius for the Valarie capsule dock, tuned on Pong. */
+        public static final float DEFAULT_VALARIE_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 12.0f;
+
+        public static final float MIN_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 0.0f;
+
+        public static final float MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 24.0f;
 
         /**
          * Defines the key for whether the soft keyboard will be enabled only if no hardware keyboard
@@ -448,34 +531,6 @@ public final class TermuxPreferenceConstants {
 
         public static final int DEFAULT_VALUE_MANAGED_WALLPAPER_SYSTEM_ID = -1;
         
-        /**
-         * Defines the key for whether extrakeys blur is enabled or not.
-         */
-        public static final String KEY_EXTRAKEYS_BLUR_ENABLED = "extrakeys_blur_enabled";
-
-        public static final boolean DEFAULT_VALUE_EXTRAKEYS_BLUR_ENABLED = false;
-        
-        /**
-         * Defines the key for whether sessions blur is enabled or not.
-         */
-        public static final String KEY_SESSIONS_BLUR_ENABLED = "sessions_blur_enabled";
-
-        public static final boolean DEFAULT_VALUE_SESSIONS_BLUR_ENABLED = false;
-        
-        /**
-         * Defines the key for whether monet background is enabled or not.
-         */
-        public static final String KEY_MONET_BACKGROUND_ENABLED = "monet_background_enabled";
-
-        public static final boolean DEFAULT_VALUE_MONET_BACKGROUND_ENABLED = false;
-
-        /**
-         * Defines the key for whether monet color should be used for the terminal background overlay.
-         */
-        public static final String KEY_MONET_OVERLAY_ENABLED = "monet_overlay_enabled";
-
-        public static final boolean DEFAULT_VALUE_MONET_OVERLAY_ENABLED = false;
-
         /**
          * Defines the key for whether terminal colors should follow Material dynamic colors.
          */

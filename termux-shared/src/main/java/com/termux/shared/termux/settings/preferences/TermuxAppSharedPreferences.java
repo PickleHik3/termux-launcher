@@ -93,7 +93,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public void setAppLauncherButtonCount(int value) {
-        SharedPreferenceUtils.setIntStoredAsString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_BUTTON_COUNT, value, false);
+        SharedPreferenceUtils.setIntStoredAsString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_BUTTON_COUNT, DataUtils.clamp(value, 1, 20), false);
     }
 
     public String getAppLauncherInputChar() {
@@ -130,7 +131,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public void setAppLauncherBarHeightScale(float value) {
-        SharedPreferenceUtils.setFloat(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT, value, false);
+        SharedPreferenceUtils.setFloat(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT,
+            Math.max(0.4f, Math.min(3.0f, value)), false);
     }
 
     public String getAppLauncherDockStyle() {
@@ -153,8 +155,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public boolean isAppLauncherDisplayAppNamesEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DISPLAY_APP_NAMES,
-            TERMUX_APP.DEFAULT_APP_LAUNCHER_DISPLAY_APP_NAMES);
+        // App names are always shown; no longer user-configurable.
+        return true;
     }
 
     public void setAppLauncherDisplayAppNamesEnabled(boolean value) {
@@ -167,22 +169,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setAppLauncherBwIconsEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_BW_ICONS, value, false);
-    }
-
-    public boolean isAppLauncherUnifyIconsEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_UNIFY_ICONS, TERMUX_APP.DEFAULT_APP_LAUNCHER_UNIFY_ICONS);
-    }
-
-    public void setAppLauncherUnifyIconsEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_UNIFY_ICONS, value, false);
-    }
-
-    public boolean isAppLauncherIconShadowEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_ICON_SHADOW, TERMUX_APP.DEFAULT_APP_LAUNCHER_ICON_SHADOW);
-    }
-
-    public void setAppLauncherIconShadowEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_ICON_SHADOW, value, false);
     }
 
     public String getAppLauncherIconPackPackage() {
@@ -201,16 +187,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setAppLauncherPinnedIconPackPackage(String value) {
         SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_PINNED_ICON_PACK_PACKAGE, value == null ? "" : value, true);
-    }
-
-    public float getAppLauncherIconScale() {
-        float iconScale = SharedPreferenceUtils.getFloat(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_ICON_SCALE, TERMUX_APP.DEFAULT_APP_LAUNCHER_ICON_SCALE);
-        return DataUtils.rangedOrDefault(iconScale, TERMUX_APP.DEFAULT_APP_LAUNCHER_ICON_SCALE, 1.0f, 1.8f);
-    }
-
-    public void setAppLauncherIconScale(float value) {
-        float clamped = Math.max(1.0f, Math.min(1.8f, value));
-        SharedPreferenceUtils.setFloat(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_ICON_SCALE, clamped, false);
     }
 
     public String getAppLauncherPinnedItemsV2() {
@@ -274,6 +250,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setAppLauncherAzRowEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_AZ_ROW_ENABLED, value, false);
+    }
+
+    public boolean isAppLauncherRowHapticsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_ROW_HAPTICS,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_ROW_HAPTICS);
+    }
+
+    public void setAppLauncherRowHapticsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_ROW_HAPTICS, value, false);
     }
 
     public boolean isAppLauncherAzDoubleTapLockEnabled() {
@@ -428,6 +415,274 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setSoftKeyboardEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_SOFT_KEYBOARD_ENABLED, value, false);
+    }
+
+    public boolean isInAppKeyboardEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_IN_APP_KEYBOARD_ENABLED, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_ENABLED);
+    }
+
+    public void setInAppKeyboardEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_IN_APP_KEYBOARD_ENABLED, value, false);
+    }
+
+    public String getInAppKeyboardTheme() {
+        String value = SharedPreferenceUtils.getString(
+            mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_THEME,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_THEME,
+            true
+        );
+        if (isValidInAppKeyboardTheme(value))
+            return value;
+        return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_THEME;
+    }
+
+    public void setInAppKeyboardTheme(String value) {
+        if (!isValidInAppKeyboardTheme(value))
+            value = TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_THEME;
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_IN_APP_KEYBOARD_THEME, value, false);
+    }
+
+    public String getInAppKeyboardColorScheme() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_COLOR_SCHEME,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_COLOR_SCHEME, true);
+        return value == null ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_COLOR_SCHEME : value;
+    }
+
+    public void setInAppKeyboardColorScheme(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_COLOR_SCHEME,
+            value == null ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_COLOR_SCHEME : value, false);
+    }
+
+    private static boolean isValidInAppKeyboardTheme(String value) {
+        if (value == null) return false;
+        switch (value) {
+            case "system":
+            case "light":
+            case "dark":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /** Dock-match mode: {@code none}, {@code shape}, {@code glass}, or {@code both}. */
+    public String getInAppKeyboardDockMatch() {
+        String value = SharedPreferenceUtils.getString(
+            mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_DOCK_MATCH,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_DOCK_MATCH,
+            true
+        );
+        if (isValidInAppKeyboardDockMatch(value))
+            return value;
+        return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_DOCK_MATCH;
+    }
+
+    public void setInAppKeyboardDockMatch(String value) {
+        if (!isValidInAppKeyboardDockMatch(value))
+            value = TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_DOCK_MATCH;
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_DOCK_MATCH, value, false);
+    }
+
+    private static boolean isValidInAppKeyboardDockMatch(String value) {
+        if (value == null) return false;
+        switch (value) {
+            case "none":
+            case "shape":
+            case "glass":
+            case "both":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public boolean isInAppKeyboardHapticsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_HAPTICS_ENABLED,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HAPTICS_ENABLED);
+    }
+
+    public void setInAppKeyboardHapticsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_HAPTICS_ENABLED, value, false);
+    }
+
+    public boolean isInAppKeyboardKeySoundEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_SOUND_ENABLED,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_SOUND_ENABLED);
+    }
+
+    public void setInAppKeyboardKeySoundEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_SOUND_ENABLED, value, false);
+    }
+
+    /** Absolute path of the imported label font file, or empty for the default typeface. */
+    public String getInAppKeyboardFontPath() {
+        String value = SharedPreferenceUtils.getString(
+            mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_FONT_PATH,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FONT_PATH,
+            true
+        );
+        return value == null ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FONT_PATH : value;
+    }
+
+    public void setInAppKeyboardFontPath(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_FONT_PATH,
+            value == null ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FONT_PATH : value, false);
+    }
+
+    /** Extra-key names selectable for merging into the in-app keyboard layout, in catalog order. */
+    public static final String[] IN_APP_KEYBOARD_EXTRA_KEY_NAMES = {
+        "tab", "esc", "capslock", "compose", "home", "end", "page_up", "page_down",
+        "copy", "paste", "cut", "selectAll", "undo", "redo",
+        "delete_word", "forward_delete_word", "shareText", "pasteAsPlainText",
+        "switch_greekmath", "meta", "alt", "superscript", "subscript",
+        "f11_placeholder", "f12_placeholder", "menu", "scroll_lock",
+        "€", "ß", "£", "§", "†", "ª", "º",
+        "accent_aigu", "accent_grave", "accent_circonflexe", "accent_tilde",
+        "accent_cedille", "accent_trema", "accent_ring", "accent_caron",
+        "accent_macron", "accent_ogonek", "accent_breve", "accent_dot_above",
+        "accent_double_aigu", "accent_slash", "accent_bar"
+    };
+
+    /**
+     * Comma-joined subset of {@link #IN_APP_KEYBOARD_EXTRA_KEY_NAMES} in canonical order (an
+     * empty string means "none enabled"), or the
+     * {@link TERMUX_APP#DEFAULT_IN_APP_KEYBOARD_EXTRA_KEYS} sentinel when the user never chose
+     * a selection and the built-in defaults apply.
+     */
+    public String getInAppKeyboardExtraKeys() {
+        String value = SharedPreferenceUtils.getString(
+            mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_EXTRA_KEYS,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_EXTRA_KEYS,
+            true
+        );
+        return normalizeInAppKeyboardExtraKeys(value);
+    }
+
+    public void setInAppKeyboardExtraKeys(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_EXTRA_KEYS,
+            normalizeInAppKeyboardExtraKeys(value), false);
+    }
+
+    /**
+     * Drops unknown names and rewrites the survivors in canonical catalog order. The
+     * never-chose sentinel (and {@code null}) pass through unchanged; an empty string is a
+     * valid "none enabled" selection.
+     */
+    public static String normalizeInAppKeyboardExtraKeys(String value) {
+        if (value == null || TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_EXTRA_KEYS.equals(value))
+            return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_EXTRA_KEYS;
+        if (value.isEmpty())
+            return "";
+        java.util.Set<String> selected = new java.util.HashSet<>(
+            java.util.Arrays.asList(value.split(",")));
+        StringBuilder result = new StringBuilder();
+        for (String name : IN_APP_KEYBOARD_EXTRA_KEY_NAMES) {
+            if (!selected.contains(name)) continue;
+            if (result.length() > 0) result.append(',');
+            result.append(name);
+        }
+        return result.toString();
+    }
+
+    public float getInAppKeyboardHeightScale() {
+        float defaultValue = getDefaultInAppKeyboardHeightScale();
+        float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            defaultValue);
+        if (Float.isNaN(value) || Float.isInfinite(value)) return defaultValue;
+        return clampInAppKeyboardHeightScale(value);
+    }
+
+    public void setInAppKeyboardHeightScale(float value) {
+        SharedPreferenceUtils.setFloat(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            clampInAppKeyboardHeightScale(value), false);
+    }
+
+    public static float clampInAppKeyboardHeightScale(float value) {
+        if (Float.isNaN(value) || Float.isInfinite(value))
+            return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE;
+        return Math.max(TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE, value));
+    }
+
+    public float getInAppKeyboardKeyMarginScale() {
+        float defaultValue = getDefaultInAppKeyboardKeyMarginScale();
+        float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
+            defaultValue);
+        if (Float.isNaN(value) || Float.isInfinite(value)) return defaultValue;
+        return clampInAppKeyboardKeyMarginScale(value);
+    }
+
+    public void setInAppKeyboardKeyMarginScale(float value) {
+        SharedPreferenceUtils.setFloat(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
+            clampInAppKeyboardKeyMarginScale(value), false);
+    }
+
+    public static float clampInAppKeyboardKeyMarginScale(float value) {
+        if (Float.isNaN(value) || Float.isInfinite(value))
+            return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE;
+        return Math.max(TERMUX_APP.MIN_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
+            Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_MARGIN_SCALE, value));
+    }
+
+    public float getInAppKeyboardKeyCornerRadiusDp() {
+        float defaultValue = getDefaultInAppKeyboardKeyCornerRadiusDp();
+        float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP,
+            defaultValue);
+        if (Float.isNaN(value) || Float.isInfinite(value) || value < 0f) return defaultValue;
+        return clampInAppKeyboardKeyCornerRadiusDp(value);
+    }
+
+    private boolean usesValarieInAppKeyboardDefaults() {
+        return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_VALARIE_CAPSULE.equals(
+            getAppLauncherDockStyle());
+    }
+
+    private float getDefaultInAppKeyboardHeightScale() {
+        return usesValarieInAppKeyboardDefaults()
+            ? TERMUX_APP.DEFAULT_VALARIE_IN_APP_KEYBOARD_HEIGHT_SCALE
+            : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE;
+    }
+
+    private float getDefaultInAppKeyboardKeyMarginScale() {
+        return usesValarieInAppKeyboardDefaults()
+            ? TERMUX_APP.DEFAULT_VALARIE_IN_APP_KEYBOARD_KEY_MARGIN_SCALE
+            : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE;
+    }
+
+    private float getDefaultInAppKeyboardKeyCornerRadiusDp() {
+        return usesValarieInAppKeyboardDefaults()
+            ? TERMUX_APP.DEFAULT_VALARIE_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP
+            : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP;
+    }
+
+    public void setInAppKeyboardKeyCornerRadiusDp(float value) {
+        SharedPreferenceUtils.setFloat(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP,
+            clampInAppKeyboardKeyCornerRadiusDp(value), false);
+    }
+
+    public static float clampInAppKeyboardKeyCornerRadiusDp(float value) {
+        if (Float.isNaN(value) || Float.isInfinite(value) || value < 0f)
+            return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP;
+        return Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP, value);
     }
 
     public boolean isSoftKeyboardEnabledOnlyIfNoHardware() {
@@ -594,11 +849,12 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public int getExtraKeysBlurRadius() {
         int radius = SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, TERMUX_APP.DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS);
-        return Math.max(radius, 0);
+        return DataUtils.clamp(radius, 0, 30);
     }
 
     public void setExtraKeysBlurRadius(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, Math.max(value, 0), false);
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS,
+            DataUtils.clamp(value, 0, 30), false);
     }
 
     public int getDockGlassGrain() {
@@ -711,30 +967,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         setExtraKeysBlurRadius(value ? Math.max(1, getExtraKeysBlurRadius()) : 0);
     }
     
-    public boolean isSessionsBlurEnabled() {
-        return false;
-    }
-    
-    public void setSessionsBlurEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_SESSIONS_BLUR_ENABLED, false, false);
-    }
-    
-    public boolean isMonetBackgroundEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_MONET_BACKGROUND_ENABLED, TERMUX_APP.DEFAULT_VALUE_MONET_BACKGROUND_ENABLED);
-    }
-    
-    public void setMonetBackgroundEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_MONET_BACKGROUND_ENABLED, value, false);
-    }
-
-    public boolean isMonetOverlayEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_MONET_OVERLAY_ENABLED, TERMUX_APP.DEFAULT_VALUE_MONET_OVERLAY_ENABLED);
-    }
-
-    public void setMonetOverlayEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_MONET_OVERLAY_ENABLED, value, false);
-    }
-
     public boolean isTerminalDynamicColorsEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_DYNAMIC_COLORS_ENABLED, TERMUX_APP.DEFAULT_VALUE_TERMINAL_DYNAMIC_COLORS_ENABLED);
     }

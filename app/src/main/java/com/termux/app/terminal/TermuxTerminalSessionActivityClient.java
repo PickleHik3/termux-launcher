@@ -34,6 +34,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.Properties;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * The {@link TerminalSessionClient} implementation that may require an {@link Activity} for its interface methods.
@@ -44,6 +46,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     private static final int MAX_SESSIONS = 8;
     private static final long FOREGROUND_REFRESH_DEFER_MS = 120L;
+    private static final ExecutorService MATERIAL_COLOR_FILE_EXECUTOR =
+        Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "termux-material-color-writer");
+            thread.setDaemon(true);
+            return thread;
+        });
 
     private SoundPool mBellSoundPool;
 
@@ -524,7 +532,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             if (mActivity.getPreferences() != null && mActivity.getPreferences().isTerminalDynamicColorsEnabled()) {
                 props = MaterialTerminalColorScheme.create(mActivity);
                 mLastMaterialTerminalPaletteSignature = MaterialTerminalColorScheme.signature(mActivity);
-                MaterialTerminalColorScheme.writeMaterialColorFiles(mActivity);
+                MATERIAL_COLOR_FILE_EXECUTOR.execute(() -> {
+                    try {
+                        MaterialTerminalColorScheme.writeMaterialColorFiles(mActivity);
+                    } catch (Exception e) {
+                        Logger.logStackTraceWithMessage(LOG_TAG,
+                            "Error writing material color files", e);
+                    }
+                });
             } else {
                 props = new Properties();
                 mLastMaterialTerminalPaletteSignature = 0;
