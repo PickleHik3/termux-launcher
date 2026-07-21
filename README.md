@@ -102,16 +102,16 @@ bind -n M-w run-shell 'tmux display-message "Opening WhatsApp"; launcherctl laun
 
 <table>
   <tr>
-    <td><img src="screenshots/1.png" alt="Home screen" width="320"></td>
-    <td><img src="screenshots/2.png" alt="Apps bar" width="320"></td>
+    <td align="center"><img src="screenshots/1.png" alt="sigye terminal clock" width="240"><br><sub>sigye</sub></td>
+    <td align="center"><img src="screenshots/2.png" alt="Sixel image in the launcher terminal" width="240"><br><sub>Sixel image</sub></td>
+    <td align="center"><img src="screenshots/3.png" alt="kew music player in the launcher terminal" width="240"><br><sub>kew</sub></td>
+    <td align="center"><img src="screenshots/4.png" alt="btop system monitor" width="240"><br><sub>btop</sub></td>
   </tr>
   <tr>
-    <td><img src="screenshots/3.png" alt="Settings" width="320"></td>
-    <td><img src="screenshots/4.png" alt="Light theme" width="320"></td>
-  </tr>
-  <tr>
-    <td><img src="screenshots/5.png" alt="On-device Termux AI" width="320"></td>
-    <td><img src="screenshots/6.png" alt="Notification popup" width="320"></td>
+    <td align="center"><img src="screenshots/5.png" alt="In-app keyboard preferences" width="240"><br><sub>In-app keyboard</sub></td>
+    <td align="center"><img src="screenshots/6.png" alt="Termux Launcher settings" width="240"><br><sub>Settings</sub></td>
+    <td align="center"><img src="screenshots/7.png" alt="Quick reply from a pinned app notification" width="240"><br><sub>Quick Reply</sub></td>
+    <td align="center"><img src="screenshots/8.png" alt="Glass customization panel" width="240"><br><sub>Glass Customization</sub></td>
   </tr>
 </table>
 

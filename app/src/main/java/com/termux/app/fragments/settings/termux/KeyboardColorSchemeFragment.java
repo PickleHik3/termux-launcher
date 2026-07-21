@@ -33,6 +33,7 @@ import com.google.android.material.materialswitch.MaterialSwitch;
 import com.termux.R;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory;
+import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.io.BufferedReader;
@@ -75,8 +76,10 @@ public class KeyboardColorSchemeFragment extends Fragment {
     private MaterialButton mImportButton;
     private static final String STATE_ADVANCED = "advanced";
     private static final int MAX_BASE16_BYTES = 262144;
-    private static final String BASE16_SCHEME_URL =
-        "https://raw.githubusercontent.com/tinted-theming/schemes/spec-0.11/base16/%s.yaml";
+    private static final String TINTED_SCHEME_URL =
+        "https://raw.githubusercontent.com/tinted-theming/schemes/spec-0.11/%s/%s.yaml";
+    private static final String TINTED_GALLERY_URL =
+        "https://tinted-theming.github.io/tinted-gallery/";
     private final ExecutorService mImportExecutor = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "base16-theme-import");
         thread.setDaemon(true);
@@ -128,7 +131,8 @@ public class KeyboardColorSchemeFragment extends Fragment {
         Theme.Palette palette = "glass".equals(dockMatch) || "both".equals(dockMatch)
             ? InAppKeyboardPaletteFactory.createGlass(context, theme)
             : InAppKeyboardPaletteFactory.create(context, theme);
-        palette = mScheme.applyToPalette(palette);
+        if (mScheme.shouldApplyImportedPalette(theme))
+            palette = mScheme.applyToPalette(palette);
         mKeyboard = new Keyboard2View(context, config.build(), palette);
         KeyboardData previewLayout = KeyboardData.load(getResources(),
             juloo.keyboard2.R.xml.latn_qwerty_us);
@@ -195,6 +199,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.termux_keyboard_color_scheme_reset, (dialog, which) -> {
                 mPreferences.setInAppKeyboardColorScheme("");
+                mPreferences.setInAppKeyboardTheme("system");
                 mScheme = InAppKeyboardColorScheme.fromJson(requireContext(), "");
                 mSelectedSwatch = 0;
                 createSwatches();
@@ -204,14 +209,14 @@ public class KeyboardColorSchemeFragment extends Fragment {
         heading.addView(reset);
         MaterialButton edit = new MaterialButton(context, null,
             com.google.android.material.R.attr.materialButtonOutlinedStyle);
-        edit.setText(R.string.termux_keyboard_color_scheme_edit);
+        edit.setText(R.string.termux_keyboard_color_scheme_edit_colors);
         LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         editParams.setMarginStart(dp(8));
         edit.setOnClickListener(view -> {
             mEditingSwatches = !mEditingSwatches;
-            edit.setText(mEditingSwatches ? R.string.termux_keyboard_color_scheme_done
-                : R.string.termux_keyboard_color_scheme_edit);
+            edit.setText(mEditingSwatches ? R.string.termux_keyboard_color_scheme_save_colors
+                : R.string.termux_keyboard_color_scheme_edit_colors);
             updateSwatches();
         });
         heading.addView(edit, editParams);
@@ -231,7 +236,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         mImportButton = new MaterialButton(context, null,
             com.google.android.material.R.attr.materialButtonOutlinedStyle);
-        mImportButton.setText(R.string.termux_keyboard_color_scheme_import_base16);
+        mImportButton.setText(R.string.termux_keyboard_color_scheme_import_tinted);
         mImportButton.setVisibility(mAdvanced ? View.VISIBLE : View.GONE);
         mImportButton.setOnClickListener(view -> showBase16NameDialog());
         LinearLayout.LayoutParams importParams = new LinearLayout.LayoutParams(
@@ -412,7 +417,9 @@ public class KeyboardColorSchemeFragment extends Fragment {
         Theme.Palette palette = "glass".equals(dockMatch) || "both".equals(dockMatch)
             ? InAppKeyboardPaletteFactory.createGlass(requireContext(), theme)
             : InAppKeyboardPaletteFactory.create(requireContext(), theme);
-        mKeyboard.setPalette(mScheme.applyToPalette(palette));
+        if (mScheme.shouldApplyImportedPalette(theme))
+            palette = mScheme.applyToPalette(palette);
+        mKeyboard.setPalette(palette);
         mKeyboard.setKeyColorOverrides(mScheme.resolvedOverrides());
     }
 
@@ -429,19 +436,22 @@ public class KeyboardColorSchemeFragment extends Fragment {
                     throw new IOException("Theme file is too large");
                 text.append(buffer, 0, count);
             }
-            if (!mScheme.importBase16(text.toString())) {
+            if (!importTintedScheme(text.toString(), null)) {
                 Toast.makeText(requireContext(),
-                    R.string.termux_keyboard_color_scheme_base16_error, Toast.LENGTH_LONG).show();
+                    R.string.termux_keyboard_color_scheme_tinted_error, Toast.LENGTH_LONG).show();
                 return;
             }
+            mScheme.setImportedThemeId(getString(
+                R.string.termux_keyboard_color_scheme_imported_file_name));
+            mPreferences.setInAppKeyboardTheme("custom");
             mSelectedSwatch = 0;
             persistAndRender();
             createSwatches();
             Toast.makeText(requireContext(),
-                R.string.termux_keyboard_color_scheme_base16_imported, Toast.LENGTH_SHORT).show();
+                R.string.termux_keyboard_color_scheme_tinted_imported, Toast.LENGTH_SHORT).show();
         } catch (IOException | SecurityException e) {
             Toast.makeText(requireContext(),
-                R.string.termux_keyboard_color_scheme_base16_read_error, Toast.LENGTH_LONG).show();
+                R.string.termux_keyboard_color_scheme_tinted_read_error, Toast.LENGTH_LONG).show();
         }
     }
 
@@ -449,27 +459,40 @@ public class KeyboardColorSchemeFragment extends Fragment {
         EditText input = new EditText(requireContext());
         input.setSingleLine(true);
         input.setInputType(InputType.TYPE_CLASS_TEXT);
-        input.setHint(R.string.termux_keyboard_color_scheme_base16_name_hint);
+        input.setHint(R.string.termux_keyboard_color_scheme_tinted_name_hint);
+        LinearLayout dialogContent = new LinearLayout(requireContext());
+        dialogContent.setOrientation(LinearLayout.VERTICAL);
+        dialogContent.addView(input, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        TextView galleryLink = new TextView(requireContext());
+        galleryLink.setText(R.string.termux_keyboard_color_scheme_tinted_gallery_link);
+        galleryLink.setTextColor(MaterialColors.getColor(requireContext(),
+            com.google.android.material.R.attr.colorPrimary, Color.CYAN));
+        galleryLink.setPadding(0, dp(12), 0, dp(4));
+        galleryLink.setOnClickListener(view -> ShareUtils.openUrl(requireContext(),
+            TINTED_GALLERY_URL));
+        dialogContent.addView(galleryLink, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         int horizontal = dp(24);
         AlertDialog dialog = new AlertDialog.Builder(requireContext())
-            .setTitle(R.string.termux_keyboard_color_scheme_base16_name_title)
-            .setMessage(R.string.termux_keyboard_color_scheme_base16_name_message)
-            .setView(input, horizontal, 0, horizontal, 0)
+            .setTitle(R.string.termux_keyboard_color_scheme_tinted_name_title)
+            .setMessage(R.string.termux_keyboard_color_scheme_tinted_name_message)
+            .setView(dialogContent, horizontal, 0, horizontal, 0)
             .setNegativeButton(android.R.string.cancel, null)
-            .setNeutralButton(R.string.termux_keyboard_color_scheme_base16_choose_file,
+            .setNeutralButton(R.string.termux_keyboard_color_scheme_tinted_choose_file,
                 (ignored, which) -> launchBase16FilePicker())
-            .setPositiveButton(R.string.termux_keyboard_color_scheme_base16_import, null)
+            .setPositiveButton(R.string.termux_keyboard_color_scheme_tinted_import, null)
             .create();
         dialog.setOnShowListener(ignored -> {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
-                String slug = normalizeBase16Name(input.getText().toString());
-                if (slug == null) {
+                TintedSchemeId scheme = parseTintedSchemeId(input.getText().toString());
+                if (scheme == null) {
                     input.setError(getString(
-                        R.string.termux_keyboard_color_scheme_base16_name_error));
+                        R.string.termux_keyboard_color_scheme_tinted_name_error));
                     return;
                 }
                 dialog.dismiss();
-                downloadBase16(slug);
+                downloadTintedScheme(scheme);
             });
             input.requestFocus();
         });
@@ -484,31 +507,48 @@ public class KeyboardColorSchemeFragment extends Fragment {
 
     @Nullable
     static String normalizeBase16Name(@Nullable String name) {
+        TintedSchemeId scheme = parseTintedSchemeId(name);
+        return scheme == null ? null : scheme.slug;
+    }
+
+    @Nullable
+    static TintedSchemeId parseTintedSchemeId(@Nullable String name) {
         if (name == null) return null;
         String normalized = name.trim().toLowerCase(Locale.ROOT);
-        if (normalized.startsWith("base16-")) normalized = normalized.substring(7);
         normalized = normalized.replaceAll("[\\s_]+", "-")
             .replaceAll("[^a-z0-9-]", "-")
             .replaceAll("-+", "-")
             .replaceAll("^-|-$", "");
-        return normalized.isEmpty() || normalized.length() > 96 ? null : normalized;
+        if (normalized.isEmpty() || normalized.length() > 104) return null;
+        String system = "base16";
+        for (String candidate : new String[] {"base16", "base24", "tinted8"}) {
+            String prefix = candidate + "-";
+            if (normalized.startsWith(prefix)) {
+                system = candidate;
+                normalized = normalized.substring(prefix.length());
+                break;
+            }
+        }
+        return normalized.isEmpty() || normalized.length() > 96
+            ? null : new TintedSchemeId(system, normalized);
     }
 
-    private void downloadBase16(@NonNull String slug) {
+    private void downloadTintedScheme(@NonNull TintedSchemeId scheme) {
         Toast.makeText(requireContext(),
-            R.string.termux_keyboard_color_scheme_base16_downloading, Toast.LENGTH_SHORT).show();
+            R.string.termux_keyboard_color_scheme_tinted_downloading, Toast.LENGTH_SHORT).show();
         mImportExecutor.execute(() -> {
-            Base16Download result = fetchBase16(slug);
+            Base16Download result = fetchTintedScheme(scheme);
             if (!isAdded()) return;
-            requireActivity().runOnUiThread(() -> applyDownloadedBase16(result));
+            requireActivity().runOnUiThread(() -> applyDownloadedTintedScheme(result));
         });
     }
 
     @NonNull
-    private static Base16Download fetchBase16(@NonNull String slug) {
+    private static Base16Download fetchTintedScheme(@NonNull TintedSchemeId scheme) {
         HttpURLConnection connection = null;
         try {
-            URL url = new URL(String.format(Locale.ROOT, BASE16_SCHEME_URL, slug));
+            URL url = new URL(String.format(Locale.ROOT, TINTED_SCHEME_URL,
+                scheme.system, scheme.slug));
             connection = (HttpURLConnection) url.openConnection();
             connection.setConnectTimeout(8000);
             connection.setReadTimeout(8000);
@@ -522,7 +562,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
             try (InputStream stream = connection.getInputStream()) {
                 String text = readLimitedText(stream);
                 return text == null ? Base16Download.networkError()
-                    : Base16Download.success(text);
+                    : Base16Download.success(text, scheme.system, scheme.id());
             }
         } catch (IOException | SecurityException ignored) {
             return Base16Download.networkError();
@@ -544,29 +584,42 @@ public class KeyboardColorSchemeFragment extends Fragment {
         return text.toString();
     }
 
-    private void applyDownloadedBase16(@NonNull Base16Download result) {
+    private void applyDownloadedTintedScheme(@NonNull Base16Download result) {
         if (!isAdded() || mKeyboard == null) return;
         if (result.notFound) {
             Toast.makeText(requireContext(),
-                R.string.termux_keyboard_color_scheme_base16_not_found, Toast.LENGTH_LONG).show();
+                R.string.termux_keyboard_color_scheme_tinted_not_found, Toast.LENGTH_LONG).show();
             return;
         }
         if (result.text == null) {
             Toast.makeText(requireContext(),
-                R.string.termux_keyboard_color_scheme_base16_network_error,
+                R.string.termux_keyboard_color_scheme_tinted_network_error,
                 Toast.LENGTH_LONG).show();
             return;
         }
-        if (!mScheme.importBase16(result.text)) {
+        if (!importTintedScheme(result.text, result.system)) {
             Toast.makeText(requireContext(),
-                R.string.termux_keyboard_color_scheme_base16_error, Toast.LENGTH_LONG).show();
+                R.string.termux_keyboard_color_scheme_tinted_error, Toast.LENGTH_LONG).show();
             return;
         }
+        mScheme.setImportedThemeId(result.themeId);
+        mPreferences.setInAppKeyboardTheme("custom");
         mSelectedSwatch = 0;
         persistAndRender();
         createSwatches();
         Toast.makeText(requireContext(),
-            R.string.termux_keyboard_color_scheme_base16_imported, Toast.LENGTH_SHORT).show();
+            R.string.termux_keyboard_color_scheme_tinted_imported, Toast.LENGTH_SHORT).show();
+    }
+
+    private boolean importTintedScheme(@NonNull String text, @Nullable String system) {
+        if ("base16".equals(system))
+            return mScheme.importBasePalette(text, InAppKeyboardColorScheme.BASE16_COLOR_COUNT);
+        if ("base24".equals(system))
+            return mScheme.importBasePalette(text, InAppKeyboardColorScheme.BASE24_COLOR_COUNT);
+        if ("tinted8".equals(system)) return mScheme.importTinted8(text);
+        return mScheme.importBasePalette(text, InAppKeyboardColorScheme.BASE24_COLOR_COUNT)
+            || mScheme.importBasePalette(text, InAppKeyboardColorScheme.BASE16_COLOR_COUNT)
+            || mScheme.importTinted8(text);
     }
 
     @Override
@@ -577,24 +630,43 @@ public class KeyboardColorSchemeFragment extends Fragment {
 
     private static final class Base16Download {
         @Nullable final String text;
+        @Nullable final String system;
+        @Nullable final String themeId;
         final boolean notFound;
 
-        private Base16Download(@Nullable String text, boolean notFound) {
+        private Base16Download(@Nullable String text, @Nullable String system,
+                               @Nullable String themeId, boolean notFound) {
             this.text = text;
+            this.system = system;
+            this.themeId = themeId;
             this.notFound = notFound;
         }
 
-        static Base16Download success(@NonNull String text) {
-            return new Base16Download(text, false);
+        static Base16Download success(@NonNull String text, @NonNull String system,
+                                      @NonNull String themeId) {
+            return new Base16Download(text, system, themeId, false);
         }
 
         static Base16Download notFound() {
-            return new Base16Download(null, true);
+            return new Base16Download(null, null, null, true);
         }
 
         static Base16Download networkError() {
-            return new Base16Download(null, false);
+            return new Base16Download(null, null, null, false);
         }
+    }
+
+    static final class TintedSchemeId {
+        @NonNull final String system;
+        @NonNull final String slug;
+
+        TintedSchemeId(@NonNull String system, @NonNull String slug) {
+            this.system = system;
+            this.slug = slug;
+        }
+
+        @NonNull
+        String id() { return system + "-" + slug; }
     }
 
     @Override

@@ -169,8 +169,11 @@
 
         <activity
             android:name=".app.activities.SettingsActivity"
+            android:excludeFromRecents="true"
             android:exported="true"
             android:label="@string/title_activity_termux_settings"
+            android:launchMode="singleTask"
+            android:taskAffinity="${TERMUX_PACKAGE_NAME}.settings"
             android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
 
         <activity
