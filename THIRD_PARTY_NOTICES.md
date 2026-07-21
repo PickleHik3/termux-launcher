@@ -25,6 +25,9 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   arm64 native builds and a patched UTF-8 stream processor.
 - **nlohmann/json 3.11.2** — MIT — Copyright 2013–2022 Niels Lohmann. It is statically included in
   the MNN Android JNI library.
+- **Tinted Theming schemes** — MIT — imported on demand from
+  [tinted-theming/schemes](https://github.com/tinted-theming/schemes); palette authors remain
+  credited in the downloaded scheme metadata.
 
 ## Runtime libraries
 

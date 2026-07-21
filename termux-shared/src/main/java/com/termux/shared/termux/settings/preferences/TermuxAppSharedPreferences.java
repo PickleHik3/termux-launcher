@@ -462,6 +462,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             case "system":
             case "light":
             case "dark":
+            case "custom":
                 return true;
             default:
                 return false;

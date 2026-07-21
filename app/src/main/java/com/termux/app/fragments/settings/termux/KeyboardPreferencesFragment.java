@@ -14,6 +14,7 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import androidx.preference.ListPreference;
 import androidx.preference.MultiSelectListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceDataStore;
@@ -24,6 +25,7 @@ import com.termux.app.TermuxActivity;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardExtraKeys;
+import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.io.File;
@@ -75,6 +77,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         PreferenceManager preferenceManager = getPreferenceManager();
         preferenceManager.setPreferenceDataStore(KeyboardPreferencesDataStore.getInstance(context));
         setPreferencesFromResource(R.xml.termux_keyboard_preferences, rootKey);
+        refreshThemeEntries();
 
         Preference heightAdjustPreference = findPreference(KEY_HEIGHT_ADJUST);
         if (heightAdjustPreference != null) {
@@ -110,6 +113,38 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         bindLinkPreference(KEY_CREDITS_PLAY, UPSTREAM_PLAY_URL);
 
         SettingsLayoutUtils.applyScreenLayout(this);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        refreshThemeEntries();
+    }
+
+    private void refreshThemeEntries() {
+        Context context = getContext();
+        ListPreference preference = findPreference("in_app_keyboard_theme");
+        if (context == null || preference == null) return;
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
+        if (preferences == null) return;
+        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
+            preferences.getInAppKeyboardColorScheme());
+        String importedId = scheme.getImportedThemeId();
+        if (importedId.isEmpty()) {
+            preference.setEntries(R.array.termux_in_app_keyboard_theme_entries);
+            preference.setEntryValues(R.array.termux_in_app_keyboard_theme_values);
+            if ("custom".equals(preferences.getInAppKeyboardTheme()))
+                preferences.setInAppKeyboardTheme("system");
+        } else {
+            preference.setEntries(new CharSequence[] {
+                getString(R.string.termux_in_app_keyboard_theme_system),
+                getString(R.string.termux_in_app_keyboard_theme_light),
+                getString(R.string.termux_in_app_keyboard_theme_dark),
+                getString(R.string.termux_in_app_keyboard_theme_imported, importedId)
+            });
+            preference.setEntryValues(new CharSequence[] {"system", "light", "dark", "custom"});
+        }
+        preference.setValue(preferences.getInAppKeyboardTheme());
     }
 
     private void bindLinkPreference(@NonNull String key, @NonNull String url) {

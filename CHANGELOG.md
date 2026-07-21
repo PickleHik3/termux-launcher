@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.29-hotfix.1-vaj
+
+VAJ edition (`io.vaj.tl`), pinned to the verified aarch64 APT bootstrap and the signed `https://repo.pathayam.xyz stable main` repository.
+
+### Changed
+
+- Renamed the keyboard color editor to **Keyboard Colors** and clarified palette editing with **Edit colors** / **Save colors** actions.
+- Refreshed the README demo recording and screenshot gallery.
+- The standalone release now publishes only arm64-v8a, matching its aarch64-only bootstrap and package repository.
+
+### Fixed
+
+- The welcome tour's quick-setup action now opens the existing website setup section, which uses the maintained `setup-tmux-btop` script.
+- Keyboard themes can now be imported by the complete Base16, Base24, or Tinted8 ID shown in the Tinted Gallery, with a direct Gallery link in the import dialog.
+- Opening Settings no longer causes the launcher to briefly flash the Settings screen again when Home is pressed.
+
 ## 0.2.29-vaj
 
 VAJ edition (`io.vaj.tl`), pinned to the verified aarch64 APT bootstrap and the signed `https://repo.pathayam.xyz stable main` repository.

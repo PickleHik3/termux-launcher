@@ -51,6 +51,7 @@ public class InAppKeyboardColorSchemeTest {
         assertEquals(InAppKeyboardPaletteFactory.defaultEditorSwatches(context).length,
             scheme.swatchCount());
         assertEquals(0, scheme.resolvedOverrides().size());
+        assertEquals(InAppKeyboardColorScheme.BASE24_COLOR_COUNT, scheme.swatchCount());
     }
 
     @Test
@@ -73,12 +74,45 @@ public class InAppKeyboardColorSchemeTest {
     }
 
     @Test
+    public void importsCompleteBase24PaletteWithoutDroppingExtendedColors() {
+        Context context = ApplicationProvider.getApplicationContext();
+        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context, "");
+        StringBuilder yaml = new StringBuilder("system: base24\npalette:\n");
+        for (int i = 0; i < 24; i++)
+            yaml.append(String.format("  base%02X: \"%06x\"\n", i, 0x202020 + i));
+
+        assertTrue(scheme.importBasePalette(yaml.toString(),
+            InAppKeyboardColorScheme.BASE24_COLOR_COUNT));
+        scheme.setImportedThemeId("base24-test");
+        assertEquals(0xFF202037, scheme.getSwatch(23));
+        InAppKeyboardColorScheme restored = InAppKeyboardColorScheme.fromJson(context,
+            scheme.toJson());
+        assertEquals("base24-test", restored.getImportedThemeId());
+        assertTrue(restored.shouldApplyImportedPalette("custom"));
+    }
+
+    @Test
+    public void importsTinted8NamedPalette() {
+        Context context = ApplicationProvider.getApplicationContext();
+        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context, "");
+        String yaml = "palette:\n" +
+            "  black: '#101010'\n  white: '#f0f0f0'\n  red: '#ee1111'\n" +
+            "  yellow: '#eeee11'\n  green: '#11ee11'\n  cyan: '#11eeee'\n" +
+            "  blue: '#1111ee'\n  magenta: '#ee11ee'\n  orange: '#ee8811'\n";
+
+        assertTrue(scheme.importTinted8(yaml));
+        assertEquals(0xFF101010, scheme.getSwatch(0));
+        assertEquals(0xFFEE8811, scheme.getSwatch(9));
+        assertEquals(0xFF1111EE, scheme.getSwatch(13));
+    }
+
+    @Test
     public void migratesLegacySixSwatchesWithoutChangingTheirIndexes() {
         Context context = ApplicationProvider.getApplicationContext();
         InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
             "{\"swatches\":[-16777216,-16777215,-16777214,-16777213,-16777212,-16777211],\"keys\":{}}");
 
-        assertEquals(16, scheme.swatchCount());
+        assertEquals(InAppKeyboardColorScheme.BASE24_COLOR_COUNT, scheme.swatchCount());
         assertEquals(0xFF000002, scheme.getSwatch(2));
     }
 }

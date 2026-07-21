@@ -4,6 +4,7 @@ import android.content.Context;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -22,14 +23,18 @@ import juloo.keyboard2.Keyboard2View;
 public final class InAppKeyboardColorScheme {
 
     public static final int BASE16_COLOR_COUNT = 16;
-    private static final Pattern BASE16_LINE = Pattern.compile(
-        "(?im)^\\s*[\\\"']?base0([0-9a-f])[\\\"']?\\s*[:=]\\s*[\\\"']?#?([0-9a-f]{6})(?:[0-9a-f]{2})?[\\\"']?\\s*,?\\s*(?:#.*)?$");
+    public static final int BASE24_COLOR_COUNT = 24;
+    private static final Pattern BASE_COLOR_LINE = Pattern.compile(
+        "(?im)^\\s*[\\\"']?base([0-1][0-9a-f])[\\\"']?\\s*[:=]\\s*[\\\"']?#?([0-9a-f]{6})(?:[0-9a-f]{2})?[\\\"']?\\s*,?\\s*(?:#.*)?$");
+    private static final Pattern TINTED8_COLOR_LINE = Pattern.compile(
+        "(?im)^\\s*(black|white|red|yellow|green|cyan|blue|magenta|orange|gray)(?:-(bright|dim))?\\s*:\\s*[\\\"']?#?([0-9a-f]{6})[\\\"']?\\s*(?:#.*)?$");
 
     public enum Role { KEY_BACKGROUND, KEY_BORDER, PRIMARY, SECONDARY, SECONDARY_BOTTOM }
 
     private static final String JSON_SWATCHES = "swatches";
     private static final String JSON_KEYS = "keys";
     private static final String JSON_BASE16_PALETTE = "base16Palette";
+    private static final String JSON_IMPORTED_THEME_ID = "importedThemeId";
     private static final String JSON_BACKGROUND = "bg";
     private static final String JSON_BORDER = "border";
     private static final String JSON_PRIMARY = "primary";
@@ -39,6 +44,7 @@ public final class InAppKeyboardColorScheme {
     private final int[] mSwatches;
     private final Map<String, Assignment> mAssignments = new LinkedHashMap<>();
     private boolean mBase16Palette;
+    private String mImportedThemeId = "";
 
     private InAppKeyboardColorScheme(@NonNull int[] swatches) {
         mSwatches = swatches.clone();
@@ -61,6 +67,7 @@ public final class InAppKeyboardColorScheme {
             }
             JSONObject keys = root.optJSONObject(JSON_KEYS);
             scheme.mBase16Palette = root.optBoolean(JSON_BASE16_PALETTE, false);
+            scheme.mImportedThemeId = root.optString(JSON_IMPORTED_THEME_ID, "");
             if (keys != null) {
                 Iterator<String> ids = keys.keys();
                 while (ids.hasNext()) {
@@ -93,23 +100,101 @@ public final class InAppKeyboardColorScheme {
 
     public void setSwatch(int index, @ColorInt int color) { mSwatches[index] = color; }
 
-    /** Imports the canonical Base16 base00..base0F entries from YAML/JSON-style text. */
-    public boolean importBase16(@NonNull String text) {
-        int[] imported = new int[BASE16_COLOR_COUNT];
-        boolean[] found = new boolean[BASE16_COLOR_COUNT];
-        Matcher matcher = BASE16_LINE.matcher(text);
+    public boolean hasImportedPalette() { return mBase16Palette; }
+
+    @NonNull
+    public String getImportedThemeId() { return mImportedThemeId; }
+
+    public void setImportedThemeId(@Nullable String themeId) {
+        mImportedThemeId = themeId == null ? "" : themeId.trim();
+    }
+
+    /** Legacy imported palettes had no ID and remain enabled after upgrade. */
+    public boolean shouldApplyImportedPalette(@Nullable String selectedTheme) {
+        return "custom".equals(selectedTheme) || (mBase16Palette && mImportedThemeId.isEmpty());
+    }
+
+    /** Imports a Base16 or Base24 palette from Tinted Theming YAML/JSON-style text. */
+    public boolean importBasePalette(@NonNull String text, int colorCount) {
+        if (colorCount != BASE16_COLOR_COUNT && colorCount != BASE24_COLOR_COUNT)
+            return false;
+        int[] imported = new int[colorCount];
+        boolean[] found = new boolean[colorCount];
+        Matcher matcher = BASE_COLOR_LINE.matcher(text);
         while (matcher.find()) {
             int index = Integer.parseInt(matcher.group(1), 16);
+            if (index >= colorCount) continue;
             imported[index] = (int) (0xFF000000L | Long.parseLong(matcher.group(2), 16));
             found[index] = true;
         }
         for (boolean present : found) {
             if (!present) return false;
         }
-        if (mSwatches.length < BASE16_COLOR_COUNT) return false;
-        System.arraycopy(imported, 0, mSwatches, 0, BASE16_COLOR_COUNT);
+        if (mSwatches.length < colorCount) return false;
+        System.arraycopy(imported, 0, mSwatches, 0, colorCount);
         mBase16Palette = true;
         return true;
+    }
+
+    /** Backward-compatible Base16 entry point used by existing callers and persisted schemes. */
+    public boolean importBase16(@NonNull String text) {
+        return importBasePalette(text, BASE16_COLOR_COUNT);
+    }
+
+    /** Maps Tinted8's named ANSI palette into the keyboard's Base16-compatible semantic slots. */
+    public boolean importTinted8(@NonNull String text) {
+        Map<String, Integer> colors = new HashMap<>();
+        Matcher matcher = TINTED8_COLOR_LINE.matcher(text);
+        while (matcher.find()) {
+            String variant = matcher.group(2);
+            String key = matcher.group(1).toLowerCase() +
+                (variant == null ? "" : "-" + variant.toLowerCase());
+            colors.put(key, (int) (0xFF000000L | Long.parseLong(matcher.group(3), 16)));
+        }
+        String[] required = {"black", "white", "red", "yellow", "green", "cyan", "blue", "magenta"};
+        for (String key : required) {
+            if (!colors.containsKey(key)) return false;
+        }
+        if (mSwatches.length < BASE16_COLOR_COUNT) return false;
+        int black = colors.get("black");
+        int white = colors.get("white");
+        int gray = colorOr(colors, "gray", blend(black, white));
+        int orange = colorOr(colors, "orange", colors.get("yellow"));
+        int[] imported = {
+            black,
+            colorOr(colors, "black-dim", black),
+            gray,
+            colorOr(colors, "gray-dim", gray),
+            colorOr(colors, "white-dim", white),
+            white,
+            colorOr(colors, "gray-bright", white),
+            colorOr(colors, "white-bright", white),
+            colors.get("red"), orange, colors.get("yellow"), colors.get("green"),
+            colors.get("cyan"), colors.get("blue"), colors.get("magenta"),
+            colorOr(colors, "red-bright", colors.get("red"))
+        };
+        System.arraycopy(imported, 0, mSwatches, 0, imported.length);
+        mBase16Palette = true;
+        return true;
+    }
+
+    private static int colorOr(@NonNull Map<String, Integer> colors, @NonNull String key,
+                               int fallback) {
+        Integer color = colors.get(key);
+        return color == null ? fallback : color;
+    }
+
+    private static int blend(int first, int second) {
+        int red = (ColorIntChannel.red(first) + ColorIntChannel.red(second)) / 2;
+        int green = (ColorIntChannel.green(first) + ColorIntChannel.green(second)) / 2;
+        int blue = (ColorIntChannel.blue(first) + ColorIntChannel.blue(second)) / 2;
+        return 0xFF000000 | (red << 16) | (green << 8) | blue;
+    }
+
+    private static final class ColorIntChannel {
+        static int red(int color) { return (color >> 16) & 0xFF; }
+        static int green(int color) { return (color >> 8) & 0xFF; }
+        static int blue(int color) { return color & 0xFF; }
     }
 
     /** Applies an imported Base16 scheme to the keyboard's semantic palette roles. */
@@ -172,6 +257,7 @@ public final class InAppKeyboardColorScheme {
         try {
             JSONObject root = new JSONObject();
             root.put(JSON_BASE16_PALETTE, mBase16Palette);
+            root.put(JSON_IMPORTED_THEME_ID, mImportedThemeId);
             JSONArray swatches = new JSONArray();
             for (int color : mSwatches) swatches.put(color);
             root.put(JSON_SWATCHES, swatches);

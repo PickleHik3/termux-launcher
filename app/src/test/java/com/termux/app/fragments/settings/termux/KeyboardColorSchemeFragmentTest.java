@@ -29,4 +29,22 @@ public class KeyboardColorSchemeFragmentTest {
             KeyboardColorSchemeFragment.normalizeBase16Name("base16-atelier_cave light"));
         assertNull(KeyboardColorSchemeFragment.normalizeBase16Name("---"));
     }
+
+    @Test
+    public void parsesAllTintedGallerySchemeSystems() {
+        KeyboardColorSchemeFragment.TintedSchemeId base16 =
+            KeyboardColorSchemeFragment.parseTintedSchemeId("base16-apathy");
+        assertEquals("base16", base16.system);
+        assertEquals("apathy", base16.slug);
+
+        KeyboardColorSchemeFragment.TintedSchemeId base24 =
+            KeyboardColorSchemeFragment.parseTintedSchemeId("base24-ayu-mirage");
+        assertEquals("base24", base24.system);
+        assertEquals("ayu-mirage", base24.slug);
+
+        KeyboardColorSchemeFragment.TintedSchemeId tinted8 =
+            KeyboardColorSchemeFragment.parseTintedSchemeId("tinted8_catppuccin mocha");
+        assertEquals("tinted8", tinted8.system);
+        assertEquals("catppuccin-mocha", tinted8.slug);
+    }
 }
