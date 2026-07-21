@@ -54,6 +54,7 @@ public final class OnboardingActivity extends AppCompatActivity {
     private static final String KEY_PENDING_AUTOMATIC_LAUNCH = "pending_automatic_launch_v1";
     private static final String STATE_PAGE = "page";
     private static final String GUIDE_URL = "https://picklehik3.github.io/termux-launcher-site";
+    private static final String STARTER_PROFILE_URL = GUIDE_URL + "/#setup";
     private static final int REQUEST_HOME_ROLE = 1104;
     private static final int SWIPE_FLING_THRESHOLD_DP = 72;
     static final int PAGE_COUNT = 5;
@@ -329,10 +330,8 @@ public final class OnboardingActivity extends AppCompatActivity {
         mBackButton.setOnClickListener(view -> showPreviousPage());
         mNextButton.setOnClickListener(view -> showPage(mPage + 1));
         findViewById(R.id.onboarding_home_button).setOnClickListener(view -> requestHomeRole());
-        findViewById(R.id.onboarding_starter_profile_button).setOnClickListener(view -> {
-            // TODO: Connect this to the starter-profile installer when one is added to the repo.
-            Toast.makeText(this, R.string.onboarding_starter_profile_todo, Toast.LENGTH_SHORT).show();
-        });
+        findViewById(R.id.onboarding_starter_profile_button).setOnClickListener(view ->
+            ShareUtils.openUrl(this, STARTER_PROFILE_URL));
         findViewById(R.id.onboarding_guide_button).setOnClickListener(view ->
             ShareUtils.openUrl(this, GUIDE_URL));
         findViewById(R.id.onboarding_explore_button).setOnClickListener(view -> completeAndFinish());

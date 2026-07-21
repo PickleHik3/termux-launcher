@@ -104,7 +104,8 @@ public final class InAppKeyboardPaletteFactory {
             0xFFBA1A1A);
         return new int[] {
             // Keep the original six entries first so persisted per-key assignments migrate
-            // without changing appearance. Advanced mode exposes the complete Base16-sized set.
+            // without changing appearance. Advanced mode exposes a Base24-sized set so imported
+            // Base16, Base24, and Tinted8 schemes can all retain their complete palette.
             opaque(roles.surfaceContainerHigh),
             opaque(roles.primary),
             opaque(roles.secondary),
@@ -124,7 +125,15 @@ public final class InAppKeyboardPaletteFactory {
                 roles.surface)),
             opaque(roles.outlineVariant),
             opaque(materialColor(context, com.google.android.material.R.attr.colorErrorContainer,
-                ColorUtils.blendARGB(roles.surface, error, 0.20f)))
+                ColorUtils.blendARGB(roles.surface, error, 0.20f))),
+            opaque(roles.surfaceContainerLow),
+            opaque(roles.surfaceContainer),
+            opaque(ColorUtils.blendARGB(error, roles.onSurface, 0.20f)),
+            opaque(ColorUtils.blendARGB(tertiary, roles.onSurface, 0.20f)),
+            opaque(ColorUtils.blendARGB(roles.primary, roles.onSurface, 0.20f)),
+            opaque(ColorUtils.blendARGB(roles.secondary, roles.onSurface, 0.20f)),
+            opaque(ColorUtils.blendARGB(tertiary, roles.primary, 0.50f)),
+            opaque(ColorUtils.blendARGB(roles.primary, roles.secondary, 0.50f))
         };
     }
 

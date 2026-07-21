@@ -656,7 +656,7 @@ public final class TermuxInAppKeyboard {
             : InAppKeyboardPaletteFactory.create(context, theme);
         InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
             mPreferences.getInAppKeyboardColorScheme());
-        return scheme.applyToPalette(palette);
+        return scheme.shouldApplyImportedPalette(theme) ? scheme.applyToPalette(palette) : palette;
     }
 
     /** Immutable-Config inputs; a change forces a renderer rebuild on preference reload. */
