@@ -24,6 +24,7 @@ import androidx.preference.SwitchPreferenceCompat;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.ai.TaiModelCatalog;
+import com.termux.ai.TaiModelProfile;
 import com.termux.ai.TaiModelRegistry;
 import com.termux.ai.TaiModelStore;
 import com.termux.ai.TaiModelSpec;
@@ -316,9 +317,16 @@ public class TaiParameterPreferencesFragment extends MaterialPreferenceFragment 
 
     static boolean shouldShowParameter(@Nullable TaiModelSpec model, @Nullable String modelId,
                                         @NonNull String field, boolean modelRows) {
-        if (TaiSettings.FIELD_ENABLE_THINKING.equals(field)) return false;
+        if (TaiSettings.FIELD_ENABLE_THINKING.equals(field)) {
+            if (!modelRows || model == null
+                || !model.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_LLM_THINKING)) return false;
+            return TaiModelProfile.THINKING_TOGGLEABLE.equals(TaiModelProfile.forModel(model).thinkingMode);
+        }
         if (TaiSettings.FIELD_ENABLE_SPECULATIVE_DECODING.equals(field)) {
-            return model != null && model.capabilities.contains(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING);
+            // LiteRT exposes a runtime flag. MNN's speculative_type is package-fixed metadata,
+            // so showing a switch there would imply an override the upstream engine does not offer.
+            return model != null && TaiModelSpec.BACKEND_LITERT_LM.equals(model.backend)
+                && model.capabilities.contains(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING);
         }
         if (modelRows && TaiSettings.FIELD_ACCELERATOR.equals(field)
             && TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M.equals(modelId)) {

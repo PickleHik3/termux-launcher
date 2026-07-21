@@ -625,6 +625,10 @@
         <string name="termux_ai_top_p_title">TopP</string>
         <string name="termux_ai_temperature_title">Temperature</string>
         <string name="termux_ai_accelerator_title">Accelerator</string>
+        <string name="termux_ai_import_accelerators_label">Compatible accelerators</string>
+        <string name="termux_ai_import_gpu_compatible">GPU compatible</string>
+        <string name="termux_ai_import_default_cpu">Default: CPU</string>
+        <string name="termux_ai_import_default_gpu">Default: GPU</string>
         <string name="termux_ai_thinking_title">Thinking</string>
         <string name="termux_ai_speculative_decoding_title">Speculative decoding</string>
         <string name="termux_ai_idle_unload_title">Idle unload</string>

@@ -6,6 +6,9 @@ import org.json.JSONArray;
 
 public interface TaiGenerationCallback {
     void onToken(@NonNull String text);
+    /** A model reasoning/thought channel, kept separate from assistant answer text. */
+    default void onThinkingToken(@NonNull String text) {
+    }
     /** Lets a consumer stop native decoding after it has recognized an app-side terminal condition. */
     default boolean shouldCancelGeneration() {
         return false;

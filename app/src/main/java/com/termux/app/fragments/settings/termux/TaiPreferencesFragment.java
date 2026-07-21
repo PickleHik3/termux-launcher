@@ -21,6 +21,7 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -101,6 +102,14 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         TaiModelImporter.DocumentMetadata documentMetadata;
         // Modalities the user ticked at import time; survives the file-picker round-trip.
         final java.util.LinkedHashSet<String> capabilities = new java.util.LinkedHashSet<>();
+        // Ordered like Gallery model configs: the first compatible accelerator is the default.
+        final java.util.LinkedHashSet<String> compatibleAccelerators = new java.util.LinkedHashSet<>();
+        String defaultAccelerator = "cpu";
+        boolean acceleratorSelectionExplicit;
+
+        ImportDraft() {
+            compatibleAccelerators.add("cpu");
+        }
     }
 
     private static final OverrideSpec[] OVERRIDE_SPECS = {
@@ -1721,6 +1730,9 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 TaiModelImporter.stripModelExtension(metadata.displayName));
         }
         fillGuessedImportCapabilities(draft.capabilities, metadata.displayName);
+        if (!draft.acceleratorSelectionExplicit) {
+            fillGuessedImportAccelerators(draft, metadata.displayName);
+        }
         pendingImportDraft = draft;
         showImportFlowDialog(context, draft);
     }
@@ -1788,6 +1800,41 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         layout.addView(reasoning);
         layout.addView(multilingual);
 
+        layout.addView(importDialogLabel(context, R.string.termux_ai_import_accelerators_label, 8));
+        CheckBox gpuCompatible = new CheckBox(context);
+        gpuCompatible.setText(R.string.termux_ai_import_gpu_compatible);
+        gpuCompatible.setChecked(draft.compatibleAccelerators.contains("gpu"));
+        layout.addView(gpuCompatible);
+        Spinner defaultAccelerator = new Spinner(context);
+        android.widget.ArrayAdapter<CharSequence> acceleratorAdapter = new android.widget.ArrayAdapter<>(
+            context, android.R.layout.simple_spinner_item,
+            new CharSequence[]{getString(R.string.termux_ai_import_default_cpu),
+                getString(R.string.termux_ai_import_default_gpu)});
+        acceleratorAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        defaultAccelerator.setAdapter(acceleratorAdapter);
+        defaultAccelerator.setSelection("gpu".equals(draft.defaultAccelerator) ? 1 : 0);
+        layout.addView(defaultAccelerator);
+        gpuCompatible.setOnTouchListener((view, event) -> {
+            draft.acceleratorSelectionExplicit = true;
+            return false;
+        });
+        defaultAccelerator.setOnTouchListener((view, event) -> {
+            draft.acceleratorSelectionExplicit = true;
+            return false;
+        });
+        gpuCompatible.setOnCheckedChangeListener((button, checked) -> {
+            if (!checked && defaultAccelerator.getSelectedItemPosition() == 1) {
+                defaultAccelerator.setSelection(0);
+            }
+        });
+        defaultAccelerator.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view,
+                                                  int position, long id) {
+                if (position == 1) gpuCompatible.setChecked(true);
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+        });
+
         boolean rawTflite = draft.documentMetadata != null
             && draft.documentMetadata.displayName.toLowerCase(Locale.ROOT).endsWith(".tflite");
         if (rawTflite) {
@@ -1815,6 +1862,11 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 code.setChecked(guessed.contains(TaiModelSpec.CAPABILITY_CODE));
                 reasoning.setChecked(guessed.contains("reasoning"));
                 multilingual.setChecked(guessed.contains("multilingual"));
+                if (!draft.acceleratorSelectionExplicit) {
+                    fillGuessedImportAccelerators(draft, s == null ? "" : s.toString());
+                    gpuCompatible.setChecked(draft.compatibleAccelerators.contains("gpu"));
+                    defaultAccelerator.setSelection("gpu".equals(draft.defaultAccelerator) ? 1 : 0);
+                }
             }
             @Override public void afterTextChanged(android.text.Editable s) {}
         });
@@ -1856,6 +1908,15 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             if (code.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_CODE);
             if (reasoning.isChecked()) draft.capabilities.add("reasoning");
             if (multilingual.isChecked()) draft.capabilities.add("multilingual");
+            if (isQwenThinkingImport(draft)) {
+                draft.capabilities.add("reasoning");
+                draft.capabilities.add(TaiModelSpec.CAPABILITY_LLM_THINKING);
+            }
+            draft.compatibleAccelerators.clear();
+            draft.defaultAccelerator = defaultAccelerator.getSelectedItemPosition() == 1 ? "gpu" : "cpu";
+            draft.compatibleAccelerators.add(draft.defaultAccelerator);
+            if (gpuCompatible.isChecked()) draft.compatibleAccelerators.add("gpu");
+            draft.compatibleAccelerators.add("cpu");
         };
 
         androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(context)
@@ -1936,7 +1997,47 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         }
         if (value.contains("coder") || value.contains("code-")) capabilities.add(TaiModelSpec.CAPABILITY_CODE);
         if (value.contains("deepseek-r1") || value.contains("reasoning")) capabilities.add("reasoning");
+        if (value.contains("qwen3") && value.contains("thinking")) {
+            capabilities.add("reasoning");
+            capabilities.add(TaiModelSpec.CAPABILITY_LLM_THINKING);
+        }
         if (value.contains("qwen") || value.contains("multilingual")) capabilities.add("multilingual");
+    }
+
+    private void fillGuessedImportAccelerators(@NonNull ImportDraft draft, @Nullable String source) {
+        String value = source == null ? "" : source.toLowerCase(Locale.ROOT);
+        boolean mnn = value.contains("-mnn") || value.contains("_mnn") || value.endsWith("config.json");
+        boolean knownGpu = !mnn && ((value.contains("qwen3") && value.contains("thinking"))
+            || value.contains("gemma-4-e2b") || value.contains("gemma-4-e4b")
+            || value.contains("deepseek-r1-distill-qwen-1.5b")
+            || value.contains("qwen2.5-1.5b-instruct"));
+        draft.compatibleAccelerators.clear();
+        draft.defaultAccelerator = knownGpu ? "gpu" : "cpu";
+        draft.compatibleAccelerators.add(draft.defaultAccelerator);
+        if (knownGpu) draft.compatibleAccelerators.add("cpu");
+    }
+
+    private boolean isQwenThinkingImport(@NonNull ImportDraft draft) {
+        String identity = (draft.modelId + " " + draft.hfUrl + " "
+            + (draft.documentMetadata == null ? "" : draft.documentMetadata.displayName))
+            .toLowerCase(Locale.ROOT);
+        return identity.contains("qwen3") && identity.contains("thinking");
+    }
+
+    @NonNull
+    private TaiModelProfile importRuntimeProfile(@NonNull ImportDraft draft) {
+        ArrayList<String> accelerators = new ArrayList<>(draft.compatibleAccelerators);
+        TaiModelProfile defaults = new TaiModelProfile(java.util.Collections.singletonList("cpu"),
+            1024, 64, 0.95d, 1.0d, null, "edge-gallery-import-default");
+        if (isQwenThinkingImport(draft)) {
+            defaults = new TaiModelProfile(java.util.Arrays.asList("gpu", "cpu"), 2048, 64,
+                0.95d, 1.0d, 3, TaiModelProfile.SOURCE_LITERT_COMMUNITY,
+                TaiModelProfile.THINKING_ALWAYS, "<think>", "</think>");
+        }
+        return new TaiModelProfile(accelerators, defaults.defaultMaxTokens, defaults.defaultTopK,
+            defaults.defaultTopP, defaults.defaultTemperature, defaults.minDeviceMemoryInGb,
+            "import-dialog-selection", defaults.thinkingMode, defaults.thinkingChannelStart,
+            defaults.thinkingChannelEnd);
     }
 
     private CharSequence importSelectionText(Context context, ImportDraft draft) {
@@ -1996,7 +2097,8 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             Toast.makeText(context, validation.message, Toast.LENGTH_LONG).show();
             return false;
         }
-        importModelDocument(context, draft.documentUri, draft.modelId, IMPORT_BACKEND_LITERT, draft.capabilities);
+        importModelDocument(context, draft.documentUri, draft.modelId, IMPORT_BACKEND_LITERT,
+            draft.capabilities, importRuntimeProfile(draft));
         pendingImportDraft = null;
         return true;
     }
@@ -2020,6 +2122,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 JSONArray capabilities = new JSONArray();
                 for (String capability : draft.capabilities) capabilities.put(capability);
                 request.put("capabilities", capabilities);
+                request.put("runtimeProfile", importRuntimeProfile(draft).toJson());
                 if (draft.hfToken != null && !draft.hfToken.trim().isEmpty()) {
                     request.put("huggingFaceToken", draft.hfToken.trim());
                 }
@@ -2059,7 +2162,8 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
     }
 
     private void importModelDocument(Context context, Uri uri, String modelId, String backend,
-                                     java.util.Set<String> capabilities) {
+                                     java.util.Set<String> capabilities,
+                                     TaiModelProfile runtimeProfile) {
         Context appContext = context.getApplicationContext();
         Preference importPreference = findPreference("tai_model_import");
         if (importPreference != null) {
@@ -2070,7 +2174,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             JSONObject result = null;
             try {
                 result = new TaiModelImporter(appContext, new TaiModelStore(appContext))
-                    .importDocument(uri, modelId, backend, capabilities);
+                    .importDocument(uri, modelId, backend, capabilities, runtimeProfile);
             } catch (JSONException | RuntimeException ignored) {
             }
             JSONObject finalResult = result;

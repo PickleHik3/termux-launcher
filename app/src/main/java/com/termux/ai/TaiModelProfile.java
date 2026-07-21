@@ -15,6 +15,10 @@ import java.util.Locale;
 
 public final class TaiModelProfile {
     public static final String SOURCE_EDGE_GALLERY_1_0_15 = "google-ai-edge-gallery-1.0.15";
+    public static final String SOURCE_LITERT_COMMUNITY = "litert-community-model-card";
+    public static final String THINKING_NONE = "none";
+    public static final String THINKING_TOGGLEABLE = "toggleable";
+    public static final String THINKING_ALWAYS = "always";
 
     public final List<String> compatibleAccelerators;
     public final int defaultMaxTokens;
@@ -23,6 +27,9 @@ public final class TaiModelProfile {
     public final double defaultTemperature;
     @Nullable public final Integer minDeviceMemoryInGb;
     public final String source;
+    public final String thinkingMode;
+    @Nullable public final String thinkingChannelStart;
+    @Nullable public final String thinkingChannelEnd;
 
     public TaiModelProfile(
         @NonNull List<String> compatibleAccelerators,
@@ -32,6 +39,22 @@ public final class TaiModelProfile {
         double defaultTemperature,
         @Nullable Integer minDeviceMemoryInGb,
         @NonNull String source
+    ) {
+        this(compatibleAccelerators, defaultMaxTokens, defaultTopK, defaultTopP,
+            defaultTemperature, minDeviceMemoryInGb, source, THINKING_NONE, null, null);
+    }
+
+    public TaiModelProfile(
+        @NonNull List<String> compatibleAccelerators,
+        int defaultMaxTokens,
+        int defaultTopK,
+        double defaultTopP,
+        double defaultTemperature,
+        @Nullable Integer minDeviceMemoryInGb,
+        @NonNull String source,
+        @NonNull String thinkingMode,
+        @Nullable String thinkingChannelStart,
+        @Nullable String thinkingChannelEnd
     ) {
         ArrayList<String> normalized = new ArrayList<>();
         for (String accelerator : compatibleAccelerators) {
@@ -46,23 +69,34 @@ public final class TaiModelProfile {
         this.defaultTemperature = defaultTemperature;
         this.minDeviceMemoryInGb = minDeviceMemoryInGb;
         this.source = source;
+        this.thinkingMode = normalizeThinkingMode(thinkingMode);
+        this.thinkingChannelStart = emptyToNull(thinkingChannelStart);
+        this.thinkingChannelEnd = emptyToNull(thinkingChannelEnd);
     }
 
     @NonNull
     public static TaiModelProfile forModel(@NonNull TaiModelSpec modelSpec) {
-        if (modelSpec.runtimeProfile != null) return modelSpec.runtimeProfile;
-
         String id = normalizedIdentity(modelSpec.id);
         String path = modelSpec.localPath == null ? "" : modelSpec.localPath.toLowerCase(Locale.ROOT);
+        // This provider package has fixed, published runtime behavior. Override the legacy generic
+        // CPU-only profile that older importer versions persisted so existing installations heal
+        // without requiring the user to delete and re-import a multi-gigabyte model.
+        if (TaiModelSpec.BACKEND_LITERT_LM.equals(modelSpec.backend)
+            && isQwen3Thinking2507(id, path)
+            && (modelSpec.runtimeProfile == null || isLegacyCpuOnlyImportProfile(modelSpec.runtimeProfile))) {
+            return qwen3Thinking2507Profile();
+        }
+        if (modelSpec.runtimeProfile != null) return modelSpec.runtimeProfile;
+
         if (TaiModelSpec.BACKEND_MNN_LLM.equals(modelSpec.backend)) {
             return new TaiModelProfile(Collections.singletonList("cpu"), 1024, 40, 0.90d, 0.80d,
                 modelSpec.recommendedRamGb > 0 ? modelSpec.recommendedRamGb : null, "tai-mnn-config-default");
         }
         if ("gemma4e2bit".equals(id) || "gemma4e2bitlitertlm".equals(id) || path.contains("gemma-4-e2b-it.litertlm")) {
-            return edgeGalleryProfile(Arrays.asList("gpu", "cpu"), 4000, 1.0d, 8);
+            return edgeGalleryThinkingProfile(Arrays.asList("gpu", "cpu"), 4000, 1.0d, 8);
         }
         if ("gemma4e4bit".equals(id) || "gemma4e4bitlitertlm".equals(id) || path.contains("gemma-4-e4b-it.litertlm")) {
-            return edgeGalleryProfile(Arrays.asList("gpu", "cpu"), 4000, 1.0d, 12);
+            return edgeGalleryThinkingProfile(Arrays.asList("gpu", "cpu"), 4000, 1.0d, 12);
         }
         if (normalizedIdentity(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M).equals(id)
             || path.contains("mobile_actions_q8_ekv1024")) {
@@ -95,7 +129,7 @@ public final class TaiModelProfile {
         List<String> accelerators = acceleratorsFromJson(profile.opt("compatibleAccelerators"));
         if (accelerators.isEmpty()) accelerators = fallback.compatibleAccelerators;
         Integer minMemory = profile.has("minDeviceMemoryInGb") && !profile.isNull("minDeviceMemoryInGb")
-            ? profile.optInt("minDeviceMemoryInGb") : fallback.minDeviceMemoryInGb;
+            ? Integer.valueOf(profile.optInt("minDeviceMemoryInGb")) : fallback.minDeviceMemoryInGb;
         return new TaiModelProfile(
             accelerators,
             positiveInt(profile, "defaultMaxTokens", fallback.defaultMaxTokens),
@@ -103,7 +137,10 @@ public final class TaiModelProfile {
             profile.has("defaultTopP") ? profile.optDouble("defaultTopP", fallback.defaultTopP) : fallback.defaultTopP,
             profile.has("defaultTemperature") ? profile.optDouble("defaultTemperature", fallback.defaultTemperature) : fallback.defaultTemperature,
             minMemory,
-            profile.optString("source", fallback.source)
+            profile.optString("source", fallback.source),
+            profile.optString("thinkingMode", fallback.thinkingMode),
+            nullableString(profile, "thinkingChannelStart", fallback.thinkingChannelStart),
+            nullableString(profile, "thinkingChannelEnd", fallback.thinkingChannelEnd)
         );
     }
 
@@ -115,8 +152,11 @@ public final class TaiModelProfile {
             positiveInt(json, "defaultTopK", 64),
             json.optDouble("defaultTopP", 0.95d),
             json.optDouble("defaultTemperature", 1.0d),
-            json.has("minDeviceMemoryInGb") && !json.isNull("minDeviceMemoryInGb") ? json.optInt("minDeviceMemoryInGb") : null,
-            json.optString("source", "persisted")
+            json.has("minDeviceMemoryInGb") && !json.isNull("minDeviceMemoryInGb") ? Integer.valueOf(json.optInt("minDeviceMemoryInGb")) : null,
+            json.optString("source", "persisted"),
+            json.optString("thinkingMode", THINKING_NONE),
+            nullableString(json, "thinkingChannelStart", null),
+            nullableString(json, "thinkingChannelEnd", null)
         );
     }
 
@@ -137,6 +177,9 @@ public final class TaiModelProfile {
         json.put("defaultTemperature", defaultTemperature);
         json.put("minDeviceMemoryInGb", minDeviceMemoryInGb == null ? JSONObject.NULL : minDeviceMemoryInGb);
         json.put("source", source);
+        json.put("thinkingMode", thinkingMode);
+        json.put("thinkingChannelStart", thinkingChannelStart == null ? JSONObject.NULL : thinkingChannelStart);
+        json.put("thinkingChannelEnd", thinkingChannelEnd == null ? JSONObject.NULL : thinkingChannelEnd);
         return json;
     }
 
@@ -144,6 +187,48 @@ public final class TaiModelProfile {
     private static TaiModelProfile edgeGalleryProfile(List<String> accelerators, int maxTokens, double temperature, int minMemoryGb) {
         return new TaiModelProfile(accelerators, maxTokens, 64, 0.95d, temperature, minMemoryGb,
             SOURCE_EDGE_GALLERY_1_0_15);
+    }
+
+    @NonNull
+    private static TaiModelProfile edgeGalleryThinkingProfile(List<String> accelerators, int maxTokens, double temperature, int minMemoryGb) {
+        return new TaiModelProfile(accelerators, maxTokens, 64, 0.95d, temperature, minMemoryGb,
+            SOURCE_EDGE_GALLERY_1_0_15, THINKING_TOGGLEABLE, null, null);
+    }
+
+    @NonNull
+    static TaiModelProfile qwen3Thinking2507Profile() {
+        return new TaiModelProfile(Arrays.asList("gpu", "cpu"), 2048, 64, 0.95d, 1.0d,
+            3, SOURCE_LITERT_COMMUNITY, THINKING_ALWAYS, "<think>", "</think>");
+    }
+
+    static boolean isQwen3Thinking2507(@Nullable String id, @Nullable String path) {
+        return normalizedIdentity(id).contains("qwen34bthinking2507")
+            || normalizedIdentity(path).contains("qwen34bthinking2507");
+    }
+
+    static boolean isLegacyCpuOnlyImportProfile(@Nullable TaiModelProfile profile) {
+        return profile != null
+            && "edge-gallery-import-default".equals(profile.source)
+            && profile.compatibleAccelerators.size() == 1
+            && profile.compatibleAccelerators.contains("cpu");
+    }
+
+    @NonNull
+    private static String normalizeThinkingMode(@Nullable String value) {
+        if (THINKING_ALWAYS.equals(value) || THINKING_TOGGLEABLE.equals(value)) return value;
+        return THINKING_NONE;
+    }
+
+    @Nullable
+    private static String emptyToNull(@Nullable String value) {
+        return value == null || value.trim().isEmpty() ? null : value;
+    }
+
+    @Nullable
+    private static String nullableString(@NonNull JSONObject json, @NonNull String key, @Nullable String fallback) {
+        if (!json.has(key)) return fallback;
+        if (json.isNull(key)) return null;
+        return emptyToNull(json.optString(key, fallback));
     }
 
     @NonNull

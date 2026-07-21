@@ -138,6 +138,7 @@ public class TaiModelSchemaTest {
     public void userModelStore_persistsAndReloadsMnnModels() throws Exception {
         Context context = ApplicationProvider.getApplicationContext();
         context.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE).edit().clear().commit();
+        context.getSharedPreferences(TaiModelStore.PREFS_NAME, Context.MODE_PRIVATE).edit().clear().commit();
         TaiModelStore store = new TaiModelStore(context);
         TaiModelSpec mnn = TaiModelSpec.fromJson(baseModelJson("user-mnn", "/models/user-mnn/model.mnn")
             .put("backend", TaiModelSpec.BACKEND_MNN_LLM)

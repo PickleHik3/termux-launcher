@@ -1,9 +1,8 @@
 name: Build MNN native (arm64)
 
 # Builds libMNN.so (with the LLM engine bundled) and libmnnllmapp.so for arm64-v8a from
-# alibaba/MNN @ 3.6.0, with a patched utf8_stream_processor.hpp that validates UTF-8
-# continuation bytes — so a malformed multibyte token from the model can never reach
-# NewStringUTF and SIGABRT the :tai_runtime process. Artifacts are committed into
+# alibaba/MNN @ 3.6.0, with Android patches for validated UTF-8 streaming and one-shot
+# response() generation required by Eagle speculative decoding. Artifacts are committed into
 # app/src/main/jniLibs/arm64-v8a/ by hand after a green run.
 #
 # Iterative: dispatch manually or push this file. Does not touch the app build.
@@ -33,7 +32,7 @@ jobs:
         with:
           path: self
 
-      - name: Apply UTF-8 stream-processor patch
+      - name: Apply Android runtime patches
         run: |
           set -euxo pipefail
           CPP="mnn/apps/Android/MnnLlmChat/app/src/main/cpp"
@@ -41,6 +40,15 @@ jobs:
           cp -v self/ci/mnn-patch/utf8_stream_processor.hpp "$DST"
           grep -q "0xC0) != 0x80" "$DST"   # fail fast if the patch didn't land
           echo "--- patched header ---"; cat "$DST"
+
+          # Keep speculative generation inside one upstream response() call. Eagle accepts token
+          # batches and cannot be driven correctly by repeated generate(1) calls.
+          git -C mnn apply ../self/ci/mnn-patch/llm_session_generation.patch
+          grep -q 'max_new_tokens_)' "$CPP/llm_session.cpp"
+          if grep -Eq '^[[:space:]]*llm_->generate\(1\);' "$CPP/llm_session.cpp"; then
+            echo "Incremental generate(1) remained in Android generation paths" >&2
+            exit 1
+          fi
 
           # TAI embedding JNI: bind MNN Transformer::Embedding into libmnnllmapp.so so MNN-format
           # embedding models work through MnnEmbeddingSession. Add the source and register it in CMake.

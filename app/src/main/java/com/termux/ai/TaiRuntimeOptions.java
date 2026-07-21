@@ -97,6 +97,24 @@ public final class TaiRuntimeOptions {
     }
 
     @NonNull
+    public static TaiRuntimeOptions fromJson(@NonNull JSONObject json) {
+        return new TaiRuntimeOptions(
+            nullableInteger(json, "maxTokens"),
+            nullableInteger(json, "topK"),
+            nullableDouble(json, "topP"),
+            nullableDouble(json, "temperature"),
+            nullableString(json, "accelerator"),
+            nullableInteger(json, "contextWindow"),
+            nullableInteger(json, "threadCount"),
+            nullableString(json, "precision"),
+            nullableString(json, "memoryMode"),
+            nullableBoolean(json, "thinkingEnabled"),
+            nullableBoolean(json, "speculativeDecodingEnabled"),
+            nullableInteger(json, "idleUnloadMinutes")
+        );
+    }
+
+    @NonNull
     public TaiRuntimeOptions withAccelerator(@Nullable String overrideAccelerator) {
         return new TaiRuntimeOptions(
             maxTokens,
@@ -160,5 +178,27 @@ public final class TaiRuntimeOptions {
 
     private static void putNullable(JSONObject json, String key, Object value) throws JSONException {
         json.put(key, value == null ? JSONObject.NULL : value);
+    }
+
+    @Nullable
+    private static Integer nullableInteger(@NonNull JSONObject json, @NonNull String key) {
+        return json.has(key) && !json.isNull(key) ? json.optInt(key) : null;
+    }
+
+    @Nullable
+    private static Double nullableDouble(@NonNull JSONObject json, @NonNull String key) {
+        return json.has(key) && !json.isNull(key) ? json.optDouble(key) : null;
+    }
+
+    @Nullable
+    private static Boolean nullableBoolean(@NonNull JSONObject json, @NonNull String key) {
+        return json.has(key) && !json.isNull(key) ? json.optBoolean(key) : null;
+    }
+
+    @Nullable
+    private static String nullableString(@NonNull JSONObject json, @NonNull String key) {
+        if (!json.has(key) || json.isNull(key)) return null;
+        String value = json.optString(key, "").trim();
+        return value.isEmpty() ? null : value;
     }
 }

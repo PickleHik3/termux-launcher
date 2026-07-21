@@ -16,6 +16,8 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 
 public final class TaiModelStore {
+    static final String PREFS_NAME = "termux_ai_model_store";
+    private static final String KEY_MIGRATED = "tai_model_store_migrated_v1";
     public static final String STATE_QUEUED = "queued";
     public static final String STATE_DOWNLOADING = "downloading";
     public static final String STATE_CANCELLED = "cancelled";
@@ -40,7 +42,22 @@ public final class TaiModelStore {
 
     public TaiModelStore(@NonNull Context context) {
         appContext = context.getApplicationContext();
-        preferences = appContext.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE);
+        preferences = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        migrateLegacyPreferences();
+    }
+
+    private void migrateLegacyPreferences() {
+        if (preferences.getBoolean(KEY_MIGRATED, false)) return;
+        SharedPreferences legacy = appContext.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        for (Map.Entry<String, ?> entry : legacy.getAll().entrySet()) {
+            String key = entry.getKey();
+            if (!KEY_USER_MODELS.equals(key) && !KEY_DOWNLOADS.equals(key)
+                && !key.startsWith(KEY_CAPS_PREFIX) && !key.startsWith(KEY_EXPOSURE_PREFIX)) continue;
+            Object value = entry.getValue();
+            if (value instanceof String) editor.putString(key, (String) value);
+        }
+        editor.putBoolean(KEY_MIGRATED, true).commit();
     }
 
     @NonNull
@@ -79,7 +96,7 @@ public final class TaiModelStore {
     /** User-declared capability set for a model (e.g. enable vision/audio/tools on an import). */
     public synchronized void setCapabilityOverride(@NonNull String modelId, @NonNull java.util.Set<String> capabilities) {
         LinkedHashSet<String> caps = new LinkedHashSet<>(capabilities);
-        preferences.edit().putString(KEY_CAPS_PREFIX + modelId, android.text.TextUtils.join(",", caps)).apply();
+        preferences.edit().putString(KEY_CAPS_PREFIX + modelId, android.text.TextUtils.join(",", caps)).commit();
     }
 
     /** How a multimodal model is advertised: split / combined / both. Defaults to split. */
@@ -89,7 +106,7 @@ public final class TaiModelStore {
     }
 
     public synchronized void setExposure(@NonNull String modelId, @NonNull String exposure) {
-        preferences.edit().putString(KEY_EXPOSURE_PREFIX + modelId, exposure).apply();
+        preferences.edit().putString(KEY_EXPOSURE_PREFIX + modelId, exposure).commit();
     }
 
     /** Re-applies any user capability override to a spec resolved outside the user-model store
@@ -208,7 +225,7 @@ public final class TaiModelStore {
             } catch (JSONException ignored) {
             }
         }
-        if (removed > 0) preferences.edit().putString(KEY_USER_MODELS, array.toString()).apply();
+        if (removed > 0) preferences.edit().putString(KEY_USER_MODELS, array.toString()).commit();
         return removed;
     }
 
@@ -219,7 +236,7 @@ public final class TaiModelStore {
         for (TaiModelSpec model : models.values()) {
             array.put(model.toJson());
         }
-        preferences.edit().putString(KEY_USER_MODELS, array.toString()).apply();
+        preferences.edit().putString(KEY_USER_MODELS, array.toString()).commit();
     }
 
     public synchronized boolean deleteUserModel(@NonNull String modelId) {
@@ -262,7 +279,7 @@ public final class TaiModelStore {
         preferences.edit()
             .putString(KEY_USER_MODELS, array.toString())
             .putString(KEY_DOWNLOADS, keptDownloads.toString())
-            .apply();
+            .commit();
 
         File modelDir = new File(getModelsDirectory(), modelId);
         deleteRecursively(modelDir);
@@ -290,7 +307,7 @@ public final class TaiModelStore {
             }
         }
         if (!replaced) next.put(transfer);
-        preferences.edit().putString(KEY_DOWNLOADS, next.toString()).apply();
+        preferences.edit().putString(KEY_DOWNLOADS, next.toString()).commit();
     }
 
     public synchronized void updateDownloadStatus(@NonNull String transferId, @NonNull String status, @NonNull String error) {
@@ -306,7 +323,7 @@ public final class TaiModelStore {
             }
             break;
         }
-        preferences.edit().putString(KEY_DOWNLOADS, current.toString()).apply();
+        preferences.edit().putString(KEY_DOWNLOADS, current.toString()).commit();
     }
 
     @NonNull
@@ -356,6 +373,28 @@ public final class TaiModelStore {
             if (new File(modelDir, name).isFile()) return name;
         }
         return "tokenizer.txt";
+    }
+
+    /** Reads modality and generation capabilities declared by an upstream MNN config package. */
+    @NonNull
+    static LinkedHashSet<String> mnnPackageCapabilities(
+        @NonNull File configFile,
+        @NonNull java.util.Set<String> declared
+    ) {
+        LinkedHashSet<String> capabilities = new LinkedHashSet<>(declared);
+        if (!configFile.isFile()) return capabilities;
+        try {
+            JSONObject config = new JSONObject(readUtf8(configFile));
+            if (config.optJSONObject("mllm") != null) {
+                capabilities.add(TaiModelSpec.CAPABILITY_IMAGE_INPUT);
+            }
+            String speculativeType = config.optString("speculative_type", "").trim();
+            if (!speculativeType.isEmpty() && !"none".equalsIgnoreCase(speculativeType)) {
+                capabilities.add(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING);
+            }
+        } catch (Exception ignored) {
+        }
+        return capabilities;
     }
 
     private boolean sidecarReadable(@NonNull File modelDir, @Nullable String fileName) {
@@ -459,7 +498,7 @@ public final class TaiModelStore {
     }
 
     @NonNull
-    private String readUtf8(@NonNull File file) throws java.io.IOException {
+    private static String readUtf8(@NonNull File file) throws java.io.IOException {
         try (java.io.FileInputStream input = new java.io.FileInputStream(file);
              java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
             byte[] buffer = new byte[8192];
@@ -474,6 +513,40 @@ public final class TaiModelStore {
         String migratedId = TaiSettings.migrateBuiltInModelId(spec.id);
         TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(migratedId);
         String identity = (migratedId + " " + (spec.localPath == null ? "" : spec.localPath)).toLowerCase(java.util.Locale.ROOT);
+        if (entry == null && TaiModelSpec.BACKEND_LITERT_LM.equals(spec.backend)
+            && TaiModelProfile.isQwen3Thinking2507(migratedId, spec.localPath)) {
+            LinkedHashSet<String> capabilities = new LinkedHashSet<>(spec.sourceCapabilities);
+            boolean missingThinking = !capabilities.contains(TaiModelSpec.CAPABILITY_LLM_THINKING);
+            boolean staleProfile = spec.runtimeProfile == null
+                || TaiModelProfile.isLegacyCpuOnlyImportProfile(spec.runtimeProfile);
+            if (!missingThinking && !staleProfile) return spec;
+            capabilities.add("reasoning");
+            capabilities.add(TaiModelSpec.CAPABILITY_LLM_THINKING);
+            LinkedHashSet<String> endpoint = TaiModelSpec.endpointCapabilitiesFor(
+                migratedId, spec.backend, spec.format, capabilities, spec.localPath);
+            return new TaiModelSpec(migratedId, spec.displayName, spec.roleHint, spec.source,
+                spec.localPath, spec.license, spec.sizeBytes, capabilities, false,
+                staleProfile ? TaiModelProfile.qwen3Thinking2507Profile() : spec.runtimeProfile,
+                spec.backend, spec.format,
+                spec.architecture, spec.quantization, spec.endpointContextWindow,
+                spec.sourceContextWindow, Math.max(2048, spec.defaultMaxOutputTokens),
+                Math.max(3, spec.recommendedRamGb), spec.sha256, endpoint,
+                TaiModelSpec.toolModeFor(spec.backend, endpoint));
+        }
+        if (entry == null && TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend) && spec.localPath != null) {
+            LinkedHashSet<String> packageCapabilities = mnnPackageCapabilities(
+                new File(spec.localPath), spec.sourceCapabilities);
+            if (!packageCapabilities.equals(spec.sourceCapabilities)) {
+                LinkedHashSet<String> endpoint = TaiModelSpec.endpointCapabilitiesFor(
+                    migratedId, spec.backend, spec.format, packageCapabilities, spec.localPath);
+                return new TaiModelSpec(migratedId, spec.displayName, spec.roleHint, spec.source,
+                    spec.localPath, spec.license, spec.sizeBytes, packageCapabilities,
+                    spec.builtInCatalogEntry, spec.runtimeProfile, spec.backend, spec.format,
+                    spec.architecture, spec.quantization, spec.endpointContextWindow,
+                    spec.sourceContextWindow, spec.defaultMaxOutputTokens, spec.recommendedRamGb,
+                    spec.sha256, endpoint, TaiModelSpec.toolModeFor(spec.backend, endpoint));
+            }
+        }
         if (entry == null && identity.contains("embedding") && identity.contains(".tflite")) {
             LinkedHashSet<String> embedding = new LinkedHashSet<>();
             embedding.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
