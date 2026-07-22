@@ -5103,6 +5103,7 @@ public final class SuggestionBarView extends GridLayout {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         List<NotificationReplyTarget> replyTargets = new ArrayList<>();
+        notificationCardViews.clear();
         for (int i = 0; i < notifications.size(); i++) {
             if (i > 0) addNotificationDivider(shell);
             NotificationReplyTarget target = addNotificationCard(shell, notifications.get(i));
@@ -5148,22 +5149,23 @@ public final class SuggestionBarView extends GridLayout {
         applyNotificationPopupDim(notificationPopupWindow);
         if (notificationPopupInteractionListener != null)
             notificationPopupInteractionListener.onNotificationPopupShown();
-        // With several conversations, choosing the first reply field for the user is surprising.
-        // Auto-focus only when there is exactly one possible reply destination.
+        // Always land the user in a reply box on swipe-up: auto-open the topmost (most recent)
+        // repliable notification. showInlineReply highlights the active card and dims the rest so
+        // it stays clear which conversation the reply is going to.
         NotificationReplyTarget finalAutoReplyTarget = shouldAutoOpenNotificationReply(
             replyTargets.size()) ? replyTargets.get(0) : null;
         if (finalAutoReplyTarget != null) {
             post(() -> {
                 if (notificationPopupWindow != holder[0] || !holder[0].isShowing()) return;
-                showInlineReply(finalAutoReplyTarget.actionHost, finalAutoReplyTarget.action,
-                    finalAutoReplyTarget.remoteInputs, finalAutoReplyTarget.freeform,
-                    finalAutoReplyTarget.recipient);
+                showInlineReply(finalAutoReplyTarget.card, finalAutoReplyTarget.actionHost,
+                    finalAutoReplyTarget.action, finalAutoReplyTarget.remoteInputs,
+                    finalAutoReplyTarget.freeform, finalAutoReplyTarget.recipient);
             });
         }
     }
 
     static boolean shouldAutoOpenNotificationReply(int replyTargetCount) {
-        return replyTargetCount == 1;
+        return replyTargetCount >= 1;
     }
 
     @Nullable
@@ -5335,10 +5337,10 @@ public final class SuggestionBarView extends GridLayout {
                 if (freeform != null) {
                     if (replyTarget == null) {
                         replyTarget = new NotificationReplyTarget(
-                            actionHost, action, remoteInputs, freeform, title);
+                            card, actionHost, action, remoteInputs, freeform, title);
                     }
                     actionButton.setOnClickListener(v ->
-                        showInlineReply(actionHost, action, remoteInputs, freeform, title));
+                        showInlineReply(card, actionHost, action, remoteInputs, freeform, title));
                 } else {
                     actionButton.setOnClickListener(v ->
                         sendNotificationIntent(action.actionIntent, null, null));
@@ -5368,19 +5370,22 @@ public final class SuggestionBarView extends GridLayout {
         }
         shell.addView(card, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        notificationCardViews.add(card);
         return replyTarget;
     }
 
     private static final class NotificationReplyTarget {
+        @NonNull final LinearLayout card;
         @NonNull final FrameLayout actionHost;
         @NonNull final Notification.Action action;
         @NonNull final RemoteInput[] remoteInputs;
         @NonNull final RemoteInput freeform;
         @Nullable final CharSequence recipient;
 
-        NotificationReplyTarget(@NonNull FrameLayout actionHost,
+        NotificationReplyTarget(@NonNull LinearLayout card, @NonNull FrameLayout actionHost,
             @NonNull Notification.Action action, @NonNull RemoteInput[] remoteInputs,
             @NonNull RemoteInput freeform, @Nullable CharSequence recipient) {
+            this.card = card;
             this.actionHost = actionHost;
             this.action = action;
             this.remoteInputs = remoteInputs;
@@ -5389,13 +5394,35 @@ public final class SuggestionBarView extends GridLayout {
         }
     }
 
+    private final List<LinearLayout> notificationCardViews = new ArrayList<>();
+
+    // Fade every card except the one being replied to so the active conversation is obvious when
+    // the popup holds more than one notification. Passing null clears the highlight.
+    private void highlightActiveNotificationCard(@Nullable View active) {
+        for (LinearLayout card : notificationCardViews) {
+            if (card.getVisibility() == View.GONE) continue;
+            boolean isActive = active == null || card == active;
+            card.setAlpha(isActive ? 1f : 0.4f);
+            if (isActive && active != null) {
+                GradientDrawable hi = new GradientDrawable();
+                hi.setCornerRadius(dp(10));
+                hi.setColor(withAlphaComponent(resolveLauncherOutlineColor(), 0x22));
+                card.setBackground(hi);
+            } else {
+                card.setBackground(null);
+            }
+        }
+    }
+
     private void showInlineReply(
+        @Nullable LinearLayout card,
         @NonNull FrameLayout actionHost,
         @NonNull Notification.Action action,
         @NonNull RemoteInput[] remoteInputs,
         @NonNull RemoteInput freeform,
         @Nullable CharSequence recipient
     ) {
+        highlightActiveNotificationCard(card);
         LinearLayout row = new LinearLayout(getContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
