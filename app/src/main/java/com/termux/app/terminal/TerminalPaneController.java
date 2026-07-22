@@ -257,14 +257,14 @@ public class TerminalPaneController {
         }
         mActiveWindow.active = newLeaf;
         render();
-        // A side-by-side split changes the old pane's column count; nudge the shell to redraw
-        // cleanly (Ctrl+L) once the resize settles, avoiding a duplicated prompt.
-        if (orientation == LinearLayout.HORIZONTAL) {
-            final TerminalSession reflowed = oldLeaf.session;
-            mHostView.postDelayed(() -> {
-                if (reflowed.isRunning()) reflowed.write("");
-            }, 250);
-        }
+        // Splitting resizes the old pane (fewer cols/rows), which reflows its buffer and can
+        // leave the view scrolled up (prompt jumps to the top). Once the resize settles, scroll
+        // the old pane back to the bottom so its prompt stays where the shell repainted it.
+        final TerminalSession reflowed = oldLeaf.session;
+        mHostView.postDelayed(() -> {
+            TerminalView v = mPaneViews.get(reflowed);
+            if (v != null) v.onScreenUpdated();
+        }, 250);
         mHost.onActivePaneChanged();
         mHost.onTreesChanged();
     }
