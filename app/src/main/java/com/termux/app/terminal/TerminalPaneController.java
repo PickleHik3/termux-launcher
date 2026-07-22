@@ -444,10 +444,15 @@ public class TerminalPaneController {
             if (frame == null) continue;
             if (!split) { frame.setForeground(null); continue; }
             boolean isActive = v.getCurrentSession() == activeSession;
-            // Active pane: primary-tone border. Inactive panes: secondary-tone border so every
-            // pane is delineated (both grounded in Material accents, not grey).
-            frame.setForeground(ContextCompat.getDrawable(mHostView.getContext(),
-                isActive ? R.drawable.pane_active_border : R.drawable.pane_inactive_border));
+            // Same Material primary hue for every pane, but the focused pane's border is at full
+            // strength while the rest are dimmed — an unambiguous, theme-proof focus cue.
+            android.graphics.drawable.Drawable border =
+                ContextCompat.getDrawable(mHostView.getContext(), R.drawable.pane_active_border);
+            if (border != null) {
+                border = border.mutate();
+                border.setAlpha(isActive ? 255 : 64);
+            }
+            frame.setForeground(border);
         }
     }
 
