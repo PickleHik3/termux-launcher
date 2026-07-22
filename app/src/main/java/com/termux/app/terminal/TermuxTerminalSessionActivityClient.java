@@ -196,20 +196,27 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             mActivity.finishActivityIfNotFinishing();
             return;
         }
-        // Split-pane: if a secondary pane's shell exits, collapse that pane back to single
-        // and drop its (hidden) session, without disturbing the primary pane.
-        if (mActivity.isSecondaryPaneSession(finishedSession)) {
-            mActivity.closeSecondaryPane(finishedSession);
-            service.removeTermuxSession(finishedSession);
-            termuxSessionListNotifyUpdated();
-            return;
-        }
-        // If a primary that owns a secondary exits/killed, promote the secondary to its own
-        // tab, then close the primary and switch to the promoted session (collapse to single).
-        if (mActivity.getTabSecondary(finishedSession) != null) {
-            mActivity.promoteSecondaryToPrimary(finishedSession);
-            removeFinishedSession(finishedSession);
-            return;
+        // Split panes / windows: route the finished shell through the pane controller first.
+        com.termux.app.terminal.TerminalPaneController panes = mActivity.getPaneController();
+        if (panes != null) {
+            com.termux.app.terminal.TerminalPaneController.Window window = panes.windowOf(finishedSession);
+            int result = panes.onSessionFinished(finishedSession);
+            if (result == com.termux.app.terminal.TerminalPaneController.FINISHED_PANE) {
+                // A pane with siblings closed; its window lives on. Kill the shell, refresh drawer.
+                service.removeTermuxSession(finishedSession);
+                mActivity.rebuildDrawerSessions();
+                termuxSessionListNotifyUpdated();
+                return;
+            }
+            if (result == com.termux.app.terminal.TerminalPaneController.FINISHED_WINDOW) {
+                // The window's last pane closed; drop the window from its session (and the session
+                // if that was its last window), then switch to whatever remains.
+                service.removeTermuxSession(finishedSession);
+                if (window != null) mActivity.onWindowEmptied(window);
+                termuxSessionListNotifyUpdated();
+                return;
+            }
+            // FINISHED_UNKNOWN: shell not tracked by the controller; fall through to classic close.
         }
         int index = service.getIndexOfSession(finishedSession);
         // For plugin commands that expect the result back, we should immediately close the session

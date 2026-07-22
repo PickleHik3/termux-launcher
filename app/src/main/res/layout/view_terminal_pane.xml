@@ -18,7 +18,9 @@
         android:smoothScrollbar="false"
         android:scrollingCache="true"
         android:fastScrollEnabled="false"
-        android:scrollbarThumbVertical="@drawable/terminal_scroll_shape"
+        android:fadeScrollbars="true"
+        android:scrollbarSize="3dp"
+        android:scrollbarThumbVertical="@drawable/pane_scroll_thumb"
         android:scrollbars="vertical"
         tools:ignore="UnusedAttribute" />
 </FrameLayout>

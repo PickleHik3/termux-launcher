@@ -190,3 +190,70 @@ Hardcode a 2-pane vertical split. No drag divider, no persistence, no tree. Goal
 | Highest risk | IME/focus retargeting across 3 keyboard paths |
 | De-risked by | per-instance client support already present |
 | Recommendation | run Phase 1 spike; the only genuine unknown is IME/focus. If the spike types cleanly into the focused pane, ship it. |
+
+---
+
+## Status — 2026-07-22: N-pane controller WIRED (Phase A of "both together")
+
+`TerminalPaneController` is now the source of truth. The fixed two-view layout is gone;
+`activity_termux.xml` holds a single `terminal_pane_host` FrameLayout into which the controller
+inflates one `view_terminal_pane.xml` per tree leaf. Unlimited recursive splits (tmux-style).
+
+**Architecture**
+- Each drawer tab = one primary session owning a binary pane tree (leaf=shell, split=orientation+2 children+weights).
+- `mTerminalView`/`mActivePane` are live aliases to the focused pane, repointed by `PaneHost.onActivePaneChanged` — keeps the ~30 single-view call sites working, now acting on the active pane.
+- `PaneHost` (inner class) bridges controller → activity: createShell, configurePaneView (client/font/size/keep-on/transparent bg), removeShell, onActivePaneChanged, onTreesChanged, defaultCwd.
+- Bootstrap sessionless pane (`createBootstrapView`) gives a non-null active view during onCreate (in-app keyboard + font setup need it before the first tab).
+- Accessory layout listener now watches `terminal_pane_host` (was `terminal_view`).
+- Base `TerminalExtraKeys.mTerminalView` made settable; toolbar repointed to the active pane.
+- `onSessionFinished` routes through `controller.onSessionFinished`: pane-with-siblings → drop pane + re-key tab if primary exited; only-pane → clean tree + fall through to normal session close.
+- Compat mode: `collapseAll()` kills secondaries, restores single panes.
+
+**Verified on device (100.101.173.85):** startup (no crash, nerd font), Ctrl+Alt+V side-by-side,
+Ctrl+Alt+H stacked → 3 recursive panes, Ctrl+Alt+arrow directional focus, `exit` clean collapse +
+reflow + primary re-key, thin Material active-pane border. Build: `:app:assembleDebug` green.
+
+**Not yet driven by automation (needs hands-on check):** drawer session list filtering (logic
+unchanged, delegates to `controller.isSecondaryPane`); in-app soft-keyboard Ctrl+Alt+letter binds
+(hardware keyboard confirmed; soft-keyboard letter combos still bypass onKeyDown).
+
+### Phase B — windows layer (NEXT, not built)
+Session › **Window** › Pane-tree. A session owns N windows; each window owns a pane tree. Bind
+`Ctrl+Alt+C` = new window, `Ctrl+Alt+X` = close window (currently toast "not implemented"). Needs a
+window-select affordance (bind unspecified) + a window strip UI. `Ctrl+Alt+Shift+C/X` already do
+new/close session.
+
+---
+
+## Status — 2026-07-22 (round 3): WINDOWS layer built + visual fixes
+
+### Visual fixes
+- **Double border**: the white line was the pane *divider* drawn next to the active border.
+  `pane_divider.xml` now transparent (structural gap only).
+- **Inactive pane borders**: added `pane_inactive_border.xml` (Material **secondary** tone). Active =
+  primary tone, inactive = secondary tone — every split pane delineated, both grounded in accents.
+- **Scrollbar**: `pane_scroll_thumb.xml` (2dp, `termuxColorScrollbar`), pane view now `scrollbars=vertical`
+  + `fadeScrollbars` + 3dp size → thin, fades in on scroll, out when idle.
+- **Constraint bug**: `refreshPaneSizes()` (posts updateSize on all visible panes) on
+  onWindowFocusChanged(true) + onResume, so returning to the app re-measures against full size.
+
+### Windows model (Session › Window › Pane-tree)
+Controller is now **window-centric**: `Window` = one pane tree (stable object identity) + focused
+leaf. `mWindows` holds all live windows; `mActiveWindow` renders. Sessions live in the activity as
+`WSession { List<Window> windows; int current }`. Drawer = one row per session (its current
+window's focused shell is the representative). `onSessionFinished` returns FINISHED_PANE /
+FINISHED_WINDOW / UNKNOWN; a emptied window is dropped from its session via `onWindowEmptied`,
+closing the session (and switching away / spawning a fresh one) when it was the last window.
+`ensureWindowsForServiceSessions()` on service-connect wraps persisted shells (post-recreate) each
+into their own session.
+
+**Keybinds (final):** Ctrl+Alt+V/H split · Ctrl+Alt+arrows focus · Ctrl+Alt+Shift+arrows resize ·
+Ctrl+Alt+C new window · Ctrl+Alt+X close window · **Ctrl+Alt+[ / ]** prev/next window (new default —
+window-select bind was unspecified) · Ctrl+Alt+Shift+C new session · Ctrl+Alt+Shift+X close session.
+
+**Verified on device:** split → new window (Window 2/2, fresh pane) → switch back (Window 1/2, split
+intact, panes preserved) → close window (drops to sibling). No crashes. Build green.
+
+**Deferred / needs hands-on:** window strip UI (windows currently keybind-driven + a "Window i/n"
+toast, no persistent visual list); drawer multi-session verification via touch; closing the very last
+session auto-spawns a fresh one (launcher can't sit with zero shells) — confirm that's desired.

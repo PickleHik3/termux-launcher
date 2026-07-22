@@ -14,9 +14,15 @@ import static com.termux.shared.termux.extrakeys.ExtraKeysConstants.PRIMARY_KEY_
 
 public class TerminalExtraKeys implements ExtraKeysView.IExtraKeysView {
 
-    private final TerminalView mTerminalView;
+    // Not final: split panes repoint this at the focused pane so extra keys reach the active shell.
+    private TerminalView mTerminalView;
 
-    public TerminalExtraKeys(@NonNull TerminalView terminalView) {
+    public TerminalExtraKeys(TerminalView terminalView) {
+        mTerminalView = terminalView;
+    }
+
+    /** Repoint the extra keys at the currently focused pane's view. */
+    public void setTerminalView(TerminalView terminalView) {
         mTerminalView = terminalView;
     }
 
@@ -51,6 +57,8 @@ public class TerminalExtraKeys implements ExtraKeysView.IExtraKeysView {
     }
 
     protected void onTerminalExtraKeyButtonClick(View view, String key, boolean ctrlDown, boolean altDown, boolean shiftDown, boolean fnDown) {
+        if (mTerminalView == null)
+            return; // no focused pane yet
         if (PRIMARY_KEY_CODES_FOR_STRINGS.containsKey(key)) {
             Integer keyCode = PRIMARY_KEY_CODES_FOR_STRINGS.get(key);
             if (keyCode == null)

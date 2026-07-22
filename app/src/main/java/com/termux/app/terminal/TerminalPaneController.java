@@ -20,16 +20,17 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Owns the recursive split-pane layout for the currently displayed tab.
+ * Owns the recursive split-pane layout, organised as tmux-style <b>windows</b>.
  *
- * <p>Each drawer "tab" is one primary {@link TerminalSession} and owns a binary tree of panes
- * ({@link Node}); a leaf is a shell, an internal {@link Split} arranges two children along an
- * axis. Splitting replaces the focused leaf with a Split of {oldLeaf, newLeaf}, so any number of
- * panes / nesting depths are possible (tmux-style). Only the active tab's tree is rendered into
- * {@link #mHost}; other tabs keep their trees (and running shells) alive off-screen.
+ * <p>A {@link Window} is one screenful: a binary tree of panes ({@link Node}) where a leaf is a
+ * shell and an internal {@link Split} arranges two children along an axis. Splitting replaces the
+ * focused leaf with a Split of {oldLeaf, newLeaf}, so any number of panes / nesting depths are
+ * possible. Only the active window's tree is rendered into the host; other windows keep their
+ * trees (and running shells) alive off-screen.
  *
- * <p>The windows layer (many windows per session) is not built yet and will wrap this: a window
- * will own a pane tree, a session will own windows.
+ * <p>Windows are grouped into <b>sessions</b> by the activity (a session owns an ordered list of
+ * {@link Window}s). This controller is window-centric and session-agnostic: it renders/focuses
+ * one active window and reports pane/window lifecycle back through {@link Host}.
  */
 public class TerminalPaneController {
 
@@ -43,11 +44,16 @@ public class TerminalPaneController {
         void removeShell(TerminalSession session);
         /** The active pane changed; activity should refresh anything keyed off the current view. */
         void onActivePaneChanged();
-        /** The set of tabs/panes changed; activity should rebuild the drawer. */
+        /** The set of windows/panes changed; activity should rebuild the drawer. */
         void onTreesChanged();
         /** Default working directory when a cwd can't be derived. */
         String defaultCwd();
     }
+
+    /** onSessionFinished outcomes. */
+    public static final int FINISHED_UNKNOWN = 0; // shell not in any window
+    public static final int FINISHED_PANE = 1;    // pane dropped, window still alive
+    public static final int FINISHED_WINDOW = 2;  // window's last pane closed, window removed
 
     // --- Tree model ---
     abstract static class Node {
@@ -65,18 +71,24 @@ public class TerminalPaneController {
         float weightA = 1f, weightB = 1f;
     }
 
+    /** A window = one pane tree + which leaf is focused within it. Stable identity (object). */
+    public static final class Window {
+        Node root;
+        Leaf active;
+        Window(Leaf leaf) { root = leaf; active = leaf; }
+    }
+
     private final Host mHost;
     private final FrameLayout mHostView;
     private final LayoutInflater mInflater;
 
-    /** tab primary session -> its pane tree root. */
-    private final Map<TerminalSession, Node> mTrees = new HashMap<>();
+    /** All live windows (across every session). */
+    private final List<Window> mWindows = new ArrayList<>();
     /** Cached pane frames + terminal views, keyed by shell session (reused across re-renders). */
     private final Map<TerminalSession, FrameLayout> mPaneFrames = new HashMap<>();
     private final Map<TerminalSession, TerminalView> mPaneViews = new HashMap<>();
 
-    @Nullable private TerminalSession mActiveTab;   // primary session of the visible tab
-    @Nullable private Leaf mActiveLeaf;             // focused pane within the visible tab
+    @Nullable private Window mActiveWindow;
 
     private static final int DIVIDER_DP = 1;
 
@@ -86,10 +98,77 @@ public class TerminalPaneController {
         mInflater = inflater;
     }
 
+    /**
+     * Create and show a single sessionless pane view so the activity has a non-null active view
+     * during onCreate (before any window exists). Discarded on the first {@link #showWindow}.
+     */
+    public TerminalView createBootstrapView() {
+        FrameLayout frame = (FrameLayout) mInflater.inflate(R.layout.view_terminal_pane, mHostView, false);
+        TerminalView view = frame.findViewById(R.id.terminal_view);
+        mHost.configurePaneView(view);
+        mHostView.removeAllViews();
+        mHostView.addView(frame, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        return view;
+    }
+
+    // --- Window lifecycle ---
+
+    /** Create a new single-pane window around {@code shell} (not shown yet). */
+    public Window newWindow(TerminalSession shell) {
+        Window w = new Window(new Leaf(shell));
+        mWindows.add(w);
+        return w;
+    }
+
+    /** Make {@code w} the visible window and render its pane tree. */
+    public void showWindow(Window w) {
+        if (w == null) return;
+        mActiveWindow = w;
+        render();
+        mHost.onActivePaneChanged();
+    }
+
+    @Nullable public Window activeWindow() { return mActiveWindow; }
+
+    /** The window whose tree contains {@code shell}, or null. */
+    @Nullable public Window windowOf(@Nullable TerminalSession shell) {
+        if (shell == null) return null;
+        for (Window w : mWindows)
+            for (Leaf leaf : leavesOf(w.root))
+                if (leaf.session == shell) return w;
+        return null;
+    }
+
+    /** All shells (leaves) of {@code w}. */
+    public List<TerminalSession> shellsOf(Window w) {
+        List<TerminalSession> out = new ArrayList<>();
+        if (w != null) for (Leaf leaf : leavesOf(w.root)) out.add(leaf.session);
+        return out;
+    }
+
+    /** The focused shell of {@code w} (its representative for the drawer). */
+    @Nullable public TerminalSession windowActiveSession(@Nullable Window w) {
+        return w == null || w.active == null ? null : w.active.session;
+    }
+
+    /** Remove a whole window (all panes). Returns its shells so the caller can kill them. */
+    public List<TerminalSession> removeWindow(Window w) {
+        List<TerminalSession> sessions = new ArrayList<>();
+        if (w == null) return sessions;
+        for (Leaf leaf : leavesOf(w.root)) {
+            sessions.add(leaf.session);
+            detachPaneView(leaf.session);
+        }
+        mWindows.remove(w);
+        if (mActiveWindow == w) mActiveWindow = null;
+        return sessions;
+    }
+
     // --- Queries ---
 
     @Nullable public TerminalSession getActiveSession() {
-        return mActiveLeaf != null ? mActiveLeaf.session : null;
+        return mActiveWindow != null && mActiveWindow.active != null ? mActiveWindow.active.session : null;
     }
 
     @Nullable public TerminalView getActivePaneView() {
@@ -97,83 +176,71 @@ public class TerminalPaneController {
         return s == null ? null : mPaneViews.get(s);
     }
 
-    @Nullable public TerminalSession getActiveTab() { return mActiveTab; }
-
-    /** All pane views currently rendered (leaves of the active tab). */
+    /** All pane views currently rendered (leaves of the active window). */
     public List<TerminalView> getVisiblePaneViews() {
         List<TerminalView> out = new ArrayList<>();
-        if (mActiveTab == null) return out;
-        for (Leaf leaf : leavesOf(mTrees.get(mActiveTab)))
+        if (mActiveWindow == null) return out;
+        for (Leaf leaf : leavesOf(mActiveWindow.root))
             if (mPaneViews.containsKey(leaf.session)) out.add(mPaneViews.get(leaf.session));
         return out;
     }
 
-    /** The pane view showing {@code session}, if it is a leaf of the active tab. */
+    /** Re-measure every visible pane once layout settles. Returning from another app can leave the
+     *  panes measured against a stale (tiny) host size; posting updateSize after the next layout
+     *  pass recomputes rows/cols against the restored full size. */
+    public void refreshPaneSizes() {
+        for (TerminalView v : getVisiblePaneViews())
+            v.post(v::updateSize);
+    }
+
+    /** The pane view showing {@code session}, if it is a leaf of the active window. */
     @Nullable public TerminalView getViewForSession(@Nullable TerminalSession session) {
         return session == null ? null : mPaneViews.get(session);
     }
 
-    /** Whether {@code session} is a non-primary pane of any tab (hidden from the drawer). */
-    public boolean isSecondaryPane(@Nullable TerminalSession session) {
-        if (session == null) return false;
-        for (Map.Entry<TerminalSession, Node> e : mTrees.entrySet()) {
-            if (e.getKey() == session) continue; // the primary itself
-            for (Leaf leaf : leavesOf(e.getValue()))
-                if (leaf.session == session) return true;
-        }
-        return false;
-    }
-
-    // --- Tab lifecycle ---
-
-    /** Show a tab (primary session), creating a single-pane tree if it has none. */
-    public void showTab(TerminalSession primary) {
-        if (primary == null) return;
-        Node tree = mTrees.get(primary);
-        if (tree == null) {
-            tree = new Leaf(primary);
-            mTrees.put(primary, tree);
-        }
-        mActiveTab = primary;
-        mActiveLeaf = firstLeaf(tree);
-        render();
-        mHost.onActivePaneChanged();
-    }
-
-    /** Focus the pane showing {@code session} (its tab must be shown first). */
+    /** Focus the pane showing {@code session} within the active window. */
     public void focusSession(TerminalSession session) {
-        Leaf leaf = findLeaf(session);
+        if (mActiveWindow == null) return;
+        Leaf leaf = findLeafIn(mActiveWindow.root, session);
         if (leaf != null) {
-            mActiveLeaf = leaf;
+            mActiveWindow.active = leaf;
             updateActiveBorders();
             focusActiveView();
             mHost.onActivePaneChanged();
         }
     }
 
-    /** Remove a tab entirely (its whole pane tree). Caller removes the shells. */
-    public List<TerminalSession> removeTab(TerminalSession primary) {
-        List<TerminalSession> sessions = new ArrayList<>();
-        Node tree = mTrees.remove(primary);
-        if (tree != null)
-            for (Leaf leaf : leavesOf(tree)) {
-                sessions.add(leaf.session);
+    /** Collapse every window back to its focused single pane, returning dropped shells to kill.
+     *  Used when compatibility mode turns split panes off. */
+    public List<TerminalSession> collapseAll() {
+        List<TerminalSession> dropped = new ArrayList<>();
+        for (Window w : mWindows) {
+            TerminalSession keep = w.active != null ? w.active.session : firstLeaf(w.root).session;
+            for (Leaf leaf : leavesOf(w.root)) {
+                if (leaf.session == keep) continue;
+                dropped.add(leaf.session);
                 detachPaneView(leaf.session);
             }
-        if (mActiveTab == primary) { mActiveTab = null; mActiveLeaf = null; }
-        return sessions;
+            Leaf single = new Leaf(keep);
+            w.root = single;
+            w.active = single;
+        }
+        render();
+        mHost.onActivePaneChanged();
+        mHost.onTreesChanged();
+        return dropped;
     }
 
-    // --- Pane operations ---
+    // --- Pane operations (act on the active window) ---
 
     /** Split the focused pane; new shell fills the new leaf. orientation = LinearLayout.*. */
     public void split(int orientation) {
-        if (mActiveTab == null || mActiveLeaf == null) return;
-        String cwd = mActiveLeaf.session.getCwd();
+        if (mActiveWindow == null || mActiveWindow.active == null) return;
+        Leaf oldLeaf = mActiveWindow.active;
+        String cwd = oldLeaf.session.getCwd();
         TerminalSession newSession = mHost.createShell(cwd != null ? cwd : mHost.defaultCwd());
         if (newSession == null) return;
 
-        Leaf oldLeaf = mActiveLeaf;
         Leaf newLeaf = new Leaf(newSession);
         Split split = new Split();
         split.orientation = orientation;
@@ -184,11 +251,11 @@ public class TerminalPaneController {
         newLeaf.parent = split;
 
         if (split.parent == null) {
-            mTrees.put(mActiveTab, split);
+            mActiveWindow.root = split;
         } else {
             if (split.parent.a == oldLeaf) split.parent.a = split; else split.parent.b = split;
         }
-        mActiveLeaf = newLeaf;
+        mActiveWindow.active = newLeaf;
         render();
         // A side-by-side split changes the old pane's column count; nudge the shell to redraw
         // cleanly (Ctrl+L) once the resize settles, avoiding a duplicated prompt.
@@ -202,70 +269,41 @@ public class TerminalPaneController {
         mHost.onTreesChanged();
     }
 
-    /** Close the focused pane; returns its shell session so the caller can kill it. Null if it was
-     *  the tab's last pane (caller should close the whole tab instead). */
-    @Nullable public TerminalSession closeActivePane() {
-        if (mActiveTab == null || mActiveLeaf == null) return null;
-        Leaf leaf = mActiveLeaf;
-        Split parent = leaf.parent;
-        if (parent == null) {
-            // Last pane in the tab.
-            return null;
-        }
-        Node sibling = (parent.a == leaf) ? parent.b : parent.a;
-        Split grand = parent.parent;
-        sibling.parent = grand;
-        if (grand == null) {
-            mTrees.put(mActiveTab, sibling);
-        } else {
-            if (grand.a == parent) grand.a = sibling; else grand.b = sibling;
-        }
-        detachPaneView(leaf.session);
-        mActiveLeaf = firstLeaf(sibling);
-        render();
-        mHost.onActivePaneChanged();
-        mHost.onTreesChanged();
-        return leaf.session;
-    }
-
-    /** Drop a finished shell's pane (e.g. user ran `exit`). Returns true if it was a known pane. */
-    public boolean onSessionFinished(TerminalSession session) {
-        // Find which tab owns it.
-        TerminalSession owningTab = null;
+    /** Drop a finished shell's pane. Returns one of FINISHED_*. */
+    public int onSessionFinished(TerminalSession session) {
+        Window owner = null;
         Leaf owningLeaf = null;
-        for (Map.Entry<TerminalSession, Node> e : mTrees.entrySet()) {
-            for (Leaf leaf : leavesOf(e.getValue()))
-                if (leaf.session == session) { owningTab = e.getKey(); owningLeaf = leaf; break; }
+        for (Window w : mWindows) {
+            for (Leaf leaf : leavesOf(w.root))
+                if (leaf.session == session) { owner = w; owningLeaf = leaf; break; }
             if (owningLeaf != null) break;
         }
-        if (owningLeaf == null) return false;
+        if (owningLeaf == null) return FINISHED_UNKNOWN;
 
         Split parent = owningLeaf.parent;
         if (parent == null) {
-            // It was the tab's only pane -> the whole tab is gone; caller handles tab removal.
-            return false;
+            // Window's only pane -> remove the whole window; caller drops it from its session.
+            detachPaneView(session);
+            mWindows.remove(owner);
+            if (mActiveWindow == owner) mActiveWindow = null;
+            return FINISHED_WINDOW;
         }
         Node sibling = (parent.a == owningLeaf) ? parent.b : parent.a;
         Split grand = parent.parent;
         sibling.parent = grand;
-        boolean isPrimaryGone = (session == owningTab);
         if (grand == null) {
-            mTrees.remove(owningTab);
-            // If the removed leaf was the tab's primary (its drawer identity), re-key the tree
-            // under a surviving leaf so the tab persists under a new primary.
-            TerminalSession newPrimary = firstLeaf(sibling).session;
-            mTrees.put(newPrimary, sibling);
-            if (mActiveTab == owningTab) mActiveTab = newPrimary;
+            owner.root = sibling;
         } else {
             if (grand.a == parent) grand.a = sibling; else grand.b = sibling;
         }
         detachPaneView(session);
-        if (mActiveTab != null && mActiveLeaf != null && mActiveLeaf.session == session)
-            mActiveLeaf = firstLeaf(mTrees.get(mActiveTab));
-        render();
-        mHost.onActivePaneChanged();
+        if (owner.active == owningLeaf) owner.active = firstLeaf(sibling);
+        if (owner == mActiveWindow) {
+            render();
+            mHost.onActivePaneChanged();
+        }
         mHost.onTreesChanged();
-        return true;
+        return FINISHED_PANE;
     }
 
     /** Focus the pane nearest to the active one in the arrow direction (KeyEvent.KEYCODE_DPAD_*). */
@@ -303,12 +341,12 @@ public class TerminalPaneController {
 
     /** Resize the split enclosing the active pane along the arrow axis. */
     public boolean resizeActive(int keyCode) {
-        if (mActiveLeaf == null) return true;
+        if (mActiveWindow == null || mActiveWindow.active == null) return true;
         boolean horizontalAxis = keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT
             || keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT;
         int wantOrientation = horizontalAxis ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL;
         // Walk up to the nearest ancestor split on the matching axis.
-        Node node = mActiveLeaf;
+        Node node = mActiveWindow.active;
         Split target = null;
         while (node.parent != null) {
             if (node.parent.orientation == wantOrientation) { target = node.parent; break; }
@@ -334,10 +372,8 @@ public class TerminalPaneController {
 
     private void render() {
         mHostView.removeAllViews();
-        if (mActiveTab == null) return;
-        Node root = mTrees.get(mActiveTab);
-        if (root == null) return;
-        View built = buildView(root);
+        if (mActiveWindow == null) return;
+        View built = buildView(mActiveWindow.root);
         mHostView.addView(built, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         updateActiveBorders();
@@ -361,8 +397,6 @@ public class TerminalPaneController {
         ll.addView(va, new LinearLayout.LayoutParams(
             vertical ? match : 0, vertical ? 0 : match, split.weightA));
         View divider = new View(mHostView.getContext());
-        divider.setBackgroundColor(ContextCompat.getColor(mHostView.getContext(),
-            android.R.color.transparent));
         divider.setBackground(ContextCompat.getDrawable(mHostView.getContext(),
             R.drawable.pane_divider));
         ll.addView(divider, new LinearLayout.LayoutParams(
@@ -404,12 +438,16 @@ public class TerminalPaneController {
     private void updateActiveBorders() {
         List<TerminalView> views = getVisiblePaneViews();
         boolean split = views.size() > 1;
+        TerminalSession activeSession = getActiveSession();
         for (TerminalView v : views) {
             FrameLayout frame = mPaneFrames.get(v.getCurrentSession());
             if (frame == null) continue;
-            boolean isActive = split && mActiveLeaf != null && v.getCurrentSession() == mActiveLeaf.session;
-            frame.setForeground(isActive
-                ? ContextCompat.getDrawable(mHostView.getContext(), R.drawable.pane_active_border) : null);
+            if (!split) { frame.setForeground(null); continue; }
+            boolean isActive = v.getCurrentSession() == activeSession;
+            // Active pane: primary-tone border. Inactive panes: secondary-tone border so every
+            // pane is delineated (both grounded in Material accents, not grey).
+            frame.setForeground(ContextCompat.getDrawable(mHostView.getContext(),
+                isActive ? R.drawable.pane_active_border : R.drawable.pane_inactive_border));
         }
     }
 
@@ -420,9 +458,8 @@ public class TerminalPaneController {
 
     // --- Tree helpers ---
 
-    @Nullable private Leaf findLeaf(TerminalSession session) {
-        if (mActiveTab == null) return null;
-        for (Leaf leaf : leavesOf(mTrees.get(mActiveTab)))
+    @Nullable private Leaf findLeafIn(@Nullable Node root, TerminalSession session) {
+        for (Leaf leaf : leavesOf(root))
             if (leaf.session == session) return leaf;
         return null;
     }

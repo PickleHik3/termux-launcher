@@ -122,9 +122,14 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      */
     public void onCreate() {
         onReloadProperties();
-        mActivity.getTerminalView().setTextSize(mActivity.getPreferences().getFontSize());
+        // Panes are created lazily by TerminalPaneController (each configured in PaneHost), so
+        // there may be no active pane yet at activity onCreate. Guard the initial font/keep-on setup.
+        TerminalView view = mActivity.getTerminalView();
+        if (view != null)
+            view.setTextSize(mActivity.getPreferences().getFontSize());
         mActivity.requestTerminalFlushDockGeometryUpdate();
-        mActivity.getTerminalView().setKeepScreenOn(mActivity.getPreferences().shouldKeepScreenOn());
+        if (view != null)
+            view.setKeepScreenOn(mActivity.getPreferences().shouldKeepScreenOn());
     }
 
     /**
@@ -338,8 +343,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      * Multiplexer keybinds (only when compatibility mode is off). All use Ctrl+Alt(+Shift):
      *   Ctrl+Alt+V            vertical split (side by side)
      *   Ctrl+Alt+H            horizontal split (stacked top/bottom)
-     *   Ctrl+Alt+C            new window        (window layer not built yet)
-     *   Ctrl+Alt+X            close window      (window layer not built yet)
+     *   Ctrl+Alt+C            new window (within the current session)
+     *   Ctrl+Alt+X            close window
+     *   Ctrl+Alt+[ / ]        previous / next window in the current session
      *   Ctrl+Alt+Shift+C      new session
      *   Ctrl+Alt+Shift+X      close session
      *   Ctrl+Alt+arrow        focus pane in that direction
@@ -367,15 +373,21 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 return true;
             case KeyEvent.KEYCODE_C:
                 if (shift)
-                    mTermuxTerminalSessionActivityClient.addNewSession(false, null);
+                    mTermuxTerminalSessionActivityClient.addNewSession(false, null); // new session
                 else
-                    mActivity.showToast("Windows not implemented yet", true);
+                    mActivity.createNewWindow();                                     // new window
                 return true;
             case KeyEvent.KEYCODE_X:
                 if (shift)
-                    mActivity.closeCurrentSession();
+                    mActivity.closeCurrentSession();                                 // close session
                 else
-                    mActivity.showToast("Windows not implemented yet", true);
+                    mActivity.closeCurrentWindow();                                  // close window
+                return true;
+            case KeyEvent.KEYCODE_LEFT_BRACKET:  // Ctrl+Alt+[  previous window
+                mActivity.switchWindow(false);
+                return true;
+            case KeyEvent.KEYCODE_RIGHT_BRACKET: // Ctrl+Alt+]  next window
+                mActivity.switchWindow(true);
                 return true;
             default:
                 return false;
