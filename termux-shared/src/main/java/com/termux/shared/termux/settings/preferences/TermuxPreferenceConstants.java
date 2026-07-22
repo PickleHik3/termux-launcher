@@ -395,6 +395,15 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_KEEP_SCREEN_ON = false;
 
         /**
+         * Defines the key for "compatibility mode": when enabled, all custom window/pane
+         * splitting behaviour and tmux-style keybinds are disabled and native Termux
+         * single-pane behaviour is used.
+         */
+        public static final String KEY_COMPATIBILITY_MODE = "compatibility_mode";
+
+        public static final boolean DEFAULT_VALUE_COMPATIBILITY_MODE = false;
+
+        /**
          * Defines the key for font size of termux terminal view.
          */
         public static final String KEY_FONTSIZE = "fontsize";

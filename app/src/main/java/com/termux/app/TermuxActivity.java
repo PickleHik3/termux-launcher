@@ -52,6 +52,7 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -191,6 +192,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * The {@link TerminalView} shown in  {@link TermuxActivity} that displays the terminal.
      */
     TerminalView mTerminalView;
+
+    /**
+     * Split-pane (Phase 1 spike): the second {@link TerminalView}. Null-safe everywhere;
+     * remains hidden until a second session is attached via {@link #ensureSecondPaneSession()}.
+     */
+    TerminalView mTerminalView2;
+
+    /** The pane that currently has focus. Backs {@link #getTerminalView()}. */
+    TerminalView mActivePane;
+
+    // ---- Split-pane model ----
+    // A "tab" = one primary session, shown in the drawer. A tab may own one secondary
+    // pane session (2-pane split). Secondary sessions are hidden from the drawer.
+    /** primary session -> its secondary pane session. */
+    private final java.util.Map<TerminalSession, TerminalSession> mTabSecondary = new java.util.HashMap<>();
+    /** primary session -> pane container orientation (LinearLayout.VERTICAL/HORIZONTAL). */
+    private final java.util.Map<TerminalSession, Integer> mTabOrientation = new java.util.HashMap<>();
+    /** Sessions that are a secondary pane; excluded from the drawer list. */
+    private final java.util.Set<TerminalSession> mSecondaryPaneSessions = new java.util.HashSet<>();
+    /** Primary session of the currently displayed tab. */
+    @Nullable private TerminalSession mCurrentTabPrimary;
+    /** Drawer-visible sessions = service sessions minus secondary panes. Backs the list adapter. */
+    public final java.util.List<com.termux.shared.termux.shell.command.runner.terminal.TermuxSession> mDrawerSessions = new java.util.ArrayList<>();
 
     /**
      *  The {@link TerminalViewClient} interface implementation to allow for communication between
@@ -833,6 +857,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTermuxTerminalViewClient.onResume();
         refreshLauncherIconsIfPreferencesChanged();
         maybeRecoverFromEmptySession("onResume");
+        // If compatibility mode was just enabled, drop any active split back to a single pane.
+        if (!isSplitPanesEnabled())
+            collapseAllSplits();
 
         updateWindowBackgroundForCurrentSession();
         syncTerminalWallpaperRenderingMode();
@@ -3996,6 +4023,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
         mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
+        rebuildDrawerSessions();
         scheduleOnboardingIfReady();
     }
 
@@ -5345,6 +5373,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Set termux terminal view
         mTerminalView = findViewById(R.id.terminal_view);
         mTerminalView.setTerminalViewClient(mTermuxTerminalViewClient);
+        // Split-pane spike: the second view shares the same clients. All client callbacks
+        // route through getTerminalView() (active pane) or per-session lookup, so a single
+        // client pair drives both panes correctly.
+        mTerminalView2 = findViewById(R.id.terminal_view_2);
+        if (mTerminalView2 != null)
+            mTerminalView2.setTerminalViewClient(mTermuxTerminalViewClient);
+        mActivePane = mTerminalView;
+        setupPaneFocusRouting();
         syncTerminalWallpaperRenderingMode();
         applySuggestionBarInputChar();
         if (mTermuxTerminalViewClient != null)
@@ -5796,7 +5832,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public TerminalView getTerminalView() {
-            return mTerminalView;
+            // Route in-app keyboard input to the focused pane.
+            return TermuxActivity.this.getTerminalView();
         }
 
         @Override
@@ -6075,7 +6112,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void setTermuxSessionsListView() {
         ListView termuxSessionsListView = findViewById(R.id.terminal_sessions_list);
-        mTermuxSessionListViewController = new TermuxSessionsListViewController(this, mTermuxService.getTermuxSessions());
+        // Backed by the filtered drawer list (excludes secondary panes) rather than the raw
+        // service session list, so panes don't show up as their own sessions.
+        rebuildDrawerSessions();
+        mTermuxSessionListViewController = new TermuxSessionsListViewController(this, mDrawerSessions);
         termuxSessionsListView.setAdapter(mTermuxSessionListViewController);
         termuxSessionsListView.setOnItemClickListener(mTermuxSessionListViewController);
         termuxSessionsListView.setOnItemLongClickListener(mTermuxSessionListViewController);
@@ -7154,7 +7194,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     public void termuxSessionListNotifyUpdated() {
-        mTermuxSessionListViewController.notifyDataSetChanged();
+        // Rebuild the filtered drawer list (also calls notifyDataSetChanged).
+        rebuildDrawerSessions();
     }
 
     public boolean isVisible() {
@@ -7182,7 +7223,340 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     public TerminalView getTerminalView() {
-        return mTerminalView;
+        // Returns the focused pane so all single-view client callbacks act on it.
+        return mActivePane != null ? mActivePane : mTerminalView;
+    }
+
+    /** All terminal panes that currently exist (order = pane 1, pane 2). */
+    public java.util.List<TerminalView> getTerminalPaneViews() {
+        java.util.List<TerminalView> panes = new java.util.ArrayList<>(2);
+        if (mTerminalView != null) panes.add(mTerminalView);
+        if (mTerminalView2 != null) panes.add(mTerminalView2);
+        return panes;
+    }
+
+    /** The pane currently displaying {@code session}, or null if none. */
+    @Nullable
+    public TerminalView getTerminalViewForSession(@Nullable TerminalSession session) {
+        if (session == null) return null;
+        for (TerminalView v : getTerminalPaneViews()) {
+            if (v.getCurrentSession() == session) return v;
+        }
+        return null;
+    }
+
+    private void setupPaneFocusRouting() {
+        // Touch-down (not focus-change) so every tap reliably re-targets the active pane,
+        // even after focus has bounced around between panes / the in-app keyboard.
+        android.view.View.OnTouchListener t = (view, ev) -> {
+            if (ev.getActionMasked() == android.view.MotionEvent.ACTION_DOWN)
+                setActivePane((TerminalView) view);
+            return false; // observe only; let the view handle the touch
+        };
+        for (TerminalView v : getTerminalPaneViews())
+            v.setOnTouchListener(t);
+        updatePaneActiveIndicators();
+    }
+
+    /** Mark {@code view} as the focused pane and update the active-pane border. */
+    public void setActivePane(TerminalView view) {
+        if (view == null) return;
+        mActivePane = view;
+        if (!view.isFocused())
+            view.requestFocus();
+        updatePaneActiveIndicators();
+    }
+
+    private void updatePaneActiveIndicators() {
+        View frame1 = findViewById(R.id.terminal_pane_frame_1);
+        View frame2 = findViewById(R.id.terminal_pane_frame_2);
+        // Only show the active-pane border while a second pane is visible (split mode).
+        boolean split = mTerminalView2 != null && frame2 != null
+            && frame2.getVisibility() == View.VISIBLE;
+        if (frame1 != null)
+            frame1.setForeground(split && mActivePane == mTerminalView
+                ? androidx.core.content.ContextCompat.getDrawable(this, R.drawable.pane_active_border) : null);
+        if (frame2 != null)
+            frame2.setForeground(split && mActivePane == mTerminalView2
+                ? androidx.core.content.ContextCompat.getDrawable(this, R.drawable.pane_active_border) : null);
+    }
+
+    public boolean isSecondaryPaneSession(@Nullable TerminalSession s) {
+        return s != null && mSecondaryPaneSessions.contains(s);
+    }
+
+    @Nullable
+    public TerminalSession getTabSecondary(@Nullable TerminalSession primary) {
+        return primary == null ? null : mTabSecondary.get(primary);
+    }
+
+    @Nullable
+    private TerminalSession findPrimaryForSecondary(TerminalSession secondary) {
+        for (java.util.Map.Entry<TerminalSession, TerminalSession> e : mTabSecondary.entrySet())
+            if (e.getValue() == secondary) return e.getKey();
+        return null;
+    }
+
+    /** Rebuild the drawer-visible session list (excludes secondary panes) and refresh the adapter. */
+    public void rebuildDrawerSessions() {
+        mDrawerSessions.clear();
+        if (mTermuxService != null) {
+            for (com.termux.shared.termux.shell.command.runner.terminal.TermuxSession ts : mTermuxService.getTermuxSessions()) {
+                if (!isSecondaryPaneSession(ts.getTerminalSession()))
+                    mDrawerSessions.add(ts);
+            }
+        }
+        if (mTermuxSessionListViewController != null)
+            mTermuxSessionListViewController.notifyDataSetChanged();
+    }
+
+    /** Index of {@code session} within the drawer-visible list, or -1. */
+    public int getDrawerIndexOfSession(TerminalSession session) {
+        for (int i = 0; i < mDrawerSessions.size(); i++)
+            if (mDrawerSessions.get(i).getTerminalSession() == session) return i;
+        return -1;
+    }
+
+    private int paneDp(int dp) {
+        return Math.round(getResources().getDisplayMetrics().density * dp);
+    }
+
+    /** Lay the two pane frames + divider out for the given orientation. */
+    private void applyPaneContainerOrientation(int orientation) {
+        android.widget.LinearLayout panes = findViewById(R.id.terminal_panes);
+        View frame1 = findViewById(R.id.terminal_pane_frame_1);
+        View divider = findViewById(R.id.terminal_pane_divider);
+        View frame2 = findViewById(R.id.terminal_pane_frame_2);
+        if (panes == null || frame1 == null || divider == null || frame2 == null) return;
+        panes.setOrientation(orientation);
+        boolean vertical = orientation == android.widget.LinearLayout.VERTICAL;
+        int match = android.widget.LinearLayout.LayoutParams.MATCH_PARENT;
+        // Weighted frames: the weighted axis is 0dp, the other is match_parent.
+        frame1.setLayoutParams(new android.widget.LinearLayout.LayoutParams(
+            vertical ? match : 0, vertical ? 0 : match, 1f));
+        frame2.setLayoutParams(new android.widget.LinearLayout.LayoutParams(
+            vertical ? match : 0, vertical ? 0 : match, 1f));
+        divider.setLayoutParams(new android.widget.LinearLayout.LayoutParams(
+            vertical ? match : paneDp(1), vertical ? paneDp(1) : match));
+    }
+
+    /**
+     * Show a session's tab across the panes: primary in pane 1, its secondary (if any) in
+     * pane 2. Passing a secondary session activates its owning tab and focuses pane 2.
+     * @return true if the focused session changed.
+     */
+    public boolean activateSessionInPanes(TerminalSession session) {
+        if (session == null || mTerminalView == null) return false;
+        TerminalSession previousFocused = getCurrentSession();
+        TerminalSession primary = isSecondaryPaneSession(session) ? findPrimaryForSecondary(session) : session;
+        if (primary == null) primary = session;
+        mCurrentTabPrimary = primary;
+        TerminalSession secondary = mTabSecondary.get(primary);
+
+        if (getPreferences() != null && !mTerminalView.isFontInitialized())
+            mTerminalView.setTextSize(getPreferences().getFontSize());
+        mTerminalView.attachSession(primary);
+
+        View frame2 = findViewById(R.id.terminal_pane_frame_2);
+        View divider = findViewById(R.id.terminal_pane_divider);
+        if (secondary != null && mTerminalView2 != null) {
+            Integer o = mTabOrientation.get(primary);
+            applyPaneContainerOrientation(o == null ? android.widget.LinearLayout.VERTICAL : o);
+            if (getPreferences() != null && !mTerminalView2.isFontInitialized())
+                mTerminalView2.setTextSize(getPreferences().getFontSize());
+            if (frame2 != null) frame2.setVisibility(View.VISIBLE);
+            if (divider != null) divider.setVisibility(View.VISIBLE);
+            mTerminalView2.attachSession(secondary);
+        } else {
+            if (frame2 != null) frame2.setVisibility(View.GONE);
+            if (divider != null) divider.setVisibility(View.GONE);
+        }
+        // Apply font/colours (nerd-font typeface) to every populated pane.
+        if (getTermuxTerminalSessionClient() != null)
+            getTermuxTerminalSessionClient().checkForFontAndColors();
+
+        mActivePane = (secondary != null && session == secondary) ? mTerminalView2 : mTerminalView;
+        if (mActivePane != null) mActivePane.requestFocus();
+        updatePaneActiveIndicators();
+        for (TerminalView v : getTerminalPaneViews())
+            if (v.getCurrentSession() != null) v.onScreenUpdated();
+        return previousFocused != session;
+    }
+
+    /** Whether custom window/pane splitting is active (disabled by compatibility mode). */
+    public boolean isSplitPanesEnabled() {
+        return getPreferences() == null || !getPreferences().isCompatibilityModeEnabled();
+    }
+
+    @Nullable
+    public TerminalSession getCurrentTabPrimary() {
+        return mCurrentTabPrimary;
+    }
+
+    /** Split the current tab's pane into two, spawning a new shell in the second pane. */
+    public void splitCurrentPane(int orientation) {
+        if (!isSplitPanesEnabled()) return;
+        if (mTermuxService == null || mCurrentTabPrimary == null) {
+            showToast("No session to split", true);
+            return;
+        }
+        if (mTabSecondary.containsKey(mCurrentTabPrimary)) {
+            showToast("Pane already split", true);
+            return;
+        }
+        if (mTerminalView2 == null) return;
+        String cwd = mCurrentTabPrimary.getCwd();
+        if (cwd == null) cwd = getProperties().getDefaultWorkingDirectory();
+        com.termux.shared.termux.shell.command.runner.terminal.TermuxSession created =
+            mTermuxService.createTermuxSession(null, null, null, cwd, false, null);
+        if (created == null) return;
+        TerminalSession sec = created.getTerminalSession();
+        mSecondaryPaneSessions.add(sec);
+        mTabSecondary.put(mCurrentTabPrimary, sec);
+        mTabOrientation.put(mCurrentTabPrimary, orientation);
+        applyPaneContainerOrientation(orientation);
+        if (getPreferences() != null) {
+            mTerminalView2.setTextSize(getPreferences().getFontSize());
+            mTerminalView2.setKeepScreenOn(getPreferences().shouldKeepScreenOn());
+        }
+        View frame2 = findViewById(R.id.terminal_pane_frame_2);
+        View divider = findViewById(R.id.terminal_pane_divider);
+        if (frame2 != null) frame2.setVisibility(View.VISIBLE);
+        if (divider != null) divider.setVisibility(View.VISIBLE);
+        mTerminalView2.attachSession(sec);
+        // Apply font to the NEW pane only. Re-applying to pane 1 would recreate its renderer
+        // and trigger a second resize/repaint (fish then reprints its prompt -> duplicate).
+        if (getTermuxTerminalSessionClient() != null)
+            getTermuxTerminalSessionClient().applyFontToView(mTerminalView2);
+        mActivePane = mTerminalView2;
+        mTerminalView2.requestFocus();
+        updatePaneActiveIndicators();
+        mTerminalView2.onScreenUpdated();
+        // A side-by-side split changes pane 1's column count; the running shell reflows and
+        // leaves a stale prompt line. Once the resize settles, nudge it (Ctrl+L) to redraw
+        // cleanly. Stacked splits keep the same width, so no nudge is needed there.
+        if (orientation == android.widget.LinearLayout.HORIZONTAL) {
+            final TerminalSession primary = mCurrentTabPrimary;
+            mTerminalView.postDelayed(() -> {
+                if (primary != null && primary.isRunning())
+                    primary.write("\u000c");
+            }, 250);
+        }
+        rebuildDrawerSessions();
+    }
+
+    /** Move focus to the pane in the given arrow direction (Ctrl+Alt+arrow). No-op if none. */
+    public boolean focusPaneDirection(int keyCode) {
+        View frame2 = findViewById(R.id.terminal_pane_frame_2);
+        boolean split = mTerminalView2 != null && frame2 != null && frame2.getVisibility() == View.VISIBLE;
+        if (!split) return true; // consume; nothing to move to in single-pane mode
+        android.widget.LinearLayout panes = findViewById(R.id.terminal_panes);
+        boolean stacked = panes == null || panes.getOrientation() == android.widget.LinearLayout.VERTICAL;
+        TerminalView target = null;
+        if (stacked) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) target = mTerminalView;
+            else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) target = mTerminalView2;
+        } else {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) target = mTerminalView;
+            else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) target = mTerminalView2;
+        }
+        if (target != null) setActivePane(target);
+        return true;
+    }
+
+    /** Adjust the split ratio toward the arrow direction (Ctrl+Alt+Shift+arrow). */
+    public boolean resizeActivePane(int keyCode) {
+        View frame1 = findViewById(R.id.terminal_pane_frame_1);
+        View frame2 = findViewById(R.id.terminal_pane_frame_2);
+        if (frame1 == null || frame2 == null || frame2.getVisibility() != View.VISIBLE) return true;
+        android.widget.LinearLayout panes = findViewById(R.id.terminal_panes);
+        boolean stacked = panes == null || panes.getOrientation() == android.widget.LinearLayout.VERTICAL;
+        android.widget.LinearLayout.LayoutParams p1 = (android.widget.LinearLayout.LayoutParams) frame1.getLayoutParams();
+        android.widget.LinearLayout.LayoutParams p2 = (android.widget.LinearLayout.LayoutParams) frame2.getLayoutParams();
+        float step = 0.12f;
+        float w1 = p1.weight, w2 = p2.weight;
+        if (stacked) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) { w1 += step; w2 -= step; }
+            else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) { w1 -= step; w2 += step; }
+            else return true;
+        } else {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) { w1 += step; w2 -= step; }
+            else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) { w1 -= step; w2 += step; }
+            else return true;
+        }
+        // Clamp so neither pane collapses (total weight stays 2).
+        w1 = Math.max(0.3f, Math.min(1.7f, w1));
+        w2 = 2f - w1;
+        p1.weight = w1; p2.weight = w2;
+        frame1.setLayoutParams(p1);
+        frame2.setLayoutParams(p2);
+        return true;
+    }
+
+    /** Kill the focused pane's shell (Alt+Esc). Teardown/promotion happens in onSessionFinished. */
+    public boolean killFocusedPane() {
+        TerminalView active = getTerminalView();
+        if (active == null) return false;
+        TerminalSession s = active.getCurrentSession();
+        if (s == null) return false;
+        s.finishIfRunning();
+        return true;
+    }
+
+    /** Close the current tab (its primary session plus any secondary pane) and switch away. */
+    public void closeCurrentSession() {
+        TerminalSession primary = mCurrentTabPrimary != null ? mCurrentTabPrimary : getCurrentSession();
+        if (primary == null) return;
+        TerminalSession sec = mTabSecondary.get(primary);
+        if (sec != null) {
+            mTabSecondary.remove(primary);
+            mTabOrientation.remove(primary);
+            mSecondaryPaneSessions.remove(sec);
+            if (mTermuxService != null) mTermuxService.removeTermuxSession(sec);
+        }
+        if (getTermuxTerminalSessionClient() != null)
+            getTermuxTerminalSessionClient().removeFinishedSession(primary);
+    }
+
+    /** Collapse any active split back to a single pane (used when entering compatibility mode). */
+    public void collapseAllSplits() {
+        if (mTerminalView2 == null) return;
+        View frame2 = findViewById(R.id.terminal_pane_frame_2);
+        View divider = findViewById(R.id.terminal_pane_divider);
+        if (frame2 != null) frame2.setVisibility(View.GONE);
+        if (divider != null) divider.setVisibility(View.GONE);
+        mTabSecondary.clear();
+        mTabOrientation.clear();
+        mSecondaryPaneSessions.clear();
+        mActivePane = mTerminalView;
+        updatePaneActiveIndicators();
+        rebuildDrawerSessions();
+    }
+
+    /** Tear down the second pane after its (secondary) session has finished. */
+    public void closeSecondaryPane(TerminalSession sec) {
+        TerminalSession primary = findPrimaryForSecondary(sec);
+        if (primary != null) {
+            mTabSecondary.remove(primary);
+            mTabOrientation.remove(primary);
+        }
+        mSecondaryPaneSessions.remove(sec);
+        View frame2 = findViewById(R.id.terminal_pane_frame_2);
+        View divider = findViewById(R.id.terminal_pane_divider);
+        if (frame2 != null) frame2.setVisibility(View.GONE);
+        if (divider != null) divider.setVisibility(View.GONE);
+        mActivePane = mTerminalView;
+        if (mTerminalView != null) mTerminalView.requestFocus();
+        updatePaneActiveIndicators();
+        rebuildDrawerSessions();
+    }
+
+    /** Promote a tab's secondary pane to a standalone session (used when the primary exits). */
+    public void promoteSecondaryToPrimary(TerminalSession primary) {
+        TerminalSession sec = mTabSecondary.remove(primary);
+        mTabOrientation.remove(primary);
+        if (sec != null) mSecondaryPaneSessions.remove(sec);
+        rebuildDrawerSessions();
     }
 
     public TermuxTerminalViewClient getTermuxTerminalViewClient() {
@@ -7195,8 +7569,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Nullable
     public TerminalSession getCurrentSession() {
-        if (mTerminalView != null)
-            return mTerminalView.getCurrentSession();
+        TerminalView active = getTerminalView();
+        if (active != null)
+            return active.getCurrentSession();
         else
             return null;
     }

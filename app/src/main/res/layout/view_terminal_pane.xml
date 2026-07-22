@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One pane: a TerminalView wrapped in a frame that can show the active-pane border.
+     Inflated once per leaf in the pane tree (see TerminalPaneController). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+    <com.termux.view.TerminalView
+        android:id="@+id/terminal_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:defaultFocusHighlightEnabled="false"
+        android:focusableInTouchMode="true"
+        android:overScrollMode="never"
+        android:smoothScrollbar="false"
+        android:scrollingCache="true"
+        android:fastScrollEnabled="false"
+        android:scrollbarThumbVertical="@drawable/terminal_scroll_shape"
+        android:scrollbars="vertical"
+        tools:ignore="UnusedAttribute" />
+</FrameLayout>

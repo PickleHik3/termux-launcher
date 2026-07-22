@@ -59,19 +59,71 @@
                     android:visibility="gone"
                     android:background="?attr/termuxColorSurfaceBase" />
 
-                <com.termux.view.TerminalView
-                    android:id="@+id/terminal_view"
+                <!-- Split-pane container (Phase 1 spike): two stacked TerminalViews.
+                     Pane 2 frame is GONE until a second session is attached, so the
+                     single-pane experience is unchanged when only one shell exists. -->
+                <LinearLayout
+                    android:id="@+id/terminal_panes"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:defaultFocusHighlightEnabled="false"
-                    android:focusableInTouchMode="true"
-                    android:overScrollMode="never"
-                    android:smoothScrollbar="false"
-                    android:scrollingCache="true"
-                    android:fastScrollEnabled="false"
-                    android:scrollbarThumbVertical="@drawable/terminal_scroll_shape"
-                    android:scrollbars="vertical"
-                    tools:ignore="UnusedAttribute" />
+                    android:orientation="vertical"
+                    android:clipChildren="false"
+                    android:clipToPadding="false">
+
+                    <FrameLayout
+                        android:id="@+id/terminal_pane_frame_1"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:clipChildren="false"
+                        android:clipToPadding="false">
+
+                        <com.termux.view.TerminalView
+                            android:id="@+id/terminal_view"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:defaultFocusHighlightEnabled="false"
+                            android:focusableInTouchMode="true"
+                            android:overScrollMode="never"
+                            android:smoothScrollbar="false"
+                            android:scrollingCache="true"
+                            android:fastScrollEnabled="false"
+                            android:scrollbarThumbVertical="@drawable/terminal_scroll_shape"
+                            android:scrollbars="vertical"
+                            tools:ignore="UnusedAttribute" />
+                    </FrameLayout>
+
+                    <View
+                        android:id="@+id/terminal_pane_divider"
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:visibility="gone"
+                        android:background="?attr/termuxColorOnSurfaceVariant" />
+
+                    <FrameLayout
+                        android:id="@+id/terminal_pane_frame_2"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:visibility="gone"
+                        android:clipChildren="false"
+                        android:clipToPadding="false">
+
+                        <com.termux.view.TerminalView
+                            android:id="@+id/terminal_view_2"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:defaultFocusHighlightEnabled="false"
+                            android:focusableInTouchMode="true"
+                            android:overScrollMode="never"
+                            android:smoothScrollbar="false"
+                            android:scrollingCache="true"
+                            android:fastScrollEnabled="false"
+                            android:scrollbarThumbVertical="@drawable/terminal_scroll_shape"
+                            android:scrollbars="vertical"
+                            tools:ignore="UnusedAttribute" />
+                    </FrameLayout>
+                </LinearLayout>
             </FrameLayout>
 
             <RelativeLayout

@@ -18,4 +18,16 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory
+        app:key="split_panes"
+        app:title="@string/termux_split_panes_header">
+
+        <SwitchPreferenceCompat
+            app:key="compatibility_mode"
+            app:summaryOff="@string/termux_compatibility_mode_off"
+            app:summaryOn="@string/termux_compatibility_mode_on"
+            app:title="@string/termux_compatibility_mode_title" />
+
+    </PreferenceCategory>
+
 </PreferenceScreen>

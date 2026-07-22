@@ -713,6 +713,11 @@ public final class TerminalView extends View {
         invalidate();
     }
 
+    /** Whether a renderer/font has been set (safe to call {@link #setTypeface}). */
+    public boolean isFontInitialized() {
+        return mRenderer != null;
+    }
+
     @Override
     public boolean onCheckIsTextEditor() {
         return true;
@@ -1348,7 +1353,9 @@ public final class TerminalView extends View {
     public void updateSize() {
         int viewWidth = getWidth();
         int viewHeight = getHeight();
-        if (viewWidth == 0 || viewHeight == 0 || mTermSession == null)
+        // mRenderer may be null if the view is laid out before its font/text size is set
+        // (e.g. a split pane made visible before setTextSize()). Nothing to size yet.
+        if (viewWidth == 0 || viewHeight == 0 || mTermSession == null || mRenderer == null)
             return;
         // Set to 80 and 24 if you want to enable vttest.
         int newColumns = Math.max(4, (int) (viewWidth / mRenderer.mFontWidth));

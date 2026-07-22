@@ -283,6 +283,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         }
         if (handleVirtualKeys(keyCode, e, true))
             return true;
+        if (!mActivity.getProperties().areHardwareKeyboardShortcutsDisabled()
+            && handleMultiplexerKeybinds(keyCode, e))
+            return true;
         if (keyCode == KeyEvent.KEYCODE_ENTER && !currentSession.isRunning()) {
             mTermuxTerminalSessionActivityClient.removeFinishedSession(currentSession);
             return true;
@@ -329,6 +332,54 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Multiplexer keybinds (only when compatibility mode is off). All use Ctrl+Alt(+Shift):
+     *   Ctrl+Alt+V            vertical split (side by side)
+     *   Ctrl+Alt+H            horizontal split (stacked top/bottom)
+     *   Ctrl+Alt+C            new window        (window layer not built yet)
+     *   Ctrl+Alt+X            close window      (window layer not built yet)
+     *   Ctrl+Alt+Shift+C      new session
+     *   Ctrl+Alt+Shift+X      close session
+     *   Ctrl+Alt+arrow        focus pane in that direction
+     *   Ctrl+Alt+Shift+arrow  resize the split toward that direction
+     */
+    private boolean handleMultiplexerKeybinds(int keyCode, KeyEvent e) {
+        if (!mActivity.isSplitPanesEnabled())
+            return false;
+        if (!(e.isAltPressed() && e.isCtrlPressed()))
+            return false; // every bind is Ctrl+Alt(+Shift)
+        boolean shift = e.isShiftPressed();
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                return shift ? mActivity.resizeActivePane(keyCode)
+                             : mActivity.focusPaneDirection(keyCode);
+            case KeyEvent.KEYCODE_V: // vertical split = panes side by side
+                mActivity.splitCurrentPane(android.widget.LinearLayout.HORIZONTAL);
+                return true;
+            case KeyEvent.KEYCODE_H: // horizontal split = panes stacked
+                mActivity.splitCurrentPane(android.widget.LinearLayout.VERTICAL);
+                return true;
+            case KeyEvent.KEYCODE_C:
+                if (shift)
+                    mTermuxTerminalSessionActivityClient.addNewSession(false, null);
+                else
+                    mActivity.showToast("Windows not implemented yet", true);
+                return true;
+            case KeyEvent.KEYCODE_X:
+                if (shift)
+                    mActivity.closeCurrentSession();
+                else
+                    mActivity.showToast("Windows not implemented yet", true);
+                return true;
+            default:
+                return false;
+        }
     }
 
     @Override

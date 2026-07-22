@@ -38,7 +38,7 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
     private MacroTask mMacroTask;
     private boolean mLoggedSelectionSlider;
 
-    public TerminalKeyEventHandler(TerminalView terminalView,
+    public TerminalKeyEventHandler(Supplier<TerminalView> terminalView,
                                    Supplier<TerminalSession> currentSession,
                                    HostActions hostActions,
                                    Handler mainHandler) {
@@ -341,23 +341,29 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
 
     private static final class ViewTerminalSink implements TerminalSink {
 
-        private final TerminalView mTerminalView;
+        // Resolved dynamically so in-app keyboard input follows the focused split pane.
+        private final Supplier<TerminalView> mTerminalView;
         private final Supplier<TerminalSession> mCurrentSession;
 
-        private ViewTerminalSink(TerminalView terminalView, Supplier<TerminalSession> currentSession) {
+        private ViewTerminalSink(Supplier<TerminalView> terminalView, Supplier<TerminalSession> currentSession) {
             mTerminalView = Objects.requireNonNull(terminalView, "terminalView");
             mCurrentSession = Objects.requireNonNull(currentSession, "currentSession");
         }
 
         @Override
         public void inputCodePoint(int eventSource, int codePoint, boolean ctrl, boolean alt) {
-            mTerminalView.inputCodePoint(eventSource, codePoint, ctrl, alt);
+            TerminalView view = mTerminalView.get();
+            if (view != null)
+                view.inputCodePoint(eventSource, codePoint, ctrl, alt);
         }
 
         @Override
         public void dispatchKeyEvent(int keyCode, KeyEvent down, KeyEvent up) {
-            mTerminalView.onKeyDown(keyCode, down);
-            mTerminalView.onKeyUp(keyCode, up);
+            TerminalView view = mTerminalView.get();
+            if (view == null)
+                return;
+            view.onKeyDown(keyCode, down);
+            view.onKeyUp(keyCode, up);
         }
 
         @Override
@@ -369,12 +375,15 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
 
         @Override
         public boolean isSelectingText() {
-            return mTerminalView.isSelectingText();
+            TerminalView view = mTerminalView.get();
+            return view != null && view.isSelectingText();
         }
 
         @Override
         public void stopTextSelectionMode() {
-            mTerminalView.stopTextSelectionMode();
+            TerminalView view = mTerminalView.get();
+            if (view != null)
+                view.stopTextSelectionMode();
         }
 
         @Override

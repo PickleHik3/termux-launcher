@@ -604,8 +604,9 @@ public final class TermuxInAppKeyboard {
     private void ensureKeyboardView() {
         if (mKeyboardView != null)
             return;
-        TerminalView terminalView = Objects.requireNonNull(mHost.getTerminalView(), "terminalView");
-        mKeyEventHandler = new TerminalKeyEventHandler(terminalView,
+        Objects.requireNonNull(mHost.getTerminalView(), "terminalView");
+        // Supplier so the handler always targets the currently focused pane.
+        mKeyEventHandler = new TerminalKeyEventHandler(mHost::getTerminalView,
             () -> mAttachedSession != null ? mAttachedSession : mHost.getCurrentSession(),
             mHost, new Handler(Looper.getMainLooper()));
         Config.Builder configBuilder = new Config.Builder(

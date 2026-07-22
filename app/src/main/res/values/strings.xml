@@ -316,6 +316,12 @@
         <string name="termux_terminal_io_preferences_title">Terminal I/O</string>
         <string name="termux_terminal_io_preferences_summary">Preferences for terminal I/O</string>
 
+            <!-- Split panes Category -->
+            <string name="termux_split_panes_header">Split panes</string>
+                <string name="termux_compatibility_mode_title">Compatibility mode</string>
+                <string name="termux_compatibility_mode_off">Window/pane splitting and tmux-style keybinds are enabled.</string>
+                <string name="termux_compatibility_mode_on">Disables all window/pane splitting and restores native Termux single-pane behaviour.</string>
+
             <!-- Keyboard Category -->
             <string name="termux_keyboard_header">Keyboard</string>
 

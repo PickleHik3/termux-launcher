@@ -60,6 +60,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     private static final String LOG_TAG = "TermuxTerminalSessionActivityClient";
     private final Handler mUiHandler = new Handler(Looper.getMainLooper());
     private boolean mTerminalScreenUpdatePending;
+    /** Sessions with a coalesced screen-update posted but not yet drawn (one entry per pane). */
+    private final java.util.Set<TerminalSession> mPendingScreenUpdateSessions = new java.util.HashSet<>();
     private boolean mForegroundRefreshPending;
     private int mLastMaterialTerminalPaletteSignature;
     private final Runnable mForegroundTerminalRefreshRunnable;
@@ -124,6 +126,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // Related: https://stackoverflow.com/a/28708351/14686958
         releaseBellSoundPool();
         mTerminalScreenUpdatePending = false;
+        mPendingScreenUpdateSessions.clear();
         mForegroundRefreshPending = false;
         mUiHandler.removeCallbacks(mForegroundTerminalRefreshRunnable);
     }
@@ -144,18 +147,21 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     public void onTextChanged(@NonNull TerminalSession changedSession) {
         if (!mActivity.isVisible())
             return;
-        if (mActivity.getCurrentSession() != changedSession)
+        // Split-pane: redraw whichever pane is showing the changed session (may be the
+        // non-active pane). Coalesce per-session so two live panes never drop each other's frames.
+        if (mActivity.getTerminalViewForSession(changedSession) == null)
             return;
-        if (mTerminalScreenUpdatePending)
+        if (!mPendingScreenUpdateSessions.add(changedSession))
             return;
         mTerminalScreenUpdatePending = true;
         mUiHandler.post(() -> {
-            mTerminalScreenUpdatePending = false;
+            mPendingScreenUpdateSessions.remove(changedSession);
+            mTerminalScreenUpdatePending = !mPendingScreenUpdateSessions.isEmpty();
             if (!mActivity.isVisible())
                 return;
-            if (mActivity.getCurrentSession() != changedSession)
-                return;
-            mActivity.getTerminalView().onScreenUpdated();
+            com.termux.view.TerminalView view = mActivity.getTerminalViewForSession(changedSession);
+            if (view != null)
+                view.onScreenUpdated();
         });
     }
 
@@ -188,6 +194,21 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (service == null || service.wantsToStop()) {
             // The service wants to stop as soon as possible.
             mActivity.finishActivityIfNotFinishing();
+            return;
+        }
+        // Split-pane: if a secondary pane's shell exits, collapse that pane back to single
+        // and drop its (hidden) session, without disturbing the primary pane.
+        if (mActivity.isSecondaryPaneSession(finishedSession)) {
+            mActivity.closeSecondaryPane(finishedSession);
+            service.removeTermuxSession(finishedSession);
+            termuxSessionListNotifyUpdated();
+            return;
+        }
+        // If a primary that owns a secondary exits/killed, promote the secondary to its own
+        // tab, then close the primary and switch to the promoted session (collapse to single).
+        if (mActivity.getTabSecondary(finishedSession) != null) {
+            mActivity.promoteSecondaryToPrimary(finishedSession);
+            removeFinishedSession(finishedSession);
             return;
         }
         int index = service.getIndexOfSession(finishedSession);
@@ -330,7 +351,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     public void setCurrentSession(TerminalSession session) {
         if (session == null)
             return;
-        if (mActivity.getTerminalView().attachSession(session)) {
+        // Route through the split-pane model: shows the session's tab (primary + optional
+        // secondary pane) and focuses the pane displaying this session.
+        if (mActivity.activateSessionInPanes(session)) {
             // notify about switched session if not already displaying the session
             notifyOfSessionChange();
         }
@@ -350,12 +373,17 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     public void switchToSession(boolean forward) {
-        TermuxService service = mActivity.getTermuxService();
-        if (service == null)
+        // Cycle through drawer-visible sessions (tabs), skipping secondary pane shells.
+        java.util.List<TermuxSession> tabs = mActivity.mDrawerSessions;
+        int size = tabs.size();
+        if (size == 0)
             return;
-        TerminalSession currentTerminalSession = mActivity.getCurrentSession();
-        int index = service.getIndexOfSession(currentTerminalSession);
-        int size = service.getTermuxSessionsSize();
+        TerminalSession reference = mActivity.getCurrentTabPrimary();
+        if (reference == null)
+            reference = mActivity.getCurrentSession();
+        int index = mActivity.getDrawerIndexOfSession(reference);
+        if (index < 0)
+            index = 0;
         if (forward) {
             if (++index >= size)
                 index = 0;
@@ -363,16 +391,17 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             if (--index < 0)
                 index = size - 1;
         }
-        TermuxSession termuxSession = service.getTermuxSession(index);
+        TermuxSession termuxSession = tabs.get(index);
         if (termuxSession != null)
             setCurrentSession(termuxSession.getTerminalSession());
     }
 
     public void switchToSession(int index) {
-        TermuxService service = mActivity.getTermuxService();
-        if (service == null)
+        // Index into the drawer-visible (tab) list.
+        java.util.List<TermuxSession> tabs = mActivity.mDrawerSessions;
+        if (index < 0 || index >= tabs.size())
             return;
-        TermuxSession termuxSession = service.getTermuxSession(index);
+        TermuxSession termuxSession = tabs.get(index);
         if (termuxSession != null)
             setCurrentSession(termuxSession.getTerminalSession());
     }
@@ -492,7 +521,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         TermuxService service = mActivity.getTermuxService();
         if (service == null)
             return;
-        final int indexOfSession = service.getIndexOfSession(session);
+        // Use the drawer-visible index (secondary panes are filtered out).
+        final int indexOfSession = mActivity.getDrawerIndexOfSession(session);
         if (indexOfSession < 0)
             return;
         final ListView termuxSessionsListView = mActivity.findViewById(R.id.terminal_sessions_list);
@@ -554,10 +584,29 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             updateBackgroundColor();
             final Typeface newTypeface = (fontFile.exists() && fontFile.length() > 0) ? Typeface.createFromFile(fontFile) : Typeface.MONOSPACE;
             final Typeface newItalicTypeface = (italicFontFile.exists() && italicFontFile.length() > 0) ? Typeface.createFromFile(italicFontFile) : newTypeface;
-            mActivity.getTerminalView().setTypeface(newTypeface, newItalicTypeface);
+            // Apply to every pane that has a renderer so split panes get the nerd font too.
+            for (com.termux.view.TerminalView v : mActivity.getTerminalPaneViews()) {
+                if (v.isFontInitialized())
+                    v.setTypeface(newTypeface, newItalicTypeface);
+            }
             mActivity.requestTerminalFlushDockGeometryUpdate();
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in checkForFontAndColors()", e);
+        }
+    }
+
+    /** Apply the configured terminal font (nerd-font typeface) to a single pane view. */
+    public void applyFontToView(com.termux.view.TerminalView view) {
+        if (view == null || !view.isFontInitialized())
+            return;
+        try {
+            File fontFile = TermuxConstants.TERMUX_FONT_FILE;
+            File italicFontFile = TermuxConstants.TERMUX_ITALIC_FONT_FILE;
+            final Typeface newTypeface = (fontFile.exists() && fontFile.length() > 0) ? Typeface.createFromFile(fontFile) : Typeface.MONOSPACE;
+            final Typeface newItalicTypeface = (italicFontFile.exists() && italicFontFile.length() > 0) ? Typeface.createFromFile(italicFontFile) : newTypeface;
+            view.setTypeface(newTypeface, newItalicTypeface);
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyFontToView()", e);
         }
     }
 
