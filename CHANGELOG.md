@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.2.29-hotfix.1
+
+### Changed
+
+- Renamed the keyboard color editor to **Keyboard Colors** and clarified palette editing with **Edit colors** / **Save colors** actions.
+- Refreshed the README demo recording and screenshot gallery.
+
+### Fixed
+
+- The welcome tour's quick-setup action now opens the existing website setup section, which uses the maintained `setup-tmux-btop` script.
+- Keyboard themes can now be imported by the complete Base16, Base24, or Tinted8 ID shown in the Tinted Gallery, with a direct Gallery link in the import dialog.
+- Opening Settings no longer causes the launcher to briefly flash the Settings screen again when Home is pressed.
+
+## 0.2.29
+
+### Added
+
+- **Built-in terminal keyboard** — an embedded on-screen keyboard (a trimmed Unexpected-Keyboard port) you can use in the terminal instead of the Android soft keyboard. Includes themes, a per-key color-scheme creator, dock-matched glass, size/shape and key-spacing tuning, optional key haptics and press sounds, a custom label font, configurable extra keys, custom `~/.termux/keyboard/layout.xml` support, and a settings page linking the upstream layout docs.
+- **Onboarding tour** — a replayable first-run showcase with per-page screen-recording preview clips; reachable any time from Settings → System & Info → Quick start tour.
+- **Glass Labs** — a live appearance tuner for the terminal, dock, and sessions menu (style, size, per-page icon count, blur/opacity/grain), tuned in-context against the real UI.
+
+### Changed
+
+- Unified the glass treatment across dock, keyboard, sessions menu, and navigation strip.
+- Improved adaptive light-mode terminal colors.
+- Moved the quick-start tour into Settings → System & Info and added a feedback link.
+
+### Fixed
+
+- The rotate/circle gesture now capitalizes letters even when a custom layout binds Fn to every letter (Shift now wins over the Fn modmap for letter keys).
+- A-Z rail swipe-up intent is classified from recent motion, with sticky locks, to stop accidental launches.
+- Per-icon ripple color extraction and softer ripple rendering; artwork-hugging search focus outline; dock-style pill rendering.
+
+## 0.2.28
+
+### Fixed
+
+- Rate-limited API responses (HTTP 429) now include `Retry-After` and `RateLimit-*` headers so OpenAI/Ollama clients can back off correctly instead of guessing.
+- Attempting to load an embedding model into the generation runtime now returns a clear error; embedding models are served on demand through the embeddings endpoints and no longer need to be loaded.
+
 ## 0.2.27
 
 ### Changed
@@ -19,6 +59,15 @@
 - Fixed a LiteRT generation deadlock and corrected MNN memory-mapping for more stable on-device inference.
 - Broader OpenAI/Ollama API conformance: token-usage accounting, error shapes, and stop-sequence handling.
 - Audit-driven correctness fixes across both backends versus the official specs; retained automatic tool use for mobile-action specialist models.
+
+## 0.2.26
+
+### Added
+- Notification popup for pinned apps: when a pinned app has an unread notification, swipe up from its icon in the pinned-icons row to open a popup and interact with the notification directly.
+- Pinned app icon pages now loop around instead of stopping at the first or last page.
+
+### Fixed
+- Custom app icon bug fixes: icon-pack changes now refresh immediately — including pinned-icon pack changes and resetting per-app icon overrides — without requiring `termux-reload-settings`, and rendered icon caches are invalidated after icon source changes.
 
 ## 0.2.25
 

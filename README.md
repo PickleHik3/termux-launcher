@@ -1,11 +1,16 @@
 # Termux Launcher
 
-⚠️🤖 This project is entirely vibe-coded, I have been dailying this as a launcher (nothing phone 2), its been rock solid and does not seem to affect my battery life 🤖⚠️
+> [!WARNING]
+> **This project is entirely vibe-coded.**
+> I’ve been daily-driving it as a launcher on a Nothing Phone (2), and it has been rock-solid so far. It also does not appear to have any noticeable impact on battery life.
 
-⚠️ The native AI backends Google/LiteRT & alibaba/MNN are highly experimental, be mindful of your device's system RAM & Processor capability when choosing models ⚠️
+> [!CAUTION]
+> The native AI backends—**Google LiteRT** and **Alibaba MNN**—are highly experimental. Be mindful of your device’s available RAM and processor capabilities when selecting models.
 
-❗ the Termux edition (`com.termux`) cannot be installed alongside your existing termux app — use the VAJ edition (`io.vaj.tl`) for that, see [Editions](#editions) ❗
-❗ if terminal slows down, run termux-reload-settings ❗
+> [!NOTE]
+> ~~If the terminal slows down, run `termux-reload-settings`.~~
+> All hail Fable for exorcising this daemon-basically yeeted it in seconds, on God.
+
 
 Termux Launcher is a terminal-first Android home launcher inspired by [TEL](https://github.com/t-e-l/tel), built on [termux-app](https://github.com/termux/termux-app) and [termux-monet](https://github.com/Termux-Monet/termux-monet).
 

@@ -24,11 +24,11 @@ jobs:
         with:
           ref: ${{ env.GITHUB_REF }}
 
-      - name: Setup java 17 as required by gradle
+      - name: Setup java 21 as required by gradle
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: Build and attach APKs to release
         shell: bash {0}
