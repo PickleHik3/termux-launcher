@@ -28,6 +28,26 @@
         <item>default</item>
         <item>valarie_capsule</item>
     </string-array>
+    <string-array name="status_bar_style_entries">
+        <item>@string/termux_status_bar_style_default</item>
+        <item>@string/termux_status_bar_style_valarie_capsule</item>
+    </string-array>
+    <string-array name="status_bar_style_values">
+        <item>default</item>
+        <item>valarie_capsule</item>
+    </string-array>
+    <string-array name="termux_top_pane_clock_style_entries">
+        <item>@string/termux_top_pane_clock_style_flip</item>
+        <item>@string/termux_top_pane_clock_style_lcd</item>
+        <item>@string/termux_top_pane_clock_style_minimal</item>
+        <item>@string/termux_top_pane_clock_style_led</item>
+    </string-array>
+    <string-array name="termux_top_pane_clock_style_values">
+        <item>flip</item>
+        <item>lcd</item>
+        <item>minimal</item>
+        <item>led</item>
+    </string-array>
     <string-array name="launcherctl_mcp_web_provider_entries">
         <item>@string/launcherctl_mcp_web_provider_off</item>
         <item>@string/launcherctl_mcp_web_provider_brave</item>

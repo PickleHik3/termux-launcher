@@ -1,15 +1,25 @@
 package com.termux.app.terminal;
 
+import android.animation.ValueAnimator;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.RectF;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.ColorUtils;
 
+import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalView;
@@ -61,7 +71,7 @@ public class TerminalPaneController {
     }
 
     static final class Leaf extends Node {
-        final TerminalSession session;
+        TerminalSession session;
         Leaf(TerminalSession session) { this.session = session; }
     }
 
@@ -87,8 +97,11 @@ public class TerminalPaneController {
     /** Cached pane frames + terminal views, keyed by shell session (reused across re-renders). */
     private final Map<TerminalSession, FrameLayout> mPaneFrames = new HashMap<>();
     private final Map<TerminalSession, TerminalView> mPaneViews = new HashMap<>();
+    private final Map<Split, LinearLayout> mSplitLayouts = new HashMap<>();
+    private final PaneInteractionOverlay mInteractionOverlay;
 
     @Nullable private Window mActiveWindow;
+    @Nullable private Leaf mMaximizedLeaf;
 
     private static final int DIVIDER_DP = 1;
 
@@ -96,6 +109,7 @@ public class TerminalPaneController {
         mHost = host;
         mHostView = hostView;
         mInflater = inflater;
+        mInteractionOverlay = new PaneInteractionOverlay();
     }
 
     /**
@@ -125,6 +139,9 @@ public class TerminalPaneController {
     public void showWindow(Window w) {
         if (w == null) return;
         mActiveWindow = w;
+        if (mMaximizedLeaf != null && findLeafIn(w.root, mMaximizedLeaf.session) == null) {
+            mMaximizedLeaf = null;
+        }
         render();
         mHost.onActivePaneChanged();
     }
@@ -161,7 +178,10 @@ public class TerminalPaneController {
             detachPaneView(leaf.session);
         }
         mWindows.remove(w);
-        if (mActiveWindow == w) mActiveWindow = null;
+        if (mActiveWindow == w) {
+            mActiveWindow = null;
+            mMaximizedLeaf = null;
+        }
         return sessions;
     }
 
@@ -180,6 +200,11 @@ public class TerminalPaneController {
     public List<TerminalView> getVisiblePaneViews() {
         List<TerminalView> out = new ArrayList<>();
         if (mActiveWindow == null) return out;
+        if (mMaximizedLeaf != null) {
+            TerminalView view = mPaneViews.get(mMaximizedLeaf.session);
+            if (view != null) out.add(view);
+            return out;
+        }
         for (Leaf leaf : leavesOf(mActiveWindow.root))
             if (mPaneViews.containsKey(leaf.session)) out.add(mPaneViews.get(leaf.session));
         return out;
@@ -193,6 +218,18 @@ public class TerminalPaneController {
             v.post(v::updateSize);
     }
 
+    /** Coalesce a host-surface animation into one final PTY resize. */
+    public void beginHostSurfaceResize() {
+        setPaneSizeUpdatesPaused(true);
+    }
+
+    /** Finish a host resize while keeping prompt/content attached to the bottom edge. */
+    public void finishHostSurfaceResizeKeepingBottom() {
+        for (TerminalView view : getVisiblePaneViews()) {
+            view.setTerminalSizeUpdatesPaused(false, true);
+        }
+    }
+
     /** The pane view showing {@code session}, if it is a leaf of the active window. */
     @Nullable public TerminalView getViewForSession(@Nullable TerminalSession session) {
         return session == null ? null : mPaneViews.get(session);
@@ -204,6 +241,7 @@ public class TerminalPaneController {
         Leaf leaf = findLeafIn(mActiveWindow.root, session);
         if (leaf != null) {
             mActiveWindow.active = leaf;
+            if (mMaximizedLeaf != null) mMaximizedLeaf = leaf;
             updateActiveBorders();
             focusActiveView();
             mHost.onActivePaneChanged();
@@ -214,6 +252,7 @@ public class TerminalPaneController {
      *  Used when compatibility mode turns split panes off. */
     public List<TerminalSession> collapseAll() {
         List<TerminalSession> dropped = new ArrayList<>();
+        mMaximizedLeaf = null;
         for (Window w : mWindows) {
             TerminalSession keep = w.active != null ? w.active.session : firstLeaf(w.root).session;
             for (Leaf leaf : leavesOf(w.root)) {
@@ -236,6 +275,7 @@ public class TerminalPaneController {
     /** Split the focused pane; new shell fills the new leaf. orientation = LinearLayout.*. */
     public void split(int orientation) {
         if (mActiveWindow == null || mActiveWindow.active == null) return;
+        mMaximizedLeaf = null;
         Leaf oldLeaf = mActiveWindow.active;
         String cwd = oldLeaf.session.getCwd();
         TerminalSession newSession = mHost.createShell(cwd != null ? cwd : mHost.defaultCwd());
@@ -279,6 +319,7 @@ public class TerminalPaneController {
             if (owningLeaf != null) break;
         }
         if (owningLeaf == null) return FINISHED_UNKNOWN;
+        if (mMaximizedLeaf == owningLeaf) mMaximizedLeaf = null;
 
         Split parent = owningLeaf.parent;
         if (parent == null) {
@@ -372,10 +413,21 @@ public class TerminalPaneController {
 
     private void render() {
         mHostView.removeAllViews();
+        mSplitLayouts.clear();
         if (mActiveWindow == null) return;
-        View built = buildView(mActiveWindow.root);
+        View built = mMaximizedLeaf != null
+            ? paneFrameFor(mMaximizedLeaf.session) : buildView(mActiveWindow.root);
         mHostView.addView(built, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        if (mInteractionOverlay.getParent() instanceof ViewGroup) {
+            ((ViewGroup) mInteractionOverlay.getParent()).removeView(mInteractionOverlay);
+        }
+        int paneCount = leavesOf(mActiveWindow.root).size();
+        if (shouldShowInteractionOverlay(paneCount, mMaximizedLeaf != null)) {
+            mHostView.addView(mInteractionOverlay, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            mInteractionOverlay.onTreeRendered();
+        }
         updateActiveBorders();
         focusActiveView();
     }
@@ -386,6 +438,7 @@ public class TerminalPaneController {
         }
         Split split = (Split) node;
         LinearLayout ll = new LinearLayout(mHostView.getContext());
+        mSplitLayouts.put(split, ll);
         ll.setOrientation(split.orientation);
         ll.setClipChildren(false);
         ll.setClipToPadding(false);
@@ -442,7 +495,7 @@ public class TerminalPaneController {
         for (TerminalView v : views) {
             FrameLayout frame = mPaneFrames.get(v.getCurrentSession());
             if (frame == null) continue;
-            if (!split) { frame.setForeground(null); continue; }
+            if (!split && mMaximizedLeaf == null) { frame.setForeground(null); continue; }
             boolean isActive = v.getCurrentSession() == activeSession;
             // Same Material primary hue for every pane, but the focused pane's border is at full
             // strength while the rest are dimmed — an unambiguous, theme-proof focus cue.
@@ -459,6 +512,676 @@ public class TerminalPaneController {
     private void focusActiveView() {
         TerminalView v = getActivePaneView();
         if (v != null && !v.isFocused()) v.requestFocus();
+    }
+
+    static float clampFirstWeight(float total, float candidate) {
+        float min = total * 0.18f;
+        return Math.max(min, Math.min(total - min, candidate));
+    }
+
+    static boolean shouldShowInteractionOverlay(int paneCount, boolean maximized) {
+        return maximized || paneCount > 1;
+    }
+
+    static float snapFirstWeightToCell(float total, float availablePixels,
+                                       float currentWeight, float cellPixels) {
+        if (total <= 0f || availablePixels <= 0f || cellPixels <= 0f) {
+            return clampFirstWeight(total, currentWeight);
+        }
+        float currentPixels = availablePixels * currentWeight / total;
+        float snappedPixels = Math.round(currentPixels / cellPixels) * cellPixels;
+        return clampFirstWeight(total, total * snappedPixels / availablePixels);
+    }
+
+    static int touchedBorderIndex(@NonNull List<RectF> panes, int activeIndex,
+                                  float x, float y, float threshold) {
+        int contained = -1;
+        int activeCandidate = -1;
+        int nearest = -1;
+        float containedDistance = Float.MAX_VALUE;
+        float nearestDistance = Float.MAX_VALUE;
+        for (int i = 0; i < panes.size(); i++) {
+            RectF rect = panes.get(i);
+            if (rect == null || x < rect.left - threshold || x > rect.right + threshold
+                || y < rect.top - threshold || y > rect.bottom + threshold) continue;
+            float edgeDistance = Math.min(
+                Math.min(Math.abs(x - rect.left), Math.abs(x - rect.right)),
+                Math.min(Math.abs(y - rect.top), Math.abs(y - rect.bottom)));
+            if (edgeDistance > threshold) continue;
+            if (rect.contains(x, y) && edgeDistance < containedDistance) {
+                contained = i;
+                containedDistance = edgeDistance;
+            }
+            if (activeIndex == i) activeCandidate = i;
+            if (edgeDistance < nearestDistance) {
+                nearest = i;
+                nearestDistance = edgeDistance;
+            }
+        }
+        if (contained >= 0) return contained;
+        return activeCandidate >= 0 ? activeCandidate : nearest;
+    }
+
+    private void setPaneSizeUpdatesPaused(boolean paused) {
+        for (TerminalView view : getVisiblePaneViews()) {
+            view.setTerminalSizeUpdatesPaused(paused);
+        }
+    }
+
+    /** Transparent interaction layer: generous border hit targets without thick layout dividers. */
+    private final class PaneInteractionOverlay extends View {
+
+        private static final int ACTION_NONE = -1;
+        private static final int ACTION_MOVE_PANE = 0;
+        private static final int ACTION_MAXIMIZE = 1;
+        private static final int ACTION_CLOSE = 2;
+
+        private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Path mPath = new Path();
+        private final RectF mControlRect = new RectF();
+        private final RectF[] mControlButtons = {new RectF(), new RectF(), new RectF()};
+
+        @Nullable private Split mXSplit;
+        @Nullable private Split mYSplit;
+        @Nullable private Leaf mBorderTapLeaf;
+        @Nullable private Leaf mControlLeaf;
+        @Nullable private Leaf mMovingLeaf;
+        @Nullable private Leaf mMoveTarget;
+        private float mDownX;
+        private float mDownY;
+        private float mHandleX;
+        private float mHandleY;
+        private float mXWeightA;
+        private float mXWeightB;
+        private float mYWeightA;
+        private float mYWeightB;
+        private float mControlProgress;
+        private boolean mDraggingDivider;
+        private boolean mBorderPressed;
+        private boolean mTouchMoved;
+        private boolean mControlsShown;
+        private int mPressedControlAction = ACTION_NONE;
+        @Nullable private ValueAnimator mControlAnimator;
+
+        PaneInteractionOverlay() {
+            super(mHostView.getContext());
+            setWillNotDraw(false);
+            setClickable(true);
+            setFocusable(false);
+            setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
+            setContentDescription("Pane resize and controls");
+        }
+
+        void onTreeRendered() {
+            resetTouchState();
+            if (mMaximizedLeaf != null) {
+                mControlLeaf = mMaximizedLeaf;
+                mControlsShown = true;
+                mControlProgress = 1f;
+            } else if (mControlLeaf != null
+                && (mActiveWindow == null || findLeafIn(mActiveWindow.root,
+                    mControlLeaf.session) == null)) {
+                mControlLeaf = null;
+                mControlsShown = false;
+                mControlProgress = 0f;
+            }
+            invalidate();
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent event) {
+            float x = event.getX();
+            float y = event.getY();
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    mDownX = mHandleX = x;
+                    mDownY = mHandleY = y;
+                    mTouchMoved = false;
+                    mPressedControlAction = controlActionAt(x, y);
+                    if (mPressedControlAction != ACTION_NONE) {
+                        if (mPressedControlAction == ACTION_MOVE_PANE) {
+                            mMovingLeaf = mControlLeaf;
+                            mMoveTarget = mControlLeaf;
+                        }
+                        getParent().requestDisallowInterceptTouchEvent(true);
+                        invalidate();
+                        return true;
+                    }
+
+                    if (mControlsShown && mMaximizedLeaf == null) dismissControls();
+                    findDividerTargets(x, y);
+                    // Resolve pane ownership from the touched border before falling back to the
+                    // nearest pane. This is important for the original pane: the empty pixels in
+                    // a shared divider otherwise tend to resolve to the newly-created neighbour.
+                    mBorderTapLeaf = leafAtTouchedBorder(x, y);
+                    if (mBorderTapLeaf == null) mBorderTapLeaf = leafAtOrNearest(x, y);
+                    if (mXSplit != null || mYSplit != null) {
+                        mDraggingDivider = true;
+                        setPaneSizeUpdatesPaused(true);
+                        if (mXSplit != null) {
+                            mXWeightA = mXSplit.weightA;
+                            mXWeightB = mXSplit.weightB;
+                        }
+                        if (mYSplit != null) {
+                            mYWeightA = mYSplit.weightA;
+                            mYWeightB = mYSplit.weightB;
+                        }
+                        focusLeaf(mBorderTapLeaf);
+                        getParent().requestDisallowInterceptTouchEvent(true);
+                        invalidate();
+                        return true;
+                    }
+                    if (mBorderTapLeaf != null && isNearPaneBorder(mBorderTapLeaf, x, y)) {
+                        mBorderPressed = true;
+                        focusLeaf(mBorderTapLeaf);
+                        getParent().requestDisallowInterceptTouchEvent(true);
+                        invalidate();
+                        return true;
+                    }
+                    return false;
+
+                case MotionEvent.ACTION_MOVE:
+                    if (mMovingLeaf != null) {
+                        mHandleX = x;
+                        mHandleY = y;
+                        mMoveTarget = leafAtOrNearest(x, y);
+                        mTouchMoved = true;
+                        invalidate();
+                        return true;
+                    }
+                    if (mPressedControlAction != ACTION_NONE) {
+                        mTouchMoved |= distance(x, y, mDownX, mDownY) > dp(8);
+                        return true;
+                    }
+                    if (mDraggingDivider) {
+                        mHandleX = x;
+                        mHandleY = y;
+                        mTouchMoved |= distance(x, y, mDownX, mDownY) > dp(3);
+                        applySplitDrag(mXSplit, x - mDownX, mXWeightA, mXWeightB);
+                        applySplitDrag(mYSplit, y - mDownY, mYWeightA, mYWeightB);
+                        invalidate();
+                        return true;
+                    }
+                    if (mBorderTapLeaf != null) {
+                        mHandleX = x;
+                        mHandleY = y;
+                        mTouchMoved |= distance(x, y, mDownX, mDownY) > dp(3);
+                        invalidate();
+                        return true;
+                    }
+                    return false;
+
+                case MotionEvent.ACTION_UP:
+                    if (mMovingLeaf != null) {
+                        Leaf source = mMovingLeaf;
+                        Leaf target = mMoveTarget;
+                        resetTouchState();
+                        if (source != null && target != null && source != target) {
+                            swapPanePositions(source, target);
+                        } else {
+                            showControls(source);
+                        }
+                        return true;
+                    }
+                    if (mPressedControlAction != ACTION_NONE) {
+                        int action = mPressedControlAction;
+                        Leaf leaf = mControlLeaf;
+                        boolean activate = !mTouchMoved && controlActionAt(x, y) == action;
+                        resetTouchState();
+                        if (activate && leaf != null) performControlAction(action, leaf);
+                        return true;
+                    }
+                    if (mDraggingDivider || mBorderTapLeaf != null) {
+                        Leaf leaf = mBorderTapLeaf;
+                        boolean resized = mDraggingDivider && mTouchMoved;
+                        if (resized) {
+                            snapSplitToCellGrid(mXSplit);
+                            snapSplitToCellGrid(mYSplit);
+                        }
+                        if (mDraggingDivider) setPaneSizeUpdatesPaused(false);
+                        resetTouchState();
+                        showControls(leaf);
+                        if (resized) mHost.onTreesChanged();
+                        return true;
+                    }
+                    return false;
+
+                case MotionEvent.ACTION_CANCEL:
+                    if (mDraggingDivider) setPaneSizeUpdatesPaused(false);
+                    resetTouchState();
+                    invalidate();
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private void performControlAction(int action, @NonNull Leaf leaf) {
+            if (action == ACTION_MAXIMIZE) {
+                mMaximizedLeaf = mMaximizedLeaf == null ? leaf : null;
+                mActiveWindow.active = leaf;
+                render();
+                mHost.onActivePaneChanged();
+            } else if (action == ACTION_CLOSE) {
+                dismissControls();
+                leaf.session.finishIfRunning();
+            }
+        }
+
+        private void swapPanePositions(@NonNull Leaf source, @NonNull Leaf target) {
+            TerminalSession moved = source.session;
+            source.session = target.session;
+            target.session = moved;
+            mActiveWindow.active = target;
+            mControlLeaf = target;
+            render();
+            showControls(target);
+            mHost.onActivePaneChanged();
+            mHost.onTreesChanged();
+        }
+
+        private void focusLeaf(@Nullable Leaf leaf) {
+            if (leaf == null || mActiveWindow == null || mActiveWindow.active == leaf) return;
+            mActiveWindow.active = leaf;
+            updateActiveBorders();
+            focusActiveView();
+            mHost.onActivePaneChanged();
+        }
+
+        private void findDividerTargets(float x, float y) {
+            mXSplit = null;
+            mYSplit = null;
+            float bestX = Float.MAX_VALUE;
+            float bestY = Float.MAX_VALUE;
+            float threshold = dp(14);
+            int[] host = location(mHostView);
+            for (Map.Entry<Split, LinearLayout> entry : mSplitLayouts.entrySet()) {
+                Split split = entry.getKey();
+                LinearLayout layout = entry.getValue();
+                if (layout.getChildCount() < 3) continue;
+                View divider = layout.getChildAt(1);
+                int[] dividerLocation = location(divider);
+                int[] layoutLocation = location(layout);
+                float left = layoutLocation[0] - host[0];
+                float top = layoutLocation[1] - host[1];
+                float right = left + layout.getWidth();
+                float bottom = top + layout.getHeight();
+                if (split.orientation == LinearLayout.HORIZONTAL) {
+                    float boundary = dividerLocation[0] - host[0] + divider.getWidth() / 2f;
+                    float distance = Math.abs(x - boundary);
+                    if (distance <= threshold && y >= top - threshold && y <= bottom + threshold
+                        && distance < bestX) {
+                        bestX = distance;
+                        mXSplit = split;
+                    }
+                } else {
+                    float boundary = dividerLocation[1] - host[1] + divider.getHeight() / 2f;
+                    float distance = Math.abs(y - boundary);
+                    if (distance <= threshold && x >= left - threshold && x <= right + threshold
+                        && distance < bestY) {
+                        bestY = distance;
+                        mYSplit = split;
+                    }
+                }
+            }
+        }
+
+        private void applySplitDrag(@Nullable Split split, float delta,
+                                    float startA, float startB) {
+            if (split == null) return;
+            LinearLayout layout = mSplitLayouts.get(split);
+            if (layout == null || layout.getChildCount() < 3) return;
+            View divider = layout.getChildAt(1);
+            float available = split.orientation == LinearLayout.HORIZONTAL
+                ? layout.getWidth() - divider.getWidth()
+                : layout.getHeight() - divider.getHeight();
+            if (available <= 0f) return;
+            float total = startA + startB;
+            float startPixels = available * startA / total;
+            float candidate = total * (startPixels + delta) / available;
+            split.weightA = clampFirstWeight(total, candidate);
+            split.weightB = total - split.weightA;
+            LinearLayout.LayoutParams a = (LinearLayout.LayoutParams) layout.getChildAt(0).getLayoutParams();
+            LinearLayout.LayoutParams b = (LinearLayout.LayoutParams) layout.getChildAt(2).getLayoutParams();
+            a.weight = split.weightA;
+            b.weight = split.weightB;
+            layout.getChildAt(0).setLayoutParams(a);
+            layout.getChildAt(2).setLayoutParams(b);
+        }
+
+        private void snapSplitToCellGrid(@Nullable Split split) {
+            if (split == null) return;
+            LinearLayout layout = mSplitLayouts.get(split);
+            if (layout == null || layout.getChildCount() < 3) return;
+            View divider = layout.getChildAt(1);
+            float available = split.orientation == LinearLayout.HORIZONTAL
+                ? layout.getWidth() - divider.getWidth()
+                : layout.getHeight() - divider.getHeight();
+            TerminalView reference = getActivePaneView();
+            if (reference == null || available <= 0f) return;
+            float cell = split.orientation == LinearLayout.HORIZONTAL
+                ? reference.getTerminalCellWidthPixels()
+                : reference.getTerminalCellHeightPixels();
+            float total = split.weightA + split.weightB;
+            split.weightA = snapFirstWeightToCell(total, available, split.weightA, cell);
+            split.weightB = total - split.weightA;
+            LinearLayout.LayoutParams a =
+                (LinearLayout.LayoutParams) layout.getChildAt(0).getLayoutParams();
+            LinearLayout.LayoutParams b =
+                (LinearLayout.LayoutParams) layout.getChildAt(2).getLayoutParams();
+            a.weight = split.weightA;
+            b.weight = split.weightB;
+            layout.getChildAt(0).setLayoutParams(a);
+            layout.getChildAt(2).setLayoutParams(b);
+        }
+
+        /**
+         * Return the leaf whose border was actually touched. A point inside a pane wins over an
+         * equally-near pane across the divider; for the divider's exact centre, the focused pane
+         * wins. This makes the first/original pane as reachable as every pane created after it.
+         */
+        @Nullable
+        private Leaf leafAtTouchedBorder(float x, float y) {
+            if (mActiveWindow == null) return null;
+            float threshold = dp(12);
+            List<Leaf> leaves = new ArrayList<>();
+            List<RectF> panes = new ArrayList<>();
+            int activeIndex = -1;
+            for (Leaf leaf : leavesOf(mActiveWindow.root)) {
+                RectF rect = paneRect(leaf);
+                if (rect == null) continue;
+                if (mActiveWindow.active == leaf) activeIndex = leaves.size();
+                leaves.add(leaf);
+                panes.add(rect);
+            }
+            int index = touchedBorderIndex(panes, activeIndex, x, y, threshold);
+            return index < 0 ? null : leaves.get(index);
+        }
+
+        @Nullable
+        private Leaf leafAtOrNearest(float x, float y) {
+            if (mActiveWindow == null) return null;
+            Leaf best = null;
+            float bestDistance = Float.MAX_VALUE;
+            for (Leaf leaf : leavesOf(mActiveWindow.root)) {
+                RectF rect = paneRect(leaf);
+                if (rect == null) continue;
+                if (rect.contains(x, y)) return leaf;
+                float dx = Math.max(rect.left - x, Math.max(0f, x - rect.right));
+                float dy = Math.max(rect.top - y, Math.max(0f, y - rect.bottom));
+                float d = dx * dx + dy * dy;
+                if (d < bestDistance) {
+                    bestDistance = d;
+                    best = leaf;
+                }
+            }
+            return best;
+        }
+
+        private boolean isNearPaneBorder(@NonNull Leaf leaf, float x, float y) {
+            RectF rect = paneRect(leaf);
+            if (rect == null) return false;
+            float threshold = dp(12);
+            return Math.min(Math.min(Math.abs(x - rect.left), Math.abs(x - rect.right)),
+                Math.min(Math.abs(y - rect.top), Math.abs(y - rect.bottom))) <= threshold;
+        }
+
+        @Nullable
+        private RectF paneRect(@NonNull Leaf leaf) {
+            FrameLayout frame = mPaneFrames.get(leaf.session);
+            if (frame == null || frame.getParent() == null) return null;
+            int[] frameLocation = location(frame);
+            int[] hostLocation = location(mHostView);
+            float left = frameLocation[0] - hostLocation[0];
+            float top = frameLocation[1] - hostLocation[1];
+            return new RectF(left, top, left + frame.getWidth(), top + frame.getHeight());
+        }
+
+        private int[] location(@NonNull View view) {
+            int[] location = new int[2];
+            view.getLocationOnScreen(location);
+            return location;
+        }
+
+        private void showControls(@Nullable Leaf leaf) {
+            if (leaf == null || !shouldShowInteractionOverlay(
+                mActiveWindow == null ? 0 : leavesOf(mActiveWindow.root).size(),
+                mMaximizedLeaf != null)) return;
+            mControlLeaf = leaf;
+            mControlsShown = true;
+            animateControlProgress(1f, false);
+        }
+
+        private void dismissControls() {
+            if (mMaximizedLeaf != null) return;
+            animateControlProgress(0f, true);
+        }
+
+        private void animateControlProgress(float target, boolean clearOnEnd) {
+            if (mControlAnimator != null) mControlAnimator.cancel();
+            mControlAnimator = ValueAnimator.ofFloat(mControlProgress, target);
+            mControlAnimator.setDuration(190L);
+            mControlAnimator.setInterpolator(new DecelerateInterpolator(1.8f));
+            mControlAnimator.addUpdateListener(animation -> {
+                mControlProgress = (Float) animation.getAnimatedValue();
+                invalidate();
+            });
+            mControlAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(android.animation.Animator animation) {
+                    if (clearOnEnd && mControlProgress <= 0f) {
+                        mControlsShown = false;
+                        mControlLeaf = null;
+                    }
+                }
+            });
+            mControlAnimator.start();
+        }
+
+        private int controlActionAt(float x, float y) {
+            if (!mControlsShown || mControlLeaf == null || mControlProgress < .35f) {
+                return ACTION_NONE;
+            }
+            computeControlGeometry();
+            if (mMaximizedLeaf != null) {
+                if (mControlButtons[0].contains(x, y)) return ACTION_MAXIMIZE;
+                if (mControlButtons[1].contains(x, y)) return ACTION_CLOSE;
+            } else {
+                if (mControlButtons[0].contains(x, y)) return ACTION_MOVE_PANE;
+                if (mControlButtons[1].contains(x, y)) return ACTION_MAXIMIZE;
+                if (mControlButtons[2].contains(x, y)) return ACTION_CLOSE;
+            }
+            return ACTION_NONE;
+        }
+
+        private void computeControlGeometry() {
+            RectF pane = mControlLeaf == null ? null : paneRect(mControlLeaf);
+            if (pane == null) {
+                mControlRect.setEmpty();
+                return;
+            }
+            int count = mMaximizedLeaf == null ? 3 : 2;
+            float button = dp(22.4f);
+            float width = button * count + dp(4.8f);
+            float right = pane.right - dp(3);
+            float left = Math.max(pane.left + dp(3), right - width);
+            float height = dp(24);
+            float top = pane.top - height * (1f - mControlProgress);
+            mControlRect.set(left, top, right, top + height);
+            for (int i = 0; i < mControlButtons.length; i++) mControlButtons[i].setEmpty();
+            float x = left + dp(2.4f);
+            for (int i = 0; i < count; i++) {
+                mControlButtons[i].set(x, top, x + button, top + dp(22));
+                x += button;
+            }
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            int primary = MaterialColors.getColor(getContext(),
+                com.termux.shared.R.attr.termuxColorPrimary,
+                ContextCompat.getColor(getContext(), R.color.termux_primary));
+            int tertiary = MaterialColors.getColor(getContext(),
+                com.google.android.material.R.attr.colorTertiary, primary);
+            if (mDraggingDivider) {
+                mPaint.setStyle(Paint.Style.STROKE);
+                mPaint.setStrokeWidth(dp(3));
+                mPaint.setColor(ColorUtils.setAlphaComponent(primary, 230));
+                drawActiveDivider(canvas, mXSplit);
+                drawActiveDivider(canvas, mYSplit);
+                mPaint.setStyle(Paint.Style.FILL);
+                mPaint.setColor(tertiary);
+                canvas.drawRoundRect(new RectF(mHandleX - dp(5), mHandleY - dp(2),
+                    mHandleX + dp(5), mHandleY + dp(2)), dp(2), dp(2), mPaint);
+                if (mXSplit != null && mYSplit != null) {
+                    canvas.drawRoundRect(new RectF(mHandleX - dp(2), mHandleY - dp(5),
+                        mHandleX + dp(2), mHandleY + dp(5)), dp(2), dp(2), mPaint);
+                }
+            }
+            if (mBorderPressed && mBorderTapLeaf != null && !mDraggingDivider) {
+                RectF border = paneRect(mBorderTapLeaf);
+                if (border != null) {
+                    border.inset(dp(1.5f), dp(1.5f));
+                    mPaint.setStyle(Paint.Style.STROKE);
+                    mPaint.setStrokeWidth(dp(3));
+                    mPaint.setColor(ColorUtils.setAlphaComponent(primary, 230));
+                    canvas.drawRect(border, mPaint);
+                    mPaint.setStyle(Paint.Style.FILL);
+                    mPaint.setColor(tertiary);
+                    canvas.drawRoundRect(new RectF(mHandleX - dp(5), mHandleY - dp(2),
+                        mHandleX + dp(5), mHandleY + dp(2)), dp(2), dp(2), mPaint);
+                }
+            }
+            if (mMovingLeaf != null && mMoveTarget != null && mMoveTarget != mMovingLeaf) {
+                RectF target = paneRect(mMoveTarget);
+                if (target != null) {
+                    mPaint.setStyle(Paint.Style.STROKE);
+                    mPaint.setStrokeWidth(dp(3));
+                    mPaint.setColor(ColorUtils.setAlphaComponent(tertiary, 220));
+                    canvas.drawRect(target, mPaint);
+                }
+            }
+            if (mControlsShown && mControlLeaf != null && mControlProgress > 0f) {
+                drawControls(canvas, primary, tertiary);
+            }
+        }
+
+        private void drawActiveDivider(Canvas canvas, @Nullable Split split) {
+            if (split == null) return;
+            LinearLayout layout = mSplitLayouts.get(split);
+            if (layout == null || layout.getChildCount() < 3) return;
+            View divider = layout.getChildAt(1);
+            int[] host = location(mHostView);
+            int[] dividerLocation = location(divider);
+            float left = dividerLocation[0] - host[0];
+            float top = dividerLocation[1] - host[1];
+            if (split.orientation == LinearLayout.HORIZONTAL) {
+                float x = left + divider.getWidth() / 2f;
+                canvas.drawLine(x, top, x, top + divider.getHeight(), mPaint);
+            } else {
+                float y = top + divider.getHeight() / 2f;
+                canvas.drawLine(left, y, left + divider.getWidth(), y, mPaint);
+            }
+        }
+
+        private void drawControls(Canvas canvas, int primary, int tertiary) {
+            computeControlGeometry();
+            if (mControlRect.isEmpty()) return;
+            int surface = MaterialColors.getColor(getContext(),
+                com.termux.shared.R.attr.termuxColorSurfacePanel,
+                ContextCompat.getColor(getContext(), R.color.termux_surface_panel));
+            RectF pane = paneRect(mControlLeaf);
+            if (pane == null) return;
+            float paneTop = pane.top;
+            float radius = dp(4);
+            int canvasState = canvas.save();
+            // The tab is revealed through the pane's top edge. Clipping here is what makes the
+            // closing motion disappear back into the frame instead of floating above the pane.
+            canvas.clipRect(pane.left, paneTop - dp(1), pane.right, pane.bottom);
+
+            mPath.reset();
+            mPath.moveTo(mControlRect.left, paneTop);
+            mPath.lineTo(mControlRect.right, paneTop);
+            mPath.lineTo(mControlRect.right, mControlRect.bottom - radius);
+            mPath.quadTo(mControlRect.right, mControlRect.bottom,
+                mControlRect.right - radius, mControlRect.bottom);
+            mPath.lineTo(mControlRect.left + radius, mControlRect.bottom);
+            mPath.quadTo(mControlRect.left, mControlRect.bottom,
+                mControlRect.left, mControlRect.bottom - radius);
+            mPath.close();
+            mPaint.setStyle(Paint.Style.FILL);
+            mPaint.setColor(ColorUtils.setAlphaComponent(surface,
+                Math.round(232f * mControlProgress)));
+            canvas.drawPath(mPath, mPaint);
+
+            mPath.reset();
+            mPath.moveTo(mControlRect.left - dp(5), paneTop);
+            mPath.lineTo(mControlRect.left, paneTop);
+            mPath.lineTo(mControlRect.left, mControlRect.bottom - radius);
+            mPath.quadTo(mControlRect.left, mControlRect.bottom,
+                mControlRect.left + radius, mControlRect.bottom);
+            mPath.lineTo(mControlRect.right - radius, mControlRect.bottom);
+            mPath.quadTo(mControlRect.right, mControlRect.bottom,
+                mControlRect.right, mControlRect.bottom - radius);
+            mPath.lineTo(mControlRect.right, paneTop);
+            mPath.lineTo(mControlRect.right + dp(5), paneTop);
+            mPaint.setStyle(Paint.Style.STROKE);
+            mPaint.setStrokeWidth(dp(1));
+            mPaint.setStrokeCap(Paint.Cap.ROUND);
+            mPaint.setStrokeJoin(Paint.Join.ROUND);
+            mPaint.setColor(ColorUtils.setAlphaComponent(primary,
+                Math.round(225f * mControlProgress)));
+            canvas.drawPath(mPath, mPaint);
+
+            int count = mMaximizedLeaf == null ? 3 : 2;
+            for (int i = 0; i < count; i++) {
+                int action = mMaximizedLeaf == null ? i : i + 1;
+                RectF button = mControlButtons[i];
+                mPaint.setStyle(Paint.Style.STROKE);
+                mPaint.setStrokeCap(Paint.Cap.ROUND);
+                mPaint.setStrokeWidth(dp(1.35f));
+                mPaint.setColor(ColorUtils.setAlphaComponent(
+                    action == ACTION_MOVE_PANE ? tertiary : action == ACTION_CLOSE
+                        ? MaterialColors.getColor(getContext(),
+                            com.termux.shared.R.attr.termuxColorError, Color.RED) : primary,
+                    Math.round(255f * mControlProgress)));
+                float cx = button.centerX();
+                float cy = button.centerY();
+                if (action == ACTION_MOVE_PANE) {
+                    canvas.drawLine(cx - dp(4), cy - dp(2.5f), cx + dp(4), cy - dp(2.5f), mPaint);
+                    canvas.drawLine(cx - dp(4), cy + dp(2.5f), cx + dp(4), cy + dp(2.5f), mPaint);
+                } else if (action == ACTION_MAXIMIZE) {
+                    float inset = mMaximizedLeaf == null ? dp(4) : dp(3.5f);
+                    canvas.drawRect(cx - inset, cy - inset, cx + inset, cy + inset, mPaint);
+                    if (mMaximizedLeaf != null) {
+                        canvas.drawLine(cx - dp(5), cy + dp(2), cx - dp(2), cy + dp(5), mPaint);
+                        canvas.drawLine(cx + dp(5), cy - dp(2), cx + dp(2), cy - dp(5), mPaint);
+                    }
+                } else {
+                    canvas.drawLine(cx - dp(4), cy - dp(4), cx + dp(4), cy + dp(4), mPaint);
+                    canvas.drawLine(cx + dp(4), cy - dp(4), cx - dp(4), cy + dp(4), mPaint);
+                }
+            }
+            mPaint.setStrokeCap(Paint.Cap.BUTT);
+            mPaint.setStrokeJoin(Paint.Join.MITER);
+            canvas.restoreToCount(canvasState);
+        }
+
+        private void resetTouchState() {
+            mXSplit = null;
+            mYSplit = null;
+            mBorderTapLeaf = null;
+            mMovingLeaf = null;
+            mMoveTarget = null;
+            mDraggingDivider = false;
+            mBorderPressed = false;
+            mTouchMoved = false;
+            mPressedControlAction = ACTION_NONE;
+        }
+
+        private float distance(float x1, float y1, float x2, float y2) {
+            return (float) Math.hypot(x1 - x2, y1 - y2);
+        }
     }
 
     // --- Tree helpers ---
@@ -494,5 +1217,9 @@ public class TerminalPaneController {
 
     private int dp(int dp) {
         return Math.round(mHostView.getResources().getDisplayMetrics().density * dp);
+    }
+
+    private float dp(float dp) {
+        return mHostView.getResources().getDisplayMetrics().density * dp;
     }
 }

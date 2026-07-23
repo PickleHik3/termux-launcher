@@ -175,6 +175,27 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_APP_LAUNCHER_DOCK_STYLE = APP_LAUNCHER_DOCK_STYLE_DEFAULT;
 
         /**
+         * Defines the visual surface style for the top terminal status bar.
+         */
+        public static final String KEY_STATUS_BAR_STYLE = "status_bar_style";
+
+        public static final String STATUS_BAR_STYLE_DEFAULT = "default";
+
+        public static final String STATUS_BAR_STYLE_VALARIE_CAPSULE = "valarie_capsule";
+
+        public static final String DEFAULT_STATUS_BAR_STYLE = STATUS_BAR_STYLE_DEFAULT;
+
+        /** Optional trailing system widgets on the status row. */
+        public static final String KEY_STATUS_WIDGET_CPU = "status_widget_cpu";
+        public static final boolean DEFAULT_STATUS_WIDGET_CPU = true;
+
+        public static final String KEY_STATUS_WIDGET_RAM = "status_widget_ram";
+        public static final boolean DEFAULT_STATUS_WIDGET_RAM = true;
+
+        public static final String KEY_STATUS_WIDGET_WEATHER = "status_widget_weather";
+        public static final boolean DEFAULT_STATUS_WIDGET_WEATHER = true;
+
+        /**
          * Defines the key for showing focused app names while scrubbing the dock.
          */
         public static final String KEY_APP_LAUNCHER_DISPLAY_APP_NAMES = "app_launcher_display_app_names";
@@ -402,6 +423,24 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_COMPATIBILITY_MODE = "compatibility_mode";
 
         public static final boolean DEFAULT_VALUE_COMPATIBILITY_MODE = false;
+
+        /** Clock renderer shown in the modular widget slot above the terminal window row. */
+        public static final String KEY_TOP_PANE_CLOCK_STYLE = "top_pane_clock_style";
+
+        public static final String TOP_PANE_CLOCK_STYLE_FLIP = "flip";
+        public static final String TOP_PANE_CLOCK_STYLE_LCD = "lcd";
+        public static final String TOP_PANE_CLOCK_STYLE_MINIMAL = "minimal";
+        public static final String TOP_PANE_CLOCK_STYLE_LED = "led";
+
+        public static final String DEFAULT_TOP_PANE_CLOCK_STYLE = TOP_PANE_CLOCK_STYLE_FLIP;
+
+        /** Use a 12-hour top-pane clock and append the AM/PM period. */
+        public static final String KEY_TOP_PANE_CLOCK_AM_PM = "top_pane_clock_am_pm";
+        public static final boolean DEFAULT_TOP_PANE_CLOCK_AM_PM = false;
+
+        /** Persist the user-controlled compact single-row status-bar state. */
+        public static final String KEY_TOP_PANE_CLOCK_COLLAPSED = "top_pane_clock_collapsed";
+        public static final boolean DEFAULT_TOP_PANE_CLOCK_COLLAPSED = false;
 
         /**
          * Defines the key for font size of termux terminal view.

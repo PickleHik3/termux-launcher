@@ -18,13 +18,26 @@
             android:clipChildren="false"
             android:clipToPadding="false">
 
-        <View
+        <FrameLayout
             android:id="@+id/terminal_status_bar_background"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_gravity="top"
             android:visibility="gone"
-            android:background="?attr/termuxColorSurfaceBase" />
+            android:background="?attr/termuxColorSurfaceBase">
+
+            <com.github.mmin18.widget.RealtimeBlurView
+                android:id="@+id/terminal_status_bar_glass_blur"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                app:realtimeBlurRadius="10dp"
+                app:realtimeOverlayColor="@android:color/transparent" />
+
+            <View
+                android:id="@+id/terminal_status_bar_glass_surface"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </FrameLayout>
 
         <RelativeLayout
             android:id="@+id/activity_termux_root_relative_layout"
@@ -45,30 +58,169 @@
             android:clipChildren="false"
             android:clipToPadding="false">
 
-            <FrameLayout
-                android:id="@+id/terminal_surface_host"
+            <LinearLayout
+                android:id="@+id/terminal_content_column"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:orientation="vertical"
                 android:clipChildren="false"
                 android:clipToPadding="false">
 
-                <View
-                    android:id="@+id/terminal_background"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:visibility="gone"
-                    android:background="?attr/termuxColorSurfaceBase" />
-
-                <!-- Split-pane host: TerminalPaneController inflates the recursive pane tree
-                     (view_terminal_pane.xml per leaf) into this frame. A single unsplit shell
-                     is just one pane filling the host, so the single-pane experience is unchanged. -->
+                <!-- App-owned top glass pane. Three compact rows are deliberately reserved above
+                     the bottom-aligned window row for future widgets. The glass backdrop is
+                     extended behind the system status bar in applyTerminalOverlayInsets(). -->
                 <FrameLayout
-                    android:id="@+id/terminal_pane_host"
+                    android:id="@+id/terminal_window_bar_host"
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
+                    android:layout_height="98dp"
                     android:clipChildren="false"
-                    android:clipToPadding="false" />
-            </FrameLayout>
+                    android:clipToPadding="false"
+                    android:visibility="gone">
+
+                    <com.github.mmin18.widget.RealtimeBlurView
+                        android:id="@+id/terminal_window_bar_blur"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        app:realtimeBlurRadius="10dp"
+                        app:realtimeOverlayColor="@android:color/transparent" />
+
+                    <View
+                        android:id="@+id/terminal_window_bar_background"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent" />
+
+                    <!-- Stable modular slot: clocks render only here. A later widget editor can
+                         resize/reorder this host without coupling widget code to the pane. -->
+                    <FrameLayout
+                        android:id="@+id/terminal_top_widget_area"
+                        android:layout_width="match_parent"
+                        android:layout_height="68dp"
+                        android:layout_gravity="top"
+                        android:clipChildren="true"
+                        android:clipToPadding="true">
+
+                        <com.termux.app.terminal.TerminalClockWidget
+                            android:id="@+id/terminal_clock_widget"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:contentDescription="@string/termux_top_pane_clock_content_description"
+                            android:importantForAccessibility="yes" />
+                    </FrameLayout>
+
+                    <!-- Bottom status row. Order is fixed: sessions indicator, window pills, then
+                         the compact CPU/RAM/weather trailing widgets. The reserved rows above stay
+                         empty until the next design pass. -->
+                    <LinearLayout
+                        android:id="@+id/terminal_status_row"
+                        android:layout_width="match_parent"
+                        android:layout_height="26dp"
+                        android:layout_gravity="bottom"
+                        android:layout_marginBottom="4dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:clipChildren="false"
+                        android:clipToPadding="false">
+
+                        <com.termux.app.statusbar.SessionsIndicatorView
+                            android:id="@+id/terminal_sessions_indicator"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_marginStart="5dp" />
+
+                        <com.termux.app.terminal.TerminalWindowBar
+                            android:id="@+id/terminal_window_bar"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:layout_marginStart="3dp"
+                            android:background="@android:color/transparent"
+                            android:contentDescription="@string/termux_window_bar_content_description" />
+
+                        <LinearLayout
+                            android:id="@+id/terminal_status_widgets"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingStart="3dp"
+                            android:paddingEnd="5dp"
+                            android:clipChildren="false"
+                            android:clipToPadding="false">
+
+                            <com.termux.app.statusbar.StatusBarWidgetView
+                                android:id="@+id/terminal_status_widget_cpu"
+                                android:layout_width="wrap_content"
+                                android:layout_height="match_parent"
+                                android:visibility="gone"
+                                android:contentDescription="@string/termux_status_widget_cpu_content_description" />
+
+                            <com.termux.app.statusbar.MaterialDotSeparatorView
+                                android:id="@+id/terminal_status_dot_cpu_ram"
+                                android:layout_width="4dp"
+                                android:layout_height="4dp"
+                                android:layout_gravity="center_vertical"
+                                android:layout_marginHorizontal="1dp"
+                                android:visibility="gone" />
+
+                            <com.termux.app.statusbar.StatusBarWidgetView
+                                android:id="@+id/terminal_status_widget_ram"
+                                android:layout_width="wrap_content"
+                                android:layout_height="match_parent"
+                                android:layout_marginStart="3dp"
+                                android:visibility="gone"
+                                android:contentDescription="@string/termux_status_widget_ram_content_description" />
+
+                            <com.termux.app.statusbar.MaterialDotSeparatorView
+                                android:id="@+id/terminal_status_dot_ram_weather"
+                                android:layout_width="4dp"
+                                android:layout_height="4dp"
+                                android:layout_gravity="center_vertical"
+                                android:layout_marginHorizontal="1dp"
+                                android:visibility="gone" />
+
+                            <com.termux.app.statusbar.StatusBarWidgetView
+                                android:id="@+id/terminal_status_widget_weather"
+                                android:layout_width="wrap_content"
+                                android:layout_height="match_parent"
+                                android:layout_marginStart="3dp"
+                                android:visibility="gone"
+                                android:contentDescription="@string/termux_status_widget_weather_content_description" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <com.termux.app.statusbar.StatusBarGrabHandleView
+                        android:id="@+id/terminal_status_grab_handle"
+                        android:layout_width="68dp"
+                        android:layout_height="6dp"
+                        android:layout_gravity="bottom|center_horizontal" />
+                </FrameLayout>
+
+                <FrameLayout
+                    android:id="@+id/terminal_surface_host"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:clipChildren="false"
+                    android:clipToPadding="false">
+
+                    <View
+                        android:id="@+id/terminal_background"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:visibility="gone"
+                        android:background="?attr/termuxColorSurfaceBase" />
+
+                    <!-- Split-pane host: TerminalPaneController inflates the recursive pane tree
+                         (view_terminal_pane.xml per leaf) into this frame. A single unsplit shell
+                         is just one pane filling the host. -->
+                    <FrameLayout
+                        android:id="@+id/terminal_pane_host"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:clipChildren="false"
+                        android:clipToPadding="false" />
+                </FrameLayout>
+            </LinearLayout>
 
             <RelativeLayout
                 android:layout_width="240dp"

@@ -154,6 +154,65 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         );
     }
 
+    public String getStatusBarStyle() {
+        String value = SharedPreferenceUtils.getString(
+            mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_STYLE,
+            TERMUX_APP.DEFAULT_STATUS_BAR_STYLE,
+            true
+        );
+        return normalizeStatusBarStyle(value);
+    }
+
+    public void setStatusBarStyle(String value) {
+        SharedPreferenceUtils.setString(
+            mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_STYLE,
+            normalizeStatusBarStyle(value),
+            false
+        );
+    }
+
+    public static String normalizeStatusBarStyle(@Nullable String value) {
+        if (value == null) {
+            return TERMUX_APP.DEFAULT_STATUS_BAR_STYLE;
+        }
+        switch (value) {
+            case TERMUX_APP.STATUS_BAR_STYLE_VALARIE_CAPSULE:
+                return TERMUX_APP.STATUS_BAR_STYLE_VALARIE_CAPSULE;
+            case TERMUX_APP.STATUS_BAR_STYLE_DEFAULT:
+            default:
+                return TERMUX_APP.STATUS_BAR_STYLE_DEFAULT;
+        }
+    }
+
+    public boolean isStatusWidgetCpuEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_CPU, TERMUX_APP.DEFAULT_STATUS_WIDGET_CPU);
+    }
+
+    public void setStatusWidgetCpuEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_CPU, value, false);
+    }
+
+    public boolean isStatusWidgetRamEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_RAM, TERMUX_APP.DEFAULT_STATUS_WIDGET_RAM);
+    }
+
+    public void setStatusWidgetRamEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_RAM, value, false);
+    }
+
+    public boolean isStatusWidgetWeatherEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_WEATHER, TERMUX_APP.DEFAULT_STATUS_WIDGET_WEATHER);
+    }
+
+    public void setStatusWidgetWeatherEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_WEATHER, value, false);
+    }
+
     public boolean isAppLauncherDisplayAppNamesEnabled() {
         // App names are always shown; no longer user-configurable.
         return true;
@@ -716,6 +775,47 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setCompatibilityModeEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_COMPATIBILITY_MODE, value, false);
+    }
+
+    public String getTopPaneClockStyle() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_TOP_PANE_CLOCK_STYLE, TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_STYLE, true);
+        if (TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD.equals(value)
+            || TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL.equals(value)
+            || TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED.equals(value)) {
+            return value;
+        }
+        return TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP;
+    }
+
+    public void setTopPaneClockStyle(String value) {
+        String normalized = TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD.equals(value)
+            || TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL.equals(value)
+            || TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED.equals(value)
+            ? value : TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP;
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_TOP_PANE_CLOCK_STYLE, normalized, false);
+    }
+
+    public boolean isTopPaneClockAmPmEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TOP_PANE_CLOCK_AM_PM, TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_AM_PM);
+    }
+
+    public void setTopPaneClockAmPmEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TOP_PANE_CLOCK_AM_PM, value, false);
+    }
+
+    public boolean isTopPaneClockCollapsed() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TOP_PANE_CLOCK_COLLAPSED,
+            TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_COLLAPSED);
+    }
+
+    public void setTopPaneClockCollapsed(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TOP_PANE_CLOCK_COLLAPSED, value, false);
     }
 
     public static int[] getDefaultFontSizes(Context context) {

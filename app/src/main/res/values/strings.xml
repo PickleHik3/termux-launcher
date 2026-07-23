@@ -318,9 +318,36 @@
 
             <!-- Split panes Category -->
             <string name="termux_split_panes_header">Split panes</string>
+                <string name="termux_window_bar_content_description">Terminal windows</string>
+                <string name="termux_window_tab_content_description">Window %1$d of %2$d: %3$s</string>
+                <string name="termux_window_new_content_description">New terminal window</string>
+                <string name="termux_top_pane_clock_content_description">Top pane clock</string>
+                <string name="termux_sessions_indicator_content_description">Session %1$d of %2$d</string>
+                <string name="termux_sessions_indicator_empty_content_description">No sessions</string>
+                <string name="termux_status_widget_cpu_content_description">CPU usage</string>
+                <string name="termux_status_widget_ram_content_description">Memory usage</string>
+                <string name="termux_status_widget_weather_content_description">Weather</string>
                 <string name="termux_compatibility_mode_title">Compatibility mode</string>
                 <string name="termux_compatibility_mode_off">Window/pane splitting and tmux-style keybinds are enabled.</string>
                 <string name="termux_compatibility_mode_on">Disables all window/pane splitting and restores native Termux single-pane behaviour.</string>
+                <string name="termux_top_pane_clock_style_title">Top pane clock</string>
+                <string name="termux_top_pane_clock_style_summary">Choose the clock widget rendered above the window row.</string>
+                <string name="termux_top_pane_clock_am_pm_title">12-hour clock</string>
+                <string name="termux_top_pane_clock_am_pm_summary">Show time using AM/PM instead of 24-hour format.</string>
+                <string name="termux_status_bar_style_title">Status bar style</string>
+                <string name="termux_status_bar_style_summary">Choose the top status bar surface shape.</string>
+                <string name="termux_status_bar_style_default">Default</string>
+                <string name="termux_status_bar_style_valarie_capsule">Valarie capsule</string>
+                <string name="termux_status_widget_cpu_title">CPU widget</string>
+                <string name="termux_status_widget_cpu_summary">Show CPU usage on the status row. Tap for cores, load and top processes.</string>
+                <string name="termux_status_widget_ram_title">RAM widget</string>
+                <string name="termux_status_widget_ram_summary">Show memory usage on the status row. Tap for the memory breakdown.</string>
+                <string name="termux_status_widget_weather_title">Weather widget</string>
+                <string name="termux_status_widget_weather_summary">Show weather on the status row. Tap for hourly and weekly forecasts. Needs location permission.</string>
+                <string name="termux_top_pane_clock_style_flip">Flip</string>
+                <string name="termux_top_pane_clock_style_lcd">LCD</string>
+                <string name="termux_top_pane_clock_style_minimal">Minimal</string>
+                <string name="termux_top_pane_clock_style_led">LED matrix</string>
 
             <!-- Keyboard Category -->
             <string name="termux_keyboard_header">Keyboard</string>

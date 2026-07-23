@@ -69,6 +69,14 @@ public final class TerminalView extends View {
     public TerminalViewClient mClient;
 
     private boolean mUseTransparentFrameClear;
+    /**
+     * A split-pane drag may change this view's Android bounds many times per second. Sending every
+     * intermediate geometry to the PTY generates a SIGWINCH storm and makes interactive shells
+     * repaint their prompt repeatedly. The pane controller pauses those updates for the duration
+     * of the gesture and commits the final rows/columns once the drag is released.
+     */
+    private boolean mTerminalSizeUpdatesPaused;
+    private boolean mTerminalSizeUpdatePending;
     private int mTransparentFrameOverlayColor;
 
     private TextSelectionCursorController mTextSelectionCursorController;
@@ -1351,6 +1359,15 @@ public final class TerminalView extends View {
      * Check if the terminal size in rows and columns should be updated.
      */
     public void updateSize() {
+        updateSize(false);
+    }
+
+    private void updateSize(boolean keepCursorAtBottom) {
+        if (mTerminalSizeUpdatesPaused) {
+            mTerminalSizeUpdatePending = true;
+            invalidate();
+            return;
+        }
         int viewWidth = getWidth();
         int viewHeight = getHeight();
         // mRenderer may be null if the view is laid out before its font/text size is set
@@ -1361,7 +1378,8 @@ public final class TerminalView extends View {
         int newColumns = Math.max(4, (int) (viewWidth / mRenderer.mFontWidth));
         int newRows = Math.max(4, (viewHeight - mRenderer.mFontLineSpacingAndAscent) / mRenderer.mFontLineSpacing);
         if (mEmulator == null || (newColumns != mEmulator.mColumns || newRows != mEmulator.mRows)) {
-            mTermSession.updateSize(newColumns, newRows, (int) mRenderer.getFontWidth(), mRenderer.getFontLineSpacing());
+            mTermSession.updateSize(newColumns, newRows, (int) mRenderer.getFontWidth(),
+                mRenderer.getFontLineSpacing(), keepCursorAtBottom);
             mEmulator = mTermSession.getEmulator();
             mClient.onEmulatorSet();
             // Update mTerminalCursorBlinkerRunnable inner class mEmulator on session change
@@ -1371,6 +1389,33 @@ public final class TerminalView extends View {
             scrollTo(0, 0);
             invalidate();
         }
+    }
+
+    /** Coalesce transient layout changes without forwarding every one to the attached PTY. */
+    public void setTerminalSizeUpdatesPaused(boolean paused) {
+        setTerminalSizeUpdatesPaused(paused, false);
+    }
+
+    /** Resume a coalesced resize with optional bottom anchoring after the final layout pass. */
+    public void setTerminalSizeUpdatesPaused(boolean paused,
+                                             boolean keepCursorAtBottomOnResume) {
+        if (mTerminalSizeUpdatesPaused == paused) return;
+        mTerminalSizeUpdatesPaused = paused;
+        if (!paused && mTerminalSizeUpdatePending) {
+            mTerminalSizeUpdatePending = false;
+            // Run after the final split layout pass so only the settled geometry reaches the PTY.
+            post(() -> updateSize(keepCursorAtBottomOnResume));
+        }
+    }
+
+    /** Current rendered character-cell width, or zero until a renderer has been configured. */
+    public float getTerminalCellWidthPixels() {
+        return mRenderer == null ? 0f : mRenderer.getFontWidth();
+    }
+
+    /** Current rendered character-cell line height, or zero until a renderer is configured. */
+    public float getTerminalCellHeightPixels() {
+        return mRenderer == null ? 0f : mRenderer.getFontLineSpacing();
     }
 
     @Override

@@ -216,6 +216,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** All sessions shown in the drawer. Each owns one or more windows. */
     private final java.util.List<WSession> mWSessions = new java.util.ArrayList<>();
     @Nullable private WSession mCurrentWSession;
+    /** Resolves per-pane foreground process / open file for the window pill labels. */
+    @Nullable private com.termux.app.statusbar.WindowForegroundResolver mWindowForegroundResolver;
+    private final Handler mWindowLabelHandler = new Handler(Looper.getMainLooper());
+    private static final long WINDOW_LABEL_POLL_MS = 2000L;
+    /** Trailing CPU/RAM/weather widgets, their data controllers, and the shared detail card host. */
+    @Nullable private com.termux.app.statusbar.SystemStatsController mStatsController;
+    @Nullable private com.termux.app.statusbar.SystemStatsCardView mStatsCardView;
+    @Nullable private com.termux.app.statusbar.WeatherController mWeatherController;
+    @Nullable private com.termux.app.statusbar.WeatherCardView mWeatherCardView;
+    private final com.termux.app.statusbar.StatusCardHost mStatusCardHost =
+        new com.termux.app.statusbar.StatusCardHost();
+    @Nullable private android.animation.ValueAnimator mStatusBarCollapseAnimator;
+    private boolean mStatusBarHandleTouchDelegated;
+    private final int[] mStatusBarHandleLocation = new int[2];
+    private int mStatusBarDragStartHeight;
+    private int mStatusBarTerminalResizeGeneration;
+    private static final int REQUEST_CODE_WEATHER_LOCATION = 4711;
     /** Drawer-visible sessions = service sessions minus secondary panes. Backs the list adapter. */
     public final java.util.List<com.termux.shared.termux.shell.command.runner.terminal.TermuxSession> mDrawerSessions = new java.util.ArrayList<>();
 
@@ -655,6 +672,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         registerWallpaperActivityResultLaunchers();
         mLastLaunchWasLauncherEntry = isLauncherHomeIntent(getIntent());
         setTermuxTerminalViewAndClients();
+        setTerminalWindowBar();
         setTerminalToolbarView(savedInstanceState);
         initializeInAppKeyboard(savedInstanceState);
         // Only a fresh launch may enter adjust mode: after process death the system re-delivers
@@ -768,7 +786,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
         feedDockPlank(ev);
+        if (dispatchStatusBarHandleTouch(ev)) return true;
         return super.dispatchTouchEvent(ev);
+    }
+
+    /** Routes the handle's downward-biased extended target before the terminal consumes it. */
+    private boolean dispatchStatusBarHandleTouch(MotionEvent event) {
+        com.termux.app.statusbar.StatusBarGrabHandleView handle =
+            findViewById(R.id.terminal_status_grab_handle);
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            mStatusBarHandleTouchDelegated = handle != null && handle.isShown()
+                && handle.containsExtendedTouchPoint(event.getRawX(), event.getRawY());
+        }
+        if (!mStatusBarHandleTouchDelegated || handle == null) return false;
+
+        handle.getLocationOnScreen(mStatusBarHandleLocation);
+        MotionEvent delegated = MotionEvent.obtain(event);
+        delegated.setLocation(event.getRawX() - mStatusBarHandleLocation[0],
+            event.getRawY() - mStatusBarHandleLocation[1]);
+        boolean handled = handle.dispatchTouchEvent(delegated);
+        delegated.recycle();
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+            mStatusBarHandleTouchDelegated = false;
+        }
+        return handled;
     }
 
     /**
@@ -865,6 +907,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             collapseAllSplits();
         else if (mPaneController != null)
             mPaneController.refreshPaneSizes();
+        refreshTerminalWindowBar();
 
         updateWindowBackgroundForCurrentSession();
         syncTerminalWallpaperRenderingMode();
@@ -925,6 +968,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             }
             applyTerminalStatusBarSurfaceColor(showSurface, terminalSurfaceColor);
+            applyTerminalWindowBarBackdropInsets();
             return;
         }
 
@@ -944,6 +988,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         applyTerminalStatusBarSurfaceColor(showSurface, terminalSurfaceColor);
+        applyTerminalWindowBarBackdropInsets();
     }
 
     /**
@@ -1884,9 +1929,158 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             );
     }
 
+    private boolean isValarieStatusBarStyle() {
+        return mPreferences != null
+            && TermuxPreferenceConstants.TERMUX_APP.STATUS_BAR_STYLE_VALARIE_CAPSULE.equals(
+                mPreferences.getStatusBarStyle()
+            );
+    }
+
+    /**
+     * Apply the selected status-bar style to the top window-bar host. Default is the edge-to-edge
+     * glass pane (no margins, square corners, glass extended behind the system status bar). Valarie
+     * capsule floats the pane: horizontal margins, a gap below the status bar, and a rounded-outline
+     * clip so the blur + glass read as the same capsule geometry as the Valarie dock.
+     */
+    private void applyStatusBarStyle(@NonNull View host) {
+        boolean capsule = isValarieStatusBarStyle();
+        boolean collapsed = mPreferences != null && mPreferences.isTopPaneClockCollapsed();
+        ViewGroup.LayoutParams lp = host.getLayoutParams();
+        if (lp instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
+            int hMargin = capsule ? resolveDockCapsuleHorizontalMarginPx() : 0;
+            // Extend Valarie upward without moving its lower edge or the terminal content.
+            int topMargin = capsule ? Math.round(dpToPx(2)) : 0;
+            int targetHeight = Math.round(dpToPx(collapsed
+                ? capsule ? 32 : 34
+                : capsule ? 102 : 98));
+            if (mlp.leftMargin != hMargin || mlp.rightMargin != hMargin
+                || mlp.topMargin != topMargin
+                || (mStatusBarCollapseAnimator == null && mlp.height != targetHeight)) {
+                mlp.leftMargin = hMargin;
+                mlp.rightMargin = hMargin;
+                mlp.topMargin = topMargin;
+                if (mStatusBarCollapseAnimator == null) mlp.height = targetHeight;
+                host.setLayoutParams(mlp);
+            }
+            View topWidgets = findViewById(R.id.terminal_top_widget_area);
+            if (topWidgets != null && topWidgets.getLayoutParams() != null) {
+                int targetWidgetHeight = Math.round(dpToPx(capsule ? 72 : 68));
+                ViewGroup.LayoutParams widgetParams = topWidgets.getLayoutParams();
+                if (widgetParams.height != targetWidgetHeight) {
+                    widgetParams.height = targetWidgetHeight;
+                    topWidgets.setLayoutParams(widgetParams);
+                }
+                if (mStatusBarCollapseAnimator == null) {
+                    topWidgets.setAlpha(1f);
+                    topWidgets.setTranslationY(0f);
+                    topWidgets.setVisibility(collapsed ? View.GONE : View.VISIBLE);
+                }
+            }
+
+            // Keep the bottom chip corners inside the capsule's 26dp outline. At the former 4dp
+            // inset, the rounded host clip intersected the session and weather chip backgrounds.
+            View statusRow = findViewById(R.id.terminal_status_row);
+            if (statusRow != null
+                && statusRow.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams rowParams =
+                    (ViewGroup.MarginLayoutParams) statusRow.getLayoutParams();
+                // The collapse affordance overlays the physical bottom edge; it does not own a
+                // separate row. Keep only enough inset for the capsule clip and move the side
+                // content inward below where the curve becomes tight.
+                int targetBottomMargin = Math.round(dpToPx(collapsed ? 0 : capsule ? 3 : 2));
+                int targetRowHeight = Math.round(dpToPx(collapsed && capsule ? 24 : 26));
+                int targetGravity = collapsed ? Gravity.CENTER_VERTICAL : Gravity.BOTTOM;
+                boolean rowChanged = rowParams.bottomMargin != targetBottomMargin
+                    || rowParams.topMargin != 0 || rowParams.height != targetRowHeight;
+                if (rowParams instanceof FrameLayout.LayoutParams) {
+                    FrameLayout.LayoutParams frameParams = (FrameLayout.LayoutParams) rowParams;
+                    rowChanged |= frameParams.gravity != targetGravity;
+                    frameParams.gravity = targetGravity;
+                }
+                if (rowChanged) {
+                    rowParams.topMargin = 0;
+                    rowParams.bottomMargin = targetBottomMargin;
+                    rowParams.height = targetRowHeight;
+                    statusRow.setLayoutParams(rowParams);
+                }
+            }
+
+            View sessions = findViewById(R.id.terminal_sessions_indicator);
+            if (sessions != null
+                && sessions.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams sessionParams =
+                    (ViewGroup.MarginLayoutParams) sessions.getLayoutParams();
+                int targetStartMargin = Math.round(dpToPx(capsule ? 14 : 5));
+                int targetSessionHeight = Math.round(dpToPx(collapsed && capsule ? 20 : 22));
+                int targetSessionWidth = sessions instanceof
+                    com.termux.app.statusbar.SessionsIndicatorView
+                    && ((com.termux.app.statusbar.SessionsIndicatorView) sessions).isNumericSession()
+                    ? targetSessionHeight : ViewGroup.LayoutParams.WRAP_CONTENT;
+                boolean sessionLayoutChanged = sessionParams.getMarginStart() != targetStartMargin
+                    || sessionParams.height != targetSessionHeight
+                    || sessionParams.width != targetSessionWidth;
+                if (sessionLayoutChanged) {
+                    sessionParams.setMarginStart(targetStartMargin);
+                    sessionParams.height = targetSessionHeight;
+                    sessionParams.width = targetSessionWidth;
+                    if (sessionParams instanceof android.widget.LinearLayout.LayoutParams) {
+                        ((android.widget.LinearLayout.LayoutParams) sessionParams).gravity =
+                            Gravity.CENTER_VERTICAL;
+                    }
+                    sessions.setLayoutParams(sessionParams);
+                }
+                if (sessions instanceof com.termux.app.statusbar.SessionsIndicatorView) {
+                    ((com.termux.app.statusbar.SessionsIndicatorView) sessions).setSurfaceStyle(
+                        capsule, resolveDockCapsuleCornerRadiusPx(targetHeight));
+                }
+            }
+
+            com.termux.app.terminal.TerminalWindowBar windows =
+                findViewById(R.id.terminal_window_bar);
+            if (windows != null) {
+                windows.setSurfaceStyle(capsule,
+                    resolveDockCapsuleCornerRadiusPx(targetHeight));
+            }
+
+            View statusWidgets = findViewById(R.id.terminal_status_widgets);
+            if (statusWidgets != null) {
+                int targetEndPadding = Math.round(dpToPx(capsule ? 14 : 5));
+                if (statusWidgets.getPaddingEnd() != targetEndPadding) {
+                    statusWidgets.setPaddingRelative(statusWidgets.getPaddingStart(),
+                        statusWidgets.getPaddingTop(), targetEndPadding,
+                        statusWidgets.getPaddingBottom());
+                }
+            }
+            com.termux.app.statusbar.StatusBarGrabHandleView handle =
+                findViewById(R.id.terminal_status_grab_handle);
+            if (handle != null) handle.setCollapsed(collapsed);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            if (capsule) {
+                final float radius = resolveDockCapsuleCornerRadiusPx(targetStatusBarHeightPx(
+                    true, collapsed));
+                host.setOutlineProvider(new ViewOutlineProvider() {
+                    @Override
+                    public void getOutline(View view, android.graphics.Outline outline) {
+                        outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+                    }
+                });
+                host.setClipToOutline(true);
+            } else {
+                host.setOutlineProvider(ViewOutlineProvider.BOUNDS);
+                host.setClipToOutline(false);
+            }
+        }
+    }
+
     private int resolveDockCapsuleHorizontalMarginPx() {
         // Floating capsule floats 10dp off the screen edges (design redline · Outer margin 10).
         return Math.round(dpToPx(10));
+    }
+
+    private int targetStatusBarHeightPx(boolean capsule, boolean collapsed) {
+        return Math.round(dpToPx(collapsed ? capsule ? 32 : 34 : capsule ? 102 : 98));
     }
 
     private int resolveDockCapsuleContentInsetPx() {
@@ -3764,6 +3958,52 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyTerminalSurfaceAppearance();
     }
 
+    /**
+     * Continue the top pane's glass through the system status-bar inset. This surface is a sibling
+     * of the drawer, so Android cannot clip it at the drawer's top bound. The compact window row
+     * remains bottom-aligned inside its 98dp pane and the terminal still starts below that pane.
+     */
+    private void applyTerminalWindowBarBackdropInsets() {
+        View host = findViewById(R.id.terminal_window_bar_host);
+        View statusGlass = findViewById(R.id.terminal_status_bar_background);
+        if (host == null || statusGlass == null) return;
+        boolean show = host.getVisibility() == View.VISIBLE
+            && isSplitPanesEnabled()
+            && shouldEnableSeamlessStatusBackground()
+            && !isValarieStatusBarStyle()
+            && mLastStatusBarInsetTop > 0;
+        View statusBlur = findViewById(R.id.terminal_status_bar_glass_blur);
+        View statusSurface = findViewById(R.id.terminal_status_bar_glass_surface);
+        if (!show) {
+            statusGlass.setTranslationY(0f);
+            if (statusBlur != null) statusBlur.setVisibility(View.GONE);
+            if (statusSurface != null) statusSurface.setVisibility(View.GONE);
+            return;
+        }
+        float opacity = mPreferences != null ? mPreferences.getAppBarOpacity() / 100f : 1f;
+        int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
+        statusGlass.setTranslationY(-mLastStatusBarInsetTop);
+        statusGlass.setBackgroundColor(Color.TRANSPARENT);
+        statusGlass.setVisibility(View.VISIBLE);
+        applyRealtimeBlurRadius(statusBlur, blurRadiusDp);
+        applyRealtimeBlurDownsampleFactor(statusBlur, ACCESSORY_BLUR_DOWNSAMPLE_FACTOR);
+        applyRealtimeBlurOverlayColor(statusBlur, Color.TRANSPARENT);
+        if (statusBlur != null) {
+            statusBlur.setVisibility(dockBlurEnabled(blurRadiusDp) ? View.VISIBLE : View.GONE);
+        }
+        if (statusSurface != null) {
+            statusSurface.setBackground(buildDockGlassSurface(opacity, 0f,
+                terminalWindowGlassStatusFraction(host)));
+            statusSurface.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private float terminalWindowGlassStatusFraction(@NonNull View host) {
+        int paneHeight = host.getLayoutParams() != null ? host.getLayoutParams().height : 0;
+        if (paneHeight <= 0) paneHeight = Math.round(dpToPx(98));
+        return mLastStatusBarInsetTop / (float) (mLastStatusBarInsetTop + paneHeight);
+    }
+
     private void applyDockImeOffset(int imeLiftPx) {
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
         if (accessoryContainer == null) {
@@ -3893,6 +4133,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logDebug(LOG_TAG, "onStop");
         stopAzEdgePagingLoop();
         cancelAzOverflowRefresh();
+        mWindowLabelHandler.removeCallbacksAndMessages(null);
+        mStatusCardHost.dismiss();
+        if (mStatsController != null) mStatsController.stop();
         if (mIsInvalidState)
             return;
         mIsVisible = false;
@@ -7111,6 +7354,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logVerbose(LOG_TAG, "onRequestPermissionsResult: requestCode: " + requestCode + ", permissions: " + Arrays.toString(permissions) + ", grantResults: " + Arrays.toString(grantResults));
         if (requestCode == PermissionUtils.REQUEST_GRANT_STORAGE_PERMISSION) {
             requestStoragePermission(true);
+        } else if (requestCode == REQUEST_CODE_WEATHER_LOCATION) {
+            if (grantResults.length > 0
+                && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                ensureWeatherController().forceRefresh();
+            }
         }
     }
 
@@ -7314,6 +7562,597 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mTermuxSessionListViewController != null)
             mTermuxSessionListViewController.notifyDataSetChanged();
+        refreshTerminalWindowBar();
+    }
+
+    /** Wire the app-owned window strip. Window chips are indicators and direct switch targets. */
+    private void setTerminalWindowBar() {
+        com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
+        if (bar == null) return;
+        bar.setOnWindowSelectedListener(index -> {
+            if (!isSplitPanesEnabled() || mPaneController == null || mCurrentWSession == null
+                || index < 0 || index >= mCurrentWSession.windows.size()) return;
+            showWindowFromBar(index);
+        });
+        bar.setOnCreateWindowListener(this::createNewWindow);
+        com.termux.app.statusbar.SessionsIndicatorView sessionsIndicator =
+            findViewById(R.id.terminal_sessions_indicator);
+        if (sessionsIndicator != null) {
+            sessionsIndicator.setOnClickListener(v -> {
+                if (getDrawer().isDrawerOpen(Gravity.LEFT)) getDrawer().closeDrawers();
+                else getDrawer().openDrawer(Gravity.LEFT);
+            });
+        }
+        com.termux.app.statusbar.StatusBarGrabHandleView collapseHandle =
+            findViewById(R.id.terminal_status_grab_handle);
+        if (collapseHandle != null) {
+            collapseHandle.setCollapsed(mPreferences != null
+                && mPreferences.isTopPaneClockCollapsed());
+            collapseHandle.setListener(
+                new com.termux.app.statusbar.StatusBarGrabHandleView.Listener() {
+                    @Override
+                    public void onCollapsedStateRequested(boolean collapsed) {
+                        setTopStatusBarCollapsed(collapsed, true);
+                    }
+
+                    @Override
+                    public void onResizeDragStarted() {
+                        beginTopStatusBarResizeDrag();
+                    }
+
+                    @Override
+                    public void onResizeDragProgress(float deltaY) {
+                        previewTopStatusBarResizeDrag(deltaY);
+                    }
+
+                    @Override
+                    public void onResizeDragFinished(boolean collapsed) {
+                        finishTopStatusBarResizeDrag(collapsed);
+                    }
+                });
+        }
+        refreshTerminalWindowBar();
+    }
+
+    private void beginTopStatusBarResizeDrag() {
+        View host = findViewById(R.id.terminal_window_bar_host);
+        if (host == null) return;
+        if (mStatusBarCollapseAnimator != null) mStatusBarCollapseAnimator.cancel();
+        beginStatusBarTerminalResize();
+        boolean capsule = isValarieStatusBarStyle();
+        mStatusBarDragStartHeight = currentTopStatusBarHeight(host);
+        if (mStatusBarDragStartHeight <= 0) {
+            mStatusBarDragStartHeight = targetStatusBarHeightPx(capsule,
+                mPreferences != null && mPreferences.isTopPaneClockCollapsed());
+        }
+        applyTopStatusBarInteractiveHeight(host,
+            findViewById(R.id.terminal_top_widget_area), mStatusBarDragStartHeight, capsule);
+    }
+
+    private void previewTopStatusBarResizeDrag(float deltaY) {
+        View host = findViewById(R.id.terminal_window_bar_host);
+        if (host == null || mStatusBarDragStartHeight <= 0) return;
+        boolean capsule = isValarieStatusBarStyle();
+        int minHeight = targetStatusBarHeightPx(capsule, true);
+        int maxHeight = targetStatusBarHeightPx(capsule, false);
+        int height = Math.max(minHeight,
+            Math.min(maxHeight, Math.round(mStatusBarDragStartHeight + deltaY)));
+        applyTopStatusBarInteractiveHeight(host,
+            findViewById(R.id.terminal_top_widget_area), height, capsule);
+    }
+
+    private void finishTopStatusBarResizeDrag(boolean collapsed) {
+        mStatusBarDragStartHeight = 0;
+        setTopStatusBarCollapsed(collapsed, true);
+    }
+
+    private void applyTopStatusBarInteractiveHeight(View host, @Nullable View topWidgets,
+                                                     int height, boolean capsule) {
+        ViewGroup.LayoutParams params = host.getLayoutParams();
+        if (params.height != height) {
+            params.height = height;
+            host.setLayoutParams(params);
+        }
+        int collapsedHeight = targetStatusBarHeightPx(capsule, true);
+        int expandedHeight = targetStatusBarHeightPx(capsule, false);
+        float expansion = expandedHeight == collapsedHeight ? 0f
+            : Math.max(0f, Math.min(1f,
+                (height - collapsedHeight) / (float) (expandedHeight - collapsedHeight)));
+        com.termux.app.statusbar.StatusBarResizeGeometry.Row rowGeometry =
+            applyInteractiveStatusRowGeometry(height, capsule, collapsedHeight, expandedHeight);
+        if (topWidgets != null) {
+            topWidgets.setVisibility(View.VISIBLE);
+            topWidgets.setAlpha(expansion);
+            topWidgets.setTranslationY(-dpToPx(8) * (1f - expansion));
+            int clipRight = Math.max(1, Math.max(host.getWidth(), topWidgets.getWidth()));
+            int widgetHeight = topWidgets.getHeight() > 0
+                ? topWidgets.getHeight() : rowGeometry.clockClipBottom;
+            int clipBottom = Math.max(0,
+                Math.min(widgetHeight, rowGeometry.clockClipBottom));
+            topWidgets.setClipBounds(new Rect(0, 0, clipRight, clipBottom));
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) host.invalidateOutline();
+    }
+
+    private com.termux.app.statusbar.StatusBarResizeGeometry.Row
+            applyInteractiveStatusRowGeometry(int surfaceHeight, boolean capsule,
+                                              int collapsedHeight, int expandedHeight) {
+        int collapsedRowHeight = Math.round(dpToPx(capsule ? 24 : 26));
+        int expandedRowHeight = Math.round(dpToPx(26));
+        int expandedBottomMargin = Math.round(dpToPx(capsule ? 3 : 2));
+        com.termux.app.statusbar.StatusBarResizeGeometry.Row geometry =
+            com.termux.app.statusbar.StatusBarResizeGeometry.calculate(surfaceHeight,
+                collapsedHeight, expandedHeight, collapsedRowHeight, expandedRowHeight,
+                expandedBottomMargin);
+
+        View statusRow = findViewById(R.id.terminal_status_row);
+        if (statusRow != null && statusRow.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams params =
+                (FrameLayout.LayoutParams) statusRow.getLayoutParams();
+            params.gravity = Gravity.TOP;
+            params.topMargin = geometry.top;
+            params.bottomMargin = 0;
+            params.height = geometry.height;
+            statusRow.setLayoutParams(params);
+        }
+
+        View sessions = findViewById(R.id.terminal_sessions_indicator);
+        if (sessions != null && sessions.getLayoutParams() != null) {
+            int collapsedSessionHeight = Math.round(dpToPx(capsule ? 20 : 22));
+            int expandedSessionHeight = Math.round(dpToPx(22));
+            int sessionHeight = Math.round(collapsedSessionHeight
+                + (expandedSessionHeight - collapsedSessionHeight) * geometry.expansion);
+            ViewGroup.LayoutParams params = sessions.getLayoutParams();
+            params.height = sessionHeight;
+            if (sessions instanceof com.termux.app.statusbar.SessionsIndicatorView
+                && ((com.termux.app.statusbar.SessionsIndicatorView) sessions).isNumericSession()) {
+                params.width = sessionHeight;
+            }
+            sessions.setLayoutParams(params);
+        }
+        return geometry;
+    }
+
+    private int currentTopStatusBarHeight(View host) {
+        ViewGroup.LayoutParams params = host.getLayoutParams();
+        return params != null && params.height > 0 ? params.height : host.getHeight();
+    }
+
+    private int beginStatusBarTerminalResize() {
+        int generation = ++mStatusBarTerminalResizeGeneration;
+        if (mPaneController != null) mPaneController.beginHostSurfaceResize();
+        return generation;
+    }
+
+    private void finishStatusBarTerminalResizeAfterLayout(View host, int generation) {
+        // The posted resume runs after the requested terminal-surface layout. Each pane then sends
+        // exactly one final row/column update instead of a SIGWINCH for every animation frame.
+        host.post(() -> {
+            if (generation != mStatusBarTerminalResizeGeneration) return;
+            if (mPaneController != null) mPaneController.finishHostSurfaceResizeKeepingBottom();
+        });
+    }
+
+    private void setTopStatusBarCollapsed(boolean collapsed, boolean animate) {
+        if (mPreferences == null) return;
+        View host = findViewById(R.id.terminal_window_bar_host);
+        View topWidgets = findViewById(R.id.terminal_top_widget_area);
+        boolean capsule = isValarieStatusBarStyle();
+        int targetHeight = targetStatusBarHeightPx(capsule, collapsed);
+        boolean preferenceChanged = mPreferences.isTopPaneClockCollapsed() != collapsed;
+        boolean geometryChanged = host != null && currentTopStatusBarHeight(host) != targetHeight;
+        if (!preferenceChanged && !geometryChanged) {
+            if (topWidgets != null) {
+                topWidgets.setClipBounds(null);
+                topWidgets.setAlpha(1f);
+                topWidgets.setTranslationY(0f);
+                topWidgets.setVisibility(collapsed ? View.GONE : View.VISIBLE);
+            }
+            refreshTerminalWindowBar();
+            if (host != null) finishStatusBarTerminalResizeAfterLayout(host,
+                mStatusBarTerminalResizeGeneration);
+            return;
+        }
+        if (preferenceChanged) mPreferences.setTopPaneClockCollapsed(collapsed);
+        com.termux.app.statusbar.StatusBarGrabHandleView handle =
+            findViewById(R.id.terminal_status_grab_handle);
+        if (handle != null) handle.setCollapsed(collapsed);
+        if (host == null) {
+            refreshTerminalWindowBar();
+            return;
+        }
+        if (!animate) {
+            int resizeGeneration = beginStatusBarTerminalResize();
+            refreshTerminalWindowBar();
+            finishStatusBarTerminalResizeAfterLayout(host, resizeGeneration);
+            return;
+        }
+
+        if (mStatusBarCollapseAnimator != null) mStatusBarCollapseAnimator.cancel();
+        final int resizeGeneration = beginStatusBarTerminalResize();
+        int startHeight = currentTopStatusBarHeight(host);
+        if (startHeight <= 0) startHeight = targetStatusBarHeightPx(capsule, !collapsed);
+        applyTopStatusBarInteractiveHeight(host, topWidgets, startHeight, capsule);
+        mStatusBarCollapseAnimator = android.animation.ValueAnimator.ofInt(startHeight, targetHeight);
+        int fullDistance = Math.max(1, targetStatusBarHeightPx(capsule, false)
+            - targetStatusBarHeightPx(capsule, true));
+        long settleDuration = Math.max(90L,
+            Math.round(260f * Math.abs(targetHeight - startHeight) / fullDistance));
+        mStatusBarCollapseAnimator.setDuration(settleDuration);
+        mStatusBarCollapseAnimator.setInterpolator(Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
+            ? new android.view.animation.PathInterpolator(.16f, 1f, .3f, 1f)
+            : new android.view.animation.DecelerateInterpolator(1.8f));
+        mStatusBarCollapseAnimator.addUpdateListener(animation -> {
+            int height = (Integer) animation.getAnimatedValue();
+            applyTopStatusBarInteractiveHeight(host, topWidgets, height, capsule);
+        });
+        mStatusBarCollapseAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                if (topWidgets != null) {
+                    topWidgets.setClipBounds(null);
+                    topWidgets.setAlpha(1f);
+                    topWidgets.setTranslationY(0f);
+                    topWidgets.setVisibility(collapsed ? View.GONE : View.VISIBLE);
+                }
+                mStatusBarCollapseAnimator = null;
+                refreshTerminalWindowBar();
+                finishStatusBarTerminalResizeAfterLayout(host, resizeGeneration);
+            }
+        });
+        mStatusBarCollapseAnimator.start();
+    }
+
+    /** Refresh visibility, labels, selection and the shared dock/keyboard glass treatment. */
+    public void refreshTerminalWindowBar() {
+        View host = findViewById(R.id.terminal_window_bar_host);
+        com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
+        if (host == null || bar == null) return;
+        boolean visible = isSplitPanesEnabled();
+        host.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (!visible) {
+            applyTerminalSurfaceAppearance();
+            return;
+        }
+
+        com.termux.app.terminal.TerminalClockWidget clock = findViewById(R.id.terminal_clock_widget);
+        if (clock != null && mPreferences != null) {
+            clock.setStyle(mPreferences.getTopPaneClockStyle());
+            clock.setUseAmPm(mPreferences.isTopPaneClockAmPmEnabled());
+        }
+
+        float opacity = mPreferences != null ? mPreferences.getAppBarOpacity() / 100f : 1f;
+        int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
+        View blur = findViewById(R.id.terminal_window_bar_blur);
+        applyRealtimeBlurRadius(blur, blurRadiusDp);
+        applyRealtimeBlurDownsampleFactor(blur, ACCESSORY_BLUR_DOWNSAMPLE_FACTOR);
+        applyRealtimeBlurOverlayColor(blur, Color.TRANSPARENT);
+        if (blur != null) blur.setVisibility(dockBlurEnabled(blurRadiusDp) ? View.VISIBLE : View.GONE);
+        boolean capsuleStatusBar = isValarieStatusBarStyle();
+        View background = findViewById(R.id.terminal_window_bar_background);
+        if (background != null) {
+            // The capsule floats below the status bar as its own slab, so its glass spans the full
+            // pane height. The default pane merges with the behind-status glass, so it renders only
+            // the lower slice and the extension draws the rest.
+            background.setBackground(buildDockGlassSurface(opacity,
+                capsuleStatusBar ? 0f : terminalWindowGlassStatusFraction(host), 1f));
+        }
+        applyStatusBarStyle(host);
+        applyTerminalWindowBarBackdropInsets();
+
+        com.termux.app.statusbar.SessionsIndicatorView sessionsIndicator =
+            findViewById(R.id.terminal_sessions_indicator);
+        if (sessionsIndicator != null) {
+            int sessionIndex = mCurrentWSession == null ? -1 : mWSessions.indexOf(mCurrentWSession);
+            sessionsIndicator.setSession(currentStatusSessionLabel(sessionIndex),
+                mWSessions.size(), sessionIndex);
+        }
+
+        java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
+            new java.util.ArrayList<>();
+        java.util.List<Integer> foregroundPids = new java.util.ArrayList<>();
+        int selected = -1;
+        if (mCurrentWSession != null && mPaneController != null) {
+            selected = Math.max(0, Math.min(mCurrentWSession.current,
+                mCurrentWSession.windows.size() - 1));
+            for (int i = 0; i < mCurrentWSession.windows.size(); i++) {
+                TerminalSession session = mPaneController.windowActiveSession(mCurrentWSession.windows.get(i));
+                items.add(buildWindowItem(session, i, foregroundPids));
+            }
+        }
+        bar.setWindows(items, selected);
+        scheduleWindowLabelPoll(foregroundPids);
+        updateStatusWidgets();
+    }
+
+    @NonNull
+    private CharSequence currentStatusSessionLabel(int sessionIndex) {
+        if (sessionIndex < 0 || mCurrentWSession == null || mPaneController == null
+            || mCurrentWSession.windows.isEmpty()) return "0";
+        TerminalSession representative = mPaneController.windowActiveSession(
+            mCurrentWSession.currentWindow());
+        if (representative != null && !TextUtils.isEmpty(representative.mSessionName)) {
+            return representative.mSessionName.trim();
+        }
+        return Integer.toString(sessionIndex + 1);
+    }
+
+    /**
+     * Build a window pill label following the priority: open file basename (editors) &gt; foreground
+     * process name &gt; directory basename (idle). Falls back to the title/cwd label when foreground
+     * detection has no data yet. Collects the pane pid into {@code foregroundPids} for the next
+     * resolver poll.
+     */
+    @NonNull
+    private com.termux.app.terminal.TerminalWindowBar.WindowItem buildWindowItem(
+            @Nullable TerminalSession session, int index, @NonNull java.util.List<Integer> foregroundPids) {
+        if (session == null) return com.termux.app.terminal.TerminalWindowBar.itemFor(null, index);
+        int pid = session.getPid();
+        if (pid > 0) foregroundPids.add(pid);
+        com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+            mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(pid);
+        if (info != null && !info.idle && info.processName != null) {
+            if (info.openFile != null) {
+                return com.termux.app.terminal.TerminalWindowBar.itemForResolved(info.processName,
+                    com.termux.app.terminal.TerminalWindowBar.truncateFile(info.openFile),
+                    info.processName + " editing " + info.openFile);
+            }
+            return com.termux.app.terminal.TerminalWindowBar.itemForResolved(info.processName,
+                com.termux.app.terminal.TerminalWindowBar.truncateProcess(info.processName),
+                info.processName);
+        }
+        // Idle or not yet resolved: directory basename via the existing title/cwd derivation.
+        return com.termux.app.terminal.TerminalWindowBar.itemFor(session, index);
+    }
+
+    /** Kick the throttled foreground resolver and keep it polling while the window bar is shown. */
+    private void scheduleWindowLabelPoll(@NonNull java.util.List<Integer> pids) {
+        mWindowLabelHandler.removeCallbacksAndMessages(null);
+        if (pids.isEmpty()) return;
+        if (mWindowForegroundResolver == null) {
+            mWindowForegroundResolver = new com.termux.app.statusbar.WindowForegroundResolver(
+                this::refreshTerminalWindowBar);
+        }
+        mWindowForegroundResolver.refresh(pids, android.os.SystemClock.uptimeMillis());
+        mWindowLabelHandler.postDelayed(() -> {
+            if (mWindowForegroundResolver != null && isSplitPanesEnabled()) {
+                mWindowForegroundResolver.refresh(pids, android.os.SystemClock.uptimeMillis());
+                scheduleWindowLabelPoll(pids);
+            }
+        }, WINDOW_LABEL_POLL_MS);
+    }
+
+    // ---- Trailing status widgets (CPU / RAM / weather) + their anchored detail cards ----
+
+    /** Apply widget visibility from preferences, wire taps once, and drive the data controllers. */
+    private void updateStatusWidgets() {
+        com.termux.app.statusbar.StatusBarWidgetView cpu = findViewById(R.id.terminal_status_widget_cpu);
+        com.termux.app.statusbar.StatusBarWidgetView ram = findViewById(R.id.terminal_status_widget_ram);
+        com.termux.app.statusbar.StatusBarWidgetView weather = findViewById(R.id.terminal_status_widget_weather);
+        com.termux.app.statusbar.MaterialDotSeparatorView cpuRamDot =
+            findViewById(R.id.terminal_status_dot_cpu_ram);
+        com.termux.app.statusbar.MaterialDotSeparatorView ramWeatherDot =
+            findViewById(R.id.terminal_status_dot_ram_weather);
+        boolean cpuOn = mPreferences != null && mPreferences.isStatusWidgetCpuEnabled();
+        boolean ramOn = mPreferences != null && mPreferences.isStatusWidgetRamEnabled();
+        boolean weatherOn = mPreferences != null && mPreferences.isStatusWidgetWeatherEnabled();
+
+        if (cpu != null) {
+            cpu.setVisibility(cpuOn ? View.VISIBLE : View.GONE);
+            cpu.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
+            cpu.setIconResource(R.drawable.ic_stat_cpu);
+            if (cpu.getTag() == null) {
+                cpu.setTag("wired");
+                cpu.setOnClickListener(v -> toggleStatsCard(v));
+            }
+        }
+        if (ram != null) {
+            ram.setVisibility(ramOn ? View.VISIBLE : View.GONE);
+            ram.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
+            ram.setIconResource(R.drawable.ic_stat_ram);
+            if (ram.getTag() == null) {
+                ram.setTag("wired");
+                ram.setOnClickListener(v -> toggleStatsCard(v));
+            }
+        }
+        if (weather != null) {
+            weather.setVisibility(weatherOn ? View.VISIBLE : View.GONE);
+            weather.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.TERTIARY);
+            if (weather.getTag() == null) {
+                weather.setTag("wired");
+                weather.setIconResource(R.drawable.ic_weather_clear_day);
+                weather.setValue("--");
+                weather.setOnClickListener(v -> toggleWeatherCard(v));
+            }
+        }
+        if (cpuRamDot != null) {
+            boolean show = cpuOn && (ramOn || weatherOn);
+            cpuRamDot.setVisibility(show ? View.VISIBLE : View.GONE);
+            cpuRamDot.setColorRole(ramOn
+                ? com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY
+                : com.termux.app.statusbar.StatusBarWidgetView.ColorRole.TERTIARY);
+        }
+        if (ramWeatherDot != null) {
+            ramWeatherDot.setVisibility(ramOn && weatherOn ? View.VISIBLE : View.GONE);
+            ramWeatherDot.setColorRole(
+                com.termux.app.statusbar.StatusBarWidgetView.ColorRole.TERTIARY);
+        }
+
+        if (cpuOn || ramOn) {
+            boolean cardShowing = mStatusCardHost.isShowing() && mStatsCardView != null;
+            ensureStatsController().start(cardShowing ? 1500L : 4000L, cardShowing);
+        } else if (mStatsController != null) {
+            mStatsController.stop();
+        }
+
+        if (weatherOn) {
+            ensureWeatherController().refreshIfStale();
+        } else if (mWeatherController != null) {
+            mWeatherController.stop();
+        }
+    }
+
+    @NonNull
+    private com.termux.app.statusbar.SystemStatsController ensureStatsController() {
+        if (mStatsController == null) {
+            mStatsController = new com.termux.app.statusbar.SystemStatsController(this, this::onStatsUpdated);
+        }
+        return mStatsController;
+    }
+
+    private void onStatsUpdated(@NonNull com.termux.app.statusbar.SystemStatsController.Stats stats) {
+        com.termux.app.statusbar.StatusBarWidgetView cpu = findViewById(R.id.terminal_status_widget_cpu);
+        com.termux.app.statusbar.StatusBarWidgetView ram = findViewById(R.id.terminal_status_widget_ram);
+        if (cpu != null && cpu.getVisibility() == View.VISIBLE) {
+            cpu.setValue(stats.cpuPercent >= 0 ? stats.cpuPercent + "%" : "--");
+        }
+        if (ram != null && ram.getVisibility() == View.VISIBLE) {
+            int memPct = stats.memTotalKb > 0
+                ? (int) Math.round(100.0 * stats.memUsedKb / stats.memTotalKb) : -1;
+            ram.setValue(memPct >= 0 ? memPct + "%" : "--");
+        }
+        if (mStatsCardView != null && mStatusCardHost.isShowing()) {
+            mStatsCardView.bind(stats);
+        }
+    }
+
+    private void toggleStatsCard(@NonNull View anchor) {
+        if (mStatusCardHost.isShowing()) {
+            boolean same = mStatusCardHost.isShowingFor(anchor);
+            mStatusCardHost.dismiss();
+            if (same) return;
+        }
+        if (mStatsCardView == null) {
+            mStatsCardView = new com.termux.app.statusbar.SystemStatsCardView(this);
+        }
+        detachFromParent(mStatsCardView);
+        mStatsCardView.bind(ensureStatsController().latest());
+        ensureStatsController().start(1500L, true);
+        setWidgetAccent(anchor, true);
+        mStatusCardHost.show(anchor, mStatsCardView, statusCardStyleProvider(), () -> {
+            setWidgetAccent(anchor, false);
+            if (mStatsController != null
+                && mPreferences != null
+                && (mPreferences.isStatusWidgetCpuEnabled() || mPreferences.isStatusWidgetRamEnabled())) {
+                mStatsController.start(4000L, false);
+            }
+        });
+    }
+
+    @NonNull
+    private com.termux.app.statusbar.StatusCardHost.StyleProvider statusCardStyleProvider() {
+        return new com.termux.app.statusbar.StatusCardHost.StyleProvider() {
+            @Override
+            public Drawable cardBackground() {
+                int surface = getTermuxThemeColor(
+                    com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+                    R.color.termux_surface_panel_high);
+                int outline = getTermuxThemeColor(
+                    com.termux.shared.R.attr.termuxColorOutlineVariant,
+                    R.color.termux_outline_variant);
+                GradientDrawable materialSurface = new GradientDrawable();
+                materialSurface.setColor(withAlphaComponent(surface, 248));
+                materialSurface.setCornerRadius(isValarieStatusBarStyle()
+                    ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : dpToPx(16));
+                materialSurface.setStroke(Math.max(1, Math.round(dpToPx(1))),
+                    withAlphaComponent(outline, 118));
+                return materialSurface;
+            }
+
+            @Override
+            public float cornerRadiusPx() {
+                return isValarieStatusBarStyle()
+                    ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : dpToPx(16);
+            }
+        };
+    }
+
+    private void setWidgetAccent(@NonNull View anchor, boolean accent) {
+        if (anchor instanceof com.termux.app.statusbar.StatusBarWidgetView) {
+            ((com.termux.app.statusbar.StatusBarWidgetView) anchor).setAccent(accent);
+        }
+    }
+
+    private static void detachFromParent(@NonNull View view) {
+        if (view.getParent() instanceof ViewGroup) {
+            ((ViewGroup) view.getParent()).removeView(view);
+        }
+    }
+
+    @NonNull
+    private com.termux.app.statusbar.WeatherController ensureWeatherController() {
+        if (mWeatherController == null) {
+            mWeatherController = new com.termux.app.statusbar.WeatherController(this, this::onWeatherUpdated);
+        }
+        return mWeatherController;
+    }
+
+    private void onWeatherUpdated(@NonNull com.termux.app.statusbar.WeatherController.Weather weather) {
+        com.termux.app.statusbar.StatusBarWidgetView widget = findViewById(R.id.terminal_status_widget_weather);
+        if (widget != null && widget.getVisibility() == View.VISIBLE) {
+            if (weather.valid) {
+                widget.setIconResource(com.termux.app.statusbar.WeatherController.iconFor(
+                    weather.currentCode, weather.currentIsDay));
+                widget.setValue(Double.isNaN(weather.currentC) ? "--°" : Math.round(weather.currentC) + "°");
+            } else {
+                widget.setValue("--°");
+            }
+        }
+        if (mWeatherCardView != null && mStatusCardHost.isShowing()) {
+            mWeatherCardView.bind(weather);
+        }
+    }
+
+    private void toggleWeatherCard(@NonNull View anchor) {
+        if (mStatusCardHost.isShowing()) {
+            boolean same = mStatusCardHost.isShowingFor(anchor);
+            mStatusCardHost.dismiss();
+            if (same) return;
+        }
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            androidx.core.app.ActivityCompat.requestPermissions(this,
+                new String[] {android.Manifest.permission.ACCESS_COARSE_LOCATION},
+                REQUEST_CODE_WEATHER_LOCATION);
+        }
+        if (mWeatherCardView == null) {
+            mWeatherCardView = new com.termux.app.statusbar.WeatherCardView(this);
+        }
+        detachFromParent(mWeatherCardView);
+        mWeatherCardView.bind(ensureWeatherController().cache());
+        ensureWeatherController().refreshIfStale();
+        setWidgetAccent(anchor, true);
+        mStatusCardHost.show(anchor, mWeatherCardView, statusCardStyleProvider(), 360,
+            () -> setWidgetAccent(anchor, false));
+    }
+
+    /** Switch directly from the app-owned window row and settle the terminal with a short wave. */
+    private void showWindowFromBar(int index) {
+        if (mPaneController == null || mCurrentWSession == null
+            || index < 0 || index >= mCurrentWSession.windows.size()) return;
+        int previous = mCurrentWSession.current;
+        if (previous == index) return;
+        mStatusCardHost.dismiss();
+        mCurrentWSession.current = index;
+        mPaneController.showWindow(mCurrentWSession.currentWindow());
+        animateTerminalWindowArrival(index >= previous ? 1 : -1);
+        rebuildDrawerSessions();
+    }
+
+    private void animateTerminalWindowArrival(int direction) {
+        View terminal = findViewById(R.id.terminal_surface_host);
+        if (terminal == null) return;
+        terminal.animate().cancel();
+        terminal.setAlpha(0.78f);
+        terminal.setTranslationX((direction < 0 ? -1f : 1f) * dpToPx(34));
+        terminal.animate()
+            .alpha(1f)
+            .translationX(0f)
+            .setDuration(260L)
+            .setInterpolator(Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
+                ? new android.view.animation.PathInterpolator(0.16f, 1f, 0.3f, 1f)
+                : new android.view.animation.DecelerateInterpolator(1.8f))
+            .start();
     }
 
     /** Index of {@code session} within the drawer-visible list, or -1. */
@@ -7422,6 +8261,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mCurrentWSession.windows.add(w);
         mCurrentWSession.current = mCurrentWSession.windows.size() - 1;
         mPaneController.showWindow(w);
+        animateTerminalWindowArrival(1);
         showToast("Window " + (mCurrentWSession.current + 1) + "/" + mCurrentWSession.windows.size(), true);
         rebuildDrawerSessions();
     }
@@ -7451,9 +8291,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneController == null || mCurrentWSession == null) return;
         int n = mCurrentWSession.windows.size();
         if (n < 2) return;
-        mCurrentWSession.current = ((mCurrentWSession.current + (forward ? 1 : -1)) % n + n) % n;
-        mPaneController.showWindow(mCurrentWSession.currentWindow());
-        showToast("Window " + (mCurrentWSession.current + 1) + "/" + n, true);
+        int target = ((mCurrentWSession.current + (forward ? 1 : -1)) % n + n) % n;
+        showWindowFromBar(target);
+        showToast("Window " + (target + 1) + "/" + n, true);
     }
 
     /** Close the whole current session (Ctrl+Alt+Shift+X): all its windows + panes. */
@@ -7546,6 +8386,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mTermuxTerminalExtraKeys.setTerminalView(v);
             }
             mCurrentTabPrimary = mPaneController.getActiveSession();
+            refreshTerminalWindowBar();
         }
 
         @Override public void onTreesChanged() {

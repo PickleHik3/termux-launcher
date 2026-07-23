@@ -62,6 +62,18 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
             case "compatibility_mode":
                 mPreferences.setCompatibilityModeEnabled(value);
                 break;
+            case "top_pane_clock_am_pm":
+                mPreferences.setTopPaneClockAmPmEnabled(value);
+                break;
+            case "status_widget_cpu":
+                mPreferences.setStatusWidgetCpuEnabled(value);
+                break;
+            case "status_widget_ram":
+                mPreferences.setStatusWidgetRamEnabled(value);
+                break;
+            case "status_widget_weather":
+                mPreferences.setStatusWidgetWeatherEnabled(value);
+                break;
             default:
                 break;
         }
@@ -78,8 +90,37 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isSoftKeyboardEnabledOnlyIfNoHardware();
             case "compatibility_mode":
                 return mPreferences.isCompatibilityModeEnabled();
+            case "top_pane_clock_am_pm":
+                return mPreferences.isTopPaneClockAmPmEnabled();
+            case "status_widget_cpu":
+                return mPreferences.isStatusWidgetCpuEnabled();
+            case "status_widget_ram":
+                return mPreferences.isStatusWidgetRamEnabled();
+            case "status_widget_weather":
+                return mPreferences.isStatusWidgetWeatherEnabled();
             default:
                 return defValue;
         }
+    }
+
+    @Override
+    public void putString(String key, @Nullable String value) {
+        if (mPreferences == null || key == null) return;
+        if ("top_pane_clock_style".equals(key)) {
+            mPreferences.setTopPaneClockStyle(value);
+        } else if ("status_bar_style".equals(key)) {
+            mPreferences.setStatusBarStyle(value);
+        }
+    }
+
+    @Override
+    public String getString(String key, @Nullable String defValue) {
+        if (mPreferences == null || key == null) return defValue;
+        if ("top_pane_clock_style".equals(key)) {
+            return mPreferences.getTopPaneClockStyle();
+        } else if ("status_bar_style".equals(key)) {
+            return mPreferences.getStatusBarStyle();
+        }
+        return defValue;
     }
 }

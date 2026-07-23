@@ -24,6 +24,18 @@ public class ScreenBufferTest extends TerminalTestCase {
         assertEquals("XX\nXYY\n YY", screen.getTranscriptText());
     }
 
+    public void testBottomAnchoredExpansionAddsBlankRowsAboveCursor() {
+        TerminalBuffer screen = new TerminalBuffer(5, 10, 3);
+        screen.setChar(0, 0, 'a', TextStyle.NORMAL);
+        screen.setChar(0, 2, 'p', TextStyle.NORMAL);
+        int[] cursor = {0, 2};
+
+        screen.resize(5, 5, 10, cursor, TextStyle.NORMAL, false, true);
+
+        assertEquals(4, cursor[1]);
+        assertEquals("\n\na\n\np", screen.getSelectedText(0, 0, 4, 4, false));
+    }
+
     public void testGetSelectedText() {
         withTerminalSized(5, 3).enterString("ABCDEFGHIJ").assertLinesAre("ABCDE", "FGHIJ", "     ");
         assertEquals("AB", mTerminal.getSelectedText(0, 0, 1, 0));

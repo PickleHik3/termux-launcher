@@ -237,6 +237,16 @@ public final class TerminalBuffer {
      * @param cursor     An int[2] containing the (column, row) cursor location.
      */
     public void resize(int newColumns, int newRows, int newTotalRows, int[] cursor, long currentStyle, boolean altScreen) {
+        resize(newColumns, newRows, newTotalRows, cursor, currentStyle, altScreen, false);
+    }
+
+    /**
+     * Resize with an optional bottom anchor. The anchored form exposes transcript rows (or blank
+     * rows when history is exhausted) above the old screen so the cursor retains its distance from
+     * the bottom edge as rows are added.
+     */
+    public void resize(int newColumns, int newRows, int newTotalRows, int[] cursor,
+                       long currentStyle, boolean altScreen, boolean keepCursorAtBottom) {
         // newRows > mTotalRows should not normally happen since mTotalRows is TRANSCRIPT_ROWS (10000):
         if (newColumns == mColumns && newRows <= mTotalRows) {
             // Fast resize where just the rows changed.
@@ -253,12 +263,23 @@ public final class TerminalBuffer {
                     }
                 }
             } else if (shiftDownOfTopRow < 0) {
-                // Negative shift down = expanding. Only move screen up if there is transcript to show:
-                int actualShift = Math.max(shiftDownOfTopRow, -mActiveTranscriptRows);
-                if (shiftDownOfTopRow != actualShift) {
-                    // The new lines revealed by the resizing are not all from the transcript. Blank the below ones.
-                    for (int i = 0; i < actualShift - shiftDownOfTopRow; i++) allocateFullLineIfNecessary((mScreenFirstRow + mScreenRows + i) % mTotalRows).clear(currentStyle);
-                    shiftDownOfTopRow = actualShift;
+                if (keepCursorAtBottom) {
+                    int rowsAdded = -shiftDownOfTopRow;
+                    // Existing transcript fills the first new rows. Any remaining rows are clean
+                    // padding above the old screen rather than below its cursor.
+                    for (int i = mActiveTranscriptRows + 1; i <= rowsAdded; i++) {
+                        int internalRow = (mScreenFirstRow - i) % mTotalRows;
+                        if (internalRow < 0) internalRow += mTotalRows;
+                        allocateFullLineIfNecessary(internalRow).clear(currentStyle);
+                    }
+                } else {
+                    // Negative shift down = expanding. Only move screen up if there is transcript to show:
+                    int actualShift = Math.max(shiftDownOfTopRow, -mActiveTranscriptRows);
+                    if (shiftDownOfTopRow != actualShift) {
+                        // The new lines revealed by the resizing are not all from the transcript. Blank the below ones.
+                        for (int i = 0; i < actualShift - shiftDownOfTopRow; i++) allocateFullLineIfNecessary((mScreenFirstRow + mScreenRows + i) % mTotalRows).clear(currentStyle);
+                        shiftDownOfTopRow = actualShift;
+                    }
                 }
             }
             mScreenFirstRow += shiftDownOfTopRow;

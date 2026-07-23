@@ -119,11 +119,18 @@ public final class TerminalSession extends TerminalOutput {
 
     /** Inform the attached pty of the new size and reflow or initialize the emulator. */
     public void updateSize(int columns, int rows, int cellWidthPixels, int cellHeightPixels) {
+        updateSize(columns, rows, cellWidthPixels, cellHeightPixels, false);
+    }
+
+    /** Inform the pty of a new size with an optional bottom-anchored row expansion. */
+    public void updateSize(int columns, int rows, int cellWidthPixels, int cellHeightPixels,
+                           boolean keepCursorAtBottom) {
         if (mEmulator == null) {
             initializeEmulator(columns, rows, cellWidthPixels, cellHeightPixels);
         } else {
             JNI.setPtyWindowSize(mTerminalFileDescriptor, rows, columns, cellWidthPixels, cellHeightPixels);
-            mEmulator.resize(columns, rows, cellWidthPixels, cellHeightPixels);
+            mEmulator.resize(columns, rows, cellWidthPixels, cellHeightPixels,
+                keepCursorAtBottom);
         }
     }
 

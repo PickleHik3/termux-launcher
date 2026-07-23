@@ -552,6 +552,11 @@ public final class TerminalEmulator {
     }
 
     public void resize(int columns, int rows, int cellWidthPixels, int cellHeightPixels) {
+        resize(columns, rows, cellWidthPixels, cellHeightPixels, false);
+    }
+
+    public void resize(int columns, int rows, int cellWidthPixels, int cellHeightPixels,
+                       boolean keepCursorAtBottom) {
         this.mCellWidthPixels = cellWidthPixels;
         this.mCellHeightPixels = cellHeightPixels;
 
@@ -576,13 +581,18 @@ public final class TerminalEmulator {
             mLeftMargin = 0;
             mRightMargin = mColumns;
         }
-        resizeScreen();
+        resizeScreen(keepCursorAtBottom);
     }
 
     private void resizeScreen() {
+        resizeScreen(false);
+    }
+
+    private void resizeScreen(boolean keepCursorAtBottom) {
         final int[] cursor = { mCursorCol, mCursorRow };
         int newTotalRows = (mScreen == mAltBuffer) ? mRows : mMainBuffer.mTotalRows;
-        mScreen.resize(mColumns, mRows, newTotalRows, cursor, getStyle(), isAlternateBufferActive());
+        mScreen.resize(mColumns, mRows, newTotalRows, cursor, getStyle(),
+            isAlternateBufferActive(), keepCursorAtBottom);
         mCursorCol = cursor[0];
         mCursorRow = cursor[1];
     }
