@@ -1,6 +1,12 @@
 package com.termux.app.terminal;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
@@ -34,6 +40,9 @@ import java.util.Locale;
 /** One compact app-owned row for the current tmux-style window list. */
 public final class TerminalWindowBar extends HorizontalScrollView {
 
+    /** Shared with the terminal surface so both pieces of the window switch settle together. */
+    public static final long WINDOW_SWITCH_ANIMATION_DURATION_MS = 320L;
+
     public interface OnWindowSelectedListener {
         void onWindowSelected(int index);
     }
@@ -53,7 +62,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         }
     }
 
-    private final LinearLayout mTabs;
+    private final SelectionStrip mTabs;
     @Nullable private OnWindowSelectedListener mSelectionListener;
     @Nullable private OnCreateWindowListener mCreateListener;
     private int mSelectedIndex = -1;
@@ -62,6 +71,13 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private long mTerminalTypefaceModified;
     private boolean mCapsuleSurface;
     private float mStatusBarRadiusPx;
+    private int mSelectedTextColor;
+    private int mUnselectedTextColor;
+    private int mUnselectedFillColor;
+    private int mUnselectedStrokeColor;
+    private int mSelectedFillColor;
+    private int mSelectedStrokeColor;
+    @Nullable private ValueAnimator mSelectionAnimator;
 
     public TerminalWindowBar(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -72,14 +88,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         setOverScrollMode(OVER_SCROLL_NEVER);
         // The parent already supplies the intended gap after the session indicator. A second
         // leading inset here made that gap look like trailing padding owned by the session chip.
-        setPaddingRelative(0, dp(3), dp(5), dp(3));
-        mTabs = new LinearLayout(context);
+        setPaddingRelative(0, dp(2), dp(5), dp(2));
+        mTabs = new SelectionStrip(context);
         mTabs.setGravity(Gravity.CENTER_VERTICAL);
         mTabs.setOrientation(LinearLayout.HORIZONTAL);
         mTabs.setClipChildren(true);
         mTabs.setClipToPadding(true);
         addView(mTabs, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT));
         reloadTerminalTypeface();
+        updatePalette();
     }
 
     public void setOnWindowSelectedListener(@Nullable OnWindowSelectedListener listener) {
@@ -96,19 +113,32 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         if (mCapsuleSurface == capsule && mStatusBarRadiusPx == radius) return;
         mCapsuleSurface = capsule;
         mStatusBarRadiusPx = radius;
-        int selected = mSelectedIndex;
-        List<WindowItem> items = new ArrayList<>(mItems);
-        mSelectedIndex = -1;
-        setWindows(items, selected);
+        updatePalette();
+        applyTabSurfaceStyle();
     }
 
     public void setWindows(@NonNull List<WindowItem> items, int selectedIndex) {
         boolean typefaceChanged = reloadTerminalTypeface();
         if (!typefaceChanged && selectedIndex == mSelectedIndex && sameItems(mItems, items)) return;
         int previousSelected = mSelectedIndex;
-        int previousCount = mItems.size();
+        boolean canReuseTabs = !typefaceChanged && sameItems(mItems, items)
+            && mTabs.getChildCount() == items.size() + 1;
         mSelectedIndex = selectedIndex;
         mItems = new ArrayList<>(items);
+        updatePalette();
+        if (canReuseTabs) {
+            if (previousSelected >= 0 && previousSelected != selectedIndex) {
+                animateSelectionSlide(previousSelected, selectedIndex);
+            } else {
+                cancelSelectionAnimation();
+                mTabs.snapSelection(selectedIndex);
+                applyStableTabSelection();
+            }
+            scrollSelectedIntoView(selectedIndex);
+            return;
+        }
+
+        cancelSelectionAnimation();
         mTabs.removeAllViews();
         for (int i = 0; i < items.size(); i++) {
             final int index = i;
@@ -126,44 +156,28 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             mTabs.addView(tab, params);
         }
         addCreateButton(items.isEmpty());
-        if (previousCount == items.size() && previousSelected >= 0
-            && previousSelected != selectedIndex) {
-            animateSelectionSlide(previousSelected, selectedIndex);
-        }
+        mTabs.setWindowCount(items.size());
+        mTabs.snapSelection(selectedIndex);
+        applyStableTabSelection();
         scrollSelectedIntoView(selectedIndex);
     }
 
     private TextView createTab(String label, boolean selected) {
         Context context = getContext();
-        int primary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
-            ContextCompat.getColor(context, R.color.termux_primary));
-        int onSurface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurface,
-            ContextCompat.getColor(context, R.color.termux_on_surface));
-        int onSurfaceVariant = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
-            ContextCompat.getColor(context, R.color.termux_on_surface_variant));
-        int secondary = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorSecondary,
-            ContextCompat.getColor(context, R.color.termux_secondary));
-        GradientDrawable chip = new GradientDrawable();
-        chip.setCornerRadius(mCapsuleSurface ? mStatusBarRadiusPx : 0f);
-        chip.setColor(ColorUtils.setAlphaComponent(selected ? primary : secondary,
-            selected ? 38 : 42));
-        chip.setStroke(dp(1), ColorUtils.setAlphaComponent(selected ? primary : secondary,
-            selected ? 62 : 72));
-
         TextView tab = new TextView(context);
         tab.setGravity(Gravity.CENTER);
         tab.setMinWidth(0);
         tab.setMaxWidth(dp(104));
-        tab.setPadding(dp(3), 0, dp(3), 0);
+        // A half-dp on each side is visible at modern phone densities without making the compact
+        // window row feel loose.
+        tab.setPadding(dp(3.5f), 0, dp(3.5f), 0);
         tab.setSingleLine(true);
         tab.setEllipsize(TextUtils.TruncateAt.END);
         tab.setText(label);
-        tab.setTextColor(selected ? onSurface : ColorUtils.blendARGB(onSurfaceVariant, secondary, .24f));
+        tab.setTextColor(selected ? mSelectedTextColor : mUnselectedTextColor);
         tab.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
         tab.setTypeface(mTerminalTypeface, selected ? Typeface.BOLD : Typeface.NORMAL);
-        tab.setBackground(chip);
+        tab.setBackground(buildUnselectedChip());
         tab.setSelected(selected);
         tab.setFocusable(true);
         return tab;
@@ -194,18 +208,47 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     private void animateSelectionSlide(int previousSelected, int selectedIndex) {
-        int direction = selectedIndex >= previousSelected ? 1 : -1;
-        if (selectedIndex < 0 || selectedIndex >= mTabs.getChildCount()) return;
-        View selected = mTabs.getChildAt(selectedIndex);
-        selected.animate().cancel();
-        selected.setAlpha(0.56f);
-        selected.setTranslationX(direction * dp(12));
-        selected.animate()
-            .alpha(1f)
-            .translationX(0f)
-            .setDuration(230L)
-            .setInterpolator(settleInterpolator())
-            .start();
+        if (previousSelected < 0 || previousSelected >= mItems.size()
+            || selectedIndex < 0 || selectedIndex >= mItems.size()) {
+            mTabs.snapSelection(selectedIndex);
+            applyStableTabSelection();
+            return;
+        }
+        RectF start = new RectF();
+        RectF end = new RectF();
+        if (!mTabs.copyCurrentHighlightBounds(start)
+            || !mTabs.copyChildBounds(selectedIndex, end)) {
+            mTabs.snapSelection(selectedIndex);
+            applyStableTabSelection();
+            return;
+        }
+
+        cancelSelectionAnimation();
+        applyAnimatedTabSelection(previousSelected, selectedIndex, 0f);
+        mTabs.setAnimatedHighlight(start);
+        mSelectionAnimator = ValueAnimator.ofFloat(0f, 1f);
+        mSelectionAnimator.setDuration(WINDOW_SWITCH_ANIMATION_DURATION_MS);
+        mSelectionAnimator.setInterpolator(settleInterpolator());
+        mSelectionAnimator.addUpdateListener(animation -> {
+            float progress = (Float) animation.getAnimatedValue();
+            mTabs.setAnimatedHighlight(lerp(start, end, progress));
+            applyAnimatedTabSelection(previousSelected, selectedIndex, progress);
+        });
+        mSelectionAnimator.addListener(new AnimatorListenerAdapter() {
+            private boolean mCancelled;
+
+            @Override public void onAnimationCancel(Animator animation) {
+                mCancelled = true;
+            }
+
+            @Override public void onAnimationEnd(Animator animation) {
+                if (mSelectionAnimator == animation) mSelectionAnimator = null;
+                if (mCancelled) return;
+                mTabs.snapSelection(selectedIndex);
+                applyStableTabSelection();
+            }
+        });
+        mSelectionAnimator.start();
     }
 
     private void scrollSelectedIntoView(int selectedIndex) {
@@ -220,7 +263,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     private void animateScrollTo(int target) {
         android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofInt(getScrollX(), target);
-        animator.setDuration(220L);
+        animator.setDuration(WINDOW_SWITCH_ANIMATION_DURATION_MS);
         animator.setInterpolator(settleInterpolator());
         animator.addUpdateListener(value -> scrollTo((Integer) value.getAnimatedValue(), 0));
         animator.start();
@@ -230,6 +273,170 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
             ? new PathInterpolator(0.16f, 1f, 0.3f, 1f)
             : new DecelerateInterpolator(1.8f);
+    }
+
+    private void cancelSelectionAnimation() {
+        if (mSelectionAnimator == null) return;
+        mSelectionAnimator.cancel();
+        mSelectionAnimator = null;
+    }
+
+    private void applyStableTabSelection() {
+        for (int i = 0; i < mItems.size() && i < mTabs.getChildCount(); i++) {
+            TextView tab = (TextView) mTabs.getChildAt(i);
+            boolean selected = i == mSelectedIndex;
+            tab.setSelected(selected);
+            tab.setTextColor(selected ? mSelectedTextColor : mUnselectedTextColor);
+            tab.setTypeface(mTerminalTypeface, selected ? Typeface.BOLD : Typeface.NORMAL);
+            tab.setAlpha(1f);
+            tab.setTranslationX(0f);
+        }
+    }
+
+    private void applyAnimatedTabSelection(int previousSelected, int selectedIndex, float progress) {
+        for (int i = 0; i < mItems.size() && i < mTabs.getChildCount(); i++) {
+            TextView tab = (TextView) mTabs.getChildAt(i);
+            tab.setSelected(i == selectedIndex);
+            if (i == previousSelected) {
+                tab.setTextColor(ColorUtils.blendARGB(
+                    mSelectedTextColor, mUnselectedTextColor, progress));
+                tab.setTypeface(mTerminalTypeface, Typeface.BOLD);
+            } else if (i == selectedIndex) {
+                tab.setTextColor(ColorUtils.blendARGB(
+                    mUnselectedTextColor, mSelectedTextColor, progress));
+                tab.setTypeface(mTerminalTypeface, Typeface.BOLD);
+            } else {
+                tab.setTextColor(mUnselectedTextColor);
+                tab.setTypeface(mTerminalTypeface, Typeface.NORMAL);
+            }
+            tab.setAlpha(1f);
+            tab.setTranslationX(0f);
+        }
+    }
+
+    private void updatePalette() {
+        Context context = getContext();
+        int primary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
+            ContextCompat.getColor(context, R.color.termux_primary));
+        int onSurface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurface,
+            ContextCompat.getColor(context, R.color.termux_on_surface));
+        int onSurfaceVariant = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+            ContextCompat.getColor(context, R.color.termux_on_surface_variant));
+        int secondary = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorSecondary,
+            ContextCompat.getColor(context, R.color.termux_secondary));
+        mSelectedTextColor = onSurface;
+        mUnselectedTextColor = ColorUtils.setAlphaComponent(
+            ColorUtils.blendARGB(onSurfaceVariant, secondary, .18f), 148);
+        mUnselectedFillColor = ColorUtils.setAlphaComponent(secondary, 16);
+        mUnselectedStrokeColor = ColorUtils.setAlphaComponent(secondary, 34);
+        mSelectedFillColor = ColorUtils.setAlphaComponent(primary, 58);
+        mSelectedStrokeColor = ColorUtils.setAlphaComponent(primary, 112);
+        mTabs.setHighlightStyle(mSelectedFillColor, mSelectedStrokeColor,
+            mCapsuleSurface ? mStatusBarRadiusPx : 0f, dp(1));
+    }
+
+    private void applyTabSurfaceStyle() {
+        for (int i = 0; i < mItems.size() && i < mTabs.getChildCount(); i++) {
+            mTabs.getChildAt(i).setBackground(buildUnselectedChip());
+        }
+        applyStableTabSelection();
+        mTabs.invalidate();
+    }
+
+    private GradientDrawable buildUnselectedChip() {
+        GradientDrawable chip = new GradientDrawable();
+        chip.setCornerRadius(mCapsuleSurface ? mStatusBarRadiusPx : 0f);
+        chip.setColor(mUnselectedFillColor);
+        chip.setStroke(dp(1), mUnselectedStrokeColor);
+        return chip;
+    }
+
+    private static RectF lerp(@NonNull RectF start, @NonNull RectF end, float progress) {
+        return new RectF(
+            start.left + (end.left - start.left) * progress,
+            start.top + (end.top - start.top) * progress,
+            start.right + (end.right - start.right) * progress,
+            start.bottom + (end.bottom - start.bottom) * progress);
+    }
+
+    /** Draws one selected surface beneath the pills so it can travel without moving their labels. */
+    private static final class SelectionStrip extends LinearLayout {
+
+        private final Paint mFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF mAnimatedHighlight = new RectF();
+        private int mWindowCount;
+        private int mSelection = -1;
+        private boolean mHasAnimatedHighlight;
+        private float mCornerRadius;
+
+        SelectionStrip(@NonNull Context context) {
+            super(context);
+            setWillNotDraw(false);
+            mFillPaint.setStyle(Paint.Style.FILL);
+            mStrokePaint.setStyle(Paint.Style.STROKE);
+        }
+
+        void setWindowCount(int windowCount) {
+            mWindowCount = Math.max(0, windowCount);
+        }
+
+        void setHighlightStyle(int fillColor, int strokeColor, float cornerRadius,
+                               float strokeWidth) {
+            mFillPaint.setColor(fillColor);
+            mStrokePaint.setColor(strokeColor);
+            mStrokePaint.setStrokeWidth(strokeWidth);
+            mCornerRadius = Math.max(0f, cornerRadius);
+            invalidate();
+        }
+
+        void snapSelection(int selection) {
+            mSelection = selection;
+            mHasAnimatedHighlight = false;
+            invalidate();
+        }
+
+        void setAnimatedHighlight(@NonNull RectF bounds) {
+            mAnimatedHighlight.set(bounds);
+            mHasAnimatedHighlight = true;
+            invalidate();
+        }
+
+        boolean copyCurrentHighlightBounds(@NonNull RectF output) {
+            if (mHasAnimatedHighlight && !mAnimatedHighlight.isEmpty()) {
+                output.set(mAnimatedHighlight);
+                return true;
+            }
+            return copyChildBounds(mSelection, output);
+        }
+
+        boolean copyChildBounds(int index, @NonNull RectF output) {
+            if (index < 0 || index >= mWindowCount || index >= getChildCount()) return false;
+            View child = getChildAt(index);
+            if (child.getWidth() <= 0 || child.getHeight() <= 0) return false;
+            output.set(child.getLeft(), child.getTop(), child.getRight(), child.getBottom());
+            return true;
+        }
+
+        @Override protected void dispatchDraw(@NonNull Canvas canvas) {
+            RectF bounds = new RectF();
+            boolean hasBounds;
+            if (mHasAnimatedHighlight) {
+                bounds.set(mAnimatedHighlight);
+                hasBounds = !bounds.isEmpty();
+            } else {
+                hasBounds = copyChildBounds(mSelection, bounds);
+            }
+            if (hasBounds) {
+                float strokeInset = mStrokePaint.getStrokeWidth() / 2f;
+                bounds.inset(strokeInset, strokeInset);
+                canvas.drawRoundRect(bounds, mCornerRadius, mCornerRadius, mFillPaint);
+                canvas.drawRoundRect(bounds, mCornerRadius, mCornerRadius, mStrokePaint);
+            }
+            super.dispatchDraw(canvas);
+        }
     }
 
     private boolean reloadTerminalTypeface() {
@@ -435,6 +642,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private int dp(float value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 }

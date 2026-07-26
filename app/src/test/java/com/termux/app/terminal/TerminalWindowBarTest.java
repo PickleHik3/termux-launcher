@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
@@ -41,6 +42,9 @@ public class TerminalWindowBarTest {
         assertFalse(tabs.getChildAt(0).isSelected());
         assertTrue(tabs.getChildAt(1).isSelected());
         assertEquals("ssh-icon zbook", ((TextView) tabs.getChildAt(1)).getText().toString());
+        assertEquals(Math.round(3.5f * bar.getResources().getDisplayMetrics().density),
+            tabs.getChildAt(1).getPaddingLeft());
+        assertEquals(tabs.getChildAt(1).getPaddingLeft(), tabs.getChildAt(1).getPaddingRight());
 
         tabs.getChildAt(0).performClick();
         assertEquals(0, selected.get());
@@ -62,7 +66,7 @@ public class TerminalWindowBarTest {
     }
 
     @Test
-    public void surfaceStyle_rebuildsTabsWithStatusBarCornerRadius() {
+    public void surfaceStyle_updatesTabsWithStatusBarCornerRadius() {
         TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
         bar.setWindows(Arrays.asList(new TerminalWindowBar.WindowItem("home", "home")), 0);
         bar.setSurfaceStyle(false, 40f);
@@ -74,5 +78,26 @@ public class TerminalWindowBarTest {
         tabs = (LinearLayout) bar.getChildAt(0);
         assertEquals(40f,
             ((GradientDrawable) tabs.getChildAt(0).getBackground()).getCornerRadius(), .01f);
+    }
+
+    @Test
+    public void selectionChange_reusesStationaryTabsInsteadOfWigglingSelectedLabel() {
+        TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
+        java.util.List<TerminalWindowBar.WindowItem> items = Arrays.asList(
+            new TerminalWindowBar.WindowItem("home", "home"),
+            new TerminalWindowBar.WindowItem("work", "work"),
+            new TerminalWindowBar.WindowItem("ssh", "ssh"));
+        bar.setWindows(items, 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        android.view.View second = tabs.getChildAt(1);
+
+        bar.setWindows(items, 1);
+
+        assertSame(second, tabs.getChildAt(1));
+        assertEquals(0f, tabs.getChildAt(1).getTranslationX(), .01f);
+        assertEquals(1f, tabs.getChildAt(1).getAlpha(), .01f);
+        assertTrue(tabs.getChildAt(1).isSelected());
+        assertFalse(tabs.getChildAt(0).isSelected());
+        assertEquals(320L, TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS);
     }
 }

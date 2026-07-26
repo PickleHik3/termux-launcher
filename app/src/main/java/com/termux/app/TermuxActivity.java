@@ -1921,9 +1921,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int hMargin = capsule ? resolveDockCapsuleHorizontalMarginPx() : 0;
             // Extend Rounded upward without moving its lower edge or the terminal content.
             int topMargin = capsule ? Math.round(dpToPx(2)) : 0;
-            int targetHeight = Math.round(dpToPx(collapsed
-                ? capsule ? 32 : 34
-                : capsule ? 102 : 98));
+            int targetHeight = targetStatusBarHeightPx(capsule, collapsed);
             if (mlp.leftMargin != hMargin || mlp.rightMargin != hMargin
                 || mlp.topMargin != topMargin
                 || (mStatusBarCollapseAnimator == null && mlp.height != targetHeight)) {
@@ -1959,7 +1957,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // separate row. Keep only enough inset for the capsule clip and move the side
                 // content inward below where the curve becomes tight.
                 int targetBottomMargin = Math.round(dpToPx(collapsed ? 0 : capsule ? 3 : 2));
-                int targetRowHeight = Math.round(dpToPx(collapsed && capsule ? 24 : 26));
+                int targetRowHeight = Math.round(dpToPx(collapsed && capsule ? 22 : 24));
                 int targetGravity = collapsed ? Gravity.CENTER_VERTICAL : Gravity.BOTTOM;
                 boolean rowChanged = rowParams.bottomMargin != targetBottomMargin
                     || rowParams.topMargin != 0 || rowParams.height != targetRowHeight;
@@ -2061,7 +2059,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private int targetStatusBarHeightPx(boolean capsule, boolean collapsed) {
-        return Math.round(dpToPx(collapsed ? capsule ? 32 : 34 : capsule ? 102 : 98));
+        return Math.round(dpToPx(collapsed ? capsule ? 30 : 32 : capsule ? 100 : 96));
     }
 
     private int resolveDockCapsuleContentInsetPx() {
@@ -3948,7 +3946,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * Continue the top pane's glass through the system status-bar inset. This surface is a sibling
      * of the drawer, so Android cannot clip it at the drawer's top bound. The compact window row
-     * remains bottom-aligned inside its 98dp pane and the terminal still starts below that pane.
+     * remains bottom-aligned inside its 96dp pane and the terminal still starts below that pane.
      */
     private void applyTerminalWindowBarBackdropInsets() {
         View host = findViewById(R.id.terminal_window_bar_host);
@@ -3987,7 +3985,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private float terminalWindowGlassStatusFraction(@NonNull View host) {
         int paneHeight = host.getLayoutParams() != null ? host.getLayoutParams().height : 0;
-        if (paneHeight <= 0) paneHeight = Math.round(dpToPx(98));
+        if (paneHeight <= 0) paneHeight = Math.round(dpToPx(96));
         return mLastStatusBarInsetTop / (float) (mLastStatusBarInsetTop + paneHeight);
     }
 
@@ -7999,8 +7997,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.statusbar.StatusBarResizeGeometry.Row
             applyInteractiveStatusRowGeometry(int surfaceHeight, boolean capsule,
                                               int collapsedHeight, int expandedHeight) {
-        int collapsedRowHeight = Math.round(dpToPx(capsule ? 24 : 26));
-        int expandedRowHeight = Math.round(dpToPx(26));
+        int collapsedRowHeight = Math.round(dpToPx(capsule ? 22 : 24));
+        int expandedRowHeight = Math.round(dpToPx(24));
         int expandedBottomMargin = Math.round(dpToPx(capsule ? 3 : 2));
         com.termux.app.statusbar.StatusBarResizeGeometry.Row geometry =
             com.termux.app.statusbar.StatusBarResizeGeometry.calculate(surfaceHeight,
@@ -8462,8 +8460,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mStatusCardHost.dismiss();
         mCurrentWSession.current = index;
         mPaneController.showWindow(mCurrentWSession.currentWindow());
-        animateTerminalWindowArrival(index >= previous ? 1 : -1);
         rebuildDrawerSessions();
+        animateTerminalWindowArrival(index >= previous ? 1 : -1);
     }
 
     private void animateTerminalWindowArrival(int direction) {
@@ -8475,7 +8473,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         terminal.animate()
             .alpha(1f)
             .translationX(0f)
-            .setDuration(260L)
+            .setDuration(com.termux.app.terminal.TerminalWindowBar
+                .WINDOW_SWITCH_ANIMATION_DURATION_MS)
             .setInterpolator(Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
                 ? new android.view.animation.PathInterpolator(0.16f, 1f, 0.3f, 1f)
                 : new android.view.animation.DecelerateInterpolator(1.8f))
