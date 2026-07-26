@@ -43,15 +43,6 @@
             app:summary="@string/termux_top_pane_clock_am_pm_summary"
             app:defaultValue="false" />
 
-        <ListPreference
-            app:key="status_bar_style"
-            app:title="@string/termux_status_bar_style_title"
-            app:summary="@string/termux_status_bar_style_summary"
-            app:entries="@array/status_bar_style_entries"
-            app:entryValues="@array/status_bar_style_values"
-            app:defaultValue="default"
-            app:useSimpleSummaryProvider="true" />
-
         <SwitchPreferenceCompat
             app:key="status_widget_cpu"
             app:title="@string/termux_status_widget_cpu_title"

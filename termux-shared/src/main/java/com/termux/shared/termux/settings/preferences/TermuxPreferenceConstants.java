@@ -170,20 +170,29 @@ public final class TermuxPreferenceConstants {
 
         public static final String APP_LAUNCHER_DOCK_STYLE_DEFAULT = "default";
 
-        public static final String APP_LAUNCHER_DOCK_STYLE_VALARIE_CAPSULE = "valarie_capsule";
+        public static final String APP_LAUNCHER_DOCK_STYLE_ROUNDED = "rounded";
+
+        /** Pre-unification persisted value. Read for migration, but never write it again. */
+        public static final String APP_LAUNCHER_DOCK_STYLE_LEGACY_VALARIE_CAPSULE = "valarie_capsule";
 
         public static final String DEFAULT_APP_LAUNCHER_DOCK_STYLE = APP_LAUNCHER_DOCK_STYLE_DEFAULT;
 
-        /**
-         * Defines the visual surface style for the top terminal status bar.
-         */
-        public static final String KEY_STATUS_BAR_STYLE = "status_bar_style";
+        /** Custom capsule corner radius in dp, or -1 to follow the selected dock style. */
+        public static final String KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS =
+            "app_launcher_dock_corner_radius";
+        public static final int DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS = -1;
+        public static final int MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS = 40;
 
-        public static final String STATUS_BAR_STYLE_DEFAULT = "default";
-
-        public static final String STATUS_BAR_STYLE_VALARIE_CAPSULE = "valarie_capsule";
-
-        public static final String DEFAULT_STATUS_BAR_STYLE = STATUS_BAR_STYLE_DEFAULT;
+        /** Independent status-surface glass controls used by the live surface editor. */
+        public static final String KEY_STATUS_BAR_BLUR_RADIUS = "status_bar_blur_radius";
+        public static final int DEFAULT_STATUS_BAR_BLUR_RADIUS = 10;
+        public static final String KEY_STATUS_BAR_OPACITY = "status_bar_opacity";
+        public static final int DEFAULT_STATUS_BAR_OPACITY = 50;
+        public static final String KEY_STATUS_BAR_GRAIN = "status_bar_grain";
+        public static final int DEFAULT_STATUS_BAR_GRAIN = 12;
+        public static final String KEY_STATUS_BAR_CORNER_RADIUS = "status_bar_corner_radius";
+        public static final int DEFAULT_STATUS_BAR_CORNER_RADIUS = -1;
+        public static final int MAX_STATUS_BAR_CORNER_RADIUS = 40;
 
         /** Optional trailing system widgets on the status row. */
         public static final String KEY_STATUS_WIDGET_CPU = "status_widget_cpu";
@@ -311,15 +320,6 @@ public final class TermuxPreferenceConstants {
 
         public static final String DEFAULT_IN_APP_KEYBOARD_COLOR_SCHEME = "";
 
-        /**
-         * Defines the key for how the in-app keyboard matches the launcher dock:
-         * {@code none}, {@code shape} (capsule geometry follows the dock style),
-         * {@code glass} (the theme is rendered on the dock's glass surface), or {@code both}.
-         */
-        public static final String KEY_IN_APP_KEYBOARD_DOCK_MATCH = "in_app_keyboard_dock_match";
-
-        public static final String DEFAULT_IN_APP_KEYBOARD_DOCK_MATCH = "both";
-
         /** Defines the key for whether keypresses trigger haptic feedback. */
         public static final String KEY_IN_APP_KEYBOARD_HAPTICS_ENABLED =
             "in_app_keyboard_haptics_enabled";
@@ -357,8 +357,8 @@ public final class TermuxPreferenceConstants {
         // exact confirmed value; spacing and radius below are discrete slider steps.
         public static final float DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.0830541f;
 
-        /** Default keyboard height for the Valarie capsule dock, tuned on Pong. */
-        public static final float DEFAULT_VALARIE_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.1109314f;
+        /** Default keyboard height for the Rounded dock, tuned on Pong. */
+        public static final float DEFAULT_ROUNDED_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.1109314f;
 
         public static final float MIN_IN_APP_KEYBOARD_HEIGHT_SCALE = 0.5f;
 
@@ -370,8 +370,8 @@ public final class TermuxPreferenceConstants {
 
         public static final float DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 2.96f;
 
-        /** Default key spacing for the Valarie capsule dock, tuned on Pong. */
-        public static final float DEFAULT_VALARIE_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 2.57f;
+        /** Default key spacing for the Rounded dock, tuned on Pong. */
+        public static final float DEFAULT_ROUNDED_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 2.57f;
 
         public static final float MIN_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 0.0f;
 
@@ -385,8 +385,8 @@ public final class TermuxPreferenceConstants {
 
         public static final float DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 2.7f;
 
-        /** Default key radius for the Valarie capsule dock, tuned on Pong. */
-        public static final float DEFAULT_VALARIE_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 12.0f;
+        /** Default key radius for the Rounded dock, tuned on Pong. */
+        public static final float DEFAULT_ROUNDED_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 12.0f;
 
         public static final float MIN_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 0.0f;
 

@@ -65,6 +65,8 @@ public final class SettingsLayoutUtils {
 
         // Preferences that fully own their layout.
         if (preference instanceof SegmentedPillPreference
+            || preference instanceof StatusActionPreference
+            || preference instanceof SettingsSearchPreference
             || preference instanceof StatusCardPreference
             || preference instanceof TaiRuntimeActionsPreference
             || preference instanceof TaiOverridesPreference

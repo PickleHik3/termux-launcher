@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+    <PreferenceCategory app:title="@string/settings_connected_services_header">
+        <com.termux.app.fragments.settings.StatusActionPreference
+            app:key="service_tai" app:title="@string/settings_tai_service_title"
+            app:icon="@drawable/ic_symbol_smart_toy"
+            app:summary="@string/settings_service_manage_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.TaiPreferencesFragment" />
+        <com.termux.app.fragments.settings.StatusActionPreference
+            app:key="service_shizuku" app:title="@string/settings_shizuku_service_title"
+            app:icon="@drawable/ic_symbol_shield"
+            app:summary="@string/settings_service_connect_manage_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.PrivilegedAccessPreferencesFragment" />
+        <com.termux.app.fragments.settings.StatusActionPreference
+            app:key="service_termux_api" app:title="@string/settings_termux_api_service_title"
+            app:icon="@drawable/ic_symbol_extension"
+            app:summary="@string/settings_service_configure_summary"
+            app:fragment="com.termux.app.fragments.settings.TermuxAPIPreferencesFragment" />
+    </PreferenceCategory>
+    <PreferenceCategory app:title="@string/settings_permissions_header">
+        <com.termux.app.fragments.settings.StatusActionPreference app:key="app_launcher_storage_access" app:icon="@drawable/ic_symbol_folder" app:title="@string/settings_files_media_title" />
+        <com.termux.app.fragments.settings.StatusActionPreference app:key="app_launcher_notification_access" app:icon="@drawable/ic_symbol_notifications" app:title="@string/termux_app_launcher_notification_access_settings_title" />
+        <com.termux.app.fragments.settings.StatusActionPreference app:key="app_launcher_accessibility_lock_access" app:icon="@drawable/ic_symbol_accessibility_new" app:title="@string/settings_accessibility_service_title" />
+        <com.termux.app.fragments.settings.StatusActionPreference app:key="app_launcher_notification_settings" app:icon="@drawable/ic_symbol_notification_settings" app:title="@string/settings_app_notifications_title" />
+        <com.termux.app.fragments.settings.StatusActionPreference app:key="app_launcher_app_permissions" app:title="@string/settings_other_permissions_title"
+            app:icon="@drawable/ic_symbol_admin_panel_settings"
+            app:summary="@string/settings_other_permissions_summary" />
+    </PreferenceCategory>
+</PreferenceScreen>

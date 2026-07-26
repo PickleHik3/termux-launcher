@@ -6,6 +6,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
+import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -43,6 +44,18 @@ import java.util.Map;
  * one active window and reports pane/window lifecycle back through {@link Host}.
  */
 public class TerminalPaneController {
+
+    private static final String STATE_NODE_TYPE = "type";
+    private static final String STATE_NODE_SESSION = "session";
+    private static final String STATE_NODE_ORIENTATION = "orientation";
+    private static final String STATE_NODE_WEIGHT_A = "weight_a";
+    private static final String STATE_NODE_WEIGHT_B = "weight_b";
+    private static final String STATE_NODE_A = "a";
+    private static final String STATE_NODE_B = "b";
+    private static final String STATE_WINDOW_ROOT = "root";
+    private static final String STATE_WINDOW_ACTIVE = "active";
+    private static final int NODE_LEAF = 0;
+    private static final int NODE_SPLIT = 1;
 
     /** Callbacks into the hosting activity. */
     public interface Host {
@@ -133,6 +146,87 @@ public class TerminalPaneController {
         Window w = new Window(new Leaf(shell));
         mWindows.add(w);
         return w;
+    }
+
+    /**
+     * Serialize one window's complete pane topology. Terminal processes themselves remain owned by
+     * {@code TermuxService}; their stable handles reconnect these leaves after activity recreation.
+     */
+    @NonNull
+    public Bundle saveWindow(@NonNull Window window) {
+        Bundle state = new Bundle();
+        state.putBundle(STATE_WINDOW_ROOT, saveNode(window.root));
+        TerminalSession active = windowActiveSession(window);
+        if (active != null) state.putString(STATE_WINDOW_ACTIVE, active.mHandle);
+        return state;
+    }
+
+    /**
+     * Restore a pane window against the still-running service sessions. Missing/finished leaves are
+     * pruned; a window is discarded only when none of its terminals still exist.
+     */
+    @Nullable
+    public Window restoreWindow(@Nullable Bundle state,
+                                @NonNull Map<String, TerminalSession> sessionsByHandle) {
+        if (state == null) return null;
+        Node root = restoreNode(state.getBundle(STATE_WINDOW_ROOT), sessionsByHandle);
+        if (root == null) return null;
+        root.parent = null;
+        Leaf first = firstLeaf(root);
+        Window window = new Window(first);
+        window.root = root;
+        String activeHandle = state.getString(STATE_WINDOW_ACTIVE);
+        TerminalSession activeSession = activeHandle == null ? null : sessionsByHandle.get(activeHandle);
+        Leaf active = activeSession == null ? null : findLeafIn(root, activeSession);
+        window.active = active != null ? active : first;
+        mWindows.add(window);
+        return window;
+    }
+
+    @NonNull
+    private Bundle saveNode(@NonNull Node node) {
+        Bundle state = new Bundle();
+        if (node instanceof Leaf) {
+            state.putInt(STATE_NODE_TYPE, NODE_LEAF);
+            state.putString(STATE_NODE_SESSION, ((Leaf) node).session.mHandle);
+            return state;
+        }
+        Split split = (Split) node;
+        state.putInt(STATE_NODE_TYPE, NODE_SPLIT);
+        state.putInt(STATE_NODE_ORIENTATION, split.orientation);
+        state.putFloat(STATE_NODE_WEIGHT_A, split.weightA);
+        state.putFloat(STATE_NODE_WEIGHT_B, split.weightB);
+        state.putBundle(STATE_NODE_A, saveNode(split.a));
+        state.putBundle(STATE_NODE_B, saveNode(split.b));
+        return state;
+    }
+
+    @Nullable
+    private Node restoreNode(@Nullable Bundle state,
+                             @NonNull Map<String, TerminalSession> sessionsByHandle) {
+        if (state == null) return null;
+        if (state.getInt(STATE_NODE_TYPE, NODE_LEAF) == NODE_LEAF) {
+            TerminalSession session = sessionsByHandle.get(state.getString(STATE_NODE_SESSION));
+            // A terminal may appear only once across the restored tree set.
+            return session == null || windowOf(session) != null ? null : new Leaf(session);
+        }
+        Node a = restoreNode(state.getBundle(STATE_NODE_A), sessionsByHandle);
+        Node b = restoreNode(state.getBundle(STATE_NODE_B), sessionsByHandle);
+        if (a == null) return b;
+        if (b == null) return a;
+        Split split = new Split();
+        split.orientation = state.getInt(STATE_NODE_ORIENTATION, LinearLayout.HORIZONTAL);
+        split.weightA = state.getFloat(STATE_NODE_WEIGHT_A, 1f);
+        split.weightB = state.getFloat(STATE_NODE_WEIGHT_B, 1f);
+        if (split.weightA <= 0f || split.weightB <= 0f) {
+            split.weightA = 1f;
+            split.weightB = 1f;
+        }
+        split.a = a;
+        split.b = b;
+        a.parent = split;
+        b.parent = split;
+        return split;
     }
 
     /** Make {@code w} the visible window and render its pane tree. */

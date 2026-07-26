@@ -127,10 +127,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         config.hapticEnabled = false;
         config.keySoundEnabled = false;
         String theme = mPreferences.getInAppKeyboardTheme();
-        String dockMatch = mPreferences.getInAppKeyboardDockMatch();
-        Theme.Palette palette = "glass".equals(dockMatch) || "both".equals(dockMatch)
-            ? InAppKeyboardPaletteFactory.createGlass(context, theme)
-            : InAppKeyboardPaletteFactory.create(context, theme);
+        Theme.Palette palette = InAppKeyboardPaletteFactory.createGlass(context, theme);
         if (mScheme.shouldApplyImportedPalette(theme))
             palette = mScheme.applyToPalette(palette);
         mKeyboard = new Keyboard2View(context, config.build(), palette);
@@ -413,10 +410,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
     private void persistAndRender() {
         mPreferences.setInAppKeyboardColorScheme(mScheme.toJson());
         String theme = mPreferences.getInAppKeyboardTheme();
-        String dockMatch = mPreferences.getInAppKeyboardDockMatch();
-        Theme.Palette palette = "glass".equals(dockMatch) || "both".equals(dockMatch)
-            ? InAppKeyboardPaletteFactory.createGlass(requireContext(), theme)
-            : InAppKeyboardPaletteFactory.create(requireContext(), theme);
+        Theme.Palette palette = InAppKeyboardPaletteFactory.createGlass(requireContext(), theme);
         if (mScheme.shouldApplyImportedPalette(theme))
             palette = mScheme.applyToPalette(palette);
         mKeyboard.setPalette(palette);

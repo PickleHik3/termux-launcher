@@ -21,7 +21,6 @@ import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
 
 import com.termux.R;
-import com.termux.app.TermuxActivity;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardExtraKeys;
@@ -30,6 +29,8 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Arrays;
@@ -40,7 +41,6 @@ import java.util.Set;
 @Keep
 public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
 
-    private static final String KEY_HEIGHT_ADJUST = "in_app_keyboard_height_adjust";
     private static final String KEY_FONT = "in_app_keyboard_font";
     private static final String KEY_EXTRA_KEYS = "in_app_keyboard_extra_keys";
     private static final String KEY_CREDITS_GITHUB = "keyboard_credits_github";
@@ -79,17 +79,21 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         setPreferencesFromResource(R.xml.termux_keyboard_preferences, rootKey);
         refreshThemeEntries();
 
-        Preference heightAdjustPreference = findPreference(KEY_HEIGHT_ADJUST);
-        if (heightAdjustPreference != null) {
-            heightAdjustPreference.setOnPreferenceClickListener(preference -> {
-                Activity activity = getActivity();
-                if (activity == null)
-                    return false;
-                Intent intent = new Intent(activity, TermuxActivity.class)
-                    .putExtra(TermuxActivity.EXTRA_IN_APP_KEYBOARD_HEIGHT_ADJUST, true)
-                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                activity.startActivity(intent);
-                activity.finish();
+        Preference customizeSurface = findPreference("customize_keyboard_surface");
+        if (customizeSurface != null) customizeSurface.setOnPreferenceClickListener(preference -> {
+            Intent intent = new Intent(context, com.termux.app.TermuxActivity.class);
+            intent.putExtra(com.termux.app.TermuxActivity.EXTRA_DOCK_TUNING, true);
+            intent.putExtra(com.termux.app.TermuxActivity.EXTRA_DOCK_TUNING_SECTION, "keyboard");
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(intent);
+            return true;
+        });
+
+        ListPreference inputMethodPreference = findPreference("keyboard_input_method");
+        if (inputMethodPreference != null) {
+            updateBuiltInKeyboardRows("built_in".equals(inputMethodPreference.getValue()));
+            inputMethodPreference.setOnPreferenceChangeListener((preference, newValue) -> {
+                updateBuiltInKeyboardRows("built_in".equals(newValue));
                 return true;
             });
         }
@@ -111,13 +115,62 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         bindLinkPreference(KEY_DOCS_KEYS, DOCS_KEYS_URL);
         bindLinkPreference(KEY_CREDITS_GITHUB, UPSTREAM_GITHUB_URL);
         bindLinkPreference(KEY_CREDITS_PLAY, UPSTREAM_PLAY_URL);
+        Preference customLayout = findPreference("in_app_keyboard_custom_layout");
+        if (customLayout != null) customLayout.setOnPreferenceClickListener(preference -> {
+            validateCustomLayout();
+            return true;
+        });
 
         SettingsLayoutUtils.applyScreenLayout(this);
+    }
+
+    private void validateCustomLayout() {
+        Context context = getContext();
+        if (context == null) return;
+        File file = new File(com.termux.shared.termux.TermuxConstants.TERMUX_DATA_HOME_DIR_PATH,
+            "keyboard/layout.xml");
+        if (!file.isFile()) {
+            Toast.makeText(context, R.string.settings_custom_layout_missing, Toast.LENGTH_LONG).show();
+            return;
+        }
+        new Thread(() -> {
+            boolean valid = false;
+            try (FileInputStream input = new FileInputStream(file);
+                 ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                byte[] buffer = new byte[8192];
+                int total = 0, read;
+                while ((read = input.read(buffer)) != -1) {
+                    total += read;
+                    if (total > com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboardLayoutLoader.MAX_LAYOUT_BYTES)
+                        throw new java.io.IOException("layout too large");
+                    output.write(buffer, 0, read);
+                }
+                juloo.keyboard2.KeyboardData.load_string_exn(
+                    new String(output.toByteArray(), java.nio.charset.StandardCharsets.UTF_8));
+                valid = true;
+            } catch (Exception ignored) {}
+            final int message = valid ? R.string.settings_custom_layout_valid
+                : R.string.settings_custom_layout_invalid;
+            if (isAdded() && getActivity() != null) getActivity().runOnUiThread(() ->
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show());
+        }, "keyboard-layout-validation").start();
+    }
+
+    private void updateBuiltInKeyboardRows(boolean enabled) {
+        Preference appearance = findPreference("keyboard_appearance");
+        Preference layout = findPreference("keyboard_layout");
+        Preference feedback = findPreference("keyboard_feedback");
+        if (appearance != null) appearance.setEnabled(enabled);
+        if (layout != null) layout.setEnabled(enabled);
+        if (feedback != null) feedback.setEnabled(enabled);
     }
 
     @Override
     public void onResume() {
         super.onResume();
+        if (getActivity() != null) {
+            getActivity().setTitle(R.string.settings_destination_keyboard_input);
+        }
         refreshThemeEntries();
     }
 
@@ -338,6 +391,9 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
         if (mPreferences == null || key == null)
             return;
         switch (key) {
+            case "in_app_keyboard_hide_on_hardware":
+                mPreferences.setSoftKeyboardEnabledOnlyIfNoHardware(value);
+                break;
             case "in_app_keyboard_enabled":
                 mPreferences.setInAppKeyboardEnabled(value);
                 break;
@@ -357,6 +413,8 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
         if (mPreferences == null || key == null)
             return defValue;
         switch (key) {
+            case "in_app_keyboard_hide_on_hardware":
+                return mPreferences.isSoftKeyboardEnabledOnlyIfNoHardware();
             case "in_app_keyboard_enabled":
                 return mPreferences.isInAppKeyboardEnabled();
             case "in_app_keyboard_haptics_enabled":
@@ -373,11 +431,13 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
         if (mPreferences == null || key == null)
             return;
         switch (key) {
+            case "keyboard_input_method":
+                String inputMethod = value == null ? "built_in" : value;
+                mPreferences.setInAppKeyboardEnabled("built_in".equals(inputMethod));
+                mPreferences.setSoftKeyboardEnabled("android".equals(inputMethod));
+                break;
             case "in_app_keyboard_theme":
                 mPreferences.setInAppKeyboardTheme(value);
-                break;
-            case "in_app_keyboard_dock_match":
-                mPreferences.setInAppKeyboardDockMatch(value);
                 break;
             default:
                 break;
@@ -390,10 +450,11 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
         if (mPreferences == null || key == null)
             return defValue;
         switch (key) {
+            case "keyboard_input_method":
+                if (mPreferences.isInAppKeyboardEnabled()) return "built_in";
+                return mPreferences.isSoftKeyboardEnabled() ? "android" : "none";
             case "in_app_keyboard_theme":
                 return mPreferences.getInAppKeyboardTheme();
-            case "in_app_keyboard_dock_match":
-                return mPreferences.getInAppKeyboardDockMatch();
             default:
                 return defValue;
         }

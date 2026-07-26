@@ -8,13 +8,13 @@ import android.view.View;
 import android.view.Window;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.content.res.AppCompatResources;
 import androidx.fragment.app.Fragment;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 import com.termux.R;
 import com.termux.app.fragments.settings.PillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.app.fragments.settings.SettingsSearchPreference;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.app.theme.TermuxThemeManager;
 import com.termux.shared.activities.ReportActivity;
@@ -82,6 +82,24 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         AppCompatActivityUtils.setShowBackButtonInActionBar(this, true);
         int titleResId = getIntent().getIntExtra(EXTRA_INITIAL_TITLE_RES, R.string.title_activity_termux_settings);
         setTitle(titleResId);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (intent.getBooleanExtra(EXTRA_OPEN_TAI_SETTINGS, false)) {
+            intent.putExtra(EXTRA_INITIAL_FRAGMENT,
+                "com.termux.app.fragments.settings.termux.TaiPreferencesFragment");
+            intent.putExtra(EXTRA_INITIAL_TITLE_RES, R.string.termux_ai_preferences_title);
+        }
+        getSupportFragmentManager().popBackStackImmediate(null,
+            androidx.fragment.app.FragmentManager.POP_BACK_STACK_INCLUSIVE);
+        getSupportFragmentManager().beginTransaction()
+            .replace(R.id.settings, buildInitialFragment())
+            .commit();
+        setTitle(intent.getIntExtra(EXTRA_INITIAL_TITLE_RES,
+            R.string.title_activity_termux_settings));
     }
 
     /**
@@ -178,25 +196,35 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 return;
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
             SettingsLayoutUtils.applyRootLayout(this);
-            configureTermuxAPIPreference(context);
-            configureTermuxGUIPreference(context);
-            configureTermuxFloatPreference(context);
-            configureTermuxTaskerPreference(context);
-            configureTermuxWidgetPreference(context);
-            configureQuickStartPreference(context);
-            configureAboutPreference(context);
-            configureOpenSourceLicensesPreference(context);
-            configureDonatePreference(context);
-            configureReportIssuePreference(context);
+            configureSearch();
         }
 
         @Override
         public void onResume() {
             super.onResume();
             if (getActivity() != null) {
-                getActivity().setTitle(R.string.application_name);
+                getActivity().setTitle(R.string.title_activity_termux_settings);
             }
-            updateShizukuPill();
+        }
+
+        private void configureSearch() {
+            SettingsSearchPreference search = findPreference("settings_search");
+            if (search == null) return;
+            search.setOnQueryChangedListener(query -> {
+                String needle = query.trim().toLowerCase(java.util.Locale.ROOT);
+                androidx.preference.PreferenceScreen screen = getPreferenceScreen();
+                if (screen == null) return;
+                for (int i = 0; i < screen.getPreferenceCount(); i++) {
+                    Preference row = screen.getPreference(i);
+                    if (row == search) continue;
+                    CharSequence title = row.getTitle();
+                    CharSequence summary = row.getSummary();
+                    String searchable = (title == null ? "" : title.toString()) + " "
+                        + (summary == null ? "" : summary.toString());
+                    row.setVisible(needle.isEmpty()
+                        || searchable.toLowerCase(java.util.Locale.ROOT).contains(needle));
+                }
+            });
         }
 
         private void updateShizukuPill() {

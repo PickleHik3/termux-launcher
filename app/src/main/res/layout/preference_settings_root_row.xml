@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="?attr/selectableItemBackground"
     android:baselineAligned="false"
-    android:minHeight="64dp"
+    android:minHeight="76dp"
     android:orientation="horizontal"
     android:paddingStart="24dp"
     android:paddingTop="14dp"
@@ -12,18 +13,19 @@
     android:paddingBottom="14dp">
 
     <FrameLayout
-        android:layout_width="36dp"
-        android:layout_height="36dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:layout_marginTop="1dp"
         android:background="@drawable/settings_icon_background"
         android:clipToOutline="true">
 
         <ImageView
             android:id="@android:id/icon"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
             android:layout_gravity="center"
-            android:tint="?attr/termuxColorPrimary" />
+            android:importantForAccessibility="no"
+            app:tint="?attr/termuxColorOnSurfaceVariant" />
     </FrameLayout>
 
     <LinearLayout

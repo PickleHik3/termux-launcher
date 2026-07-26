@@ -332,21 +332,40 @@ public final class TermuxInAppKeyboard {
     public void previewHeightScale(float heightScale) {
         if (!mHeightAdjusting || mDestroyed)
             return;
-        applyHeightScale(heightScale);
+        applyHeightScale(heightScale, true);
     }
 
     /** Applies one key-spacing slider preview without writing preferences. */
     public void previewKeyMarginScale(float keyMarginScale) {
         if (!mHeightAdjusting || mDestroyed)
             return;
-        applyKeyMarginScale(keyMarginScale);
+        applyKeyMarginScale(keyMarginScale, true);
     }
 
     /** Applies one corner-radius slider preview without writing preferences. */
     public void previewKeyCornerRadiusDp(float radiusDp) {
         if (!mHeightAdjusting || mDestroyed)
             return;
-        applyKeyCornerRadiusDp(radiusDp);
+        applyKeyCornerRadiusDp(radiusDp, true);
+    }
+
+    /** Lightweight live previews used by the unified surface editor. */
+    public void previewSurfaceEditorHeightScale(float heightScale) {
+        if (!mEnabled || mDestroyed)
+            return;
+        applyHeightScale(heightScale, true);
+    }
+
+    public void previewSurfaceEditorKeyMarginScale(float keyMarginScale) {
+        if (!mEnabled || mDestroyed)
+            return;
+        applyKeyMarginScale(keyMarginScale, true);
+    }
+
+    public void previewSurfaceEditorKeyCornerRadiusDp(float radiusDp) {
+        if (!mEnabled || mDestroyed)
+            return;
+        applyKeyCornerRadiusDp(radiusDp, true);
     }
 
     public void confirmHeightAdjustment() {
@@ -374,16 +393,24 @@ public final class TermuxInAppKeyboard {
     }
 
     private void applyHeightScale(float heightScale) {
+        applyHeightScale(heightScale, false);
+    }
+
+    private void applyHeightScale(float heightScale, boolean livePreview) {
         float clamped = TermuxAppSharedPreferences.clampInAppKeyboardHeightScale(heightScale);
         if (Float.compare(mHeightScale, clamped) == 0)
             return;
         mHeightScale = clamped;
         if (mKeyboardView != null)
             mKeyboardView.setHeightScale(mHeightScale);
-        requestIntrinsicSizeGeometrySync();
+        requestIntrinsicSizeGeometrySync(livePreview);
     }
 
     private void applyKeyMarginScale(float keyMarginScale) {
+        applyKeyMarginScale(keyMarginScale, false);
+    }
+
+    private void applyKeyMarginScale(float keyMarginScale, boolean livePreview) {
         float clamped = TermuxAppSharedPreferences.clampInAppKeyboardKeyMarginScale(
             keyMarginScale);
         if (Float.compare(mKeyMarginScale, clamped) == 0)
@@ -391,17 +418,21 @@ public final class TermuxInAppKeyboard {
         mKeyMarginScale = clamped;
         if (mKeyboardView != null)
             mKeyboardView.setKeyMarginScale(mKeyMarginScale);
-        requestIntrinsicSizeGeometrySync();
+        requestIntrinsicSizeGeometrySync(livePreview);
     }
 
     private void applyKeyCornerRadiusDp(float radiusDp) {
+        applyKeyCornerRadiusDp(radiusDp, false);
+    }
+
+    private void applyKeyCornerRadiusDp(float radiusDp, boolean livePreview) {
         float clamped = TermuxAppSharedPreferences.clampInAppKeyboardKeyCornerRadiusDp(radiusDp);
         if (Float.compare(mKeyCornerRadiusDp, clamped) == 0)
             return;
         mKeyCornerRadiusDp = clamped;
         if (mKeyboardView != null)
             mKeyboardView.setKeyCornerRadiusOverride(radiusDpToPx(mKeyCornerRadiusDp));
-        requestIntrinsicSizeGeometrySync();
+        requestIntrinsicSizeGeometrySync(livePreview);
     }
 
     /**
@@ -410,9 +441,17 @@ public final class TermuxInAppKeyboard {
      * example when the async custom layout replaces the bundled fallback), so a plain layout
      * request is not enough to invalidate the activity's width/height-keyed measurement cache.
      */
+    private void requestIntrinsicSizeGeometrySync(boolean livePreview) {
+        if (livePreview) {
+            mHost.requestAccessoryGeometryPreviewSync();
+        } else {
+            mHost.invalidateKeyboardMeasurement();
+            mHost.requestAccessoryGeometrySync();
+        }
+    }
+
     private void requestIntrinsicSizeGeometrySync() {
-        mHost.invalidateKeyboardMeasurement();
-        mHost.requestAccessoryGeometrySync();
+        requestIntrinsicSizeGeometrySync(false);
     }
 
     private float radiusDpToPx(float radiusDp) {
@@ -650,11 +689,8 @@ public final class TermuxInAppKeyboard {
     private juloo.keyboard2.Theme.Palette createPalette() {
         Context context = requireContainer().getContext();
         String theme = mPreferences.getInAppKeyboardTheme();
-        String dockMatch = mPreferences.getInAppKeyboardDockMatch();
-        boolean glass = "glass".equals(dockMatch) || "both".equals(dockMatch);
-        juloo.keyboard2.Theme.Palette palette = glass
-            ? InAppKeyboardPaletteFactory.createGlass(context, theme)
-            : InAppKeyboardPaletteFactory.create(context, theme);
+        juloo.keyboard2.Theme.Palette palette =
+            InAppKeyboardPaletteFactory.createGlass(context, theme);
         InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
             mPreferences.getInAppKeyboardColorScheme());
         return scheme.shouldApplyImportedPalette(theme) ? scheme.applyToPalette(palette) : palette;

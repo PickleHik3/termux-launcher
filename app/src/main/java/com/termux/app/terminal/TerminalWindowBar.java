@@ -47,7 +47,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         @NonNull public final String label;
         @NonNull public final String spokenLabel;
 
-        WindowItem(@NonNull String label, @NonNull String spokenLabel) {
+        public WindowItem(@NonNull String label, @NonNull String spokenLabel) {
             this.label = label;
             this.spokenLabel = spokenLabel;
         }
@@ -72,7 +72,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         setOverScrollMode(OVER_SCROLL_NEVER);
         // The parent already supplies the intended gap after the session indicator. A second
         // leading inset here made that gap look like trailing padding owned by the session chip.
-        setPaddingRelative(0, dp(2), dp(5), dp(2));
+        setPaddingRelative(0, dp(3), dp(5), dp(3));
         mTabs = new LinearLayout(context);
         mTabs.setGravity(Gravity.CENTER_VERTICAL);
         mTabs.setOrientation(LinearLayout.HORIZONTAL);
@@ -90,7 +90,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mCreateListener = listener;
     }
 
-    /** Keep window containers square in the default bar and capsule-rounded in Valerie. */
+    /** Keep window containers square in the default bar and capsule-rounded in Rounded. */
     public void setSurfaceStyle(boolean capsule, float statusBarRadiusPx) {
         float radius = Math.max(0f, statusBarRadiusPx);
         if (mCapsuleSurface == capsule && mStatusBarRadiusPx == radius) return;
@@ -153,10 +153,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             selected ? 62 : 72));
 
         TextView tab = new TextView(context);
-        tab.setGravity(Gravity.CENTER_VERTICAL);
-        tab.setMinWidth(dp(42));
+        tab.setGravity(Gravity.CENTER);
+        tab.setMinWidth(0);
         tab.setMaxWidth(dp(104));
-        tab.setPadding(dp(6), 0, dp(6), 0);
+        tab.setPadding(dp(3), 0, dp(3), 0);
         tab.setSingleLine(true);
         tab.setEllipsize(TextUtils.TruncateAt.END);
         tab.setText(label);

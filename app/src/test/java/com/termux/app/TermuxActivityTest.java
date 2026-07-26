@@ -62,4 +62,5 @@ public class TermuxActivityTest {
         Assert.assertEquals(0, background.getMinimumWidth());
         Assert.assertEquals(0, background.getMinimumHeight());
     }
+
 }

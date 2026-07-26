@@ -154,36 +154,71 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         );
     }
 
-    public String getStatusBarStyle() {
-        String value = SharedPreferenceUtils.getString(
-            mSharedPreferences,
-            TERMUX_APP.KEY_STATUS_BAR_STYLE,
-            TERMUX_APP.DEFAULT_STATUS_BAR_STYLE,
-            true
-        );
-        return normalizeStatusBarStyle(value);
+    public int getAppLauncherDockCornerRadius() {
+        int value = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS);
+        if (value < 0) return TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS;
+        return Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS, value);
     }
 
-    public void setStatusBarStyle(String value) {
-        SharedPreferenceUtils.setString(
-            mSharedPreferences,
-            TERMUX_APP.KEY_STATUS_BAR_STYLE,
-            normalizeStatusBarStyle(value),
-            false
-        );
+    public void setAppLauncherDockCornerRadius(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS,
+            value < 0 ? TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS
+                : Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS, value),
+            false);
     }
 
-    public static String normalizeStatusBarStyle(@Nullable String value) {
-        if (value == null) {
-            return TERMUX_APP.DEFAULT_STATUS_BAR_STYLE;
-        }
-        switch (value) {
-            case TERMUX_APP.STATUS_BAR_STYLE_VALARIE_CAPSULE:
-                return TERMUX_APP.STATUS_BAR_STYLE_VALARIE_CAPSULE;
-            case TERMUX_APP.STATUS_BAR_STYLE_DEFAULT:
-            default:
-                return TERMUX_APP.STATUS_BAR_STYLE_DEFAULT;
-        }
+    public int getStatusBarBlurRadius() {
+        int fallback = mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS)
+            ? TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS : getExtraKeysBlurRadius();
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, fallback), 0, 30);
+    }
+
+    public void setStatusBarBlurRadius(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS,
+            DataUtils.clamp(value, 0, 30), false);
+    }
+
+    public int getStatusBarOpacity() {
+        int fallback = mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_OPACITY)
+            ? TERMUX_APP.DEFAULT_STATUS_BAR_OPACITY : getAppBarOpacity();
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_OPACITY, fallback), 0, 100);
+    }
+
+    public void setStatusBarOpacity(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_OPACITY,
+            DataUtils.clamp(value, 0, 100), false);
+    }
+
+    public int getStatusBarGrain() {
+        int fallback = mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_GRAIN)
+            ? TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN : getDockGlassGrain();
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_GRAIN, fallback), 0, 100);
+    }
+
+    public void setStatusBarGrain(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_GRAIN,
+            DataUtils.clamp(value, 0, 100), false);
+    }
+
+    public int getStatusBarCornerRadius() {
+        int fallback = mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS)
+            ? TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS : getAppLauncherDockCornerRadius();
+        int value = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS, fallback);
+        return value < 0 ? TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS
+            : Math.min(TERMUX_APP.MAX_STATUS_BAR_CORNER_RADIUS, value);
+    }
+
+    public void setStatusBarCornerRadius(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS,
+            value < 0 ? TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS
+                : Math.min(TERMUX_APP.MAX_STATUS_BAR_CORNER_RADIUS, value), false);
     }
 
     public boolean isStatusWidgetCpuEnabled() {
@@ -392,8 +427,9 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             return TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_STYLE;
         }
         switch (value) {
-            case TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_VALARIE_CAPSULE:
-                return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_VALARIE_CAPSULE;
+            case TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_LEGACY_VALARIE_CAPSULE:
+            case TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED:
+                return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED;
             case TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_DEFAULT:
             default:
                 return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_DEFAULT;
@@ -522,39 +558,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             case "light":
             case "dark":
             case "custom":
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    /** Dock-match mode: {@code none}, {@code shape}, {@code glass}, or {@code both}. */
-    public String getInAppKeyboardDockMatch() {
-        String value = SharedPreferenceUtils.getString(
-            mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_DOCK_MATCH,
-            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_DOCK_MATCH,
-            true
-        );
-        if (isValidInAppKeyboardDockMatch(value))
-            return value;
-        return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_DOCK_MATCH;
-    }
-
-    public void setInAppKeyboardDockMatch(String value) {
-        if (!isValidInAppKeyboardDockMatch(value))
-            value = TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_DOCK_MATCH;
-        SharedPreferenceUtils.setString(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_DOCK_MATCH, value, false);
-    }
-
-    private static boolean isValidInAppKeyboardDockMatch(String value) {
-        if (value == null) return false;
-        switch (value) {
-            case "none":
-            case "shape":
-            case "glass":
-            case "both":
                 return true;
             default:
                 return false;
@@ -710,26 +713,26 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return clampInAppKeyboardKeyCornerRadiusDp(value);
     }
 
-    private boolean usesValarieInAppKeyboardDefaults() {
-        return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_VALARIE_CAPSULE.equals(
+    private boolean usesRoundedInAppKeyboardDefaults() {
+        return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED.equals(
             getAppLauncherDockStyle());
     }
 
     private float getDefaultInAppKeyboardHeightScale() {
-        return usesValarieInAppKeyboardDefaults()
-            ? TERMUX_APP.DEFAULT_VALARIE_IN_APP_KEYBOARD_HEIGHT_SCALE
+        return usesRoundedInAppKeyboardDefaults()
+            ? TERMUX_APP.DEFAULT_ROUNDED_IN_APP_KEYBOARD_HEIGHT_SCALE
             : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE;
     }
 
     private float getDefaultInAppKeyboardKeyMarginScale() {
-        return usesValarieInAppKeyboardDefaults()
-            ? TERMUX_APP.DEFAULT_VALARIE_IN_APP_KEYBOARD_KEY_MARGIN_SCALE
+        return usesRoundedInAppKeyboardDefaults()
+            ? TERMUX_APP.DEFAULT_ROUNDED_IN_APP_KEYBOARD_KEY_MARGIN_SCALE
             : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE;
     }
 
     private float getDefaultInAppKeyboardKeyCornerRadiusDp() {
-        return usesValarieInAppKeyboardDefaults()
-            ? TERMUX_APP.DEFAULT_VALARIE_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP
+        return usesRoundedInAppKeyboardDefaults()
+            ? TERMUX_APP.DEFAULT_ROUNDED_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP
             : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP;
     }
 

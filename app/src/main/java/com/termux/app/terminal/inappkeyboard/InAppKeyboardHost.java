@@ -31,6 +31,15 @@ public interface InAppKeyboardHost extends HostActions {
     void requestAccessoryGeometrySync();
 
     /**
+     * Coalesces high-frequency geometry previews such as slider and drag updates. Activity hosts
+     * can defer this to the next display frame; simple hosts retain the synchronous behavior.
+     */
+    default void requestAccessoryGeometryPreviewSync() {
+        invalidateKeyboardMeasurement();
+        requestAccessoryGeometrySync();
+    }
+
+    /**
      * Invalidate any host-cached keyboard measurement before a geometry sync. Required when the
      * keyboard view's intrinsic size changes without a container layout pass (height scale,
      * key margin, or corner radius previews) — the host cache is keyed only on the container's

@@ -17,12 +17,13 @@ import androidx.preference.PreferenceViewHolder;
 
 import com.termux.R;
 
-/** Inline two-segment preference used for the dock's Default / Capsule style choice. */
+/** Inline two-segment preference for the global Default / Rounded surface-shape choice. */
 @Keep
 public final class SegmentedPillPreference extends Preference {
 
     public static final String VALUE_DEFAULT = "default";
-    public static final String VALUE_CAPSULE = "valarie_capsule";
+    public static final String VALUE_ROUNDED = "rounded";
+    private static final String VALUE_LEGACY_VALARIE_CAPSULE = "valarie_capsule";
     private static final long SLIDE_DURATION_MS = 190L;
 
     private String mValue = VALUE_DEFAULT;
@@ -56,7 +57,7 @@ public final class SegmentedPillPreference extends Preference {
             return;
 
         View.OnClickListener chooseDefault = view -> setValue(VALUE_DEFAULT, track, indicator, true);
-        View.OnClickListener chooseCapsule = view -> setValue(VALUE_CAPSULE, track, indicator, true);
+        View.OnClickListener chooseCapsule = view -> setValue(VALUE_ROUNDED, track, indicator, true);
         defaultLabel.setOnClickListener(chooseDefault);
         capsuleLabel.setOnClickListener(chooseCapsule);
         track.setContentDescription(getTitle());
@@ -120,11 +121,12 @@ public final class SegmentedPillPreference extends Preference {
     }
 
     private boolean isCapsule() {
-        return VALUE_CAPSULE.equals(mValue);
+        return VALUE_ROUNDED.equals(mValue);
     }
 
     @NonNull
     private static String normalize(String value) {
-        return VALUE_CAPSULE.equals(value) ? VALUE_CAPSULE : VALUE_DEFAULT;
+        return VALUE_ROUNDED.equals(value) || VALUE_LEGACY_VALARIE_CAPSULE.equals(value)
+            ? VALUE_ROUNDED : VALUE_DEFAULT;
     }
 }

@@ -45,8 +45,8 @@ public final class SessionsIndicatorView extends LinearLayout {
         setFocusable(true);
         setClipToPadding(false);
         setClipChildren(false);
-        setMinimumWidth(dp(20));
-        setPaddingRelative(dp(4), dp(1), dp(4), dp(1));
+        setMinimumWidth(dp(18));
+        setPaddingRelative(dp(3), 0, dp(3), 0);
 
         mLabel = new OpticallyCenteredTextView(context);
         mLabel.setGravity(Gravity.CENTER);

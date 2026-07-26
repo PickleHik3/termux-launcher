@@ -15,8 +15,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -32,71 +30,61 @@ public class StatusBarGrabHandleViewTest {
             view.setCollapsed(collapsed);
         });
         view.setCollapsed(false);
+        view.layout(0, 0, 36, 22);
 
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 10f, 100f));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 18f, 11f));
         assertEquals(0, requests.size());
 
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 10f, 100f));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 18f, 11f));
         assertEquals(1, requests.size());
         assertEquals(Boolean.TRUE, requests.get(0));
     }
 
     @Test
-    public void drag_reportsContinuousMovementThenSettlesByDirection() {
+    public void movement_neverRequestsInteractiveResizeAndTogglesOnlyOnRelease() {
         StatusBarGrabHandleView view = new StatusBarGrabHandleView(
             ApplicationProvider.getApplicationContext(), null);
-        List<Float> progress = new ArrayList<>();
-        List<Boolean> finishes = new ArrayList<>();
-        int[] starts = new int[1];
-        view.setListener(new StatusBarGrabHandleView.Listener() {
-            @Override
-            public void onCollapsedStateRequested(boolean collapsed) {}
-
-            @Override
-            public void onResizeDragStarted() {
-                starts[0]++;
-            }
-
-            @Override
-            public void onResizeDragProgress(float deltaY) {
-                progress.add(deltaY);
-            }
-
-            @Override
-            public void onResizeDragFinished(boolean collapsed) {
-                finishes.add(collapsed);
-            }
-        });
+        List<Boolean> requests = new ArrayList<>();
+        view.setListener(requests::add);
         view.setCollapsed(false);
+        view.layout(0, 0, 36, 22);
 
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 10f, 100f));
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 10f, 96f));
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 10f, 80f));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 18f, 11f));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 18f, 5f));
 
-        assertEquals(1, starts[0]);
-        assertEquals(2, progress.size());
-        assertEquals(-20f, progress.get(1), .01f);
+        assertEquals(0, requests.size());
 
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 10f, 78f));
-        assertEquals(1, finishes.size());
-        assertEquals(Boolean.TRUE, finishes.get(0));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 18f, 5f));
+        assertEquals(1, requests.size());
+        assertEquals(Boolean.TRUE, requests.get(0));
     }
 
     @Test
-    public void extendedTarget_favorsAreaBelowTheStatusBarEdge() {
+    public void cancelledTap_doesNotRequestStateChange() {
         StatusBarGrabHandleView view = new StatusBarGrabHandleView(
             ApplicationProvider.getApplicationContext(), null);
-        float density = view.getResources().getDisplayMetrics().density;
-        int width = Math.round(68 * density);
-        int height = Math.round(6 * density);
-        view.layout(0, 0, width, height);
-        float centerX = width / 2f;
-        float edgeY = height - .75f * density;
+        List<Boolean> requests = new ArrayList<>();
+        view.setListener(requests::add);
 
-        assertTrue(view.containsExtendedTouchPoint(centerX, edgeY + 24f * density));
-        assertTrue(view.containsExtendedTouchPoint(centerX, edgeY - 4f * density));
-        assertFalse(view.containsExtendedTouchPoint(centerX, edgeY - 6f * density));
-        assertFalse(view.containsExtendedTouchPoint(centerX, edgeY + 31f * density));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 10f, 10f));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_CANCEL, 10f, 10f));
+
+        assertEquals(0, requests.size());
+    }
+
+    @Test
+    public void upwardMovementOutsideGlyph_doesNotToggle() {
+        StatusBarGrabHandleView view = new StatusBarGrabHandleView(
+            ApplicationProvider.getApplicationContext(), null);
+        List<Boolean> requests = new ArrayList<>();
+        view.setListener(requests::add);
+        view.layout(0, 0, 36, 22);
+
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 18f, 11f));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 18f, -1f));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 18f, -1f));
+
+        assertEquals(0, requests.size());
     }
 
     private static MotionEvent event(int action, float x, float y) {

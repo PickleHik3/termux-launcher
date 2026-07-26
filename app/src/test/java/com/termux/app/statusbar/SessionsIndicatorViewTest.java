@@ -32,7 +32,7 @@ public class SessionsIndicatorViewTest {
 
         view.setSession(null, 3, 1);
         assertEquals("2", ((TextView) view.getChildAt(0)).getText().toString());
-        assertEquals(20, Math.round(view.getMinimumWidth()
+        assertEquals(18, Math.round(view.getMinimumWidth()
             / view.getResources().getDisplayMetrics().density));
 
         view.setSession("7", 3, 1);
