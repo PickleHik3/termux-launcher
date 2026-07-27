@@ -3,7 +3,9 @@ package com.termux.view;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.DashPathEffect;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.RectF;
@@ -53,6 +55,16 @@ public final class TerminalRenderer {
     private final float[] asciiMeasures = new float[127];
     private final RectF mSixelRect = new RectF();
 
+    /** Reused when drawing curly underlines, to keep the render loop allocation free. */
+    private final Path mDecorationPath = new Path();
+
+    /** Stroke width of underlines and their dash lengths, all derived from the font size. */
+    private final float mDecorationThickness;
+
+    private final DashPathEffect mDottedEffect;
+
+    private final DashPathEffect mDashedEffect;
+
     /**
      * The width of a single mono spaced character obtained by {@link Paint#measureText(String)} on a single 'X'.
      */
@@ -98,6 +110,9 @@ public final class TerminalRenderer {
         mItalicFontLineSpacing = italicFontMetrics.descent - mItalicFontAscent;
         mItalicFontLineSpacingAndAscent = mItalicFontLineSpacing + mItalicFontAscent;
         mItalicFontWidth = mTextPaint.measureText("X");
+        mDecorationThickness = Math.max(1f, textSize / 16f);
+        mDottedEffect = new DashPathEffect(new float[]{mDecorationThickness, mDecorationThickness * 2f}, 0f);
+        mDashedEffect = new DashPathEffect(new float[]{mDecorationThickness * 4f, mDecorationThickness * 3f}, 0f);
     }
 
     /**
@@ -139,14 +154,22 @@ public final class TerminalRenderer {
             int lastRunStartColumn = -1;
             int lastRunStartIndex = 0;
             boolean lastRunFontWidthMismatch = false;
+            int lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
+            int lastRunHyperlinkId = 0;
             int currentCharIndex = 0;
             float measuredWidthForRun = 0.f;
+            // Both live in side tables on the row rather than in the style long, so they are only
+            // consulted for the rows that have them.
+            final boolean rowHasDecorationColors = lineObject.hasDecorationColors();
+            final boolean rowHasHyperlinks = lineObject.hasHyperlinks();
             for (int column = 0; column < columns; ) {
                 final char charAtIndex = line[currentCharIndex];
                 final boolean charIsHighsurrogate = Character.isHighSurrogate(charAtIndex);
                 final int charsForCodePoint = charIsHighsurrogate ? 2 : 1;
                 final int codePoint = charIsHighsurrogate ? Character.toCodePoint(charAtIndex, line[currentCharIndex + 1]) : charAtIndex;
                 final long style = lineObject.getStyle(column);
+                final int decorationColor = rowHasDecorationColors ? lineObject.getDecorationColor(column) : TextStyle.DECORATION_COLOR_DEFAULT;
+                final int hyperlinkId = rowHasHyperlinks ? lineObject.getHyperlinkId(column) : 0;
                 if (TextStyle.isBitmap(style)) {
                     Bitmap bm = mEmulator.getScreen().getSixelBitmap(codePoint, style);
                     if (bm != null) {
@@ -162,6 +185,8 @@ public final class TerminalRenderer {
                     lastRunStartColumn = column + 1;
                     lastRunStartIndex = currentCharIndex;
                     lastRunFontWidthMismatch = false;
+                    lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
+                    lastRunHyperlinkId = 0;
                     currentCharIndex += charsForCodePoint;
                     continue;
                 }
@@ -174,7 +199,7 @@ public final class TerminalRenderer {
                 // If this is detected, we draw this code point scaled to match what wcwidth() expects.
                 final float measuredCodePointWidth = (codePoint < asciiMeasures.length) ? asciiMeasures[codePoint] : mTextPaint.measureText(line, currentCharIndex, charsForCodePoint);
                 final boolean fontWidthMismatch = Math.abs(measuredCodePointWidth / mFontWidth - codePointWcWidth) > 0.01;
-                if (style != lastRunStyle || insideCursor != lastRunInsideCursor || insideSelection != lastRunInsideSelection || fontWidthMismatch || lastRunFontWidthMismatch) {
+                if (style != lastRunStyle || insideCursor != lastRunInsideCursor || insideSelection != lastRunInsideSelection || fontWidthMismatch || lastRunFontWidthMismatch || decorationColor != lastRunDecorationColor || hyperlinkId != lastRunHyperlinkId) {
                     if (column == 0 || column == lastRunStartColumn) {
                         // Skip first column as there is nothing to draw, just record the current style.
                     } else {
@@ -185,7 +210,7 @@ public final class TerminalRenderer {
                         if (lastRunInsideCursor && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK) {
                             invertCursorTextColor = true;
                         }
-                        drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn, columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun, measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, boldWithBright, reverseVideo || invertCursorTextColor || lastRunInsideSelection, horizontalOffset);
+                        drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn, columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun, measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, boldWithBright, reverseVideo || invertCursorTextColor || lastRunInsideSelection, horizontalOffset, lastRunDecorationColor, lastRunHyperlinkId != 0);
                     }
                     measuredWidthForRun = 0.f;
                     lastRunStyle = style;
@@ -194,6 +219,8 @@ public final class TerminalRenderer {
                     lastRunStartColumn = column;
                     lastRunStartIndex = currentCharIndex;
                     lastRunFontWidthMismatch = fontWidthMismatch;
+                    lastRunDecorationColor = decorationColor;
+                    lastRunHyperlinkId = hyperlinkId;
                 }
                 measuredWidthForRun += measuredCodePointWidth;
                 column += codePointWcWidth;
@@ -211,11 +238,11 @@ public final class TerminalRenderer {
             if (lastRunInsideCursor && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK) {
                 invertCursorTextColor = true;
             }
-            drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn, columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun, measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, boldWithBright, reverseVideo || invertCursorTextColor || lastRunInsideSelection, horizontalOffset);
+            drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn, columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun, measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, boldWithBright, reverseVideo || invertCursorTextColor || lastRunInsideSelection, horizontalOffset, lastRunDecorationColor, lastRunHyperlinkId != 0);
         }
     }
 
-    private void drawTextRun(Canvas canvas, char[] text, int[] palette, float y, int startColumn, int runWidthColumns, int startCharIndex, int runWidthChars, float mes, int cursor, int cursorStyle, long textStyle, boolean boldWithBright, boolean reverseVideo, float horizontalOffset) {
+    private void drawTextRun(Canvas canvas, char[] text, int[] palette, float y, int startColumn, int runWidthColumns, int startCharIndex, int runWidthChars, float mes, int cursor, int cursorStyle, long textStyle, boolean boldWithBright, boolean reverseVideo, float horizontalOffset, int decorationColor, boolean hyperlink) {
         int foreColor = TextStyle.decodeForeColor(textStyle);
         final int effect = TextStyle.decodeEffect(textStyle);
         int backColor = TextStyle.decodeBackColor(textStyle);
@@ -289,7 +316,8 @@ public final class TerminalRenderer {
                 mCurrentTypeface = desiredTypeface;
             }
             mTextPaint.setFakeBoldText(bold);
-            mTextPaint.setUnderlineText(underline);
+            // Underlines are drawn as geometry below, since Paint only knows one straight variant.
+            mTextPaint.setUnderlineText(false);
             mTextPaint.setTextSkewX(0.f);
             if (italic && mItalicTypeface.equals(mTypeface))
                 mTextPaint.setTextSkewX(-0.35f);
@@ -297,9 +325,91 @@ public final class TerminalRenderer {
             mTextPaint.setColor(foreColor);
             // The text alignment is the default Paint.Align.LEFT.
             canvas.drawTextRun(text, startCharIndex, runWidthChars, startCharIndex, runWidthChars, left, y - fontLineSpacingAndAscent, false, mTextPaint);
+            int underlineStyle = TextStyle.decodeUnderlineStyle(textStyle);
+            if (underlineStyle == TextStyle.UNDERLINE_STYLE_NONE && underline) {
+                // The attribute bit without a style: DECCARA, or a style set before this fork stored one.
+                underlineStyle = TextStyle.UNDERLINE_STYLE_SINGLE;
+            }
+            if (underlineStyle == TextStyle.UNDERLINE_STYLE_NONE && hyperlink) {
+                // An OSC 8 link is underlined so that it is discoverable, since touch has no hover.
+                underlineStyle = TextStyle.UNDERLINE_STYLE_SINGLE;
+            }
+            if (underlineStyle != TextStyle.UNDERLINE_STYLE_NONE) {
+                int lineColor = foreColor;
+                if (decorationColor != TextStyle.DECORATION_COLOR_DEFAULT) {
+                    lineColor = ((decorationColor & 0xff000000) == 0xff000000) ? decorationColor : palette[decorationColor];
+                }
+                drawUnderline(canvas, left, right, y, fontLineSpacingAndAscent, underlineStyle, lineColor);
+            }
         }
         if (savedMatrix)
             canvas.restore();
+    }
+
+    /**
+     * Draw one underline variant across a run, between the text baseline and the bottom of the cell.
+     *
+     * @param cellBottom the y coordinate of the bottom of the cell row.
+     * @param descent    the distance from the baseline to {@code cellBottom}.
+     */
+    private void drawUnderline(Canvas canvas, float left, float right, float cellBottom, int descent, int underlineStyle, int color) {
+        if (right <= left || descent <= 0)
+            return;
+        final float thickness = Math.min(mDecorationThickness, Math.max(1f, descent / 3f));
+        final float baseline = cellBottom - descent;
+        // Keep every variant inside its own cell, so that a decoration never bleeds into the row below.
+        final float top = Math.min(baseline + descent * 0.4f, cellBottom - thickness);
+        mTextPaint.setColor(color);
+        switch(underlineStyle) {
+            case TextStyle.UNDERLINE_STYLE_DOUBLE:
+                {
+                    float lineThickness = Math.max(1f, thickness * 0.6f);
+                    float first = Math.min(baseline + descent * 0.25f, cellBottom - 3f * lineThickness);
+                    float second = Math.min(first + 2f * lineThickness, cellBottom - lineThickness);
+                    canvas.drawRect(left, first, right, first + lineThickness, mTextPaint);
+                    canvas.drawRect(left, second, right, second + lineThickness, mTextPaint);
+                    break;
+                }
+            case TextStyle.UNDERLINE_STYLE_CURLY:
+                {
+                    float amplitude = Math.max(0.5f, Math.min(thickness, descent * 0.2f));
+                    float centerY = Math.min(baseline + descent * 0.5f + amplitude, cellBottom - amplitude - thickness / 2f);
+                    float halfPeriod = Math.max(2f, thickness * 2.5f);
+                    mDecorationPath.rewind();
+                    mDecorationPath.moveTo(left, centerY);
+                    boolean up = true;
+                    for (float x = left; x < right; x += halfPeriod) {
+                        float next = Math.min(x + halfPeriod, right);
+                        float controlY = up ? (centerY - amplitude * 2f) : (centerY + amplitude * 2f);
+                        mDecorationPath.quadTo((x + next) / 2f, controlY, next, centerY);
+                        up = !up;
+                    }
+                    mTextPaint.setStyle(Paint.Style.STROKE);
+                    mTextPaint.setStrokeWidth(thickness);
+                    canvas.drawPath(mDecorationPath, mTextPaint);
+                    mTextPaint.setStyle(Paint.Style.FILL);
+                    mTextPaint.setStrokeWidth(0f);
+                    break;
+                }
+            case TextStyle.UNDERLINE_STYLE_DOTTED:
+            case TextStyle.UNDERLINE_STYLE_DASHED:
+                {
+                    // Dashes are drawn with drawLine(), the one form hardware acceleration accepts a
+                    // DashPathEffect on across all supported API levels.
+                    mTextPaint.setStyle(Paint.Style.STROKE);
+                    mTextPaint.setStrokeWidth(thickness);
+                    mTextPaint.setPathEffect((underlineStyle == TextStyle.UNDERLINE_STYLE_DOTTED) ? mDottedEffect : mDashedEffect);
+                    float lineY = top + thickness / 2f;
+                    canvas.drawLine(left, lineY, right, lineY, mTextPaint);
+                    mTextPaint.setPathEffect(null);
+                    mTextPaint.setStyle(Paint.Style.FILL);
+                    mTextPaint.setStrokeWidth(0f);
+                    break;
+                }
+            default:
+                canvas.drawRect(left, top, right, top + thickness, mTextPaint);
+                break;
+        }
     }
 
     public float getFontWidth() {

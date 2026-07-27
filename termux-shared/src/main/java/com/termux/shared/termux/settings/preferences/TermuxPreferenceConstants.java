@@ -204,6 +204,10 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_STATUS_WIDGET_WEATHER = "status_widget_weather";
         public static final boolean DEFAULT_STATUS_WIDGET_WEATHER = true;
 
+        /** Animate the terminal cursor between its old and new cell instead of jumping. */
+        public static final String KEY_TERMINAL_CURSOR_TRAIL = "terminal_cursor_trail";
+        public static final boolean DEFAULT_TERMINAL_CURSOR_TRAIL = true;
+
         /**
          * Defines the key for showing focused app names while scrubbing the dock.
          */

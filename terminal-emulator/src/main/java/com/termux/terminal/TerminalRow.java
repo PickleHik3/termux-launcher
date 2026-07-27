@@ -67,6 +67,37 @@ public final class TerminalRow {
      */
     public boolean mHasBitmap;
 
+    /** This row carries no OSC 133 shell integration mark. */
+    public static final byte MARK_NONE = 0;
+
+    /** OSC 133;A - the shell's prompt starts on this row. */
+    public static final byte MARK_PROMPT_START = 1;
+
+    /** OSC 133;B - the prompt ends and what the user types starts on this row. */
+    public static final byte MARK_COMMAND_START = 2;
+
+    /** OSC 133;C - the command was submitted and its output starts on this row. */
+    public static final byte MARK_OUTPUT_START = 3;
+
+    /**
+     * The OSC 133 mark of this row, one of the {@code MARK_*} values. Marks live on the row rather than
+     * in a separate list so that they follow it through the circular buffer for free.
+     */
+    public byte mShellIntegrationMark;
+
+    /**
+     * The underline decoration color of each cell, or null while every cell in this row uses
+     * {@link TextStyle#DECORATION_COLOR_DEFAULT}. A 24 bit color does not fit in the packed style
+     * long, so it lives here and is allocated only for the rows that actually carry one.
+     */
+    private int[] mDecorationColors;
+
+    /**
+     * The OSC 8 hyperlink id of each cell, or null while no cell in this row is part of a hyperlink.
+     * Ids are indices into the emulator's link pool; 0 means "no link".
+     */
+    private int[] mHyperlinkIds;
+
     /**
      * Construct a blank row (containing only whitespace, ' ') with a specified style.
      */
@@ -75,6 +106,43 @@ public final class TerminalRow {
         mText = new char[(int) (SPARE_CAPACITY_FACTOR * columns)];
         mStyle = new long[columns];
         clear(style);
+    }
+
+    /** If any cell in this row has a non-default underline decoration color. Performance only. */
+    public boolean hasDecorationColors() {
+        return mDecorationColors != null;
+    }
+
+    /** If any cell in this row is part of an OSC 8 hyperlink. Performance only. */
+    public boolean hasHyperlinks() {
+        return mHyperlinkIds != null;
+    }
+
+    public int getDecorationColor(int column) {
+        return (mDecorationColors == null) ? TextStyle.DECORATION_COLOR_DEFAULT : mDecorationColors[column];
+    }
+
+    public int getHyperlinkId(int column) {
+        return (mHyperlinkIds == null) ? 0 : mHyperlinkIds[column];
+    }
+
+    private void setDecorationColor(int column, int color) {
+        if (mDecorationColors == null) {
+            if (color == TextStyle.DECORATION_COLOR_DEFAULT)
+                return;
+            mDecorationColors = new int[mColumns];
+            Arrays.fill(mDecorationColors, TextStyle.DECORATION_COLOR_DEFAULT);
+        }
+        mDecorationColors[column] = color;
+    }
+
+    private void setHyperlinkId(int column, int hyperlinkId) {
+        if (mHyperlinkIds == null) {
+            if (hyperlinkId == 0)
+                return;
+            mHyperlinkIds = new int[mColumns];
+        }
+        mHyperlinkIds[column] = hyperlinkId;
     }
 
     /**
@@ -101,7 +169,7 @@ public final class TerminalRow {
                 sourceX1 += latestNonCombiningWidth;
                 latestNonCombiningWidth = w;
             }
-            setChar(destinationX, codePoint, line.getStyle(sourceX1));
+            setChar(destinationX, codePoint, line.getStyle(sourceX1), line.getDecorationColor(sourceX1), line.getHyperlinkId(sourceX1));
         }
     }
 
@@ -175,13 +243,23 @@ public final class TerminalRow {
         mSpaceUsed = (short) mColumns;
         mHasNonOneWidthOrSurrogateChars = false;
         mHasBitmap = false;
+        // Erasing a row drops its links and decoration colors, as they belong to the erased text.
+        mDecorationColors = null;
+        mHyperlinkIds = null;
+        mShellIntegrationMark = MARK_NONE;
+    }
+
+    public void setChar(int columnToSet, int codePoint, long style) {
+        setChar(columnToSet, codePoint, style, TextStyle.DECORATION_COLOR_DEFAULT, 0);
     }
 
     // https://github.com/steven676/Android-Terminal-Emulator/commit/9a47042620bec87617f0b4f5d50568535668fe26
-    public void setChar(int columnToSet, int codePoint, long style) {
+    public void setChar(int columnToSet, int codePoint, long style, int decorationColor, int hyperlinkId) {
         if (columnToSet < 0 || columnToSet >= mStyle.length)
             throw new IllegalArgumentException("TerminalRow.setChar(): columnToSet=" + columnToSet + ", codePoint=" + codePoint + ", style=" + style);
         mStyle[columnToSet] = style;
+        setDecorationColor(columnToSet, decorationColor);
+        setHyperlinkId(columnToSet, hyperlinkId);
         if (!mHasBitmap && TextStyle.isBitmap(style)) {
             mHasBitmap = true;
         }

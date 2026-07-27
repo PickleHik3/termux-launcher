@@ -248,6 +248,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_WEATHER, value, false);
     }
 
+    public boolean isTerminalCursorTrailEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL, TERMUX_APP.DEFAULT_TERMINAL_CURSOR_TRAIL);
+    }
+
+    public void setTerminalCursorTrailEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL, value, false);
+    }
+
     public boolean isAppLauncherDisplayAppNamesEnabled() {
         // App names are always shown; no longer user-configurable.
         return true;

@@ -347,16 +347,24 @@ public final class TerminalBuffer {
                         /* || oldLine.mStyle[i] != currentStyle */
                         lastNonSpaceIndex = i + 1;
                 }
+                // A wrapped old row becomes several new ones; its mark belongs on the first of them.
+                if (oldLine.mShellIntegrationMark != TerminalRow.MARK_NONE)
+                    setShellIntegrationMark(currentOutputExternalRow, oldLine.mShellIntegrationMark);
                 int currentOldCol = 0;
                 long styleAtCol = 0;
+                int decorationAtCol = TextStyle.DECORATION_COLOR_DEFAULT;
+                int hyperlinkAtCol = 0;
                 for (int i = 0; i < lastNonSpaceIndex; i++) {
                     // Note that looping over java character, not cells.
                     char c = oldLine.mText[i];
                     int codePoint = (Character.isHighSurrogate(c)) ? Character.toCodePoint(c, oldLine.mText[++i]) : c;
                     int displayWidth = WcWidth.width(codePoint);
                     // Use the last style if this is a zero-width character:
-                    if (displayWidth > 0)
+                    if (displayWidth > 0) {
                         styleAtCol = oldLine.getStyle(currentOldCol);
+                        decorationAtCol = oldLine.getDecorationColor(currentOldCol);
+                        hyperlinkAtCol = oldLine.getHyperlinkId(currentOldCol);
+                    }
                     // Line wrap as necessary:
                     if (currentOutputExternalColumn + displayWidth > mColumns) {
                         setLineWrap(currentOutputExternalRow);
@@ -371,7 +379,7 @@ public final class TerminalBuffer {
                     }
                     int offsetDueToCombiningChar = ((displayWidth <= 0 && currentOutputExternalColumn > 0) ? 1 : 0);
                     int outputColumn = currentOutputExternalColumn - offsetDueToCombiningChar;
-                    setChar(outputColumn, currentOutputExternalRow, codePoint, styleAtCol);
+                    setChar(outputColumn, currentOutputExternalRow, codePoint, styleAtCol, decorationAtCol, hyperlinkAtCol);
                     if (displayWidth > 0) {
                         if (oldCursorRow == externalOldRow && oldCursorColumn == currentOldCol) {
                             newCursorColumn = currentOutputExternalColumn;
@@ -513,6 +521,10 @@ public final class TerminalBuffer {
             for (int x = 0; x < w; x++) setChar(sx + x, sy + y, val, style);
             if (sx + w == mColumns && val == ' ') {
                 clearLineWrap(sy + y);
+                if (sx == 0) {
+                    // The whole row was blanked, so whatever prompt or output started on it is gone.
+                    setShellIntegrationMark(sy + y, TerminalRow.MARK_NONE);
+                }
             }
         }
     }
@@ -522,10 +534,55 @@ public final class TerminalBuffer {
     }
 
     public void setChar(int column, int row, int codePoint, long style) {
+        setChar(column, row, codePoint, style, TextStyle.DECORATION_COLOR_DEFAULT, 0);
+    }
+
+    public void setChar(int column, int row, int codePoint, long style, int decorationColor, int hyperlinkId) {
         if (row < 0 || row >= mScreenRows || column < 0 || column >= mColumns)
             throw new IllegalArgumentException("TerminalBuffer.setChar(): row=" + row + ", column=" + column + ", mScreenRows=" + mScreenRows + ", mColumns=" + mColumns);
         row = externalToInternalRow(row);
-        allocateFullLineIfNecessary(row).setChar(column, codePoint, style);
+        allocateFullLineIfNecessary(row).setChar(column, codePoint, style, decorationColor, hyperlinkId);
+    }
+
+    /** The OSC 133 mark of a row, one of the {@code TerminalRow.MARK_*} values. */
+    public byte getShellIntegrationMark(int externalRow) {
+        return allocateFullLineIfNecessary(externalToInternalRow(externalRow)).mShellIntegrationMark;
+    }
+
+    public void setShellIntegrationMark(int externalRow, byte mark) {
+        allocateFullLineIfNecessary(externalToInternalRow(externalRow)).mShellIntegrationMark = mark;
+    }
+
+    /**
+     * Search for the closest row carrying a given mark.
+     *
+     * @param fromRow   the row to search away from, exclusive, in external coordinates.
+     * @param backwards search towards the transcript rather than towards the bottom of the screen.
+     * @return the row found, or {@link Integer#MIN_VALUE} when there is none.
+     */
+    public int findRowWithMark(int fromRow, byte mark, boolean backwards) {
+        int first = -getActiveTranscriptRows();
+        int last = mScreenRows - 1;
+        if (backwards) {
+            for (int row = Math.min(fromRow - 1, last); row >= first; row--) {
+                if (getShellIntegrationMark(row) == mark)
+                    return row;
+            }
+        } else {
+            for (int row = Math.max(fromRow + 1, first); row <= last; row++) {
+                if (getShellIntegrationMark(row) == mark)
+                    return row;
+            }
+        }
+        return Integer.MIN_VALUE;
+    }
+
+    public int getDecorationColorAt(int externalRow, int column) {
+        return allocateFullLineIfNecessary(externalToInternalRow(externalRow)).getDecorationColor(column);
+    }
+
+    public int getHyperlinkIdAt(int externalRow, int column) {
+        return allocateFullLineIfNecessary(externalToInternalRow(externalRow)).getHyperlinkId(column);
     }
 
     /** used to read aloud the character under the cursor in A11Y */
@@ -564,7 +621,8 @@ public final class TerminalBuffer {
                 } else {
                     effect &= ~bits;
                 }
-                line.mStyle[x] = TextStyle.encode(foreColor, backColor, effect);
+                // Rewrite only the effect, so that the underline style of these cells survives DECCARA.
+                line.mStyle[x] = TextStyle.withColorsAndEffect(currentStyle, foreColor, backColor, effect);
             }
         }
     }

@@ -427,6 +427,26 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         }, -1, null, -1, null, null);
     }
 
+    /**
+     * Renames the focused shell without prompting.
+     *
+     * <p>Seam for the {@code session.rename} registry action. Unlike
+     * {@link #renameSession(TerminalSession)}, this never redirects to the
+     * tmux-style session rename when split panes are on: the registry keeps the
+     * two distinct, with {@code window.rename} covering the containing session.
+     */
+    public boolean renameCurrentSessionTo(@Nullable String name) {
+        TerminalSession session = mActivity.getCurrentSession();
+        if (session == null || name == null) return false;
+        // An empty name restores the unnamed default, mirroring what the rename
+        // dialog does with cleared text and keeping this symmetric with
+        // window.rename.
+        String trimmed = name.trim();
+        renameSession(session, trimmed.isEmpty() ? null : trimmed);
+        termuxSessionListNotifyUpdated();
+        return true;
+    }
+
     private void renameSession(TerminalSession sessionToRename, String text) {
         if (sessionToRename == null)
             return;

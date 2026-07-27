@@ -468,6 +468,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final int CONTEXT_MENU_GLASS_LAB_ID = 9;
 
+    private static final int CONTEXT_MENU_COMMAND_PALETTE_ID = 10;
+
     private static final class TerminalActionItem {
         final int id;
         final CharSequence title;
@@ -864,6 +866,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logVerbose(LOG_TAG, "onResume");
         if (mIsInvalidState)
             return;
+        // Terminal hierarchy actions from launcherctl/agent/MCP need a foreground
+        // Activity; they answer 409 activity_not_running while nothing is attached.
+        com.termux.app.terminal.TerminalActionDispatcher.getInstance().attach(this);
         // The last insets snapshot can be from mid-transition out of the previous app (IME still
         // up, nav bars reported hidden) and there is no later dispatch to correct it — a stale
         // lift here renders the dock and keyboard in the top third of the screen. Drop it and
@@ -4127,6 +4132,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     protected void onStop() {
         super.onStop();
         Logger.logDebug(LOG_TAG, "onStop");
+        com.termux.app.terminal.TerminalActionDispatcher.getInstance().detach(this);
         stopAzEdgePagingLoop();
         cancelAzOverflowRefresh();
         mWindowLabelHandler.removeCallbacksAndMessages(null);
@@ -4176,6 +4182,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onDestroy() {
         super.onDestroy();
         Logger.logDebug(LOG_TAG, "onDestroy");
+        com.termux.app.terminal.TerminalActionDispatcher.getInstance().detach(this);
         clearCachedAccessoryWallpaperBlur();
         if (mIsInvalidState)
             return;
@@ -7506,6 +7513,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case CONTEXT_MENU_GLASS_LAB_ID:
                 enterDockTuningMode();
                 return true;
+            case CONTEXT_MENU_COMMAND_PALETTE_ID:
+                com.termux.app.terminal.TerminalCommandPalette.show(this);
+                return true;
             default:
                 return false;
         }
@@ -7520,6 +7530,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return true;
         }
         List<TerminalActionItem> items = new ArrayList<>();
+        items.add(new TerminalActionItem(CONTEXT_MENU_COMMAND_PALETTE_ID, getString(R.string.action_command_palette)));
         items.add(new TerminalActionItem(CONTEXT_MENU_SELECT_URL_ID, getString(R.string.action_select_url)));
         items.add(new TerminalActionItem(CONTEXT_MENU_SHARE_TRANSCRIPT_ID, getString(R.string.action_share_transcript)));
         items.add(new TerminalActionItem(CONTEXT_MENU_SET_WALLPAPER_ID, getString(R.string.action_set_background_image)));
@@ -7851,6 +7862,112 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Prefix+R entry point: rename the current tmux-style session, not its focused shell. */
     public void renameCurrentWindowSession() {
         promptWindowSessionRename(mCurrentWSession);
+    }
+
+    /**
+     * Renames the current tmux-style session without prompting.
+     *
+     * <p>Seam for registry actions ({@code window.rename}): a remote caller or a
+     * palette entry supplies the name up front, so the dialog in
+     * {@link #promptWindowSessionRename} cannot be used — it has no way to return
+     * a result. Returns false when there is no session to rename.
+     */
+    public boolean renameCurrentWindowSessionTo(@Nullable String name) {
+        if (mCurrentWSession == null || !mWSessions.contains(mCurrentWSession)) return false;
+        mCurrentWSession.name = WindowSessionName.normalize(name);
+        rebuildDrawerSessions();
+        return true;
+    }
+
+    /** Seam for {@code window.select}: switch windows by index. False when out of range. */
+    public boolean selectWindow(int index) {
+        if (mPaneController == null || mCurrentWSession == null
+            || index < 0 || index >= mCurrentWSession.windows.size()) return false;
+        showWindowFromBar(index);
+        return true;
+    }
+
+    /** Number of windows in the current tmux-style session. */
+    public int getCurrentWindowCount() {
+        return mCurrentWSession == null ? 0 : mCurrentWSession.windows.size();
+    }
+
+    /** Index of the visible window within the current session, or -1. */
+    public int getCurrentWindowIndex() {
+        return mCurrentWSession == null ? -1 : mCurrentWSession.current;
+    }
+
+    /** Name of the current tmux-style session, or null when unnamed. */
+    @Nullable
+    public String getCurrentWindowSessionName() {
+        return mCurrentWSession == null ? null : mCurrentWSession.name;
+    }
+
+    /**
+     * Seams for the {@code appearance.*} and {@code app.*} registry actions. Each
+     * wraps a private handler that the terminal action sheet already invokes, so
+     * the palette, a keybind, and a remote caller reach the same code.
+     */
+    public void openWallpaperPicker() {
+        launchManagedWallpaperPicker();
+    }
+
+    /** Flips wallpaper passthrough mode and reports the value it moved to. */
+    public boolean toggleWallpaperMode() {
+        boolean enabled = !shouldUseWallpaperPassthroughMode();
+        setWallpaperModeEnabled(this, enabled);
+        return enabled;
+    }
+
+    /** Whether wallpaper passthrough is currently on. */
+    public boolean isWallpaperModeEnabled() {
+        return shouldUseWallpaperPassthroughMode();
+    }
+
+    /**
+     * Flip the cursor trail preference and apply it to every live pane. Returns the value it moved to,
+     * which can differ from what the views do while the device is in power save mode.
+     */
+    public boolean toggleCursorTrail() {
+        boolean enabled = !mPreferences.isTerminalCursorTrailEnabled();
+        mPreferences.setTerminalCursorTrailEnabled(enabled);
+        if (mTermuxTerminalViewClient != null) {
+            if (mPaneController != null) {
+                for (TerminalView view : mPaneController.getVisiblePaneViews())
+                    mTermuxTerminalViewClient.applyCursorTrailPolicy(view);
+            }
+            mTermuxTerminalViewClient.applyCursorTrailPolicy(getTerminalView());
+        }
+        return enabled;
+    }
+
+    /** Whether the cursor trail preference is on, regardless of power save state. */
+    public boolean isCursorTrailEnabled() {
+        return mPreferences != null && mPreferences.isTerminalCursorTrailEnabled();
+    }
+
+    public void openGlassLab() {
+        enterDockTuningMode();
+    }
+
+    public void openSettings() {
+        openSettingsHome();
+    }
+
+    public void openLookAndFeel() {
+        openLookAndFeelSettings();
+    }
+
+    public void openAppsBar() {
+        openAppsBarSettings();
+    }
+
+    /** Seam for {@code terminal.reset}: reset the focused shell's emulator state. */
+    public boolean resetCurrentSession() {
+        TerminalSession session = getCurrentSession();
+        if (session == null) return false;
+        onResetTerminalSession(session);
+        return true;
     }
 
     /** Drawer entry point for renaming the tmux-style session that contains {@code shell}. */
@@ -8715,6 +8832,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 view.setTextSize(getPreferences().getFontSize());
                 view.setKeepScreenOn(getPreferences().shouldKeepScreenOn());
             }
+            if (mTermuxTerminalViewClient != null)
+                mTermuxTerminalViewClient.applyCursorTrailPolicy(view);
             view.setUseTransparentFrameClear(false);
             view.setBackgroundColor(Color.TRANSPARENT);
             view.setTransparentFrameOverlayColor(Color.TRANSPARENT);

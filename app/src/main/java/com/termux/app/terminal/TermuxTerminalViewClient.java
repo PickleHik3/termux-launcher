@@ -6,7 +6,9 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.media.AudioManager;
+import android.net.Uri;
 import android.os.Environment;
+import android.os.PowerManager;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.InputDevice;
@@ -37,7 +39,10 @@ import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ToggleReason;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.data.DataUtils;
+import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.logger.Logger;
+
+import org.json.JSONObject;
 import com.termux.shared.markdown.MarkdownUtils;
 import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.termux.data.TermuxUrlUtils;
@@ -50,9 +55,12 @@ import com.termux.view.TerminalView;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import androidx.annotation.NonNull;
@@ -128,8 +136,27 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (view != null)
             view.setTextSize(mActivity.getPreferences().getFontSize());
         mActivity.requestTerminalFlushDockGeometryUpdate();
-        if (view != null)
+        if (view != null) {
             view.setKeepScreenOn(mActivity.getPreferences().shouldKeepScreenOn());
+            applyCursorTrailPolicy(view);
+        }
+    }
+
+    /**
+     * Decide whether a terminal view animates its cursor. The view itself has no opinion: the
+     * preference and the device's power state are policy, and both are re-read on resume because the
+     * user can change either while the activity is stopped.
+     */
+    public void applyCursorTrailPolicy(TerminalView view) {
+        if (view == null)
+            return;
+        boolean enabled = mActivity.getPreferences().isTerminalCursorTrailEnabled();
+        if (enabled) {
+            PowerManager powerManager = (PowerManager) mActivity.getSystemService(Context.POWER_SERVICE);
+            if (powerManager != null && powerManager.isPowerSaveMode())
+                enabled = false;
+        }
+        view.setCursorTrailEnabled(enabled);
     }
 
     /**
@@ -150,6 +177,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      */
     public void onResume() {
         setSoftKeyboardState(true, mActivity.isActivityRecreated());
+        applyCursorTrailPolicy(mActivity.getTerminalView());
         mTerminalCursorBlinkerStateAlreadySet = false;
         if (mActivity.getTerminalView().mEmulator != null) {
             // Start terminal cursor blinking if enabled
@@ -220,6 +248,14 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     @Override
     public void onSingleTapUp(MotionEvent e) {
         TerminalEmulator term = mActivity.getCurrentSession().getEmulator();
+        int[] tappedColumnAndRow = mActivity.getTerminalView().getColumnAndRow(e, true);
+        String hyperlink = term.getHyperlinkUriAt(tappedColumnAndRow[1], tappedColumnAndRow[0]);
+        if (hyperlink != null) {
+            // An OSC 8 link was tapped. Confirm before acting on it: unlike the URL regex below, the
+            // target is chosen by the application and need not resemble the text that was tapped.
+            showHyperlinkDialog(hyperlink);
+            return;
+        }
         if (mActivity.getProperties().shouldOpenTerminalTranscriptURLOnClick()) {
             int[] columnAndRow = mActivity.getTerminalView().getColumnAndRow(e, true);
             String wordAtTap = term.getScreen().getWordAtLocation(columnAndRow[0], columnAndRow[1]);
@@ -288,117 +324,57 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         }
         if (handleVirtualKeys(keyCode, e, true))
             return true;
-        if (!mActivity.getProperties().areHardwareKeyboardShortcutsDisabled()
-            && handleMultiplexerKeybinds(keyCode, e))
-            return true;
         if (keyCode == KeyEvent.KEYCODE_ENTER && !currentSession.isRunning()) {
             mTermuxTerminalSessionActivityClient.removeFinishedSession(currentSession);
             return true;
-        } else if (!mActivity.getProperties().areHardwareKeyboardShortcutsDisabled() && e.isCtrlPressed() && e.isAltPressed()) {
-            // Get the unmodified code point:
-            int unicodeChar = e.getUnicodeChar(0);
-            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || unicodeChar == 'n') /* next */
-            {
-                mTermuxTerminalSessionActivityClient.switchToSession(true);
-            } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP || unicodeChar == 'p') /* previous */
-            {
-                mTermuxTerminalSessionActivityClient.switchToSession(false);
-            } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                mActivity.getDrawer().openDrawer(Gravity.LEFT);
-            } else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                mActivity.getDrawer().closeDrawers();
-            } else if (unicodeChar == 'k') /* keyboard */
-            {
-                onToggleSoftKeyboardRequest();
-            } else if (unicodeChar == 'm') /* menu */
-            {
-                mActivity.getTerminalView().showContextMenu();
-            } else if (unicodeChar == 'r') /* rename */
-            {
-                if (mActivity.isSplitPanesEnabled())
-                    mActivity.renameCurrentWindowSession();
-                else
-                    mTermuxTerminalSessionActivityClient.renameSession(currentSession);
-            } else if (unicodeChar == 'c') /* create */
-            {
-                mTermuxTerminalSessionActivityClient.addNewSession(false, null);
-            } else if (unicodeChar == 'u') /* urls */
-            {
-                showUrlSelection();
-            } else if (unicodeChar == 'v') {
-                doPaste();
-            } else if (unicodeChar == '+' || e.getUnicodeChar(KeyEvent.META_SHIFT_ON) == '+') {
-                // We also check for the shifted char here since shift may be required to produce '+',
-                // see https://github.com/termux/termux-api/issues/2
-                changeFontSize(true);
-            } else if (unicodeChar == '-') {
-                changeFontSize(false);
-            } else if (unicodeChar >= '1' && unicodeChar <= '9') {
-                int index = unicodeChar - '1';
-                mTermuxTerminalSessionActivityClient.switchToSession(index);
-            }
-            return true;
         }
-        return false;
+        return handleRegistryKeybinds(e);
     }
 
     /**
-     * Multiplexer keybinds (only when compatibility mode is off). All use Ctrl+Alt(+Shift):
-     *   Ctrl+Alt+V            vertical split (side by side)
-     *   Ctrl+Alt+H            horizontal split (stacked top/bottom)
-     *   Ctrl+Alt+C            new window (within the current session)
-     *   Ctrl+Alt+X            close window
-     *   Ctrl+Alt+[ / ]        previous / next window in the current session
-     *   Ctrl+Alt+Shift+C      new session
-     *   Ctrl+Alt+Shift+X      close session
-     *   Ctrl+Alt+R            rename session
-     *   Ctrl+Alt+arrow        focus pane in that direction
-     *   Ctrl+Alt+Shift+arrow  resize the split toward that direction
+     * Resolves a {@code Ctrl+Alt(+Shift)} stroke through the registry and runs the
+     * matching action.
+     *
+     * <p>This replaced two separate chains: the multiplexer {@code switch} and the
+     * legacy {@code Ctrl+Alt}+character sequence. Both are now expressed as
+     * {@code defaultBindings} in {@link LauncherToolRegistry}, with
+     * {@link LauncherToolRegistry.BindingCondition} covering the strokes that meant
+     * different things depending on whether split panes were on.
+     *
+     * <p>Two behaviors are preserved on purpose:
+     *
+     * <ul>
+     *   <li>Every {@code Ctrl+Alt} combination is swallowed while hardware
+     *       shortcuts are enabled, matched or not, exactly as the legacy chain did.
+     *       Letting unmatched combinations through to the shell would be a
+     *       user-visible change.
+     *   <li>Pane focus and resize still report whether they consumed the stroke, so
+     *       an unconsumed arrow is not silently eaten.
+     * </ul>
+     *
+     * <p>One intentional change: matching is now on key code rather than
+     * {@code getUnicodeChar}, so the binds keep working on non-Latin layouts where
+     * the legacy chain quietly did nothing.
      */
-    private boolean handleMultiplexerKeybinds(int keyCode, KeyEvent e) {
-        if (!mActivity.isSplitPanesEnabled())
+    private boolean handleRegistryKeybinds(KeyEvent e) {
+        if (mActivity.getProperties().areHardwareKeyboardShortcutsDisabled())
             return false;
         if (!(e.isAltPressed() && e.isCtrlPressed()))
-            return false; // every bind is Ctrl+Alt(+Shift)
-        boolean shift = e.isShiftPressed();
+            return false;
 
-        switch (keyCode) {
-            case KeyEvent.KEYCODE_DPAD_LEFT:
-            case KeyEvent.KEYCODE_DPAD_RIGHT:
-            case KeyEvent.KEYCODE_DPAD_UP:
-            case KeyEvent.KEYCODE_DPAD_DOWN:
-                return shift ? mActivity.resizeActivePane(keyCode)
-                             : mActivity.focusPaneDirection(keyCode);
-            case KeyEvent.KEYCODE_V: // vertical split = panes side by side
-                mActivity.splitCurrentPane(android.widget.LinearLayout.HORIZONTAL);
-                return true;
-            case KeyEvent.KEYCODE_H: // horizontal split = panes stacked
-                mActivity.splitCurrentPane(android.widget.LinearLayout.VERTICAL);
-                return true;
-            case KeyEvent.KEYCODE_C:
-                if (shift)
-                    mTermuxTerminalSessionActivityClient.addNewSession(false, null); // new session
-                else
-                    mActivity.createNewWindow();                                     // new window
-                return true;
-            case KeyEvent.KEYCODE_X:
-                if (shift)
-                    mActivity.closeCurrentSession();                                 // close session
-                else
-                    mActivity.closeCurrentWindow();                                  // close window
-                return true;
-            case KeyEvent.KEYCODE_R:
-                mActivity.renameCurrentWindowSession();
-                return true;
-            case KeyEvent.KEYCODE_LEFT_BRACKET:  // Ctrl+Alt+[  previous window
-                mActivity.switchWindow(false);
-                return true;
-            case KeyEvent.KEYCODE_RIGHT_BRACKET: // Ctrl+Alt+]  next window
-                mActivity.switchWindow(true);
-                return true;
-            default:
-                return false;
+        TerminalActionDispatcher dispatcher = TerminalActionDispatcher.getInstance();
+        TerminalKeyBindingResolver.Match match =
+            TerminalKeyBindingResolver.getInstance().resolve(e, dispatcher.actionContext());
+        if (match == null)
+            return true; // unbound Ctrl+Alt stroke: swallowed, as before
+
+        JSONObject result = dispatcher.execute(match.toolName, match.arguments);
+        if (!result.optBoolean("ok", false)) {
+            Logger.logWarn(LOG_TAG, "Binding " + match.stroke + " -> " + match.toolName
+                + " failed: " + result.optString("message"));
+            return true;
         }
+        return result.optBoolean("handled", true);
     }
 
     @Override
@@ -847,6 +823,33 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (DataUtils.isNullOrEmpty(selectedText))
             return;
         ShareUtils.shareText(mActivity, mActivity.getString(R.string.title_share_selected_text), selectedText, mActivity.getString(R.string.title_share_selected_text_with));
+    }
+
+    /**
+     * The URI schemes an OSC 8 hyperlink may be handed to another app with. Anything else - and in
+     * particular {@code file:}, which either leaks an app private path or throws
+     * {@code FileUriExposedException} - can only be copied to the clipboard.
+     */
+    private static final Set<String> OPENABLE_HYPERLINK_SCHEMES = new HashSet<>(Arrays.asList(
+        "http", "https", "mailto", "tel", "sms", "geo", "ftp", "ftps"));
+
+    /**
+     * Ask what to do with a tapped OSC 8 hyperlink, showing its full target so that a link whose text
+     * and destination disagree is visible as such before anything is opened.
+     */
+    private void showHyperlinkDialog(String uri) {
+        String scheme = Uri.parse(uri).getScheme();
+        boolean openable = scheme != null && OPENABLE_HYPERLINK_SCHEMES.contains(scheme.toLowerCase(Locale.ROOT));
+        AlertDialog.Builder builder = new AlertDialog.Builder(mActivity)
+            .setTitle(R.string.title_hyperlink_dialog)
+            .setMessage(uri)
+            .setNeutralButton(R.string.action_hyperlink_copy, (di, which) ->
+                ShareUtils.copyTextToClipboard(mActivity, uri, mActivity.getString(R.string.msg_select_url_copied_to_clipboard)))
+            .setNegativeButton(android.R.string.cancel, null);
+        if (openable) {
+            builder.setPositiveButton(R.string.action_hyperlink_open, (di, which) -> ShareUtils.openUrl(mActivity, uri));
+        }
+        builder.show();
     }
 
     public void showUrlSelection() {

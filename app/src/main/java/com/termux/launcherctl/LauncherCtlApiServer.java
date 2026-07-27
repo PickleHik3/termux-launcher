@@ -30,6 +30,7 @@ import com.termux.ai.TaiSettings;
 import com.termux.app.launcher.LauncherAppLauncher;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.model.LauncherAppEntry;
+import com.termux.app.terminal.TerminalActionDispatcher;
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.PrivilegedPolicyStore;
@@ -3018,6 +3019,13 @@ public class LauncherCtlApiServer {
                 case LauncherToolRegistry.TOOL_USER_CONFIRM:
                     return wrapExecutionResult(buildUserConfirm(arguments));
                 default:
+                    // Terminal hierarchy actions all go through the one dispatcher. Asking it what it
+                    // handles keeps this route from drifting out of step with the registry, which is
+                    // what a second copy of the tool list here did.
+                    if (TerminalActionDispatcher.handles(tool.name)) {
+                        return wrapExecutionResult(TerminalActionDispatcher.getInstance()
+                            .execute(tool.name, arguments));
+                    }
                     return LauncherToolRegistry.ToolExecutionResult.error(501, "not_implemented",
                         "Tool '" + tool.name + "' is registered but not yet executable");
             }

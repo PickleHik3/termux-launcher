@@ -252,6 +252,11 @@
     <string name="title_select_url_none_found">No URL found in the terminal.</string>
     <string name="msg_select_url_copied_to_clipboard">URL copied to clipboard</string>
 
+    <!-- OSC 8 hyperlinks -->
+    <string name="title_hyperlink_dialog">Open link?</string>
+    <string name="action_hyperlink_open">Open</string>
+    <string name="action_hyperlink_copy">Copy</string>
+
     <string name="action_share_transcript">Share transcript</string>
     <string name="title_share_transcript">Terminal transcript</string>
     <string name="title_share_transcript_with">Send transcript to:</string>
@@ -1189,5 +1194,105 @@
     <string name="settings_custom_layout_valid">Custom layout is valid and loads automatically.</string>
     <string name="settings_custom_layout_invalid">Custom layout is invalid. Open Layout documentation for the supported format.</string>
     <string name="settings_status_action_needed">Action needed</string>
+
+    <!-- Command palette chrome -->
+    <string name="action_command_palette">Command palette</string>
+    <string name="palette_title">Command palette</string>
+    <string name="palette_search_hint">Search actions</string>
+    <string name="palette_empty">No matching actions</string>
+    <string name="palette_unavailable_splits_disabled">Unavailable: compatibility mode is on</string>
+    <string name="palette_category_session">Session</string>
+    <string name="palette_category_window">Window</string>
+    <string name="palette_category_pane">Pane</string>
+    <string name="palette_category_terminal">Terminal</string>
+    <string name="palette_category_clipboard">Clipboard</string>
+    <string name="palette_category_appearance">Appearance</string>
+    <string name="palette_category_app">App</string>
+    <string name="palette_confirm_title">Run %1$s?</string>
+    <string name="palette_confirm_run">Run</string>
+    <string name="palette_action_failed">Could not run %1$s</string>
+
+    <!-- Terminal action titles, shown in the command palette -->
+    <string name="tool_pane_split_vertical">Split pane vertically</string>
+    <string name="tool_pane_split_horizontal">Split pane horizontally</string>
+    <string name="tool_pane_focus_direction">Move pane focus</string>
+    <string name="tool_pane_resize">Resize pane</string>
+    <string name="tool_pane_kill_focused">Kill focused pane</string>
+    <string name="tool_window_new">New window</string>
+    <string name="tool_window_close">Close window</string>
+    <string name="tool_window_next">Next window</string>
+    <string name="tool_window_previous">Previous window</string>
+    <string name="tool_session_new">New session</string>
+    <string name="tool_session_next">Next session</string>
+    <string name="tool_session_previous">Previous session</string>
+    <string name="tool_session_close_current">Close session</string>
+    <string name="tool_terminal_toggle_soft_keyboard">Toggle keyboard</string>
+    <string name="tool_terminal_toggle_toolbar">Toggle extra keys</string>
+    <string name="tool_terminal_font_size_increase">Increase font size</string>
+    <string name="tool_terminal_font_size_decrease">Decrease font size</string>
+    <string name="tool_terminal_select_url">Select URL</string>
+    <string name="tool_terminal_share_transcript">Share transcript</string>
+    <string name="tool_clipboard_paste">Paste</string>
+    <string name="tool_window_select">Switch to window</string>
+    <string name="tool_window_rename">Rename window session</string>
+    <string name="tool_session_rename">Rename session</string>
+    <string name="tool_terminal_reset">Reset terminal</string>
+    <string name="tool_appearance_set_wallpaper">Set wallpaper</string>
+    <string name="tool_appearance_toggle_wallpaper">Toggle wallpaper</string>
+    <string name="tool_appearance_toggle_cursor_trail">Toggle cursor trail</string>
+    <string name="tool_terminal_jump_previous_prompt">Jump to previous prompt</string>
+    <string name="tool_terminal_jump_next_prompt">Jump to next prompt</string>
+    <string name="tool_appearance_glass_lab">Edit surfaces</string>
+    <string name="tool_app_open_settings">Open settings</string>
+    <string name="tool_app_open_look_and_feel">Look and feel settings</string>
+    <string name="tool_app_open_apps_bar">Apps bar settings</string>
+    <string name="tool_app_command_palette">Command palette</string>
+    <string name="tool_app_open_drawer">Open sessions drawer</string>
+    <string name="tool_app_close_drawer">Close sessions drawer</string>
+    <string name="tool_terminal_action_sheet">Terminal actions</string>
+    <string name="tool_session_activate_by_index">Switch to session by number</string>
+    <string name="tool_window_rename_prompt">Rename window session…</string>
+    <string name="tool_session_rename_prompt">Rename session…</string>
+    <!-- Palette subtitles -->
+    <string name="tool_desc_pane_split_vertical">Split the focused pane into two panes side by side.</string>
+    <string name="tool_desc_pane_split_horizontal">Split the focused pane into two stacked panes.</string>
+    <string name="tool_desc_pane_kill_focused">Terminate the shell running in the focused pane.</string>
+    <string name="tool_desc_window_new">Create a new window with a fresh shell in the current session.</string>
+    <string name="tool_desc_window_close">Close the current window and every pane in it.</string>
+    <string name="tool_desc_window_next">Switch to the next window in the current session.</string>
+    <string name="tool_desc_window_previous">Switch to the previous window in the current session.</string>
+    <string name="tool_desc_session_new">Create a new terminal session.</string>
+    <string name="tool_desc_session_next">Switch to the next terminal session.</string>
+    <string name="tool_desc_session_previous">Switch to the previous terminal session.</string>
+    <string name="tool_desc_session_close_current">Close the current session, including all of its windows and panes.</string>
+    <string name="tool_desc_terminal_reset">Reset the terminal emulator state for the focused shell.</string>
+    <string name="tool_desc_terminal_toggle_soft_keyboard">Show or hide the keyboard.</string>
+    <string name="tool_desc_terminal_toggle_toolbar">Show or hide the extra keys toolbar.</string>
+    <string name="tool_desc_terminal_font_size_increase">Make the terminal text larger.</string>
+    <string name="tool_desc_terminal_font_size_decrease">Make the terminal text smaller.</string>
+    <string name="tool_desc_terminal_select_url">Pick a link from the terminal scrollback.</string>
+    <string name="tool_desc_terminal_share_transcript">Share the terminal transcript with another app.</string>
+    <string name="tool_desc_terminal_action_sheet">Open the terminal action sheet.</string>
+    <string name="tool_desc_clipboard_paste">Paste the clipboard contents into the terminal.</string>
+    <string name="tool_desc_appearance_set_wallpaper">Choose a background image for the terminal.</string>
+    <string name="tool_desc_appearance_toggle_wallpaper">Turn the terminal background wallpaper on or off.</string>
+    <string name="tool_desc_appearance_toggle_cursor_trail">Turn the animated cursor trail on or off.</string>
+    <string name="tool_desc_terminal_jump_previous_prompt">Scroll to the previous shell prompt. Needs shell integration.</string>
+    <string name="tool_desc_terminal_jump_next_prompt">Scroll to the next shell prompt. Needs shell integration.</string>
+    <string name="tool_desc_appearance_glass_lab">Tune the dock, keyboard, status bar, and terminal surfaces.</string>
+    <string name="tool_desc_app_open_settings">Open the launcher settings screen.</string>
+    <string name="tool_desc_app_open_look_and_feel">Open the look and feel settings.</string>
+    <string name="tool_desc_app_open_apps_bar">Open the apps bar settings.</string>
+    <string name="tool_desc_app_command_palette">Open the searchable command palette.</string>
+    <string name="tool_desc_app_open_drawer">Open the sessions drawer.</string>
+    <string name="tool_desc_app_close_drawer">Close the sessions drawer.</string>
+    <string name="tool_desc_window_rename_prompt">Ask for a new name for the current window session.</string>
+    <string name="tool_desc_session_rename_prompt">Ask for a new name for the focused shell session.</string>
+    <string name="tool_terminal_share_selected">Share selected text</string>
+    <string name="tool_clipboard_copy_selected">Copy selected text</string>
+    <string name="tool_desc_terminal_share_selected">Share the selected terminal text with another app.</string>
+    <string name="tool_desc_clipboard_copy_selected">Copy the selected terminal text to the clipboard.</string>
+    <string name="palette_unavailable_no_selection">Unavailable: no text selected</string>
+    <string name="palette_unavailable_no_session">Unavailable: no active session</string>
 
 </resources>

@@ -40,8 +40,10 @@ import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import com.termux.terminal.KeyHandler;
+import com.termux.terminal.KittyKeyEncoder;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalSession;
+import com.termux.terminal.TextStyle;
 import com.termux.view.textselection.TextSelectionCursorController;
 
 /**
@@ -65,6 +67,9 @@ public final class TerminalView extends View {
     public TerminalEmulator mEmulator;
 
     public TerminalRenderer mRenderer;
+
+    /** Draws the streak between the cursor's old and new cell. Purely visual. */
+    private final CursorTrail mCursorTrail = new CursorTrail();
 
     public TerminalViewClient mClient;
 
@@ -357,6 +362,8 @@ public final class TerminalView extends View {
         mTermSession = session;
         mEmulator = null;
         mCombiningAccent = 0;
+        // A different session's cursor is somewhere else entirely; do not streak across the switch.
+        mCursorTrail.reset();
         updateSize();
         // Wait with enabling the scrollbar until we have a terminal to get scroll position from.
         setVerticalScrollBarEnabled(true);
@@ -1159,6 +1166,11 @@ public final class TerminalView extends View {
         } else if (keyCode == KeyEvent.KEYCODE_LANGUAGE_SWITCH) {
             return super.onKeyDown(keyCode, event);
         }
+        // The kitty keyboard protocol, when the program on this session asked for it. It runs after the
+        // client's own bindings so app shortcuts keep winning, and before the legacy encoders so that
+        // the program gets the unambiguous form it requested.
+        if (handleKittyKeyEvent(keyCode, event, event.getRepeatCount() > 0 ? KittyKeyEncoder.EVENT_REPEAT : KittyKeyEncoder.EVENT_PRESS))
+            return true;
         final int metaState = event.getMetaState();
         final boolean controlDown = event.isCtrlPressed() || mClient.readControlKey();
         final boolean leftAltDown = (metaState & KeyEvent.META_ALT_LEFT_ON) != 0 || mClient.readAltKey();
@@ -1343,6 +1355,54 @@ public final class TerminalView extends View {
             // Let system key events through.
             return super.onKeyUp(keyCode, event);
         }
+        // Only the kitty keyboard protocol has any use for a release event; legacy encoding has none.
+        handleKittyKeyEvent(keyCode, event, KittyKeyEncoder.EVENT_RELEASE);
+        return true;
+    }
+
+    /**
+     * Encode a key event with the kitty keyboard protocol, if the program on this session has turned it
+     * on for the current screen.
+     *
+     * @return true when the event was dealt with, either by writing bytes or by deliberately producing
+     *         none. False means the caller should carry on with legacy encoding.
+     */
+    private boolean handleKittyKeyEvent(int keyCode, KeyEvent event, int eventType) {
+        if (mEmulator == null || mTermSession == null)
+            return false;
+        final int flags = mEmulator.getKeyboardFlags();
+        if (flags == 0)
+            return false;
+        int unshifted = event.getUnicodeChar(0);
+        if ((unshifted & KeyCharacterMap.COMBINING_ACCENT) != 0) {
+            // A dead key. Composition happens in the legacy path, which owns mCombiningAccent.
+            return false;
+        }
+        int modifiers = 0;
+        if (event.isCtrlPressed() || mClient.readControlKey())
+            modifiers |= KittyKeyEncoder.MOD_CTRL;
+        if (event.isAltPressed() || mClient.readAltKey())
+            modifiers |= KittyKeyEncoder.MOD_ALT;
+        if (event.isShiftPressed() || mClient.readShiftKey())
+            modifiers |= KittyKeyEncoder.MOD_SHIFT;
+        // Android's META is the Windows/Command key, which the protocol calls super.
+        if (event.isMetaPressed())
+            modifiers |= KittyKeyEncoder.MOD_SUPER;
+        if (event.isCapsLockOn())
+            modifiers |= KittyKeyEncoder.MOD_CAPS_LOCK;
+        if (event.isNumLockOn())
+            modifiers |= KittyKeyEncoder.MOD_NUM_LOCK;
+        int shifted = event.getUnicodeChar(KeyEvent.META_SHIFT_ON) & ~KeyCharacterMap.COMBINING_ACCENT;
+        int text = event.getUnicodeChar(event.getMetaState() & ~KeyEvent.META_CTRL_MASK) & ~KeyCharacterMap.COMBINING_ACCENT;
+        String encoded = KittyKeyEncoder.encode(keyCode, unshifted, shifted, text, modifiers, eventType, flags);
+        if (encoded == null)
+            return false;
+        if (!encoded.isEmpty()) {
+            if (TERMINAL_VIEW_KEY_LOGGING_ENABLED)
+                mClient.logInfo(LOG_TAG, "kitty keyboard flags=" + flags + " sent " + encoded.substring(1));
+            mEmulator.setCursorBlinkState(true);
+            mTermSession.write(encoded);
+        }
         return true;
     }
 
@@ -1387,6 +1447,8 @@ public final class TerminalView extends View {
                 mTerminalCursorBlinkerRunnable.setEmulator(mEmulator);
             mTopRow = 0;
             scrollTo(0, 0);
+            // Reflow moved every cell, so the remembered cursor cell no longer means anything.
+            mCursorTrail.reset();
             invalidate();
         }
     }
@@ -1429,9 +1491,27 @@ public final class TerminalView extends View {
                 mTextSelectionCursorController.getSelectors(sel);
             }
             mRenderer.render(mEmulator, canvas, mTopRow, sel[0], sel[1], sel[2], sel[3], mUseTransparentFrameClear, mTransparentFrameOverlayColor, getHorizontalContentOffset());
+            if (mCursorTrail.isEnabled() && !isSelectingText()) {
+                boolean needsAnotherFrame = mCursorTrail.draw(canvas, mEmulator.getCursorCol(), mEmulator.getCursorRow(), mTopRow,
+                    mRenderer.mFontWidth, mRenderer.mFontLineSpacing, getHorizontalContentOffset(), mRenderer.mFontLineSpacingAndAscent,
+                    mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR], mEmulator.shouldCursorBeVisible());
+                if (needsAnotherFrame)
+                    postInvalidateOnAnimation();
+            }
             // render the text selection handles
             renderTextSelection();
         }
+    }
+
+    /**
+     * Whether the cursor animates between cells. Off by policy - power save, or the user's preference -
+     * rather than by the view's own judgement.
+     */
+    public void setCursorTrailEnabled(boolean enabled) {
+        if (mCursorTrail.isEnabled() == enabled)
+            return;
+        mCursorTrail.setEnabled(enabled);
+        invalidate();
     }
 
     public void setUseTransparentFrameClear(boolean useTransparentFrameClear) {
@@ -1488,6 +1568,34 @@ public final class TerminalView extends View {
 
     public void setTopRow(int mTopRow) {
         this.mTopRow = mTopRow;
+    }
+
+    /**
+     * Scroll so that the closest shell prompt above or below the top of the view is the first row shown.
+     * Needs the shell to emit OSC 133 marks; without them there is nothing to jump to.
+     *
+     * @return true if the view moved.
+     */
+    public boolean jumpToPrompt(boolean backwards) {
+        if (mEmulator == null)
+            return false;
+        int row = mEmulator.findPromptRow(mTopRow, backwards);
+        if (row == Integer.MIN_VALUE)
+            return false;
+        int lowest = -mEmulator.getScreen().getActiveTranscriptRows();
+        int newTopRow = Math.max(lowest, Math.min(0, row));
+        if (newTopRow == mTopRow) {
+            // The prompt is already on screen: the view cannot scroll past its last row, so there is
+            // nothing to move and reporting success would be a lie.
+            return false;
+        }
+        mTopRow = newTopRow;
+        // A jump is a discontinuity, so do not streak the cursor across it.
+        mCursorTrail.reset();
+        if (isSelectingText())
+            stopTextSelectionMode();
+        invalidate();
+        return true;
     }
 
     /**
