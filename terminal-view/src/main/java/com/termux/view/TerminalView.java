@@ -71,6 +71,26 @@ public final class TerminalView extends View {
     /** Draws the streak between the cursor's old and new cell. Purely visual. */
     private final CursorTrail mCursorTrail = new CursorTrail();
 
+    /**
+     * A sink for what key input actually reached the shell, for the app's key inspector.
+     * <p>
+     * The point of reporting it from here is that this is where the encoders are chosen, so a
+     * diagnostic sees what was really written rather than a second guess at it.
+     * </p>
+     */
+    public interface KeyInputProbe {
+
+        /**
+         * @param encoder which encoder produced the bytes: "kitty", "keyhandler" or "text".
+         * @param bytes   what was written to the shell.
+         */
+        void onKeyBytesWritten(String encoder, String bytes);
+    }
+
+    /** Null in normal use; set only while the key inspector is open. */
+    @Nullable
+    private KeyInputProbe mKeyInputProbe;
+
     public TerminalViewClient mClient;
 
     private boolean mUseTransparentFrameClear;
@@ -1295,6 +1315,9 @@ public final class TerminalView extends View {
             }
             // If left alt, send escape before the code point to make e.g. Alt+B and Alt+F work in readline:
             mTermSession.writeCodePoint(altDown, codePoint);
+            if (mKeyInputProbe != null) {
+                probeKeyBytes("text", (altDown ? "\033" : "") + new String(Character.toChars(codePoint)));
+            }
         }
     }
 
@@ -1312,6 +1335,7 @@ public final class TerminalView extends View {
         if (code == null)
             return false;
         mTermSession.write(code);
+        probeKeyBytes("keyhandler", code);
         return true;
     }
 
@@ -1402,6 +1426,7 @@ public final class TerminalView extends View {
                 mClient.logInfo(LOG_TAG, "kitty keyboard flags=" + flags + " sent " + encoded.substring(1));
             mEmulator.setCursorBlinkState(true);
             mTermSession.write(encoded);
+            probeKeyBytes("kitty", encoded);
         }
         return true;
     }
@@ -1501,6 +1526,17 @@ public final class TerminalView extends View {
             // render the text selection handles
             renderTextSelection();
         }
+    }
+
+    /** Install or remove the key input diagnostic sink. */
+    public void setKeyInputProbe(@Nullable KeyInputProbe probe) {
+        mKeyInputProbe = probe;
+    }
+
+    private void probeKeyBytes(String encoder, String bytes) {
+        KeyInputProbe probe = mKeyInputProbe;
+        if (probe != null)
+            probe.onKeyBytesWritten(encoder, bytes);
     }
 
     /**

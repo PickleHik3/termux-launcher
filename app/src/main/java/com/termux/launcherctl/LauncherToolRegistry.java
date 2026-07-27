@@ -432,6 +432,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_APP_OPEN_LOOK_AND_FEEL = "app.open_look_and_feel";
     public static final String TOOL_APP_OPEN_APPS_BAR = "app.open_apps_bar";
     public static final String TOOL_APP_COMMAND_PALETTE = "app.command_palette";
+    public static final String TOOL_APP_KEY_INSPECTOR = "app.key_inspector";
     public static final String TOOL_APP_OPEN_DRAWER = "app.open_drawer";
     public static final String TOOL_APP_CLOSE_DRAWER = "app.close_drawer";
     public static final String TOOL_TERMINAL_ACTION_SHEET = "terminal.action_sheet";
@@ -856,6 +857,13 @@ public final class LauncherToolRegistry {
             CATEGORY_TERMINAL, R.string.tool_terminal_reset, R.string.tool_desc_terminal_reset, null, REQUIRES_SESSION);
         // Both need the shell to emit OSC 133 marks, which REQUIRES_SESSION cannot express; they report
         // "no prompt marks" at execution time rather than being greyed out.
+        // A diagnostic, so it is bound to nothing by default: an inspector that needs a chord to open
+        // cannot report that chord's own events.
+        addUi(map, TOOL_APP_KEY_INSPECTOR,
+            "Open or close the key inspector overlay, which reports each key event and the bytes it sends.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_APP, R.string.tool_app_key_inspector, R.string.tool_desc_app_key_inspector, null);
         addUi(map, TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT,
             "Scroll the terminal to the previous shell prompt. Needs OSC 133 shell integration.",
             schemaEmpty(),

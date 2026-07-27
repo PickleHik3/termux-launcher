@@ -1240,6 +1240,7 @@
     <string name="tool_appearance_set_wallpaper">Set wallpaper</string>
     <string name="tool_appearance_toggle_wallpaper">Toggle wallpaper</string>
     <string name="tool_appearance_toggle_cursor_trail">Toggle cursor trail</string>
+    <string name="tool_app_key_inspector">Key inspector</string>
     <string name="tool_terminal_jump_previous_prompt">Jump to previous prompt</string>
     <string name="tool_terminal_jump_next_prompt">Jump to next prompt</string>
     <string name="tool_appearance_glass_lab">Edit surfaces</string>
@@ -1277,6 +1278,12 @@
     <string name="tool_desc_appearance_set_wallpaper">Choose a background image for the terminal.</string>
     <string name="tool_desc_appearance_toggle_wallpaper">Turn the terminal background wallpaper on or off.</string>
     <string name="tool_desc_appearance_toggle_cursor_trail">Turn the animated cursor trail on or off.</string>
+    <string name="tool_desc_app_key_inspector">Show what each key sends to the shell, and which binding claimed it.</string>
+
+    <!-- Key inspector overlay -->
+    <string name="key_inspector_title">Key inspector</string>
+    <string name="key_inspector_close">Close</string>
+    <string name="key_inspector_hint">Press keys. Each event shows the Android key, the binding that claimed it, and the bytes sent.</string>
     <string name="tool_desc_terminal_jump_previous_prompt">Scroll to the previous shell prompt. Needs shell integration.</string>
     <string name="tool_desc_terminal_jump_next_prompt">Scroll to the next shell prompt. Needs shell integration.</string>
     <string name="tool_desc_appearance_glass_lab">Tune the dock, keyboard, status bar, and terminal surfaces.</string>

@@ -77,6 +77,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_APP_OPEN_LOOK_AND_FEEL = "app.open_look_and_feel";
     public static final String TOOL_APP_OPEN_APPS_BAR = "app.open_apps_bar";
     public static final String TOOL_APP_COMMAND_PALETTE = "app.command_palette";
+    public static final String TOOL_APP_KEY_INSPECTOR = "app.key_inspector";
     public static final String TOOL_APP_OPEN_DRAWER = "app.open_drawer";
     public static final String TOOL_APP_CLOSE_DRAWER = "app.close_drawer";
     public static final String TOOL_TERMINAL_ACTION_SHEET = "terminal.action_sheet";
@@ -162,6 +163,7 @@ public final class TerminalActionDispatcher {
             case TOOL_APP_OPEN_LOOK_AND_FEEL:
             case TOOL_APP_OPEN_APPS_BAR:
             case TOOL_APP_COMMAND_PALETTE:
+            case TOOL_APP_KEY_INSPECTOR:
             case TOOL_APP_OPEN_DRAWER:
             case TOOL_APP_CLOSE_DRAWER:
             case TOOL_TERMINAL_ACTION_SHEET:
@@ -380,6 +382,8 @@ public final class TerminalActionDispatcher {
                 case TOOL_APP_COMMAND_PALETTE:
                     TerminalCommandPalette.show(activity);
                     return ok();
+                case TOOL_APP_KEY_INSPECTOR:
+                    return ok().put("keyInspectorOpen", TerminalKeyInspector.toggle(activity));
                 case TOOL_APP_OPEN_DRAWER:
                     activity.getDrawer().openDrawer(android.view.Gravity.LEFT);
                     return ok();

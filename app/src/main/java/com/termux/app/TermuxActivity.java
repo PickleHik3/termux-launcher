@@ -4183,6 +4183,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         super.onDestroy();
         Logger.logDebug(LOG_TAG, "onDestroy");
         com.termux.app.terminal.TerminalActionDispatcher.getInstance().detach(this);
+        // The inspector holds this Activity strongly for the life of its overlay, so it has to go
+        // with the Activity rather than outlive it.
+        com.termux.app.terminal.TerminalKeyInspector.close();
         clearCachedAccessoryWallpaperBlur();
         if (mIsInvalidState)
             return;
@@ -8834,6 +8837,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             if (mTermuxTerminalViewClient != null)
                 mTermuxTerminalViewClient.applyCursorTrailPolicy(view);
+            // A pane created while the key inspector is open must report through it too.
+            com.termux.app.terminal.TerminalKeyInspector.attachTo(view);
             view.setUseTransparentFrameClear(false);
             view.setBackgroundColor(Color.TRANSPARENT);
             view.setTransparentFrameOverlayColor(Color.TRANSPARENT);

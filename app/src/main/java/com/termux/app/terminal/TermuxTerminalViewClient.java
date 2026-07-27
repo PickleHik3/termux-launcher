@@ -308,6 +308,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     @SuppressLint("RtlHardcoded")
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent e, TerminalSession currentSession) {
+        TerminalKeyInspector inspector = TerminalKeyInspector.active();
+        if (inspector != null)
+            inspector.recordEvent(e, true);
         if (mActivity.handleTerminalAppSearchKey(keyCode))
             return true;
         if (mSuggestionBarCallback != null && mActivity.shouldProcessSuggestionBarKeyEvent(keyCode)) {
@@ -365,6 +368,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         TerminalActionDispatcher dispatcher = TerminalActionDispatcher.getInstance();
         TerminalKeyBindingResolver.Match match =
             TerminalKeyBindingResolver.getInstance().resolve(e, dispatcher.actionContext());
+        TerminalKeyInspector inspector = TerminalKeyInspector.active();
+        if (inspector != null)
+            inspector.recordBinding(match == null ? null : match.stroke, match == null ? null : match.toolName);
         if (match == null)
             return true; // unbound Ctrl+Alt stroke: swallowed, as before
 
@@ -379,6 +385,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent e) {
+        TerminalKeyInspector inspector = TerminalKeyInspector.active();
+        if (inspector != null)
+            inspector.recordEvent(e, false);
         // If emulator is not set, like if bootstrap installation failed and user dismissed the error
         // dialog, then just exit the activity, otherwise they will be stuck in a broken state.
         if (keyCode == KeyEvent.KEYCODE_BACK && mActivity.getTerminalView().mEmulator == null) {

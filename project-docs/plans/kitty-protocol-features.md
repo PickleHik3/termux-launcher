@@ -107,11 +107,9 @@ Both are preserved by the same paths: `setChar`, `copyInterval`, reflow inside
   exists in `ActionContext` — so they report `409 no_prompt_mark` at execution time with a
   message that distinguishes the two causes.
 
-  **Shipping the shell scripts is deliberately not part of this slice.** The study's
-  fork-specific constraint applies: a script installed for `com.termux` and one for
-  `io.vaj.tl` need a package-neutral path policy decided before users have files in a
-  package-specific location. fish 4 already emits marks with no setup, which is what the
-  device pass was run against. For bash and zsh, the minimum is a `PS1` that brackets the
+  **Shipping the shell scripts is deliberately not part of this slice**, only the path they will
+  live at (see below). fish 4 already emits marks with no setup, which is what the device pass was
+  run against. For bash and zsh, the minimum is a `PS1` that brackets the
   prompt: `\033]133;A\033\\` before it and `\033]133;B\033\\` after.
 
 - **Slice 6 — kitty keyboard protocol (done).** `KittyKeyEncoder` holds the encoding and the
@@ -152,6 +150,37 @@ Both are preserved by the same paths: `setChar`, `copyInterval`, reflow inside
   which owns `mCombiningAccent`. `onKeyUp` consults the encoder as well, since release events
   exist only in this protocol.
 
+- **Slice 8 — key inspector (done).** `TerminalKeyInspector` is the in-app equivalent of kitty's
+  `kitten show-key`, and closes the last open item from the study's Phase 2. For each key event it
+  reports three things that no existing tool shows together: what Android delivered (key code, scan
+  code, device, modifiers with the protocol's own modifier value, active keyboard flags), which
+  registry binding claimed it, and the exact bytes that reached the shell in `cat -v` notation.
+  Android's key logging shows the event but not the encoding; `cat -v` shows the bytes but neither the
+  event nor a stroke the app swallowed before the shell could see it.
+
+  **The panel is not focusable, and that is the whole design constraint.** A dialog would take input
+  focus, the terminal would stop receiving key events, and the inspector would have nothing left to
+  inspect. It is a `FrameLayout` child of `terminal_root_container` with
+  `descendantFocusability="blocksDescendants"`, and the close button is clickable but explicitly not
+  focusable for the same reason.
+
+  The bytes are reported from `TerminalView` rather than recomputed: a new `KeyInputProbe` — one
+  nullable field and four call sites, null in normal use — fires at the three places key input is
+  written, tagged `kitty`, `keyhandler` or `text`. Recomputing would mean a second implementation of
+  the encoders that could disagree with the real one, which is exactly the failure a diagnostic must
+  not have.
+
+  `app.key_inspector` toggles it and is deliberately **bound to nothing**: an inspector that needs a
+  chord to open cannot report that chord's own events. `TermuxActivity.onDestroy` closes it, since the
+  overlay holds the Activity strongly.
+
+  Verified on device in one pass: `KEYCODE_F5` reported `kitty: ^[[15~`, `ctrl+p` reported
+  `kitty: ^[[112;5u`, `q` reported `text: q`, `KEYCODE_DPAD_UP` reported `kitty: ^[[A`,
+  `ctrl+alt+v` reported `binding: ctrl+alt+v -> pane.split_vertical` followed by "nothing written to
+  the shell", and every release and modifier-key event reported the same. The terminal kept focus
+  throughout, which is what makes the reporting possible at all. The `kitty=5` field also showed fish
+  4 pushing its own flags (disambiguate plus alternate keys) with no configuration.
+
 - **Slice 7 — one duplicated tool list removed (done).** `LauncherCtlApiServer`'s execute
   route held a **third** copy of the terminal tool list, and a tool absent from it answered
   `501 not_implemented` while being advertised and executable everywhere else — which is
@@ -159,13 +188,25 @@ Both are preserved by the same paths: `setChar`, `copyInterval`, reflow inside
   now `if (TerminalActionDispatcher.handles(name))`, so the route cannot drift from the
   registry again.
 
+## User config path
+
+Decided 2026-07-27: everything this roadmap needs to write for the user goes under
+**`~/.termux/`**, which already holds this fork's own files and is the same path in both shipped
+editions. That answers the study's fork-specific constraint — the shell integration scripts and the
+workspace definitions no longer need a path decision before they can be built, and neither ends up
+in a `com.termux`-specific location that a later `io.vaj.tl` user would have to be migrated out of.
+
+Names to use when those slices land: `~/.termux/shell-integration/termux-launcher.{bash,zsh,fish}`
+and `~/.termux/workspaces/<name>.json`.
+
 ## Verification
 
 `project-docs/verification/test-terminal-protocols.sh` prints every rendition and protocol
 covered here into a terminal for eyeballing.
 
 Unit tests: `UnderlineStyleTest` (16), `HyperlinkTest` (15), `ShellIntegrationTest` (10),
-`KittyKeyboardProtocolTest` (29). `terminal-emulator` is at 220 passing tests, 0 failing.
+`KittyKeyboardProtocolTest` (29), `TerminalKeyInspectorTest` (6). `terminal-emulator` is at 220
+passing tests, 0 failing.
 `:app:testDebugUnitTest` still fails the documented 48 environmental tests across the same
 12 classes and no others — compare against that baseline, not against green.
 
@@ -193,8 +234,9 @@ From the study's remaining backlog, in its recommended order:
 - **Kitty graphics protocol MVP** (L). APC is still swallowed; `ApcTest` pins that as the
   current contract. Tier 1 is query + chunked PNG transmit + display at cursor + delete, with
   an image store, memory caps, and async decode.
-- **Durable workspace files, automatic layouts, session browser** (M–L). The study's Phase 3.
-  Needs the package-neutral config path decision that slice 5 deferred.
+- **Durable workspace files, automatic layouts, session browser** (M–L). The study's Phase 3. The
+  config path it was waiting on is decided above.
+- **Shell integration scripts** for bash and zsh, at the path decided above. fish needs none.
 - **Ligature and cluster-aware shaping, font fallback ranges** (L).
 - **Explicit GPU renderer** (XL). Benchmark-gated by the study and still deferred: Phase 0's
   frame-time counters are the prerequisite, not the renderer.

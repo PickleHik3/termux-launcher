@@ -29,7 +29,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void registry_containsExpectedTools() {
         List<LauncherToolRegistry.ToolMetadata> tools = registry.getTools();
-        assertEquals(57, tools.size());
+        assertEquals(58, tools.size());
         assertNotNull(registry.getTool("capabilities.get"));
         assertNotNull(registry.getTool("apps.search"));
         assertNotNull(registry.getTool("apps.launch"));
@@ -84,7 +84,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void toOpenAiToolsJson_producesFunctionTools() throws Exception {
         JSONArray openAiTools = registry.toOpenAiToolsJson();
-        assertEquals(57, openAiTools.length());
+        assertEquals(58, openAiTools.length());
         for (int i = 0; i < openAiTools.length(); i++) {
             JSONObject item = openAiTools.getJSONObject(i);
             assertEquals("function", item.getString("type"));
@@ -99,7 +99,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void toInternalJson_includesSchemaAndRisk() throws Exception {
         JSONArray internal = registry.toInternalJson();
-        assertEquals(57, internal.length());
+        assertEquals(58, internal.length());
         JSONObject first = internal.getJSONObject(0);
         assertTrue(first.has("name"));
         assertTrue(first.has("description"));
@@ -113,9 +113,9 @@ public class LauncherToolRegistryTest {
     public void responseJson_containsBothFormats() throws Exception {
         JSONObject response = registry.toResponseJson();
         assertTrue(response.getBoolean("ok"));
-        assertEquals(57, response.getInt("count"));
-        assertEquals(57, response.getJSONArray("tools").length());
-        assertEquals(57, response.getJSONArray("openAiTools").length());
+        assertEquals(58, response.getInt("count"));
+        assertEquals(58, response.getJSONArray("tools").length());
+        assertEquals(58, response.getJSONArray("openAiTools").length());
     }
 
     @Test
@@ -210,7 +210,7 @@ public class LauncherToolRegistryTest {
             assertNotNull(name, tool.category);
             assertTrue(name, tool.hasUiMetadata());
         }
-        assertEquals(43, registry.getUiTools().size());
+        assertEquals(44, registry.getUiTools().size());
     }
 
     @Test
