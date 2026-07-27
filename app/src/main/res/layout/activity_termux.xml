@@ -69,7 +69,7 @@
                 <!-- App-owned top glass pane. Three compact rows are deliberately reserved above
                      the bottom-aligned window row for future widgets. The glass backdrop is
                      extended behind the system status bar in applyTerminalOverlayInsets(). -->
-                <FrameLayout
+                <com.termux.app.statusbar.StatusBarSwipeLayout
                     android:id="@+id/terminal_window_bar_host"
                     android:layout_width="match_parent"
                     android:layout_height="96dp"
@@ -125,14 +125,14 @@
                             android:id="@+id/terminal_sessions_indicator"
                             android:layout_width="wrap_content"
                             android:layout_height="match_parent"
-                            android:layout_marginStart="5dp" />
+                            android:layout_marginStart="3dp" />
 
                         <com.termux.app.terminal.TerminalWindowBar
                             android:id="@+id/terminal_window_bar"
                             android:layout_width="0dp"
                             android:layout_height="match_parent"
                             android:layout_weight="1"
-                            android:layout_marginStart="3dp"
+                            android:layout_marginStart="6dp"
                             android:background="@android:color/transparent"
                             android:contentDescription="@string/termux_window_bar_content_description" />
 
@@ -143,7 +143,7 @@
                             android:orientation="horizontal"
                             android:gravity="center_vertical"
                             android:paddingStart="3dp"
-                            android:paddingEnd="5dp"
+                            android:paddingEnd="3dp"
                             android:clipChildren="false"
                             android:clipToPadding="false">
 
@@ -188,12 +188,7 @@
                         </LinearLayout>
                     </LinearLayout>
 
-                    <com.termux.app.statusbar.StatusBarGrabHandleView
-                        android:id="@+id/terminal_status_grab_handle"
-                        android:layout_width="36dp"
-                        android:layout_height="22dp"
-                        android:layout_gravity="bottom|center_horizontal" />
-                </FrameLayout>
+                </com.termux.app.statusbar.StatusBarSwipeLayout>
 
                 <FrameLayout
                     android:id="@+id/terminal_surface_host"

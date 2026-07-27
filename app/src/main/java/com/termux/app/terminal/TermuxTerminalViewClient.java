@@ -315,7 +315,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 mActivity.getTerminalView().showContextMenu();
             } else if (unicodeChar == 'r') /* rename */
             {
-                mTermuxTerminalSessionActivityClient.renameSession(currentSession);
+                if (mActivity.isSplitPanesEnabled())
+                    mActivity.renameCurrentWindowSession();
+                else
+                    mTermuxTerminalSessionActivityClient.renameSession(currentSession);
             } else if (unicodeChar == 'c') /* create */
             {
                 mTermuxTerminalSessionActivityClient.addNewSession(false, null);
@@ -348,6 +351,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      *   Ctrl+Alt+[ / ]        previous / next window in the current session
      *   Ctrl+Alt+Shift+C      new session
      *   Ctrl+Alt+Shift+X      close session
+     *   Ctrl+Alt+R            rename session
      *   Ctrl+Alt+arrow        focus pane in that direction
      *   Ctrl+Alt+Shift+arrow  resize the split toward that direction
      */
@@ -382,6 +386,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                     mActivity.closeCurrentSession();                                 // close session
                 else
                     mActivity.closeCurrentWindow();                                  // close window
+                return true;
+            case KeyEvent.KEYCODE_R:
+                mActivity.renameCurrentWindowSession();
                 return true;
             case KeyEvent.KEYCODE_LEFT_BRACKET:  // Ctrl+Alt+[  previous window
                 mActivity.switchWindow(false);
@@ -588,7 +595,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                                 mTermuxTerminalSessionActivityClient.switchToSession(false);
                                 return true;
                             case TermuxPropertyConstants.ACTION_SHORTCUT_RENAME_SESSION:
-                                mTermuxTerminalSessionActivityClient.renameSession(mActivity.getCurrentSession());
+                                if (mActivity.isSplitPanesEnabled())
+                                    mActivity.renameCurrentWindowSession();
+                                else
+                                    mTermuxTerminalSessionActivityClient.renameSession(
+                                        mActivity.getCurrentSession());
                                 return true;
                         }
                     }

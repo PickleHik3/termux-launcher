@@ -3,6 +3,7 @@ package com.termux.app.terminal;
 import android.app.Application;
 import android.os.Build;
 import android.graphics.drawable.GradientDrawable;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -45,12 +46,32 @@ public class TerminalWindowBarTest {
         assertEquals(Math.round(3.5f * bar.getResources().getDisplayMetrics().density),
             tabs.getChildAt(1).getPaddingLeft());
         assertEquals(tabs.getChildAt(1).getPaddingLeft(), tabs.getChildAt(1).getPaddingRight());
+        assertFalse(((TextView) tabs.getChildAt(1)).getIncludeFontPadding());
 
         tabs.getChildAt(0).performClick();
         assertEquals(0, selected.get());
         tabs.getChildAt(2).performClick();
         assertEquals(1, created.get());
         assertEquals(null, tabs.getChildAt(2).getBackground());
+    }
+
+    @Test
+    public void addWindowIcon_isGeometricallyCenteredWithoutTextPadding() {
+        TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
+        bar.setWindows(Arrays.asList(new TerminalWindowBar.WindowItem("home", "home")), 0);
+        int rowHeight = Math.round(24f * bar.getResources().getDisplayMetrics().density);
+        bar.measure(exact(240), exact(rowHeight));
+        bar.layout(0, 0, 240, rowHeight);
+
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        ImageView add = (ImageView) tabs.getChildAt(1);
+        assertEquals(ImageView.ScaleType.CENTER, add.getScaleType());
+        assertEquals(add.getPaddingTop(), add.getPaddingBottom());
+        assertEquals(add.getHeight() / 2f, (add.getTop() + add.getBottom()) / 2f, .01f);
+        assertEquals(add.getDrawable().getIntrinsicWidth(), add.getDrawable().getIntrinsicHeight());
+        assertEquals(Math.round(10f * bar.getResources().getDisplayMetrics().density),
+            add.getDrawable().getIntrinsicWidth());
+        assertEquals(0f, add.getTranslationY(), .01f);
     }
 
     @Test
@@ -99,5 +120,10 @@ public class TerminalWindowBarTest {
         assertTrue(tabs.getChildAt(1).isSelected());
         assertFalse(tabs.getChildAt(0).isSelected());
         assertEquals(320L, TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS);
+    }
+
+    private static int exact(int size) {
+        return android.view.View.MeasureSpec.makeMeasureSpec(
+            size, android.view.View.MeasureSpec.EXACTLY);
     }
 }

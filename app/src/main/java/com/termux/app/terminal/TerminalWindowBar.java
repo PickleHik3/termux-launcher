@@ -4,6 +4,7 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
@@ -19,13 +20,16 @@ import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
 import android.view.animation.PathInterpolator;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.widget.AppCompatImageButton;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
+import androidx.core.widget.ImageViewCompat;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
@@ -172,6 +176,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         // window row feel loose.
         tab.setPadding(dp(3.5f), 0, dp(3.5f), 0);
         tab.setSingleLine(true);
+        tab.setIncludeFontPadding(false);
+        tab.setTextAlignment(TEXT_ALIGNMENT_CENTER);
         tab.setEllipsize(TextUtils.TruncateAt.END);
         tab.setText(label);
         tab.setTextColor(selected ? mSelectedTextColor : mUnselectedTextColor);
@@ -188,16 +194,13 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         int tertiary = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorTertiary,
             ContextCompat.getColor(context, R.color.termux_primary));
-        TextView add = new TextView(context);
-        add.setText("+");
-        add.setTextColor(tertiary);
+        AppCompatImageButton add = new AppCompatImageButton(context);
+        add.setImageResource(R.drawable.ic_status_bar_add_window);
+        ImageViewCompat.setImageTintList(add, ColorStateList.valueOf(
+            ColorUtils.setAlphaComponent(tertiary, 184)));
+        add.setScaleType(ImageView.ScaleType.CENTER);
         add.setBackground(null);
-        add.setMinWidth(dp(24));
-        add.setMaxWidth(dp(24));
-        add.setPadding(0, 0, 0, dp(1));
-        add.setGravity(Gravity.CENTER);
-        add.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
-        add.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        add.setPadding(0, 0, 0, 0);
         add.setContentDescription(getResources().getString(R.string.termux_window_new_content_description));
         add.setOnClickListener(v -> {
             if (mCreateListener != null) mCreateListener.onCreateWindow();

@@ -122,6 +122,7 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.app.terminal.TermuxSessionsListViewController;
 import com.termux.app.terminal.io.TerminalToolbarViewPager;
 import com.termux.app.terminal.TermuxTerminalViewClient;
+import com.termux.app.terminal.WindowSessionName;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
@@ -214,6 +215,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     static final class WSession {
         final java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows = new java.util.ArrayList<>();
         int current;
+        @Nullable String name;
         com.termux.app.terminal.TerminalPaneController.Window currentWindow() { return windows.get(current); }
     }
     /** All sessions shown in the drawer. Each owns one or more windows. */
@@ -491,6 +493,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final String PANE_STATE_WINDOWS = "windows";
     private static final String PANE_STATE_CURRENT_WINDOW = "current_window";
     private static final String PANE_STATE_CURRENT_SESSION = "current_session";
+    private static final String PANE_STATE_SESSION_NAME = "session_name";
 
     private static final String LOG_TAG = "TermuxActivity";
     private static final int IN_APP_KEYBOARD_MARGIN_SLIDER_STEPS_PER_UNIT = 100;
@@ -1953,9 +1956,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && statusRow.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
                 ViewGroup.MarginLayoutParams rowParams =
                     (ViewGroup.MarginLayoutParams) statusRow.getLayoutParams();
-                // The collapse affordance overlays the physical bottom edge; it does not own a
-                // separate row. Keep only enough inset for the capsule clip and move the side
-                // content inward below where the curve becomes tight.
+                // Keep only enough inset for the capsule clip and move the side content inward
+                // below where the curve becomes tight.
                 int targetBottomMargin = Math.round(dpToPx(collapsed ? 0 : capsule ? 3 : 2));
                 int targetRowHeight = Math.round(dpToPx(collapsed && capsule ? 22 : 24));
                 int targetGravity = collapsed ? Gravity.CENTER_VERTICAL : Gravity.BOTTOM;
@@ -1979,12 +1981,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && sessions.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
                 ViewGroup.MarginLayoutParams sessionParams =
                     (ViewGroup.MarginLayoutParams) sessions.getLayoutParams();
-                int targetStartMargin = Math.round(dpToPx(capsule ? 14 : 5));
+                int targetStartMargin = statusBarContentEdgeInsetPx(capsule);
                 int targetSessionHeight = Math.round(dpToPx(collapsed
                     ? capsule ? 18 : 20 : 20));
                 int targetSessionWidth = sessions instanceof
                     com.termux.app.statusbar.SessionsIndicatorView
-                    && ((com.termux.app.statusbar.SessionsIndicatorView) sessions).isNumericSession()
+                    && ((com.termux.app.statusbar.SessionsIndicatorView) sessions).isShowingSessionNumber()
                     ? targetSessionHeight : ViewGroup.LayoutParams.WRAP_CONTENT;
                 boolean sessionLayoutChanged = sessionParams.getMarginStart() != targetStartMargin
                     || sessionParams.height != targetSessionHeight
@@ -2014,16 +2016,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             View statusWidgets = findViewById(R.id.terminal_status_widgets);
             if (statusWidgets != null) {
-                int targetEndPadding = Math.round(dpToPx(capsule ? 14 : 5));
+                int targetEndPadding = statusBarContentEdgeInsetPx(capsule);
                 if (statusWidgets.getPaddingEnd() != targetEndPadding) {
                     statusWidgets.setPaddingRelative(statusWidgets.getPaddingStart(),
                         statusWidgets.getPaddingTop(), targetEndPadding,
                         statusWidgets.getPaddingBottom());
                 }
             }
-            com.termux.app.statusbar.StatusBarGrabHandleView handle =
-                findViewById(R.id.terminal_status_grab_handle);
-            if (handle != null) handle.setCollapsed(collapsed);
+            if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
+                ((com.termux.app.statusbar.StatusBarSwipeLayout) host).setCollapsed(collapsed);
+            }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             if (capsule) {
@@ -2046,6 +2048,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int resolveDockCapsuleHorizontalMarginPx() {
         // Floating capsule floats 10dp off the screen edges (design redline · Outer margin 10).
         return Math.round(dpToPx(10));
+    }
+
+    /** Internal row inset only; the floating capsule's outer screen margin remains unchanged. */
+    private int statusBarContentEdgeInsetPx(boolean capsule) {
+        return Math.round(dpToPx(capsule ? 8 : 3));
     }
 
     private float resolveStatusBarCapsuleCornerRadiusPx(int surfaceHeightPx) {
@@ -7833,6 +7840,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return null;
     }
 
+    /** Stable name of the tmux-style session containing {@code shell}. */
+    @Nullable
+    public String getWindowSessionName(@Nullable TerminalSession shell) {
+        if (shell == null || mPaneController == null) return null;
+        WSession ws = wsessionOwning(mPaneController.windowOf(shell));
+        return ws == null ? WindowSessionName.normalize(shell.mSessionName) : ws.name;
+    }
+
+    /** Prefix+R entry point: rename the current tmux-style session, not its focused shell. */
+    public void renameCurrentWindowSession() {
+        promptWindowSessionRename(mCurrentWSession);
+    }
+
+    /** Drawer entry point for renaming the tmux-style session that contains {@code shell}. */
+    public void renameWindowSession(@Nullable TerminalSession shell) {
+        if (shell == null || mPaneController == null) return;
+        promptWindowSessionRename(wsessionOwning(mPaneController.windowOf(shell)));
+    }
+
+    private void promptWindowSessionRename(@Nullable WSession session) {
+        if (session == null) return;
+        TextInputDialogUtils.textInput(this, R.string.title_rename_window_session, session.name,
+            R.string.action_rename_session_confirm, text -> {
+                if (!mWSessions.contains(session)) return;
+                session.name = WindowSessionName.normalize(text);
+                rebuildDrawerSessions();
+            }, -1, null, -1, null, null);
+    }
+
     @Nullable
     private com.termux.shared.termux.shell.command.runner.terminal.TermuxSession findTermuxSession(TerminalSession shell) {
         if (mTermuxService == null || shell == null) return null;
@@ -7851,6 +7887,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 WSession ws = new WSession();
                 ws.windows.add(w);
                 ws.current = 0;
+                ws.name = WindowSessionName.normalize(shell.mSessionName);
                 mWSessions.add(ws);
             }
         }
@@ -7870,6 +7907,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             sessionState.putParcelableArrayList(PANE_STATE_WINDOWS, windowStates);
             sessionState.putInt(PANE_STATE_CURRENT_WINDOW,
                 Math.max(0, Math.min(ws.current, windowStates.size() - 1)));
+            if (ws.name != null) sessionState.putString(PANE_STATE_SESSION_NAME, ws.name);
             sessionStates.add(sessionState);
         }
         root.putParcelableArrayList(PANE_STATE_SESSIONS, sessionStates);
@@ -7906,6 +7944,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (ws.windows.isEmpty()) continue;
             ws.current = Math.max(0, Math.min(
                 sessionState.getInt(PANE_STATE_CURRENT_WINDOW, 0), ws.windows.size() - 1));
+            ws.name = WindowSessionName.normalize(sessionState.getString(PANE_STATE_SESSION_NAME));
             mWSessions.add(ws);
         }
         if (!mWSessions.isEmpty()) {
@@ -7950,18 +7989,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 else getDrawer().openDrawer(Gravity.LEFT);
             });
         }
-        com.termux.app.statusbar.StatusBarGrabHandleView collapseHandle =
-            findViewById(R.id.terminal_status_grab_handle);
-        if (collapseHandle != null) {
-            collapseHandle.setCollapsed(mPreferences != null
+        View statusBarHost = findViewById(R.id.terminal_window_bar_host);
+        if (statusBarHost instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
+            com.termux.app.statusbar.StatusBarSwipeLayout swipeHost =
+                (com.termux.app.statusbar.StatusBarSwipeLayout) statusBarHost;
+            swipeHost.setCollapsed(mPreferences != null
                 && mPreferences.isTopPaneClockCollapsed());
-            collapseHandle.setListener(
-                new com.termux.app.statusbar.StatusBarGrabHandleView.Listener() {
-                    @Override
-                    public void onCollapsedStateRequested(boolean collapsed) {
-                        setTopStatusBarCollapsed(collapsed, true);
-                    }
-                });
+            swipeHost.setListener(collapsed -> setTopStatusBarCollapsed(collapsed, true));
         }
         refreshTerminalWindowBar();
     }
@@ -8025,7 +8059,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ViewGroup.LayoutParams params = sessions.getLayoutParams();
             params.height = sessionHeight;
             if (sessions instanceof com.termux.app.statusbar.SessionsIndicatorView
-                && ((com.termux.app.statusbar.SessionsIndicatorView) sessions).isNumericSession()) {
+                && ((com.termux.app.statusbar.SessionsIndicatorView) sessions).isShowingSessionNumber()) {
                 params.width = sessionHeight;
             }
             sessions.setLayoutParams(params);
@@ -8057,15 +8091,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null) return;
         View host = findViewById(R.id.terminal_window_bar_host);
         View topWidgets = findViewById(R.id.terminal_top_widget_area);
-        com.termux.app.statusbar.StatusBarGrabHandleView handle =
-            findViewById(R.id.terminal_status_grab_handle);
+        com.termux.app.statusbar.StatusBarSwipeLayout swipeHost = host instanceof
+            com.termux.app.statusbar.StatusBarSwipeLayout
+            ? (com.termux.app.statusbar.StatusBarSwipeLayout) host : null;
         boolean capsule = isRoundedDockStyle();
         int targetHeight = targetStatusBarHeightPx(capsule, collapsed);
         boolean preferenceChanged = mPreferences.isTopPaneClockCollapsed() != collapsed;
         boolean geometryChanged = host != null && currentTopStatusBarHeight(host) != targetHeight;
-        if (handle != null) handle.setCollapsed(collapsed, animate && geometryChanged);
+        if (swipeHost != null) swipeHost.setCollapsed(collapsed);
         if (!preferenceChanged && !geometryChanged) {
-            if (handle != null) handle.setTransitioning(false);
             if (topWidgets != null) {
                 topWidgets.setClipBounds(null);
                 topWidgets.setAlpha(1f);
@@ -8079,12 +8113,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (preferenceChanged) mPreferences.setTopPaneClockCollapsed(collapsed);
         if (host == null) {
-            if (handle != null) handle.setTransitioning(false);
             refreshTerminalWindowBar();
             return;
         }
         if (!animate) {
-            if (handle != null) handle.setTransitioning(false);
             int resizeGeneration = beginStatusBarTerminalResize();
             refreshTerminalWindowBar();
             finishStatusBarTerminalResizeAfterLayout(host, resizeGeneration);
@@ -8111,7 +8143,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         mStatusBarCollapseAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(android.animation.Animator animation) {
-                if (handle != null) handle.setTransitioning(false);
                 if (topWidgets != null) {
                     topWidgets.setClipBounds(null);
                     topWidgets.setAlpha(1f);
@@ -8123,7 +8154,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 finishStatusBarTerminalResizeAfterLayout(host, resizeGeneration);
             }
         });
-        if (handle != null) handle.setTransitioning(true);
         mStatusBarCollapseAnimator.start();
     }
 
@@ -8168,7 +8198,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             findViewById(R.id.terminal_sessions_indicator);
         if (sessionsIndicator != null) {
             int sessionIndex = mCurrentWSession == null ? -1 : mWSessions.indexOf(mCurrentWSession);
-            sessionsIndicator.setSession(currentStatusSessionLabel(sessionIndex),
+            sessionsIndicator.setSession(currentStatusSessionName(),
                 mWSessions.size(), sessionIndex);
         }
 
@@ -8189,16 +8219,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateStatusWidgets();
     }
 
-    @NonNull
-    private CharSequence currentStatusSessionLabel(int sessionIndex) {
-        if (sessionIndex < 0 || mCurrentWSession == null || mPaneController == null
-            || mCurrentWSession.windows.isEmpty()) return "0";
-        TerminalSession representative = mPaneController.windowActiveSession(
-            mCurrentWSession.currentWindow());
-        if (representative != null && !TextUtils.isEmpty(representative.mSessionName)) {
-            return representative.mSessionName.trim();
-        }
-        return Integer.toString(sessionIndex + 1);
+    @Nullable
+    private CharSequence currentStatusSessionName() {
+        return mCurrentWSession == null ? null : mCurrentWSession.name;
     }
 
     /**
@@ -8503,6 +8526,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             WSession ws = new WSession();
             ws.windows.add(w);
             ws.current = 0;
+            ws.name = WindowSessionName.normalize(session.mSessionName);
             mWSessions.add(ws);
             mCurrentWSession = ws;
         } else {

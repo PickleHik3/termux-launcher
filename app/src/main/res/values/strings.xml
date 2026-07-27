@@ -231,6 +231,7 @@
     <string name="msg_max_terminals_reached">Close down existing ones before creating new.</string>
 
     <string name="title_rename_session">Set session name</string>
+    <string name="title_rename_window_session">Set session name (5 characters max)</string>
     <string name="action_rename_session_confirm">Set</string>
     <string name="title_create_named_session">New named session</string>
     <string name="action_create_named_session_confirm">Create</string>
@@ -504,9 +505,8 @@
                 <string name="termux_window_tab_content_description">Window %1$d of %2$d: %3$s</string>
                 <string name="termux_window_new_content_description">New terminal window</string>
                 <string name="termux_top_pane_clock_content_description">Clock and status panel</string>
-                <string name="termux_status_bar_collapse_content_description">Collapse status panel</string>
-                <string name="termux_status_bar_expand_content_description">Expand status panel</string>
                 <string name="termux_sessions_indicator_content_description">Session %1$d of %2$d</string>
+                <string name="termux_named_sessions_indicator_content_description">Session %1$d of %2$d: %3$s</string>
                 <string name="termux_sessions_indicator_empty_content_description">No sessions</string>
                 <string name="termux_status_widget_cpu_content_description">CPU usage</string>
                 <string name="termux_status_widget_ram_content_description">Memory usage</string>
