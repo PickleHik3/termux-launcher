@@ -5,6 +5,10 @@ binding work recorded in `action-registry-terminal-actions.md`. That covered the
 Phase 1–2; this file covers Phase 4 (protocol/render upgrades) and the first Phase 5
 project (the keyboard protocol).
 
+Status: delivered through graphics Tier 1. User setup and compatibility guidance are in
+[`../../docs/en/Terminal_Modernization.md`](../../docs/en/Terminal_Modernization.md); the cross-project
+status map is [`../terminal-modernization-status.md`](../terminal-modernization-status.md).
+
 ## Decision
 
 Protocol state lives with the `TerminalEmulator` in the service, not with the view, so it

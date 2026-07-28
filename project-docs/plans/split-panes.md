@@ -1,8 +1,17 @@
 # Native split panes — feasibility study & implementation plan
 
-**Status:** Phase 2b DONE + verified on-device (2026-07-22). tmux-style keybinds + compatibility mode. Session-as-tab + up-to-2 panes per tab. Greenfield feature.
+**Current status:** delivered and verified. The final model is session → windows → unlimited
+recursive pane trees, with an app-owned window strip, conditional tmux-style keybinds, and
+single-pane compatibility mode. See
+[`../../docs/en/Terminal_Modernization.md`](../../docs/en/Terminal_Modernization.md) for current user
+guidance and [`../terminal-modernization-status.md`](../terminal-modernization-status.md) for the
+project overview.
 
-## Phase 2b result (verified on device, 2026-07-22)
+The Phase 1/2a/2b sections below are retained as implementation history and are superseded by the
+N-pane and windows-layer status sections later in this file. In particular, the historical two-pane
+limit and “windows not built” notes do not describe the current build.
+
+## Historical Phase 2b result (verified on device, 2026-07-22)
 
 Replicated the user's tmux binds (from their `~/.tmux.conf`) and added a safety toggle.
 
@@ -25,14 +34,14 @@ in-app keyboard is NOT yet routed to the multiplexer — needs a hook in Termina
 
 **Duplicate-prompt fix (side-by-side only):** a side-by-side split changes pane 1's column count; the running shell reflows and leaves a stale prompt (stacked splits keep the same width, so no issue). After the resize settles, `splitCurrentPane` posts a Ctrl+L (``) to pane 1's session (250ms delay) so the shell redraws one clean prompt. Verified clean.
 
-### Not built yet (next phase): the Windows layer
+### Historical Phase 2b gap: the Windows layer
 The middle tmux level. User's binds for it (currently pass through to the shell, NOT intercepted):
 - `Alt+1..9` → select-window
 - `Alt+Left / Alt+Right` → prev/next window
 - `Alt+Shift+Left / Right` → swap-window
 Needs a Window model (each window owns its own pane layout, many windows per session) + a switch UI (window bar or just the keybinds).
 
-## Phase 2a result (verified on-device, 2026-07-22)
+## Historical Phase 2a result (verified on-device, 2026-07-22)
 
 ## Target model (agreed with user)
 
@@ -43,7 +52,7 @@ Three-level tmux-style hierarchy:
 
 Current build implements Session + Pane (2 panes max, h/v). The Window layer is the next phase.
 
-## Phase 2a result (verified on device, 2026-07-22)
+## Historical Phase 2a result (verified on device, 2026-07-22)
 
 Fixes to the first spike, all confirmed working:
 - **Default is 1 pane** (auto-spawn removed). Split is user-triggered.
@@ -56,7 +65,7 @@ Fixes to the first spike, all confirmed working:
 
 Model implementation (`TermuxActivity`): `mTabSecondary` (primary→secondary), `mTabOrientation`, `mSecondaryPaneSessions`, `mCurrentTabPrimary`, `mDrawerSessions`. Key methods: `activateSessionInPanes()`, `splitCurrentPane()`, `closeSecondaryPane()`, `promoteSecondaryToPrimary()`, `rebuildDrawerSessions()`. `setCurrentSession()` (session client) now delegates to `activateSessionInPanes()`.
 
-### Known gaps / next phase
+### Historical Phase 2a gaps
 - **Windows layer** not built (the middle tmux level). Needs its own model + switch UI.
 - Max 2 panes; only one split axis at a time (no nested/recursive splits yet).
 - No drag divider, no rotation persistence.
@@ -217,7 +226,7 @@ reflow + primary re-key, thin Material active-pane border. Build: `:app:assemble
 unchanged, delegates to `controller.isSecondaryPane`); in-app soft-keyboard Ctrl+Alt+letter binds
 (hardware keyboard confirmed; soft-keyboard letter combos still bypass onKeyDown).
 
-### Phase B — windows layer (NEXT, not built)
+### Historical Phase B plan — windows layer
 Session › **Window** › Pane-tree. A session owns N windows; each window owns a pane tree. Bind
 `Ctrl+Alt+C` = new window, `Ctrl+Alt+X` = close window (currently toast "not implemented"). Needs a
 window-select affordance (bind unspecified) + a window strip UI. `Ctrl+Alt+Shift+C/X` already do
@@ -254,6 +263,21 @@ window-select bind was unspecified) · Ctrl+Alt+Shift+C new session · Ctrl+Alt+
 **Verified on device:** split → new window (Window 2/2, fresh pane) → switch back (Window 1/2, split
 intact, panes preserved) → close window (drops to sibling). No crashes. Build green.
 
-**Deferred / needs hands-on:** window strip UI (windows currently keybind-driven + a "Window i/n"
+**Deferred at that checkpoint (window strip later completed below):** window strip UI (windows currently keybind-driven + a "Window i/n"
 toast, no persistent visual list); drawer multi-session verification via touch; closing the very last
 session auto-spawns a fresh one (launcher can't sit with zero shells) — confirm that's desired.
+
+---
+
+## Current window strip (supersedes the round-3 deferral)
+
+The top status surface now owns a persistent, horizontally scrollable `TerminalWindowBar` whenever
+split panes are enabled. It renders one accessible chip per current-session window plus a create
+button, switches directly on chip taps, keeps the selected chip visible, and animates the selection
+and terminal arrival together. The sessions indicator beside it toggles the drawer.
+
+Labels are refreshed through the bounded foreground resolver and prefer an editor's open-file
+basename, then foreground process, then terminal title/CWD fallback. The strip shares the status
+surface's Material color, opacity, blur, square/capsule style, and collapse behavior. It disappears
+in single-pane compatibility mode. This supersedes the historical “no persistent visual list” note
+immediately above; that note remains only as round-3 chronology.

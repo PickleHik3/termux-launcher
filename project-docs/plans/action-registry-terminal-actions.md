@@ -3,6 +3,10 @@
 Feeds the command-palette / custom-bindings work described in
 `kitty-to-termux-launcher-feasibility-study.md` (Phase 1).
 
+Status: delivered. User configuration and usage are documented in
+[`../../docs/en/Terminal_Modernization.md`](../../docs/en/Terminal_Modernization.md); the cross-project
+status map is [`../terminal-modernization-status.md`](../terminal-modernization-status.md).
+
 ## Decision
 
 Extend the existing `LauncherToolRegistry` rather than adding a second

@@ -3,6 +3,10 @@
 Status: implemented July 2026. This completes the automatic-layout part of Phase 3 in the terminal
 modernization study.
 
+User workflows and API examples are in
+[`../../docs/en/Terminal_Modernization.md`](../../docs/en/Terminal_Modernization.md). The engineering
+status map is [`../terminal-modernization-status.md`](../terminal-modernization-status.md).
+
 ## Runtime semantics
 
 Every operation acts only on the active window. It reuses the existing `Leaf` objects and

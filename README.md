@@ -14,7 +14,7 @@
 
 Termux Launcher is a terminal-first Android home launcher inspired by [TEL](https://github.com/t-e-l/tel), built on [termux-app](https://github.com/termux/termux-app) and [termux-monet](https://github.com/Termux-Monet/termux-monet).
 
-**[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | [Download builds](https://github.com/PickleHik3/termux-launcher/releases) | [Getting Started](docs/en/Launcher_Getting_Started.md) | [LauncherCtl](docs/en/LauncherCtl_API.md) | [LauncherCtl MCP](docs/en/LauncherCtl_MCP.md) | [Termux AI](docs/en/Termux_AI.md) | [Changelog](CHANGELOG.md)
+**[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | [Download builds](https://github.com/PickleHik3/termux-launcher/releases) | [Getting Started](docs/en/Launcher_Getting_Started.md) | [Modern terminal](docs/en/Terminal_Modernization.md) | [LauncherCtl](docs/en/LauncherCtl_API.md) | [LauncherCtl MCP](docs/en/LauncherCtl_MCP.md) | [Termux AI](docs/en/Termux_AI.md) | [Changelog](CHANGELOG.md)
 
 > **Two editions are available.** The **`com.termux`** build is the **recommended** version — it stays fully compatible with the upstream Termux package ecosystem. The **`io.vaj.tl`** build installs side-by-side with a stock Termux, but it runs off my own custom APT repository, which I maintain by hand — so it is updated manually and less often. See [Editions](#editions).
 
@@ -30,6 +30,9 @@ All credits go to the amazing developers and contributors of Termux, TEL, and Te
 
 - Termux as the actual Android home launcher
 - Sixel image drawing in terminal
+- Native sessions, windows, recursive split panes, layouts, workspace restore, and session browser
+- Kitty keyboard/graphics protocols, safe hyperlinks, prompt navigation, and advanced font shaping
+- Searchable terminal command palette with customizable chords and modal keymaps
 - App dock with terminal app search
 - Android Material theme integration for launcher surfaces and Termux shell theming
 - `launcherctl` shell bridge for launching apps and reading launcher/system data
@@ -75,6 +78,7 @@ See [Getting Started](docs/en/Launcher_Getting_Started.md) for the setup flow.
 ## Documentation
 
 - [Getting Started](docs/en/Launcher_Getting_Started.md): install, launcher basics, tmux setup, rish setup, Extra Keys, and troubleshooting.
+- [Modern terminal guide](docs/en/Terminal_Modernization.md): panes, windows, sessions, layouts, workspaces, bindings, fonts, protocols, and diagnostics.
 - [LauncherCtl](docs/en/LauncherCtl_API.md): shell commands, endpoint files, API basics, and permissions.
 - [LauncherCtl MCP](docs/en/LauncherCtl_MCP.md): MCP client configs, tool names, and live-verified examples for local agents.
 - [Termux AI](docs/en/Termux_AI.md): local model setup, `tai`, OpenAI-compatible clients, and troubleshooting.

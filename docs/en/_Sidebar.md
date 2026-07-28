@@ -7,6 +7,7 @@
 
 ## Integrations
 
+- [Modern terminal guide](Terminal_Modernization)
 - [Shell integration](Launcher_Shell_Integration)
 - [Termux Launcher AI](Termux_Launcher_AI)
 - [TAI / Termux AI](Termux_AI)

@@ -3,6 +3,9 @@
 Status: implemented July 2026. This completes the searchable session-management and clone-with-CWD
 part of Phase 3 in the terminal modernization study.
 
+User guidance is in [`../../docs/en/Terminal_Modernization.md`](../../docs/en/Terminal_Modernization.md).
+The engineering status map is [`../terminal-modernization-status.md`](../terminal-modernization-status.md).
+
 ## Surface and hierarchy
 
 `session.browser` is a low-risk terminal action in the Session category, so it appears in the

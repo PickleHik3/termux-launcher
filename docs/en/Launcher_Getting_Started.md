@@ -71,6 +71,15 @@ Useful places:
 - **Apps Bar:** Input split character, app ranking reset, Home launcher shortcut, and lock-screen behavior.
 - **TAI / Termux AI:** Local model downloads, imports, runtime settings, API port, and API token.
 
+The terminal also has a native command palette, recursive split panes, windows, a session browser,
+and durable layout/CWD workspaces. Long-press the terminal and choose **Command palette**, or press
+`Ctrl+Alt+Shift+P` on a hardware keyboard. Split panes are enabled by default; traditional
+single-pane behavior is available at **Settings → Termux → Terminal IO → Split panes**.
+
+See the [Modern terminal guide](Terminal_Modernization.md) for shortcuts, automatic layouts,
+workspace restore, custom bindings, advanced fonts, shell prompt navigation, Kitty protocols, and
+diagnostics.
+
 Live wallpapers can disable dock blur. If you use two rows of Extra Keys, turn on compact dock spacing so the terminal has more room.
 
 ## 4. Use LauncherCtl From the Shell
@@ -100,7 +109,9 @@ Media and notification commands need Android notification listener access. For e
 
 ## 5. Optional Guarded Shell and tmux Setup
 
-tmux is recommended if you want a persistent terminal workspace. My broader shell setup usually includes:
+tmux remains useful when you need Unix processes to survive independently of the Android terminal
+UI. The native workspace feature restores sessions, windows, panes, titles, and CWDs after process
+death, but it does not resurrect foreground programs. My broader shell setup usually includes:
 
 - fish
 - oh-my-posh

@@ -8,6 +8,11 @@ advertised everywhere else.
 Only unfinished work is listed here. For what is built, and why each decision was made, read the
 slice records instead:
 
+- `../terminal-modernization-status.md` — engineering overview, user-file contracts, compatibility
+  decisions, verification summary, and links to every owning record.
+- `../../docs/en/Terminal_Modernization.md` — public task-oriented setup and usage guide for all
+  delivered features.
+
 - `action-registry-terminal-actions.md` — the registry, dispatcher, binding resolver, command
   palette, chords, user binding file, hints, search, and modal maps (the study's Phase 1–2).
 - `kitty-protocol-features.md` — underlines, decoration colour, OSC 8, cursor trail, OSC 133 and
@@ -21,7 +26,7 @@ slice records instead:
   focused-pane movement to an outer edge (Phase 3 multiplexer completion).
 - `session-browser.md` — searchable session/window/pane hierarchy, clone-with-CWD, and browser
   management actions (Phase 3 multiplexer completion).
-- `../../../kitty-to-termux-launcher-feasibility-study.md` — the original assessment, with a phase
+- `../../../../kitty-to-termux-launcher-feasibility-study.md` — the original assessment, with a phase
   status table near the top.
 
 Sizes follow the study: **S** 2–5 days, **M** 1–3 weeks, **L** 4–8 weeks, **XL** 2–6 months.

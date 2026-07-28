@@ -3,6 +3,10 @@
 Status: implemented July 2026. This is the first Phase 3 project from the terminal modernization
 study.
 
+User workflows and safe API examples are in
+[`../../docs/en/Terminal_Modernization.md`](../../docs/en/Terminal_Modernization.md). The engineering
+status map is [`../terminal-modernization-status.md`](../terminal-modernization-status.md).
+
 ## Contract
 
 Workspace definitions live at `~/.termux/workspaces/<name>.json`. Version 1 records the ordered

@@ -4,6 +4,10 @@ Status: the bounded fixed-cell font project is complete. Four-face configuration
 the fixed-cell grapheme model, explicit symbol maps, ligature policy, OpenType features, variable
 axes, and configurable metrics were delivered and device-verified 2026-07-28.
 
+User configuration, examples, reload behavior, and troubleshooting are in
+[`../../docs/en/Terminal_Modernization.md`](../../docs/en/Terminal_Modernization.md). The engineering
+status map is [`../terminal-modernization-status.md`](../terminal-modernization-status.md).
+
 This is the remaining Phase 4 project from the Kitty feasibility study. It extends Termux's native
 `~/.termux/font.ttf` contract instead of replacing it, and keeps the Canvas renderer unless device
 tests prove that Android's shaping APIs cannot satisfy the cluster contract.
