@@ -30,7 +30,7 @@ Sizes follow the study: **S** 2–5 days, **M** 1–3 weeks, **L** 4–8 weeks, 
 
 | Item | Size | Notes |
 |---|---|---|
-| Cluster-aware shaping and font maps | L | Four real faces and backward-compatible `~/.termux/fonts.conf` are complete. Next: build the grapheme acceptance suite, test Canvas `getTextRunAdvances()` against it, then decide whether HarfBuzz is necessary. After that: `symbol_map`, ligature policy, OpenType features, variable axes, and metrics. No bidi, `narrow_symbols`, or symbols consuming following cells. |
+| Cluster-aware renderer and font maps | L | Four real faces and `fonts.conf` are complete. The Android 16 acceptance probe selected ICU grapheme boundaries plus Canvas `getTextRunAdvances()`; no HarfBuzz port is currently needed. Next: map shaping clusters to fixed cell spans and cover cursor/selection/style/reflow integration. After that: `symbol_map`, ligature policy, OpenType features, variable axes, and metrics. No bidi, `narrow_symbols`, or symbols consuming following cells. |
 
 ## Deferred on purpose
 

@@ -1,6 +1,7 @@
 # Fonts and cluster-aware shaping
 
-Status: four-face configuration delivered and device-verified 2026-07-28; cluster-aware shaping is next.
+Status: four-face configuration and the Canvas shaping feasibility gate were delivered and
+device-verified 2026-07-28; cluster-aware renderer integration is next.
 
 This is the remaining Phase 4 project from the Kitty feasibility study. It extends Termux's native
 `~/.termux/font.ttf` contract instead of replacing it, and keeps the Canvas renderer unless device
@@ -50,10 +51,10 @@ for path-backed mappings.
    `TerminalRenderer` to select the real face for each SGR combination. Synthetic bold/italic is
    used only when its face is absent. This is independent of the grapheme work and is the first
    visible delivery.
-2. **Grapheme and shaping test suite.** Cover Arabic shaping without promising bidi layout, Indic
+2. **Grapheme and shaping test suite — device primitives complete, integration cases remain.** Cover Arabic shaping without promising bidi layout, Indic
    conjuncts, combining marks, ZWJ emoji, Nerd symbols, programming ligatures, cursor boundaries,
    selection boundaries, reflow, and styled run boundaries.
-3. **Canvas shaping experiment.** `Paint.getTextRunAdvances()` is available below the app's API 26
+3. **Canvas shaping experiment — complete; retain Canvas.** `Paint.getTextRunAdvances()` is available below the app's API 26
    minimum and exposes per-character advances/cluster continuations. Test it against the suite and
    use the result to map Android-shaped clusters deterministically back to terminal cells. Port
    HarfBuzz only if those acceptance tests fail on supported Android versions/devices.
@@ -95,6 +96,26 @@ Device verification on a Nothing A065 running Android 16 covered:
 - visible regular, bold, italic, and bold-italic selection in the same terminal grid;
 - a malformed bold font falling back safely while the other real faces remained active; and
 - restoration to the legacy no-`fonts.conf` state after the test.
+
+## Canvas shaping decision
+
+The Android instrumentation suite now exercises Arabic in logical-LTR and RTL run directions,
+Devanagari conjuncts, multiple combining marks, ZWJ emoji, regional-indicator flags, Nerd Font
+private-use characters, and programming-ligature input. It checks ICU extended-grapheme boundaries,
+UTF-16 safety, repeatability, finite/non-negative per-character advances, and exact recovery of each
+run's total advance by summing grapheme spans.
+
+On the Android 16 device, `Paint.getTextRunAdvances()` exposed the information the renderer needs:
+Devanagari and ZWJ sequences formed one grapheme, combining and surrogate continuations had zero
+independent advance, and Arabic lam-alef and the platform font's `->` ligature exposed zero-advance
+glyph continuations. Disabling `liga` and `calt` changed `->` from `[61, 0]` to `[29, 42]`, and
+restoring the `Paint` setting restored the original advances exactly.
+
+Decision: retain Android Canvas and do not port HarfBuzz. ICU supplies grapheme boundaries and
+Canvas supplies shaped per-character advances, including glyph-cluster continuations. The next
+slice must map those two signals to fixed terminal-cell spans and add cursor, selection, style-run,
+copy, resize, and reflow integration tests. HarfBuzz remains only a fallback if that concrete
+integration suite uncovers a Canvas result that cannot be mapped deterministically.
 
 ## Scope boundaries
 
