@@ -426,6 +426,12 @@ as conditions rather than left unbound; kept here as the rationale for why
   it to `KEYCODE_DPAD_*`. Keep that translation at the dispatcher boundary so
   the registry schema stays platform-neutral.
 
+## Remaining work
+
+The open items from these slices — chords and timeouts, modal maps, a user-editable binding file,
+`send-text` / `send-key`, and generating the action sheet from the registry — are listed with
+everything else in `backlog.md`.
+
 ## Test baseline
 
 `./gradlew :app:testDebugUnitTest` fails 48 tests on clean `dev` at

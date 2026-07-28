@@ -248,14 +248,6 @@ when the target row is already the top row.
 
 ## Not started
 
-From the study's remaining backlog, in its recommended order:
-
-- **Kitty graphics protocol MVP** (L). APC is still swallowed; `ApcTest` pins that as the
-  current contract. Tier 1 is query + chunked PNG transmit + display at cursor + delete, with
-  an image store, memory caps, and async decode.
-- **Durable workspace files, automatic layouts, session browser** (M–L). The study's Phase 3. The
-  config path it was waiting on is decided above.
-- **Shell integration scripts** for bash and zsh, at the path decided above. fish needs none.
-- **Ligature and cluster-aware shaping, font fallback ranges** (L).
-- **Explicit GPU renderer** (XL). Benchmark-gated by the study and still deferred: Phase 0's
-  frame-time counters are the prerequisite, not the renderer.
+Everything remaining from the study, including the items this file deferred, is listed in
+`backlog.md`. It is kept there rather than here so there is one list to read and one list to
+maintain.
