@@ -1,7 +1,7 @@
 # Fonts and cluster-aware shaping
 
-Status: four-face configuration, Canvas shaping, and the fixed-cell grapheme model were delivered
-and device-verified 2026-07-28; symbol maps are next.
+Status: four-face configuration, Canvas shaping, the fixed-cell grapheme model, and explicit symbol
+maps were delivered and device-verified 2026-07-28; ligature policy is next.
 
 This is the remaining Phase 4 project from the Kitty feasibility study. It extends Termux's native
 `~/.termux/font.ttf` contract instead of replacing it, and keeps the Canvas renderer unless device
@@ -34,11 +34,11 @@ With no `fonts.conf`, `font.ttf` remains the regular face, `font-italic.ttf` rem
 italic face, and Android monospace remains the final default. Existing Termux:Styling and manual
 font replacement workflows therefore retain their current behavior.
 
-Later slices may add repeatable directives such as:
+Repeatable symbol maps use Kitty's range syntax:
 
 ```text
 symbol_map U+E000-U+F8FF path=~/.termux/fonts/SymbolsNerdFontMono.ttf
-fallback U+0600-U+06FF path=~/.termux/fonts/NotoSansArabic.ttf
+symbol_map U+E0A0-U+E0D7,U+F0001 family="Symbols Nerd Font Mono"
 ```
 
 An explicit map selects its font for the range. Unmapped clusters use the configured primary face
@@ -58,7 +58,7 @@ for path-backed mappings.
    minimum and exposes per-character advances/cluster continuations. Test it against the suite and
    use the result to map Android-shaped clusters deterministically back to terminal cells. Port
    HarfBuzz only if those acceptance tests fail on supported Android versions/devices.
-4. **`symbol_map` and fallback ranges.** Select fonts per complete grapheme, never in the middle of
+4. **`symbol_map` and fallback ranges — complete.** Select fonts per complete grapheme, never in the middle of
    a cluster; retain Android fallback after explicit mappings and primary faces.
 5. **Ligature policy.** Support `never`, `cursor`, and `always`. The renderer already breaks at the
    cursor for inversion; cursor-only disabling should use that boundary and a temporary feature
@@ -141,6 +141,26 @@ eight Android 16 shaping/buffer/renderer instrumentation tests, an APK build, an
 smoke test. The device suite proves atomic selection and reflow for ZWJ emoji, flags, Indic
 conjuncts, and combining sequences in addition to the Canvas advance fixtures.
 
+## Delivered: explicit symbol maps
+
+`fonts.conf` now accepts repeatable `symbol_map` directives containing comma-separated `U+...`
+points and inclusive ranges followed by a `path=` or `family=` source. Later mappings win where
+ranges overlap, matching Kitty. Parsing is atomic per line and bounded to 256 directives and 1024
+ranges; font loading is bounded to 64 distinct sources and retains the existing 64 MiB per-file
+limit and exception boundary.
+
+The loader resolves mapped fonts during the existing settings reload, then applies the complete
+face/map set atomically to every pane. The renderer selects a map from the first code point of each
+complete grapheme and splits shaped draw runs at that boundary. Continuations can never select a
+different font, SGR synthesis is not applied to explicit symbol fonts, and all mapped glyphs remain
+scaled into the primary face's fixed cell grid. Unmapped text still uses the selected primary face
+and Android's normal fallback.
+
+Android 16 instrumentation covers family loading, later-overlap precedence, and first-code-point
+grapheme ownership. A live reload also loaded a path-backed Noto Serif copy from
+`~/.termux/fonts/`, kept the foreground activity and process healthy, emitted no font errors, and
+restored the original absent-config state after the test.
+
 ## Scope boundaries
 
 - **No `narrow_symbols` and no symbols consuming following cells.** Those change terminal cell
@@ -165,6 +185,7 @@ and do disk/font work off the render path.
 
 - Existing users without `fonts.conf` see no behavior change.
 - Real bold, italic, and bold-italic faces reload across every existing and newly created pane.
+- Repeatable path-backed symbol ranges reload atomically, with later overlaps taking precedence.
 - One bad optional face cannot disable the other faces or crash Activity creation.
 - Cursor, selection, copy, resize, and reflow agree on grapheme boundaries for the test matrix.
 - Canvas is retained unless the same acceptance suite demonstrates a concrete Android shaping gap.

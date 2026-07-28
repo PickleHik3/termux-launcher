@@ -1,6 +1,7 @@
 package com.termux.app.terminal;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.graphics.Bitmap;
@@ -86,6 +87,54 @@ public class GraphemeBufferInstrumentationTest {
             }
         }
         assertTrue("cluster cursor/selection render should draw visible pixels", drewPixels);
+    }
+
+    @Test
+    public void familySymbolMapsLoadAndLaterOverlapsWin() {
+        TerminalFontConfig.Result config = TerminalFontConfig.parse(
+            "symbol_map U+0041-U+005A family=serif\n"
+                + "symbol_map U+0041 family=sans-serif\n", true);
+        TerminalFontLoader.Faces faces = TerminalFontLoader.load(config);
+        assertTrue(faces.errors.toString(), faces.errors.isEmpty());
+        assertEquals(2, faces.symbolMaps.length);
+
+        Bitmap serifLast = render("A", new TerminalRenderer.SymbolMap[]{
+            new TerminalRenderer.SymbolMap('A', 'A', Typeface.create("sans-serif", 0)),
+            new TerminalRenderer.SymbolMap('A', 'A', Typeface.create("serif", 0))
+        });
+        Bitmap sansLast = render("A", new TerminalRenderer.SymbolMap[]{
+            new TerminalRenderer.SymbolMap('A', 'A', Typeface.create("serif", 0)),
+            new TerminalRenderer.SymbolMap('A', 'A', Typeface.create("sans-serif", 0))
+        });
+        assertFalse("the later overlapping map must select the drawn font",
+            serifLast.sameAs(sansLast));
+    }
+
+    @Test
+    public void symbolMapSelectsByFirstCodePointOfWholeGrapheme() {
+        Bitmap baseline = render("A\u0301", null);
+        Bitmap continuationOnly = render("A\u0301", new TerminalRenderer.SymbolMap[]{
+            new TerminalRenderer.SymbolMap(0x0301, 0x0301, Typeface.create("serif", 0))
+        });
+        Bitmap baseMapped = render("A\u0301", new TerminalRenderer.SymbolMap[]{
+            new TerminalRenderer.SymbolMap('A', 'A', Typeface.create("serif", 0))
+        });
+
+        assertTrue("mapping a continuation must not split its grapheme",
+            baseline.sameAs(continuationOnly));
+        assertFalse("mapping the first code point must select the symbol font",
+            baseline.sameAs(baseMapped));
+    }
+
+    private static Bitmap render(String text, TerminalRenderer.SymbolMap[] symbolMaps) {
+        TerminalEmulator emulator = emulator(6, 2);
+        enter(emulator, "\033[?25l" + text);
+        Bitmap bitmap = Bitmap.createBitmap(360, 120, Bitmap.Config.ARGB_8888);
+        TerminalRenderer renderer = new TerminalRenderer(48, Typeface.MONOSPACE, null, null,
+            null, symbolMaps);
+        renderer.render(emulator, new Canvas(bitmap), 0, -1, -1, -1, -1, false,
+            Color.TRANSPARENT, 0f);
+        return bitmap;
     }
 
     private static TerminalEmulator emulator(int columns, int rows) {

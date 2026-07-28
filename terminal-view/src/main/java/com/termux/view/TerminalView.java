@@ -744,7 +744,7 @@ public final class TerminalView extends View {
         mRenderer = mRenderer == null
             ? new TerminalRenderer(textSize, Typeface.MONOSPACE, null, null, null)
             : new TerminalRenderer(textSize, mRenderer.mTypeface, mRenderer.mBoldTypeface,
-                mRenderer.mItalicTypeface, mRenderer.mBoldItalicTypeface);
+                mRenderer.mItalicTypeface, mRenderer.mBoldItalicTypeface, mRenderer.mSymbolMaps);
         updateSize();
     }
 
@@ -755,7 +755,14 @@ public final class TerminalView extends View {
     /** Apply independent regular, bold, italic and bold-italic terminal faces. */
     public void setTypeface(Typeface regular, Typeface bold, Typeface italic,
                             Typeface boldItalic) {
-        mRenderer = new TerminalRenderer(mRenderer.mTextSize, regular, bold, italic, boldItalic);
+        setTypeface(regular, bold, italic, boldItalic, null);
+    }
+
+    /** Apply the primary faces and repeatable explicit symbol-font ranges atomically. */
+    public void setTypeface(Typeface regular, Typeface bold, Typeface italic,
+                            Typeface boldItalic, TerminalRenderer.SymbolMap[] symbolMaps) {
+        mRenderer = new TerminalRenderer(mRenderer.mTextSize, regular, bold, italic, boldItalic,
+            symbolMaps);
         updateSize();
         invalidate();
     }

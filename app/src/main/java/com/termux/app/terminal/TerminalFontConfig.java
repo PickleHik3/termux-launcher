@@ -27,6 +27,8 @@ public final class TerminalFontConfig {
     private static final int MAX_LINES = 512;
     private static final int MAX_LINE_CHARS = 4096;
     private static final int MAX_FAMILY_CHARS = 128;
+    private static final int MAX_SYMBOL_MAPS = 256;
+    private static final int MAX_SYMBOL_RANGES = 1024;
 
     public enum Face { REGULAR, BOLD, ITALIC, BOLD_ITALIC }
 
@@ -42,17 +44,39 @@ public final class TerminalFontConfig {
         }
     }
 
+    public static final class CodePointRange {
+        public final int first;
+        public final int last;
+
+        private CodePointRange(int first, int last) {
+            this.first = first;
+            this.last = last;
+        }
+    }
+
+    public static final class SymbolMapSpec {
+        @NonNull public final List<CodePointRange> ranges;
+        @NonNull public final FaceSpec font;
+
+        private SymbolMapSpec(@NonNull List<CodePointRange> ranges, @NonNull FaceSpec font) {
+            this.ranges = Collections.unmodifiableList(new ArrayList<>(ranges));
+            this.font = font;
+        }
+    }
+
     public static final class Result {
         public final boolean filePresent;
         @NonNull public final Map<Face, FaceSpec> faces;
+        @NonNull public final List<SymbolMapSpec> symbolMaps;
         @NonNull public final List<String> errors;
 
         private Result(boolean filePresent, @NonNull Map<Face, FaceSpec> faces,
-                       @NonNull List<String> errors) {
+                       @NonNull List<SymbolMapSpec> symbolMaps, @NonNull List<String> errors) {
             this.filePresent = filePresent;
             EnumMap<Face, FaceSpec> faceCopy = new EnumMap<>(Face.class);
             faceCopy.putAll(faces);
             this.faces = Collections.unmodifiableMap(faceCopy);
+            this.symbolMaps = Collections.unmodifiableList(new ArrayList<>(symbolMaps));
             this.errors = Collections.unmodifiableList(new ArrayList<>(errors));
         }
 
@@ -95,7 +119,9 @@ public final class TerminalFontConfig {
     @NonNull
     static Result parse(@NonNull String content, boolean filePresent) {
         EnumMap<Face, FaceSpec> faces = new EnumMap<>(Face.class);
+        List<SymbolMapSpec> symbolMaps = new ArrayList<>();
         List<String> errors = new ArrayList<>();
+        int symbolRangeCount = 0;
         String[] lines = content.split("\\r?\\n", -1);
         for (int i = 0; i < lines.length; i++) {
             List<String> words;
@@ -106,6 +132,28 @@ public final class TerminalFontConfig {
                 continue;
             }
             if (words.isEmpty()) continue;
+            if ("symbol_map".equalsIgnoreCase(words.get(0))) {
+                if (words.size() != 3) {
+                    errors.add("line " + (i + 1)
+                        + ": expected symbol_map ranges and one path= or family= value");
+                    continue;
+                }
+                if (symbolMaps.size() >= MAX_SYMBOL_MAPS) {
+                    errors.add("line " + (i + 1) + ": symbol_map count exceeds " + MAX_SYMBOL_MAPS);
+                    continue;
+                }
+                List<CodePointRange> ranges = parseRanges(words.get(1), i + 1, errors);
+                FaceSpec font = parseSource(words.get(2), i + 1, errors);
+                if (ranges == null || font == null) continue;
+                if (symbolRangeCount + ranges.size() > MAX_SYMBOL_RANGES) {
+                    errors.add("line " + (i + 1) + ": symbol range count exceeds "
+                        + MAX_SYMBOL_RANGES);
+                    continue;
+                }
+                symbolMaps.add(new SymbolMapSpec(ranges, font));
+                symbolRangeCount += ranges.size();
+                continue;
+            }
             if (words.size() != 2) {
                 errors.add("line " + (i + 1) + ": expected a face and one path= or family= value");
                 continue;
@@ -115,34 +163,68 @@ public final class TerminalFontConfig {
                 errors.add("line " + (i + 1) + ": unknown directive '" + words.get(0) + "'");
                 continue;
             }
-            String source = words.get(1);
-            SourceType type;
-            String value;
-            if (source.startsWith("path=")) {
-                type = SourceType.PATH;
-                value = source.substring(5);
-                if (!(value.startsWith("~/") || value.startsWith("/"))) {
-                    errors.add("line " + (i + 1) + ": font paths must be absolute or start with ~/");
-                    continue;
-                }
-            } else if (source.startsWith("family=")) {
-                type = SourceType.FAMILY;
-                value = source.substring(7).trim();
-                if (value.length() > MAX_FAMILY_CHARS) {
-                    errors.add("line " + (i + 1) + ": family name exceeds " + MAX_FAMILY_CHARS + " characters");
-                    continue;
-                }
-            } else {
-                errors.add("line " + (i + 1) + ": font source must start with path= or family=");
-                continue;
-            }
-            if (value.isEmpty()) {
-                errors.add("line " + (i + 1) + ": font source is empty");
-                continue;
-            }
-            faces.put(face, new FaceSpec(type, value));
+            FaceSpec source = parseSource(words.get(1), i + 1, errors);
+            if (source != null) faces.put(face, source);
         }
-        return new Result(filePresent, faces, errors);
+        return new Result(filePresent, faces, symbolMaps, errors);
+    }
+
+    @Nullable
+    private static FaceSpec parseSource(@NonNull String source, int line, @NonNull List<String> errors) {
+        SourceType type;
+        String value;
+        if (source.startsWith("path=")) {
+            type = SourceType.PATH;
+            value = source.substring(5);
+            if (!(value.startsWith("~/") || value.startsWith("/"))) {
+                errors.add("line " + line + ": font paths must be absolute or start with ~/");
+                return null;
+            }
+        } else if (source.startsWith("family=")) {
+            type = SourceType.FAMILY;
+            value = source.substring(7).trim();
+            if (value.length() > MAX_FAMILY_CHARS) {
+                errors.add("line " + line + ": family name exceeds " + MAX_FAMILY_CHARS + " characters");
+                return null;
+            }
+        } else {
+            errors.add("line " + line + ": font source must start with path= or family=");
+            return null;
+        }
+        if (value.isEmpty()) {
+            errors.add("line " + line + ": font source is empty");
+            return null;
+        }
+        return new FaceSpec(type, value);
+    }
+
+    @Nullable
+    private static List<CodePointRange> parseRanges(@NonNull String value, int line,
+                                                     @NonNull List<String> errors) {
+        List<CodePointRange> result = new ArrayList<>();
+        for (String item : value.replace('\u2013', '-').split(",", -1)) {
+            int separator = item.indexOf('-', 2);
+            String firstText = separator < 0 ? item : item.substring(0, separator);
+            String lastText = separator < 0 ? item : item.substring(separator + 1);
+            int first = parseCodePoint(firstText);
+            int last = parseCodePoint(lastText);
+            if (first < 1 || last < first || last > Character.MAX_CODE_POINT
+                || (first <= Character.MAX_SURROGATE && last >= Character.MIN_SURROGATE)) {
+                errors.add("line " + line + ": invalid Unicode range '" + item + "'");
+                return null;
+            }
+            result.add(new CodePointRange(first, last));
+        }
+        return result;
+    }
+
+    private static int parseCodePoint(@NonNull String value) {
+        if (value.length() < 3 || !(value.startsWith("U+") || value.startsWith("u+"))) return -1;
+        try {
+            return Integer.parseInt(value.substring(2), 16);
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
     @NonNull
@@ -165,7 +247,7 @@ public final class TerminalFontConfig {
     @NonNull
     private static Result empty(boolean present, @Nullable String error) {
         List<String> errors = error == null ? Collections.emptyList() : Collections.singletonList(error);
-        return new Result(present, Collections.emptyMap(), errors);
+        return new Result(present, Collections.emptyMap(), Collections.emptyList(), errors);
     }
 
     /** Split one config line, allowing quotes and backslash escapes; # starts a comment. */

@@ -625,7 +625,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             // Apply to every pane that has a renderer so split panes get the nerd font too.
             for (com.termux.view.TerminalView v : mActivity.getTerminalPaneViews()) {
                 if (v.isFontInitialized())
-                    v.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic);
+                    v.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic,
+                        faces.symbolMaps);
             }
             mActivity.requestTerminalFlushDockGeometryUpdate();
         } catch (Exception e) {
@@ -640,7 +641,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         try {
             TerminalFontLoader.Faces faces = TerminalFontLoader.load(TerminalFontConfig.load());
             for (String error : faces.errors) Logger.logError(LOG_TAG, "Font config: " + error);
-            view.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic);
+            view.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic,
+                faces.symbolMaps);
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyFontToView()", e);
         }

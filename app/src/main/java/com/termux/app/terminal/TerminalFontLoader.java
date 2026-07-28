@@ -6,31 +6,40 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.shared.termux.TermuxConstants;
+import com.termux.view.TerminalRenderer;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /** Resolves a parsed font config without allowing one bad optional font to disable the terminal. */
 public final class TerminalFontLoader {
 
     private static final long MAX_FONT_FILE_BYTES = 64L * 1024L * 1024L;
+    private static final int MAX_SYMBOL_FONTS = 64;
 
     public static final class Faces {
         @NonNull public final Typeface regular;
         @Nullable public final Typeface bold;
         @Nullable public final Typeface italic;
         @Nullable public final Typeface boldItalic;
+        @NonNull public final TerminalRenderer.SymbolMap[] symbolMaps;
         @NonNull public final List<String> errors;
 
         private Faces(@NonNull Typeface regular, @Nullable Typeface bold,
                       @Nullable Typeface italic, @Nullable Typeface boldItalic,
+                      @NonNull TerminalRenderer.SymbolMap[] symbolMaps,
                       @NonNull List<String> errors) {
             this.regular = regular;
             this.bold = bold;
             this.italic = italic;
             this.boldItalic = boldItalic;
+            this.symbolMaps = symbolMaps.clone();
             this.errors = Collections.unmodifiableList(new ArrayList<>(errors));
         }
     }
@@ -55,7 +64,41 @@ public final class TerminalFontLoader {
                 "font-italic.ttf", errors);
         Typeface boldItalic = loadConfigured(config.face(TerminalFontConfig.Face.BOLD_ITALIC),
             Typeface.BOLD_ITALIC, "bold_italic_font", errors);
-        return new Faces(regular, bold, italic, boldItalic, errors);
+        TerminalRenderer.SymbolMap[] symbolMaps = loadSymbolMaps(config.symbolMaps, errors);
+        return new Faces(regular, bold, italic, boldItalic, symbolMaps, errors);
+    }
+
+    @NonNull
+    private static TerminalRenderer.SymbolMap[] loadSymbolMaps(
+        @NonNull List<TerminalFontConfig.SymbolMapSpec> specs,
+        @NonNull List<String> errors) {
+        List<TerminalRenderer.SymbolMap> result = new ArrayList<>();
+        Map<String, Typeface> loaded = new LinkedHashMap<>();
+        Set<String> failed = new HashSet<>();
+        for (TerminalFontConfig.SymbolMapSpec spec : specs) {
+            String key = spec.font.type.name() + '\n' + spec.font.value;
+            Typeface typeface = loaded.get(key);
+            if (typeface == null && !failed.contains(key)) {
+                if (loaded.size() + failed.size() >= MAX_SYMBOL_FONTS) {
+                    errors.add("symbol_map: distinct font count exceeds " + MAX_SYMBOL_FONTS);
+                    break;
+                }
+                typeface = loadConfigured(spec.font, Typeface.NORMAL,
+                    "symbol_map " + sourceDescription(spec.font), errors);
+                if (typeface == null) failed.add(key);
+                else loaded.put(key, typeface);
+            }
+            if (typeface == null) continue;
+            for (TerminalFontConfig.CodePointRange range : spec.ranges)
+                result.add(new TerminalRenderer.SymbolMap(range.first, range.last, typeface));
+        }
+        return result.toArray(new TerminalRenderer.SymbolMap[0]);
+    }
+
+    @NonNull
+    private static String sourceDescription(@NonNull TerminalFontConfig.FaceSpec spec) {
+        return spec.type == TerminalFontConfig.SourceType.PATH
+            ? "path=" + spec.value : "family='" + spec.value + "'";
     }
 
     @Nullable

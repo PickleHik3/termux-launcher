@@ -15,7 +15,6 @@ import com.termux.terminal.TerminalBuffer;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalRow;
 import com.termux.terminal.TextStyle;
-import com.termux.terminal.WcWidth;
 
 /**
  * Renderer of a {@link TerminalEmulator} into a {@link Canvas}.
@@ -23,6 +22,24 @@ import com.termux.terminal.WcWidth;
  * Saves font metrics, so needs to be recreated each time the typeface or font size changes.
  */
 public final class TerminalRenderer {
+
+    /** One explicit code-point range mapped to a font. Later entries override earlier ones. */
+    public static final class SymbolMap {
+        public final int firstCodePoint;
+        public final int lastCodePoint;
+        public final Typeface typeface;
+
+        public SymbolMap(int firstCodePoint, int lastCodePoint, Typeface typeface) {
+            if (firstCodePoint < 0 || lastCodePoint < firstCodePoint
+                || lastCodePoint > Character.MAX_CODE_POINT || typeface == null)
+                throw new IllegalArgumentException("Invalid symbol font range");
+            this.firstCodePoint = firstCodePoint;
+            this.lastCodePoint = lastCodePoint;
+            this.typeface = typeface;
+        }
+    }
+
+    private static final SymbolMap[] NO_SYMBOL_MAPS = new SymbolMap[0];
 
     final int mTextSize;
 
@@ -34,6 +51,8 @@ public final class TerminalRenderer {
     final Typeface mItalicTypeface;
 
     @Nullable final Typeface mBoldItalicTypeface;
+
+    final SymbolMap[] mSymbolMaps;
 
     private final Paint mTextPaint = new Paint();
     private Typeface mCurrentTypeface;
@@ -75,18 +94,28 @@ public final class TerminalRenderer {
     public TerminalRenderer(int textSize, Typeface typeface, Typeface italicTypeface) {
         this(textSize, typeface, null,
             italicTypeface != null && !italicTypeface.equals(typeface) ? italicTypeface : null,
-            null);
+            null, NO_SYMBOL_MAPS);
     }
 
     /** Construct a renderer with independent real faces; null variants use synthetic styling. */
     public TerminalRenderer(int textSize, Typeface typeface, @Nullable Typeface boldTypeface,
                             @Nullable Typeface italicTypeface,
                             @Nullable Typeface boldItalicTypeface) {
+        this(textSize, typeface, boldTypeface, italicTypeface, boldItalicTypeface, NO_SYMBOL_MAPS);
+    }
+
+    /** Construct a renderer with real faces and explicit per-code-point symbol fonts. */
+    public TerminalRenderer(int textSize, Typeface typeface, @Nullable Typeface boldTypeface,
+                            @Nullable Typeface italicTypeface,
+                            @Nullable Typeface boldItalicTypeface,
+                            @Nullable SymbolMap[] symbolMaps) {
         mTextSize = textSize;
         mTypeface = typeface;
         mBoldTypeface = boldTypeface;
         mItalicTypeface = italicTypeface;
         mBoldItalicTypeface = boldItalicTypeface;
+        mSymbolMaps = symbolMaps == null || symbolMaps.length == 0
+            ? NO_SYMBOL_MAPS : symbolMaps.clone();
         mTextPaint.setTypeface(typeface);
         mTextPaint.setAntiAlias(true);
         mTextPaint.setTextSize(textSize);
@@ -150,6 +179,7 @@ public final class TerminalRenderer {
             boolean lastRunFontWidthMismatch = false;
             int lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
             int lastRunHyperlinkId = 0;
+            Typeface lastRunSymbolTypeface = null;
             int currentCharIndex = 0;
             float measuredWidthForRun = 0.f;
             // Both live in side tables on the row rather than in the style long, so they are only
@@ -181,6 +211,7 @@ public final class TerminalRenderer {
                     lastRunFontWidthMismatch = false;
                     lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
                     lastRunHyperlinkId = 0;
+                    lastRunSymbolTypeface = null;
                     currentCharIndex += charsForCodePoint;
                     continue;
                 }
@@ -192,16 +223,22 @@ public final class TerminalRenderer {
                     | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0;
                 final boolean cellItalic = (effect & TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0;
                 final int faceStyle = (cellBold ? 1 : 0) | (cellItalic ? 2 : 0);
-                configureFont(cellBold, cellItalic);
+                final Typeface symbolTypeface = symbolTypefaceFor(codePoint);
+                configureFont(cellBold, cellItalic, symbolTypeface);
                 // Check if the measured text width for this code point is not the same as that expected by wcwidth().
                 // This could happen for some fonts which are not truly monospace, or for more exotic characters such as
                 // smileys which android font renders as wide.
                 // If this is detected, we draw this code point scaled to match what wcwidth() expects.
-                final float measuredCodePointWidth = (codePoint < mAsciiMeasures[faceStyle].length)
+                final float measuredCodePointWidth = (symbolTypeface == null
+                    && codePoint < mAsciiMeasures[faceStyle].length)
                     ? mAsciiMeasures[faceStyle][codePoint]
                     : mTextPaint.measureText(line, currentCharIndex, charsForCodePoint);
                 final boolean fontWidthMismatch = Math.abs(measuredCodePointWidth / mFontWidth - codePointWcWidth) > 0.01;
-                if (style != lastRunStyle || insideCursor != lastRunInsideCursor || insideSelection != lastRunInsideSelection || fontWidthMismatch || lastRunFontWidthMismatch || decorationColor != lastRunDecorationColor || hyperlinkId != lastRunHyperlinkId) {
+                if (style != lastRunStyle || insideCursor != lastRunInsideCursor
+                    || insideSelection != lastRunInsideSelection || fontWidthMismatch
+                    || lastRunFontWidthMismatch || decorationColor != lastRunDecorationColor
+                    || hyperlinkId != lastRunHyperlinkId
+                    || symbolTypeface != lastRunSymbolTypeface) {
                     if (column == 0 || column == lastRunStartColumn) {
                         // Skip first column as there is nothing to draw, just record the current style.
                     } else {
@@ -212,7 +249,13 @@ public final class TerminalRenderer {
                         if (lastRunInsideCursor && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK) {
                             invertCursorTextColor = true;
                         }
-                        drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn, columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun, measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, boldWithBright, reverseVideo || invertCursorTextColor || lastRunInsideSelection, horizontalOffset, lastRunDecorationColor, lastRunHyperlinkId != 0, 0);
+                        drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
+                            columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
+                            measuredWidthForRun, cursorColor, cursorShape, lastRunStyle,
+                            boldWithBright, reverseVideo || invertCursorTextColor
+                                || lastRunInsideSelection,
+                            horizontalOffset, lastRunDecorationColor,
+                            lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface);
                     }
                     measuredWidthForRun = 0.f;
                     lastRunStyle = style;
@@ -223,6 +266,7 @@ public final class TerminalRenderer {
                     lastRunFontWidthMismatch = fontWidthMismatch;
                     lastRunDecorationColor = decorationColor;
                     lastRunHyperlinkId = hyperlinkId;
+                    lastRunSymbolTypeface = symbolTypeface;
                 }
                 measuredWidthForRun += measuredCodePointWidth;
                 column += codePointWcWidth;
@@ -241,12 +285,22 @@ public final class TerminalRenderer {
             if (lastRunInsideCursor && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK) {
                 invertCursorTextColor = true;
             }
-            drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn, columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun, measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, boldWithBright, reverseVideo || invertCursorTextColor || lastRunInsideSelection, horizontalOffset, lastRunDecorationColor, lastRunHyperlinkId != 0, 0);
+            drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
+                columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
+                measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, boldWithBright,
+                reverseVideo || invertCursorTextColor || lastRunInsideSelection,
+                horizontalOffset, lastRunDecorationColor, lastRunHyperlinkId != 0, 0,
+                lastRunSymbolTypeface);
         }
         drawExtraCursors(mEmulator, canvas, screen, palette, topRow, endRow, boldWithBright, reverseVideo, horizontalOffset);
     }
 
-    private void drawTextRun(Canvas canvas, char[] text, int[] palette, float y, int startColumn, int runWidthColumns, int startCharIndex, int runWidthChars, float mes, int cursor, int cursorStyle, long textStyle, boolean boldWithBright, boolean reverseVideo, float horizontalOffset, int decorationColor, boolean hyperlink, int foregroundOverride) {
+    private void drawTextRun(Canvas canvas, char[] text, int[] palette, float y, int startColumn,
+                             int runWidthColumns, int startCharIndex, int runWidthChars, float mes,
+                             int cursor, int cursorStyle, long textStyle, boolean boldWithBright,
+                             boolean reverseVideo, float horizontalOffset, int decorationColor,
+                             boolean hyperlink, int foregroundOverride,
+                             @Nullable Typeface symbolTypeface) {
         int foreColor = TextStyle.decodeForeColor(textStyle);
         final int effect = TextStyle.decodeEffect(textStyle);
         int backColor = TextStyle.decodeBackColor(textStyle);
@@ -261,7 +315,7 @@ public final class TerminalRenderer {
         final int fontLineSpacing = mFontLineSpacing;
         final int fontAscent = mFontAscent;
         final int fontLineSpacingAndAscent = mFontLineSpacingAndAscent;
-        configureFont(bold, italic);
+        configureFont(bold, italic, symbolTypeface);
         // Measure the same shaped run that Canvas will draw. Per-code-point measureText() cannot
         // account for ligatures, Indic conjuncts, Arabic joining, or ZWJ emoji continuations.
         mes = mTextPaint.getTextRunAdvances(text, startCharIndex, runWidthChars,
@@ -372,7 +426,7 @@ public final class TerminalRenderer {
             char[] text = row.mText;
             int codePoint = Character.isHighSurrogate(text[startIndex])
                 ? Character.toCodePoint(text[startIndex], text[startIndex + 1]) : text[startIndex];
-            int width = Math.max(1, WcWidth.width(codePoint));
+            int width = Math.max(1, row.getDisplayWidthAt(startIndex));
             int endColumn = Math.min(emulator.mColumns, startColumn + width);
             int endIndex = row.findStartOfColumn(endColumn);
             int chars = Math.max(1, endIndex - startIndex);
@@ -409,16 +463,17 @@ public final class TerminalRenderer {
                 continue;
             }
             int effect = TextStyle.decodeEffect(style);
+            Typeface symbolTypeface = symbolTypefaceFor(codePoint);
             configureFont((effect & (TextStyle.CHARACTER_ATTRIBUTE_BOLD
-                | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0,
-                (effect & TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0);
+                    | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0,
+                (effect & TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0, symbolTypeface);
             float measured = mTextPaint.measureText(text, startIndex, chars);
             int decorationColor = row.hasDecorationColors() ? row.getDecorationColor(startColumn)
                 : TextStyle.DECORATION_COLOR_DEFAULT;
             boolean hyperlink = row.hasHyperlinks() && row.getHyperlinkId(startColumn) != 0;
             drawTextRun(canvas, text, palette, y, startColumn, width, startIndex, chars, measured,
                 cursorColor, shape, style, boldWithBright, reverseVideo || invertText, horizontalOffset,
-                decorationColor, hyperlink, textOverride);
+                decorationColor, hyperlink, textOverride, symbolTypeface);
         }
     }
 
@@ -430,10 +485,17 @@ public final class TerminalRenderer {
 
     /** Select a real face when configured and synthesize only the missing style component. */
     private void configureFont(boolean bold, boolean italic) {
+        configureFont(bold, italic, null);
+    }
+
+    /** Symbol fonts intentionally ignore SGR face synthesis, matching Kitty's explicit map. */
+    private void configureFont(boolean bold, boolean italic, @Nullable Typeface symbolTypeface) {
         Typeface desired;
         boolean fakeBold = false;
         boolean fakeItalic = false;
-        if (bold && italic) {
+        if (symbolTypeface != null) {
+            desired = symbolTypeface;
+        } else if (bold && italic) {
             if (mBoldItalicTypeface != null) {
                 desired = mBoldItalicTypeface;
             } else if (mItalicTypeface != null) {
@@ -462,6 +524,17 @@ public final class TerminalRenderer {
         }
         mTextPaint.setFakeBoldText(fakeBold);
         mTextPaint.setTextSkewX(fakeItalic ? -0.35f : 0f);
+    }
+
+    @Nullable
+    private Typeface symbolTypefaceFor(int codePoint) {
+        // Repeated directives are ordered; a later overlapping range wins.
+        for (int i = mSymbolMaps.length - 1; i >= 0; i--) {
+            SymbolMap map = mSymbolMaps[i];
+            if (codePoint >= map.firstCodePoint && codePoint <= map.lastCodePoint)
+                return map.typeface;
+        }
+        return null;
     }
 
     private static int resolveCellColor(int color, int[] palette) {
