@@ -1,8 +1,8 @@
 # Fonts and cluster-aware shaping
 
 Status: four-face configuration, Canvas shaping, the fixed-cell grapheme model, explicit symbol
-maps, and ligature policy were delivered and device-verified 2026-07-28; OpenType features are
-next.
+maps, ligature policy, and OpenType features were delivered and device-verified 2026-07-28;
+variable axes are next.
 
 This is the remaining Phase 4 project from the Kitty feasibility study. It extends Termux's native
 `~/.termux/font.ttf` contract instead of replacing it, and keeps the Canvas renderer unless device
@@ -41,6 +41,8 @@ Repeatable symbol maps use Kitty's range syntax:
 symbol_map U+E000-U+F8FF path=~/.termux/fonts/SymbolsNerdFontMono.ttf
 symbol_map U+E0A0-U+E0D7,U+F0001 family="Symbols Nerd Font Mono"
 disable_ligatures cursor
+font_features regular +zero -liga cv01=2
+font_features symbols +ss01
 ```
 
 An explicit map selects its font for the range. Unmapped clusters use the configured primary face
@@ -65,7 +67,7 @@ for path-backed mappings.
 5. **Ligature policy — complete.** Support `never`, `cursor`, and `always`. The renderer already breaks at the
    cursor for inversion; cursor-only disabling should use that boundary and a temporary feature
    setting rather than reshape unrelated cells.
-6. **OpenType features.** `Paint.setFontFeatureSettings()` exists below minSdk 26. Translate the
+6. **OpenType features — complete.** `Paint.setFontFeatureSettings()` exists below minSdk 26. Translate the
    user-facing feature syntax to Android's feature-settings form, scope settings to a face/run, and
    restore `Paint` state after every draw.
 7. **Variable axes.** `Paint.setFontVariationSettings()` is available at minSdk 26. Validate axes,
@@ -179,6 +181,24 @@ Pure policy tests cover every mode/cursor combination. Android 16 verifies that 
 breaks the platform programming-ligature probe, that restoring `Paint` restores identical shaping,
 and that cursor mode leaves runs away from the cursor unchanged. A live `disable_ligatures always`
 reload kept the foreground process healthy and the absent-config state was restored afterward.
+
+## Delivered: OpenType features
+
+`font_features` targets `regular`, `bold`, `italic`, `bold_italic`, or `symbols`, followed by one or
+more Kitty/HarfBuzz-style feature tokens. `+zero`, `-liga`, and `cv01=2` translate to Android's
+`'zero' 1, 'liga' 0, 'cv01' 2` form. Commas and whitespace are both accepted, `none` clears a prior
+target, a later directive replaces the target, and each target is bounded to 32 validated
+four-character tags with values from 0 through 65535.
+
+Face aliases are deliberate: Android does not reliably expose the PostScript name Kitty uses to
+target features after a font is loaded from an arbitrary path. Aliases remain deterministic for
+the four configured SGR faces, while `symbols` covers all explicit mapped-font runs. A setting is
+applied for both run measurement and drawing, composed with a later temporary `-calt` ligature
+override when required, and restored in the same `finally` boundary.
+
+Android 16 accepts the generated setting string, uses `font_features regular -calt` to break the
+programming-ligature fixture, and restores the original shaping afterward. A live reload with
+separate regular and bold features kept Termux healthy and the test config was removed afterward.
 
 ## Scope boundaries
 

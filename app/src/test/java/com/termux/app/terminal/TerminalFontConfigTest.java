@@ -54,6 +54,37 @@ public class TerminalFontConfigTest {
     }
 
     @Test
+    public void translatesFaceScopedOpenTypeFeaturesForAndroidPaint() {
+        TerminalFontConfig.Result result = TerminalFontConfig.parse(
+            "font_features regular +zero,-liga cv01=2\n"
+                + "font_features bold +calt\n"
+                + "font_features symbols ss01=3\n"
+                + "font_features bold none\n", true);
+
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+        assertEquals("'zero' 1, 'liga' 0, 'cv01' 2",
+            result.features(TerminalFontConfig.FeatureTarget.REGULAR));
+        assertEquals("'ss01' 3", result.features(TerminalFontConfig.FeatureTarget.SYMBOLS));
+        assertNull(result.features(TerminalFontConfig.FeatureTarget.BOLD));
+    }
+
+    @Test
+    public void rejectsMalformedOpenTypeFeaturesWithoutDiscardingOtherTargets() {
+        TerminalFontConfig.Result result = TerminalFontConfig.parse(
+            "font_features regular +zero\n"
+                + "font_features unknown +calt\n"
+                + "font_features bold +abc\n"
+                + "font_features italic +calt=2\n"
+                + "font_features symbols cv01=99999\n", true);
+
+        assertEquals(4, result.errors.size());
+        assertEquals("'zero' 1", result.features(TerminalFontConfig.FeatureTarget.REGULAR));
+        assertNull(result.features(TerminalFontConfig.FeatureTarget.BOLD));
+        assertNull(result.features(TerminalFontConfig.FeatureTarget.ITALIC));
+        assertNull(result.features(TerminalFontConfig.FeatureTarget.SYMBOLS));
+    }
+
+    @Test
     public void parsesRepeatableSymbolMapsAndCommaSeparatedRanges() {
         TerminalFontConfig.Result result = TerminalFontConfig.parse(
             "symbol_map U+E000-U+F8FF,U+F0001 path=~/.termux/fonts/nerd.ttf\n"

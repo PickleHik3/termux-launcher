@@ -114,7 +114,10 @@ public class CanvasShapingInstrumentationTest {
         Fixture arrow = new Fixture("cursor-arrow", "->", false, 2);
         float[] enabled = advances(paint, arrow);
 
-        paint.setFontFeatureSettings("'calt' 0");
+        TerminalFontConfig.Result config = TerminalFontConfig.parse(
+            "font_features regular -calt\n", true);
+        assertTrue(config.errors.toString(), config.errors.isEmpty());
+        paint.setFontFeatureSettings(config.features(TerminalFontConfig.FeatureTarget.REGULAR));
         float[] caltDisabled = advances(paint, arrow);
         paint.setFontFeatureSettings("'liga' 0, 'calt' 0");
         float[] disabled = advances(paint, arrow);

@@ -30,12 +30,14 @@ public final class TerminalFontLoader {
         @Nullable public final Typeface boldItalic;
         @NonNull public final TerminalRenderer.SymbolMap[] symbolMaps;
         @NonNull public final TerminalRenderer.LigaturePolicy ligaturePolicy;
+        @NonNull public final TerminalRenderer.FontFeatures fontFeatures;
         @NonNull public final List<String> errors;
 
         private Faces(@NonNull Typeface regular, @Nullable Typeface bold,
                       @Nullable Typeface italic, @Nullable Typeface boldItalic,
                       @NonNull TerminalRenderer.SymbolMap[] symbolMaps,
                       @NonNull TerminalRenderer.LigaturePolicy ligaturePolicy,
+                      @NonNull TerminalRenderer.FontFeatures fontFeatures,
                       @NonNull List<String> errors) {
             this.regular = regular;
             this.bold = bold;
@@ -43,6 +45,7 @@ public final class TerminalFontLoader {
             this.boldItalic = boldItalic;
             this.symbolMaps = symbolMaps.clone();
             this.ligaturePolicy = ligaturePolicy;
+            this.fontFeatures = fontFeatures;
             this.errors = Collections.unmodifiableList(new ArrayList<>(errors));
         }
     }
@@ -70,7 +73,14 @@ public final class TerminalFontLoader {
         TerminalRenderer.SymbolMap[] symbolMaps = loadSymbolMaps(config.symbolMaps, errors);
         TerminalRenderer.LigaturePolicy ligaturePolicy = TerminalRenderer.LigaturePolicy.valueOf(
             config.ligaturePolicy.name());
-        return new Faces(regular, bold, italic, boldItalic, symbolMaps, ligaturePolicy, errors);
+        TerminalRenderer.FontFeatures fontFeatures = new TerminalRenderer.FontFeatures(
+            config.features(TerminalFontConfig.FeatureTarget.REGULAR),
+            config.features(TerminalFontConfig.FeatureTarget.BOLD),
+            config.features(TerminalFontConfig.FeatureTarget.ITALIC),
+            config.features(TerminalFontConfig.FeatureTarget.BOLD_ITALIC),
+            config.features(TerminalFontConfig.FeatureTarget.SYMBOLS));
+        return new Faces(regular, bold, italic, boldItalic, symbolMaps, ligaturePolicy,
+            fontFeatures, errors);
     }
 
     @NonNull

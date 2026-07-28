@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 
@@ -29,12 +30,15 @@ public final class TerminalFontConfig {
     private static final int MAX_FAMILY_CHARS = 128;
     private static final int MAX_SYMBOL_MAPS = 256;
     private static final int MAX_SYMBOL_RANGES = 1024;
+    private static final int MAX_FEATURES_PER_TARGET = 32;
 
     public enum Face { REGULAR, BOLD, ITALIC, BOLD_ITALIC }
 
     public enum SourceType { PATH, FAMILY }
 
     public enum LigaturePolicy { NEVER, CURSOR, ALWAYS }
+
+    public enum FeatureTarget { REGULAR, BOLD, ITALIC, BOLD_ITALIC, SYMBOLS }
 
     public static final class FaceSpec {
         @NonNull public final SourceType type;
@@ -71,22 +75,32 @@ public final class TerminalFontConfig {
         @NonNull public final Map<Face, FaceSpec> faces;
         @NonNull public final List<SymbolMapSpec> symbolMaps;
         @NonNull public final LigaturePolicy ligaturePolicy;
+        @NonNull public final Map<FeatureTarget, String> fontFeatures;
         @NonNull public final List<String> errors;
 
         private Result(boolean filePresent, @NonNull Map<Face, FaceSpec> faces,
                        @NonNull List<SymbolMapSpec> symbolMaps,
-                       @NonNull LigaturePolicy ligaturePolicy, @NonNull List<String> errors) {
+                       @NonNull LigaturePolicy ligaturePolicy,
+                       @NonNull Map<FeatureTarget, String> fontFeatures,
+                       @NonNull List<String> errors) {
             this.filePresent = filePresent;
             EnumMap<Face, FaceSpec> faceCopy = new EnumMap<>(Face.class);
             faceCopy.putAll(faces);
             this.faces = Collections.unmodifiableMap(faceCopy);
             this.symbolMaps = Collections.unmodifiableList(new ArrayList<>(symbolMaps));
             this.ligaturePolicy = ligaturePolicy;
+            EnumMap<FeatureTarget, String> featureCopy = new EnumMap<>(FeatureTarget.class);
+            featureCopy.putAll(fontFeatures);
+            this.fontFeatures = Collections.unmodifiableMap(featureCopy);
             this.errors = Collections.unmodifiableList(new ArrayList<>(errors));
         }
 
         @Nullable public FaceSpec face(@NonNull Face face) {
             return faces.get(face);
+        }
+
+        @Nullable public String features(@NonNull FeatureTarget target) {
+            return fontFeatures.get(target);
         }
     }
 
@@ -127,6 +141,7 @@ public final class TerminalFontConfig {
         List<SymbolMapSpec> symbolMaps = new ArrayList<>();
         List<String> errors = new ArrayList<>();
         LigaturePolicy ligaturePolicy = LigaturePolicy.NEVER;
+        EnumMap<FeatureTarget, String> fontFeatures = new EnumMap<>(FeatureTarget.class);
         int symbolRangeCount = 0;
         String[] lines = content.split("\\r?\\n", -1);
         for (int i = 0; i < lines.length; i++) {
@@ -138,6 +153,26 @@ public final class TerminalFontConfig {
                 continue;
             }
             if (words.isEmpty()) continue;
+            if ("font_features".equalsIgnoreCase(words.get(0))) {
+                if (words.size() < 3) {
+                    errors.add("line " + (i + 1)
+                        + ": expected font_features target and one or more features");
+                    continue;
+                }
+                FeatureTarget target = featureTarget(words.get(1));
+                if (target == null) {
+                    errors.add("line " + (i + 1)
+                        + ": feature target must be regular, bold, italic, bold_italic, or symbols");
+                    continue;
+                }
+                if (words.size() == 3 && "none".equalsIgnoreCase(words.get(2))) {
+                    fontFeatures.remove(target);
+                    continue;
+                }
+                String settings = parseFeatureSettings(words, 2, i + 1, errors);
+                if (settings != null) fontFeatures.put(target, settings);
+                continue;
+            }
             if ("disable_ligatures".equalsIgnoreCase(words.get(0))) {
                 if (words.size() != 2) {
                     errors.add("line " + (i + 1)
@@ -186,7 +221,77 @@ public final class TerminalFontConfig {
             FaceSpec source = parseSource(words.get(1), i + 1, errors);
             if (source != null) faces.put(face, source);
         }
-        return new Result(filePresent, faces, symbolMaps, ligaturePolicy, errors);
+        return new Result(filePresent, faces, symbolMaps, ligaturePolicy, fontFeatures, errors);
+    }
+
+    @Nullable
+    private static FeatureTarget featureTarget(@NonNull String value) {
+        try {
+            return FeatureTarget.valueOf(value.toUpperCase(Locale.US));
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    @Nullable
+    private static String parseFeatureSettings(@NonNull List<String> words, int start, int line,
+                                               @NonNull List<String> errors) {
+        LinkedHashMap<String, Integer> features = new LinkedHashMap<>();
+        for (int i = start; i < words.size(); i++) {
+            for (String item : words.get(i).split(",", -1)) {
+                if (item.isEmpty() || "none".equalsIgnoreCase(item)) {
+                    errors.add("line " + line + ": invalid OpenType feature '" + item + "'");
+                    return null;
+                }
+                boolean disabled = item.charAt(0) == '-';
+                int tagStart = item.charAt(0) == '+' || disabled ? 1 : 0;
+                int equals = item.indexOf('=', tagStart);
+                String tag = equals < 0 ? item.substring(tagStart) : item.substring(tagStart, equals);
+                if (!isFeatureTag(tag)) {
+                    errors.add("line " + line + ": feature tags must be four ASCII letters or digits");
+                    return null;
+                }
+                int value = disabled ? 0 : 1;
+                if (equals >= 0) {
+                    if (tagStart != 0) {
+                        errors.add("line " + line + ": feature values cannot also use + or -");
+                        return null;
+                    }
+                    try {
+                        value = Integer.parseInt(item.substring(equals + 1));
+                    } catch (NumberFormatException e) {
+                        value = -1;
+                    }
+                    if (value < 0 || value > 65535) {
+                        errors.add("line " + line + ": feature values must be between 0 and 65535");
+                        return null;
+                    }
+                }
+                if (features.containsKey(tag)) features.remove(tag);
+                features.put(tag, value);
+                if (features.size() > MAX_FEATURES_PER_TARGET) {
+                    errors.add("line " + line + ": feature count exceeds "
+                        + MAX_FEATURES_PER_TARGET);
+                    return null;
+                }
+            }
+        }
+        StringBuilder result = new StringBuilder();
+        for (Map.Entry<String, Integer> feature : features.entrySet()) {
+            if (result.length() > 0) result.append(", ");
+            result.append('\'').append(feature.getKey()).append("' ").append(feature.getValue());
+        }
+        return result.toString();
+    }
+
+    private static boolean isFeatureTag(@NonNull String tag) {
+        if (tag.length() != 4) return false;
+        for (int i = 0; i < tag.length(); i++) {
+            char c = tag.charAt(i);
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                || (c >= '0' && c <= '9'))) return false;
+        }
+        return true;
     }
 
     @Nullable
@@ -268,7 +373,7 @@ public final class TerminalFontConfig {
     private static Result empty(boolean present, @Nullable String error) {
         List<String> errors = error == null ? Collections.emptyList() : Collections.singletonList(error);
         return new Result(present, Collections.emptyMap(), Collections.emptyList(),
-            LigaturePolicy.NEVER, errors);
+            LigaturePolicy.NEVER, Collections.emptyMap(), errors);
     }
 
     /** Split one config line, allowing quotes and backslash escapes; # starts a comment. */
