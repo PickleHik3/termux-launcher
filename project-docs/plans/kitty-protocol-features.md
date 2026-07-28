@@ -85,6 +85,25 @@ Both are preserved by the same paths: `setChar`, `copyInterval`, reflow inside
   change and not animated. Reset on session switch and on reflow, where the remembered cell no
   longer means anything.
 
+  **Fixed after the first device pass, from a report that it worked inside tmux but not at a raw
+  prompt.** Four defects, in order of how much they mattered:
+
+  - *It gated on whether the cursor was being drawn this frame.* With a blinking cursor the remembered
+    cell was cleared on every blink-off frame, so a streak could never start. That is the tmux
+    difference: `DECSCUSR` with an odd parameter turns blinking on, fish sets exactly that on startup,
+    and tmux normalizes it to a steady cursor. It now tracks `isCursorEnabled()` — has the program
+    hidden the cursor — and is indifferent to the blink phase.
+  - *The streak was the rectangle bounding the two cells.* On a diagonal move that is a block covering
+    every cell between them: the reported screenshot showed a nine-by-five block tinting 45 cells of
+    an editor. It is now the convex hull of the two cursor cells, a band one cell wide along the
+    direction of travel, built by a monotone chain over the eight corners — cheaper than case analysis
+    for eight directions and unable to get one of them wrong. `CursorTrailHullTest` pins the shape.
+  - *Too heavy and too slow.* Peak alpha 0.55 to 0.3, duration 70-160ms to 60-120ms, and both the
+    tail's catch-up and the fade now ease out, so the streak is mostly gone early instead of lingering
+    long enough to be caught in a screenshot.
+  - *No minimum distance.* Typing advances one column per keystroke, which drew a two-cell blob on
+    every letter. Moves shorter than two cells are no longer animated.
+
   On or off is decided in `app` by `TermuxTerminalViewClient.applyCursorTrailPolicy`: the new
   `terminal_cursor_trail` preference (default on) and `PowerManager.isPowerSaveMode()`,
   re-read on resume because the user can change either while the activity is stopped.
@@ -205,8 +224,8 @@ and `~/.termux/workspaces/<name>.json`.
 covered here into a terminal for eyeballing.
 
 Unit tests: `UnderlineStyleTest` (16), `HyperlinkTest` (15), `ShellIntegrationTest` (10),
-`KittyKeyboardProtocolTest` (29), `TerminalKeyInspectorTest` (6). `terminal-emulator` is at 220
-passing tests, 0 failing.
+`KittyKeyboardProtocolTest` (29), `TerminalKeyInspectorTest` (6), `CursorTrailHullTest` (6).
+`terminal-emulator` is at 220 passing tests and `terminal-view` at 6, both with 0 failing.
 `:app:testDebugUnitTest` still fails the documented 48 environmental tests across the same
 12 classes and no others — compare against that baseline, not against green.
 

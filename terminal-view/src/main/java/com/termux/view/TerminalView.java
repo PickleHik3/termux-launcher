@@ -1519,7 +1519,7 @@ public final class TerminalView extends View {
             if (mCursorTrail.isEnabled() && !isSelectingText()) {
                 boolean needsAnotherFrame = mCursorTrail.draw(canvas, mEmulator.getCursorCol(), mEmulator.getCursorRow(), mTopRow,
                     mRenderer.mFontWidth, mRenderer.mFontLineSpacing, getHorizontalContentOffset(), mRenderer.mFontLineSpacingAndAscent,
-                    mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR], mEmulator.shouldCursorBeVisible());
+                    mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR], mEmulator.isCursorEnabled());
                 if (needsAnotherFrame)
                     postInvalidateOnAnimation();
             }
