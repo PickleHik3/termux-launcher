@@ -71,6 +71,9 @@ public final class TerminalView extends View {
     /** Draws the streak between the cursor's old and new cell. Purely visual. */
     private final CursorTrail mCursorTrail = new CursorTrail();
 
+    /** Per-pane timing counters; recording uses only primitive fields and fixed arrays. */
+    private final TerminalRenderMetrics mRenderMetrics = new TerminalRenderMetrics();
+
     /**
      * A sink for what key input actually reached the shell, for the app's key inspector.
      * <p>
@@ -1510,6 +1513,7 @@ public final class TerminalView extends View {
         if (mEmulator == null) {
             canvas.drawColor(0XFF000000);
         } else {
+            long drawStartNanos = SystemClock.elapsedRealtimeNanos();
             // render the terminal view and highlight any selected text
             int[] sel = mDefaultSelectors;
             if (mTextSelectionCursorController != null) {
@@ -1525,7 +1529,23 @@ public final class TerminalView extends View {
             }
             // render the text selection handles
             renderTextSelection();
+            long drawEndNanos = SystemClock.elapsedRealtimeNanos();
+            android.view.Display display = getDisplay();
+            float refreshRate = display == null ? 60f : display.getRefreshRate();
+            long frameBudgetNanos = refreshRate > 0f
+                ? (long) (1_000_000_000d / refreshRate) : 16_666_667L;
+            mRenderMetrics.recordDraw(drawStartNanos, drawEndNanos, frameBudgetNanos);
         }
+    }
+
+    /** Snapshot of this pane's renderer counters. Percentiles allocate only when queried. */
+    public TerminalRenderMetrics.Snapshot getRenderMetricsSnapshot() {
+        return mRenderMetrics.snapshot();
+    }
+
+    /** Starts a fresh benchmark window for this pane. */
+    public void resetRenderMetrics() {
+        mRenderMetrics.reset();
     }
 
     /** Install or remove the key input diagnostic sink. */
@@ -1604,6 +1624,19 @@ public final class TerminalView extends View {
 
     public void setTopRow(int mTopRow) {
         this.mTopRow = mTopRow;
+    }
+
+    /** Jump to a row from the screen buffer's external coordinate system. */
+    public boolean jumpToBufferRow(int row) {
+        if (mEmulator == null) return false;
+        int lowest = -mEmulator.getScreen().getActiveTranscriptRows();
+        int newTopRow = Math.max(lowest, Math.min(0, row));
+        if (newTopRow == mTopRow) return false;
+        mTopRow = newTopRow;
+        mCursorTrail.reset();
+        if (isSelectingText()) stopTextSelectionMode();
+        invalidate();
+        return true;
     }
 
     /**

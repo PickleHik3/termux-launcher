@@ -8,6 +8,8 @@ import android.content.Context;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.text.TextUtils;
 import android.view.Gravity;
@@ -60,6 +62,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -99,6 +102,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     private static final long KEYBOARD_STANDARD_RETRY_DELAY_MS = 300L;
     /** Second retry for devices whose resumed window becomes IME-ready later. */
     private static final long KEYBOARD_RESUME_SECOND_RETRY_DELAY_MS = 320L;
+    /** Matches kitty's default multi-key mapping timeout. */
+    private static final long KEY_CHORD_TIMEOUT_MS = 2_000L;
     private static final ExecutorService REPORT_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "termux-report-builder");
         thread.setDaemon(true);
@@ -106,11 +111,16 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     });
     private SuggestionBarCallback mSuggestionBarCallback;
     private final View.OnFocusChangeListener mTerminalFocusChangeListener;
+    private final Handler mKeyChordHandler = new Handler(Looper.getMainLooper());
+    private final TerminalKeyChordOverlay mKeyChordOverlay;
+    private final Runnable mKeyChordTimeout = this::cancelPendingKeyChord;
+    private final Runnable mKeyModeTimeout = this::expireKeyMode;
 
     public TermuxTerminalViewClient(TermuxActivity activity, TermuxTerminalSessionActivityClient termuxTerminalSessionActivityClient) {
         this.mActivity = activity;
         this.mTermuxTerminalSessionActivityClient = termuxTerminalSessionActivityClient;
         this.mTerminalFocusChangeListener = this::onTerminalFocusChanged;
+        this.mKeyChordOverlay = new TerminalKeyChordOverlay(activity);
     }
 
     public TermuxActivity getActivity() {
@@ -198,6 +208,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (mShowSoftKeyboardRunnable != null) {
             mActivity.getTerminalView().removeCallbacks(mShowSoftKeyboardRunnable);
         }
+        cancelPendingKeyChord();
+        TerminalKeyBindingResolver.getInstance().clearModes();
+        mKeyChordHandler.removeCallbacks(mKeyModeTimeout);
     }
 
     /**
@@ -205,6 +218,16 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      */
     public void onReloadProperties() {
         setSessionShortcuts();
+        cancelPendingKeyChord();
+        mKeyChordHandler.removeCallbacks(mKeyModeTimeout);
+        TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.reloadUserBindings();
+        if (!resolver.getConfigErrors().isEmpty()) {
+            for (String error : resolver.getConfigErrors())
+                Logger.logError(LOG_TAG, "Binding config: " + error);
+            mActivity.showToast(mActivity.getResources().getQuantityString(
+                R.plurals.terminal_binding_config_errors, resolver.getConfigErrors().size(),
+                resolver.getConfigErrors().size()), true);
+        }
     }
 
     /**
@@ -360,27 +383,142 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      * the legacy chain quietly did nothing.
      */
     private boolean handleRegistryKeybinds(KeyEvent e) {
-        if (mActivity.getProperties().areHardwareKeyboardShortcutsDisabled())
+        TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
+        if (mActivity.getProperties().areHardwareKeyboardShortcutsDisabled()) {
+            if (resolver.cancelPendingSequence()) clearPendingKeyChordUi();
             return false;
-        if (!(e.isAltPressed() && e.isCtrlPressed()))
-            return false;
+        }
 
         TerminalActionDispatcher dispatcher = TerminalActionDispatcher.getInstance();
-        TerminalKeyBindingResolver.Match match =
-            TerminalKeyBindingResolver.getInstance().resolve(e, dispatcher.actionContext());
+        TerminalKeyBindingResolver.Step step = resolver.advance(e, dispatcher.actionContext());
+        if (step.kind == TerminalKeyBindingResolver.Step.Kind.NONE) {
+            // Preserve the historical Termux contract: unmatched Ctrl+Alt strokes
+            // are swallowed while hardware shortcuts are enabled.
+            return e.isAltPressed() && e.isCtrlPressed();
+        }
+        if (step.kind == TerminalKeyBindingResolver.Step.Kind.PASSTHROUGH)
+            return false;
+        if (step.kind == TerminalKeyBindingResolver.Step.Kind.IGNORED) {
+            refreshKeyModeUi(resolver);
+            return true;
+        }
+        if (step.kind == TerminalKeyBindingResolver.Step.Kind.PENDING) {
+            mKeyChordHandler.removeCallbacks(mKeyChordTimeout);
+            mKeyChordHandler.postDelayed(mKeyChordTimeout, KEY_CHORD_TIMEOUT_MS);
+            mKeyChordOverlay.show(step.pendingSequence);
+            return true;
+        }
+        clearPendingKeyChordUi();
+        if (step.kind == TerminalKeyBindingResolver.Step.Kind.CANCELLED) {
+            mActivity.getWindow().getDecorView().playSoundEffect(
+                android.view.SoundEffectConstants.CLICK);
+            refreshKeyModeUi(resolver);
+            return true;
+        }
+
+        TerminalKeyBindingResolver.Match match = step.match;
+        if (match == null) return true;
         TerminalKeyInspector inspector = TerminalKeyInspector.active();
         if (inspector != null)
             inspector.recordBinding(match == null ? null : match.stroke, match == null ? null : match.toolName);
         if (match == null)
             return true; // unbound Ctrl+Alt stroke: swallowed, as before
 
-        JSONObject result = dispatcher.execute(match.toolName, match.arguments);
-        if (!result.optBoolean("ok", false)) {
-            Logger.logWarn(LOG_TAG, "Binding " + match.stroke + " -> " + match.toolName
-                + " failed: " + result.optString("message"));
-            return true;
+        boolean handled = false;
+        for (TerminalBindingConfig.Action action : match.actions) {
+            if (action.type == TerminalBindingConfig.ActionType.PUSH_MODE) {
+                handled |= resolver.pushMode(action.value);
+                continue;
+            }
+            if (action.type == TerminalBindingConfig.ActionType.POP_MODE) {
+                handled |= resolver.popMode();
+                continue;
+            }
+            if (action.type == TerminalBindingConfig.ActionType.SEND_TEXT) {
+                TerminalSession session = mActivity.getCurrentSession();
+                if (session == null) {
+                    Logger.logWarn(LOG_TAG, "Binding " + match.stroke + " cannot send text: no session");
+                } else {
+                    session.write(action.value);
+                }
+                handled = true;
+                continue;
+            }
+            if (action.type == TerminalBindingConfig.ActionType.SEND_KEY) {
+                TerminalSession session = mActivity.getCurrentSession();
+                String encoded = session == null ? null
+                    : TerminalBindingKeyEncoder.encode(action.value, session.getEmulator());
+                if (encoded == null) {
+                    Logger.logWarn(LOG_TAG, "Binding " + match.stroke
+                        + " cannot encode send-key " + action.value);
+                } else {
+                    session.write(encoded);
+                }
+                handled = true;
+                continue;
+            }
+
+            JSONObject arguments = mergeArguments(action.arguments, match.arguments);
+            JSONObject result = dispatcher.execute(action.value, arguments);
+            if (!result.optBoolean("ok", false)) {
+                Logger.logWarn(LOG_TAG, "Binding " + match.stroke + " -> " + action.value
+                    + " failed: " + result.optString("message"));
+                handled = true;
+                continue;
+            }
+            handled |= result.optBoolean("handled", true);
         }
-        return result.optBoolean("handled", true);
+        resolver.afterMatch(match);
+        refreshKeyModeUi(resolver);
+        return handled;
+    }
+
+    @NonNull
+    private static JSONObject mergeArguments(@NonNull JSONObject configured,
+                                             @NonNull JSONObject derived) {
+        JSONObject result = new JSONObject();
+        copyJson(configured, result);
+        copyJson(derived, result);
+        return result;
+    }
+
+    private static void copyJson(@NonNull JSONObject source, @NonNull JSONObject target) {
+        Iterator<String> keys = source.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            try {
+                target.put(key, source.get(key));
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private void cancelPendingKeyChord() {
+        TerminalKeyBindingResolver.getInstance().cancelPendingSequence();
+        clearPendingKeyChordUi();
+    }
+
+    private void clearPendingKeyChordUi() {
+        mKeyChordHandler.removeCallbacks(mKeyChordTimeout);
+        mKeyChordOverlay.hide();
+    }
+
+    private void refreshKeyModeUi(@NonNull TerminalKeyBindingResolver resolver) {
+        mKeyChordHandler.removeCallbacks(mKeyModeTimeout);
+        String mode = resolver.getCurrentMode();
+        if (mode.isEmpty()) {
+            mKeyChordOverlay.hide();
+            return;
+        }
+        mKeyChordOverlay.showMode(mode);
+        long timeout = resolver.getCurrentModeTimeoutMillis();
+        if (timeout > 0) mKeyChordHandler.postDelayed(mKeyModeTimeout, timeout);
+    }
+
+    private void expireKeyMode() {
+        TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
+        resolver.popCurrentModeOnTimeout();
+        refreshKeyModeUi(resolver);
     }
 
     @Override
@@ -891,6 +1029,19 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             });
         });
         dialog.show();
+    }
+
+    /** Show the keyboard-addressable URL/path/hash/line-reference hint picker. */
+    public void showHintsOverlay() {
+        TerminalSession session = mActivity.getCurrentSession();
+        if (session == null) return;
+        String text = ShellUtils.getTerminalSessionTranscriptText(session, true, true);
+        TerminalHintsOverlay.show(mActivity, text == null ? "" : text);
+    }
+
+    public void showScrollbackSearch() {
+        TerminalView view = mActivity.getTerminalView();
+        if (view != null) TerminalScrollbackSearchOverlay.show(mActivity, view);
     }
 
     public void reportIssueFromTranscript() {

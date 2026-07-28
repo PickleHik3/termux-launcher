@@ -128,7 +128,8 @@ public class TerminalKeyBindingResolverTest {
             assertEquals("session.previous", tool(KeyEvent.KEYCODE_P, CTRL_ALT, ctx));
             assertEquals("terminal.toggle_soft_keyboard", tool(KeyEvent.KEYCODE_K, CTRL_ALT, ctx));
             assertEquals("terminal.action_sheet", tool(KeyEvent.KEYCODE_M, CTRL_ALT, ctx));
-            assertEquals("terminal.select_url", tool(KeyEvent.KEYCODE_U, CTRL_ALT, ctx));
+            assertEquals("terminal.hints", tool(KeyEvent.KEYCODE_U, CTRL_ALT, ctx));
+            assertEquals("terminal.search_scrollback", tool(KeyEvent.KEYCODE_S, CTRL_ALT, ctx));
             assertEquals("terminal.font_size_decrease", tool(KeyEvent.KEYCODE_MINUS, CTRL_ALT, ctx));
             assertEquals("terminal.font_size_increase", tool(KeyEvent.KEYCODE_PLUS, CTRL_ALT, ctx));
             assertEquals("session.new", tool(KeyEvent.KEYCODE_C, CTRL_ALT_SHIFT, ctx));
@@ -161,6 +162,128 @@ public class TerminalKeyBindingResolverTest {
         assertEquals("app.command_palette", tool(KeyEvent.KEYCODE_P, CTRL_ALT_SHIFT, SPLITS_ON));
         assertEquals("app.command_palette", tool(KeyEvent.KEYCODE_P, CTRL_ALT_SHIFT, SPLITS_OFF));
         assertEquals("session.previous", tool(KeyEvent.KEYCODE_P, CTRL_ALT, SPLITS_ON));
+    }
+
+    @Test
+    public void commandPaletteLeaderChord_waitsThenMatches() {
+        TerminalKeyBindingResolver.Step first = resolver.advance(
+            key(KeyEvent.KEYCODE_SPACE, CTRL_ALT), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.PENDING, first.kind);
+        assertEquals("ctrl+alt+space", first.pendingSequence);
+        assertTrue(resolver.hasPendingSequence());
+
+        TerminalKeyBindingResolver.Step second = resolver.advance(key(KeyEvent.KEYCODE_P, 0), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, second.kind);
+        assertNotNull(second.match);
+        assertEquals("app.command_palette", second.match.toolName);
+        assertEquals("ctrl+alt+space>p", second.match.stroke);
+        org.junit.Assert.assertFalse(resolver.hasPendingSequence());
+    }
+
+    @Test
+    public void userConfigOverridesDefaultsAndRunsMultipleActions() {
+        TerminalBindingConfig.Result config = TerminalBindingConfig.parse(
+            "unmap ctrl+alt+v\n"
+                + "map ctrl+alt+space>q terminal.font_size_increase\n"
+                + "map ctrl+alt+space>q terminal.font_size_decrease\n",
+            LauncherToolRegistry.getInstance(), true);
+        assertTrue(config.errors.toString(), config.errors.isEmpty());
+        TerminalKeyBindingResolver.installConfigForTesting(config);
+        resolver = TerminalKeyBindingResolver.getInstance();
+
+        assertNull(tool(KeyEvent.KEYCODE_V, CTRL_ALT, SPLITS_ON));
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.PENDING,
+            resolver.advance(key(KeyEvent.KEYCODE_SPACE, CTRL_ALT), SPLITS_ON).kind);
+        TerminalKeyBindingResolver.Step result = resolver.advance(key(KeyEvent.KEYCODE_Q, 0), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, result.kind);
+        assertEquals(2, result.match.actions.size());
+        assertEquals("terminal.font_size_increase", result.match.actions.get(0).value);
+        assertEquals("terminal.font_size_decrease", result.match.actions.get(1).value);
+        assertTrue(resolver.getStrokesForTool("terminal.font_size_increase", SPLITS_ON)
+            .contains("ctrl+alt+space>q"));
+    }
+
+    @Test
+    public void unknownContinuation_cancelsAndConsumesTheSequence() {
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.PENDING,
+            resolver.advance(key(KeyEvent.KEYCODE_SPACE, CTRL_ALT), SPLITS_ON).kind);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.CANCELLED,
+            resolver.advance(key(KeyEvent.KEYCODE_Q, 0), SPLITS_ON).kind);
+        org.junit.Assert.assertFalse(resolver.hasPendingSequence());
+    }
+
+    @Test
+    public void escapeAndTimeoutCancellation_discardPendingKeys() {
+        resolver.advance(key(KeyEvent.KEYCODE_SPACE, CTRL_ALT), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.CANCELLED,
+            resolver.advance(key(KeyEvent.KEYCODE_ESCAPE, 0), SPLITS_ON).kind);
+        resolver.advance(key(KeyEvent.KEYCODE_SPACE, CTRL_ALT), SPLITS_ON);
+        assertTrue(resolver.cancelPendingSequence());
+        org.junit.Assert.assertFalse(resolver.cancelPendingSequence());
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.NONE,
+            resolver.advance(key(KeyEvent.KEYCODE_P, 0), SPLITS_ON).kind);
+    }
+
+    @Test
+    public void modalMapPushesMatchesAndPops() {
+        installModal("map --new-mode panes --timeout 5 --on-unknown passthrough ctrl+alt+g\n"
+            + "map --mode panes h send-text left\n"
+            + "map --mode panes escape pop-mode\n");
+        TerminalKeyBindingResolver.Step enter = resolver.advance(key(KeyEvent.KEYCODE_G, CTRL_ALT), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, enter.kind);
+        assertEquals(TerminalBindingConfig.ActionType.PUSH_MODE, enter.match.actions.get(0).type);
+        assertTrue(resolver.pushMode(enter.match.actions.get(0).value));
+        assertEquals("panes", resolver.getCurrentMode());
+        assertEquals(5000L, resolver.getCurrentModeTimeoutMillis());
+
+        TerminalKeyBindingResolver.Step action = resolver.advance(key(KeyEvent.KEYCODE_H, 0), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, action.kind);
+        assertEquals("left", action.match.actions.get(0).value);
+        assertEquals("panes", action.match.mode);
+        resolver.afterMatch(action.match);
+        assertEquals("panes", resolver.getCurrentMode());
+
+        TerminalKeyBindingResolver.Step exit = resolver.advance(key(KeyEvent.KEYCODE_ESCAPE, 0), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, exit.kind);
+        assertTrue(resolver.popMode());
+        assertEquals("", resolver.getCurrentMode());
+    }
+
+    @Test
+    public void modalUnknownPoliciesAndEndOnAction() {
+        installModal("map --new-mode pass --on-unknown passthrough ctrl+alt+g\n"
+            + "map --mode pass h send-text x\n"
+            + "map --new-mode once --on-unknown ignore --on-action end ctrl+alt+o\n"
+            + "map --mode once q send-text q\n");
+        TerminalKeyBindingResolver.Step enterPass = resolver.advance(key(KeyEvent.KEYCODE_G, CTRL_ALT), SPLITS_ON);
+        resolver.pushMode(enterPass.match.actions.get(0).value);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.PASSTHROUGH,
+            resolver.advance(key(KeyEvent.KEYCODE_Z, 0), SPLITS_ON).kind);
+        resolver.popMode();
+
+        TerminalKeyBindingResolver.Step enterOnce = resolver.advance(key(KeyEvent.KEYCODE_O, CTRL_ALT), SPLITS_ON);
+        resolver.pushMode(enterOnce.match.actions.get(0).value);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.IGNORED,
+            resolver.advance(key(KeyEvent.KEYCODE_Z, 0), SPLITS_ON).kind);
+        TerminalKeyBindingResolver.Step q = resolver.advance(key(KeyEvent.KEYCODE_Q, 0), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, q.kind);
+        assertTrue(resolver.afterMatch(q.match));
+        assertEquals("", resolver.getCurrentMode());
+    }
+
+    @Test
+    public void modalModesStackAndTimeoutOneLevelAtATime() {
+        installModal("map --new-mode outer --timeout 0 ctrl+alt+g\n"
+            + "map --mode outer h send-text h\n"
+            + "map --new-mode inner --timeout 1 ctrl+alt+i\n"
+            + "map --mode inner q send-text q\n");
+        assertTrue(resolver.pushMode("outer"));
+        assertTrue(resolver.pushMode("inner"));
+        assertEquals("inner", resolver.getCurrentMode());
+        assertEquals(1000L, resolver.getCurrentModeTimeoutMillis());
+        assertTrue(resolver.popCurrentModeOnTimeout());
+        assertEquals("outer", resolver.getCurrentMode());
+        assertEquals(0L, resolver.getCurrentModeTimeoutMillis());
     }
 
     // ---------------------------------------------------------------- arguments
@@ -240,12 +363,32 @@ public class TerminalKeyBindingResolverTest {
 
     // ---------------------------------------------------------------- helpers
 
+    private void installModal(String configText) {
+        TerminalBindingConfig.Result config = TerminalBindingConfig.parse(configText,
+            LauncherToolRegistry.getInstance(), true);
+        assertTrue(config.errors.toString(), config.errors.isEmpty());
+        TerminalKeyBindingResolver.installConfigForTesting(config);
+        resolver = TerminalKeyBindingResolver.getInstance();
+    }
+
     @Test
     public void strokeSpecNormalization_isCaseAndOrderInsensitive() {
         assertEquals("ctrl+alt+v", TerminalKeyBindingResolver.normalizeStrokeSpec("Ctrl+Alt+V"));
         assertEquals("ctrl+alt+v", TerminalKeyBindingResolver.normalizeStrokeSpec("alt+ctrl+v"));
         assertEquals("ctrl+alt+shift+left", TerminalKeyBindingResolver.normalizeStrokeSpec("SHIFT+ALT+CTRL+left"));
         assertEquals("ctrl+alt+]", TerminalKeyBindingResolver.normalizeStrokeSpec("Control+Alt+]"));
+    }
+
+    @Test
+    public void sequenceSpecNormalization_normalizesEveryStroke() {
+        assertEquals("ctrl+alt+space>shift+p",
+            TerminalKeyBindingResolver.normalizeSequenceSpec("Alt+Ctrl+Space > Shift+P"));
+    }
+
+    @Test
+    public void pendingOverlay_formatsASequenceForPeople() {
+        assertEquals("Ctrl+Alt+Space  ›  P",
+            TerminalKeyChordOverlay.displaySequence("ctrl+alt+space>p"));
     }
 
     @Test

@@ -44,6 +44,9 @@ public class TerminalBitmap {
 
     public int[] cursorDelta;
 
+    /** Non-negative for a kitty graphics placement, -1 for sixel and iTerm images. */
+    public long kittyImageId = -1;
+
     private static final String LOG_TAG = "TerminalBitmap";
 
     public TerminalBitmap(int num, TerminalSixel sixel, int Y, int X, int cellW, int cellH, TerminalBuffer screen) {
@@ -140,6 +143,17 @@ public class TerminalBitmap {
         cursorDelta = new int[] { scrollLines, (bitmap.getWidth() + cellW - 1) / cellW };
     }
 
+    public TerminalBitmap(int num, Bitmap image, long imageId, int y, int x, int cellW, int cellH,
+                          TerminalBuffer screen) {
+        kittyImageId = imageId;
+        Bitmap constrained = resizeBitmapConstraints(image, image.getWidth(), image.getHeight(), cellW, cellH,
+            screen.mColumns - x);
+        if (constrained != image) image.recycle();
+        addBitmap(num, constrained, y, x, cellW, cellH, screen);
+        if (bitmap != null)
+            cursorDelta = new int[] { scrollLines, (bitmap.getWidth() + cellW - 1) / cellW };
+    }
+
     private void addBitmap(int num, Bitmap bm, int Y, int X, int cellW, int cellH, TerminalBuffer screen) {
         if (bm == null) {
             bitmap = null;
@@ -182,7 +196,7 @@ public class TerminalBitmap {
             return null;
         }
 
-        int[] pixels = new int[bm.getAllocationByteCount()];
+        int[] pixels = new int[bm.getWidth() * bm.getHeight()];
         bm.getPixels(pixels, 0, bm.getWidth(), 0, 0, bm.getWidth(), bm.getHeight());
         Bitmap newbm;
         try {

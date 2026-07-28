@@ -202,13 +202,7 @@ public final class TerminalCommandPalette {
     @NonNull
     static List<String> strokesFor(@NonNull LauncherToolRegistry.ToolMetadata tool,
                                    @NonNull LauncherToolRegistry.ActionContext context) {
-        List<String> strokes = new ArrayList<>(tool.defaultBindings.size());
-        for (LauncherToolRegistry.Binding binding : tool.defaultBindings) {
-            if (binding.condition.holds(context)) {
-                strokes.add(binding.stroke);
-            }
-        }
-        return strokes;
+        return TerminalKeyBindingResolver.getInstance().getStrokesForTool(tool.name, context);
     }
 
     static boolean hasRequiredArguments(@NonNull LauncherToolRegistry.ToolMetadata tool) {

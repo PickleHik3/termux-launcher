@@ -23,6 +23,7 @@ public class TerminalActionDispatcherTest {
             "terminal.state", "pane.split_vertical", "pane.split_horizontal", "pane.focus_direction",
             "pane.resize", "pane.kill_focused", "window.new", "window.close", "window.next",
             "window.previous", "session.new", "session.next", "session.previous", "session.close_current",
+            "session.browser", "session.clone_current",
             "terminal.toggle_soft_keyboard", "terminal.toggle_toolbar", "terminal.font_size_increase",
             "terminal.font_size_decrease", "terminal.select_url", "terminal.share_transcript",
             "clipboard.paste", "window.select", "window.rename", "session.rename", "terminal.reset",
@@ -30,7 +31,9 @@ public class TerminalActionDispatcherTest {
             "app.command_palette", "app.open_drawer", "app.close_drawer", "terminal.action_sheet",
             "session.activate_by_index", "window.rename_prompt", "session.rename_prompt",
             "terminal.share_selected", "clipboard.copy_selected",
-            "app.open_settings", "app.open_look_and_feel", "app.open_apps_bar"};
+            "app.open_settings", "app.open_look_and_feel", "app.open_apps_bar",
+            "workspace.save", "workspace.load", "workspace.list", "workspace.delete",
+            "pane.layout", "pane.equalize", "pane.rotate", "pane.move_to_edge"};
         for (String name : handled) {
             assertTrue(name, TerminalActionDispatcher.handles(name));
         }
@@ -65,6 +68,7 @@ public class TerminalActionDispatcherTest {
             "terminal.state", "pane.split_vertical", "pane.split_horizontal", "pane.focus_direction",
             "pane.resize", "pane.kill_focused", "window.new", "window.close", "window.next",
             "window.previous", "session.new", "session.next", "session.previous", "session.close_current",
+            "session.browser", "session.clone_current",
             "terminal.toggle_soft_keyboard", "terminal.toggle_toolbar", "terminal.font_size_increase",
             "terminal.font_size_decrease", "terminal.select_url", "terminal.share_transcript",
             "clipboard.paste", "window.select", "window.rename", "session.rename", "terminal.reset",
@@ -72,7 +76,9 @@ public class TerminalActionDispatcherTest {
             "app.command_palette", "app.open_drawer", "app.close_drawer", "terminal.action_sheet",
             "session.activate_by_index", "window.rename_prompt", "session.rename_prompt",
             "terminal.share_selected", "clipboard.copy_selected",
-            "app.open_settings", "app.open_look_and_feel", "app.open_apps_bar"};
+            "app.open_settings", "app.open_look_and_feel", "app.open_apps_bar",
+            "workspace.save", "workspace.load", "workspace.list", "workspace.delete",
+            "pane.layout", "pane.equalize", "pane.rotate", "pane.move_to_edge"};
         for (String name : tools) {
             JSONObject result = dispatcher.execute(name, new JSONObject());
             assertFalse(name, result.getBoolean("ok"));

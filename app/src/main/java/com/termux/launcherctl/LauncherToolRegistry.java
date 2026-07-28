@@ -398,16 +398,26 @@ public final class LauncherToolRegistry {
      * foreground Activity and answers {@code 409 activity_not_running} otherwise.
      */
     public static final String TOOL_TERMINAL_STATE = "terminal.state";
+    public static final String TOOL_WORKSPACE_SAVE = "workspace.save";
+    public static final String TOOL_WORKSPACE_LOAD = "workspace.load";
+    public static final String TOOL_WORKSPACE_LIST = "workspace.list";
+    public static final String TOOL_WORKSPACE_DELETE = "workspace.delete";
     public static final String TOOL_PANE_SPLIT_VERTICAL = "pane.split_vertical";
     public static final String TOOL_PANE_SPLIT_HORIZONTAL = "pane.split_horizontal";
     public static final String TOOL_PANE_FOCUS_DIRECTION = "pane.focus_direction";
     public static final String TOOL_PANE_RESIZE = "pane.resize";
     public static final String TOOL_PANE_KILL_FOCUSED = "pane.kill_focused";
+    public static final String TOOL_PANE_LAYOUT = "pane.layout";
+    public static final String TOOL_PANE_EQUALIZE = "pane.equalize";
+    public static final String TOOL_PANE_ROTATE = "pane.rotate";
+    public static final String TOOL_PANE_MOVE_TO_EDGE = "pane.move_to_edge";
     public static final String TOOL_WINDOW_NEW = "window.new";
     public static final String TOOL_WINDOW_CLOSE = "window.close";
     public static final String TOOL_WINDOW_NEXT = "window.next";
     public static final String TOOL_WINDOW_PREVIOUS = "window.previous";
     public static final String TOOL_SESSION_NEW = "session.new";
+    public static final String TOOL_SESSION_BROWSER = "session.browser";
+    public static final String TOOL_SESSION_CLONE_CURRENT = "session.clone_current";
     public static final String TOOL_SESSION_NEXT = "session.next";
     public static final String TOOL_SESSION_PREVIOUS = "session.previous";
     public static final String TOOL_SESSION_CLOSE_CURRENT = "session.close_current";
@@ -416,6 +426,8 @@ public final class LauncherToolRegistry {
     public static final String TOOL_TERMINAL_FONT_SIZE_INCREASE = "terminal.font_size_increase";
     public static final String TOOL_TERMINAL_FONT_SIZE_DECREASE = "terminal.font_size_decrease";
     public static final String TOOL_TERMINAL_SELECT_URL = "terminal.select_url";
+    public static final String TOOL_TERMINAL_HINTS = "terminal.hints";
+    public static final String TOOL_TERMINAL_SEARCH_SCROLLBACK = "terminal.search_scrollback";
     public static final String TOOL_TERMINAL_SHARE_TRANSCRIPT = "terminal.share_transcript";
     public static final String TOOL_CLIPBOARD_PASTE = "clipboard.paste";
     public static final String TOOL_WINDOW_SELECT = "window.select";
@@ -573,9 +585,37 @@ public final class LauncherToolRegistry {
         // confirmed, anything terminating one is HIGH and confirmed.
         addUi(map, TOOL_TERMINAL_STATE,
             "Return the current terminal split, window, and session state.",
-            schemaEmpty(),
+            schemaObject()
+                .withBoolean("resetPerformance", "Reset performance counters before returning state", false, false)
+                .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_TERMINAL, 0, 0, null);
+        // Workspace tools require arguments and intentionally stay agent/CLI-only until the palette
+        // has a general argument prompt. Loading is HIGH because runCommands may execute user-owned
+        // JSON and replace mode terminates the existing live workspace.
+        add(map, TOOL_WORKSPACE_SAVE,
+            "Save the live session, window, and pane topology to ~/.termux/workspaces/<name>.json.",
+            schemaObject()
+                .withString("name", "Workspace file name without .json", true)
+                .withBoolean("overwrite", "Replace an existing workspace file", false, false)
+                .withBoolean("captureCommands", "Best-effort capture of foreground process argv", false, false)
+                .build(),
+            ToolRisk.MEDIUM, true, ToolExecutor.TERMINAL);
+        add(map, TOOL_WORKSPACE_LOAD,
+            "Recreate a saved workspace; commands run only with an explicit opt-in.",
+            schemaObject()
+                .withString("name", "Workspace file name without .json", true)
+                .withEnum("mode", new String[]{"append", "replace"}, false, "append")
+                .withBoolean("runCommands", "Execute captured argv instead of starting login shells", false, false)
+                .build(),
+            ToolRisk.HIGH, true, ToolExecutor.TERMINAL);
+        add(map, TOOL_WORKSPACE_LIST,
+            "List durable terminal workspace files.",
+            schemaEmpty(), ToolRisk.LOW, false, ToolExecutor.TERMINAL);
+        add(map, TOOL_WORKSPACE_DELETE,
+            "Delete a durable terminal workspace file.",
+            schemaObject().withString("name", "Workspace file name without .json", true).build(),
+            ToolRisk.HIGH, true, ToolExecutor.TERMINAL);
         addUi(map, TOOL_PANE_SPLIT_VERTICAL,
             "Split the focused pane into two panes side by side.",
             schemaEmpty(),
@@ -613,6 +653,35 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.HIGH, true, ToolExecutor.TERMINAL,
             CATEGORY_PANE, R.string.tool_pane_kill_focused, R.string.tool_desc_pane_kill_focused, null, REQUIRES_SESSION);
+        // The palette cannot prompt for a preset or edge. Keep those two parameterized actions
+        // agent/CLI-only; equalize and clockwise rotate remain directly useful palette actions.
+        add(map, TOOL_PANE_LAYOUT,
+            "Arrange the current window using an automatic pane layout.",
+            schemaObject()
+                .withEnum("layout", new String[]{"stack", "grid", "tall", "fat", "horizontal", "vertical"},
+                    true, "grid")
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
+        addUi(map, TOOL_PANE_EQUALIZE,
+            "Reset every divider in the current window to an equal ratio.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_PANE, R.string.tool_pane_equalize, R.string.tool_desc_pane_equalize, null,
+            REQUIRES_SPLITS);
+        addUi(map, TOOL_PANE_ROTATE,
+            "Rotate the current pane layout clockwise or counterclockwise.",
+            schemaObject()
+                .withEnum("direction", new String[]{"clockwise", "counterclockwise"}, false, "clockwise")
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_PANE, R.string.tool_pane_rotate, R.string.tool_desc_pane_rotate, null,
+            REQUIRES_SPLITS);
+        add(map, TOOL_PANE_MOVE_TO_EDGE,
+            "Move the focused pane to an outer edge of the current window.",
+            schemaObject()
+                .withEnum("edge", new String[]{"left", "right", "up", "down"}, true, "left")
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
         addUi(map, TOOL_WINDOW_NEW,
             "Create a new window with a fresh shell in the current session.",
             schemaEmpty(),
@@ -643,6 +712,18 @@ public final class LauncherToolRegistry {
             CATEGORY_SESSION, R.string.tool_session_new, R.string.tool_desc_session_new, Arrays.asList(
                 Binding.of("ctrl+alt+shift+c"),
                 Binding.of("ctrl+alt+c", BindingCondition.SPLITS_OFF)));
+        addUi(map, TOOL_SESSION_BROWSER,
+            "Open the searchable session, window, and pane browser.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_SESSION, R.string.tool_session_browser, R.string.tool_desc_session_browser,
+            null, REQUIRES_SESSION);
+        addUi(map, TOOL_SESSION_CLONE_CURRENT,
+            "Create a fresh terminal session at the current pane's working directory.",
+            schemaEmpty(),
+            ToolRisk.MEDIUM, true, ToolExecutor.TERMINAL,
+            CATEGORY_SESSION, R.string.tool_session_clone_current,
+            R.string.tool_desc_session_clone_current, null, REQUIRES_SESSION);
         // Ctrl+Alt+Down/Up is deliberately absent here. Today it means "next/previous
         // session" only while split panes are off; with splits on the multiplexer
         // claims it for pane focus first. Until defaultBindings can express that
@@ -698,7 +779,20 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_TERMINAL, R.string.tool_terminal_select_url, R.string.tool_desc_terminal_select_url,
+            null, REQUIRES_SESSION);
+        addUi(map, TOOL_TERMINAL_HINTS,
+            "Show keyboard labels for URLs, paths, hashes, and source line references in scrollback.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_TERMINAL, R.string.tool_terminal_hints, R.string.tool_desc_terminal_hints,
             Binding.all("ctrl+alt+u"), REQUIRES_SESSION);
+        addUi(map, TOOL_TERMINAL_SEARCH_SCROLLBACK,
+            "Search the focused session's scrollback and jump to a matching row.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_TERMINAL, R.string.tool_terminal_search_scrollback,
+            R.string.tool_desc_terminal_search_scrollback,
+            Binding.all("ctrl+alt+s"), REQUIRES_SESSION);
         // Sharing sends scrollback contents to another app, so it is confirmed.
         addUi(map, TOOL_TERMINAL_SHARE_TRANSCRIPT,
             "Share the terminal transcript with another app.",
@@ -747,7 +841,7 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_APP, R.string.tool_app_command_palette, R.string.tool_desc_app_command_palette,
-            Binding.all("ctrl+alt+shift+p"));
+            Binding.all("ctrl+alt+shift+p", "ctrl+alt+space>p"));
         addUi(map, TOOL_TERMINAL_ACTION_SHEET,
             "Open the terminal action sheet.",
             schemaEmpty(),

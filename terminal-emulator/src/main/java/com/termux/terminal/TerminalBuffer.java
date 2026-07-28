@@ -635,17 +635,19 @@ public final class TerminalBuffer {
             Arrays.fill(mLines, mScreenFirstRow - mActiveTranscriptRows, mScreenFirstRow, null);
         }
         mActiveTranscriptRows = 0;
-        bitmaps.clear();
-        hasBitmaps = false;
+        // Visible bitmap cells still reference their image data after ED 3 clears scrollback.
+        collectUnusedBitmaps();
         terminalSixel = null;
     }
 
     public Bitmap getSixelBitmap(int codePoint, long style) {
-        return bitmaps.get(TextStyle.bitmapNum(style)).bitmap;
+        TerminalBitmap bitmap = bitmaps.get(TextStyle.bitmapNum(style));
+        return bitmap == null ? null : bitmap.bitmap;
     }
 
     public Rect getSixelRect(int codePoint, long style) {
         TerminalBitmap bm = bitmaps.get(TextStyle.bitmapNum(style));
+        if (bm == null) return new Rect();
         int x = TextStyle.bitmapX(style);
         int y = TextStyle.bitmapY(style);
         Rect r = new Rect(x * bm.cellWidth, y * bm.cellHeight, (x + 1) * bm.cellWidth, (y + 1) * bm.cellHeight);
@@ -724,10 +726,73 @@ public final class TerminalBuffer {
         return bitmaps.get(num).cursorDelta;
     }
 
+    /** Add one decoded kitty Tier-1 placement at a screen cell. */
+    public int[] addKittyImage(Bitmap image, long imageId, int y, int x, int cellW, int cellH) {
+        if (image == null || x < 0 || x >= mColumns || y < 0 || y >= mScreenRows)
+            return new int[] { 0, 0 };
+        int num = findFreeBitmap();
+        TerminalBitmap terminalBitmap = new TerminalBitmap(num, image, imageId, y, x, cellW, cellH, this);
+        if (terminalBitmap.bitmap == null)
+            return new int[] { 0, 0 };
+        bitmaps.put(num, terminalBitmap);
+        hasBitmaps = true;
+        bitmapGC(30000);
+        return terminalBitmap.cursorDelta;
+    }
+
+    /** Bytes currently owned by decoded kitty placements in this buffer. */
+    public long getKittyImageBytes() {
+        long result = 0;
+        for (TerminalBitmap bitmap : bitmaps.values()) {
+            if (bitmap.kittyImageId >= 0 && bitmap.bitmap != null)
+                result += bitmap.bitmap.getAllocationByteCount();
+        }
+        return result;
+    }
+
+    /** Delete kitty placements, either only on-screen or also in scrollback. A negative id matches all images. */
+    public int deleteKittyImages(long imageId, boolean includeScrollback) {
+        int deletedCells = 0;
+        int firstRow = includeScrollback ? -getActiveTranscriptRows() : 0;
+        for (int row = firstRow; row < mScreenRows; row++) {
+            TerminalRow line = allocateFullLineIfNecessary(externalToInternalRow(row));
+            boolean changed = false;
+            for (int column = 0; column < mColumns; column++) {
+                long style = line.getStyle(column);
+                if (!TextStyle.isBitmap(style)) continue;
+                TerminalBitmap bitmap = bitmaps.get(TextStyle.bitmapNum(style));
+                if (bitmap != null && bitmap.kittyImageId >= 0
+                    && (imageId < 0 || bitmap.kittyImageId == imageId)) {
+                    line.setChar(column, ' ', TextStyle.NORMAL);
+                    deletedCells++;
+                    changed = true;
+                }
+            }
+            if (changed) recomputeBitmapFlag(line);
+        }
+        collectUnusedBitmaps();
+        return deletedCells;
+    }
+
+    private void recomputeBitmapFlag(TerminalRow line) {
+        line.mHasBitmap = false;
+        for (int column = 0; column < mColumns; column++) {
+            if (TextStyle.isBitmap(line.getStyle(column))) {
+                line.mHasBitmap = true;
+                return;
+            }
+        }
+    }
+
     public void bitmapGC(int timeDelta) {
         if (!hasBitmaps || bitmapLastGC + timeDelta > SystemClock.uptimeMillis()) {
             return;
         }
+        collectUnusedBitmaps();
+        bitmapLastGC = SystemClock.uptimeMillis();
+    }
+
+    private void collectUnusedBitmaps() {
         Set<Integer> used = new HashSet<Integer>();
         for (int line = 0; line < mLines.length; line++) {
             if (mLines[line] != null && mLines[line].mHasBitmap) {
@@ -745,6 +810,6 @@ public final class TerminalBuffer {
                 bitmaps.remove(bn);
             }
         }
-        bitmapLastGC = SystemClock.uptimeMillis();
+        hasBitmaps = !bitmaps.isEmpty();
     }
 }

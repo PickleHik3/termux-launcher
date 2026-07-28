@@ -100,6 +100,7 @@ import com.termux.launcherctl.LauncherCtlApiServer;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
+import com.termux.app.terminal.TerminalFrameMetricsMonitor;
 import com.termux.app.terminal.TermuxActivityRootView;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardHost;
@@ -223,6 +224,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private WSession mCurrentWSession;
     /** Resolves per-pane foreground process / open file for the window pill labels. */
     @Nullable private com.termux.app.statusbar.WindowForegroundResolver mWindowForegroundResolver;
+    @Nullable private Runnable mSessionBrowserRefreshCallback;
     private final Handler mWindowLabelHandler = new Handler(Looper.getMainLooper());
     private static final long WINDOW_LABEL_POLL_MS = 2000L;
     /** Trailing CPU/RAM/weather widgets, their data controllers, and the shared detail card host. */
@@ -230,6 +232,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.statusbar.SystemStatsCardView mStatsCardView;
     @Nullable private com.termux.app.statusbar.WeatherController mWeatherController;
     @Nullable private com.termux.app.statusbar.WeatherCardView mWeatherCardView;
+    private final TerminalFrameMetricsMonitor mTerminalFrameMetricsMonitor =
+        new TerminalFrameMetricsMonitor();
     private final com.termux.app.statusbar.StatusCardHost mStatusCardHost =
         new com.termux.app.statusbar.StatusCardHost();
     @Nullable private android.animation.ValueAnimator mStatusBarCollapseAnimator;
@@ -749,6 +753,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logDebug(LOG_TAG, "onStart");
     
         if (mIsInvalidState) return;
+
+        mTerminalFrameMetricsMonitor.start(getWindow());
 
         mIsVisible = true;
         resetInheritedImeLayoutState();
@@ -4133,6 +4139,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         super.onStop();
         Logger.logDebug(LOG_TAG, "onStop");
         com.termux.app.terminal.TerminalActionDispatcher.getInstance().detach(this);
+        mTerminalFrameMetricsMonitor.stop();
         stopAzEdgePagingLoop();
         cancelAzOverflowRefresh();
         mWindowLabelHandler.removeCallbacksAndMessages(null);
@@ -4183,6 +4190,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         super.onDestroy();
         Logger.logDebug(LOG_TAG, "onDestroy");
         com.termux.app.terminal.TerminalActionDispatcher.getInstance().detach(this);
+        mTerminalFrameMetricsMonitor.stop();
         // The inspector holds this Activity strongly for the life of its overlay, so it has to go
         // with the Activity rather than outlive it.
         com.termux.app.terminal.TerminalKeyInspector.close();
@@ -4292,6 +4300,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
             // Bootstrap setup may complete after app startup; re-attempt launcher CLI script install.
             LauncherCtlApiServer.getInstance().ensureCliScriptsInstalled();
+            TermuxShellIntegrationInstaller.ensureInstalled(this);
 
             // Activity might have been destroyed.
             if (mTermuxService == null) {
@@ -7818,6 +7827,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return panes;
     }
 
+    public TerminalFrameMetricsMonitor.Snapshot getTerminalFrameMetricsSnapshot() {
+        return mTerminalFrameMetricsMonitor.snapshot();
+    }
+
+    /** Reset the window and every currently visible pane to the same benchmark origin. */
+    public void resetTerminalPerformanceMetrics() {
+        mTerminalFrameMetricsMonitor.reset();
+        for (TerminalView pane : getTerminalPaneViews()) pane.resetRenderMetrics();
+    }
+
     /** The pane currently displaying {@code session}, or null if none. */
     @Nullable
     public TerminalView getTerminalViewForSession(@Nullable TerminalSession session) {
@@ -7882,6 +7901,145 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
+    /** Immutable projection consumed by the searchable session browser. */
+    @NonNull
+    public java.util.List<com.termux.app.terminal.SessionBrowserModel.Session> getSessionBrowserSessions() {
+        java.util.List<com.termux.app.terminal.SessionBrowserModel.Session> sessions =
+            new java.util.ArrayList<>();
+        if (mPaneController == null) return sessions;
+        for (int sessionIndex = 0; sessionIndex < mWSessions.size(); sessionIndex++) {
+            WSession ws = mWSessions.get(sessionIndex);
+            java.util.List<com.termux.app.terminal.SessionBrowserModel.Window> windows =
+                new java.util.ArrayList<>();
+            for (int windowIndex = 0; windowIndex < ws.windows.size(); windowIndex++) {
+                com.termux.app.terminal.TerminalPaneController.Window window = ws.windows.get(windowIndex);
+                java.util.List<com.termux.app.terminal.SessionBrowserModel.Pane> panes =
+                    new java.util.ArrayList<>();
+                for (TerminalSession shell : mPaneController.shellsOf(window)) {
+                    String foreground = null;
+                    com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+                        mWindowForegroundResolver == null ? null
+                            : mWindowForegroundResolver.get(shell.getPid());
+                    if (info != null && !info.idle) {
+                        foreground = info.processName;
+                        if (info.openFile != null) {
+                            foreground = foreground == null ? info.openFile
+                                : foreground + " · " + info.openFile;
+                        }
+                    }
+                    if (foreground == null) foreground = shell.getTitle();
+                    panes.add(new com.termux.app.terminal.SessionBrowserModel.Pane(
+                        shell.getCwd(), foreground));
+                }
+                windows.add(new com.termux.app.terminal.SessionBrowserModel.Window(windowIndex,
+                    windowIndex == ws.current, panes));
+            }
+            sessions.add(new com.termux.app.terminal.SessionBrowserModel.Session(sessionIndex,
+                ws == mCurrentWSession, ws.name, windows));
+        }
+        return sessions;
+    }
+
+    /** Select a browser row's current window and focused pane. */
+    public boolean activateBrowserSession(int index) {
+        if (mPaneController == null || index < 0 || index >= mWSessions.size()) return false;
+        WSession ws = mWSessions.get(index);
+        if (ws.windows.isEmpty()) return false;
+        TerminalSession shell = mPaneController.windowActiveSession(ws.currentWindow());
+        if (shell == null) return false;
+        if (getTermuxTerminalSessionClient() != null) {
+            getTermuxTerminalSessionClient().setCurrentSession(shell);
+        } else {
+            activateSessionInPanes(shell);
+        }
+        return true;
+    }
+
+    /** Create a fresh top-level session from the currently focused pane's CWD. */
+    public boolean createBrowserSession() {
+        com.termux.app.terminal.TermuxTerminalSessionActivityClient client =
+            getTermuxTerminalSessionClient();
+        TerminalSession current = getCurrentSession();
+        return client != null && client.addNewSessionAtWorkingDirectory(
+            current == null ? null : current.getCwd(), false, null);
+    }
+
+    /** Clone a selected session as a fresh one-window shell at its focused pane's CWD. */
+    public boolean cloneBrowserSession(int index) {
+        if (mPaneController == null || index < 0 || index >= mWSessions.size()) return false;
+        WSession ws = mWSessions.get(index);
+        if (ws.windows.isEmpty()) return false;
+        TerminalSession source = mPaneController.windowActiveSession(ws.currentWindow());
+        com.termux.app.terminal.TermuxTerminalSessionActivityClient client =
+            getTermuxTerminalSessionClient();
+        return source != null && client != null
+            && client.addNewSessionAtWorkingDirectory(source.getCwd(), false, null);
+    }
+
+    public boolean cloneCurrentBrowserSession() {
+        int index = mCurrentWSession == null ? -1 : mWSessions.indexOf(mCurrentWSession);
+        return cloneBrowserSession(index);
+    }
+
+    public boolean renameBrowserSession(int index, @Nullable String name) {
+        if (index < 0 || index >= mWSessions.size()) return false;
+        mWSessions.get(index).name = WindowSessionName.normalize(name);
+        rebuildDrawerSessions();
+        return true;
+    }
+
+    /** Close any browser-selected session, without first activating it. */
+    public boolean closeBrowserSession(int index) {
+        if (mPaneController == null || index < 0 || index >= mWSessions.size()) return false;
+        WSession ws = mWSessions.get(index);
+        boolean wasCurrent = ws == mCurrentWSession;
+        for (com.termux.app.terminal.TerminalPaneController.Window window :
+                new java.util.ArrayList<>(ws.windows)) {
+            for (TerminalSession shell : mPaneController.removeWindow(window)) {
+                if (mTermuxService != null) mTermuxService.removeTermuxSession(shell);
+            }
+        }
+        mWSessions.remove(ws);
+        if (wasCurrent) {
+            mCurrentWSession = null;
+            if (!mWSessions.isEmpty()) {
+                mCurrentWSession = mWSessions.get(Math.min(index, mWSessions.size() - 1));
+                mPaneController.showWindow(mCurrentWSession.currentWindow());
+            } else if (getTermuxTerminalSessionClient() != null) {
+                getTermuxTerminalSessionClient().addNewSession(false, null);
+            }
+        }
+        rebuildDrawerSessions();
+        return true;
+    }
+
+    public void setSessionBrowserRefreshCallback(@Nullable Runnable callback) {
+        mSessionBrowserRefreshCallback = callback;
+    }
+
+    /** Resolve foreground labels for all panes, including inactive sessions and windows. */
+    public void requestSessionBrowserForegroundRefresh() {
+        if (mPaneController == null) return;
+        if (mWindowForegroundResolver == null) {
+            mWindowForegroundResolver = new com.termux.app.statusbar.WindowForegroundResolver(
+                this::onWindowForegroundResolved);
+        }
+        java.util.List<Integer> pids = new java.util.ArrayList<>();
+        for (WSession ws : mWSessions) {
+            for (com.termux.app.terminal.TerminalPaneController.Window window : ws.windows) {
+                for (TerminalSession shell : mPaneController.shellsOf(window)) {
+                    if (shell.getPid() > 0) pids.add(shell.getPid());
+                }
+            }
+        }
+        mWindowForegroundResolver.refresh(pids, android.os.SystemClock.uptimeMillis());
+    }
+
+    private void onWindowForegroundResolved() {
+        refreshTerminalWindowBar();
+        if (mSessionBrowserRefreshCallback != null) mSessionBrowserRefreshCallback.run();
+    }
+
     /** Seam for {@code window.select}: switch windows by index. False when out of range. */
     public boolean selectWindow(int index) {
         if (mPaneController == null || mCurrentWSession == null
@@ -7904,6 +8062,212 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     public String getCurrentWindowSessionName() {
         return mCurrentWSession == null ? null : mCurrentWSession.name;
+    }
+
+    /** Result summary returned by the durable workspace loader. */
+    public static final class WorkspaceLoadResult {
+        public final int sessions;
+        public final int windows;
+        public final int panes;
+        public final int commandsRun;
+        public final int commandsSkipped;
+        public final boolean replaced;
+
+        WorkspaceLoadResult(int sessions, int windows, int panes, int commandsRun,
+                            int commandsSkipped, boolean replaced) {
+            this.sessions = sessions;
+            this.windows = windows;
+            this.panes = panes;
+            this.commandsRun = commandsRun;
+            this.commandsSkipped = commandsSkipped;
+            this.replaced = replaced;
+        }
+    }
+
+    /** Capture the complete live session/window/pane topology into a durable JSON file. */
+    @NonNull
+    public com.termux.app.terminal.TerminalWorkspace saveWorkspace(
+            @NonNull String requestedName, boolean overwrite, boolean captureCommands)
+            throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
+        if (mPaneController == null || mWSessions.isEmpty()) {
+            throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
+                "no_session", "There are no terminal sessions to save");
+        }
+        String name = com.termux.app.terminal.TerminalWorkspaceStore.validateName(requestedName);
+        java.util.List<com.termux.app.terminal.TerminalWorkspace.Session> sessions =
+            new java.util.ArrayList<>();
+        for (WSession ws : mWSessions) {
+            if (ws.windows.isEmpty()) continue;
+            java.util.List<com.termux.app.terminal.TerminalWorkspace.Window> windows =
+                new java.util.ArrayList<>();
+            for (com.termux.app.terminal.TerminalPaneController.Window window : ws.windows) {
+                windows.add(mPaneController.snapshotWorkspaceWindow(window, shell -> {
+                    String cwd = shell.getCwd();
+                    if (cwd == null) cwd = getProperties().getDefaultWorkingDirectory();
+                    java.util.List<String> command = java.util.Collections.emptyList();
+                    if (captureCommands && mWindowForegroundResolver != null) {
+                        com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+                            mWindowForegroundResolver.get(shell.getPid());
+                        if (info != null && !info.idle) command = info.command;
+                    }
+                    return new com.termux.app.terminal.TerminalWorkspace.Pane(
+                        cwd, shell.mSessionName, command);
+                }));
+            }
+            sessions.add(new com.termux.app.terminal.TerminalWorkspace.Session(ws.name,
+                Math.max(0, Math.min(ws.current, windows.size() - 1)), windows));
+        }
+        int current = Math.max(0, Math.min(
+            mCurrentWSession == null ? 0 : mWSessions.indexOf(mCurrentWSession), sessions.size() - 1));
+        com.termux.app.terminal.TerminalWorkspace workspace =
+            new com.termux.app.terminal.TerminalWorkspace(name, System.currentTimeMillis(), current, sessions);
+        workspace.validate();
+        new com.termux.app.terminal.TerminalWorkspaceStore().save(name, workspace, overwrite);
+        return workspace;
+    }
+
+    @NonNull
+    public java.util.List<com.termux.app.terminal.TerminalWorkspaceStore.Entry> listWorkspaces()
+            throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
+        return new com.termux.app.terminal.TerminalWorkspaceStore().list();
+    }
+
+    public void deleteWorkspace(@NonNull String name)
+            throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
+        new com.termux.app.terminal.TerminalWorkspaceStore().delete(name);
+    }
+
+    /**
+     * Recreate a saved workspace. Shell+CWD restore is the default; foreground argv execution is a
+     * separate explicit opt-in because workspace files are user-editable executable input.
+     */
+    @NonNull
+    public WorkspaceLoadResult loadWorkspace(@NonNull String name, boolean replace, boolean runCommands)
+            throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
+        if (!isSplitPanesEnabled()) {
+            throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
+                "splits_disabled", "Split panes are disabled while compatibility mode is on");
+        }
+        if (mPaneController == null || mTermuxService == null) {
+            throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
+                "unavailable", "The terminal service and pane controller must be ready");
+        }
+        com.termux.app.terminal.TerminalWorkspace workspace =
+            new com.termux.app.terminal.TerminalWorkspaceStore().load(name);
+        int paneCount = workspace.paneCount();
+        int eventualCount = replace ? paneCount : mTermuxService.getTermuxSessionsSize() + paneCount;
+        if (eventualCount > com.termux.app.terminal.TermuxTerminalSessionActivityClient.MAX_SESSIONS) {
+            throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
+                "too_many_panes", "Restoring this workspace would create " + eventualCount
+                    + " terminals; the limit is "
+                    + com.termux.app.terminal.TermuxTerminalSessionActivityClient.MAX_SESSIONS);
+        }
+
+        java.util.List<TerminalSession> createdShells = new java.util.ArrayList<>();
+        java.util.List<java.util.List<TerminalSession>> windowShells = new java.util.ArrayList<>();
+        int windowCount = 0;
+        try {
+            for (com.termux.app.terminal.TerminalWorkspace.Session savedSession : workspace.sessions) {
+                for (com.termux.app.terminal.TerminalWorkspace.Window savedWindow : savedSession.windows) {
+                    java.util.List<com.termux.app.terminal.TerminalWorkspace.Pane> panes =
+                        new java.util.ArrayList<>();
+                    collectWorkspacePanes(savedWindow.root, panes);
+                    java.util.List<TerminalSession> shells = new java.util.ArrayList<>();
+                    for (com.termux.app.terminal.TerminalWorkspace.Pane pane : panes) {
+                        String executable = null;
+                        String[] arguments = null;
+                        if (runCommands && !pane.command.isEmpty()) {
+                            executable = pane.command.get(0);
+                            arguments = pane.command.subList(1, pane.command.size()).toArray(new String[0]);
+                        }
+                        String cwd = pane.cwd;
+                        if (cwd == null || cwd.isEmpty()) cwd = getProperties().getDefaultWorkingDirectory();
+                        com.termux.shared.termux.shell.command.runner.terminal.TermuxSession created =
+                            mTermuxService.createTermuxSession(executable, arguments, null, cwd,
+                                false, pane.title);
+                        if (created == null || created.getTerminalSession() == null) {
+                            throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
+                                "session_create_failed", "Could not create every workspace pane");
+                        }
+                        TerminalSession shell = created.getTerminalSession();
+                        shells.add(shell);
+                        createdShells.add(shell);
+                    }
+                    windowShells.add(shells);
+                    windowCount++;
+                }
+            }
+        } catch (com.termux.app.terminal.TerminalWorkspace.WorkspaceException e) {
+            for (TerminalSession shell : createdShells) mTermuxService.removeTermuxSession(shell);
+            throw e;
+        } catch (RuntimeException e) {
+            for (TerminalSession shell : createdShells) mTermuxService.removeTermuxSession(shell);
+            throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
+                "session_create_failed", "Could not create workspace panes: " + e.getMessage(), e);
+        }
+
+        java.util.List<WSession> restored = new java.util.ArrayList<>();
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> restoredWindows =
+            new java.util.ArrayList<>();
+        int shellWindowIndex = 0;
+        try {
+            for (com.termux.app.terminal.TerminalWorkspace.Session savedSession : workspace.sessions) {
+                WSession ws = new WSession();
+                ws.name = WindowSessionName.normalize(savedSession.name);
+                for (com.termux.app.terminal.TerminalWorkspace.Window savedWindow : savedSession.windows) {
+                    com.termux.app.terminal.TerminalPaneController.Window window =
+                        mPaneController.newWorkspaceWindow(savedWindow, windowShells.get(shellWindowIndex++));
+                    ws.windows.add(window);
+                    restoredWindows.add(window);
+                }
+                ws.current = savedSession.currentWindow;
+                restored.add(ws);
+            }
+        } catch (RuntimeException e) {
+            for (com.termux.app.terminal.TerminalPaneController.Window window : restoredWindows)
+                mPaneController.removeWindow(window);
+            for (TerminalSession shell : createdShells) mTermuxService.removeTermuxSession(shell);
+            throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
+                "invalid_workspace", "Could not rebuild workspace topology: " + e.getMessage(), e);
+        }
+
+        int firstRestoredIndex = mWSessions.size();
+        if (replace) {
+            java.util.List<WSession> oldSessions = new java.util.ArrayList<>(mWSessions);
+            mWSessions.clear();
+            mCurrentWSession = null;
+            for (WSession old : oldSessions) {
+                for (com.termux.app.terminal.TerminalPaneController.Window window :
+                        new java.util.ArrayList<>(old.windows)) {
+                    for (TerminalSession shell : mPaneController.removeWindow(window))
+                        mTermuxService.removeTermuxSession(shell);
+                }
+            }
+            firstRestoredIndex = 0;
+        }
+        mWSessions.addAll(restored);
+        int selected = firstRestoredIndex + workspace.currentSession;
+        mCurrentWSession = mWSessions.get(selected);
+        mPaneController.showWindow(mCurrentWSession.currentWindow());
+        if (getTermuxTerminalSessionClient() != null)
+            getTermuxTerminalSessionClient().checkForFontAndColors();
+        rebuildDrawerSessions();
+        return new WorkspaceLoadResult(restored.size(), windowCount, paneCount,
+            runCommands ? workspace.commandCount() : 0,
+            runCommands ? 0 : workspace.commandCount(), replace);
+    }
+
+    private static void collectWorkspacePanes(
+            @NonNull com.termux.app.terminal.TerminalWorkspace.Node node,
+            @NonNull java.util.List<com.termux.app.terminal.TerminalWorkspace.Pane> panes) {
+        if (node instanceof com.termux.app.terminal.TerminalWorkspace.Pane) {
+            panes.add((com.termux.app.terminal.TerminalWorkspace.Pane) node);
+            return;
+        }
+        com.termux.app.terminal.TerminalWorkspace.Split split =
+            (com.termux.app.terminal.TerminalWorkspace.Split) node;
+        collectWorkspacePanes(split.a, panes);
+        collectWorkspacePanes(split.b, panes);
     }
 
     /**
@@ -8378,7 +8742,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (pids.isEmpty()) return;
         if (mWindowForegroundResolver == null) {
             mWindowForegroundResolver = new com.termux.app.statusbar.WindowForegroundResolver(
-                this::refreshTerminalWindowBar);
+                this::onWindowForegroundResolved);
         }
         mWindowForegroundResolver.refresh(pids, android.os.SystemClock.uptimeMillis());
         mWindowLabelHandler.postDelayed(() -> {
@@ -8696,6 +9060,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Adjust the split ratio toward the arrow direction (Ctrl+Alt+Shift+arrow). */
     public boolean resizeActivePane(int keyCode) {
         return mPaneController == null || mPaneController.resizeActive(keyCode);
+    }
+
+    /** Apply an automatic pane layout to the current window. */
+    public boolean applyPaneLayout(@NonNull String layout) {
+        return isSplitPanesEnabled() && mPaneController != null && mPaneController.applyLayout(layout);
+    }
+
+    /** Reset every split in the current window to a 1:1 divider ratio. */
+    public boolean equalizePaneLayout() {
+        return isSplitPanesEnabled() && mPaneController != null && mPaneController.equalizeLayout();
+    }
+
+    /** Rotate the current pane tree geometrically by ninety degrees. */
+    public boolean rotatePaneLayout(boolean clockwise) {
+        return isSplitPanesEnabled() && mPaneController != null
+            && mPaneController.rotateLayout(clockwise);
+    }
+
+    /** Move the focused pane to an outer edge of the current window. */
+    public boolean moveFocusedPaneToEdge(@NonNull String edge) {
+        return isSplitPanesEnabled() && mPaneController != null
+            && mPaneController.moveActivePaneToEdge(edge);
     }
 
     /** Kill the focused pane's shell (Alt+Esc). Teardown/promotion happens in onSessionFinished. */

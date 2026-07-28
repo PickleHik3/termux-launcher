@@ -1218,6 +1218,8 @@
     <string name="tool_pane_focus_direction">Move pane focus</string>
     <string name="tool_pane_resize">Resize pane</string>
     <string name="tool_pane_kill_focused">Kill focused pane</string>
+    <string name="tool_pane_equalize">Equalize pane dividers</string>
+    <string name="tool_pane_rotate">Rotate pane layout</string>
     <string name="tool_window_new">New window</string>
     <string name="tool_window_close">Close window</string>
     <string name="tool_window_next">Next window</string>
@@ -1226,11 +1228,15 @@
     <string name="tool_session_next">Next session</string>
     <string name="tool_session_previous">Previous session</string>
     <string name="tool_session_close_current">Close session</string>
+    <string name="tool_session_browser">Session browser</string>
+    <string name="tool_session_clone_current">Clone session with CWD</string>
     <string name="tool_terminal_toggle_soft_keyboard">Toggle keyboard</string>
     <string name="tool_terminal_toggle_toolbar">Toggle extra keys</string>
     <string name="tool_terminal_font_size_increase">Increase font size</string>
     <string name="tool_terminal_font_size_decrease">Decrease font size</string>
     <string name="tool_terminal_select_url">Select URL</string>
+    <string name="tool_terminal_hints">Hints</string>
+    <string name="tool_terminal_search_scrollback">Search scrollback</string>
     <string name="tool_terminal_share_transcript">Share transcript</string>
     <string name="tool_clipboard_paste">Paste</string>
     <string name="tool_window_select">Switch to window</string>
@@ -1258,6 +1264,8 @@
     <string name="tool_desc_pane_split_vertical">Split the focused pane into two panes side by side.</string>
     <string name="tool_desc_pane_split_horizontal">Split the focused pane into two stacked panes.</string>
     <string name="tool_desc_pane_kill_focused">Terminate the shell running in the focused pane.</string>
+    <string name="tool_desc_pane_equalize">Reset every divider in this window to an equal ratio.</string>
+    <string name="tool_desc_pane_rotate">Rotate this window’s pane layout clockwise.</string>
     <string name="tool_desc_window_new">Create a new window with a fresh shell in the current session.</string>
     <string name="tool_desc_window_close">Close the current window and every pane in it.</string>
     <string name="tool_desc_window_next">Switch to the next window in the current session.</string>
@@ -1266,12 +1274,27 @@
     <string name="tool_desc_session_next">Switch to the next terminal session.</string>
     <string name="tool_desc_session_previous">Switch to the previous terminal session.</string>
     <string name="tool_desc_session_close_current">Close the current session, including all of its windows and panes.</string>
+    <string name="tool_desc_session_browser">Search sessions by name, working directory, or foreground process.</string>
+    <string name="tool_desc_session_clone_current">Create a fresh shell session in the current working directory.</string>
     <string name="tool_desc_terminal_reset">Reset the terminal emulator state for the focused shell.</string>
     <string name="tool_desc_terminal_toggle_soft_keyboard">Show or hide the keyboard.</string>
     <string name="tool_desc_terminal_toggle_toolbar">Show or hide the extra keys toolbar.</string>
     <string name="tool_desc_terminal_font_size_increase">Make the terminal text larger.</string>
     <string name="tool_desc_terminal_font_size_decrease">Make the terminal text smaller.</string>
     <string name="tool_desc_terminal_select_url">Pick a link from the terminal scrollback.</string>
+    <string name="tool_desc_terminal_hints">Open or copy URLs, paths, hashes, and source line references by keyboard label.</string>
+    <string name="terminal_hints_title">Terminal hints</string>
+    <string name="terminal_hints_instructions">Press a label to open a URL or copy another item. Hold Shift while pressing a label to copy anything.</string>
+    <string name="terminal_hints_none">No URLs, paths, hashes, or line references found.</string>
+    <string name="terminal_hint_copied">Hint copied to clipboard</string>
+    <string name="tool_desc_terminal_search_scrollback">Find text in this pane’s scrollback and jump to a match.</string>
+    <string name="terminal_scrollback_search_title">Search scrollback</string>
+    <string name="terminal_scrollback_search_hint">Search text</string>
+    <string name="terminal_scrollback_search_row">Row %1$s   %2$s</string>
+    <plurals name="terminal_scrollback_search_results">
+        <item quantity="one">1 match</item>
+        <item quantity="other">%1$d matches</item>
+    </plurals>
     <string name="tool_desc_terminal_share_transcript">Share the terminal transcript with another app.</string>
     <string name="tool_desc_terminal_action_sheet">Open the terminal action sheet.</string>
     <string name="tool_desc_clipboard_paste">Paste the clipboard contents into the terminal.</string>
@@ -1291,6 +1314,12 @@
     <string name="tool_desc_app_open_look_and_feel">Open the look and feel settings.</string>
     <string name="tool_desc_app_open_apps_bar">Open the apps bar settings.</string>
     <string name="tool_desc_app_command_palette">Open the searchable command palette.</string>
+    <string name="terminal_key_chord_pending">Waiting for key: %1$s  ›  …</string>
+    <string name="terminal_key_mode_active">Key mode: %1$s</string>
+    <plurals name="terminal_binding_config_errors">
+        <item quantity="one">1 binding-file error; defaults kept where possible</item>
+        <item quantity="other">%1$d binding-file errors; defaults kept where possible</item>
+    </plurals>
     <string name="tool_desc_app_open_drawer">Open the sessions drawer.</string>
     <string name="tool_desc_app_close_drawer">Close the sessions drawer.</string>
     <string name="tool_desc_window_rename_prompt">Ask for a new name for the current window session.</string>
@@ -1299,6 +1328,42 @@
     <string name="tool_clipboard_copy_selected">Copy selected text</string>
     <string name="tool_desc_terminal_share_selected">Share the selected terminal text with another app.</string>
     <string name="tool_desc_clipboard_copy_selected">Copy the selected terminal text to the clipboard.</string>
+
+    <!-- Searchable session browser -->
+    <string name="session_browser_title">Sessions</string>
+    <string name="session_browser_search_hint">Search name, CWD, or process</string>
+    <string name="session_browser_empty">No matching sessions</string>
+    <string name="session_browser_new">New</string>
+    <string name="session_browser_clone_current">Clone</string>
+    <string name="session_browser_save_workspace">Save</string>
+    <string name="session_browser_more_actions">More session actions</string>
+    <string name="session_browser_current">Current</string>
+    <string name="session_browser_unnamed">Session %1$d</string>
+    <string name="session_browser_named">Session %1$d · %2$s</string>
+    <plurals name="session_browser_window_count">
+        <item quantity="one">%1$d window</item>
+        <item quantity="other">%1$d windows</item>
+    </plurals>
+    <plurals name="session_browser_pane_count">
+        <item quantity="one">%1$d pane</item>
+        <item quantity="other">%1$d panes</item>
+    </plurals>
+    <string name="session_browser_window">Window %1$d</string>
+    <string name="session_browser_activate">Activate</string>
+    <string name="session_browser_clone">Clone with CWD</string>
+    <string name="session_browser_rename">Rename</string>
+    <string name="session_browser_close">Close</string>
+    <string name="session_browser_close_title">Close %1$s?</string>
+    <plurals name="session_browser_close_message">
+        <item quantity="one">This terminates the pane in the session.</item>
+        <item quantity="other">This terminates all %1$d panes in the session.</item>
+    </plurals>
+    <string name="session_browser_workspace_name">Workspace name</string>
+    <string name="session_browser_workspace_saved">Saved workspace %1$s</string>
+    <string name="session_browser_workspace_overwrite_title">Replace %1$s?</string>
+    <string name="session_browser_workspace_overwrite_message">A workspace with this name already exists.</string>
+    <string name="session_browser_overwrite">Replace</string>
+    <string name="session_browser_action_failed">Could not complete the session action</string>
     <string name="palette_unavailable_no_selection">Unavailable: no text selected</string>
     <string name="palette_unavailable_no_session">Unavailable: no active session</string>
 

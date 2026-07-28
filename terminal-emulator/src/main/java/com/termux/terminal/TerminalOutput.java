@@ -43,4 +43,12 @@ public abstract class TerminalOutput {
     public abstract void onBell();
 
     public abstract void onColorsChanged();
+
+    /**
+     * Return work produced off-thread to the terminal's serialized update thread. Test outputs that do not own a
+     * looper may use this default; a live {@link TerminalSession} overrides it and posts to its main-thread handler.
+     */
+    public void postTerminalUpdate(Runnable update) {
+        update.run();
+    }
 }

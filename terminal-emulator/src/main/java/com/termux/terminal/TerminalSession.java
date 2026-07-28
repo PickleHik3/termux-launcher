@@ -342,6 +342,14 @@ public final class TerminalSession extends TerminalOutput {
         mClient.onColorsChanged(this);
     }
 
+    @Override
+    public void postTerminalUpdate(Runnable update) {
+        mMainThreadHandler.post(() -> {
+            update.run();
+            notifyScreenUpdate();
+        });
+    }
+
     public int getPid() {
         return mShellPid;
     }

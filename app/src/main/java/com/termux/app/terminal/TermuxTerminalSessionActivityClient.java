@@ -44,7 +44,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     private final TermuxActivity mActivity;
 
-    private static final int MAX_SESSIONS = 8;
+    public static final int MAX_SESSIONS = 8;
     private static final long FOREGROUND_REFRESH_DEFER_MS = 120L;
     private static final ExecutorService MATERIAL_COLOR_FILE_EXECUTOR =
         Executors.newSingleThreadExecutor(runnable -> {
@@ -460,25 +460,34 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     public void addNewSession(boolean isFailSafe, String sessionName) {
+        TerminalSession currentSession = mActivity.getCurrentSession();
+        String workingDirectory = currentSession == null
+            ? mActivity.getProperties().getDefaultWorkingDirectory()
+            : currentSession.getCwd();
+        addNewSessionAtWorkingDirectory(workingDirectory, isFailSafe, sessionName);
+    }
+
+    /** Create and select a fresh shell at an explicitly chosen CWD. Used by session cloning. */
+    public boolean addNewSessionAtWorkingDirectory(@Nullable String workingDirectory,
+                                                   boolean isFailSafe,
+                                                   @Nullable String sessionName) {
         TermuxService service = mActivity.getTermuxService();
         if (service == null)
-            return;
+            return false;
         if (service.getTermuxSessionsSize() >= MAX_SESSIONS) {
             new AlertDialog.Builder(mActivity).setTitle(R.string.title_max_terminals_reached).setMessage(R.string.msg_max_terminals_reached).setPositiveButton(android.R.string.ok, null).show();
+            return false;
         } else {
-            TerminalSession currentSession = mActivity.getCurrentSession();
-            String workingDirectory;
-            if (currentSession == null) {
+            if (workingDirectory == null) {
                 workingDirectory = mActivity.getProperties().getDefaultWorkingDirectory();
-            } else {
-                workingDirectory = currentSession.getCwd();
             }
             TermuxSession newTermuxSession = service.createTermuxSession(null, null, null, workingDirectory, isFailSafe, sessionName);
             if (newTermuxSession == null)
-                return;
+                return false;
             TerminalSession newTerminalSession = newTermuxSession.getTerminalSession();
             setCurrentSession(newTerminalSession);
             mActivity.getDrawer().closeDrawers();
+            return true;
         }
     }
 

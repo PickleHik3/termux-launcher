@@ -11,7 +11,10 @@ import androidx.annotation.Nullable;
 import com.termux.app.TermuxActivity;
 import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.logger.Logger;
+import com.termux.view.TerminalRenderMetrics;
+import com.termux.view.TerminalView;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -43,16 +46,26 @@ public final class TerminalActionDispatcher {
     private static final long MAIN_THREAD_TIMEOUT_MS = 5_000L;
 
     public static final String TOOL_TERMINAL_STATE = "terminal.state";
+    public static final String TOOL_WORKSPACE_SAVE = "workspace.save";
+    public static final String TOOL_WORKSPACE_LOAD = "workspace.load";
+    public static final String TOOL_WORKSPACE_LIST = "workspace.list";
+    public static final String TOOL_WORKSPACE_DELETE = "workspace.delete";
     public static final String TOOL_PANE_SPLIT_VERTICAL = "pane.split_vertical";
     public static final String TOOL_PANE_SPLIT_HORIZONTAL = "pane.split_horizontal";
     public static final String TOOL_PANE_FOCUS_DIRECTION = "pane.focus_direction";
     public static final String TOOL_PANE_RESIZE = "pane.resize";
     public static final String TOOL_PANE_KILL_FOCUSED = "pane.kill_focused";
+    public static final String TOOL_PANE_LAYOUT = "pane.layout";
+    public static final String TOOL_PANE_EQUALIZE = "pane.equalize";
+    public static final String TOOL_PANE_ROTATE = "pane.rotate";
+    public static final String TOOL_PANE_MOVE_TO_EDGE = "pane.move_to_edge";
     public static final String TOOL_WINDOW_NEW = "window.new";
     public static final String TOOL_WINDOW_CLOSE = "window.close";
     public static final String TOOL_WINDOW_NEXT = "window.next";
     public static final String TOOL_WINDOW_PREVIOUS = "window.previous";
     public static final String TOOL_SESSION_NEW = "session.new";
+    public static final String TOOL_SESSION_BROWSER = "session.browser";
+    public static final String TOOL_SESSION_CLONE_CURRENT = "session.clone_current";
     public static final String TOOL_SESSION_NEXT = "session.next";
     public static final String TOOL_SESSION_PREVIOUS = "session.previous";
     public static final String TOOL_SESSION_CLOSE_CURRENT = "session.close_current";
@@ -61,6 +74,8 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_TERMINAL_FONT_SIZE_INCREASE = "terminal.font_size_increase";
     public static final String TOOL_TERMINAL_FONT_SIZE_DECREASE = "terminal.font_size_decrease";
     public static final String TOOL_TERMINAL_SELECT_URL = "terminal.select_url";
+    public static final String TOOL_TERMINAL_HINTS = "terminal.hints";
+    public static final String TOOL_TERMINAL_SEARCH_SCROLLBACK = "terminal.search_scrollback";
     public static final String TOOL_TERMINAL_SHARE_TRANSCRIPT = "terminal.share_transcript";
     public static final String TOOL_CLIPBOARD_PASTE = "clipboard.paste";
     public static final String TOOL_WINDOW_SELECT = "window.select";
@@ -129,16 +144,26 @@ public final class TerminalActionDispatcher {
         if (toolName == null) return false;
         switch (toolName) {
             case TOOL_TERMINAL_STATE:
+            case TOOL_WORKSPACE_SAVE:
+            case TOOL_WORKSPACE_LOAD:
+            case TOOL_WORKSPACE_LIST:
+            case TOOL_WORKSPACE_DELETE:
             case TOOL_PANE_SPLIT_VERTICAL:
             case TOOL_PANE_SPLIT_HORIZONTAL:
             case TOOL_PANE_FOCUS_DIRECTION:
             case TOOL_PANE_RESIZE:
             case TOOL_PANE_KILL_FOCUSED:
+            case TOOL_PANE_LAYOUT:
+            case TOOL_PANE_EQUALIZE:
+            case TOOL_PANE_ROTATE:
+            case TOOL_PANE_MOVE_TO_EDGE:
             case TOOL_WINDOW_NEW:
             case TOOL_WINDOW_CLOSE:
             case TOOL_WINDOW_NEXT:
             case TOOL_WINDOW_PREVIOUS:
             case TOOL_SESSION_NEW:
+            case TOOL_SESSION_BROWSER:
+            case TOOL_SESSION_CLONE_CURRENT:
             case TOOL_SESSION_NEXT:
             case TOOL_SESSION_PREVIOUS:
             case TOOL_SESSION_CLOSE_CURRENT:
@@ -147,6 +172,8 @@ public final class TerminalActionDispatcher {
             case TOOL_TERMINAL_FONT_SIZE_INCREASE:
             case TOOL_TERMINAL_FONT_SIZE_DECREASE:
             case TOOL_TERMINAL_SELECT_URL:
+            case TOOL_TERMINAL_HINTS:
+            case TOOL_TERMINAL_SEARCH_SCROLLBACK:
             case TOOL_TERMINAL_SHARE_TRANSCRIPT:
             case TOOL_CLIPBOARD_PASTE:
             case TOOL_WINDOW_SELECT:
@@ -284,7 +311,51 @@ public final class TerminalActionDispatcher {
         try {
             switch (toolName) {
                 case TOOL_TERMINAL_STATE:
+                    if (arguments.optBoolean("resetPerformance", false)) {
+                        activity.resetTerminalPerformanceMetrics();
+                    }
                     return buildState(activity);
+
+                case TOOL_WORKSPACE_SAVE: {
+                    if (!arguments.has("name")) return error(400, "bad_request", "Missing 'name'");
+                    TerminalWorkspace workspace = activity.saveWorkspace(arguments.optString("name", ""),
+                        arguments.optBoolean("overwrite", false),
+                        arguments.optBoolean("captureCommands", false));
+                    return ok().put("name", workspace.name)
+                        .put("sessions", workspace.sessions.size())
+                        .put("panes", workspace.paneCount())
+                        .put("commandsCaptured", workspace.commandCount());
+                }
+                case TOOL_WORKSPACE_LOAD: {
+                    if (!arguments.has("name")) return error(400, "bad_request", "Missing 'name'");
+                    String mode = arguments.optString("mode", "append");
+                    if (!"append".equals(mode) && !"replace".equals(mode))
+                        return error(400, "bad_request", "Invalid 'mode'; expected append or replace");
+                    TermuxActivity.WorkspaceLoadResult result = activity.loadWorkspace(
+                        arguments.optString("name", ""), "replace".equals(mode),
+                        arguments.optBoolean("runCommands", false));
+                    return ok().put("name", arguments.optString("name", "").trim())
+                        .put("mode", mode)
+                        .put("sessions", result.sessions)
+                        .put("windows", result.windows)
+                        .put("panes", result.panes)
+                        .put("commandsRun", result.commandsRun)
+                        .put("commandsSkipped", result.commandsSkipped);
+                }
+                case TOOL_WORKSPACE_LIST: {
+                    JSONArray entries = new JSONArray();
+                    for (TerminalWorkspaceStore.Entry entry : activity.listWorkspaces()) {
+                        entries.put(new JSONObject().put("name", entry.name)
+                            .put("modifiedAtEpochMs", entry.modifiedAtEpochMs)
+                            .put("sizeBytes", entry.sizeBytes));
+                    }
+                    return ok().put("count", entries.length()).put("workspaces", entries);
+                }
+                case TOOL_WORKSPACE_DELETE:
+                    if (!arguments.has("name")) return error(400, "bad_request", "Missing 'name'");
+                    String deletedName = TerminalWorkspaceStore.validateName(arguments.optString("name", ""));
+                    activity.deleteWorkspace(deletedName);
+                    return ok().put("name", deletedName).put("deleted", true);
 
                 case TOOL_PANE_SPLIT_VERTICAL:
                     return doSplit(activity, LinearLayout.HORIZONTAL, "vertical");
@@ -304,6 +375,44 @@ public final class TerminalActionDispatcher {
                 }
                 case TOOL_PANE_KILL_FOCUSED:
                     return ok().put("killed", activity.killFocusedPane());
+
+                case TOOL_PANE_LAYOUT: {
+                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
+                    if (!arguments.has("layout")) return error(400, "bad_request", "Missing 'layout'");
+                    String layout = arguments.optString("layout", "");
+                    if (!isPaneLayout(layout)) {
+                        return error(400, "bad_request",
+                            "Invalid 'layout'; expected stack, grid, tall, fat, horizontal, or vertical");
+                    }
+                    if (!activity.applyPaneLayout(layout)) return noSession(toolName);
+                    return ok().put("layout", layout);
+                }
+                case TOOL_PANE_EQUALIZE:
+                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
+                    if (!activity.equalizePaneLayout()) return noSession(toolName);
+                    return ok().put("equalized", true);
+                case TOOL_PANE_ROTATE: {
+                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
+                    String direction = arguments.optString("direction", "clockwise");
+                    if (!"clockwise".equals(direction) && !"counterclockwise".equals(direction)) {
+                        return error(400, "bad_request",
+                            "Invalid 'direction'; expected clockwise or counterclockwise");
+                    }
+                    if (!activity.rotatePaneLayout("clockwise".equals(direction))) return noSession(toolName);
+                    return ok().put("direction", direction);
+                }
+                case TOOL_PANE_MOVE_TO_EDGE: {
+                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
+                    if (!arguments.has("edge")) return error(400, "bad_request", "Missing 'edge'");
+                    String edge = arguments.optString("edge", "");
+                    if (!isPaneEdge(edge)) {
+                        return error(400, "bad_request", "Invalid 'edge'; expected left, right, up, or down");
+                    }
+                    if (!activity.moveFocusedPaneToEdge(edge)) {
+                        return error(409, "single_pane", "Moving to an edge requires at least two panes");
+                    }
+                    return ok().put("edge", edge);
+                }
 
                 case TOOL_WINDOW_NEW:
                     if (!activity.isSplitPanesEnabled()) return splitsDisabled();
@@ -327,6 +436,12 @@ public final class TerminalActionDispatcher {
                     client.addNewSession(arguments.optBoolean("failsafe", false), name.isEmpty() ? null : name);
                     return ok();
                 }
+                case TOOL_SESSION_BROWSER:
+                    TerminalSessionBrowser.show(activity);
+                    return ok().put("browserOpen", true);
+                case TOOL_SESSION_CLONE_CURRENT:
+                    if (!activity.cloneCurrentBrowserSession()) return noSession(toolName);
+                    return ok().put("cloned", true);
                 case TOOL_SESSION_NEXT:
                 case TOOL_SESSION_PREVIOUS: {
                     TermuxTerminalSessionActivityClient client = activity.getTermuxTerminalSessionClient();
@@ -475,6 +590,8 @@ public final class TerminalActionDispatcher {
                 case TOOL_TERMINAL_FONT_SIZE_INCREASE:
                 case TOOL_TERMINAL_FONT_SIZE_DECREASE:
                 case TOOL_TERMINAL_SELECT_URL:
+                case TOOL_TERMINAL_HINTS:
+                case TOOL_TERMINAL_SEARCH_SCROLLBACK:
                 case TOOL_TERMINAL_SHARE_TRANSCRIPT:
                 case TOOL_CLIPBOARD_PASTE: {
                     TermuxTerminalViewClient viewClient = activity.getTermuxTerminalViewClient();
@@ -493,6 +610,12 @@ public final class TerminalActionDispatcher {
                         case TOOL_TERMINAL_SELECT_URL:
                             viewClient.showUrlSelection();
                             break;
+                        case TOOL_TERMINAL_HINTS:
+                            viewClient.showHintsOverlay();
+                            break;
+                        case TOOL_TERMINAL_SEARCH_SCROLLBACK:
+                            viewClient.showScrollbackSearch();
+                            break;
                         case TOOL_TERMINAL_SHARE_TRANSCRIPT:
                             viewClient.shareSessionTranscript();
                             break;
@@ -508,6 +631,8 @@ public final class TerminalActionDispatcher {
                 default:
                     return error(501, "not_implemented", "Unhandled terminal action: " + toolName);
             }
+        } catch (TerminalWorkspace.WorkspaceException e) {
+            return workspaceError(e);
         } catch (Throwable t) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Terminal action '" + toolName + "' failed", t);
             return error(500, "execution_failed", String.valueOf(t.getMessage()));
@@ -544,10 +669,78 @@ public final class TerminalActionDispatcher {
             if (sessionName != null) state.put("windowSessionName", sessionName);
             state.put("wallpaperEnabled", activity.isWallpaperModeEnabled());
             state.put("cursorTrailEnabled", activity.isCursorTrailEnabled());
+            state.put("performance", buildPerformanceState(activity));
             return state;
         } catch (JSONException e) {
             return error(500, "execution_failed", "Failed to build terminal state");
         }
+    }
+
+    @NonNull
+    private JSONObject buildPerformanceState(@NonNull TermuxActivity activity) throws JSONException {
+        TerminalFrameMetricsMonitor.Snapshot window = activity.getTerminalFrameMetricsSnapshot();
+        JSONObject performance = new JSONObject();
+        performance.put("measurementActiveMs", nanosToMillis(window.activeDurationNanos));
+        performance.put("allocationScope", "whole_process_since_reset");
+        performance.put("allocatedBytes", window.allocatedBytes);
+        performance.put("gcCount", window.gcCount);
+
+        JSONObject frames = new JSONObject();
+        frames.put("scope", "whole_activity_window");
+        frames.put("count", window.frameCount);
+        frames.put("frameBudgetMs", nanosToMillis(window.frameBudgetNanos));
+        frames.put("averageFrameMs", averageMillis(window.totalDurationNanos, window.frameCount));
+        frames.put("medianFrameMs", nanosToMillis(window.medianTotalDurationNanos));
+        frames.put("p95FrameMs", nanosToMillis(window.p95TotalDurationNanos));
+        frames.put("maxFrameMs", nanosToMillis(window.maxTotalDurationNanos));
+        frames.put("averageDrawMs", averageMillis(window.totalDrawDurationNanos, window.frameCount));
+        frames.put("medianDrawMs", nanosToMillis(window.medianDrawDurationNanos));
+        frames.put("p95DrawMs", nanosToMillis(window.p95DrawDurationNanos));
+        frames.put("maxDrawMs", nanosToMillis(window.maxDrawDurationNanos));
+        frames.put("jankyFrames", window.jankyFrameCount);
+        frames.put("estimatedDroppedFrames", window.estimatedDroppedFrames);
+        frames.put("metricsReportsDropped", window.metricsReportsDropped);
+        performance.put("windowFrames", frames);
+
+        JSONArray panes = new JSONArray();
+        java.util.List<TerminalView> visiblePanes = activity.getTerminalPaneViews();
+        TerminalView activePane = activity.getTerminalView();
+        for (int i = 0; i < visiblePanes.size(); i++) {
+            TerminalView pane = visiblePanes.get(i);
+            TerminalRenderMetrics.Snapshot render = pane.getRenderMetricsSnapshot();
+            JSONObject item = new JSONObject();
+            item.put("index", i);
+            item.put("active", pane == activePane);
+            item.put("drawCount", render.drawCount);
+            item.put("frameBudgetMs", nanosToMillis(render.frameBudgetNanos));
+            item.put("averageRenderMs", averageMillis(render.totalRenderNanos, render.drawCount));
+            item.put("medianRenderMs", nanosToMillis(render.medianRenderNanos));
+            item.put("p95RenderMs", nanosToMillis(render.p95RenderNanos));
+            item.put("maxRenderMs", nanosToMillis(render.maxRenderNanos));
+            item.put("slowDraws", render.slowDrawCount);
+            item.put("estimatedDroppedFrames", render.estimatedDroppedFrames);
+            item.put("activeFrameTimeCount", render.activeFrameTimeCount);
+            item.put("averageActiveFrameMs",
+                averageMillis(render.totalActiveFrameTimeNanos, render.activeFrameTimeCount));
+            item.put("medianActiveFrameMs", nanosToMillis(render.medianActiveFrameTimeNanos));
+            item.put("p95ActiveFrameMs", nanosToMillis(render.p95ActiveFrameTimeNanos));
+            item.put("maxActiveFrameMs", nanosToMillis(render.maxActiveFrameTimeNanos));
+            panes.put(item);
+        }
+        performance.put("terminalPanes", panes);
+        return performance;
+    }
+
+    private static double averageMillis(long totalNanos, long count) {
+        return count <= 0L ? 0d : roundMillis(totalNanos / (double) count);
+    }
+
+    private static double nanosToMillis(long nanos) {
+        return nanos <= 0L ? 0d : roundMillis(nanos);
+    }
+
+    private static double roundMillis(double nanos) {
+        return Math.round((nanos / 1_000_000d) * 1000d) / 1000d;
     }
 
     @Nullable
@@ -559,6 +752,22 @@ public final class TerminalActionDispatcher {
             case "down": return KeyEvent.KEYCODE_DPAD_DOWN;
             default: return null;
         }
+    }
+
+    private static boolean isPaneLayout(@NonNull String layout) {
+        return TerminalPaneController.LAYOUT_STACK.equals(layout)
+            || TerminalPaneController.LAYOUT_GRID.equals(layout)
+            || TerminalPaneController.LAYOUT_TALL.equals(layout)
+            || TerminalPaneController.LAYOUT_FAT.equals(layout)
+            || TerminalPaneController.LAYOUT_HORIZONTAL.equals(layout)
+            || TerminalPaneController.LAYOUT_VERTICAL.equals(layout);
+    }
+
+    private static boolean isPaneEdge(@NonNull String edge) {
+        return TerminalPaneController.EDGE_LEFT.equals(edge)
+            || TerminalPaneController.EDGE_RIGHT.equals(edge)
+            || TerminalPaneController.EDGE_UP.equals(edge)
+            || TerminalPaneController.EDGE_DOWN.equals(edge);
     }
 
     @NonNull
@@ -575,6 +784,34 @@ public final class TerminalActionDispatcher {
     private static JSONObject splitsDisabled() {
         return error(409, "splits_disabled",
             "Split panes are disabled while compatibility mode is on");
+    }
+
+    @NonNull
+    private static JSONObject workspaceError(@NonNull TerminalWorkspace.WorkspaceException error) {
+        int status;
+        switch (error.code) {
+            case "invalid_name":
+            case "invalid_workspace":
+            case "unsupported_version":
+            case "workspace_too_large":
+                status = 400;
+                break;
+            case "not_found":
+                status = 404;
+                break;
+            case "conflict":
+            case "no_session":
+            case "splits_disabled":
+            case "too_many_panes":
+                status = 409;
+                break;
+            case "unavailable":
+                status = 503;
+                break;
+            default:
+                status = 500;
+        }
+        return error(status, error.code, error.getMessage() == null ? error.code : error.getMessage());
     }
 
     @NonNull

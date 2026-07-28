@@ -9,6 +9,8 @@ import androidx.annotation.Nullable;
 import com.termux.app.terminal.TerminalWindowBar;
 import com.termux.privileged.PrivilegedBackendManager;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -34,11 +36,15 @@ public final class WindowForegroundResolver {
         @Nullable public final String processName;
         /** Open file basename for editors, e.g. {@code config.toml}. Null otherwise. */
         @Nullable public final String openFile;
+        /** Full foreground argv as read from procfs. Empty for idle/unknown panes. */
+        @NonNull public final List<String> command;
 
-        ForegroundInfo(boolean idle, @Nullable String processName, @Nullable String openFile) {
+        ForegroundInfo(boolean idle, @Nullable String processName, @Nullable String openFile,
+                       @NonNull List<String> command) {
             this.idle = idle;
             this.processName = processName;
             this.openFile = openFile;
+            this.command = Collections.unmodifiableList(new ArrayList<>(command));
         }
     }
 
@@ -129,7 +135,7 @@ public final class WindowForegroundResolver {
             }
             String kind = parts[1];
             if ("idle".equals(kind)) {
-                next.put(pid, new ForegroundInfo(true, null, null));
+                next.put(pid, new ForegroundInfo(true, null, null, Collections.emptyList()));
             } else if ("fg".equals(kind) && parts.length == 3) {
                 ForegroundInfo info = parseForeground(parts[2]);
                 if (info != null) next.put(pid, info);
@@ -161,7 +167,9 @@ public final class WindowForegroundResolver {
                 break;
             }
         }
-        return new ForegroundInfo(false, process, openFile);
+        List<String> command = new ArrayList<>();
+        Collections.addAll(command, argv);
+        return new ForegroundInfo(false, process, openFile, command);
     }
 
     @NonNull
@@ -176,7 +184,8 @@ public final class WindowForegroundResolver {
         if (a == null || b == null) return a == b;
         return a.idle == b.idle
             && equalStr(a.processName, b.processName)
-            && equalStr(a.openFile, b.openFile);
+            && equalStr(a.openFile, b.openFile)
+            && a.command.equals(b.command);
     }
 
     private static boolean equalStr(@Nullable String a, @Nullable String b) {

@@ -45,6 +45,18 @@ import java.util.Map;
  */
 public class TerminalPaneController {
 
+    public static final String LAYOUT_STACK = "stack";
+    public static final String LAYOUT_GRID = "grid";
+    public static final String LAYOUT_TALL = "tall";
+    public static final String LAYOUT_FAT = "fat";
+    public static final String LAYOUT_HORIZONTAL = "horizontal";
+    public static final String LAYOUT_VERTICAL = "vertical";
+
+    public static final String EDGE_LEFT = "left";
+    public static final String EDGE_RIGHT = "right";
+    public static final String EDGE_UP = "up";
+    public static final String EDGE_DOWN = "down";
+
     private static final String STATE_NODE_TYPE = "type";
     private static final String STATE_NODE_SESSION = "session";
     private static final String STATE_NODE_ORIENTATION = "orientation";
@@ -71,6 +83,11 @@ public class TerminalPaneController {
         void onTreesChanged();
         /** Default working directory when a cwd can't be derived. */
         String defaultCwd();
+    }
+
+    /** Supplies durable metadata for a pane while its tree is being snapshotted. */
+    public interface WorkspacePaneCapture {
+        @NonNull TerminalWorkspace.Pane capture(@NonNull TerminalSession session);
     }
 
     /** onSessionFinished outcomes. */
@@ -146,6 +163,69 @@ public class TerminalPaneController {
         Window w = new Window(new Leaf(shell));
         mWindows.add(w);
         return w;
+    }
+
+    /** Export one live window without coupling the pane controller to process/CWD discovery. */
+    @NonNull
+    public TerminalWorkspace.Window snapshotWorkspaceWindow(
+        @NonNull Window window, @NonNull WorkspacePaneCapture capture) {
+        List<Leaf> leaves = leavesOf(window.root);
+        int active = Math.max(0, leaves.indexOf(window.active));
+        return new TerminalWorkspace.Window(active, snapshotWorkspaceNode(window.root, capture));
+    }
+
+    /**
+     * Rebuild a durable pane tree around newly-created sessions. Sessions must be supplied in the
+     * same left-to-right leaf order as the definition. No views are rendered until showWindow().
+     */
+    @NonNull
+    public Window newWorkspaceWindow(@NonNull TerminalWorkspace.Window definition,
+                                     @NonNull List<TerminalSession> sessions) {
+        int[] position = {0};
+        Node root = restoreWorkspaceNode(definition.root, sessions, position);
+        if (position[0] != sessions.size())
+            throw new IllegalArgumentException("Session count does not match workspace pane tree");
+        root.parent = null;
+        List<Leaf> leaves = leavesOf(root);
+        if (leaves.isEmpty() || definition.activePane < 0 || definition.activePane >= leaves.size())
+            throw new IllegalArgumentException("Workspace active pane is outside pane tree");
+        Window window = new Window(leaves.get(0));
+        window.root = root;
+        window.active = leaves.get(definition.activePane);
+        mWindows.add(window);
+        return window;
+    }
+
+    @NonNull
+    private TerminalWorkspace.Node snapshotWorkspaceNode(
+        @NonNull Node node, @NonNull WorkspacePaneCapture capture) {
+        if (node instanceof Leaf) return capture.capture(((Leaf) node).session);
+        Split split = (Split) node;
+        String orientation = split.orientation == LinearLayout.VERTICAL
+            ? TerminalWorkspace.Split.VERTICAL : TerminalWorkspace.Split.HORIZONTAL;
+        return new TerminalWorkspace.Split(orientation, split.weightA, split.weightB,
+            snapshotWorkspaceNode(split.a, capture), snapshotWorkspaceNode(split.b, capture));
+    }
+
+    @NonNull
+    private Node restoreWorkspaceNode(@NonNull TerminalWorkspace.Node definition,
+                                      @NonNull List<TerminalSession> sessions, @NonNull int[] position) {
+        if (definition instanceof TerminalWorkspace.Pane) {
+            if (position[0] >= sessions.size())
+                throw new IllegalArgumentException("Not enough sessions for workspace pane tree");
+            return new Leaf(sessions.get(position[0]++));
+        }
+        TerminalWorkspace.Split saved = (TerminalWorkspace.Split) definition;
+        Split split = new Split();
+        split.orientation = TerminalWorkspace.Split.VERTICAL.equals(saved.orientation)
+            ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL;
+        split.weightA = saved.weightA;
+        split.weightB = saved.weightB;
+        split.a = restoreWorkspaceNode(saved.a, sessions, position);
+        split.b = restoreWorkspaceNode(saved.b, sessions, position);
+        split.a.parent = split;
+        split.b.parent = split;
+        return split;
     }
 
     /**
@@ -501,6 +581,221 @@ public class TerminalPaneController {
         target.weightB = total - target.weightA;
         render();
         return true;
+    }
+
+    /** Apply one of the six automatic layouts to the active window without restarting any PTY. */
+    public boolean applyLayout(@NonNull String layout) {
+        if (mActiveWindow == null || mActiveWindow.active == null) return false;
+        List<Leaf> leaves = leavesOf(mActiveWindow.root);
+        if (leaves.isEmpty()) return false;
+        if (LAYOUT_STACK.equals(layout)) {
+            mMaximizedLeaf = mActiveWindow.active;
+            render();
+            mHost.onTreesChanged();
+            return true;
+        }
+
+        Node root;
+        switch (layout) {
+            case LAYOUT_GRID:
+                root = buildGrid(leaves);
+                break;
+            case LAYOUT_TALL:
+                root = buildMasterLayout(leaves, LinearLayout.HORIZONTAL, LinearLayout.VERTICAL);
+                break;
+            case LAYOUT_FAT:
+                root = buildMasterLayout(leaves, LinearLayout.VERTICAL, LinearLayout.HORIZONTAL);
+                break;
+            case LAYOUT_HORIZONTAL:
+                root = joinEvenly(new ArrayList<Node>(leaves), LinearLayout.HORIZONTAL);
+                break;
+            case LAYOUT_VERTICAL:
+                root = joinEvenly(new ArrayList<Node>(leaves), LinearLayout.VERTICAL);
+                break;
+            default:
+                return false;
+        }
+        mMaximizedLeaf = null;
+        root.parent = null;
+        mActiveWindow.root = root;
+        render();
+        mHost.onTreesChanged();
+        return true;
+    }
+
+    /** Reset every divider in the active window to an equal 1:1 ratio. */
+    public boolean equalizeLayout() {
+        if (mActiveWindow == null || mActiveWindow.root == null) return false;
+        mMaximizedLeaf = null;
+        equalizeNode(mActiveWindow.root);
+        render();
+        mHost.onTreesChanged();
+        return true;
+    }
+
+    /** Rotate the entire active pane tree geometrically by ninety degrees. */
+    public boolean rotateLayout(boolean clockwise) {
+        if (mActiveWindow == null || mActiveWindow.root == null) return false;
+        mMaximizedLeaf = null;
+        rotateNode(mActiveWindow.root, clockwise);
+        mActiveWindow.root.parent = null;
+        render();
+        mHost.onTreesChanged();
+        return true;
+    }
+
+    /** Extract the focused pane and attach it as the requested outer edge of the window. */
+    public boolean moveActivePaneToEdge(@NonNull String edge) {
+        if (mActiveWindow == null || mActiveWindow.active == null
+            || !(mActiveWindow.root instanceof Split)) return false;
+        final int orientation;
+        final boolean activeFirst;
+        switch (edge) {
+            case EDGE_LEFT:
+                orientation = LinearLayout.HORIZONTAL;
+                activeFirst = true;
+                break;
+            case EDGE_RIGHT:
+                orientation = LinearLayout.HORIZONTAL;
+                activeFirst = false;
+                break;
+            case EDGE_UP:
+                orientation = LinearLayout.VERTICAL;
+                activeFirst = true;
+                break;
+            case EDGE_DOWN:
+                orientation = LinearLayout.VERTICAL;
+                activeFirst = false;
+                break;
+            default:
+                return false;
+        }
+
+        mMaximizedLeaf = null;
+        Leaf active = mActiveWindow.active;
+        Node remainder = detachLeaf(mActiveWindow, active);
+        Split root = new Split();
+        root.orientation = orientation;
+        root.weightA = 1f;
+        root.weightB = 1f;
+        root.a = activeFirst ? active : remainder;
+        root.b = activeFirst ? remainder : active;
+        root.a.parent = root;
+        root.b.parent = root;
+        mActiveWindow.root = root;
+        render();
+        mHost.onTreesChanged();
+        return true;
+    }
+
+    @NonNull
+    private Node buildGrid(@NonNull List<Leaf> leaves) {
+        int columns = (int) Math.ceil(Math.sqrt(leaves.size()));
+        int rows = (int) Math.ceil(leaves.size() / (double) columns);
+        List<Node> rowNodes = new ArrayList<>();
+        int position = 0;
+        for (int row = 0; row < rows; row++) {
+            int remaining = leaves.size() - position;
+            int rowsLeft = rows - row;
+            int inRow = (int) Math.ceil(remaining / (double) rowsLeft);
+            List<Node> rowLeaves = new ArrayList<>();
+            for (int i = 0; i < inRow; i++) rowLeaves.add(leaves.get(position++));
+            rowNodes.add(joinEvenly(rowLeaves, LinearLayout.HORIZONTAL));
+        }
+        return joinEvenly(rowNodes, LinearLayout.VERTICAL);
+    }
+
+    @NonNull
+    private Node buildMasterLayout(@NonNull List<Leaf> leaves, int masterOrientation,
+                                   int remainderOrientation) {
+        if (leaves.size() == 1) {
+            leaves.get(0).parent = null;
+            return leaves.get(0);
+        }
+        Leaf master = leaves.get(0);
+        List<Node> remainderLeaves = new ArrayList<>();
+        for (int i = 1; i < leaves.size(); i++) remainderLeaves.add(leaves.get(i));
+        Node remainder = joinEvenly(remainderLeaves, remainderOrientation);
+        Split root = new Split();
+        root.orientation = masterOrientation;
+        root.weightA = 1f;
+        root.weightB = 1f;
+        root.a = master;
+        root.b = remainder;
+        master.parent = root;
+        remainder.parent = root;
+        return root;
+    }
+
+    /** Join ordered groups so each receives the same final width/height despite a chain tree. */
+    @NonNull
+    private Node joinEvenly(@NonNull List<Node> nodes, int orientation) {
+        if (nodes.isEmpty()) throw new IllegalArgumentException("Cannot layout zero panes");
+        Node root = nodes.get(0);
+        root.parent = null;
+        int groups = 1;
+        for (int i = 1; i < nodes.size(); i++) {
+            Node next = nodes.get(i);
+            Split split = new Split();
+            split.orientation = orientation;
+            split.weightA = groups;
+            split.weightB = 1f;
+            split.a = root;
+            split.b = next;
+            root.parent = split;
+            next.parent = split;
+            root = split;
+            groups++;
+        }
+        return root;
+    }
+
+    private void equalizeNode(@NonNull Node node) {
+        if (!(node instanceof Split)) return;
+        Split split = (Split) node;
+        split.weightA = 1f;
+        split.weightB = 1f;
+        equalizeNode(split.a);
+        equalizeNode(split.b);
+    }
+
+    private void rotateNode(@NonNull Node node, boolean clockwise) {
+        if (!(node instanceof Split)) return;
+        Split split = (Split) node;
+        rotateNode(split.a, clockwise);
+        rotateNode(split.b, clockwise);
+        boolean wasHorizontal = split.orientation == LinearLayout.HORIZONTAL;
+        split.orientation = wasHorizontal ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL;
+        boolean swap = (clockwise && !wasHorizontal) || (!clockwise && wasHorizontal);
+        if (swap) {
+            Node child = split.a;
+            split.a = split.b;
+            split.b = child;
+            float weight = split.weightA;
+            split.weightA = split.weightB;
+            split.weightB = weight;
+        }
+        split.a.parent = split;
+        split.b.parent = split;
+    }
+
+    /** Remove a leaf but keep every remaining node and session alive. */
+    @NonNull
+    private Node detachLeaf(@NonNull Window window, @NonNull Leaf leaf) {
+        Split parent = leaf.parent;
+        if (parent == null) throw new IllegalArgumentException("Cannot detach the only pane");
+        Node sibling = parent.a == leaf ? parent.b : parent.a;
+        Split grand = parent.parent;
+        sibling.parent = grand;
+        if (grand == null) {
+            window.root = sibling;
+        } else if (grand.a == parent) {
+            grand.a = sibling;
+        } else {
+            grand.b = sibling;
+        }
+        leaf.parent = null;
+        return window.root;
     }
 
     // --- Rendering ---

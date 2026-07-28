@@ -210,7 +210,7 @@ public final class TerminalRenderer {
                         if (lastRunInsideCursor && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK) {
                             invertCursorTextColor = true;
                         }
-                        drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn, columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun, measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, boldWithBright, reverseVideo || invertCursorTextColor || lastRunInsideSelection, horizontalOffset, lastRunDecorationColor, lastRunHyperlinkId != 0);
+                        drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn, columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun, measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, boldWithBright, reverseVideo || invertCursorTextColor || lastRunInsideSelection, horizontalOffset, lastRunDecorationColor, lastRunHyperlinkId != 0, 0);
                     }
                     measuredWidthForRun = 0.f;
                     lastRunStyle = style;
@@ -238,11 +238,12 @@ public final class TerminalRenderer {
             if (lastRunInsideCursor && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK) {
                 invertCursorTextColor = true;
             }
-            drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn, columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun, measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, boldWithBright, reverseVideo || invertCursorTextColor || lastRunInsideSelection, horizontalOffset, lastRunDecorationColor, lastRunHyperlinkId != 0);
+            drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn, columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun, measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, boldWithBright, reverseVideo || invertCursorTextColor || lastRunInsideSelection, horizontalOffset, lastRunDecorationColor, lastRunHyperlinkId != 0, 0);
         }
+        drawExtraCursors(mEmulator, canvas, screen, palette, topRow, endRow, boldWithBright, reverseVideo, horizontalOffset);
     }
 
-    private void drawTextRun(Canvas canvas, char[] text, int[] palette, float y, int startColumn, int runWidthColumns, int startCharIndex, int runWidthChars, float mes, int cursor, int cursorStyle, long textStyle, boolean boldWithBright, boolean reverseVideo, float horizontalOffset, int decorationColor, boolean hyperlink) {
+    private void drawTextRun(Canvas canvas, char[] text, int[] palette, float y, int startColumn, int runWidthColumns, int startCharIndex, int runWidthChars, float mes, int cursor, int cursorStyle, long textStyle, boolean boldWithBright, boolean reverseVideo, float horizontalOffset, int decorationColor, boolean hyperlink, int foregroundOverride) {
         int foreColor = TextStyle.decodeForeColor(textStyle);
         final int effect = TextStyle.decodeEffect(textStyle);
         int backColor = TextStyle.decodeBackColor(textStyle);
@@ -271,6 +272,8 @@ public final class TerminalRenderer {
             foreColor = backColor;
             backColor = tmp;
         }
+        if (foregroundOverride != 0)
+            foreColor = foregroundOverride;
         float left = horizontalOffset + startColumn * fontWidth;
         float right = left + runWidthColumns * fontWidth;
         mes = mes / fontWidth;
@@ -344,6 +347,100 @@ public final class TerminalRenderer {
         }
         if (savedMatrix)
             canvas.restore();
+    }
+
+    /** Draw kitty-protocol cursors after the normal screen, so they do not perturb text run batching. */
+    private void drawExtraCursors(TerminalEmulator emulator, Canvas canvas, TerminalBuffer screen, int[] palette,
+                                  int topRow, int endRow, boolean boldWithBright, boolean reverseVideo,
+                                  float horizontalOffset) {
+        TerminalEmulator.ExtraCursor[] cursors = emulator.getExtraCursors();
+        if (cursors.length == 0 || !emulator.shouldExtraCursorsBeVisible()) return;
+
+        TerminalEmulator.ExtraCursorColor configuredCursor = emulator.getExtraCursorColor();
+        TerminalEmulator.ExtraCursorColor configuredText = emulator.getExtraCursorTextColor();
+        for (TerminalEmulator.ExtraCursor cursor : cursors) {
+            if (cursor.row < topRow || cursor.row >= endRow || cursor.col < 0 || cursor.col >= emulator.mColumns)
+                continue;
+            TerminalRow row = screen.allocateFullLineIfNecessary(screen.externalToInternalRow(cursor.row));
+            int startColumn = cursor.col;
+            int startIndex = row.findStartOfColumn(startColumn);
+            if (startColumn > 0 && startIndex == row.findStartOfColumn(startColumn - 1))
+                startColumn--;
+            startIndex = row.findStartOfColumn(startColumn);
+            char[] text = row.mText;
+            int codePoint = Character.isHighSurrogate(text[startIndex])
+                ? Character.toCodePoint(text[startIndex], text[startIndex + 1]) : text[startIndex];
+            int width = Math.max(1, WcWidth.width(codePoint));
+            int endColumn = Math.min(emulator.mColumns, startColumn + width);
+            int endIndex = row.findStartOfColumn(endColumn);
+            int chars = Math.max(1, endIndex - startIndex);
+            long style = row.getStyle(startColumn);
+            int shape = cursor.shape == 29 ? emulator.getCursorStyle() : kittyCursorShape(cursor.shape);
+            int cellForeground = resolveCellColor(TextStyle.decodeForeColor(style), palette);
+            int cellBackground = resolveCellColor(TextStyle.decodeBackColor(style), palette);
+            if (reverseVideo ^ ((TextStyle.decodeEffect(style) & TextStyle.CHARACTER_ATTRIBUTE_INVERSE) != 0)) {
+                int swap = cellForeground;
+                cellForeground = cellBackground;
+                cellBackground = swap;
+            }
+
+            int cursorColor = resolveExtraColor(configuredCursor, palette,
+                palette[TextStyle.COLOR_INDEX_CURSOR]);
+            int textOverride = 0;
+            boolean invertText = shape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
+            if (configuredCursor.type == 1) {
+                cursorColor = cellForeground;
+                textOverride = cellBackground;
+                invertText = false;
+            } else if (configuredText.type == 1) {
+                textOverride = cellBackground;
+                invertText = false;
+            } else if (configuredText.type == 2 || configuredText.type == 5) {
+                textOverride = resolveExtraColor(configuredText, palette, cellBackground);
+                invertText = false;
+            }
+
+            float y = mFontLineSpacingAndAscent + (cursor.row - topRow + 1) * mFontLineSpacing;
+            if (TextStyle.isBitmap(style)) {
+                drawCursorShape(canvas, horizontalOffset + startColumn * mFontWidth, y,
+                    width * mFontWidth, shape, cursorColor);
+                continue;
+            }
+            float measured = mTextPaint.measureText(text, startIndex, chars);
+            int decorationColor = row.hasDecorationColors() ? row.getDecorationColor(startColumn)
+                : TextStyle.DECORATION_COLOR_DEFAULT;
+            boolean hyperlink = row.hasHyperlinks() && row.getHyperlinkId(startColumn) != 0;
+            drawTextRun(canvas, text, palette, y, startColumn, width, startIndex, chars, measured,
+                cursorColor, shape, style, boldWithBright, reverseVideo || invertText, horizontalOffset,
+                decorationColor, hyperlink, textOverride);
+        }
+    }
+
+    private static int kittyCursorShape(int shape) {
+        if (shape == 2) return TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR;
+        if (shape == 3) return TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE;
+        return TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
+    }
+
+    private static int resolveCellColor(int color, int[] palette) {
+        return (color & 0xff000000) == 0xff000000 ? color : palette[color];
+    }
+
+    private static int resolveExtraColor(TerminalEmulator.ExtraCursorColor color, int[] palette, int fallback) {
+        if (color.type == 2) return color.value;
+        if (color.type == 5) return palette[color.value & 0xff];
+        return fallback;
+    }
+
+    private void drawCursorShape(Canvas canvas, float left, float bottom, float width, int shape, int color) {
+        float top = bottom - mFontLineSpacing;
+        float right = left + width;
+        if (shape == TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE)
+            top = bottom - mFontLineSpacing / 4f;
+        else if (shape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR)
+            right = left + width / 4f;
+        mTextPaint.setColor(color);
+        canvas.drawRect(left, top, right, bottom, mTextPaint);
     }
 
     /**

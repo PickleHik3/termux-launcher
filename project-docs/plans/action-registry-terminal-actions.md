@@ -401,6 +401,44 @@ keybind comments.
   "description · stroke" subtitles, and searching "selected" shows both rows
   greyed with their reason. No crashes; device left unchanged.
 
+- **Slice 10 — chords, timeout, and editable bindings (done).** The resolver is now a sequence
+  state machine. Prefixes such as `Ctrl+Alt+Space` remain pending for two seconds, show a small
+  non-focusable overlay, and cancel cleanly on timeout, mismatch, lifecycle stop, or property
+  reload. The command palette keeps its direct `Ctrl+Alt+Shift+P` bind and also demonstrates the
+  chord path at `Ctrl+Alt+Space > P`.
+
+  `~/.termux/termux-launcher-bindings.conf` overlays the registry defaults without changing the
+  remote action surface. `map`, `unmap`, `--when splits-on|splits-off|always`, quoted `send-text`,
+  `send-key`, and repeated maps for ordered multi-action bindings are supported. Parsing is bounded
+  to 256 KiB, 4096 lines, and 4096 characters per line. Invalid lines are skipped, logged, and
+  summarized in a toast while every valid mapping remains active.
+
+- **Slice 11 — hints overlay (done).** `terminal.hints`, bound to `Ctrl+Alt+U`, scans the formatted
+  transcript for URLs, absolute and relative paths, hashes, and `path:line[:column]` locations.
+  It renders stable letter labels in a keyboard-first picker. Pressing a label opens a URL or copies
+  any other hint; holding Shift while pressing a URL label copies it instead. Extraction, overlap
+  precedence, deduplication, and labels live in the Android-free
+  `TerminalHintsModel` and are unit tested.
+
+- **Slice 12 — native scrollback search (done).** `terminal.search_scrollback`, bound to
+  `Ctrl+Alt+S`, opens a native search overlay over the active emulator transcript. Matches are
+  case-insensitive, bounded, and retain their emulator row so choosing a result scrolls the view to
+  it instead of copying text into a temporary pager. The model tests history/screen row mapping,
+  multiple hits, empty queries, and result caps.
+
+- **Slice 13 — modal keymaps (done).** A root binding can push a named mode with `map --new-mode`;
+  mode-local mappings use `map --mode`. Modes form a stack and may set a timeout, choose
+  `beep`, `ignore`, `end`, or `passthrough` for unknown keys, and either remain active or end after
+  a matched action. `pop-mode` (and kitty's `pop_keyboard_mode` spelling) exits explicitly. The
+  chord overlay doubles as a persistent mode indicator, without acquiring input focus. Reloading
+  properties replaces the complete mode table and cancels both pending chord and mode timers.
+
+  Pong verification upgraded the APK in place, loaded a disposable `test` mode, observed its mode
+  indicator, dispatched `x` to `send-text MODAL_OK`, verified the mode remained active, and popped it
+  with Escape. The built-in `Ctrl+Alt+Space > P` chord opened the command palette. The temporary
+  binding file and typed test line were removed, the original no-config state was restored, and the
+  bounded app log contained no binding error or fatal exception.
+
 ## Resolved binding conflicts
 
 These were the ambiguities that blocked earlier slices. All three are now expressed
@@ -428,9 +466,9 @@ as conditions rather than left unbound; kept here as the rationale for why
 
 ## Remaining work
 
-The open items from these slices — chords and timeouts, modal maps, a user-editable binding file,
-`send-text` / `send-key`, and generating the action sheet from the registry — are listed with
-everything else in `backlog.md`.
+Generating the curated action sheet from the registry remains deliberately out of scope; the
+complete searchable surface is the command palette. All other binding/input items from these
+slices are complete. The project-wide unfinished list is `backlog.md`.
 
 ## Test baseline
 

@@ -29,7 +29,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void registry_containsExpectedTools() {
         List<LauncherToolRegistry.ToolMetadata> tools = registry.getTools();
-        assertEquals(58, tools.size());
+        assertEquals(70, tools.size());
         assertNotNull(registry.getTool("capabilities.get"));
         assertNotNull(registry.getTool("apps.search"));
         assertNotNull(registry.getTool("apps.launch"));
@@ -84,7 +84,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void toOpenAiToolsJson_producesFunctionTools() throws Exception {
         JSONArray openAiTools = registry.toOpenAiToolsJson();
-        assertEquals(58, openAiTools.length());
+        assertEquals(70, openAiTools.length());
         for (int i = 0; i < openAiTools.length(); i++) {
             JSONObject item = openAiTools.getJSONObject(i);
             assertEquals("function", item.getString("type"));
@@ -99,7 +99,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void toInternalJson_includesSchemaAndRisk() throws Exception {
         JSONArray internal = registry.toInternalJson();
-        assertEquals(58, internal.length());
+        assertEquals(70, internal.length());
         JSONObject first = internal.getJSONObject(0);
         assertTrue(first.has("name"));
         assertTrue(first.has("description"));
@@ -113,9 +113,9 @@ public class LauncherToolRegistryTest {
     public void responseJson_containsBothFormats() throws Exception {
         JSONObject response = registry.toResponseJson();
         assertTrue(response.getBoolean("ok"));
-        assertEquals(58, response.getInt("count"));
-        assertEquals(58, response.getJSONArray("tools").length());
-        assertEquals(58, response.getJSONArray("openAiTools").length());
+        assertEquals(70, response.getInt("count"));
+        assertEquals(70, response.getJSONArray("tools").length());
+        assertEquals(70, response.getJSONArray("openAiTools").length());
     }
 
     @Test
@@ -186,7 +186,9 @@ public class LauncherToolRegistryTest {
     public void agentOnlyTools_haveNoUiMetadata() {
         String[] agentOnly = {"capabilities.get", "apps.search", "apps.launch", "notifications.recent",
             "notifications.since", "notifications.search", "notifications.stats", "media.now_playing",
-            "system.resources", "intent.open", "memory.write", "memory.search", "events.tail", "user.confirm"};
+            "system.resources", "intent.open", "memory.write", "memory.search", "events.tail", "user.confirm",
+            "workspace.save", "workspace.load", "workspace.list", "workspace.delete",
+            "pane.layout", "pane.move_to_edge"};
         for (String name : agentOnly) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
             assertNotNull(name, tool);
@@ -202,7 +204,8 @@ public class LauncherToolRegistryTest {
         String[] terminalTools = {"terminal.state", "pane.split_vertical", "pane.split_horizontal",
             "pane.focus_direction", "pane.resize", "pane.kill_focused", "window.new", "window.close",
             "window.next", "window.previous", "session.new", "session.next", "session.previous",
-            "session.close_current"};
+            "session.close_current", "session.browser", "session.clone_current",
+            "pane.equalize", "pane.rotate"};
         for (String name : terminalTools) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
             assertNotNull(name, tool);
@@ -210,7 +213,7 @@ public class LauncherToolRegistryTest {
             assertNotNull(name, tool.category);
             assertTrue(name, tool.hasUiMetadata());
         }
-        assertEquals(44, registry.getUiTools().size());
+        assertEquals(50, registry.getUiTools().size());
     }
 
     @Test
@@ -232,6 +235,8 @@ public class LauncherToolRegistryTest {
     public void commandPaletteIsBoundAndPromptVariantsExist() {
         assertEquals("ctrl+alt+shift+p",
             registry.getTool("app.command_palette").defaultBindings.get(0).stroke);
+        assertEquals("ctrl+alt+space>p",
+            registry.getTool("app.command_palette").defaultBindings.get(1).stroke);
         assertNotNull(registry.getTool("window.rename_prompt"));
         assertNotNull(registry.getTool("session.rename_prompt"));
         // The argument-taking variants remain, for callers that know the name.
@@ -253,14 +258,17 @@ public class LauncherToolRegistryTest {
         // Navigation is LOW and unconfirmed; spawning a shell is MEDIUM and
         // confirmed; terminating one is HIGH and confirmed.
         String[] navigation = {"terminal.state", "pane.focus_direction", "pane.resize",
-            "window.next", "window.previous", "session.next", "session.previous"};
+            "window.next", "window.previous", "session.next", "session.previous",
+            "pane.layout", "pane.equalize", "pane.rotate", "pane.move_to_edge",
+            "session.browser"};
         for (String name : navigation) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
             assertEquals(name, LauncherToolRegistry.ToolRisk.LOW, tool.risk);
             assertFalse(name, tool.requiresConfirmation);
         }
 
-        String[] spawning = {"pane.split_vertical", "pane.split_horizontal", "window.new", "session.new"};
+        String[] spawning = {"pane.split_vertical", "pane.split_horizontal", "window.new", "session.new",
+            "session.clone_current"};
         for (String name : spawning) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
             assertEquals(name, LauncherToolRegistry.ToolRisk.MEDIUM, tool.risk);
@@ -276,13 +284,60 @@ public class LauncherToolRegistryTest {
     }
 
     @Test
+    public void workspaceActions_haveExplicitSchemasAndConservativeRisk() {
+        LauncherToolRegistry.ToolMetadata save = registry.getTool("workspace.save");
+        LauncherToolRegistry.ToolMetadata load = registry.getTool("workspace.load");
+        LauncherToolRegistry.ToolMetadata list = registry.getTool("workspace.list");
+        LauncherToolRegistry.ToolMetadata delete = registry.getTool("workspace.delete");
+        assertNotNull(save);
+        assertNotNull(load);
+        assertNotNull(list);
+        assertNotNull(delete);
+        assertEquals(LauncherToolRegistry.ToolRisk.MEDIUM, save.risk);
+        assertEquals(LauncherToolRegistry.ToolRisk.HIGH, load.risk);
+        assertEquals(LauncherToolRegistry.ToolRisk.LOW, list.risk);
+        assertEquals(LauncherToolRegistry.ToolRisk.HIGH, delete.risk);
+        assertTrue(save.requiresConfirmation);
+        assertTrue(load.requiresConfirmation);
+        assertFalse(list.requiresConfirmation);
+        assertTrue(delete.requiresConfirmation);
+        assertEquals("name", save.schema.optJSONArray("required").optString(0));
+        assertEquals(2, load.schema.optJSONObject("properties")
+            .optJSONObject("mode").optJSONArray("enum").length());
+    }
+
+    @Test
+    public void automaticLayoutActions_haveBoundedSchemasAndUiMetadataWhereUsable() {
+        LauncherToolRegistry.ToolMetadata layout = registry.getTool("pane.layout");
+        LauncherToolRegistry.ToolMetadata equalize = registry.getTool("pane.equalize");
+        LauncherToolRegistry.ToolMetadata rotate = registry.getTool("pane.rotate");
+        LauncherToolRegistry.ToolMetadata move = registry.getTool("pane.move_to_edge");
+        assertNotNull(layout);
+        assertNotNull(equalize);
+        assertNotNull(rotate);
+        assertNotNull(move);
+        assertEquals(6, layout.schema.optJSONObject("properties")
+            .optJSONObject("layout").optJSONArray("enum").length());
+        assertEquals("layout", layout.schema.optJSONArray("required").optString(0));
+        assertEquals(4, move.schema.optJSONObject("properties")
+            .optJSONObject("edge").optJSONArray("enum").length());
+        assertEquals("edge", move.schema.optJSONArray("required").optString(0));
+        assertFalse(layout.hasUiMetadata());
+        assertFalse(move.hasUiMetadata());
+        assertTrue(equalize.hasUiMetadata());
+        assertTrue(rotate.hasUiMetadata());
+        assertFalse(equalize.requiresConfirmation);
+        assertFalse(rotate.requiresConfirmation);
+    }
+
+    @Test
     public void paletteVisibleTools_haveTitleResources() {
         // A titleRes is what marks a tool user-facing. terminal.state is an
         // introspection tool and must stay out of the palette.
         String[] userFacing = {"pane.split_vertical", "pane.split_horizontal", "pane.focus_direction",
             "pane.resize", "pane.kill_focused", "window.new", "window.close", "window.next",
             "window.previous", "session.new", "session.next", "session.previous",
-            "session.close_current"};
+            "session.close_current", "session.browser", "session.clone_current"};
         for (String name : userFacing) {
             assertTrue(name + " needs a titleRes", registry.getTool(name).titleRes != 0);
         }
@@ -318,6 +373,7 @@ public class LauncherToolRegistryTest {
     public void terminalViewActions_areRegistered() {
         String[] viewActions = {"terminal.toggle_soft_keyboard", "terminal.toggle_toolbar",
             "terminal.font_size_increase", "terminal.font_size_decrease", "terminal.select_url",
+            "terminal.hints", "terminal.search_scrollback",
             "terminal.share_transcript", "clipboard.paste"};
         for (String name : viewActions) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
@@ -328,6 +384,8 @@ public class LauncherToolRegistryTest {
         }
         assertEquals("clipboard", registry.getTool("clipboard.paste").category);
         assertEquals("terminal", registry.getTool("terminal.select_url").category);
+        assertEquals("terminal", registry.getTool("terminal.hints").category);
+        assertEquals("terminal", registry.getTool("terminal.search_scrollback").category);
     }
 
     @Test
@@ -361,7 +419,8 @@ public class LauncherToolRegistryTest {
         LauncherToolRegistry.ActionContext none = context(true, false);
         LauncherToolRegistry.ActionContext present = context(true, true);
         String[] needSession = {"pane.kill_focused", "session.close_current",
-            "terminal.toggle_soft_keyboard", "terminal.select_url", "terminal.share_transcript",
+            "terminal.toggle_soft_keyboard", "terminal.select_url", "terminal.hints",
+            "terminal.search_scrollback", "terminal.share_transcript",
             "clipboard.paste"};
         for (String name : needSession) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
@@ -512,6 +571,15 @@ public class LauncherToolRegistryTest {
         assertTrue(properties.has("name"));
         assertEquals("boolean", properties.optJSONObject("failsafe").optString("type"));
         assertNull(schema.optJSONArray("required"));
+    }
+
+    @Test
+    public void terminalStateSchema_canResetPerformanceCounters() {
+        JSONObject schema = registry.getTool("terminal.state").schema;
+        JSONObject reset = schema.optJSONObject("properties").optJSONObject("resetPerformance");
+        assertNotNull(reset);
+        assertEquals("boolean", reset.optString("type"));
+        assertFalse(reset.optBoolean("default", true));
     }
 
     @Test
