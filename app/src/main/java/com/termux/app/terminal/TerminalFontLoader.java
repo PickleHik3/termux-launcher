@@ -29,17 +29,20 @@ public final class TerminalFontLoader {
         @Nullable public final Typeface italic;
         @Nullable public final Typeface boldItalic;
         @NonNull public final TerminalRenderer.SymbolMap[] symbolMaps;
+        @NonNull public final TerminalRenderer.LigaturePolicy ligaturePolicy;
         @NonNull public final List<String> errors;
 
         private Faces(@NonNull Typeface regular, @Nullable Typeface bold,
                       @Nullable Typeface italic, @Nullable Typeface boldItalic,
                       @NonNull TerminalRenderer.SymbolMap[] symbolMaps,
+                      @NonNull TerminalRenderer.LigaturePolicy ligaturePolicy,
                       @NonNull List<String> errors) {
             this.regular = regular;
             this.bold = bold;
             this.italic = italic;
             this.boldItalic = boldItalic;
             this.symbolMaps = symbolMaps.clone();
+            this.ligaturePolicy = ligaturePolicy;
             this.errors = Collections.unmodifiableList(new ArrayList<>(errors));
         }
     }
@@ -65,7 +68,9 @@ public final class TerminalFontLoader {
         Typeface boldItalic = loadConfigured(config.face(TerminalFontConfig.Face.BOLD_ITALIC),
             Typeface.BOLD_ITALIC, "bold_italic_font", errors);
         TerminalRenderer.SymbolMap[] symbolMaps = loadSymbolMaps(config.symbolMaps, errors);
-        return new Faces(regular, bold, italic, boldItalic, symbolMaps, errors);
+        TerminalRenderer.LigaturePolicy ligaturePolicy = TerminalRenderer.LigaturePolicy.valueOf(
+            config.ligaturePolicy.name());
+        return new Faces(regular, bold, italic, boldItalic, symbolMaps, ligaturePolicy, errors);
     }
 
     @NonNull

@@ -1,7 +1,8 @@
 # Fonts and cluster-aware shaping
 
-Status: four-face configuration, Canvas shaping, the fixed-cell grapheme model, and explicit symbol
-maps were delivered and device-verified 2026-07-28; ligature policy is next.
+Status: four-face configuration, Canvas shaping, the fixed-cell grapheme model, explicit symbol
+maps, and ligature policy were delivered and device-verified 2026-07-28; OpenType features are
+next.
 
 This is the remaining Phase 4 project from the Kitty feasibility study. It extends Termux's native
 `~/.termux/font.ttf` contract instead of replacing it, and keeps the Canvas renderer unless device
@@ -39,6 +40,7 @@ Repeatable symbol maps use Kitty's range syntax:
 ```text
 symbol_map U+E000-U+F8FF path=~/.termux/fonts/SymbolsNerdFontMono.ttf
 symbol_map U+E0A0-U+E0D7,U+F0001 family="Symbols Nerd Font Mono"
+disable_ligatures cursor
 ```
 
 An explicit map selects its font for the range. Unmapped clusters use the configured primary face
@@ -60,7 +62,7 @@ for path-backed mappings.
    HarfBuzz only if those acceptance tests fail on supported Android versions/devices.
 4. **`symbol_map` and fallback ranges — complete.** Select fonts per complete grapheme, never in the middle of
    a cluster; retain Android fallback after explicit mappings and primary faces.
-5. **Ligature policy.** Support `never`, `cursor`, and `always`. The renderer already breaks at the
+5. **Ligature policy — complete.** Support `never`, `cursor`, and `always`. The renderer already breaks at the
    cursor for inversion; cursor-only disabling should use that boundary and a temporary feature
    setting rather than reshape unrelated cells.
 6. **OpenType features.** `Paint.setFontFeatureSettings()` exists below minSdk 26. Translate the
@@ -160,6 +162,23 @@ Android 16 instrumentation covers family loading, later-overlap precedence, and 
 grapheme ownership. A live reload also loaded a path-backed Noto Serif copy from
 `~/.termux/fonts/`, kept the foreground activity and process healthy, emitted no font errors, and
 restored the original absent-config state after the test.
+
+## Delivered: ligature policy
+
+`disable_ligatures` accepts Kitty's `never`, `cursor`, and `always` values, defaults to `never`, and
+uses last-value-wins reload semantics. It controls the programming-ligature `calt` feature rather
+than changing terminal cells or disabling general-script shaping. `cursor` adds `-calt` only to the
+visible cursor run; `always` adds it to every text run.
+
+The renderer preserves any existing feature string, applies the temporary `-calt` override for
+both advance measurement and drawing, and restores the previous `Paint` setting in a `finally`
+boundary. Policy state survives text-size changes and is replaced atomically with faces and symbol
+maps during the existing settings reload.
+
+Pure policy tests cover every mode/cursor combination. Android 16 verifies that `-calt` alone
+breaks the platform programming-ligature probe, that restoring `Paint` restores identical shaping,
+and that cursor mode leaves runs away from the cursor unchanged. A live `disable_ligatures always`
+reload kept the foreground process healthy and the absent-config state was restored afterward.
 
 ## Scope boundaries
 

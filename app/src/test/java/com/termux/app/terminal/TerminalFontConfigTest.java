@@ -38,6 +38,22 @@ public class TerminalFontConfigTest {
     }
 
     @Test
+    public void parsesKittyLigaturePoliciesAndDefaultsToNever() {
+        TerminalFontConfig.Result defaultResult = TerminalFontConfig.parse("", true);
+        assertEquals(TerminalFontConfig.LigaturePolicy.NEVER, defaultResult.ligaturePolicy);
+
+        TerminalFontConfig.Result result = TerminalFontConfig.parse(
+            "disable_ligatures cursor\ndisable_ligatures ALWAYS\n", true);
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+        assertEquals(TerminalFontConfig.LigaturePolicy.ALWAYS, result.ligaturePolicy);
+
+        TerminalFontConfig.Result invalid = TerminalFontConfig.parse(
+            "disable_ligatures sometimes\n", true);
+        assertEquals(TerminalFontConfig.LigaturePolicy.NEVER, invalid.ligaturePolicy);
+        assertEquals(1, invalid.errors.size());
+    }
+
+    @Test
     public void parsesRepeatableSymbolMapsAndCommaSeparatedRanges() {
         TerminalFontConfig.Result result = TerminalFontConfig.parse(
             "symbol_map U+E000-U+F8FF,U+F0001 path=~/.termux/fonts/nerd.ttf\n"

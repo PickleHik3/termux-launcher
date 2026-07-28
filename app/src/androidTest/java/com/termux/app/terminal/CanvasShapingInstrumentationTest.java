@@ -114,6 +114,8 @@ public class CanvasShapingInstrumentationTest {
         Fixture arrow = new Fixture("cursor-arrow", "->", false, 2);
         float[] enabled = advances(paint, arrow);
 
+        paint.setFontFeatureSettings("'calt' 0");
+        float[] caltDisabled = advances(paint, arrow);
         paint.setFontFeatureSettings("'liga' 0, 'calt' 0");
         float[] disabled = advances(paint, arrow);
         paint.setFontFeatureSettings(null);
@@ -121,10 +123,13 @@ public class CanvasShapingInstrumentationTest {
 
         assertEquals("the platform font should expose a real -> ligature for this probe",
             0f, enabled[1], EPSILON);
+        assertTrue("Kitty-compatible calt disabling should break the programming ligature",
+            caltDisabled[1] > 0f);
         assertTrue("disabling liga/calt should restore an advance to the second character",
             disabled[1] > 0f);
         assertArrayEquals("restoring Paint state must restore shaping", enabled, restored, EPSILON);
         Log.i(LOG_TAG, "cursor-arrow enabled=[" + enabled[0] + ',' + enabled[1]
+            + "] calt-disabled=[" + caltDisabled[0] + ',' + caltDisabled[1]
             + "] disabled=[" + disabled[0] + ',' + disabled[1] + "]");
     }
 

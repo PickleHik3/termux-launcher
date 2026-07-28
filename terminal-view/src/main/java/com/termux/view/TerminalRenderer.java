@@ -23,6 +23,8 @@ import com.termux.terminal.TextStyle;
  */
 public final class TerminalRenderer {
 
+    public enum LigaturePolicy { NEVER, CURSOR, ALWAYS }
+
     /** One explicit code-point range mapped to a font. Later entries override earlier ones. */
     public static final class SymbolMap {
         public final int firstCodePoint;
@@ -53,6 +55,8 @@ public final class TerminalRenderer {
     @Nullable final Typeface mBoldItalicTypeface;
 
     final SymbolMap[] mSymbolMaps;
+
+    final LigaturePolicy mLigaturePolicy;
 
     private final Paint mTextPaint = new Paint();
     private Typeface mCurrentTypeface;
@@ -94,14 +98,15 @@ public final class TerminalRenderer {
     public TerminalRenderer(int textSize, Typeface typeface, Typeface italicTypeface) {
         this(textSize, typeface, null,
             italicTypeface != null && !italicTypeface.equals(typeface) ? italicTypeface : null,
-            null, NO_SYMBOL_MAPS);
+            null, NO_SYMBOL_MAPS, LigaturePolicy.NEVER);
     }
 
     /** Construct a renderer with independent real faces; null variants use synthetic styling. */
     public TerminalRenderer(int textSize, Typeface typeface, @Nullable Typeface boldTypeface,
                             @Nullable Typeface italicTypeface,
                             @Nullable Typeface boldItalicTypeface) {
-        this(textSize, typeface, boldTypeface, italicTypeface, boldItalicTypeface, NO_SYMBOL_MAPS);
+        this(textSize, typeface, boldTypeface, italicTypeface, boldItalicTypeface, NO_SYMBOL_MAPS,
+            LigaturePolicy.NEVER);
     }
 
     /** Construct a renderer with real faces and explicit per-code-point symbol fonts. */
@@ -109,6 +114,16 @@ public final class TerminalRenderer {
                             @Nullable Typeface italicTypeface,
                             @Nullable Typeface boldItalicTypeface,
                             @Nullable SymbolMap[] symbolMaps) {
+        this(textSize, typeface, boldTypeface, italicTypeface, boldItalicTypeface, symbolMaps,
+            LigaturePolicy.NEVER);
+    }
+
+    /** Construct a renderer with explicit font maps and programming-ligature policy. */
+    public TerminalRenderer(int textSize, Typeface typeface, @Nullable Typeface boldTypeface,
+                            @Nullable Typeface italicTypeface,
+                            @Nullable Typeface boldItalicTypeface,
+                            @Nullable SymbolMap[] symbolMaps,
+                            @Nullable LigaturePolicy ligaturePolicy) {
         mTextSize = textSize;
         mTypeface = typeface;
         mBoldTypeface = boldTypeface;
@@ -116,6 +131,7 @@ public final class TerminalRenderer {
         mBoldItalicTypeface = boldItalicTypeface;
         mSymbolMaps = symbolMaps == null || symbolMaps.length == 0
             ? NO_SYMBOL_MAPS : symbolMaps.clone();
+        mLigaturePolicy = ligaturePolicy == null ? LigaturePolicy.NEVER : ligaturePolicy;
         mTextPaint.setTypeface(typeface);
         mTextPaint.setAntiAlias(true);
         mTextPaint.setTextSize(textSize);
@@ -301,6 +317,35 @@ public final class TerminalRenderer {
                              boolean reverseVideo, float horizontalOffset, int decorationColor,
                              boolean hyperlink, int foregroundOverride,
                              @Nullable Typeface symbolTypeface) {
+        boolean disableLigatures = disablesLigatures(mLigaturePolicy, cursor != 0);
+        String previousFeatures = mTextPaint.getFontFeatureSettings();
+        if (disableLigatures) {
+            String disabledFeatures = previousFeatures == null || previousFeatures.isEmpty()
+                ? "'calt' 0" : previousFeatures + ", 'calt' 0";
+            mTextPaint.setFontFeatureSettings(disabledFeatures);
+        }
+        try {
+            drawTextRunConfigured(canvas, text, palette, y, startColumn, runWidthColumns,
+                startCharIndex, runWidthChars, mes, cursor, cursorStyle, textStyle,
+                boldWithBright, reverseVideo, horizontalOffset, decorationColor, hyperlink,
+                foregroundOverride, symbolTypeface);
+        } finally {
+            if (disableLigatures) mTextPaint.setFontFeatureSettings(previousFeatures);
+        }
+    }
+
+    static boolean disablesLigatures(LigaturePolicy policy, boolean cursorRun) {
+        return policy == LigaturePolicy.ALWAYS
+            || (policy == LigaturePolicy.CURSOR && cursorRun);
+    }
+
+    private void drawTextRunConfigured(Canvas canvas, char[] text, int[] palette, float y,
+                                       int startColumn, int runWidthColumns, int startCharIndex,
+                                       int runWidthChars, float mes, int cursor, int cursorStyle,
+                                       long textStyle, boolean boldWithBright, boolean reverseVideo,
+                                       float horizontalOffset, int decorationColor,
+                                       boolean hyperlink, int foregroundOverride,
+                                       @Nullable Typeface symbolTypeface) {
         int foreColor = TextStyle.decodeForeColor(textStyle);
         final int effect = TextStyle.decodeEffect(textStyle);
         int backColor = TextStyle.decodeBackColor(textStyle);

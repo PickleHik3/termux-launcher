@@ -34,6 +34,8 @@ public final class TerminalFontConfig {
 
     public enum SourceType { PATH, FAMILY }
 
+    public enum LigaturePolicy { NEVER, CURSOR, ALWAYS }
+
     public static final class FaceSpec {
         @NonNull public final SourceType type;
         @NonNull public final String value;
@@ -68,15 +70,18 @@ public final class TerminalFontConfig {
         public final boolean filePresent;
         @NonNull public final Map<Face, FaceSpec> faces;
         @NonNull public final List<SymbolMapSpec> symbolMaps;
+        @NonNull public final LigaturePolicy ligaturePolicy;
         @NonNull public final List<String> errors;
 
         private Result(boolean filePresent, @NonNull Map<Face, FaceSpec> faces,
-                       @NonNull List<SymbolMapSpec> symbolMaps, @NonNull List<String> errors) {
+                       @NonNull List<SymbolMapSpec> symbolMaps,
+                       @NonNull LigaturePolicy ligaturePolicy, @NonNull List<String> errors) {
             this.filePresent = filePresent;
             EnumMap<Face, FaceSpec> faceCopy = new EnumMap<>(Face.class);
             faceCopy.putAll(faces);
             this.faces = Collections.unmodifiableMap(faceCopy);
             this.symbolMaps = Collections.unmodifiableList(new ArrayList<>(symbolMaps));
+            this.ligaturePolicy = ligaturePolicy;
             this.errors = Collections.unmodifiableList(new ArrayList<>(errors));
         }
 
@@ -121,6 +126,7 @@ public final class TerminalFontConfig {
         EnumMap<Face, FaceSpec> faces = new EnumMap<>(Face.class);
         List<SymbolMapSpec> symbolMaps = new ArrayList<>();
         List<String> errors = new ArrayList<>();
+        LigaturePolicy ligaturePolicy = LigaturePolicy.NEVER;
         int symbolRangeCount = 0;
         String[] lines = content.split("\\r?\\n", -1);
         for (int i = 0; i < lines.length; i++) {
@@ -132,6 +138,20 @@ public final class TerminalFontConfig {
                 continue;
             }
             if (words.isEmpty()) continue;
+            if ("disable_ligatures".equalsIgnoreCase(words.get(0))) {
+                if (words.size() != 2) {
+                    errors.add("line " + (i + 1)
+                        + ": expected disable_ligatures never, cursor, or always");
+                    continue;
+                }
+                try {
+                    ligaturePolicy = LigaturePolicy.valueOf(words.get(1).toUpperCase(Locale.US));
+                } catch (IllegalArgumentException e) {
+                    errors.add("line " + (i + 1)
+                        + ": disable_ligatures must be never, cursor, or always");
+                }
+                continue;
+            }
             if ("symbol_map".equalsIgnoreCase(words.get(0))) {
                 if (words.size() != 3) {
                     errors.add("line " + (i + 1)
@@ -166,7 +186,7 @@ public final class TerminalFontConfig {
             FaceSpec source = parseSource(words.get(1), i + 1, errors);
             if (source != null) faces.put(face, source);
         }
-        return new Result(filePresent, faces, symbolMaps, errors);
+        return new Result(filePresent, faces, symbolMaps, ligaturePolicy, errors);
     }
 
     @Nullable
@@ -247,7 +267,8 @@ public final class TerminalFontConfig {
     @NonNull
     private static Result empty(boolean present, @Nullable String error) {
         List<String> errors = error == null ? Collections.emptyList() : Collections.singletonList(error);
-        return new Result(present, Collections.emptyMap(), Collections.emptyList(), errors);
+        return new Result(present, Collections.emptyMap(), Collections.emptyList(),
+            LigaturePolicy.NEVER, errors);
     }
 
     /** Split one config line, allowing quotes and backslash escapes; # starts a comment. */

@@ -126,12 +126,52 @@ public class GraphemeBufferInstrumentationTest {
             baseline.sameAs(baseMapped));
     }
 
+    @Test
+    public void ligaturePolicyDisablesCaltOnlyWhereRequested() {
+        Typeface ligatureFace = Typeface.create("sans-serif", Typeface.NORMAL);
+        Bitmap enabled = render("->", null, TerminalRenderer.LigaturePolicy.NEVER, false,
+            ligatureFace);
+        Bitmap cursorWithoutCursor = render("->", null,
+            TerminalRenderer.LigaturePolicy.CURSOR, false, ligatureFace);
+        Bitmap alwaysDisabled = render("->", null,
+            TerminalRenderer.LigaturePolicy.ALWAYS, false, ligatureFace);
+
+        assertTrue("cursor policy must preserve ligatures away from a visible cursor",
+            enabled.sameAs(cursorWithoutCursor));
+        assertTrue("always policy renderer smoke should draw output", hasVisiblePixels(alwaysDisabled));
+
+        // Exercise the cursor-only draw path. The cursor cell is already a separate inversion run,
+        // and the renderer additionally applies -calt to that run before restoring Paint state.
+        render("->\r", null, TerminalRenderer.LigaturePolicy.CURSOR, true, ligatureFace);
+    }
+
+    private static boolean hasVisiblePixels(Bitmap bitmap) {
+        for (int y = 0; y < bitmap.getHeight(); y += 4) {
+            for (int x = 0; x < bitmap.getWidth(); x += 4) {
+                if (bitmap.getPixel(x, y) != Color.TRANSPARENT) return true;
+            }
+        }
+        return false;
+    }
+
     private static Bitmap render(String text, TerminalRenderer.SymbolMap[] symbolMaps) {
+        return render(text, symbolMaps, TerminalRenderer.LigaturePolicy.NEVER, false);
+    }
+
+    private static Bitmap render(String text, TerminalRenderer.SymbolMap[] symbolMaps,
+                                 TerminalRenderer.LigaturePolicy ligaturePolicy,
+                                 boolean cursorVisible) {
+        return render(text, symbolMaps, ligaturePolicy, cursorVisible, Typeface.MONOSPACE);
+    }
+
+    private static Bitmap render(String text, TerminalRenderer.SymbolMap[] symbolMaps,
+                                 TerminalRenderer.LigaturePolicy ligaturePolicy,
+                                 boolean cursorVisible, Typeface primaryTypeface) {
         TerminalEmulator emulator = emulator(6, 2);
-        enter(emulator, "\033[?25l" + text);
+        enter(emulator, (cursorVisible ? "" : "\033[?25l") + text);
         Bitmap bitmap = Bitmap.createBitmap(360, 120, Bitmap.Config.ARGB_8888);
-        TerminalRenderer renderer = new TerminalRenderer(48, Typeface.MONOSPACE, null, null,
-            null, symbolMaps);
+        TerminalRenderer renderer = new TerminalRenderer(48, primaryTypeface, null, null,
+            null, symbolMaps, ligaturePolicy);
         renderer.render(emulator, new Canvas(bitmap), 0, -1, -1, -1, -1, false,
             Color.TRANSPARENT, 0f);
         return bitmap;
