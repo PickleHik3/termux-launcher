@@ -131,4 +131,36 @@ public class HyperlinkTest extends TerminalTestCase {
         assertNull(pool.getUri(TerminalHyperlinks.NO_LINK));
         assertNull(pool.getUri(7));
     }
+
+    public void testSaturationSweepReusesOnlyUnreferencedIds() {
+        TerminalHyperlinks pool = new TerminalHyperlinks();
+        int kept = pool.intern("id=kept", URI);
+        int released = pool.intern("id=dead", "https://example.com/dead");
+        boolean[] used = new boolean[TerminalHyperlinks.MAX_LINKS + 1];
+        used[kept] = true;
+
+        assertEquals(1, pool.reclaimUnused(used));
+        assertEquals(URI, pool.getUri(kept));
+        assertNull(pool.getUri(released));
+        assertEquals(released, pool.intern("id=reused", "https://example.com/reused"));
+    }
+
+    public void testFullPoolSweepsBothLiveScreenBuffersBeforeReusingIds() {
+        withTerminalSized(4, 2).enterString(open("id=main", URI) + "A" + close());
+        int mainLinkId = mTerminal.getScreen().getHyperlinkIdAt(0, 0);
+        // Preserve a main-screen reference while the alternate screen is active.
+        enterString("\033[?1049h");
+        TerminalHyperlinks pool = mTerminal.getHyperlinks();
+        for (int i = pool.size(); i < TerminalHyperlinks.MAX_LINKS; i++)
+            assertTrue(pool.intern("", "https://example.com/fill/" + i) != TerminalHyperlinks.NO_LINK);
+
+        enterString(open("id=alternate", "https://example.com/alternate") + "B" + close());
+        int alternateColumn = mTerminal.getCursorCol() - 1;
+        assertEquals("https://example.com/alternate",
+            mTerminal.getHyperlinkUriAt(mTerminal.getCursorRow(), alternateColumn));
+        assertEquals(2, pool.size());
+        enterString("\033[?1049l");
+        assertEquals(mainLinkId, mTerminal.getScreen().getHyperlinkIdAt(0, 0));
+        assertEquals(URI, mTerminal.getHyperlinkUriAt(0, 0));
+    }
 }

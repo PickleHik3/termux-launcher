@@ -61,10 +61,11 @@ Both are preserved by the same paths: `setChar`, `copyInterval`, reflow inside
   Bounded on purpose, since escape sequences are untrusted input: 4096 links per session and
   2083 characters per URI, and a URI containing a control character is rejected outright
   rather than percent-decoded. A full pool degrades to plain text — the cells render normally
-  and are simply not clickable — instead of pushing the session toward an lmkd kill. The pool
-  is dropped on `reset()`; it is **not** garbage collected when the last referencing cell
-  scrolls away, because finding that out means walking every row. `CSI 3 J` deliberately does
-  not clear it, as cells still on screen may reference those links.
+  and are simply not clickable — instead of pushing the session toward an lmkd kill. The pool is
+  dropped on `reset()`. When all 4096 ids are occupied, one saturation-only sweep walks the live
+  main and alternate buffers, preserves every referenced id without renumbering cells, and reuses
+  unreachable holes. There is no scan on normal scroll, erase, or reflow. `CSI 3 J` deliberately
+  does not clear the pool, as cells still on screen may reference those links.
 
   Activation is policy and lives in `app`: a tap on a linked cell opens a dialog showing the
   full target, because unlike the URL regex path the target is chosen by the application and
@@ -303,7 +304,7 @@ marks itself and needs no file. Workspace definitions use `~/.termux/workspaces/
 `project-docs/verification/test-terminal-protocols.sh` prints every rendition and protocol
 covered here into a terminal for eyeballing.
 
-Unit tests: `UnderlineStyleTest` (16), `HyperlinkTest` (15), `ShellIntegrationTest` (11),
+Unit tests: `UnderlineStyleTest` (16), `HyperlinkTest` (19), `ShellIntegrationTest` (11),
 `KittyKeyboardProtocolTest` (29), `TerminalKeyInspectorTest` (6), `CursorTrailHullTest` (6), and
 `TermuxShellIntegrationInstallerTest` (2), `TerminalFrameMetricsMonitorTest` (3), and
 `TerminalRenderMetricsTest` (3), `EscapeSequenceLimitTest` (7),

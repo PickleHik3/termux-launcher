@@ -56,8 +56,6 @@ Small, deliberate omissions recorded where they happened. Listed here so they ar
   actions. See `action-registry-terminal-actions.md` slice 7.
 - `appearance.set_wallpaper` is registered and advertised but was never invoked in a device pass,
   because it launches an external picker and crop flow. Exercise by hand.
-- The OSC 8 link pool is not garbage collected when the last cell referencing a link scrolls away.
-  Bounded, so it degrades rather than grows without limit. See `kitty-protocol-features.md` slice 3.
 - The keyboard protocol reports the shifted alternate key but not the base-layout one: Android
   exposes no PC-101 physical mapping to derive it from.
 - Automatic pane layouts are currently one-shot tree transforms. They still need a retained

@@ -2912,6 +2912,15 @@ public final class TerminalEmulator {
             }
         }
         mCurrentHyperlinkId = mHyperlinks.intern(id, uri);
+        if (mCurrentHyperlinkId == TerminalHyperlinks.NO_LINK && mHyperlinks.isFull()) {
+            // Saturation is rare. Pay for one complete live-buffer scan here rather than maintaining
+            // fragile reference counts across every erase, copy, scroll, resize, and reflow path.
+            boolean[] used = new boolean[TerminalHyperlinks.MAX_LINKS + 1];
+            mMainBuffer.markUsedHyperlinkIds(used);
+            mAltBuffer.markUsedHyperlinkIds(used);
+            if (mHyperlinks.reclaimUnused(used) > 0)
+                mCurrentHyperlinkId = mHyperlinks.intern(id, uri);
+        }
     }
 
     /**

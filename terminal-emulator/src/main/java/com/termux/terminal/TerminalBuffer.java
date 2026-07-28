@@ -604,6 +604,14 @@ public final class TerminalBuffer {
         return allocateFullLineIfNecessary(externalToInternalRow(externalRow)).getHyperlinkId(column);
     }
 
+    /** Mark hyperlink ids referenced by the visible screen and active transcript only. */
+    void markUsedHyperlinkIds(boolean[] used) {
+        for (int row = -mActiveTranscriptRows; row < mScreenRows; row++) {
+            TerminalRow line = mLines[externalToInternalRow(row)];
+            if (line != null) line.markUsedHyperlinkIds(used);
+        }
+    }
+
     /** used to read aloud the character under the cursor in A11Y */
     public Character getChar(int column, int row) {
         if (row  < 0 || row >= mScreenRows || column < 0 || column >= mColumns)

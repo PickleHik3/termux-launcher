@@ -129,6 +129,15 @@ public final class TerminalRow {
         return (mHyperlinkIds == null) ? 0 : mHyperlinkIds[column];
     }
 
+    /** Mark every pool id referenced by this row without allocating a side table. */
+    void markUsedHyperlinkIds(boolean[] used) {
+        if (mHyperlinkIds == null) return;
+        for (int hyperlinkId : mHyperlinkIds) {
+            if (hyperlinkId > TerminalHyperlinks.NO_LINK && hyperlinkId < used.length)
+                used[hyperlinkId] = true;
+        }
+    }
+
     private void setDecorationColor(int column, int color) {
         if (mDecorationColors == null) {
             if (color == TextStyle.DECORATION_COLOR_DEFAULT)
