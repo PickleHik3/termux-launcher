@@ -10,6 +10,7 @@ import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import androidx.annotation.Nullable;
 import com.termux.terminal.TerminalBuffer;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalRow;
@@ -27,7 +28,12 @@ public final class TerminalRenderer {
 
     final Typeface mTypeface;
 
+    @Nullable final Typeface mBoldTypeface;
+
+    @Nullable
     final Typeface mItalicTypeface;
+
+    @Nullable final Typeface mBoldItalicTypeface;
 
     private final Paint mTextPaint = new Paint();
     private Typeface mCurrentTypeface;
@@ -52,7 +58,8 @@ public final class TerminalRenderer {
      */
     final int mFontLineSpacingAndAscent;
 
-    private final float[] asciiMeasures = new float[127];
+    /** Width cache for normal, bold, italic and bold-italic rendering. */
+    private final float[][] mAsciiMeasures = new float[4][127];
     private final RectF mSixelRect = new RectF();
 
     /** Reused when drawing curly underlines, to keep the render loop allocation free. */
@@ -65,30 +72,21 @@ public final class TerminalRenderer {
 
     private final DashPathEffect mDashedEffect;
 
-    /**
-     * The width of a single mono spaced character obtained by {@link Paint#measureText(String)} on a single 'X'.
-     */
-    final float mItalicFontWidth;
-
-    /**
-     * The italic font line height, derived from {@link Paint.FontMetricsInt} descent-ascent.
-     */
-    final int mItalicFontLineSpacing;
-
-    /**
-     * The {@link Paint#ascent()}. See http://www.fampennings.nl/maarten/android/08numgrid/font.png
-     */
-    private final int mItalicFontAscent;
-
-    /**
-     * The {@link #mFontLineSpacing} + {@link #mFontAscent}.
-     */
-    final int mItalicFontLineSpacingAndAscent;
-
     public TerminalRenderer(int textSize, Typeface typeface, Typeface italicTypeface) {
+        this(textSize, typeface, null,
+            italicTypeface != null && !italicTypeface.equals(typeface) ? italicTypeface : null,
+            null);
+    }
+
+    /** Construct a renderer with independent real faces; null variants use synthetic styling. */
+    public TerminalRenderer(int textSize, Typeface typeface, @Nullable Typeface boldTypeface,
+                            @Nullable Typeface italicTypeface,
+                            @Nullable Typeface boldItalicTypeface) {
         mTextSize = textSize;
         mTypeface = typeface;
+        mBoldTypeface = boldTypeface;
         mItalicTypeface = italicTypeface;
+        mBoldItalicTypeface = boldItalicTypeface;
         mTextPaint.setTypeface(typeface);
         mTextPaint.setAntiAlias(true);
         mTextPaint.setTextSize(textSize);
@@ -98,18 +96,14 @@ public final class TerminalRenderer {
         mFontLineSpacingAndAscent = mFontLineSpacing + mFontAscent;
         mFontWidth = mTextPaint.measureText("X");
         StringBuilder sb = new StringBuilder(" ");
-        for (int i = 0; i < asciiMeasures.length; i++) {
-            sb.setCharAt(0, (char) i);
-            asciiMeasures[i] = mTextPaint.measureText(sb, 0, 1);
+        for (int style = 0; style < mAsciiMeasures.length; style++) {
+            configureFont((style & 1) != 0, (style & 2) != 0);
+            for (int i = 0; i < mAsciiMeasures[style].length; i++) {
+                sb.setCharAt(0, (char) i);
+                mAsciiMeasures[style][i] = mTextPaint.measureText(sb, 0, 1);
+            }
         }
-        mTextPaint.setTypeface(italicTypeface);
-        mTextPaint.setAntiAlias(true);
-        mTextPaint.setTextSize(textSize);
-        Paint.FontMetricsInt italicFontMetrics = mTextPaint.getFontMetricsInt();
-        mItalicFontAscent = italicFontMetrics.ascent;
-        mItalicFontLineSpacing = italicFontMetrics.descent - mItalicFontAscent;
-        mItalicFontLineSpacingAndAscent = mItalicFontLineSpacing + mItalicFontAscent;
-        mItalicFontWidth = mTextPaint.measureText("X");
+        configureFont(false, false);
         mDecorationThickness = Math.max(1f, textSize / 16f);
         mDottedEffect = new DashPathEffect(new float[]{mDecorationThickness, mDecorationThickness * 2f}, 0f);
         mDashedEffect = new DashPathEffect(new float[]{mDecorationThickness * 4f, mDecorationThickness * 3f}, 0f);
@@ -193,11 +187,19 @@ public final class TerminalRenderer {
                 final int codePointWcWidth = WcWidth.width(codePoint);
                 final boolean insideCursor = (cursorX == column || (codePointWcWidth == 2 && cursorX == column + 1));
                 final boolean insideSelection = column >= selx1 && column <= selx2;
+                final int effect = TextStyle.decodeEffect(style);
+                final boolean cellBold = (effect & (TextStyle.CHARACTER_ATTRIBUTE_BOLD
+                    | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0;
+                final boolean cellItalic = (effect & TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0;
+                final int faceStyle = (cellBold ? 1 : 0) | (cellItalic ? 2 : 0);
+                configureFont(cellBold, cellItalic);
                 // Check if the measured text width for this code point is not the same as that expected by wcwidth().
                 // This could happen for some fonts which are not truly monospace, or for more exotic characters such as
                 // smileys which android font renders as wide.
                 // If this is detected, we draw this code point scaled to match what wcwidth() expects.
-                final float measuredCodePointWidth = (codePoint < asciiMeasures.length) ? asciiMeasures[codePoint] : mTextPaint.measureText(line, currentCharIndex, charsForCodePoint);
+                final float measuredCodePointWidth = (codePoint < mAsciiMeasures[faceStyle].length)
+                    ? mAsciiMeasures[faceStyle][codePoint]
+                    : mTextPaint.measureText(line, currentCharIndex, charsForCodePoint);
                 final boolean fontWidthMismatch = Math.abs(measuredCodePointWidth / mFontWidth - codePointWcWidth) > 0.01;
                 if (style != lastRunStyle || insideCursor != lastRunInsideCursor || insideSelection != lastRunInsideSelection || fontWidthMismatch || lastRunFontWidthMismatch || decorationColor != lastRunDecorationColor || hyperlinkId != lastRunHyperlinkId) {
                     if (column == 0 || column == lastRunStartColumn) {
@@ -252,10 +254,12 @@ public final class TerminalRenderer {
         final boolean italic = (effect & TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0;
         final boolean strikeThrough = (effect & TextStyle.CHARACTER_ATTRIBUTE_STRIKETHROUGH) != 0;
         final boolean dim = (effect & TextStyle.CHARACTER_ATTRIBUTE_DIM) != 0;
-        final float fontWidth = italic ? mItalicFontWidth : mFontWidth;
-        final int fontLineSpacing = italic ? mItalicFontLineSpacing : mFontLineSpacing;
-        final int fontAscent = italic ? mItalicFontAscent : mFontAscent;
-        final int fontLineSpacingAndAscent = italic ? mItalicFontLineSpacingAndAscent : mFontLineSpacingAndAscent;
+        // The regular face defines the terminal grid. Variant faces are scaled into those same
+        // cells instead of moving later columns when their native metrics differ.
+        final float fontWidth = mFontWidth;
+        final int fontLineSpacing = mFontLineSpacing;
+        final int fontAscent = mFontAscent;
+        final int fontLineSpacingAndAscent = mFontLineSpacingAndAscent;
         if ((foreColor & 0xff000000) != 0xff000000) {
             // If enabled, let bold have bright colors if applicable (one of the first 8):
             if (boldWithBright && bold && foreColor >= 0 && foreColor < 8)
@@ -313,17 +317,9 @@ public final class TerminalRenderer {
                 blue = blue * 2 / 3;
                 foreColor = 0xFF000000 + (red << 16) + (green << 8) + blue;
             }
-            Typeface desiredTypeface = italic ? mItalicTypeface : mTypeface;
-            if (desiredTypeface != mCurrentTypeface) {
-                mTextPaint.setTypeface(desiredTypeface);
-                mCurrentTypeface = desiredTypeface;
-            }
-            mTextPaint.setFakeBoldText(bold);
+            configureFont(bold, italic);
             // Underlines are drawn as geometry below, since Paint only knows one straight variant.
             mTextPaint.setUnderlineText(false);
-            mTextPaint.setTextSkewX(0.f);
-            if (italic && mItalicTypeface.equals(mTypeface))
-                mTextPaint.setTextSkewX(-0.35f);
             mTextPaint.setStrikeThruText(strikeThrough);
             mTextPaint.setColor(foreColor);
             // The text alignment is the default Paint.Align.LEFT.
@@ -406,6 +402,10 @@ public final class TerminalRenderer {
                     width * mFontWidth, shape, cursorColor);
                 continue;
             }
+            int effect = TextStyle.decodeEffect(style);
+            configureFont((effect & (TextStyle.CHARACTER_ATTRIBUTE_BOLD
+                | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0,
+                (effect & TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0);
             float measured = mTextPaint.measureText(text, startIndex, chars);
             int decorationColor = row.hasDecorationColors() ? row.getDecorationColor(startColumn)
                 : TextStyle.DECORATION_COLOR_DEFAULT;
@@ -420,6 +420,42 @@ public final class TerminalRenderer {
         if (shape == 2) return TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR;
         if (shape == 3) return TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE;
         return TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
+    }
+
+    /** Select a real face when configured and synthesize only the missing style component. */
+    private void configureFont(boolean bold, boolean italic) {
+        Typeface desired;
+        boolean fakeBold = false;
+        boolean fakeItalic = false;
+        if (bold && italic) {
+            if (mBoldItalicTypeface != null) {
+                desired = mBoldItalicTypeface;
+            } else if (mItalicTypeface != null) {
+                desired = mItalicTypeface;
+                fakeBold = true;
+            } else if (mBoldTypeface != null) {
+                desired = mBoldTypeface;
+                fakeItalic = true;
+            } else {
+                desired = mTypeface;
+                fakeBold = true;
+                fakeItalic = true;
+            }
+        } else if (bold) {
+            desired = mBoldTypeface == null ? mTypeface : mBoldTypeface;
+            fakeBold = mBoldTypeface == null;
+        } else if (italic) {
+            desired = mItalicTypeface == null ? mTypeface : mItalicTypeface;
+            fakeItalic = mItalicTypeface == null;
+        } else {
+            desired = mTypeface;
+        }
+        if (desired != mCurrentTypeface) {
+            mTextPaint.setTypeface(desired);
+            mCurrentTypeface = desired;
+        }
+        mTextPaint.setFakeBoldText(fakeBold);
+        mTextPaint.setTextSkewX(fakeItalic ? -0.35f : 0f);
     }
 
     private static int resolveCellColor(int color, int[] palette) {

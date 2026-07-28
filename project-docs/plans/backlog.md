@@ -30,7 +30,7 @@ Sizes follow the study: **S** 2–5 days, **M** 1–3 weeks, **L** 4–8 weeks, 
 
 | Item | Size | Notes |
 |---|---|---|
-| Four font faces, then cluster-aware shaping and font maps | M + L | Decision recorded in `fonts-and-shaping.md`: backward-compatible `~/.termux/fonts.conf`; paths first and Android families optional. Deliver real regular/bold/italic/bold-italic faces first, then the grapheme/Canvas experiment, `symbol_map`, ligature policy, OpenType features, variable axes, and metrics. No bidi, `narrow_symbols`, or symbols consuming following cells. |
+| Cluster-aware shaping and font maps | L | Four real faces and backward-compatible `~/.termux/fonts.conf` are complete. Next: build the grapheme acceptance suite, test Canvas `getTextRunAdvances()` against it, then decide whether HarfBuzz is necessary. After that: `symbol_map`, ligature policy, OpenType features, variable axes, and metrics. No bidi, `narrow_symbols`, or symbols consuming following cells. |
 
 ## Deferred on purpose
 

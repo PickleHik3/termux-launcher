@@ -1,6 +1,6 @@
 # Fonts and cluster-aware shaping
 
-Status: design decided 2026-07-28; implementation not started.
+Status: four-face configuration delivered and device-verified 2026-07-28; cluster-aware shaping is next.
 
 This is the remaining Phase 4 project from the Kitty feasibility study. It extends Termux's native
 `~/.termux/font.ttf` contract instead of replacing it, and keeps the Canvas renderer unless device
@@ -46,7 +46,7 @@ for path-backed mappings.
 
 ## Implementation order
 
-1. **Four faces first.** Load regular, bold, italic, and bold-italic independently and teach
+1. **Four faces first — complete.** Load regular, bold, italic, and bold-italic independently and teach
    `TerminalRenderer` to select the real face for each SGR combination. Synthetic bold/italic is
    used only when its face is absent. This is independent of the grapheme work and is the first
    visible delivery.
@@ -69,6 +69,32 @@ for path-backed mappings.
    keep settings face-specific, and degrade to the unmodified face if Android rejects them.
 8. **Metrics.** Add bounded cell width/height, baseline, underline, and strikethrough adjustments
    only after shaping and selection geometry are pinned by tests.
+
+## Delivered: four independent faces
+
+`TerminalFontConfig` now parses a bounded `~/.termux/fonts.conf` with explicit `path=` and
+`family=` sources. The four supported directives are `font_family`, `bold_font`, `italic_font`, and
+`bold_italic_font`; a later duplicate replaces the earlier value. Quoted values, comments, and
+`~/` expansion are supported. The parser caps the file at 64 KiB, 512 lines, and 4096 characters
+per line.
+
+`TerminalFontLoader` resolves each face independently. Path-backed files are the primary contract;
+Android family lookup is best-effort. A missing config retains native Termux compatibility:
+`font.ttf`, optional `font-italic.ttf`, then Android monospace. Individual path loads are checked for
+readability, emptiness, and a 64 MiB size limit, and Android font-parser failures are caught. Parse
+and load failures are logged and summarized in a bounded toast without preventing terminal startup.
+
+`TerminalRenderer` carries all four real faces across size changes and pane creation. Regular-face
+metrics continue to own the fixed terminal grid. Styled faces are measured and scaled into that
+grid, and synthetic bold or skew is applied only for a missing component. Existing two-face callers
+remain source-compatible.
+
+Device verification on a Nothing A065 running Android 16 covered:
+
+- live `termux-reload-settings` application of four deliberately distinct path-backed system fonts;
+- visible regular, bold, italic, and bold-italic selection in the same terminal grid;
+- a malformed bold font falling back safely while the other real faces remained active; and
+- restoration to the legacy no-`fonts.conf` state after the test.
 
 ## Scope boundaries
 

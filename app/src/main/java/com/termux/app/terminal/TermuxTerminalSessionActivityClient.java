@@ -7,7 +7,6 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.graphics.Typeface;
 import android.media.AudioAttributes;
 import android.media.SoundPool;
 import android.os.Handler;
@@ -64,6 +63,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     private final java.util.Set<TerminalSession> mPendingScreenUpdateSessions = new java.util.HashSet<>();
     private boolean mForegroundRefreshPending;
     private int mLastMaterialTerminalPaletteSignature;
+    @NonNull private String mLastFontErrorSummary = "";
     private final Runnable mForegroundTerminalRefreshRunnable;
 
     public TermuxTerminalSessionActivityClient(TermuxActivity activity) {
@@ -596,8 +596,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     public void checkForFontAndColors() {
         try {
             File colorsFile = TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE;
-            File fontFile = TermuxConstants.TERMUX_FONT_FILE;
-            File italicFontFile = TermuxConstants.TERMUX_ITALIC_FONT_FILE;
             final Properties props;
             if (mActivity.getPreferences() != null && mActivity.getPreferences().isTerminalDynamicColorsEnabled()) {
                 props = MaterialTerminalColorScheme.create(mActivity);
@@ -622,12 +620,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             TerminalColors.COLOR_SCHEME.updateWith(props);
             resetAllSessionColors();
             updateBackgroundColor();
-            final Typeface newTypeface = (fontFile.exists() && fontFile.length() > 0) ? Typeface.createFromFile(fontFile) : Typeface.MONOSPACE;
-            final Typeface newItalicTypeface = (italicFontFile.exists() && italicFontFile.length() > 0) ? Typeface.createFromFile(italicFontFile) : newTypeface;
+            TerminalFontLoader.Faces faces = TerminalFontLoader.load(TerminalFontConfig.load());
+            reportFontErrors(faces.errors);
             // Apply to every pane that has a renderer so split panes get the nerd font too.
             for (com.termux.view.TerminalView v : mActivity.getTerminalPaneViews()) {
                 if (v.isFontInitialized())
-                    v.setTypeface(newTypeface, newItalicTypeface);
+                    v.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic);
             }
             mActivity.requestTerminalFlushDockGeometryUpdate();
         } catch (Exception e) {
@@ -640,14 +638,22 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (view == null || !view.isFontInitialized())
             return;
         try {
-            File fontFile = TermuxConstants.TERMUX_FONT_FILE;
-            File italicFontFile = TermuxConstants.TERMUX_ITALIC_FONT_FILE;
-            final Typeface newTypeface = (fontFile.exists() && fontFile.length() > 0) ? Typeface.createFromFile(fontFile) : Typeface.MONOSPACE;
-            final Typeface newItalicTypeface = (italicFontFile.exists() && italicFontFile.length() > 0) ? Typeface.createFromFile(italicFontFile) : newTypeface;
-            view.setTypeface(newTypeface, newItalicTypeface);
+            TerminalFontLoader.Faces faces = TerminalFontLoader.load(TerminalFontConfig.load());
+            for (String error : faces.errors) Logger.logError(LOG_TAG, "Font config: " + error);
+            view.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic);
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyFontToView()", e);
         }
+    }
+
+    private void reportFontErrors(@NonNull java.util.List<String> errors) {
+        String summary = android.text.TextUtils.join("\n", errors);
+        if (summary.equals(mLastFontErrorSummary)) return;
+        mLastFontErrorSummary = summary;
+        if (errors.isEmpty()) return;
+        for (String error : errors) Logger.logError(LOG_TAG, "Font config: " + error);
+        mActivity.showToast(mActivity.getResources().getQuantityString(
+            R.plurals.terminal_font_config_errors, errors.size(), errors.size()), true);
     }
 
     public void refreshMaterialTerminalColorsIfNeeded() {

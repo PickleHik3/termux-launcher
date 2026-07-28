@@ -1320,6 +1320,10 @@
         <item quantity="one">1 binding-file error; defaults kept where possible</item>
         <item quantity="other">%1$d binding-file errors; defaults kept where possible</item>
     </plurals>
+    <plurals name="terminal_font_config_errors">
+        <item quantity="one">Ignored %1$d terminal font configuration error; using safe fallbacks</item>
+        <item quantity="other">Ignored %1$d terminal font configuration errors; using safe fallbacks</item>
+    </plurals>
     <string name="tool_desc_app_open_drawer">Open the sessions drawer.</string>
     <string name="tool_desc_app_close_drawer">Close the sessions drawer.</string>
     <string name="tool_desc_window_rename_prompt">Ask for a new name for the current window session.</string>

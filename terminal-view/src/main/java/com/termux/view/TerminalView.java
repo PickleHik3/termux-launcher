@@ -741,12 +741,21 @@ public final class TerminalView extends View {
      * @param textSize the new font size, in density-independent pixels.
      */
     public void setTextSize(int textSize) {
-        mRenderer = new TerminalRenderer(textSize, mRenderer == null ? Typeface.MONOSPACE : mRenderer.mTypeface, mRenderer == null ? Typeface.MONOSPACE : mRenderer.mItalicTypeface);
+        mRenderer = mRenderer == null
+            ? new TerminalRenderer(textSize, Typeface.MONOSPACE, null, null, null)
+            : new TerminalRenderer(textSize, mRenderer.mTypeface, mRenderer.mBoldTypeface,
+                mRenderer.mItalicTypeface, mRenderer.mBoldItalicTypeface);
         updateSize();
     }
 
     public void setTypeface(Typeface newTypeface, Typeface newItalicTypeface) {
-        mRenderer = new TerminalRenderer(mRenderer.mTextSize, newTypeface, newItalicTypeface);
+        setTypeface(newTypeface, null, newItalicTypeface, null);
+    }
+
+    /** Apply independent regular, bold, italic and bold-italic terminal faces. */
+    public void setTypeface(Typeface regular, Typeface bold, Typeface italic,
+                            Typeface boldItalic) {
+        mRenderer = new TerminalRenderer(mRenderer.mTextSize, regular, bold, italic, boldItalic);
         updateSize();
         invalidate();
     }
