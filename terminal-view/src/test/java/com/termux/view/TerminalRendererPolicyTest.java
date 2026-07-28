@@ -1,5 +1,6 @@
 package com.termux.view;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -51,5 +52,14 @@ public class TerminalRendererPolicyTest {
         assertTrue("italic".equals(variations.forRun(false, true, false)));
         assertTrue("bold-italic".equals(variations.forRun(true, true, false)));
         assertTrue("symbols".equals(variations.forRun(false, false, true)));
+    }
+
+    @Test
+    public void metricAdjustmentsUsePixelsAsDeltasAndPercentAsReplacementScale() {
+        assertEquals(18f, TerminalRenderer.adjustMetric(16f,
+            new TerminalRenderer.MetricAdjustment(2f, false)), 0f);
+        assertEquals(24f, TerminalRenderer.adjustMetric(16f,
+            new TerminalRenderer.MetricAdjustment(150f, true)), 0f);
+        assertEquals(16f, TerminalRenderer.adjustMetric(16f, null), 0f);
     }
 }

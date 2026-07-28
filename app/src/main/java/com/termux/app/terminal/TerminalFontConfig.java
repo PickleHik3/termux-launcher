@@ -42,6 +42,23 @@ public final class TerminalFontConfig {
 
     public enum FontTarget { REGULAR, BOLD, ITALIC, BOLD_ITALIC, SYMBOLS }
 
+    public enum Metric {
+        CELL_WIDTH, CELL_HEIGHT, BASELINE, UNDERLINE_POSITION, UNDERLINE_THICKNESS,
+        STRIKETHROUGH_POSITION, STRIKETHROUGH_THICKNESS
+    }
+
+    public enum MetricUnit { PIXEL, PERCENT }
+
+    public static final class MetricAdjustment {
+        public final double value;
+        @NonNull public final MetricUnit unit;
+
+        private MetricAdjustment(double value, @NonNull MetricUnit unit) {
+            this.value = value;
+            this.unit = unit;
+        }
+    }
+
     public static final class FaceSpec {
         @NonNull public final SourceType type;
         @NonNull public final String value;
@@ -79,6 +96,7 @@ public final class TerminalFontConfig {
         @NonNull public final LigaturePolicy ligaturePolicy;
         @NonNull public final Map<FontTarget, String> fontFeatures;
         @NonNull public final Map<FontTarget, String> fontVariations;
+        @NonNull public final Map<Metric, MetricAdjustment> metrics;
         @NonNull public final List<String> errors;
 
         private Result(boolean filePresent, @NonNull Map<Face, FaceSpec> faces,
@@ -86,6 +104,7 @@ public final class TerminalFontConfig {
                        @NonNull LigaturePolicy ligaturePolicy,
                        @NonNull Map<FontTarget, String> fontFeatures,
                        @NonNull Map<FontTarget, String> fontVariations,
+                       @NonNull Map<Metric, MetricAdjustment> metrics,
                        @NonNull List<String> errors) {
             this.filePresent = filePresent;
             EnumMap<Face, FaceSpec> faceCopy = new EnumMap<>(Face.class);
@@ -99,6 +118,9 @@ public final class TerminalFontConfig {
             EnumMap<FontTarget, String> variationCopy = new EnumMap<>(FontTarget.class);
             variationCopy.putAll(fontVariations);
             this.fontVariations = Collections.unmodifiableMap(variationCopy);
+            EnumMap<Metric, MetricAdjustment> metricCopy = new EnumMap<>(Metric.class);
+            metricCopy.putAll(metrics);
+            this.metrics = Collections.unmodifiableMap(metricCopy);
             this.errors = Collections.unmodifiableList(new ArrayList<>(errors));
         }
 
@@ -112,6 +134,10 @@ public final class TerminalFontConfig {
 
         @Nullable public String variations(@NonNull FontTarget target) {
             return fontVariations.get(target);
+        }
+
+        @Nullable public MetricAdjustment metric(@NonNull Metric metric) {
+            return metrics.get(metric);
         }
     }
 
@@ -154,6 +180,7 @@ public final class TerminalFontConfig {
         LigaturePolicy ligaturePolicy = LigaturePolicy.NEVER;
         EnumMap<FontTarget, String> fontFeatures = new EnumMap<>(FontTarget.class);
         EnumMap<FontTarget, String> fontVariations = new EnumMap<>(FontTarget.class);
+        EnumMap<Metric, MetricAdjustment> metrics = new EnumMap<>(Metric.class);
         int symbolRangeCount = 0;
         String[] lines = content.split("\\r?\\n", -1);
         for (int i = 0; i < lines.length; i++) {
@@ -165,6 +192,25 @@ public final class TerminalFontConfig {
                 continue;
             }
             if (words.isEmpty()) continue;
+            if ("modify_font".equalsIgnoreCase(words.get(0))) {
+                if (words.size() != 3) {
+                    errors.add("line " + (i + 1) + ": expected modify_font metric value");
+                    continue;
+                }
+                Metric metric = metric(words.get(1));
+                if (metric == null) {
+                    errors.add("line " + (i + 1) + ": unknown font metric '"
+                        + words.get(1) + "'");
+                    continue;
+                }
+                if ("none".equalsIgnoreCase(words.get(2))) {
+                    metrics.remove(metric);
+                    continue;
+                }
+                MetricAdjustment adjustment = parseMetricAdjustment(words.get(2), i + 1, errors);
+                if (adjustment != null) metrics.put(metric, adjustment);
+                continue;
+            }
             if ("font_variations".equalsIgnoreCase(words.get(0))) {
                 if (words.size() < 3) {
                     errors.add("line " + (i + 1)
@@ -254,7 +300,44 @@ public final class TerminalFontConfig {
             if (source != null) faces.put(face, source);
         }
         return new Result(filePresent, faces, symbolMaps, ligaturePolicy, fontFeatures,
-            fontVariations, errors);
+            fontVariations, metrics, errors);
+    }
+
+    @Nullable
+    private static Metric metric(@NonNull String value) {
+        try {
+            return Metric.valueOf(value.toUpperCase(Locale.US));
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    @Nullable
+    private static MetricAdjustment parseMetricAdjustment(@NonNull String text, int line,
+                                                          @NonNull List<String> errors) {
+        MetricUnit unit = MetricUnit.PIXEL;
+        String number = text;
+        if (text.endsWith("%")) {
+            unit = MetricUnit.PERCENT;
+            number = text.substring(0, text.length() - 1);
+        } else if (text.toLowerCase(Locale.US).endsWith("px")) {
+            number = text.substring(0, text.length() - 2);
+        }
+        double value;
+        try {
+            value = Double.parseDouble(number);
+        } catch (NumberFormatException e) {
+            value = Double.NaN;
+        }
+        boolean valid = !Double.isNaN(value) && !Double.isInfinite(value)
+            && (unit == MetricUnit.PERCENT ? value >= 10d && value <= 500d
+                : value >= -256d && value <= 256d);
+        if (!valid) {
+            errors.add("line " + line
+                + ": metric must be -256..256 pixels or 10%..500%");
+            return null;
+        }
+        return new MetricAdjustment(value, unit);
     }
 
     @Nullable
@@ -450,7 +533,8 @@ public final class TerminalFontConfig {
     private static Result empty(boolean present, @Nullable String error) {
         List<String> errors = error == null ? Collections.emptyList() : Collections.singletonList(error);
         return new Result(present, Collections.emptyMap(), Collections.emptyList(),
-            LigaturePolicy.NEVER, Collections.emptyMap(), Collections.emptyMap(), errors);
+            LigaturePolicy.NEVER, Collections.emptyMap(), Collections.emptyMap(),
+            Collections.emptyMap(), errors);
     }
 
     /** Split one config line, allowing quotes and backslash escapes; # starts a comment. */

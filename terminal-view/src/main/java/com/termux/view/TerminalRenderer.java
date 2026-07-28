@@ -99,6 +99,46 @@ public final class TerminalRenderer {
         }
     }
 
+    public static final class MetricAdjustment {
+        public final float value;
+        public final boolean percent;
+
+        public MetricAdjustment(float value, boolean percent) {
+            this.value = value;
+            this.percent = percent;
+        }
+    }
+
+    /** Bounded cell and decoration metrics; null entries retain font-derived defaults. */
+    public static final class FontMetricsAdjustments {
+        public static final FontMetricsAdjustments NONE = new FontMetricsAdjustments(
+            null, null, null, null, null, null, null);
+
+        @Nullable final MetricAdjustment cellWidth;
+        @Nullable final MetricAdjustment cellHeight;
+        @Nullable final MetricAdjustment baseline;
+        @Nullable final MetricAdjustment underlinePosition;
+        @Nullable final MetricAdjustment underlineThickness;
+        @Nullable final MetricAdjustment strikethroughPosition;
+        @Nullable final MetricAdjustment strikethroughThickness;
+
+        public FontMetricsAdjustments(@Nullable MetricAdjustment cellWidth,
+                                      @Nullable MetricAdjustment cellHeight,
+                                      @Nullable MetricAdjustment baseline,
+                                      @Nullable MetricAdjustment underlinePosition,
+                                      @Nullable MetricAdjustment underlineThickness,
+                                      @Nullable MetricAdjustment strikethroughPosition,
+                                      @Nullable MetricAdjustment strikethroughThickness) {
+            this.cellWidth = cellWidth;
+            this.cellHeight = cellHeight;
+            this.baseline = baseline;
+            this.underlinePosition = underlinePosition;
+            this.underlineThickness = underlineThickness;
+            this.strikethroughPosition = strikethroughPosition;
+            this.strikethroughThickness = strikethroughThickness;
+        }
+    }
+
     private static final SymbolMap[] NO_SYMBOL_MAPS = new SymbolMap[0];
 
     final int mTextSize;
@@ -120,6 +160,8 @@ public final class TerminalRenderer {
 
     final FontVariations mFontVariations;
 
+    final FontMetricsAdjustments mFontMetricsAdjustments;
+
     private final Paint mTextPaint = new Paint();
     private Typeface mCurrentTypeface;
 
@@ -138,10 +180,11 @@ public final class TerminalRenderer {
      */
     private final int mFontAscent;
 
-    /**
-     * The {@link #mFontLineSpacing} + {@link #mFontAscent}.
-     */
+    /** View top content inset; intentionally independent of baseline adjustment. */
     final int mFontLineSpacingAndAscent;
+
+    /** Distance from the configured baseline to the bottom of its cell. */
+    private final int mFontBaselineDescent;
 
     /** Width cache for normal, bold, italic and bold-italic rendering. */
     private final float[][] mAsciiMeasures = new float[4][127];
@@ -153,6 +196,14 @@ public final class TerminalRenderer {
     /** Stroke width of underlines and their dash lengths, all derived from the font size. */
     private final float mDecorationThickness;
 
+    /** Underline top measured from the top of its cell after all adjustments. */
+    private final float mUnderlinePositionFromTop;
+
+    private final float mStrikethroughThickness;
+
+    /** Strikethrough center measured from the top of its cell after all adjustments. */
+    private final float mStrikethroughPositionFromTop;
+
     private final DashPathEffect mDottedEffect;
 
     private final DashPathEffect mDashedEffect;
@@ -160,7 +211,8 @@ public final class TerminalRenderer {
     public TerminalRenderer(int textSize, Typeface typeface, Typeface italicTypeface) {
         this(textSize, typeface, null,
             italicTypeface != null && !italicTypeface.equals(typeface) ? italicTypeface : null,
-            null, NO_SYMBOL_MAPS, LigaturePolicy.NEVER, FontFeatures.NONE, FontVariations.NONE);
+            null, NO_SYMBOL_MAPS, LigaturePolicy.NEVER, FontFeatures.NONE, FontVariations.NONE,
+            FontMetricsAdjustments.NONE);
     }
 
     /** Construct a renderer with independent real faces; null variants use synthetic styling. */
@@ -209,6 +261,19 @@ public final class TerminalRenderer {
                             @Nullable LigaturePolicy ligaturePolicy,
                             @Nullable FontFeatures fontFeatures,
                             @Nullable FontVariations fontVariations) {
+        this(textSize, typeface, boldTypeface, italicTypeface, boldItalicTypeface, symbolMaps,
+            ligaturePolicy, fontFeatures, fontVariations, FontMetricsAdjustments.NONE);
+    }
+
+    /** Construct a renderer with explicit fonts, shaping controls, and bounded metrics. */
+    public TerminalRenderer(int textSize, Typeface typeface, @Nullable Typeface boldTypeface,
+                            @Nullable Typeface italicTypeface,
+                            @Nullable Typeface boldItalicTypeface,
+                            @Nullable SymbolMap[] symbolMaps,
+                            @Nullable LigaturePolicy ligaturePolicy,
+                            @Nullable FontFeatures fontFeatures,
+                            @Nullable FontVariations fontVariations,
+                            @Nullable FontMetricsAdjustments fontMetricsAdjustments) {
         mTextSize = textSize;
         mTypeface = typeface;
         mBoldTypeface = boldTypeface;
@@ -219,14 +284,28 @@ public final class TerminalRenderer {
         mLigaturePolicy = ligaturePolicy == null ? LigaturePolicy.NEVER : ligaturePolicy;
         mFontFeatures = fontFeatures == null ? FontFeatures.NONE : fontFeatures;
         mFontVariations = fontVariations == null ? FontVariations.NONE : fontVariations;
+        mFontMetricsAdjustments = fontMetricsAdjustments == null
+            ? FontMetricsAdjustments.NONE : fontMetricsAdjustments;
         mTextPaint.setTypeface(typeface);
         mTextPaint.setAntiAlias(true);
         mTextPaint.setTextSize(textSize);
         Paint.FontMetricsInt fontMetrics = mTextPaint.getFontMetricsInt();
         mFontAscent = fontMetrics.ascent;
-        mFontLineSpacing = fontMetrics.descent - mFontAscent;
-        mFontLineSpacingAndAscent = mFontLineSpacing + mFontAscent;
-        mFontWidth = mTextPaint.measureText("X");
+        int baseLineSpacing = fontMetrics.descent - mFontAscent;
+        float baseWidth = mTextPaint.measureText("X");
+        mFontWidth = clamp(adjustMetric(baseWidth, mFontMetricsAdjustments.cellWidth), 2f, 1000f);
+        mFontLineSpacing = Math.round(clamp(
+            adjustMetric(baseLineSpacing, mFontMetricsAdjustments.cellHeight), 4f, 1000f));
+        float baseBaselineFromTop = -mFontAscent;
+        float centeredBaseline = baseBaselineFromTop + (mFontLineSpacing - baseLineSpacing) / 2f;
+        float baselineAdjustment = adjustmentDelta(baseBaselineFromTop,
+            mFontMetricsAdjustments.baseline);
+        float baselineFromTop = clamp(centeredBaseline - baselineAdjustment, 1f,
+            mFontLineSpacing - 1f);
+        float effectiveBaselineRaise = centeredBaseline - baselineFromTop;
+        mFontBaselineDescent = Math.round(mFontLineSpacing - baselineFromTop);
+        mFontLineSpacingAndAscent = Math.round(clamp(fontMetrics.descent
+            + (mFontLineSpacing - baseLineSpacing) / 2f, 0f, mFontLineSpacing));
         StringBuilder sb = new StringBuilder(" ");
         for (int style = 0; style < mAsciiMeasures.length; style++) {
             configureFont((style & 1) != 0, (style & 2) != 0);
@@ -236,9 +315,34 @@ public final class TerminalRenderer {
             }
         }
         configureFont(false, false);
-        mDecorationThickness = Math.max(1f, textSize / 16f);
+        float baseDecorationThickness = Math.max(1f, textSize / 16f);
+        mDecorationThickness = clamp(adjustMetric(baseDecorationThickness,
+            mFontMetricsAdjustments.underlineThickness), 0.5f, mFontLineSpacing / 3f);
+        float baseUnderlinePosition = baseBaselineFromTop + fontMetrics.descent * 0.4f;
+        mUnderlinePositionFromTop = adjustMetric(baseUnderlinePosition,
+            mFontMetricsAdjustments.underlinePosition)
+            + (mFontLineSpacing - baseLineSpacing) / 2f - effectiveBaselineRaise;
+        mStrikethroughThickness = clamp(adjustMetric(baseDecorationThickness,
+            mFontMetricsAdjustments.strikethroughThickness), 0.5f, mFontLineSpacing / 3f);
+        float baseStrikethroughPosition = baseBaselineFromTop + mFontAscent / 3f;
+        mStrikethroughPositionFromTop = adjustMetric(baseStrikethroughPosition,
+            mFontMetricsAdjustments.strikethroughPosition)
+            + (mFontLineSpacing - baseLineSpacing) / 2f - effectiveBaselineRaise;
         mDottedEffect = new DashPathEffect(new float[]{mDecorationThickness, mDecorationThickness * 2f}, 0f);
         mDashedEffect = new DashPathEffect(new float[]{mDecorationThickness * 4f, mDecorationThickness * 3f}, 0f);
+    }
+
+    static float adjustMetric(float original, @Nullable MetricAdjustment adjustment) {
+        if (adjustment == null) return original;
+        return adjustment.percent ? original * adjustment.value / 100f : original + adjustment.value;
+    }
+
+    private static float adjustmentDelta(float original, @Nullable MetricAdjustment adjustment) {
+        return adjustMetric(original, adjustment) - original;
+    }
+
+    private static float clamp(float value, float minimum, float maximum) {
+        return Math.max(minimum, Math.min(maximum, value));
     }
 
     /**
@@ -478,8 +582,7 @@ public final class TerminalRenderer {
         // cells instead of moving later columns when their native metrics differ.
         final float fontWidth = mFontWidth;
         final int fontLineSpacing = mFontLineSpacing;
-        final int fontAscent = mFontAscent;
-        final int fontLineSpacingAndAscent = mFontLineSpacingAndAscent;
+        final int fontBaselineDescent = mFontBaselineDescent;
         configureFont(bold, italic, symbolTypeface);
         // Measure the same shaped run that Canvas will draw. Per-code-point measureText() cannot
         // account for ligatures, Indic conjuncts, Arabic joining, or ZWJ emoji continuations.
@@ -518,12 +621,10 @@ public final class TerminalRenderer {
         if (backColor != palette[TextStyle.COLOR_INDEX_BACKGROUND]) {
             // Only draw non-default background.
             mTextPaint.setColor(backColor);
-            canvas.drawRect(left, y - fontLineSpacingAndAscent + fontAscent, right, y, mTextPaint);
+            canvas.drawRect(left, y - fontLineSpacing, right, y, mTextPaint);
         }
         if (cursor != 0) {
             mTextPaint.setColor(cursor);
-            // fontLineSpacingAndAscent - fontAscent isn't equals to
-            // fontLineSpacing?
             float cursorHeight = fontLineSpacing;
             if (cursorStyle == TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE)
                 cursorHeight /= 4.;
@@ -545,10 +646,11 @@ public final class TerminalRenderer {
             }
             // Underlines are drawn as geometry below, since Paint only knows one straight variant.
             mTextPaint.setUnderlineText(false);
-            mTextPaint.setStrikeThruText(strikeThrough);
+            mTextPaint.setStrikeThruText(false);
             mTextPaint.setColor(foreColor);
             // The text alignment is the default Paint.Align.LEFT.
-            canvas.drawTextRun(text, startCharIndex, runWidthChars, startCharIndex, runWidthChars, left, y - fontLineSpacingAndAscent, false, mTextPaint);
+            canvas.drawTextRun(text, startCharIndex, runWidthChars, startCharIndex, runWidthChars,
+                left, y - fontBaselineDescent, false, mTextPaint);
             int underlineStyle = TextStyle.decodeUnderlineStyle(textStyle);
             if (underlineStyle == TextStyle.UNDERLINE_STYLE_NONE && underline) {
                 // The attribute bit without a style: DECCARA, or a style set before this fork stored one.
@@ -563,8 +665,10 @@ public final class TerminalRenderer {
                 if (decorationColor != TextStyle.DECORATION_COLOR_DEFAULT) {
                     lineColor = ((decorationColor & 0xff000000) == 0xff000000) ? decorationColor : palette[decorationColor];
                 }
-                drawUnderline(canvas, left, right, y, fontLineSpacingAndAscent, underlineStyle, lineColor);
+                drawUnderline(canvas, left, right, y, fontBaselineDescent, underlineStyle, lineColor);
             }
+            if (strikeThrough)
+                drawStrikethrough(canvas, left, right, y, foreColor);
         }
         if (savedMatrix)
             canvas.restore();
@@ -735,13 +839,15 @@ public final class TerminalRenderer {
         final float thickness = Math.min(mDecorationThickness, Math.max(1f, descent / 3f));
         final float baseline = cellBottom - descent;
         // Keep every variant inside its own cell, so that a decoration never bleeds into the row below.
-        final float top = Math.min(baseline + descent * 0.4f, cellBottom - thickness);
+        final float cellTop = cellBottom - mFontLineSpacing;
+        final float top = clamp(cellTop + mUnderlinePositionFromTop, baseline,
+            cellBottom - thickness);
         mTextPaint.setColor(color);
         switch(underlineStyle) {
             case TextStyle.UNDERLINE_STYLE_DOUBLE:
                 {
                     float lineThickness = Math.max(1f, thickness * 0.6f);
-                    float first = Math.min(baseline + descent * 0.25f, cellBottom - 3f * lineThickness);
+                    float first = clamp(top, baseline, cellBottom - 3f * lineThickness);
                     float second = Math.min(first + 2f * lineThickness, cellBottom - lineThickness);
                     canvas.drawRect(left, first, right, first + lineThickness, mTextPaint);
                     canvas.drawRect(left, second, right, second + lineThickness, mTextPaint);
@@ -750,7 +856,8 @@ public final class TerminalRenderer {
             case TextStyle.UNDERLINE_STYLE_CURLY:
                 {
                     float amplitude = Math.max(0.5f, Math.min(thickness, descent * 0.2f));
-                    float centerY = Math.min(baseline + descent * 0.5f + amplitude, cellBottom - amplitude - thickness / 2f);
+                    float centerY = clamp(top + amplitude, baseline + amplitude,
+                        cellBottom - amplitude - thickness / 2f);
                     float halfPeriod = Math.max(2f, thickness * 2.5f);
                     mDecorationPath.rewind();
                     mDecorationPath.moveTo(left, centerY);
@@ -787,6 +894,20 @@ public final class TerminalRenderer {
                 canvas.drawRect(left, top, right, top + thickness, mTextPaint);
                 break;
         }
+    }
+
+    /** Draw a bounded, configurable strikethrough without relying on Paint's fixed metrics. */
+    private void drawStrikethrough(Canvas canvas, float left, float right, float cellBottom,
+                                   int color) {
+        if (right <= left)
+            return;
+        float cellTop = cellBottom - mFontLineSpacing;
+        float center = clamp(cellTop + mStrikethroughPositionFromTop,
+            cellTop + mStrikethroughThickness / 2f,
+            cellBottom - mStrikethroughThickness / 2f);
+        mTextPaint.setColor(color);
+        canvas.drawRect(left, center - mStrikethroughThickness / 2f,
+            right, center + mStrikethroughThickness / 2f, mTextPaint);
     }
 
     public float getFontWidth() {

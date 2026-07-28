@@ -118,6 +118,44 @@ public class TerminalFontConfigTest {
     }
 
     @Test
+    public void parsesBoundedKittyStyleFontMetrics() {
+        TerminalFontConfig.Result result = TerminalFontConfig.parse(
+            "modify_font cell_width 90%\n"
+                + "modify_font cell_height 4px\n"
+                + "modify_font baseline -2\n"
+                + "modify_font underline_position 1px\n"
+                + "modify_font underline_thickness 150%\n"
+                + "modify_font strikethrough_position -1px\n"
+                + "modify_font strikethrough_thickness 2px\n"
+                + "modify_font baseline none\n", true);
+
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+        assertEquals(90d, result.metric(TerminalFontConfig.Metric.CELL_WIDTH).value, 0d);
+        assertEquals(TerminalFontConfig.MetricUnit.PERCENT,
+            result.metric(TerminalFontConfig.Metric.CELL_WIDTH).unit);
+        assertEquals(4d, result.metric(TerminalFontConfig.Metric.CELL_HEIGHT).value, 0d);
+        assertNull(result.metric(TerminalFontConfig.Metric.BASELINE));
+        assertEquals(150d,
+            result.metric(TerminalFontConfig.Metric.UNDERLINE_THICKNESS).value, 0d);
+        assertEquals(2d,
+            result.metric(TerminalFontConfig.Metric.STRIKETHROUGH_THICKNESS).value, 0d);
+    }
+
+    @Test
+    public void rejectsUnknownOrUnboundedFontMetrics() {
+        TerminalFontConfig.Result result = TerminalFontConfig.parse(
+            "modify_font cell_width 100px\n"
+                + "modify_font unknown 1px\n"
+                + "modify_font cell_height 501%\n"
+                + "modify_font baseline NaN\n", true);
+
+        assertEquals(3, result.errors.size());
+        assertEquals(100d, result.metric(TerminalFontConfig.Metric.CELL_WIDTH).value, 0d);
+        assertNull(result.metric(TerminalFontConfig.Metric.CELL_HEIGHT));
+        assertNull(result.metric(TerminalFontConfig.Metric.BASELINE));
+    }
+
+    @Test
     public void parsesRepeatableSymbolMapsAndCommaSeparatedRanges() {
         TerminalFontConfig.Result result = TerminalFontConfig.parse(
             "symbol_map U+E000-U+F8FF,U+F0001 path=~/.termux/fonts/nerd.ttf\n"

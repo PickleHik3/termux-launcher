@@ -627,7 +627,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 if (v.isFontInitialized())
                     v.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic,
                         faces.symbolMaps, faces.ligaturePolicy, faces.fontFeatures,
-                        faces.fontVariations);
+                        faces.fontVariations, faces.fontMetricsAdjustments);
             }
             mActivity.requestTerminalFlushDockGeometryUpdate();
         } catch (Exception e) {
@@ -644,7 +644,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             for (String error : faces.errors) Logger.logError(LOG_TAG, "Font config: " + error);
             view.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic,
                 faces.symbolMaps, faces.ligaturePolicy, faces.fontFeatures,
-                faces.fontVariations);
+                faces.fontVariations, faces.fontMetricsAdjustments);
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyFontToView()", e);
         }

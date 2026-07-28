@@ -173,6 +173,62 @@ public class GraphemeBufferInstrumentationTest {
             hasVisiblePixels(bitmap));
     }
 
+    @Test
+    public void loaderAppliesCellAndBaselineMetricsToRendererGeometry() {
+        TerminalFontConfig.Result config = TerminalFontConfig.parse(
+            "modify_font cell_width 150%\n"
+                + "modify_font cell_height 8px\n"
+                + "modify_font baseline 4px\n", true);
+        TerminalFontLoader.Faces faces = TerminalFontLoader.load(config);
+        assertTrue(faces.errors.toString(), faces.errors.isEmpty());
+
+        Bitmap defaults = render("XX", null);
+        Bitmap adjusted = render("XX", null, TerminalRenderer.LigaturePolicy.NEVER, false,
+            faces.regular, TerminalRenderer.FontVariations.NONE,
+            faces.fontMetricsAdjustments);
+        assertFalse("cell width, height, and baseline must alter fixed-grid rendering",
+            defaults.sameAs(adjusted));
+    }
+
+    @Test
+    public void configurableUnderlineAndStrikethroughUseBoundedGeometry() {
+        String decorated = "\033[4mU\033[0m \033[9mS\033[0m";
+        Bitmap defaults = render(decorated, null);
+        TerminalRenderer.FontMetricsAdjustments metrics =
+            new TerminalRenderer.FontMetricsAdjustments(null, null, null,
+                new TerminalRenderer.MetricAdjustment(-2f, false),
+                new TerminalRenderer.MetricAdjustment(200f, true),
+                new TerminalRenderer.MetricAdjustment(3f, false),
+                new TerminalRenderer.MetricAdjustment(250f, true));
+        Bitmap adjusted = render(decorated, null, TerminalRenderer.LigaturePolicy.NEVER, false,
+            Typeface.MONOSPACE, TerminalRenderer.FontVariations.NONE, metrics);
+
+        assertTrue("adjusted decorations should remain inside their bitmap",
+            hasVisiblePixels(adjusted));
+        assertFalse("decoration position and thickness must affect rendered pixels",
+            defaults.sameAs(adjusted));
+    }
+
+    @Test
+    public void positiveBaselineRaisesGlyphAndBothDecorationsTogether() {
+        TerminalRenderer.FontMetricsAdjustments raised =
+            new TerminalRenderer.FontMetricsAdjustments(null, null,
+                new TerminalRenderer.MetricAdjustment(4f, false), null, null, null, null);
+        Bitmap underlineDefault = render("\033[4m \033[0m", null);
+        Bitmap underlineRaised = render("\033[4m \033[0m", null,
+            TerminalRenderer.LigaturePolicy.NEVER, false, Typeface.MONOSPACE,
+            TerminalRenderer.FontVariations.NONE, raised);
+        Bitmap strikeDefault = render("\033[9m \033[0m", null);
+        Bitmap strikeRaised = render("\033[9m \033[0m", null,
+            TerminalRenderer.LigaturePolicy.NEVER, false, Typeface.MONOSPACE,
+            TerminalRenderer.FontVariations.NONE, raised);
+
+        assertEquals("baseline should raise underline by the same pixel delta",
+            visibleCenterY(underlineDefault) - 4, visibleCenterY(underlineRaised), 1);
+        assertEquals("baseline should raise strikethrough by the same pixel delta",
+            visibleCenterY(strikeDefault) - 4, visibleCenterY(strikeRaised), 1);
+    }
+
     private static boolean hasVisiblePixels(Bitmap bitmap) {
         for (int y = 0; y < bitmap.getHeight(); y += 4) {
             for (int x = 0; x < bitmap.getWidth(); x += 4) {
@@ -180,6 +236,21 @@ public class GraphemeBufferInstrumentationTest {
             }
         }
         return false;
+    }
+
+    private static int visibleCenterY(Bitmap bitmap) {
+        int first = bitmap.getHeight();
+        int last = -1;
+        for (int y = 0; y < bitmap.getHeight(); y++) {
+            for (int x = 0; x < bitmap.getWidth(); x++) {
+                if (bitmap.getPixel(x, y) != Color.TRANSPARENT) {
+                    first = Math.min(first, y);
+                    last = Math.max(last, y);
+                }
+            }
+        }
+        assertTrue("expected visible decoration pixels", last >= first);
+        return (first + last) / 2;
     }
 
     private static Bitmap render(String text, TerminalRenderer.SymbolMap[] symbolMaps) {
@@ -203,11 +274,21 @@ public class GraphemeBufferInstrumentationTest {
                                  TerminalRenderer.LigaturePolicy ligaturePolicy,
                                  boolean cursorVisible, Typeface primaryTypeface,
                                  TerminalRenderer.FontVariations fontVariations) {
+        return render(text, symbolMaps, ligaturePolicy, cursorVisible, primaryTypeface,
+            fontVariations, TerminalRenderer.FontMetricsAdjustments.NONE);
+    }
+
+    private static Bitmap render(String text, TerminalRenderer.SymbolMap[] symbolMaps,
+                                 TerminalRenderer.LigaturePolicy ligaturePolicy,
+                                 boolean cursorVisible, Typeface primaryTypeface,
+                                 TerminalRenderer.FontVariations fontVariations,
+                                 TerminalRenderer.FontMetricsAdjustments fontMetricsAdjustments) {
         TerminalEmulator emulator = emulator(6, 2);
         enter(emulator, (cursorVisible ? "" : "\033[?25l") + text);
         Bitmap bitmap = Bitmap.createBitmap(360, 120, Bitmap.Config.ARGB_8888);
         TerminalRenderer renderer = new TerminalRenderer(48, primaryTypeface, null, null,
-            null, symbolMaps, ligaturePolicy, TerminalRenderer.FontFeatures.NONE, fontVariations);
+            null, symbolMaps, ligaturePolicy, TerminalRenderer.FontFeatures.NONE, fontVariations,
+            fontMetricsAdjustments);
         renderer.render(emulator, new Canvas(bitmap), 0, -1, -1, -1, -1, false,
             Color.TRANSPARENT, 0f);
         return bitmap;

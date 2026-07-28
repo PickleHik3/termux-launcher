@@ -33,6 +33,7 @@ public final class TerminalFontLoader {
         @NonNull public final TerminalRenderer.LigaturePolicy ligaturePolicy;
         @NonNull public final TerminalRenderer.FontFeatures fontFeatures;
         @NonNull public final TerminalRenderer.FontVariations fontVariations;
+        @NonNull public final TerminalRenderer.FontMetricsAdjustments fontMetricsAdjustments;
         @NonNull public final List<String> errors;
 
         private Faces(@NonNull Typeface regular, @Nullable Typeface bold,
@@ -41,6 +42,7 @@ public final class TerminalFontLoader {
                       @NonNull TerminalRenderer.LigaturePolicy ligaturePolicy,
                       @NonNull TerminalRenderer.FontFeatures fontFeatures,
                       @NonNull TerminalRenderer.FontVariations fontVariations,
+                      @NonNull TerminalRenderer.FontMetricsAdjustments fontMetricsAdjustments,
                       @NonNull List<String> errors) {
             this.regular = regular;
             this.bold = bold;
@@ -50,6 +52,7 @@ public final class TerminalFontLoader {
             this.ligaturePolicy = ligaturePolicy;
             this.fontFeatures = fontFeatures;
             this.fontVariations = fontVariations;
+            this.fontMetricsAdjustments = fontMetricsAdjustments;
             this.errors = Collections.unmodifiableList(new ArrayList<>(errors));
         }
     }
@@ -100,8 +103,26 @@ public final class TerminalFontLoader {
         TerminalRenderer.FontVariations fontVariations = new TerminalRenderer.FontVariations(
             regularVariations, boldVariations, italicVariations, boldItalicVariations,
             symbolVariations);
+        TerminalRenderer.FontMetricsAdjustments fontMetricsAdjustments =
+            new TerminalRenderer.FontMetricsAdjustments(
+                metric(config, TerminalFontConfig.Metric.CELL_WIDTH),
+                metric(config, TerminalFontConfig.Metric.CELL_HEIGHT),
+                metric(config, TerminalFontConfig.Metric.BASELINE),
+                metric(config, TerminalFontConfig.Metric.UNDERLINE_POSITION),
+                metric(config, TerminalFontConfig.Metric.UNDERLINE_THICKNESS),
+                metric(config, TerminalFontConfig.Metric.STRIKETHROUGH_POSITION),
+                metric(config, TerminalFontConfig.Metric.STRIKETHROUGH_THICKNESS));
         return new Faces(regular, bold, italic, boldItalic, symbolMaps, ligaturePolicy,
-            fontFeatures, fontVariations, errors);
+            fontFeatures, fontVariations, fontMetricsAdjustments, errors);
+    }
+
+    @Nullable
+    private static TerminalRenderer.MetricAdjustment metric(
+        @NonNull TerminalFontConfig.Result config, @NonNull TerminalFontConfig.Metric metric) {
+        TerminalFontConfig.MetricAdjustment adjustment = config.metric(metric);
+        if (adjustment == null) return null;
+        return new TerminalRenderer.MetricAdjustment((float) adjustment.value,
+            adjustment.unit == TerminalFontConfig.MetricUnit.PERCENT);
     }
 
     @Nullable

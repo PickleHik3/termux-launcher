@@ -1,8 +1,8 @@
 # Fonts and cluster-aware shaping
 
-Status: four-face configuration, Canvas shaping, the fixed-cell grapheme model, explicit symbol
-maps, ligature policy, OpenType features, and variable axes were delivered and device-verified
-2026-07-28; bounded font metrics are next.
+Status: the bounded fixed-cell font project is complete. Four-face configuration, Canvas shaping,
+the fixed-cell grapheme model, explicit symbol maps, ligature policy, OpenType features, variable
+axes, and configurable metrics were delivered and device-verified 2026-07-28.
 
 This is the remaining Phase 4 project from the Kitty feasibility study. It extends Termux's native
 `~/.termux/font.ttf` contract instead of replacing it, and keeps the Canvas renderer unless device
@@ -44,6 +44,11 @@ disable_ligatures cursor
 font_features regular +zero -liga cv01=2
 font_features symbols +ss01
 font_variations regular wght=425 wdth=92.5
+modify_font cell_width 90%
+modify_font cell_height 2px
+modify_font baseline 1px
+modify_font underline_thickness 150%
+modify_font strikethrough_position -1px
 ```
 
 An explicit map selects its font for the range. Unmapped clusters use the configured primary face
@@ -73,8 +78,8 @@ for path-backed mappings.
    restore `Paint` state after every draw.
 7. **Variable axes — complete.** `Paint.setFontVariationSettings()` is available at minSdk 26. Validate axes,
    keep settings face-specific, and degrade to the unmodified face if Android rejects them.
-8. **Metrics.** Add bounded cell width/height, baseline, underline, and strikethrough adjustments
-   only after shaping and selection geometry are pinned by tests.
+8. **Metrics — complete.** Add bounded cell width/height, baseline, underline, and strikethrough
+   adjustments only after shaping and selection geometry are pinned by tests.
 
 ## Delivered: four independent faces
 
@@ -220,6 +225,33 @@ Android 16 verification loads path-backed Roboto Flex, accepts `wght` and `wdth`
 weights 100 and 900 produce different glyph pixels inside the same cell geometry, and proves a
 malformed direct setting cannot crash rendering. A live reload copied Roboto Flex under
 `~/.termux/fonts/`, applied axes, kept the process healthy, and restored the absent-config state.
+
+## Delivered: bounded font metrics
+
+`modify_font` accepts Kitty's seven fixed-cell metric names: `cell_width`, `cell_height`,
+`baseline`, `underline_position`, `underline_thickness`, `strikethrough_position`, and
+`strikethrough_thickness`. A value ending in `%` replaces the font-derived metric by percentage;
+`px` and bare values are additive pixels. Bare values deliberately mean pixels on Android rather
+than Kitty's desktop point unit, because this renderer has no separate configurable font DPI.
+`none` clears a prior value and later directives replace earlier ones.
+
+Pixel deltas are bounded to -256 through 256 and percentages to 10% through 500%. Final cell width
+is clamped to 2–1000 pixels, height to 4–1000 pixels, and decoration thickness and positions remain
+inside their owning cell. Positive baseline values raise the glyph and both decorations, while a
+positive explicit decoration-position value moves that decoration downward, matching Kitty's
+coordinate behavior.
+
+The regular face still defines the starting grid. Adjusted cell dimensions flow through terminal
+resize, hit testing, selection, cursor geometry, sixel cells, split panes, and text-size changes.
+Underlines and strikethroughs are drawn as bounded geometry instead of relying on Android Paint's
+fixed strikethrough metrics, so position and thickness settings affect all runs consistently. The
+same existing settings reload parses and atomically applies metrics to every initialized pane.
+
+Android 16 instrumentation compares default and adjusted cell/baseline rendering and independently
+checks underline/strikethrough position and thickness geometry. All 17 font, shaping, grapheme,
+buffer, and renderer device tests pass. A live reload applied all seven metric directives without a
+font error or process restart, then restored the original absent-`fonts.conf` state with the same
+Termux PID.
 
 ## Scope boundaries
 
