@@ -564,6 +564,13 @@ public final class TerminalEmulator {
 
     private int mLastEmittedCodePoint = -1;
 
+    private final GraphemeClusterer mGraphemeClusterer = new GraphemeClusterer();
+    private int mLastGraphemeRow = -1;
+    private int mLastGraphemeColumn = -1;
+    private int mLastGraphemeCursorRow = -1;
+    private int mLastGraphemeCursorCol = -1;
+    private boolean mLastGraphemeAboutToAutoWrap;
+
     public final TerminalColors mColors = new TerminalColors();
 
     private static final String LOG_TAG = "TerminalEmulator";
@@ -750,6 +757,7 @@ public final class TerminalEmulator {
             isAlternateBufferActive(), keepCursorAtBottom);
         mCursorCol = cursor[0];
         mCursorRow = cursor[1];
+        resetGraphemeTracking();
     }
 
     public int getCursorRow() {
@@ -1837,6 +1845,7 @@ public final class TerminalEmulator {
                         if (setting)
                             saveCursor();
                         mScreen = newScreen;
+                        resetGraphemeTracking();
                         if (!setting) {
                             int col = mSavedStateMain.mSavedCursorCol;
                             int row = mSavedStateMain.mSavedCursorRow;
@@ -3662,6 +3671,21 @@ public final class TerminalEmulator {
                     break;
             }
         }
+        boolean precedingCellIsCurrent = mLastGraphemeColumn >= 0
+            && mCursorRow == mLastGraphemeCursorRow
+            && mCursorCol == mLastGraphemeCursorCol
+            && mAboutToAutoWrap == mLastGraphemeAboutToAutoWrap;
+        if (mGraphemeClusterer.accept(codePoint, precedingCellIsCurrent)) {
+            mScreen.appendCodePointToCell(mLastGraphemeColumn, mLastGraphemeRow, codePoint);
+            if (mGraphemeClusterer.shouldWidenCell()
+                && mScreen.widenCell(mLastGraphemeColumn, mLastGraphemeRow)) {
+                mCursorCol = Math.min(mCursorCol + 1, mRightMargin - 1);
+                mAboutToAutoWrap = mCursorCol == mRightMargin - 1;
+                mLastGraphemeCursorCol = mCursorCol;
+                mLastGraphemeAboutToAutoWrap = mAboutToAutoWrap;
+            }
+            return;
+        }
         final boolean autoWrap = isDecsetInternalBitSet(DECSET_BIT_AUTOWRAP);
         final int displayWidth = WcWidth.width(codePoint);
         final boolean cursorInLastColumn = mCursorCol == mRightMargin - 1;
@@ -3695,19 +3719,26 @@ public final class TerminalEmulator {
         if (column < 0)
             column = 0;
         mScreen.setChar(column, mCursorRow, codePoint, getStyle(), mUnderlineColor, mCurrentHyperlinkId);
+        mLastGraphemeRow = mCursorRow;
+        mLastGraphemeColumn = column;
         if (autoWrap && displayWidth > 0)
             mAboutToAutoWrap = (mCursorCol == mRightMargin - displayWidth);
         mCursorCol = Math.min(mCursorCol + displayWidth, mRightMargin - 1);
+        mLastGraphemeCursorRow = mCursorRow;
+        mLastGraphemeCursorCol = mCursorCol;
+        mLastGraphemeAboutToAutoWrap = mAboutToAutoWrap;
     }
 
     private void setCursorRow(int row) {
         mCursorRow = row;
         mAboutToAutoWrap = false;
+        resetGraphemeTracking();
     }
 
     private void setCursorCol(int col) {
         mCursorCol = col;
         mAboutToAutoWrap = false;
+        resetGraphemeTracking();
     }
 
     /**
@@ -3724,6 +3755,7 @@ public final class TerminalEmulator {
         mCursorRow = Math.max(0, Math.min(row, mRows - 1));
         mCursorCol = Math.max(0, Math.min(col, mColumns - 1));
         mAboutToAutoWrap = false;
+        resetGraphemeTracking();
     }
 
     public int getScrollCounter() {
@@ -3746,6 +3778,7 @@ public final class TerminalEmulator {
      * Reset terminal state so user can interact with it regardless of present state.
      */
     public void reset() {
+        resetGraphemeTracking();
         setCursorStyle();
         mArgIndex = 0;
         mContinueSequence = false;
@@ -3793,6 +3826,13 @@ public final class TerminalEmulator {
         clearExtraCursors();
         mExtraCursorColor.type = mExtraCursorColor.value = 0;
         mExtraCursorTextColor.type = mExtraCursorTextColor.value = 0;
+    }
+
+    private void resetGraphemeTracking() {
+        mGraphemeClusterer.reset();
+        mLastGraphemeRow = mLastGraphemeColumn = -1;
+        mLastGraphemeCursorRow = mLastGraphemeCursorCol = -1;
+        mLastGraphemeAboutToAutoWrap = false;
     }
 
     long getKittyGraphicsBytes() {

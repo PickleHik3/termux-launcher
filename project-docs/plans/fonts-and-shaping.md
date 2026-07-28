@@ -1,7 +1,7 @@
 # Fonts and cluster-aware shaping
 
-Status: four-face configuration and the Canvas shaping feasibility gate were delivered and
-device-verified 2026-07-28; cluster-aware renderer integration is next.
+Status: four-face configuration, Canvas shaping, and the fixed-cell grapheme model were delivered
+and device-verified 2026-07-28; symbol maps are next.
 
 This is the remaining Phase 4 project from the Kitty feasibility study. It extends Termux's native
 `~/.termux/font.ttf` contract instead of replacing it, and keeps the Canvas renderer unless device
@@ -51,7 +51,7 @@ for path-backed mappings.
    `TerminalRenderer` to select the real face for each SGR combination. Synthetic bold/italic is
    used only when its face is absent. This is independent of the grapheme work and is the first
    visible delivery.
-2. **Grapheme and shaping test suite — device primitives complete, integration cases remain.** Cover Arabic shaping without promising bidi layout, Indic
+2. **Grapheme and shaping test suite — complete for the fixed-cell model.** Cover Arabic shaping without promising bidi layout, Indic
    conjuncts, combining marks, ZWJ emoji, Nerd symbols, programming ligatures, cursor boundaries,
    selection boundaries, reflow, and styled run boundaries.
 3. **Canvas shaping experiment — complete; retain Canvas.** `Paint.getTextRunAdvances()` is available below the app's API 26
@@ -113,9 +113,33 @@ restoring the `Paint` setting restored the original advances exactly.
 
 Decision: retain Android Canvas and do not port HarfBuzz. ICU supplies grapheme boundaries and
 Canvas supplies shaped per-character advances, including glyph-cluster continuations. The next
-slice must map those two signals to fixed terminal-cell spans and add cursor, selection, style-run,
-copy, resize, and reflow integration tests. HarfBuzz remains only a fallback if that concrete
-integration suite uncovers a Canvas result that cannot be mapped deterministically.
+slice mapped those two signals to fixed terminal-cell spans and added cursor, selection, style-run,
+copy, resize, and reflow integration tests. HarfBuzz remains only a fallback if later font-map or
+feature work uncovers a Canvas result that cannot be mapped deterministically.
+
+## Delivered: fixed-cell grapheme model
+
+`TerminalRow` now stores the decided display width at each code-point start instead of recomputing
+`wcwidth` whenever text is copied or reflowed. This lets a positive-width code point be recorded as
+a zero-cell continuation of an existing extended grapheme without changing global width tables.
+The metadata moves atomically with UTF-16 text through overwrite, block copy, selection, resize,
+and reflow. Regional-indicator pairs are promoted from one to two cells as a bounded special case,
+matching their emoji presentation width.
+
+`TerminalEmulator` incrementally asks Android ICU whether the next non-ASCII code point continues
+the current grapheme. Ordinary printable ASCII never enters ICU. Tracking resets across explicit
+cursor movement, screen switches, resize, and terminal reset, and clusters are capped before they
+can grow unbounded. The renderer consumes the stored widths and measures each final styled run with
+`getTextRunAdvances()` before scaling it into the regular-face cell grid.
+
+This is not the deferred multicell-text project. A normal Unicode extended grapheme owns the width
+of its first base (with the standard two-cell flag promotion); there is no arbitrary scale, height,
+following-cell claim, `narrow_symbols`, or Kitty multicell protocol metadata.
+
+Verification now includes 245 passing terminal-emulator JVM tests, the terminal-view unit suite,
+eight Android 16 shaping/buffer/renderer instrumentation tests, an APK build, and a live PTY render
+smoke test. The device suite proves atomic selection and reflow for ZWJ emoji, flags, Indic
+conjuncts, and combining sequences in addition to the Canvas advance fixtures.
 
 ## Scope boundaries
 

@@ -184,7 +184,7 @@ public final class TerminalRenderer {
                     currentCharIndex += charsForCodePoint;
                     continue;
                 }
-                final int codePointWcWidth = WcWidth.width(codePoint);
+                final int codePointWcWidth = lineObject.getDisplayWidthAt(currentCharIndex);
                 final boolean insideCursor = (cursorX == column || (codePointWcWidth == 2 && cursorX == column + 1));
                 final boolean insideSelection = column >= selx1 && column <= selx2;
                 final int effect = TextStyle.decodeEffect(style);
@@ -227,7 +227,8 @@ public final class TerminalRenderer {
                 measuredWidthForRun += measuredCodePointWidth;
                 column += codePointWcWidth;
                 currentCharIndex += charsForCodePoint;
-                while (currentCharIndex < charsUsedInLine && WcWidth.width(line, currentCharIndex) <= 0) {
+                while (currentCharIndex < charsUsedInLine
+                    && lineObject.getDisplayWidthAt(currentCharIndex) <= 0) {
                     // Eat combining chars so that they are treated as part of the last non-combining code point,
                     // instead of e.g. being considered inside the cursor in the next run.
                     currentCharIndex += Character.isHighSurrogate(line[currentCharIndex]) ? 2 : 1;
@@ -260,6 +261,12 @@ public final class TerminalRenderer {
         final int fontLineSpacing = mFontLineSpacing;
         final int fontAscent = mFontAscent;
         final int fontLineSpacingAndAscent = mFontLineSpacingAndAscent;
+        configureFont(bold, italic);
+        // Measure the same shaped run that Canvas will draw. Per-code-point measureText() cannot
+        // account for ligatures, Indic conjuncts, Arabic joining, or ZWJ emoji continuations.
+        mes = mTextPaint.getTextRunAdvances(text, startCharIndex, runWidthChars,
+            startCharIndex, runWidthChars, false, null, 0);
+        if (!(mes > 0f)) mes = runWidthColumns * fontWidth;
         if ((foreColor & 0xff000000) != 0xff000000) {
             // If enabled, let bold have bright colors if applicable (one of the first 8):
             if (boldWithBright && bold && foreColor >= 0 && foreColor < 8)
@@ -317,7 +324,6 @@ public final class TerminalRenderer {
                 blue = blue * 2 / 3;
                 foreColor = 0xFF000000 + (red << 16) + (green << 8) + blue;
             }
-            configureFont(bold, italic);
             // Underlines are drawn as geometry below, since Paint only knows one straight variant.
             mTextPaint.setUnderlineText(false);
             mTextPaint.setStrikeThruText(strikeThrough);

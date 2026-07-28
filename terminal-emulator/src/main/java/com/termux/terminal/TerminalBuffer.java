@@ -358,7 +358,9 @@ public final class TerminalBuffer {
                     // Note that looping over java character, not cells.
                     char c = oldLine.mText[i];
                     int codePoint = (Character.isHighSurrogate(c)) ? Character.toCodePoint(c, oldLine.mText[++i]) : c;
-                    int displayWidth = WcWidth.width(codePoint);
+                    int displayWidth = oldLine.getDisplayWidthAt(
+                        i - (Character.isSupplementaryCodePoint(codePoint) ? 1 : 0));
+                    if (justToCursor && newCursorPlaced && displayWidth > 0) break;
                     // Use the last style if this is a zero-width character:
                     if (displayWidth > 0) {
                         styleAtCol = oldLine.getStyle(currentOldCol);
@@ -379,7 +381,13 @@ public final class TerminalBuffer {
                     }
                     int offsetDueToCombiningChar = ((displayWidth <= 0 && currentOutputExternalColumn > 0) ? 1 : 0);
                     int outputColumn = currentOutputExternalColumn - offsetDueToCombiningChar;
-                    setChar(outputColumn, currentOutputExternalRow, codePoint, styleAtCol, decorationAtCol, hyperlinkAtCol);
+                    if (displayWidth > 0) {
+                        setChar(outputColumn, currentOutputExternalRow, codePoint, styleAtCol,
+                            decorationAtCol, hyperlinkAtCol);
+                    } else {
+                        allocateFullLineIfNecessary(externalToInternalRow(currentOutputExternalRow))
+                            .appendCodePointToCell(outputColumn, codePoint);
+                    }
                     if (displayWidth > 0) {
                         if (oldCursorRow == externalOldRow && oldCursorColumn == currentOldCol) {
                             newCursorColumn = currentOutputExternalColumn;
@@ -388,8 +396,6 @@ public final class TerminalBuffer {
                         }
                         currentOldCol += displayWidth;
                         currentOutputExternalColumn += displayWidth;
-                        if (justToCursor && newCursorPlaced)
-                            break;
                     }
                 }
                 // Old row has been copied. Check if we need to insert newline if old line was not wrapping:
@@ -542,6 +548,19 @@ public final class TerminalBuffer {
             throw new IllegalArgumentException("TerminalBuffer.setChar(): row=" + row + ", column=" + column + ", mScreenRows=" + mScreenRows + ", mColumns=" + mColumns);
         row = externalToInternalRow(row);
         allocateFullLineIfNecessary(row).setChar(column, codePoint, style, decorationColor, hyperlinkId);
+    }
+
+    /** Attach a code point to the grapheme already stored in a cell without consuming a new cell. */
+    public void appendCodePointToCell(int column, int row, int codePoint) {
+        if (row < 0 || row >= mScreenRows || column < 0 || column >= mColumns)
+            throw new IllegalArgumentException("TerminalBuffer.appendCodePointToCell(): row=" + row
+                + ", column=" + column + ", mScreenRows=" + mScreenRows + ", mColumns=" + mColumns);
+        allocateFullLineIfNecessary(externalToInternalRow(row)).appendCodePointToCell(column, codePoint);
+    }
+
+    public boolean widenCell(int column, int row) {
+        if (row < 0 || row >= mScreenRows || column < 0 || column >= mColumns) return false;
+        return allocateFullLineIfNecessary(externalToInternalRow(row)).widenCell(column);
     }
 
     /** The OSC 133 mark of a row, one of the {@code TerminalRow.MARK_*} values. */
