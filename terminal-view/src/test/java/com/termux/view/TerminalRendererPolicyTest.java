@@ -41,4 +41,15 @@ public class TerminalRendererPolicyTest {
         assertTrue("bold-italic".equals(features.forRun(true, true, false)));
         assertTrue("symbols".equals(features.forRun(true, true, true)));
     }
+
+    @Test
+    public void variationSettingsFollowTheRequestedFaceAndSymbolOverride() {
+        TerminalRenderer.FontVariations variations = new TerminalRenderer.FontVariations(
+            "regular", "bold", "italic", "bold-italic", "symbols");
+        assertTrue("regular".equals(variations.forRun(false, false, false)));
+        assertTrue("bold".equals(variations.forRun(true, false, false)));
+        assertTrue("italic".equals(variations.forRun(false, true, false)));
+        assertTrue("bold-italic".equals(variations.forRun(true, true, false)));
+        assertTrue("symbols".equals(variations.forRun(false, false, true)));
+    }
 }

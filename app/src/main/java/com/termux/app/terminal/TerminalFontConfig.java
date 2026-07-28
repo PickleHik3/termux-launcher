@@ -10,6 +10,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,6 +32,7 @@ public final class TerminalFontConfig {
     private static final int MAX_SYMBOL_MAPS = 256;
     private static final int MAX_SYMBOL_RANGES = 1024;
     private static final int MAX_FEATURES_PER_TARGET = 32;
+    private static final int MAX_VARIATIONS_PER_TARGET = 16;
 
     public enum Face { REGULAR, BOLD, ITALIC, BOLD_ITALIC }
 
@@ -38,7 +40,7 @@ public final class TerminalFontConfig {
 
     public enum LigaturePolicy { NEVER, CURSOR, ALWAYS }
 
-    public enum FeatureTarget { REGULAR, BOLD, ITALIC, BOLD_ITALIC, SYMBOLS }
+    public enum FontTarget { REGULAR, BOLD, ITALIC, BOLD_ITALIC, SYMBOLS }
 
     public static final class FaceSpec {
         @NonNull public final SourceType type;
@@ -75,13 +77,15 @@ public final class TerminalFontConfig {
         @NonNull public final Map<Face, FaceSpec> faces;
         @NonNull public final List<SymbolMapSpec> symbolMaps;
         @NonNull public final LigaturePolicy ligaturePolicy;
-        @NonNull public final Map<FeatureTarget, String> fontFeatures;
+        @NonNull public final Map<FontTarget, String> fontFeatures;
+        @NonNull public final Map<FontTarget, String> fontVariations;
         @NonNull public final List<String> errors;
 
         private Result(boolean filePresent, @NonNull Map<Face, FaceSpec> faces,
                        @NonNull List<SymbolMapSpec> symbolMaps,
                        @NonNull LigaturePolicy ligaturePolicy,
-                       @NonNull Map<FeatureTarget, String> fontFeatures,
+                       @NonNull Map<FontTarget, String> fontFeatures,
+                       @NonNull Map<FontTarget, String> fontVariations,
                        @NonNull List<String> errors) {
             this.filePresent = filePresent;
             EnumMap<Face, FaceSpec> faceCopy = new EnumMap<>(Face.class);
@@ -89,9 +93,12 @@ public final class TerminalFontConfig {
             this.faces = Collections.unmodifiableMap(faceCopy);
             this.symbolMaps = Collections.unmodifiableList(new ArrayList<>(symbolMaps));
             this.ligaturePolicy = ligaturePolicy;
-            EnumMap<FeatureTarget, String> featureCopy = new EnumMap<>(FeatureTarget.class);
+            EnumMap<FontTarget, String> featureCopy = new EnumMap<>(FontTarget.class);
             featureCopy.putAll(fontFeatures);
             this.fontFeatures = Collections.unmodifiableMap(featureCopy);
+            EnumMap<FontTarget, String> variationCopy = new EnumMap<>(FontTarget.class);
+            variationCopy.putAll(fontVariations);
+            this.fontVariations = Collections.unmodifiableMap(variationCopy);
             this.errors = Collections.unmodifiableList(new ArrayList<>(errors));
         }
 
@@ -99,8 +106,12 @@ public final class TerminalFontConfig {
             return faces.get(face);
         }
 
-        @Nullable public String features(@NonNull FeatureTarget target) {
+        @Nullable public String features(@NonNull FontTarget target) {
             return fontFeatures.get(target);
+        }
+
+        @Nullable public String variations(@NonNull FontTarget target) {
+            return fontVariations.get(target);
         }
     }
 
@@ -141,7 +152,8 @@ public final class TerminalFontConfig {
         List<SymbolMapSpec> symbolMaps = new ArrayList<>();
         List<String> errors = new ArrayList<>();
         LigaturePolicy ligaturePolicy = LigaturePolicy.NEVER;
-        EnumMap<FeatureTarget, String> fontFeatures = new EnumMap<>(FeatureTarget.class);
+        EnumMap<FontTarget, String> fontFeatures = new EnumMap<>(FontTarget.class);
+        EnumMap<FontTarget, String> fontVariations = new EnumMap<>(FontTarget.class);
         int symbolRangeCount = 0;
         String[] lines = content.split("\\r?\\n", -1);
         for (int i = 0; i < lines.length; i++) {
@@ -153,13 +165,33 @@ public final class TerminalFontConfig {
                 continue;
             }
             if (words.isEmpty()) continue;
+            if ("font_variations".equalsIgnoreCase(words.get(0))) {
+                if (words.size() < 3) {
+                    errors.add("line " + (i + 1)
+                        + ": expected font_variations target and one or more axes");
+                    continue;
+                }
+                FontTarget target = fontTarget(words.get(1));
+                if (target == null) {
+                    errors.add("line " + (i + 1)
+                        + ": variation target must be regular, bold, italic, bold_italic, or symbols");
+                    continue;
+                }
+                if (words.size() == 3 && "none".equalsIgnoreCase(words.get(2))) {
+                    fontVariations.remove(target);
+                    continue;
+                }
+                String settings = parseVariationSettings(words, 2, i + 1, errors);
+                if (settings != null) fontVariations.put(target, settings);
+                continue;
+            }
             if ("font_features".equalsIgnoreCase(words.get(0))) {
                 if (words.size() < 3) {
                     errors.add("line " + (i + 1)
                         + ": expected font_features target and one or more features");
                     continue;
                 }
-                FeatureTarget target = featureTarget(words.get(1));
+                FontTarget target = fontTarget(words.get(1));
                 if (target == null) {
                     errors.add("line " + (i + 1)
                         + ": feature target must be regular, bold, italic, bold_italic, or symbols");
@@ -221,16 +253,61 @@ public final class TerminalFontConfig {
             FaceSpec source = parseSource(words.get(1), i + 1, errors);
             if (source != null) faces.put(face, source);
         }
-        return new Result(filePresent, faces, symbolMaps, ligaturePolicy, fontFeatures, errors);
+        return new Result(filePresent, faces, symbolMaps, ligaturePolicy, fontFeatures,
+            fontVariations, errors);
     }
 
     @Nullable
-    private static FeatureTarget featureTarget(@NonNull String value) {
+    private static FontTarget fontTarget(@NonNull String value) {
         try {
-            return FeatureTarget.valueOf(value.toUpperCase(Locale.US));
+            return FontTarget.valueOf(value.toUpperCase(Locale.US));
         } catch (IllegalArgumentException e) {
             return null;
         }
+    }
+
+    @Nullable
+    private static String parseVariationSettings(@NonNull List<String> words, int start, int line,
+                                                 @NonNull List<String> errors) {
+        LinkedHashMap<String, Double> axes = new LinkedHashMap<>();
+        for (int i = start; i < words.size(); i++) {
+            for (String item : words.get(i).split(",", -1)) {
+                int equals = item.indexOf('=');
+                String tag = equals < 0 ? item : item.substring(0, equals);
+                if (equals < 0 || !isFeatureTag(tag) || equals == item.length() - 1
+                    || "none".equalsIgnoreCase(item)) {
+                    errors.add("line " + line
+                        + ": axes must use a four-character tag=value form");
+                    return null;
+                }
+                double value;
+                try {
+                    value = Double.parseDouble(item.substring(equals + 1));
+                } catch (NumberFormatException e) {
+                    value = Double.NaN;
+                }
+                if (Double.isNaN(value) || Double.isInfinite(value)
+                    || value < -1_000_000d || value > 1_000_000d) {
+                    errors.add("line " + line
+                        + ": axis values must be finite and between -1000000 and 1000000");
+                    return null;
+                }
+                if (axes.containsKey(tag)) axes.remove(tag);
+                axes.put(tag, value);
+                if (axes.size() > MAX_VARIATIONS_PER_TARGET) {
+                    errors.add("line " + line + ": variation axis count exceeds "
+                        + MAX_VARIATIONS_PER_TARGET);
+                    return null;
+                }
+            }
+        }
+        StringBuilder result = new StringBuilder();
+        for (Map.Entry<String, Double> axis : axes.entrySet()) {
+            if (result.length() > 0) result.append(", ");
+            String value = BigDecimal.valueOf(axis.getValue()).stripTrailingZeros().toPlainString();
+            result.append('\'').append(axis.getKey()).append("' ").append(value);
+        }
+        return result.toString();
     }
 
     @Nullable
@@ -373,7 +450,7 @@ public final class TerminalFontConfig {
     private static Result empty(boolean present, @Nullable String error) {
         List<String> errors = error == null ? Collections.emptyList() : Collections.singletonList(error);
         return new Result(present, Collections.emptyMap(), Collections.emptyList(),
-            LigaturePolicy.NEVER, Collections.emptyMap(), errors);
+            LigaturePolicy.NEVER, Collections.emptyMap(), Collections.emptyMap(), errors);
     }
 
     /** Split one config line, allowing quotes and backslash escapes; # starts a comment. */

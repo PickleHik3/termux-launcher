@@ -15,6 +15,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -117,7 +118,7 @@ public class CanvasShapingInstrumentationTest {
         TerminalFontConfig.Result config = TerminalFontConfig.parse(
             "font_features regular -calt\n", true);
         assertTrue(config.errors.toString(), config.errors.isEmpty());
-        paint.setFontFeatureSettings(config.features(TerminalFontConfig.FeatureTarget.REGULAR));
+        paint.setFontFeatureSettings(config.features(TerminalFontConfig.FontTarget.REGULAR));
         float[] caltDisabled = advances(paint, arrow);
         paint.setFontFeatureSettings("'liga' 0, 'calt' 0");
         float[] disabled = advances(paint, arrow);
@@ -134,6 +135,27 @@ public class CanvasShapingInstrumentationTest {
         Log.i(LOG_TAG, "cursor-arrow enabled=[" + enabled[0] + ',' + enabled[1]
             + "] calt-disabled=[" + caltDisabled[0] + ',' + caltDisabled[1]
             + "] disabled=[" + disabled[0] + ',' + disabled[1] + "]");
+    }
+
+    @Test
+    public void variableAxesAreValidatedAgainstTheLoadedPathFace() {
+        File variableFont = new File("/system/fonts/RobotoFlex-Regular.ttf");
+        assertTrue("Android test device must expose its standard Roboto Flex face",
+            variableFont.isFile());
+        TerminalFontConfig.Result config = TerminalFontConfig.parse(
+            "font_family path=/system/fonts/RobotoFlex-Regular.ttf\n"
+                + "font_variations regular wght=825 wdth=90\n", true);
+        TerminalFontLoader.Faces faces = TerminalFontLoader.load(config);
+        assertTrue(faces.errors.toString(), faces.errors.isEmpty());
+
+        Paint paint = shapingPaint();
+        paint.setTypeface(faces.regular);
+        String settings = config.variations(TerminalFontConfig.FontTarget.REGULAR);
+        assertTrue("Roboto Flex must accept its weight and width axes",
+            paint.setFontVariationSettings(settings));
+        assertEquals(settings, paint.getFontVariationSettings());
+        assertTrue(paint.setFontVariationSettings(null));
+        assertEquals(null, paint.getFontVariationSettings());
     }
 
     private static Paint shapingPaint() {

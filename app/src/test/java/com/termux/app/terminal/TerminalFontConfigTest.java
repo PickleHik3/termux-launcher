@@ -63,9 +63,9 @@ public class TerminalFontConfigTest {
 
         assertTrue(result.errors.toString(), result.errors.isEmpty());
         assertEquals("'zero' 1, 'liga' 0, 'cv01' 2",
-            result.features(TerminalFontConfig.FeatureTarget.REGULAR));
-        assertEquals("'ss01' 3", result.features(TerminalFontConfig.FeatureTarget.SYMBOLS));
-        assertNull(result.features(TerminalFontConfig.FeatureTarget.BOLD));
+            result.features(TerminalFontConfig.FontTarget.REGULAR));
+        assertEquals("'ss01' 3", result.features(TerminalFontConfig.FontTarget.SYMBOLS));
+        assertNull(result.features(TerminalFontConfig.FontTarget.BOLD));
     }
 
     @Test
@@ -78,10 +78,43 @@ public class TerminalFontConfigTest {
                 + "font_features symbols cv01=99999\n", true);
 
         assertEquals(4, result.errors.size());
-        assertEquals("'zero' 1", result.features(TerminalFontConfig.FeatureTarget.REGULAR));
-        assertNull(result.features(TerminalFontConfig.FeatureTarget.BOLD));
-        assertNull(result.features(TerminalFontConfig.FeatureTarget.ITALIC));
-        assertNull(result.features(TerminalFontConfig.FeatureTarget.SYMBOLS));
+        assertEquals("'zero' 1", result.features(TerminalFontConfig.FontTarget.REGULAR));
+        assertNull(result.features(TerminalFontConfig.FontTarget.BOLD));
+        assertNull(result.features(TerminalFontConfig.FontTarget.ITALIC));
+        assertNull(result.features(TerminalFontConfig.FontTarget.SYMBOLS));
+    }
+
+    @Test
+    public void translatesAndScopesVariableFontAxes() {
+        TerminalFontConfig.Result result = TerminalFontConfig.parse(
+            "font_variations regular wght=425 wdth=92.5\n"
+                + "font_variations italic slnt=-8.25\n"
+                + "font_variations symbols opsz=14,wght=500\n"
+                + "font_variations italic none\n", true);
+
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+        assertEquals("'wght' 425, 'wdth' 92.5",
+            result.variations(TerminalFontConfig.FontTarget.REGULAR));
+        assertEquals("'opsz' 14, 'wght' 500",
+            result.variations(TerminalFontConfig.FontTarget.SYMBOLS));
+        assertNull(result.variations(TerminalFontConfig.FontTarget.ITALIC));
+    }
+
+    @Test
+    public void rejectsMalformedOrUnboundedVariableAxes() {
+        TerminalFontConfig.Result result = TerminalFontConfig.parse(
+            "font_variations regular wght=420\n"
+                + "font_variations bold weight=500\n"
+                + "font_variations italic slnt=NaN\n"
+                + "font_variations bold_italic wdth=2000000\n"
+                + "font_variations symbols opsz\n", true);
+
+        assertEquals(4, result.errors.size());
+        assertEquals("'wght' 420", result.variations(TerminalFontConfig.FontTarget.REGULAR));
+        assertNull(result.variations(TerminalFontConfig.FontTarget.BOLD));
+        assertNull(result.variations(TerminalFontConfig.FontTarget.ITALIC));
+        assertNull(result.variations(TerminalFontConfig.FontTarget.BOLD_ITALIC));
+        assertNull(result.variations(TerminalFontConfig.FontTarget.SYMBOLS));
     }
 
     @Test

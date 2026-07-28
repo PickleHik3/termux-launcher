@@ -20,6 +20,7 @@ import com.termux.view.TerminalRenderer;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.io.File;
 import java.nio.charset.StandardCharsets;
 
 /** Device tests for ICU grapheme decisions and stored terminal-cell ownership. */
@@ -145,6 +146,33 @@ public class GraphemeBufferInstrumentationTest {
         render("->\r", null, TerminalRenderer.LigaturePolicy.CURSOR, true, ligatureFace);
     }
 
+    @Test
+    public void rendererAppliesVariableAxesInsideTheFixedCellGrid() {
+        Typeface variable = Typeface.createFromFile(
+            new File("/system/fonts/RobotoFlex-Regular.ttf"));
+        TerminalRenderer.FontVariations light = new TerminalRenderer.FontVariations(
+            "'wght' 100", null, null, null, null);
+        TerminalRenderer.FontVariations heavy = new TerminalRenderer.FontVariations(
+            "'wght' 900", null, null, null, null);
+
+        Bitmap lightBitmap = render("M", null, TerminalRenderer.LigaturePolicy.NEVER, false,
+            variable, light);
+        Bitmap heavyBitmap = render("M", null, TerminalRenderer.LigaturePolicy.NEVER, false,
+            variable, heavy);
+        assertFalse("weight axis should change the glyph while retaining the same cell grid",
+            lightBitmap.sameAs(heavyBitmap));
+    }
+
+    @Test
+    public void rejectedVariationSettingsFallBackWithoutCrashingTheRenderer() {
+        TerminalRenderer.FontVariations malformed = new TerminalRenderer.FontVariations(
+            "not-a-valid-axis-setting", null, null, null, null);
+        Bitmap bitmap = render("SAFE", null, TerminalRenderer.LigaturePolicy.NEVER, false,
+            Typeface.MONOSPACE, malformed);
+        assertTrue("a rejected optional variation must retain base-font rendering",
+            hasVisiblePixels(bitmap));
+    }
+
     private static boolean hasVisiblePixels(Bitmap bitmap) {
         for (int y = 0; y < bitmap.getHeight(); y += 4) {
             for (int x = 0; x < bitmap.getWidth(); x += 4) {
@@ -167,11 +195,19 @@ public class GraphemeBufferInstrumentationTest {
     private static Bitmap render(String text, TerminalRenderer.SymbolMap[] symbolMaps,
                                  TerminalRenderer.LigaturePolicy ligaturePolicy,
                                  boolean cursorVisible, Typeface primaryTypeface) {
+        return render(text, symbolMaps, ligaturePolicy, cursorVisible, primaryTypeface,
+            TerminalRenderer.FontVariations.NONE);
+    }
+
+    private static Bitmap render(String text, TerminalRenderer.SymbolMap[] symbolMaps,
+                                 TerminalRenderer.LigaturePolicy ligaturePolicy,
+                                 boolean cursorVisible, Typeface primaryTypeface,
+                                 TerminalRenderer.FontVariations fontVariations) {
         TerminalEmulator emulator = emulator(6, 2);
         enter(emulator, (cursorVisible ? "" : "\033[?25l") + text);
         Bitmap bitmap = Bitmap.createBitmap(360, 120, Bitmap.Config.ARGB_8888);
         TerminalRenderer renderer = new TerminalRenderer(48, primaryTypeface, null, null,
-            null, symbolMaps, ligaturePolicy);
+            null, symbolMaps, ligaturePolicy, TerminalRenderer.FontFeatures.NONE, fontVariations);
         renderer.render(emulator, new Canvas(bitmap), 0, -1, -1, -1, -1, false,
             Color.TRANSPARENT, 0f);
         return bitmap;

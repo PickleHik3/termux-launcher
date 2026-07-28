@@ -1,5 +1,6 @@
 package com.termux.app.terminal;
 
+import android.graphics.Paint;
 import android.graphics.Typeface;
 
 import androidx.annotation.NonNull;
@@ -31,6 +32,7 @@ public final class TerminalFontLoader {
         @NonNull public final TerminalRenderer.SymbolMap[] symbolMaps;
         @NonNull public final TerminalRenderer.LigaturePolicy ligaturePolicy;
         @NonNull public final TerminalRenderer.FontFeatures fontFeatures;
+        @NonNull public final TerminalRenderer.FontVariations fontVariations;
         @NonNull public final List<String> errors;
 
         private Faces(@NonNull Typeface regular, @Nullable Typeface bold,
@@ -38,6 +40,7 @@ public final class TerminalFontLoader {
                       @NonNull TerminalRenderer.SymbolMap[] symbolMaps,
                       @NonNull TerminalRenderer.LigaturePolicy ligaturePolicy,
                       @NonNull TerminalRenderer.FontFeatures fontFeatures,
+                      @NonNull TerminalRenderer.FontVariations fontVariations,
                       @NonNull List<String> errors) {
             this.regular = regular;
             this.bold = bold;
@@ -46,6 +49,7 @@ public final class TerminalFontLoader {
             this.symbolMaps = symbolMaps.clone();
             this.ligaturePolicy = ligaturePolicy;
             this.fontFeatures = fontFeatures;
+            this.fontVariations = fontVariations;
             this.errors = Collections.unmodifiableList(new ArrayList<>(errors));
         }
     }
@@ -74,13 +78,62 @@ public final class TerminalFontLoader {
         TerminalRenderer.LigaturePolicy ligaturePolicy = TerminalRenderer.LigaturePolicy.valueOf(
             config.ligaturePolicy.name());
         TerminalRenderer.FontFeatures fontFeatures = new TerminalRenderer.FontFeatures(
-            config.features(TerminalFontConfig.FeatureTarget.REGULAR),
-            config.features(TerminalFontConfig.FeatureTarget.BOLD),
-            config.features(TerminalFontConfig.FeatureTarget.ITALIC),
-            config.features(TerminalFontConfig.FeatureTarget.BOLD_ITALIC),
-            config.features(TerminalFontConfig.FeatureTarget.SYMBOLS));
+            config.features(TerminalFontConfig.FontTarget.REGULAR),
+            config.features(TerminalFontConfig.FontTarget.BOLD),
+            config.features(TerminalFontConfig.FontTarget.ITALIC),
+            config.features(TerminalFontConfig.FontTarget.BOLD_ITALIC),
+            config.features(TerminalFontConfig.FontTarget.SYMBOLS));
+        Typeface boldResolved = bold == null ? regular : bold;
+        Typeface italicResolved = italic == null ? regular : italic;
+        Typeface boldItalicResolved = boldItalic != null ? boldItalic
+            : italic != null ? italic : bold != null ? bold : regular;
+        String regularVariations = validateVariations(regular,
+            config.variations(TerminalFontConfig.FontTarget.REGULAR), "regular", errors);
+        String boldVariations = validateVariations(boldResolved,
+            config.variations(TerminalFontConfig.FontTarget.BOLD), "bold", errors);
+        String italicVariations = validateVariations(italicResolved,
+            config.variations(TerminalFontConfig.FontTarget.ITALIC), "italic", errors);
+        String boldItalicVariations = validateVariations(boldItalicResolved,
+            config.variations(TerminalFontConfig.FontTarget.BOLD_ITALIC), "bold_italic", errors);
+        String symbolVariations = validateSymbolVariations(symbolMaps,
+            config.variations(TerminalFontConfig.FontTarget.SYMBOLS), errors);
+        TerminalRenderer.FontVariations fontVariations = new TerminalRenderer.FontVariations(
+            regularVariations, boldVariations, italicVariations, boldItalicVariations,
+            symbolVariations);
         return new Faces(regular, bold, italic, boldItalic, symbolMaps, ligaturePolicy,
-            fontFeatures, errors);
+            fontFeatures, fontVariations, errors);
+    }
+
+    @Nullable
+    private static String validateVariations(@NonNull Typeface typeface,
+                                             @Nullable String settings,
+                                             @NonNull String label,
+                                             @NonNull List<String> errors) {
+        if (settings == null) return null;
+        Paint paint = new Paint();
+        paint.setTypeface(typeface);
+        try {
+            if (paint.setFontVariationSettings(settings)) return settings;
+            errors.add("font_variations " + label + ": Android rejected the requested axes");
+        } catch (RuntimeException e) {
+            errors.add("font_variations " + label + ": Android rejected the requested axes: "
+                + safeMessage(e));
+        }
+        return null;
+    }
+
+    @Nullable
+    private static String validateSymbolVariations(
+        @NonNull TerminalRenderer.SymbolMap[] symbolMaps, @Nullable String settings,
+        @NonNull List<String> errors) {
+        if (settings == null || symbolMaps.length == 0) return settings;
+        Set<Typeface> checked = new HashSet<>();
+        for (TerminalRenderer.SymbolMap map : symbolMaps) {
+            if (checked.add(map.typeface)
+                && validateVariations(map.typeface, settings, "symbols", errors) == null)
+                return null;
+        }
+        return settings;
     }
 
     @NonNull

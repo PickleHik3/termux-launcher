@@ -1,8 +1,8 @@
 # Fonts and cluster-aware shaping
 
 Status: four-face configuration, Canvas shaping, the fixed-cell grapheme model, explicit symbol
-maps, ligature policy, and OpenType features were delivered and device-verified 2026-07-28;
-variable axes are next.
+maps, ligature policy, OpenType features, and variable axes were delivered and device-verified
+2026-07-28; bounded font metrics are next.
 
 This is the remaining Phase 4 project from the Kitty feasibility study. It extends Termux's native
 `~/.termux/font.ttf` contract instead of replacing it, and keeps the Canvas renderer unless device
@@ -43,6 +43,7 @@ symbol_map U+E0A0-U+E0D7,U+F0001 family="Symbols Nerd Font Mono"
 disable_ligatures cursor
 font_features regular +zero -liga cv01=2
 font_features symbols +ss01
+font_variations regular wght=425 wdth=92.5
 ```
 
 An explicit map selects its font for the range. Unmapped clusters use the configured primary face
@@ -70,7 +71,7 @@ for path-backed mappings.
 6. **OpenType features — complete.** `Paint.setFontFeatureSettings()` exists below minSdk 26. Translate the
    user-facing feature syntax to Android's feature-settings form, scope settings to a face/run, and
    restore `Paint` state after every draw.
-7. **Variable axes.** `Paint.setFontVariationSettings()` is available at minSdk 26. Validate axes,
+7. **Variable axes — complete.** `Paint.setFontVariationSettings()` is available at minSdk 26. Validate axes,
    keep settings face-specific, and degrade to the unmodified face if Android rejects them.
 8. **Metrics.** Add bounded cell width/height, baseline, underline, and strikethrough adjustments
    only after shaping and selection geometry are pinned by tests.
@@ -199,6 +200,26 @@ override when required, and restored in the same `finally` boundary.
 Android 16 accepts the generated setting string, uses `font_features regular -calt` to break the
 programming-ligature fixture, and restores the original shaping afterward. A live reload with
 separate regular and bold features kept Termux healthy and the test config was removed afterward.
+
+## Delivered: variable font axes
+
+`font_variations` uses the same five deterministic face aliases and accepts comma- or
+whitespace-separated four-character `tag=value` axes. Values may be fractional or negative, must
+be finite and within a defensive ±1,000,000 bound, and each target is capped at 16 axes. `none`
+clears a target and later directives replace earlier ones. The parser emits Android form such as
+`'wght' 425, 'wdth' 92.5`.
+
+Every requested setting is probed against the resolved face with
+`Paint.setFontVariationSettings()` during the existing off-render-path load. Android accepts some
+valid settings on static faces as no-ops, so the loader can report explicit API rejection but does
+not claim axis-capability discovery. At render time, settings cover measurement and drawing, are
+restored in a `finally` boundary, and any late runtime rejection falls back to the unmodified face.
+The primary unvaried face still defines the terminal grid.
+
+Android 16 verification loads path-backed Roboto Flex, accepts `wght` and `wdth`, proves that
+weights 100 and 900 produce different glyph pixels inside the same cell geometry, and proves a
+malformed direct setting cannot crash rendering. A live reload copied Roboto Flex under
+`~/.termux/fonts/`, applied axes, kept the process healthy, and restored the absent-config state.
 
 ## Scope boundaries
 

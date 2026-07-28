@@ -745,7 +745,7 @@ public final class TerminalView extends View {
             ? new TerminalRenderer(textSize, Typeface.MONOSPACE, null, null, null)
             : new TerminalRenderer(textSize, mRenderer.mTypeface, mRenderer.mBoldTypeface,
                 mRenderer.mItalicTypeface, mRenderer.mBoldItalicTypeface, mRenderer.mSymbolMaps,
-                mRenderer.mLigaturePolicy, mRenderer.mFontFeatures);
+                mRenderer.mLigaturePolicy, mRenderer.mFontFeatures, mRenderer.mFontVariations);
         updateSize();
     }
 
@@ -779,8 +779,18 @@ public final class TerminalView extends View {
                             Typeface boldItalic, TerminalRenderer.SymbolMap[] symbolMaps,
                             TerminalRenderer.LigaturePolicy ligaturePolicy,
                             TerminalRenderer.FontFeatures fontFeatures) {
+        setTypeface(regular, bold, italic, boldItalic, symbolMaps, ligaturePolicy, fontFeatures,
+            TerminalRenderer.FontVariations.NONE);
+    }
+
+    /** Apply all font sources and per-run shaping settings as one renderer replacement. */
+    public void setTypeface(Typeface regular, Typeface bold, Typeface italic,
+                            Typeface boldItalic, TerminalRenderer.SymbolMap[] symbolMaps,
+                            TerminalRenderer.LigaturePolicy ligaturePolicy,
+                            TerminalRenderer.FontFeatures fontFeatures,
+                            TerminalRenderer.FontVariations fontVariations) {
         mRenderer = new TerminalRenderer(mRenderer.mTextSize, regular, bold, italic, boldItalic,
-            symbolMaps, ligaturePolicy, fontFeatures);
+            symbolMaps, ligaturePolicy, fontFeatures, fontVariations);
         updateSize();
         invalidate();
     }

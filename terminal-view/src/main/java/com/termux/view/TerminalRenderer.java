@@ -70,6 +70,35 @@ public final class TerminalRenderer {
         }
     }
 
+    /** Android variable-font settings scoped like {@link FontFeatures}. */
+    public static final class FontVariations {
+        public static final FontVariations NONE = new FontVariations(null, null, null, null, null);
+
+        @Nullable private final String regular;
+        @Nullable private final String bold;
+        @Nullable private final String italic;
+        @Nullable private final String boldItalic;
+        @Nullable private final String symbols;
+
+        public FontVariations(@Nullable String regular, @Nullable String bold,
+                              @Nullable String italic, @Nullable String boldItalic,
+                              @Nullable String symbols) {
+            this.regular = regular;
+            this.bold = bold;
+            this.italic = italic;
+            this.boldItalic = boldItalic;
+            this.symbols = symbols;
+        }
+
+        @Nullable String forRun(boolean isBold, boolean isItalic, boolean isSymbol) {
+            if (isSymbol) return symbols;
+            if (isBold && isItalic) return boldItalic;
+            if (isBold) return bold;
+            if (isItalic) return italic;
+            return regular;
+        }
+    }
+
     private static final SymbolMap[] NO_SYMBOL_MAPS = new SymbolMap[0];
 
     final int mTextSize;
@@ -88,6 +117,8 @@ public final class TerminalRenderer {
     final LigaturePolicy mLigaturePolicy;
 
     final FontFeatures mFontFeatures;
+
+    final FontVariations mFontVariations;
 
     private final Paint mTextPaint = new Paint();
     private Typeface mCurrentTypeface;
@@ -129,7 +160,7 @@ public final class TerminalRenderer {
     public TerminalRenderer(int textSize, Typeface typeface, Typeface italicTypeface) {
         this(textSize, typeface, null,
             italicTypeface != null && !italicTypeface.equals(typeface) ? italicTypeface : null,
-            null, NO_SYMBOL_MAPS, LigaturePolicy.NEVER, FontFeatures.NONE);
+            null, NO_SYMBOL_MAPS, LigaturePolicy.NEVER, FontFeatures.NONE, FontVariations.NONE);
     }
 
     /** Construct a renderer with independent real faces; null variants use synthetic styling. */
@@ -166,6 +197,18 @@ public final class TerminalRenderer {
                             @Nullable SymbolMap[] symbolMaps,
                             @Nullable LigaturePolicy ligaturePolicy,
                             @Nullable FontFeatures fontFeatures) {
+        this(textSize, typeface, boldTypeface, italicTypeface, boldItalicTypeface, symbolMaps,
+            ligaturePolicy, fontFeatures, FontVariations.NONE);
+    }
+
+    /** Construct a renderer with explicit fonts and every supported per-run shaping control. */
+    public TerminalRenderer(int textSize, Typeface typeface, @Nullable Typeface boldTypeface,
+                            @Nullable Typeface italicTypeface,
+                            @Nullable Typeface boldItalicTypeface,
+                            @Nullable SymbolMap[] symbolMaps,
+                            @Nullable LigaturePolicy ligaturePolicy,
+                            @Nullable FontFeatures fontFeatures,
+                            @Nullable FontVariations fontVariations) {
         mTextSize = textSize;
         mTypeface = typeface;
         mBoldTypeface = boldTypeface;
@@ -175,6 +218,7 @@ public final class TerminalRenderer {
             ? NO_SYMBOL_MAPS : symbolMaps.clone();
         mLigaturePolicy = ligaturePolicy == null ? LigaturePolicy.NEVER : ligaturePolicy;
         mFontFeatures = fontFeatures == null ? FontFeatures.NONE : fontFeatures;
+        mFontVariations = fontVariations == null ? FontVariations.NONE : fontVariations;
         mTextPaint.setTypeface(typeface);
         mTextPaint.setAntiAlias(true);
         mTextPaint.setTextSize(textSize);
@@ -373,12 +417,35 @@ public final class TerminalRenderer {
         }
         boolean changedFeatures = !sameString(previousFeatures, runFeatures);
         if (changedFeatures) mTextPaint.setFontFeatureSettings(runFeatures);
+        String previousVariations = mTextPaint.getFontVariationSettings();
+        String runVariations = mFontVariations.forRun(bold, italic, symbolTypeface != null);
+        boolean changedVariations = !sameString(previousVariations, runVariations);
+        boolean restoreVariations = false;
+        if (changedVariations) {
+            try {
+                restoreVariations = mTextPaint.setFontVariationSettings(runVariations);
+                if (!restoreVariations) mTextPaint.setFontVariationSettings(previousVariations);
+            } catch (RuntimeException e) {
+                try {
+                    mTextPaint.setFontVariationSettings(previousVariations);
+                } catch (RuntimeException ignored) {
+                    // The validated loader path should prevent this; keep the base typeface usable.
+                }
+            }
+        }
         try {
             drawTextRunConfigured(canvas, text, palette, y, startColumn, runWidthColumns,
                 startCharIndex, runWidthChars, mes, cursor, cursorStyle, textStyle,
                 boldWithBright, reverseVideo, horizontalOffset, decorationColor, hyperlink,
                 foregroundOverride, symbolTypeface);
         } finally {
+            if (restoreVariations) {
+                try {
+                    mTextPaint.setFontVariationSettings(previousVariations);
+                } catch (RuntimeException ignored) {
+                    // Never let an optional axis setting take down terminal rendering.
+                }
+            }
             if (changedFeatures) mTextPaint.setFontFeatureSettings(previousFeatures);
         }
     }

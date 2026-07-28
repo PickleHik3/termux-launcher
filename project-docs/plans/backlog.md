@@ -30,7 +30,7 @@ Sizes follow the study: **S** 2–5 days, **M** 1–3 weeks, **L** 4–8 weeks, 
 
 | Item | Size | Notes |
 |---|---|---|
-| Variable font axes and metrics | M | Four real faces, ICU fixed-cell graphemes, Canvas shaped-run advances, path/family `symbol_map` ranges, ligature policy, and face-scoped OpenType features are complete; no HarfBuzz port is currently needed. Next: variable axes and metrics. No bidi, `narrow_symbols`, or arbitrary symbols consuming following cells. |
+| Bounded font metrics | S–M | Four real faces, ICU fixed-cell graphemes, Canvas shaped-run advances, path/family `symbol_map` ranges, ligature policy, OpenType features, and variable axes are complete; no HarfBuzz port is currently needed. Next: bounded cell width/height, baseline, underline, and strikethrough adjustments. No bidi, `narrow_symbols`, or arbitrary symbols consuming following cells. |
 
 ## Deferred on purpose
 
