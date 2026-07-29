@@ -1220,6 +1220,7 @@
     <string name="tool_pane_kill_focused">Kill focused pane</string>
     <string name="tool_pane_equalize">Equalize pane dividers</string>
     <string name="tool_pane_rotate">Rotate pane layout</string>
+    <string name="tool_pane_next_layout">Next pane layout</string>
     <string name="tool_window_new">New window</string>
     <string name="tool_window_close">Close window</string>
     <string name="tool_window_next">Next window</string>
@@ -1266,6 +1267,7 @@
     <string name="tool_desc_pane_kill_focused">Terminate the shell running in the focused pane.</string>
     <string name="tool_desc_pane_equalize">Reset every divider in this window to an equal ratio.</string>
     <string name="tool_desc_pane_rotate">Rotate this window’s pane layout clockwise.</string>
+    <string name="tool_desc_pane_next_layout">Cycle this window to the next automatic pane layout and keep it applied as panes are added or closed.</string>
     <string name="tool_desc_window_new">Create a new window with a fresh shell in the current session.</string>
     <string name="tool_desc_window_close">Close the current window and every pane in it.</string>
     <string name="tool_desc_window_next">Switch to the next window in the current session.</string>

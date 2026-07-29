@@ -15,7 +15,7 @@ scope.
 | Action surface | One registry for palette, keybindings, LauncherCtl/MCP schemas, risk, requirements, and dispatch; searchable palette; conditional shortcuts; chords; modal maps; hints; scrollback search | [`plans/action-registry-terminal-actions.md`](plans/action-registry-terminal-actions.md) |
 | Terminal hierarchy | Session → window → unlimited recursive horizontal/vertical pane tree; app-owned window strip; directional focus, resize, close, switching, and single-pane compatibility mode | [`plans/split-panes.md`](plans/split-panes.md) |
 | Workspaces | Versioned, owner-only, atomically saved hierarchy definitions; append/replace restore; safe CWD restore; separately gated command capture/execution | [`plans/durable-workspaces.md`](plans/durable-workspaces.md) |
-| Pane layouts | `stack`, `grid`, `tall`, `fat`, `horizontal`, and `vertical`; equalize; geometric rotation; move focused pane to an outer edge | [`plans/automatic-pane-layouts.md`](plans/automatic-pane-layouts.md) |
+| Pane layouts | `stack`, `grid`, `tall`, `fat`, `horizontal`, and `vertical`; equalize; geometric rotation; move focused pane to an outer edge; retained per-window layout policy that re-tiles on split/close, plus `pane.next_layout` cycling (`Ctrl+Alt+L`) — policy work is JVM-verified but still owes a device pass | [`plans/automatic-pane-layouts.md`](plans/automatic-pane-layouts.md) |
 | Session browser | Searchable session/window/pane hierarchy; create, activate, clone with CWD, rename, close, and save workspace | [`plans/session-browser.md`](plans/session-browser.md) |
 | Terminal protocols | Extended underlines and color, safe OSC 8, cursor trail, OSC 133, Kitty keyboard protocol, multiple cursors, Kitty graphics Tier 1 | [`plans/kitty-protocol-features.md`](plans/kitty-protocol-features.md) |
 | Fonts and shaping | Native-font compatibility, four real faces, grapheme-aware Canvas shaping, symbol maps, ligature policy, OpenType features, variable axes, and bounded metrics | [`plans/fonts-and-shaping.md`](plans/fonts-and-shaping.md) |
@@ -60,8 +60,11 @@ yet have an argument-entry UI.
   explicitly not promised.
 - `narrow_symbols`, symbols occupying following cells, and arbitrary multicell text remain one
   deferred cell-ownership project rather than renderer-only shortcuts.
-- Kitty layouts are currently one-shot topology transforms. Retained automatic layout management
-  and `next_layout` remain backlog work.
+- A retained layout is released by any hand-shaping operation (rotate, move-to-edge, divider resize)
+  rather than fighting the user's topology on the next split. Equalize keeps it, since resetting
+  ratios agrees with the managed shape.
+- `next_layout` cycles `grid` first and `stack` last, not the documented presentation order, so one
+  press from an unmanaged window can never hide panes behind a maximize.
 
 ## Verification record
 

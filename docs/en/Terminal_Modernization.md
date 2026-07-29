@@ -46,7 +46,7 @@ The palette is the complete argument-free UI surface:
 
 | Category | Available operations |
 |---|---|
-| Pane | Split horizontally/vertically, equalize, rotate, terminate focused pane |
+| Pane | Split horizontally/vertically, cycle automatic layouts, equalize, rotate, terminate focused pane |
 | Window | Create, close, next, previous, and rename |
 | Session | Create, browse, clone with CWD, next, previous, close, and rename |
 | Terminal | Keyboard/toolbar toggles, font size, URL picker, hints, scrollback search, prompt navigation, sharing, and reset |
@@ -72,6 +72,7 @@ produced by the current keyboard layout.
 | `Ctrl+Alt+C` | New window | New session |
 | `Ctrl+Alt+X` | Close current window, after confirmation | Sent to the shell if unclaimed |
 | `Ctrl+Alt+[` / `Ctrl+Alt+]` | Previous/next window | Sent to the shell if unclaimed |
+| `Ctrl+Alt+L` | Next automatic pane layout | Sent to the shell if unclaimed |
 | `Ctrl+Alt+R` | Rename current window | Rename current session |
 | `Ctrl+Alt+Shift+C` | New session | New session |
 | `Ctrl+Alt+Shift+X` | Close current session, after confirmation | Sent to the shell if unclaimed |
@@ -97,7 +98,7 @@ open-file basename, then the foreground process, then the working-directory/titl
 session indicator to open or close the sessions drawer. The strip is hidden in single-pane
 compatibility mode.
 
-The following one-shot layouts act on the current window without restarting any shell:
+The following layouts act on the current window without restarting any shell:
 
 | Layout | Result |
 |---|---|
@@ -108,13 +109,29 @@ The following one-shot layouts act on the current window without restarting any 
 | `horizontal` | Put every pane side by side at equal width |
 | `vertical` | Put every pane in one top-to-bottom column at equal height |
 
-The palette also exposes **Equalize panes** and clockwise **Rotate panes**. Layouts requiring an
-argument, and moving the focused pane to an edge, are available through the authenticated action
-API described in [Run terminal actions from the shell](#run-terminal-actions-from-the-shell).
+`Ctrl+Alt+L`, **Next pane layout** in the palette, and `pane.next_layout` all cycle the window
+through `grid`, `tall`, `fat`, `horizontal`, `vertical`, and `stack`, in that order. A window with no
+layout applied yet jumps to `grid`, so a single press never hides panes behind `stack`.
+
+The palette also exposes **Equalize panes** and clockwise **Rotate panes**. Choosing a specific
+layout by name, and moving the focused pane to an edge, are available through the authenticated
+action API described in [Run terminal actions from the shell](#run-terminal-actions-from-the-shell).
+
+### The chosen layout keeps managing the window
+
+Applying a layout retains it for that window. Splitting a pane or closing one re-tiles the survivors
+into the same layout instead of leaving the split that the change happened to produce. The retained
+layout survives the app recreating its Activity.
+
+Hand-shaping the window drops the retained layout and returns it to manual control, because keeping
+it would mean your next split silently discarded that shaping. Rotating, moving a pane to an edge,
+and dragging or key-resizing a divider all release it. Equalizing does not, since resetting ratios is
+consistent with the layout still being in charge. Applying any layout again, including through
+`Ctrl+Alt+L`, puts the window back under management.
 
 Layout changes preserve pane order and focus. `stack` is temporary: saving a workspace stores the
-underlying pane tree, not the maximized presentation. Layouts currently transform the tree once;
-they do not automatically rearrange later splits or closes.
+underlying pane tree, not the maximized presentation. Workspace *files* do not yet record the
+retained layout, so a window restored from `workspace.load` starts out manually managed.
 
 ## Search and manage sessions
 
@@ -203,6 +220,7 @@ launcher_tool pane.layout '{"layout":"grid"}'
 launcher_tool pane.move_to_edge '{"edge":"left"}'
 launcher_tool pane.equalize
 launcher_tool pane.rotate '{"direction":"counterclockwise"}'
+launcher_tool pane.next_layout
 
 launcher_tool workspace.save '{"name":"project","overwrite":true}'
 launcher_tool workspace.list
@@ -465,8 +483,9 @@ the action, such as using a pane command in compatibility mode.
 
 ## Current limitations
 
-- Layout presets are one-shot. There is no retained automatic-layout policy or `next_layout` cycle
-  yet.
+- Workspace files do not record a window's retained layout, so a restored window starts manually
+  managed. Direct `goto_layout`/`toggle_layout` bindings are still missing, because user-editable
+  bindings cannot carry an enum argument yet.
 - The terminal deliberately has no arbitrary Kitty multicell/variable-sized text,
   `narrow_symbols`, or symbols that occupy following cells.
 - There is no Unicode bidi paragraph layout. Complex scripts are shaped in logical terminal order.

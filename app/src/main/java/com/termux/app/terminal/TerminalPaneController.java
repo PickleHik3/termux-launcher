@@ -52,6 +52,14 @@ public class TerminalPaneController {
     public static final String LAYOUT_HORIZONTAL = "horizontal";
     public static final String LAYOUT_VERTICAL = "vertical";
 
+    /**
+     * Cycle order for {@link #nextLayout()}. Deliberately not the documentation's listing order:
+     * {@code stack} hides every unfocused pane, so it must not be where a single press from an
+     * unmanaged window lands. It sits last instead.
+     */
+    private static final String[] LAYOUT_CYCLE = {
+        LAYOUT_GRID, LAYOUT_TALL, LAYOUT_FAT, LAYOUT_HORIZONTAL, LAYOUT_VERTICAL, LAYOUT_STACK};
+
     public static final String EDGE_LEFT = "left";
     public static final String EDGE_RIGHT = "right";
     public static final String EDGE_UP = "up";
@@ -66,6 +74,7 @@ public class TerminalPaneController {
     private static final String STATE_NODE_B = "b";
     private static final String STATE_WINDOW_ROOT = "root";
     private static final String STATE_WINDOW_ACTIVE = "active";
+    private static final String STATE_WINDOW_LAYOUT = "layout_policy";
     private static final int NODE_LEAF = 0;
     private static final int NODE_SPLIT = 1;
 
@@ -115,6 +124,13 @@ public class TerminalPaneController {
     public static final class Window {
         Node root;
         Leaf active;
+        /**
+         * Retained automatic layout, or null when the window is manually managed. While set, the
+         * layout keeps managing the window: adding or removing a pane recomputes the tree from it.
+         * Any hand-shaping operation clears it, because otherwise the next split would silently
+         * throw that shaping away.
+         */
+        @Nullable String layoutPolicy;
         Window(Leaf leaf) { root = leaf; active = leaf; }
     }
 
@@ -238,6 +254,7 @@ public class TerminalPaneController {
         state.putBundle(STATE_WINDOW_ROOT, saveNode(window.root));
         TerminalSession active = windowActiveSession(window);
         if (active != null) state.putString(STATE_WINDOW_ACTIVE, active.mHandle);
+        if (window.layoutPolicy != null) state.putString(STATE_WINDOW_LAYOUT, window.layoutPolicy);
         return state;
     }
 
@@ -259,6 +276,10 @@ public class TerminalPaneController {
         TerminalSession activeSession = activeHandle == null ? null : sessionsByHandle.get(activeHandle);
         Leaf active = activeSession == null ? null : findLeafIn(root, activeSession);
         window.active = active != null ? active : first;
+        // Only accept a layout this build still knows; a stale or hand-edited name must leave the
+        // window manually managed rather than wedge reapply on every later split.
+        String layout = state.getString(STATE_WINDOW_LAYOUT);
+        if (layout != null && isKnownLayout(layout)) window.layoutPolicy = layout;
         mWindows.add(window);
         return window;
     }
@@ -470,6 +491,9 @@ public class TerminalPaneController {
             if (split.parent.a == oldLeaf) split.parent.a = split; else split.parent.b = split;
         }
         mActiveWindow.active = newLeaf;
+        // A managed window re-tiles around the new pane instead of keeping the binary split that
+        // insertion just produced. This is what makes the layout a policy rather than a one-shot.
+        reapplyLayoutPolicy(mActiveWindow);
         render();
         // Splitting resizes the old pane (fewer cols/rows), which reflows its buffer and can
         // leave the view scrolled up (prompt jumps to the top). Once the resize settles, scroll
@@ -513,6 +537,9 @@ public class TerminalPaneController {
         }
         detachPaneView(session);
         if (owner.active == owningLeaf) owner.active = firstLeaf(sibling);
+        // Re-tile the survivors. Runs for background windows too, so a window that was managed when
+        // it lost a pane is still correctly tiled the next time it is shown.
+        reapplyLayoutPolicy(owner);
         if (owner == mActiveWindow) {
             render();
             mHost.onActivePaneChanged();
@@ -579,19 +606,66 @@ public class TerminalPaneController {
         float min = total * 0.18f;
         target.weightA = Math.max(min, Math.min(total - min, target.weightA));
         target.weightB = total - target.weightA;
+        clearLayoutPolicy(mActiveWindow);
         render();
         return true;
     }
 
-    /** Apply one of the six automatic layouts to the active window without restarting any PTY. */
+    /**
+     * Apply one of the six automatic layouts to the active window without restarting any PTY, and
+     * retain it as that window's layout policy so later splits and closes keep honouring it.
+     */
     public boolean applyLayout(@NonNull String layout) {
         if (mActiveWindow == null || mActiveWindow.active == null) return false;
-        List<Leaf> leaves = leavesOf(mActiveWindow.root);
+        if (!transformToLayout(mActiveWindow, layout)) return false;
+        mActiveWindow.layoutPolicy = layout;
+        render();
+        mHost.onTreesChanged();
+        return true;
+    }
+
+    /**
+     * Advance the active window to the next layout in the cycle and retain it. An unmanaged window
+     * adopts the first entry, so one press always produces a managed tiling rather than a no-op.
+     */
+    public boolean nextLayout() {
+        if (mActiveWindow == null || mActiveWindow.active == null) return false;
+        return applyLayout(nextLayoutAfter(mActiveWindow.layoutPolicy));
+    }
+
+    /** True for the six layout names this build accepts as a retained policy. */
+    static boolean isKnownLayout(@Nullable String layout) {
+        for (String candidate : LAYOUT_CYCLE) if (candidate.equals(layout)) return true;
+        return false;
+    }
+
+    /** The next cycle entry after {@code current}; the first entry when unmanaged or unrecognized. */
+    @NonNull
+    static String nextLayoutAfter(@Nullable String current) {
+        for (int i = 0; i < LAYOUT_CYCLE.length; i++) {
+            if (LAYOUT_CYCLE[i].equals(current)) return LAYOUT_CYCLE[(i + 1) % LAYOUT_CYCLE.length];
+        }
+        return LAYOUT_CYCLE[0];
+    }
+
+    /** The active window's retained layout, or null when it is manually managed. */
+    @Nullable
+    public String activeLayoutPolicy() {
+        return mActiveWindow == null ? null : mActiveWindow.layoutPolicy;
+    }
+
+    /**
+     * Rebuild {@code window}'s tree into {@code layout}. Pure topology: no render, no host
+     * notification, no policy bookkeeping, so both the public entry point and the automatic reapply
+     * path can share it.
+     */
+    private boolean transformToLayout(@NonNull Window window, @NonNull String layout) {
+        List<Leaf> leaves = leavesOf(window.root);
         if (leaves.isEmpty()) return false;
         if (LAYOUT_STACK.equals(layout)) {
-            mMaximizedLeaf = mActiveWindow.active;
-            render();
-            mHost.onTreesChanged();
+            // Stack reuses the existing temporary-maximize state, which is a property of the
+            // foreground presentation rather than the tree, so only the active window can show it.
+            if (window == mActiveWindow) mMaximizedLeaf = window.active;
             return true;
         }
 
@@ -615,12 +689,27 @@ public class TerminalPaneController {
             default:
                 return false;
         }
-        mMaximizedLeaf = null;
+        if (window == mActiveWindow) mMaximizedLeaf = null;
         root.parent = null;
-        mActiveWindow.root = root;
-        render();
-        mHost.onTreesChanged();
+        window.root = root;
         return true;
+    }
+
+    /**
+     * Recompute {@code window} from its retained layout after its pane set changed. No-op for a
+     * manually managed window. Callers render and notify; this only reshapes the tree.
+     */
+    private void reapplyLayoutPolicy(@Nullable Window window) {
+        if (window == null || window.layoutPolicy == null) return;
+        if (!transformToLayout(window, window.layoutPolicy)) window.layoutPolicy = null;
+    }
+
+    /**
+     * Drop the retained layout because the user hand-shaped the tree. Keeping it would mean the
+     * next split silently discarded that shaping.
+     */
+    private void clearLayoutPolicy(@Nullable Window window) {
+        if (window != null) window.layoutPolicy = null;
     }
 
     /** Reset every divider in the active window to an equal 1:1 ratio. */
@@ -637,6 +726,7 @@ public class TerminalPaneController {
     public boolean rotateLayout(boolean clockwise) {
         if (mActiveWindow == null || mActiveWindow.root == null) return false;
         mMaximizedLeaf = null;
+        clearLayoutPolicy(mActiveWindow);
         rotateNode(mActiveWindow.root, clockwise);
         mActiveWindow.root.parent = null;
         render();
@@ -672,6 +762,7 @@ public class TerminalPaneController {
         }
 
         mMaximizedLeaf = null;
+        clearLayoutPolicy(mActiveWindow);
         Leaf active = mActiveWindow.active;
         Node remainder = detachLeaf(mActiveWindow, active);
         Split root = new Split();

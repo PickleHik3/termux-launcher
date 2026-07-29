@@ -7,7 +7,9 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -29,7 +31,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void registry_containsExpectedTools() {
         List<LauncherToolRegistry.ToolMetadata> tools = registry.getTools();
-        assertEquals(70, tools.size());
+        assertEquals(71, tools.size());
         assertNotNull(registry.getTool("capabilities.get"));
         assertNotNull(registry.getTool("apps.search"));
         assertNotNull(registry.getTool("apps.launch"));
@@ -84,7 +86,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void toOpenAiToolsJson_producesFunctionTools() throws Exception {
         JSONArray openAiTools = registry.toOpenAiToolsJson();
-        assertEquals(70, openAiTools.length());
+        assertEquals(71, openAiTools.length());
         for (int i = 0; i < openAiTools.length(); i++) {
             JSONObject item = openAiTools.getJSONObject(i);
             assertEquals("function", item.getString("type"));
@@ -99,7 +101,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void toInternalJson_includesSchemaAndRisk() throws Exception {
         JSONArray internal = registry.toInternalJson();
-        assertEquals(70, internal.length());
+        assertEquals(71, internal.length());
         JSONObject first = internal.getJSONObject(0);
         assertTrue(first.has("name"));
         assertTrue(first.has("description"));
@@ -113,9 +115,9 @@ public class LauncherToolRegistryTest {
     public void responseJson_containsBothFormats() throws Exception {
         JSONObject response = registry.toResponseJson();
         assertTrue(response.getBoolean("ok"));
-        assertEquals(70, response.getInt("count"));
-        assertEquals(70, response.getJSONArray("tools").length());
-        assertEquals(70, response.getJSONArray("openAiTools").length());
+        assertEquals(71, response.getInt("count"));
+        assertEquals(71, response.getJSONArray("tools").length());
+        assertEquals(71, response.getJSONArray("openAiTools").length());
     }
 
     @Test
@@ -205,7 +207,7 @@ public class LauncherToolRegistryTest {
             "pane.focus_direction", "pane.resize", "pane.kill_focused", "window.new", "window.close",
             "window.next", "window.previous", "session.new", "session.next", "session.previous",
             "session.close_current", "session.browser", "session.clone_current",
-            "pane.equalize", "pane.rotate"};
+            "pane.equalize", "pane.rotate", "pane.next_layout"};
         for (String name : terminalTools) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
             assertNotNull(name, tool);
@@ -213,7 +215,7 @@ public class LauncherToolRegistryTest {
             assertNotNull(name, tool.category);
             assertTrue(name, tool.hasUiMetadata());
         }
-        assertEquals(50, registry.getUiTools().size());
+        assertEquals(51, registry.getUiTools().size());
     }
 
     @Test
@@ -260,7 +262,7 @@ public class LauncherToolRegistryTest {
         String[] navigation = {"terminal.state", "pane.focus_direction", "pane.resize",
             "window.next", "window.previous", "session.next", "session.previous",
             "pane.layout", "pane.equalize", "pane.rotate", "pane.move_to_edge",
-            "session.browser"};
+            "pane.next_layout", "session.browser"};
         for (String name : navigation) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
             assertEquals(name, LauncherToolRegistry.ToolRisk.LOW, tool.risk);
@@ -328,6 +330,52 @@ public class LauncherToolRegistryTest {
         assertTrue(rotate.hasUiMetadata());
         assertFalse(equalize.requiresConfirmation);
         assertFalse(rotate.requiresConfirmation);
+
+        // next_layout takes no argument, so unlike pane.layout it can carry UI metadata and a
+        // binding. It is the only layout action bound by default.
+        LauncherToolRegistry.ToolMetadata next = registry.getTool("pane.next_layout");
+        assertNotNull(next);
+        assertTrue(next.hasUiMetadata());
+        assertFalse(next.requiresConfirmation);
+        assertEquals(0, next.schema.optJSONObject("properties").length());
+        assertEquals(1, next.defaultBindings.size());
+        assertEquals("ctrl+alt+l", next.defaultBindings.get(0).stroke);
+        assertEquals(LauncherToolRegistry.BindingCondition.SPLITS_ON,
+            next.defaultBindings.get(0).condition);
+        assertTrue(equalize.defaultBindings.isEmpty());
+        assertTrue(rotate.defaultBindings.isEmpty());
+    }
+
+    /**
+     * Two tools may share a stroke only when their conditions cannot both be active — the
+     * SPLITS_ON / SPLITS_OFF pairs are deliberate. Anything else means one binding shadows the
+     * other and whichever the resolver happens to reach first wins.
+     */
+    @Test
+    public void defaultBindings_neverCollideUnderSimultaneouslyActiveConditions() {
+        Map<String, String> claims = new HashMap<>();
+        for (LauncherToolRegistry.ToolMetadata tool : registry.getTools()) {
+            for (LauncherToolRegistry.Binding binding : tool.defaultBindings) {
+                for (LauncherToolRegistry.BindingCondition overlapping
+                        : overlappingConditions(binding.condition)) {
+                    String key = binding.stroke + "@" + overlapping;
+                    String previous = claims.get(key);
+                    assertNull(binding.stroke + " is claimed by both " + previous + " and "
+                        + tool.name + " while " + overlapping + " is active", previous);
+                }
+                claims.put(binding.stroke + "@" + binding.condition, tool.name);
+            }
+        }
+    }
+
+    private static List<LauncherToolRegistry.BindingCondition> overlappingConditions(
+            LauncherToolRegistry.BindingCondition condition) {
+        if (condition == LauncherToolRegistry.BindingCondition.ALWAYS) {
+            return Arrays.asList(LauncherToolRegistry.BindingCondition.ALWAYS,
+                LauncherToolRegistry.BindingCondition.SPLITS_ON,
+                LauncherToolRegistry.BindingCondition.SPLITS_OFF);
+        }
+        return Arrays.asList(condition, LauncherToolRegistry.BindingCondition.ALWAYS);
     }
 
     @Test

@@ -217,6 +217,116 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
+    public void nextLayoutCycle_visitsEveryLayoutAndKeepsStackOffTheFirstPress() {
+        // An unmanaged window must land on a tiling, never on stack: stack hides every unfocused
+        // pane, so making it one press away from a fresh window would read as "panes disappeared".
+        assertEquals(TerminalPaneController.LAYOUT_GRID,
+            TerminalPaneController.nextLayoutAfter(null));
+        assertEquals(TerminalPaneController.LAYOUT_GRID,
+            TerminalPaneController.nextLayoutAfter("spiral"));
+
+        String[] expected = {
+            TerminalPaneController.LAYOUT_TALL,
+            TerminalPaneController.LAYOUT_FAT,
+            TerminalPaneController.LAYOUT_HORIZONTAL,
+            TerminalPaneController.LAYOUT_VERTICAL,
+            TerminalPaneController.LAYOUT_STACK,
+            TerminalPaneController.LAYOUT_GRID};
+        String current = TerminalPaneController.LAYOUT_GRID;
+        for (String next : expected) {
+            current = TerminalPaneController.nextLayoutAfter(current);
+            assertEquals(next, current);
+        }
+
+        assertTrue(TerminalPaneController.isKnownLayout(TerminalPaneController.LAYOUT_STACK));
+        assertFalse(TerminalPaneController.isKnownLayout("spiral"));
+        assertFalse(TerminalPaneController.isKnownLayout(null));
+    }
+
+    @Test
+    public void nextLayout_appliesAndRetainsTheLayoutItLandsOn() {
+        PaneFixture fixture = fourPaneFixture();
+        assertEquals(null, fixture.controller.activeLayoutPolicy());
+
+        assertTrue(fixture.controller.nextLayout());
+        assertEquals(TerminalPaneController.LAYOUT_GRID, fixture.controller.activeLayoutPolicy());
+
+        assertTrue(fixture.controller.nextLayout());
+        assertEquals(TerminalPaneController.LAYOUT_TALL, fixture.controller.activeLayoutPolicy());
+        TerminalPaneController.Split tall = (TerminalPaneController.Split) fixture.window.root;
+        assertEquals(LinearLayout.HORIZONTAL, tall.orientation);
+        assertAllSplitsHaveOrientation(tall.b, LinearLayout.VERTICAL);
+    }
+
+    @Test
+    public void retainedLayout_reTilesWhenAPaneIsAddedOrClosed() {
+        PaneFixture fixture = splittableFourPaneFixture();
+        assertTrue(fixture.controller.applyLayout(TerminalPaneController.LAYOUT_VERTICAL));
+        assertEquals(TerminalPaneController.LAYOUT_VERTICAL, fixture.controller.activeLayoutPolicy());
+
+        // A one-shot transform would leave the binary split that insertion produced. A retained
+        // policy re-tiles, so every divider is still on the layout's axis.
+        fixture.controller.split(LinearLayout.HORIZONTAL);
+        assertEquals(5, fixture.controller.shellsOf(fixture.window).size());
+        assertAllSplitsHaveOrientation(fixture.window.root, LinearLayout.VERTICAL);
+        assertEquals(TerminalPaneController.LAYOUT_VERTICAL, fixture.controller.activeLayoutPolicy());
+
+        TerminalSession closed = fixture.controller.shellsOf(fixture.window).get(1);
+        assertEquals(TerminalPaneController.FINISHED_PANE,
+            fixture.controller.onSessionFinished(closed));
+        assertEquals(4, fixture.controller.shellsOf(fixture.window).size());
+        assertFalse(fixture.controller.shellsOf(fixture.window).contains(closed));
+        assertAllSplitsHaveOrientation(fixture.window.root, LinearLayout.VERTICAL);
+        assertEquals(TerminalPaneController.LAYOUT_VERTICAL, fixture.controller.activeLayoutPolicy());
+    }
+
+    @Test
+    public void handShapingClearsPolicy_soALaterSplitKeepsTheUserTopology() {
+        PaneFixture fixture = splittableFourPaneFixture();
+
+        // Rotate produces a tree no preset would produce; retaining the policy would mean the next
+        // split silently threw the rotation away.
+        assertTrue(fixture.controller.applyLayout(TerminalPaneController.LAYOUT_VERTICAL));
+        assertTrue(fixture.controller.rotateLayout(true));
+        assertEquals(null, fixture.controller.activeLayoutPolicy());
+        fixture.controller.split(LinearLayout.VERTICAL);
+        assertEquals(LinearLayout.HORIZONTAL,
+            ((TerminalPaneController.Split) fixture.window.root).orientation);
+
+        assertTrue(fixture.controller.applyLayout(TerminalPaneController.LAYOUT_GRID));
+        assertTrue(fixture.controller.moveActivePaneToEdge(TerminalPaneController.EDGE_LEFT));
+        assertEquals(null, fixture.controller.activeLayoutPolicy());
+
+        assertTrue(fixture.controller.applyLayout(TerminalPaneController.LAYOUT_GRID));
+        assertTrue(fixture.controller.resizeActive(android.view.KeyEvent.KEYCODE_DPAD_LEFT));
+        assertEquals(null, fixture.controller.activeLayoutPolicy());
+
+        // Equalize only resets ratios, which is consistent with a managed layout, so it keeps it.
+        assertTrue(fixture.controller.applyLayout(TerminalPaneController.LAYOUT_GRID));
+        assertTrue(fixture.controller.equalizeLayout());
+        assertEquals(TerminalPaneController.LAYOUT_GRID, fixture.controller.activeLayoutPolicy());
+    }
+
+    @Test
+    public void savedWindow_restoresRetainedLayoutAndRejectsAnUnknownName() {
+        PaneFixture fixture = fourPaneFixture();
+        assertTrue(fixture.controller.applyLayout(TerminalPaneController.LAYOUT_FAT));
+
+        Bundle saved = fixture.controller.saveWindow(fixture.window);
+        Map<String, TerminalSession> sessions = new HashMap<>();
+        for (TerminalSession session : fixture.sessions) sessions.put(session.mHandle, session);
+
+        TerminalPaneController.Window restored = newController().restoreWindow(saved, sessions);
+        assertEquals(TerminalPaneController.LAYOUT_FAT, restored.layoutPolicy);
+
+        // A name this build no longer knows must leave the window manually managed rather than
+        // wedge the reapply path on every later split.
+        saved.putString("layout_policy", "spiral");
+        TerminalPaneController.Window stale = newController().restoreWindow(saved, sessions);
+        assertEquals(null, stale.layoutPolicy);
+    }
+
+    @Test
     public void equalizeRotateAndMoveEdge_mutateOnlyTopology() {
         PaneFixture fixture = fourPaneFixture();
         List<TerminalSession> original = new java.util.ArrayList<>(fixture.sessions);
@@ -266,8 +376,29 @@ public class TerminalPaneControllerTest {
         assertEquals(only, controller.getActiveSession());
     }
 
+    /** Four panes whose controller can also create shells, so {@code split()} actually runs. */
+    private static PaneFixture splittableFourPaneFixture() {
+        PaneFixture base = fourPaneFixture(newSplittingController());
+        return base;
+    }
+
+    private static TerminalPaneController newSplittingController() {
+        Context context = RuntimeEnvironment.getApplication();
+        return new TerminalPaneController(new TerminalPaneController.Host() {
+            @Override public TerminalSession createShell(String cwd) { return terminal(); }
+            @Override public void configurePaneView(TerminalView view) {}
+            @Override public void removeShell(TerminalSession session) {}
+            @Override public void onActivePaneChanged() {}
+            @Override public void onTreesChanged() {}
+            @Override public String defaultCwd() { return "/"; }
+        }, new FrameLayout(context), LayoutInflater.from(context));
+    }
+
     private static PaneFixture fourPaneFixture() {
-        TerminalPaneController controller = newController();
+        return fourPaneFixture(newController());
+    }
+
+    private static PaneFixture fourPaneFixture(TerminalPaneController controller) {
         List<TerminalSession> sessions = Arrays.asList(
             terminal(), terminal(), terminal(), terminal());
         TerminalWorkspace.Node root = new TerminalWorkspace.Split(

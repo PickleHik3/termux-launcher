@@ -9067,6 +9067,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return isSplitPanesEnabled() && mPaneController != null && mPaneController.applyLayout(layout);
     }
 
+    /** Advance the current window to the next automatic pane layout and retain it. */
+    public boolean cyclePaneLayout() {
+        return isSplitPanesEnabled() && mPaneController != null && mPaneController.nextLayout();
+    }
+
+    /** The current window's retained automatic layout, or null when manually managed. */
+    @Nullable
+    public String activePaneLayoutPolicy() {
+        return mPaneController == null ? null : mPaneController.activeLayoutPolicy();
+    }
+
     /** Reset every split in the current window to a 1:1 divider ratio. */
     public boolean equalizePaneLayout() {
         return isSplitPanesEnabled() && mPaneController != null && mPaneController.equalizeLayout();

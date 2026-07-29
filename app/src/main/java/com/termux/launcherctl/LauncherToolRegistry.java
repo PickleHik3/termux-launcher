@@ -411,6 +411,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_PANE_EQUALIZE = "pane.equalize";
     public static final String TOOL_PANE_ROTATE = "pane.rotate";
     public static final String TOOL_PANE_MOVE_TO_EDGE = "pane.move_to_edge";
+    public static final String TOOL_PANE_NEXT_LAYOUT = "pane.next_layout";
     public static final String TOOL_WINDOW_NEW = "window.new";
     public static final String TOOL_WINDOW_CLOSE = "window.close";
     public static final String TOOL_WINDOW_NEXT = "window.next";
@@ -682,6 +683,15 @@ public final class LauncherToolRegistry {
                 .withEnum("edge", new String[]{"left", "right", "up", "down"}, true, "left")
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL);
+        // Takes no argument, so unlike pane.layout this one can live in the palette and on a
+        // binding. It also retains the layout it lands on, which is what makes later splits re-tile.
+        addUi(map, TOOL_PANE_NEXT_LAYOUT,
+            "Switch the current window to the next automatic pane layout and keep managing it.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_PANE, R.string.tool_pane_next_layout, R.string.tool_desc_pane_next_layout,
+            Collections.singletonList(Binding.of("ctrl+alt+l", BindingCondition.SPLITS_ON)),
+            REQUIRES_SPLITS);
         addUi(map, TOOL_WINDOW_NEW,
             "Create a new window with a fresh shell in the current session.",
             schemaEmpty(),

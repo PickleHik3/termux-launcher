@@ -59,6 +59,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_PANE_EQUALIZE = "pane.equalize";
     public static final String TOOL_PANE_ROTATE = "pane.rotate";
     public static final String TOOL_PANE_MOVE_TO_EDGE = "pane.move_to_edge";
+    public static final String TOOL_PANE_NEXT_LAYOUT = "pane.next_layout";
     public static final String TOOL_WINDOW_NEW = "window.new";
     public static final String TOOL_WINDOW_CLOSE = "window.close";
     public static final String TOOL_WINDOW_NEXT = "window.next";
@@ -157,6 +158,7 @@ public final class TerminalActionDispatcher {
             case TOOL_PANE_EQUALIZE:
             case TOOL_PANE_ROTATE:
             case TOOL_PANE_MOVE_TO_EDGE:
+            case TOOL_PANE_NEXT_LAYOUT:
             case TOOL_WINDOW_NEW:
             case TOOL_WINDOW_CLOSE:
             case TOOL_WINDOW_NEXT:
@@ -386,6 +388,11 @@ public final class TerminalActionDispatcher {
                     }
                     if (!activity.applyPaneLayout(layout)) return noSession(toolName);
                     return ok().put("layout", layout);
+                }
+                case TOOL_PANE_NEXT_LAYOUT: {
+                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
+                    if (!activity.cyclePaneLayout()) return noSession(toolName);
+                    return ok().put("layout", activity.activePaneLayoutPolicy());
                 }
                 case TOOL_PANE_EQUALIZE:
                     if (!activity.isSplitPanesEnabled()) return splitsDisabled();
