@@ -6,6 +6,8 @@ import androidx.annotation.Nullable;
 import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.termux.TermuxConstants;
 
+import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -64,6 +66,10 @@ public final class TerminalBindingConfig {
 
         static Action tool(@NonNull String tool) {
             return new Action(ActionType.TOOL, tool, null);
+        }
+
+        static Action tool(@NonNull String tool, @Nullable JSONObject arguments) {
+            return new Action(ActionType.TOOL, tool, arguments);
         }
 
         static Action text(@NonNull String text) {
@@ -321,7 +327,10 @@ public final class TerminalBindingConfig {
                     continue;
                 }
                 String key = TerminalKeyBindingResolver.normalizeSequenceSpec(words.get(cursor));
-                if (key.indexOf('>') >= 0 || !TerminalKeyBindingResolver.isValidStrokeSpec(key)) {
+                // A gesture is a valid stroke to bind but has no bytes to send.
+                if (key.indexOf('>') >= 0 || !TerminalKeyBindingResolver.isValidStrokeSpec(key)
+                    || TerminalKeyBindingResolver.isGestureToken(
+                        key.substring(key.lastIndexOf('+') + 1))) {
                     errors.add("line " + lineNumber + ": invalid send-key stroke '" + words.get(cursor) + "'");
                     continue;
                 }
@@ -333,16 +342,15 @@ public final class TerminalBindingConfig {
                     }
                     action = Action.popMode();
                 } else {
-                if (cursor != words.size()) {
-                    errors.add("line " + lineNumber + ": terminal actions do not take inline arguments");
-                    continue;
-                }
                 LauncherToolRegistry.ToolMetadata tool = registry.getTool(actionName);
                 if (tool == null || tool.executor != LauncherToolRegistry.ToolExecutor.TERMINAL) {
                     errors.add("line " + lineNumber + ": unknown terminal action '" + actionName + "'");
                     continue;
                 }
-                action = Action.tool(actionName);
+                JSONObject arguments = toolArguments(tool,
+                    words.subList(cursor, words.size()), lineNumber, errors);
+                if (arguments == null) continue;
+                action = Action.tool(actionName, arguments);
                 }
             }
 
@@ -365,6 +373,88 @@ public final class TerminalBindingConfig {
             result.add(new Mapping(mapping.mode, mapping.sequence, mapping.condition, mapping.actions));
         }
         return new Result(filePresent, result, overridden, modes, errors);
+    }
+
+    /**
+     * Words trailing a tool id, read as that tool's arguments. Positional words
+     * fill the schema's required properties in declaration order, so
+     * {@code app.launch com.whatsapp} and {@code pane.focus_direction left} read
+     * naturally; {@code name=value} reaches any property, required or not.
+     */
+    @Nullable
+    private static JSONObject toolArguments(@NonNull LauncherToolRegistry.ToolMetadata tool,
+                                            @NonNull List<String> words, int lineNumber,
+                                            @NonNull List<String> errors) {
+        JSONObject arguments = new JSONObject();
+        if (words.isEmpty()) return arguments;
+        JSONObject properties = tool.schema.optJSONObject("properties");
+        if (properties == null || properties.length() == 0) {
+            errors.add("line " + lineNumber + ": '" + tool.name + "' takes no arguments");
+            return null;
+        }
+        List<String> positional = new ArrayList<>();
+        JSONArray required = tool.schema.optJSONArray("required");
+        for (int i = 0; required != null && i < required.length(); i++) {
+            positional.add(required.optString(i));
+        }
+        int next = 0;
+        for (String word : words) {
+            int equals = word.indexOf('=');
+            String name = equals > 0 ? word.substring(0, equals) : null;
+            String value;
+            if (name != null && properties.has(name)) {
+                value = word.substring(equals + 1);
+            } else {
+                while (next < positional.size() && arguments.has(positional.get(next))) next++;
+                if (next >= positional.size()) {
+                    errors.add("line " + lineNumber + ": '" + tool.name
+                        + "' takes no argument '" + word + "'");
+                    return null;
+                }
+                name = positional.get(next++);
+                value = word;
+            }
+            if (!putTypedArgument(arguments, properties.optJSONObject(name), name, value)) {
+                errors.add("line " + lineNumber + ": invalid value '" + value
+                    + "' for argument '" + name + "'");
+                return null;
+            }
+        }
+        return arguments;
+    }
+
+    private static boolean putTypedArgument(@NonNull JSONObject arguments,
+                                            @Nullable JSONObject property,
+                                            @NonNull String name, @NonNull String value) {
+        if (property == null) return false;
+        try {
+            String type = property.optString("type", "string");
+            if ("integer".equals(type)) {
+                long parsed = Long.parseLong(value);
+                if (property.has("minimum") && parsed < property.optLong("minimum")) return false;
+                if (property.has("maximum") && parsed > property.optLong("maximum")) return false;
+                arguments.put(name, parsed);
+                return true;
+            }
+            if ("boolean".equals(type)) {
+                if (!"true".equals(value) && !"false".equals(value)) return false;
+                arguments.put(name, "true".equals(value));
+                return true;
+            }
+            if (!"string".equals(type)) return false;
+            JSONArray allowed = property.optJSONArray("enum");
+            if (allowed != null) {
+                boolean permitted = false;
+                for (int i = 0; i < allowed.length(); i++) {
+                    if (value.equals(allowed.optString(i))) permitted = true;
+                }
+                if (!permitted) return false;
+            }
+            arguments.put(name, value);
+            return true;
+        } catch (NumberFormatException | JSONException e) {
+            return false;
+        }
     }
 
     private static boolean modeNameValid(@NonNull String mode) {

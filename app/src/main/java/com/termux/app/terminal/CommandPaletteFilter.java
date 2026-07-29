@@ -5,6 +5,8 @@ import androidx.annotation.Nullable;
 
 import com.termux.launcherctl.LauncherToolRegistry;
 
+import org.json.JSONObject;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -46,6 +48,12 @@ public final class CommandPaletteFilter {
         @Nullable public final String disabledReason;
         public final boolean requiresConfirmation;
         public final LauncherToolRegistry.ToolRisk risk;
+        /**
+         * Arguments this row supplies to its tool, or {@code null} for the
+         * argument-free tool rows. This is what lets one tool back many rows —
+         * every app row runs {@code app.launch} with its own query.
+         */
+        @Nullable public final JSONObject arguments;
 
         public Entry(
             @NonNull String toolName,
@@ -58,6 +66,23 @@ public final class CommandPaletteFilter {
             boolean requiresConfirmation,
             @NonNull LauncherToolRegistry.ToolRisk risk
         ) {
+            this(toolName, title, subtitle, category, bindings, enabled, disabledReason,
+                requiresConfirmation, risk, null);
+        }
+
+        public Entry(
+            @NonNull String toolName,
+            @NonNull String title,
+            @NonNull String subtitle,
+            @NonNull String category,
+            @NonNull List<String> bindings,
+            boolean enabled,
+            @Nullable String disabledReason,
+            boolean requiresConfirmation,
+            @NonNull LauncherToolRegistry.ToolRisk risk,
+            @Nullable JSONObject arguments
+        ) {
+            this.arguments = arguments;
             this.toolName = toolName;
             this.title = title;
             this.subtitle = subtitle;

@@ -1208,6 +1208,7 @@
     <string name="palette_category_clipboard">Clipboard</string>
     <string name="palette_category_appearance">Appearance</string>
     <string name="palette_category_app">App</string>
+    <string name="palette_category_apps">Apps</string>
     <string name="palette_confirm_title">Run %1$s?</string>
     <string name="palette_confirm_run">Run</string>
     <string name="palette_action_failed">Could not run %1$s</string>
@@ -1255,6 +1256,7 @@
     <string name="tool_app_open_look_and_feel">Look and feel settings</string>
     <string name="tool_app_open_apps_bar">Apps bar settings</string>
     <string name="tool_app_command_palette">Command palette</string>
+    <string name="tool_app_launch">Launch app</string>
     <string name="tool_app_open_drawer">Open sessions drawer</string>
     <string name="tool_app_close_drawer">Close sessions drawer</string>
     <string name="tool_terminal_action_sheet">Terminal actions</string>
@@ -1316,6 +1318,7 @@
     <string name="tool_desc_app_open_look_and_feel">Open the look and feel settings.</string>
     <string name="tool_desc_app_open_apps_bar">Open the apps bar settings.</string>
     <string name="tool_desc_app_command_palette">Open the searchable command palette.</string>
+    <string name="tool_desc_app_launch">Launch an installed app by package name or label.</string>
     <string name="terminal_key_chord_pending">Waiting for key: %1$s  ›  …</string>
     <string name="terminal_key_mode_active">Key mode: %1$s</string>
     <plurals name="terminal_binding_config_errors">

@@ -78,6 +78,15 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
         mHostActions.onSuggestionEntered(text);
     }
 
+    @Override
+    public boolean swipe_gesture(String keyName, String direction, Pointers.Modifiers modifiers) {
+        if (keyName == null || direction == null)
+            return false;
+        TerminalModifiers mods = TerminalModifiers.from(modifiers);
+        return mHostActions.onKeyboardGesture(keyName, direction,
+            mods.isCtrl(), mods.isAlt(), mods.isShift());
+    }
+
     /** Cancel asynchronous macro output, for hide, detach, layout, or session lifecycle changes. */
     public void cancelPendingMacros() {
         MacroTask task = mMacroTask;

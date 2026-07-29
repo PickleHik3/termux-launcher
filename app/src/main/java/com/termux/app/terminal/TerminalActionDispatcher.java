@@ -9,6 +9,11 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.TermuxActivity;
+import com.termux.app.launcher.LauncherAppLauncher;
+import com.termux.app.launcher.data.LauncherAppDataProvider;
+import com.termux.app.launcher.data.LauncherRankingEngine;
+import com.termux.app.launcher.data.LauncherUsageStatsStore;
+import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.logger.Logger;
 import com.termux.view.TerminalRenderMetrics;
@@ -19,6 +24,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.lang.ref.WeakReference;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -44,6 +50,9 @@ public final class TerminalActionDispatcher {
 
     /** Upper bound on how long a caller thread waits for the main thread. */
     private static final long MAIN_THREAD_TIMEOUT_MS = 5_000L;
+
+    /** Minimum fuzzy score for {@code app.launch}, matching the suggestion bar. */
+    private static final int APP_MATCH_TOLERANCE = 70;
 
     public static final String TOOL_TERMINAL_STATE = "terminal.state";
     public static final String TOOL_WORKSPACE_SAVE = "workspace.save";
@@ -93,6 +102,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_APP_OPEN_LOOK_AND_FEEL = "app.open_look_and_feel";
     public static final String TOOL_APP_OPEN_APPS_BAR = "app.open_apps_bar";
     public static final String TOOL_APP_COMMAND_PALETTE = "app.command_palette";
+    public static final String TOOL_APP_LAUNCH = "app.launch";
     public static final String TOOL_APP_KEY_INSPECTOR = "app.key_inspector";
     public static final String TOOL_APP_OPEN_DRAWER = "app.open_drawer";
     public static final String TOOL_APP_CLOSE_DRAWER = "app.close_drawer";
@@ -192,6 +202,7 @@ public final class TerminalActionDispatcher {
             case TOOL_APP_OPEN_LOOK_AND_FEEL:
             case TOOL_APP_OPEN_APPS_BAR:
             case TOOL_APP_COMMAND_PALETTE:
+            case TOOL_APP_LAUNCH:
             case TOOL_APP_KEY_INSPECTOR:
             case TOOL_APP_OPEN_DRAWER:
             case TOOL_APP_CLOSE_DRAWER:
@@ -504,6 +515,21 @@ public final class TerminalActionDispatcher {
                 case TOOL_APP_COMMAND_PALETTE:
                     TerminalCommandPalette.show(activity);
                     return ok();
+                case TOOL_APP_LAUNCH: {
+                    String query = arguments.optString("query", "").trim();
+                    if (query.isEmpty()) return error(400, "bad_request", "Missing 'query'");
+                    LauncherAppEntry app = resolveApp(activity, query);
+                    if (app == null) {
+                        return error(404, "not_found", "No installed app matches '" + query + "'");
+                    }
+                    if (!LauncherAppLauncher.launchEntry(activity, app)) {
+                        return error(500, "execution_failed", "Could not launch " + app.label);
+                    }
+                    // Same bookkeeping the suggestion bar does, so a launch from a
+                    // binding or the palette also shapes the usage ranking.
+                    new LauncherUsageStatsStore(activity).recordLaunch(app.appRef.stableId());
+                    return ok().put("package", app.appRef.packageName).put("label", app.label);
+                }
                 case TOOL_APP_KEY_INSPECTOR:
                     return ok().put("keyInspectorOpen", TerminalKeyInspector.toggle(activity));
                 case TOOL_APP_OPEN_DRAWER:
@@ -784,6 +810,26 @@ public final class TerminalActionDispatcher {
     @NonNull
     private static JSONObject badDirection() {
         return error(400, "bad_request", "Missing or invalid 'direction'; expected left, right, up, or down");
+    }
+
+    /**
+     * Exact package first, then the launcher's own ranking over labels, package
+     * names, and stable ids. A cold app cache is loaded synchronously: a binding
+     * that silently did nothing on its first press would be worse than paying for
+     * one PackageManager query.
+     */
+    @Nullable
+    private static LauncherAppEntry resolveApp(@NonNull TermuxActivity activity,
+                                               @NonNull String query) {
+        LauncherAppDataProvider provider = LauncherAppDataProvider.getInstance(activity);
+        List<LauncherAppEntry> apps = provider.hasLoadedApps()
+            ? provider.getAllApps()
+            : provider.getAllAppsBlocking();
+        LauncherAppEntry exact = provider.findDefaultByPackage(query);
+        if (exact != null) return exact;
+        List<LauncherAppEntry> ranked =
+            LauncherRankingEngine.filterAndRank(apps, query, APP_MATCH_TOLERANCE);
+        return ranked.isEmpty() ? null : ranked.get(0);
     }
 
     @NonNull

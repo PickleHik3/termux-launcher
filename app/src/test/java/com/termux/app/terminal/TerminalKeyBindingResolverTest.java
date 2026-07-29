@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -369,6 +370,55 @@ public class TerminalKeyBindingResolverTest {
         assertTrue(config.errors.toString(), config.errors.isEmpty());
         TerminalKeyBindingResolver.installConfigForTesting(config);
         resolver = TerminalKeyBindingResolver.getInstance();
+    }
+
+    // ------------------------------------------------------- keyboard gestures
+
+    private String gesture(String key, String direction, boolean alt,
+                           LauncherToolRegistry.ActionContext ctx) {
+        TerminalKeyBindingResolver.Match match =
+            resolver.resolveGesture(key, direction, false, alt, false, ctx);
+        return match == null ? null : match.toolName;
+    }
+
+    @Test
+    public void spacebarSwipeDefaults_reachPaletteWindowAndSession() {
+        assertEquals("app.command_palette", gesture("space", "north", false, SPLITS_ON));
+        assertEquals("window.next", gesture("space", "east", true, SPLITS_ON));
+        assertEquals("window.previous", gesture("space", "west", true, SPLITS_ON));
+        assertEquals("session.next", gesture("space", "south", true, SPLITS_ON));
+        assertEquals("session.previous", gesture("space", "north", true, SPLITS_ON));
+    }
+
+    @Test
+    public void unboundSwipesStayWithTheKeyboard() {
+        // Plain east/west remain the keyboard's cursor sliders.
+        assertNull(gesture("space", "east", false, SPLITS_ON));
+        assertNull(gesture("space", "west", false, SPLITS_ON));
+        assertNull(gesture("space", "northeast", true, SPLITS_ON));
+        assertNull(gesture("a", "north", false, SPLITS_ON));
+        // Window switching is meaningless without splits, so the keyboard keeps it.
+        assertNull(gesture("space", "east", true, SPLITS_OFF));
+    }
+
+    @Test
+    public void configRemapsAndUnmapsGestures() {
+        installModal("unmap kbd:space:swipe-north\n"
+            + "map alt+kbd:space:swipe-northeast terminal.font_size_increase\n");
+        assertNull(gesture("space", "north", false, SPLITS_ON));
+        assertEquals("terminal.font_size_increase",
+            gesture("space", "northeast", true, SPLITS_ON));
+    }
+
+    @Test
+    public void gestureTokens_areValidatedAsStrokes() {
+        assertTrue(TerminalKeyBindingResolver.isValidStrokeSpec("alt+kbd:space:swipe-east"));
+        assertTrue(TerminalKeyBindingResolver.isGestureToken("kbd:space:swipe-southwest"));
+        assertFalse(TerminalKeyBindingResolver.isGestureToken("kbd:space:swipe-up"));
+        assertFalse(TerminalKeyBindingResolver.isGestureToken("kbd::swipe-north"));
+        assertFalse(TerminalKeyBindingResolver.isGestureToken("space:swipe-north"));
+        assertEquals("alt+kbd:space:swipe-east",
+            TerminalKeyBindingResolver.gestureStroke("Space", "EAST", false, true, false));
     }
 
     @Test

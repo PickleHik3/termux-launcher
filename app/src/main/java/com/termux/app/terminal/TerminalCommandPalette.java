@@ -20,10 +20,15 @@ import androidx.appcompat.app.AlertDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
+import com.termux.app.launcher.data.LauncherAppDataProvider;
+import com.termux.app.launcher.data.LauncherRankingEngine;
+import com.termux.app.launcher.data.LauncherUsageStatsStore;
+import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.logger.Logger;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
@@ -49,12 +54,24 @@ import java.util.Map;
  *       and {@code pane.resize}, which only make sense from a directional key.
  * </ul>
  *
+ * <p>Installed apps are the one row source that is not a tool projection. They are
+ * rebuilt per query — usage-ranked with no query, fuzzy-ranked with one — and each
+ * row runs {@code app.launch} with its own stable id, so a launch from here takes
+ * the same path as a launch from a keybind.
+ *
  * <p>The view is built in code rather than XML to keep the change small; a first
  * pass at Material styling comes with the eventual layout file.
  */
 public final class TerminalCommandPalette {
 
     private static final String LOG_TAG = "TerminalCommandPalette";
+
+    /** Installed apps shown before the user narrows the list. */
+    private static final int APP_ROWS_UNFILTERED = 8;
+    /** Upper bound on ranked app matches for a query, so the list stays scannable. */
+    private static final int APP_ROWS_FILTERED = 20;
+    /** Minimum fuzzy score for an app row, matching the suggestion bar. */
+    private static final int APP_MATCH_TOLERANCE = 70;
 
     private TerminalCommandPalette() {
     }
@@ -130,7 +147,7 @@ public final class TerminalCommandPalette {
     private static void run(@NonNull TermuxActivity activity,
                             @NonNull CommandPaletteFilter.Entry entry) {
         JSONObject result = TerminalActionDispatcher.getInstance()
-            .execute(entry.toolName, new JSONObject());
+            .execute(entry.toolName, entry.arguments == null ? new JSONObject() : entry.arguments);
         if (!result.optBoolean("ok", false)) {
             String message = result.optString("message",
                 activity.getString(R.string.palette_action_failed, entry.title));
@@ -205,6 +222,51 @@ public final class TerminalCommandPalette {
         return TerminalKeyBindingResolver.getInstance().getStrokesForTool(tool.name, context);
     }
 
+    /**
+     * App rows for the current query, built from the provider's warm cache only —
+     * the palette must never block the main thread on a PackageManager sweep.
+     * Without a query the rows are usage-ranked, so the apps actually used land on
+     * top; with one, the launcher's own fuzzy ranking decides.
+     */
+    @NonNull
+    static List<CommandPaletteFilter.Entry> buildAppEntries(
+        @NonNull LauncherAppDataProvider provider,
+        @NonNull LauncherUsageStatsStore usageStats,
+        @NonNull String query
+    ) {
+        List<LauncherAppEntry> apps = provider.getAllApps();
+        if (apps.isEmpty()) return Collections.emptyList();
+        String trimmed = query.trim();
+        List<LauncherAppEntry> ranked = trimmed.isEmpty()
+            ? usageStats.rankForAz(apps)
+            : LauncherRankingEngine.filterAndRank(apps, trimmed, APP_MATCH_TOLERANCE);
+        int limit = Math.min(ranked.size(),
+            trimmed.isEmpty() ? APP_ROWS_UNFILTERED : APP_ROWS_FILTERED);
+        List<CommandPaletteFilter.Entry> entries = new ArrayList<>(limit);
+        for (int i = 0; i < limit; i++) {
+            LauncherAppEntry app = ranked.get(i);
+            JSONObject arguments = new JSONObject();
+            try {
+                // The stable id targets one activity exactly, so a row cannot drift
+                // to a different app of the same package.
+                arguments.put("query", app.appRef.stableId());
+            } catch (JSONException ignored) {
+            }
+            entries.add(new CommandPaletteFilter.Entry(
+                LauncherToolRegistry.TOOL_APP_LAUNCH,
+                app.label,
+                app.appRef.packageName,
+                LauncherToolRegistry.CATEGORY_APPS,
+                Collections.<String>emptyList(),
+                true,
+                null,
+                false,
+                LauncherToolRegistry.ToolRisk.MEDIUM,
+                arguments));
+        }
+        return entries;
+    }
+
     static boolean hasRequiredArguments(@NonNull LauncherToolRegistry.ToolMetadata tool) {
         JSONArray required = tool.schema.optJSONArray("required");
         return required != null && required.length() > 0;
@@ -220,6 +282,7 @@ public final class TerminalCommandPalette {
             case LauncherToolRegistry.CATEGORY_CLIPBOARD: return context.getString(R.string.palette_category_clipboard);
             case LauncherToolRegistry.CATEGORY_APPEARANCE: return context.getString(R.string.palette_category_appearance);
             case LauncherToolRegistry.CATEGORY_APP: return context.getString(R.string.palette_category_app);
+            case LauncherToolRegistry.CATEGORY_APPS: return context.getString(R.string.palette_category_apps);
             default: return category;
         }
     }
@@ -234,21 +297,33 @@ public final class TerminalCommandPalette {
 
         private final Context context;
         private final List<CommandPaletteFilter.Entry> all;
+        private final LauncherAppDataProvider appProvider;
+        private final LauncherUsageStatsStore usageStats;
         /** Null marks a header row; the parallel list holds its label. */
         private final List<CommandPaletteFilter.Entry> rows = new ArrayList<>();
         private final List<String> headers = new ArrayList<>();
+        @NonNull private String query = "";
 
         PaletteAdapter(@NonNull Context context, @NonNull List<CommandPaletteFilter.Entry> all) {
             this.context = context;
             this.all = all;
+            this.appProvider = LauncherAppDataProvider.getInstance(context);
+            this.usageStats = new LauncherUsageStatsStore(context);
+            // A cold app list arrives later; the dialog opens now and grows its Apps
+            // section when the load lands.
+            if (!appProvider.hasLoadedApps())
+                appProvider.warmAsync(() -> setQuery(this.query));
             setQuery("");
         }
 
         void setQuery(@Nullable String query) {
+            this.query = query == null ? "" : query;
             rows.clear();
             headers.clear();
-            List<CommandPaletteFilter.Entry> ranked = CommandPaletteFilter.filterAndRank(all, query);
-            boolean grouped = query == null || query.trim().isEmpty();
+            List<CommandPaletteFilter.Entry> ranked =
+                new ArrayList<>(CommandPaletteFilter.filterAndRank(all, this.query));
+            ranked.addAll(buildAppEntries(appProvider, usageStats, this.query));
+            boolean grouped = this.query.trim().isEmpty();
             if (!grouped) {
                 for (CommandPaletteFilter.Entry entry : ranked) {
                     rows.add(entry);

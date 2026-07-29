@@ -264,9 +264,75 @@ map ctrl+alt+j send-text "cd ~/src\n"
 map ctrl+alt+j send-text "git status\n"
 ```
 
-`--when` accepts `always`, `splits-on`, or `splits-off`. Inline arguments are not supported for
-registry actions, so argument-requiring actions such as `pane.layout` cannot yet be meaningfully
-bound without a dedicated argument-free action.
+`--when` accepts `always`, `splits-on`, or `splits-off`.
+
+### Action arguments
+
+Words after the action id are its arguments. Positional words fill the action's required arguments in
+schema order; `name=value` reaches any argument, required or not. Values are validated against the
+action's schema, so an out-of-range number or an unknown enum value is reported instead of silently
+running.
+
+```text
+# Positional required arguments.
+map ctrl+alt+shift+1 pane.layout grid
+map ctrl+alt+shift+2 pane.move_to_edge left
+map ctrl+alt+shift+w window.select 0
+
+# Named arguments, for optional ones or for clarity.
+map ctrl+alt+shift+n session.new name=build failsafe=false
+map ctrl+alt+shift+s workspace.save name=project overwrite=true
+
+# Quote a value that contains spaces.
+map ctrl+alt+shift+r session.rename "build shell"
+```
+
+Arguments a stroke implies on its own — a direction for the arrow binds, a zero-based index for the
+digit binds — still apply, and an argument written in the file wins over the implied one.
+
+### Launch apps from a binding
+
+`app.launch` takes a package name, an app label, or a stable id. An exact package match wins;
+otherwise the launcher's fuzzy app ranking picks the best match, the same ranking the suggestion bar
+uses.
+
+```text
+map ctrl+alt+w app.launch com.whatsapp
+map ctrl+alt+shift+m app.launch Maps
+```
+
+Installed apps also appear in the command palette under **Apps**: the most-used ones with no query,
+and the full ranked match list while filtering. Selecting a row runs `app.launch`.
+
+### In-app keyboard gestures
+
+Swipes on the in-app keyboard are strokes too, written `kbd:<key>:swipe-<direction>` with the usual
+modifier prefixes. `<key>` is `space` for the space bar, or a single letter or digit for an ordinary
+key. `<direction>` is one of `north`, `northeast`, `east`, `southeast`, `south`, `southwest`, `west`,
+`northwest`, covering the same circle section as that key's corresponding swipe slot. The modifiers
+are the ones held or latched when the swipe starts.
+
+Defaults on the space bar:
+
+| Gesture | Action |
+| --- | --- |
+| `kbd:space:swipe-north` | `app.command_palette` |
+| `alt+kbd:space:swipe-east` | `window.next` |
+| `alt+kbd:space:swipe-west` | `window.previous` |
+| `alt+kbd:space:swipe-south` | `session.next` |
+| `alt+kbd:space:swipe-north` | `session.previous` |
+
+The plain north swipe deliberately takes over the keyboard's own layout-switch gesture. Plain east
+and west stay the keyboard's cursor sliders, because an unbound swipe keeps its keyboard meaning —
+which is also how remapping works:
+
+```text
+unmap kbd:space:swipe-north
+map alt+kbd:space:swipe-northeast app.launch com.termux
+map --when splits-on kbd:space:swipe-south pane.next_layout
+```
+
+Gestures are single strokes: they cannot start or continue a `>` chord.
 
 ### Modal keymaps
 
@@ -284,8 +350,7 @@ map --mode nav escape pop-mode
 
 Valid unknown-key policies are `beep`, `ignore`, `end`, and `passthrough`; `--on-action` accepts
 `keep` or `end`. A non-focusable overlay shows pending chords and the active mode. Modes may be
-stacked, and `pop-mode` exits the top one. Prefer argument-free actions in custom maps until binding
-arguments are added.
+stacked, and `pop-mode` exits the top one.
 
 Invalid lines are skipped while valid lines remain active. The app logs errors and shows a bounded
 toast summary. The file is limited to 256 KiB, 4,096 lines, and 4,096 characters per line.

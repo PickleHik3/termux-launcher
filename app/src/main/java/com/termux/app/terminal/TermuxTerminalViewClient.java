@@ -424,6 +424,39 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (match == null)
             return true; // unbound Ctrl+Alt stroke: swallowed, as before
 
+        boolean handled = runMatch(resolver, dispatcher, match);
+        resolver.afterMatch(match);
+        refreshKeyModeUi(resolver);
+        return handled;
+    }
+
+    /**
+     * Resolves an in-app keyboard swipe against the same binding table as
+     * hardware strokes.
+     *
+     * <p>Returns false for an unbound swipe so the keyboard keeps its own meaning
+     * for that direction — the plain east/west spacebar cursor sliders stay
+     * reachable precisely because nothing claims them here.
+     */
+    public boolean handleKeyboardGesture(@NonNull String keyName, @NonNull String direction,
+                                         boolean ctrl, boolean alt, boolean shift) {
+        TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
+        TerminalActionDispatcher dispatcher = TerminalActionDispatcher.getInstance();
+        TerminalKeyBindingResolver.Match match = resolver.resolveGesture(keyName, direction,
+            ctrl, alt, shift, dispatcher.actionContext());
+        if (match == null) return false;
+        TerminalKeyInspector inspector = TerminalKeyInspector.active();
+        if (inspector != null) inspector.recordBinding(match.stroke, match.toolName);
+        boolean handled = runMatch(resolver, dispatcher, match);
+        resolver.afterMatch(match);
+        refreshKeyModeUi(resolver);
+        return handled;
+    }
+
+    /** Runs every action of a resolved binding, in the order the config declared them. */
+    private boolean runMatch(@NonNull TerminalKeyBindingResolver resolver,
+                             @NonNull TerminalActionDispatcher dispatcher,
+                             @NonNull TerminalKeyBindingResolver.Match match) {
         boolean handled = false;
         for (TerminalBindingConfig.Action action : match.actions) {
             if (action.type == TerminalBindingConfig.ActionType.PUSH_MODE) {
@@ -468,17 +501,16 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             }
             handled |= result.optBoolean("handled", true);
         }
-        resolver.afterMatch(match);
-        refreshKeyModeUi(resolver);
         return handled;
     }
 
+    /** Arguments the stroke implies, overridden by the ones the config spelled out. */
     @NonNull
     private static JSONObject mergeArguments(@NonNull JSONObject configured,
                                              @NonNull JSONObject derived) {
         JSONObject result = new JSONObject();
-        copyJson(configured, result);
         copyJson(derived, result);
+        copyJson(configured, result);
         return result;
     }
 

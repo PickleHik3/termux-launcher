@@ -461,6 +461,12 @@ public class Keyboard2View extends View
         _keyboard == null ? null : _keyboard.modmap);
   }
 
+  @Override
+  public boolean onSwipeGesture(String keyName, String direction, Pointers.Modifiers mods)
+  {
+    return _config.handler.swipe_gesture(keyName, direction, mods);
+  }
+
   public void onPointerDown(KeyValue k, boolean isSwipe)
   {
     updateFlags();

@@ -31,7 +31,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void registry_containsExpectedTools() {
         List<LauncherToolRegistry.ToolMetadata> tools = registry.getTools();
-        assertEquals(71, tools.size());
+        assertEquals(72, tools.size());
         assertNotNull(registry.getTool("capabilities.get"));
         assertNotNull(registry.getTool("apps.search"));
         assertNotNull(registry.getTool("apps.launch"));
@@ -86,7 +86,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void toOpenAiToolsJson_producesFunctionTools() throws Exception {
         JSONArray openAiTools = registry.toOpenAiToolsJson();
-        assertEquals(71, openAiTools.length());
+        assertEquals(72, openAiTools.length());
         for (int i = 0; i < openAiTools.length(); i++) {
             JSONObject item = openAiTools.getJSONObject(i);
             assertEquals("function", item.getString("type"));
@@ -101,7 +101,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void toInternalJson_includesSchemaAndRisk() throws Exception {
         JSONArray internal = registry.toInternalJson();
-        assertEquals(71, internal.length());
+        assertEquals(72, internal.length());
         JSONObject first = internal.getJSONObject(0);
         assertTrue(first.has("name"));
         assertTrue(first.has("description"));
@@ -115,9 +115,9 @@ public class LauncherToolRegistryTest {
     public void responseJson_containsBothFormats() throws Exception {
         JSONObject response = registry.toResponseJson();
         assertTrue(response.getBoolean("ok"));
-        assertEquals(71, response.getInt("count"));
-        assertEquals(71, response.getJSONArray("tools").length());
-        assertEquals(71, response.getJSONArray("openAiTools").length());
+        assertEquals(72, response.getInt("count"));
+        assertEquals(72, response.getJSONArray("tools").length());
+        assertEquals(72, response.getJSONArray("openAiTools").length());
     }
 
     @Test
@@ -215,7 +215,7 @@ public class LauncherToolRegistryTest {
             assertNotNull(name, tool.category);
             assertTrue(name, tool.hasUiMetadata());
         }
-        assertEquals(51, registry.getUiTools().size());
+        assertEquals(52, registry.getUiTools().size());
     }
 
     @Test
@@ -592,7 +592,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void terminalActions_groupByCategory() {
         java.util.Map<String, List<LauncherToolRegistry.ToolMetadata>> grouped = registry.getUiToolsByCategory();
-        assertEquals(7, grouped.size());
+        assertEquals(8, grouped.size());
         // Exact per-group counts churn with every added action; assert the
         // invariant instead: every grouped tool is a UI tool and vice versa.
         int total = 0;
@@ -640,15 +640,18 @@ public class LauncherToolRegistryTest {
         assertEquals(4, registry.getTool("pane.resize").defaultBindings.size());
         // terminal.state has no keybind today.
         assertTrue(registry.getTool("terminal.state").defaultBindings.isEmpty());
-        // Session switching now records both its legacy letter and the
-        // compatibility-mode arrow, the latter conditioned so it cannot lie.
-        assertEquals(2, registry.getTool("session.next").defaultBindings.size());
+        // Session switching now records its legacy letter, the in-app keyboard
+        // swipe, and the compatibility-mode arrow, the last conditioned so it
+        // cannot lie.
+        assertEquals(3, registry.getTool("session.next").defaultBindings.size());
         assertEquals("ctrl+alt+n", registry.getTool("session.next").defaultBindings.get(0).stroke);
         assertEquals(LauncherToolRegistry.BindingCondition.ALWAYS,
             registry.getTool("session.next").defaultBindings.get(0).condition);
-        assertEquals("ctrl+alt+down", registry.getTool("session.next").defaultBindings.get(1).stroke);
+        assertEquals("alt+kbd:space:swipe-south",
+            registry.getTool("session.next").defaultBindings.get(1).stroke);
+        assertEquals("ctrl+alt+down", registry.getTool("session.next").defaultBindings.get(2).stroke);
         assertEquals(LauncherToolRegistry.BindingCondition.SPLITS_OFF,
-            registry.getTool("session.next").defaultBindings.get(1).condition);
+            registry.getTool("session.next").defaultBindings.get(2).condition);
     }
 
     @Test

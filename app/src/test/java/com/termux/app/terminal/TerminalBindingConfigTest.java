@@ -49,6 +49,52 @@ public class TerminalBindingConfigTest {
     }
 
     @Test
+    public void inlineArgumentsFillRequiredPropertiesInOrder() {
+        TerminalBindingConfig.Result result = TerminalBindingConfig.parse(
+            "map ctrl+alt+shift+w app.launch com.whatsapp\n"
+                + "map ctrl+alt+shift+g pane.layout grid\n"
+                + "map ctrl+alt+shift+3 window.select 3\n"
+                + "map ctrl+alt+shift+s workspace.save name=project overwrite=true\n",
+            registry, true);
+
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+        assertEquals(4, result.mappings.size());
+        assertEquals("com.whatsapp",
+            result.mappings.get(0).actions.get(0).arguments.optString("query"));
+        assertEquals("grid", result.mappings.get(1).actions.get(0).arguments.optString("layout"));
+        assertEquals(3, result.mappings.get(2).actions.get(0).arguments.optInt("index"));
+        assertEquals("project",
+            result.mappings.get(3).actions.get(0).arguments.optString("name"));
+        assertTrue(result.mappings.get(3).actions.get(0).arguments.optBoolean("overwrite"));
+    }
+
+    @Test
+    public void inlineArgumentsAreValidatedAgainstTheSchema() {
+        TerminalBindingConfig.Result result = TerminalBindingConfig.parse(
+            "map ctrl+alt+shift+g pane.layout sideways\n"
+                + "map ctrl+alt+shift+w window.select 900\n"
+                + "map ctrl+alt+shift+e pane.equalize extra\n",
+            registry, true);
+
+        assertEquals(3, result.errors.size());
+        assertTrue(result.mappings.isEmpty());
+    }
+
+    @Test
+    public void gestureSequencesMapAndUnmapLikeStrokes() {
+        TerminalBindingConfig.Result result = TerminalBindingConfig.parse(
+            "unmap kbd:space:swipe-north\n"
+                + "map Alt+KBD:space:swipe-east session.previous\n"
+                + "map ctrl+alt+q send-key kbd:space:swipe-east\n",
+            registry, true);
+
+        assertEquals(1, result.errors.size());
+        assertEquals(1, result.mappings.size());
+        assertEquals("alt+kbd:space:swipe-east", result.mappings.get(0).sequence);
+        assertTrue(result.overriddenSequences.contains("kbd:space:swipe-north"));
+    }
+
+    @Test
     public void unmapOverridesADefaultWithoutCreatingAMapping() {
         TerminalBindingConfig.Result result = TerminalBindingConfig.parse(
             "unmap ctrl+alt+v\n", registry, true);

@@ -39,5 +39,18 @@ public interface HostActions {
     /** Reserved for a future app-owned suggestion source. */
     default void onSuggestionEntered(String text) {}
 
+    /**
+     * A swipe on an in-app keyboard key, named by the keyboard and resolved
+     * against the gesture binding table.
+     *
+     * @param keyName   key identity, e.g. {@code space}
+     * @param direction compass point, e.g. {@code north}
+     * @return whether a binding ran, which suppresses the swiped-to key value
+     */
+    default boolean onKeyboardGesture(String keyName, String direction,
+                                      boolean ctrl, boolean alt, boolean shift) {
+        return false;
+    }
+
     void debugLog(String message);
 }

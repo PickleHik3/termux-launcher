@@ -218,6 +218,15 @@ public final class Config
     public void key_up(KeyValue value, Pointers.Modifiers mods);
     public void mods_changed(Pointers.Modifiers mods);
     public void suggestion_entered(String text);
+
+    /** A swipe on [keyName] toward the compass point [direction], with the
+        modifiers held or latched at that moment. Returning [true] claims the
+        swipe, which suppresses the key value it would otherwise have selected. */
+    public default boolean swipe_gesture(String keyName, String direction,
+        Pointers.Modifiers mods)
+    {
+      return false;
+    }
   }
 
   private static final IKeyEventHandler NO_OP_HANDLER = new IKeyEventHandler()

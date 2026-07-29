@@ -6556,6 +6556,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
+        public boolean onKeyboardGesture(String keyName, String direction,
+                                         boolean ctrl, boolean alt, boolean shift) {
+            return mTermuxTerminalViewClient != null
+                && mTermuxTerminalViewClient.handleKeyboardGesture(keyName, direction,
+                    ctrl, alt, shift);
+        }
+
+        @Override
         public void debugLog(String message) {
             Logger.logDebug(LOG_TAG, message);
         }
