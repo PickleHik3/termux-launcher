@@ -753,18 +753,38 @@ public final class TerminalBuffer {
         return bitmaps.get(num).cursorDelta;
     }
 
-    /** Add one decoded kitty Tier-1 placement at a screen cell. */
-    public int[] addKittyImage(Bitmap image, long imageId, int y, int x, int cellW, int cellH) {
+    /** Add one decoded kitty placement at a screen cell. */
+    public int[] addKittyImage(Bitmap image, long imageId, long placementId, int z, int y, int x,
+                               int cellW, int cellH) {
         if (image == null || x < 0 || x >= mColumns || y < 0 || y >= mScreenRows)
             return new int[] { 0, 0 };
         int num = findFreeBitmap();
-        TerminalBitmap terminalBitmap = new TerminalBitmap(num, image, imageId, y, x, cellW, cellH, this);
+        TerminalBitmap terminalBitmap = new TerminalBitmap(num, image, imageId, placementId, z, y, x,
+            cellW, cellH, this);
         if (terminalBitmap.bitmap == null)
             return new int[] { 0, 0 };
         bitmaps.put(num, terminalBitmap);
         hasBitmaps = true;
         bitmapGC(30000);
         return terminalBitmap.cursorDelta;
+    }
+
+    /**
+     * Whether a kitty placement with the given z may take this cell: an existing placement with a
+     * higher z keeps it, and a negative z never overwrites visible text.
+     */
+    boolean kittyAllowsStamp(int column, int externalRow, int z) {
+        if (externalRow < 0 || externalRow >= mScreenRows || column < 0 || column >= mColumns)
+            return false;
+        TerminalRow line = allocateFullLineIfNecessary(externalToInternalRow(externalRow));
+        long style = line.getStyle(column);
+        if (TextStyle.isBitmap(style)) {
+            TerminalBitmap existing = bitmaps.get(TextStyle.bitmapNum(style));
+            return z >= (existing == null ? 0 : existing.kittyZ);
+        }
+        if (z >= 0) return true;
+        int charIndex = line.findStartOfColumn(column);
+        return charIndex >= line.getSpaceUsed() || line.mText[charIndex] == ' ';
     }
 
     /** Bytes currently owned by decoded kitty placements in this buffer. */
@@ -777,8 +797,19 @@ public final class TerminalBuffer {
         return result;
     }
 
+    /** Selects kitty placement cells for deletion. Receives the cell's external row (negative in scrollback). */
+    public interface KittyPlacementFilter {
+        boolean matches(TerminalBitmap bitmap, int column, int externalRow);
+    }
+
     /** Delete kitty placements, either only on-screen or also in scrollback. A negative id matches all images. */
     public int deleteKittyImages(long imageId, boolean includeScrollback) {
+        return deleteKittyImages((bitmap, column, row) ->
+            imageId < 0 || bitmap.kittyImageId == imageId, includeScrollback);
+    }
+
+    /** Delete every kitty placement cell the filter matches. */
+    public int deleteKittyImages(KittyPlacementFilter filter, boolean includeScrollback) {
         int deletedCells = 0;
         int firstRow = includeScrollback ? -getActiveTranscriptRows() : 0;
         for (int row = firstRow; row < mScreenRows; row++) {
@@ -788,8 +819,7 @@ public final class TerminalBuffer {
                 long style = line.getStyle(column);
                 if (!TextStyle.isBitmap(style)) continue;
                 TerminalBitmap bitmap = bitmaps.get(TextStyle.bitmapNum(style));
-                if (bitmap != null && bitmap.kittyImageId >= 0
-                    && (imageId < 0 || bitmap.kittyImageId == imageId)) {
+                if (bitmap != null && bitmap.kittyImageId >= 0 && filter.matches(bitmap, column, row)) {
                     line.setChar(column, ' ', TextStyle.NORMAL);
                     deletedCells++;
                     changed = true;

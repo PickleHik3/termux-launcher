@@ -5,7 +5,8 @@ binding work recorded in `action-registry-terminal-actions.md`. That covered the
 Phase 1–2; this file covers Phase 4 (protocol/render upgrades) and the first Phase 5
 project (the keyboard protocol).
 
-Status: delivered through graphics Tier 1. User setup and compatibility guidance are in
+Status: delivered through graphics Tier 2 core — stored images, placements, crop, z-index, and the
+full delete forms (slice 14); animation, Unicode placeholders, and file/shm media remain excluded. User setup and compatibility guidance are in
 [`../../docs/en/Terminal_Modernization.md`](../../docs/en/Terminal_Modernization.md); the cross-project
 status map is [`../terminal-modernization-status.md`](../terminal-modernization-status.md).
 
@@ -354,6 +355,80 @@ Both are preserved by the same paths: `setChar`, `copyInterval`, reflow inside
   `f=24`/`f=32` raw pixel data is a smaller and better-motivated next step than any of Tier 2's
   image-management features, and should be sequenced first.
 
+- **Slice 13b — raw pixel formats (done).** Tier 1 display now accepts `f=24` (RGB) and `f=32`
+  (RGBA, straight alpha) in addition to PNG, including `o=z` zlib-compressed payloads, which closes
+  the gap slice 13a identified: `chafa -f kitty` now renders. The support query already validated
+  both raw formats, so a client that probed honestly was told yes and then refused at display time.
+
+  The PNG and raw paths share one display tail (`submitDecode`): bound checks, cursor advance, and
+  the off-thread decode-and-scale, with a per-path bitmap producer. Raw decode goes through two pure
+  static helpers, `rawPixelsToArgb` and `inflate`, kept free of Android types so JVM tests cover
+  them directly (`Bitmap` construction itself is only exercised on device, since the module tests
+  run with `returnDefaultValues`). Deliberate details:
+
+  - A raw header must carry `s` and `v`, and `s*v*4` is checked against the session decode limit at
+    header time, so a doomed transfer is refused before its chunks are accepted rather than after.
+  - An uncompressed payload whose size disagrees with `s*v` is answered synchronously; a compressed
+    payload can only be measured after inflation, so its mismatch answer comes from the worker.
+  - `inflate` requires the stream to produce exactly the expected byte count — a stream that is
+    short, over-long, or trailing-garbage is one `EINVAL`, bounded by the existing decode ceiling.
+  - Unknown `o=` values are `ENOSYS:unsupported compression` at accept time, not a garbled image.
+  - The format rejection message became `ENOSYS:unsupported image format` (there is no PNG-only
+    scope left to cite), and the query path now inflates `o=z` probes before validating size.
+
+  Device pass (2026-07-29, Pong, `com.termux` debug upgraded in place, fish): `chafa -f kitty`
+  (raw RGBA, control-only header + continuation chunks, `q=2`) renders correctly and silently next
+  to `timg -pk` (PNG) in one script run; a hand-rolled `o=z` RGBA transfer with `i=` answered
+  `Gi=77;OK`, and a half-transparent zlib image scaled by `c`/`r` composited correctly over the
+  wallpaper, confirming straight-alpha conversion. App-scoped logcat had no fatal exception,
+  OOM, or emulator error. One earlier probe's malformed ST (a `printf` octal mistake) left reply
+  bytes in the shell's input line — probe defect, useful reminder that unconsumed `i=` replies land
+  in the prompt exactly as the q=2 bug's replies did.
+
+- **Slice 14 — graphics Tier 2 core: stored images and placements (done).** `a=t` and `a=p` are
+  implemented; the PNG-only-then-raw display pipeline above now feeds a bounded image store
+  (`KittyImageStore`: 32 MiB / 256 images, ENOSPC over eviction, cleared by RIS but not by screen
+  clears, which only drop placements). Image numbers (`I=`) resolve latest-wins, and an `I=`-only
+  transmission is assigned a free id that the reply reports (`i=<id>,I=<n>;OK`), which is what
+  `kitten icat` relies on.
+
+  **The ordering design is the part worth reading.** Transmission completion *reserves* the image —
+  id, number, dimensions, byte budget — synchronously on the update thread while pixels decode on
+  the worker, so an `a=p` arriving next in the stream resolves the image and validates its source
+  rectangle synchronously (a JVM test pins this with the decode still in flight). The placement's
+  own pixel work is bounced decoder→update→decoder so it runs strictly after the transmission's
+  completion lands. Store and placement never share a bitmap instance — the placement layer
+  recycles; the store only drops references — so a recycle can never corrupt the store.
+
+  Placements support source rectangles (`x,y,w,h`, clamped by `computeCrop`), cell scaling (`c,r`),
+  sub-cell pixel offsets (`X,Y`, composited into transparent padding), placement ids (`p=` replaces
+  its own (i,p) pair; unidentified placements are additive), and z-index. **z is stamping priority,
+  not compositing**: the cell model shows one owner per cell, so a higher z takes the cell, and a
+  negative z never overwrites visible text — kitty's draw-under-text becomes keep-the-text. A z<0
+  placement whose every cell is withheld fails placement rather than storing an invisible bitmap.
+
+  All delete forms except animation frames are implemented: `a/A`, `i/I` (with optional `p=`),
+  `n/N`, `c/C`, `p/P`, `q/Q`, `x/X`, `y/Y`, `z/Z`; uppercase also frees the targeted stored data.
+  Intersection forms delete the whole intersecting placement via a scan-then-delete-by-membership
+  double pass — a single filter pass would miss the placement's cells left of and above the match.
+  `d=a` with an explicit `i`/`I` keeps the legacy id-scoped meaning. Still out of scope, each with
+  a bounded `ENOSYS`: animation (`a=a/f/c` — needs a render loop the terminal does not have),
+  Unicode placeholders (`U=1`), and file/shared-memory media (`t=f/t/s` — filesystem paths in
+  escape sequences are a security decision, not a parser feature).
+
+  **One renderer defect found and fixed on device**: a row mixing text and image cells dropped the
+  text run accumulated to the left of the first image cell — `TerminalRenderer` reset the run
+  trackers without flushing them (plus two off-by-ones in the reset). Invisible for Tier 1, routine
+  under z<0. The fix flushes the pending run before drawing the image cell.
+
+  Device pass (2026-07-29, Pong, `com.termux` debug, fish): stored a 64x32 two-colour RGBA via
+  `a=t o=z`, placed it twice (`p=1` full, `p=2` cropped to the right half — rendered pure red),
+  deleted `p=1` by id+placement leaving `p=2` intact; `I=9`-only store answered `i=1,I=9;OK`
+  (captured via `cat -v`); z=-1 placements kept text glyphs and filled blank cells around and below
+  them, before and after the renderer fix. End-to-end: **yazi detected KGP and previewed images**
+  through store/place/delete cycles — hovering a PNG rendered it, moving to a JSON file replaced it
+  with a text preview, no ghost images, and app-scoped logcat stayed clean throughout.
+
 ## User config path
 
 Decided 2026-07-27: everything this roadmap needs to write for the user goes under
@@ -375,10 +450,11 @@ Unit tests: `UnderlineStyleTest` (16), `HyperlinkTest` (19), `ShellIntegrationTe
 `TermuxShellIntegrationInstallerTest` (2), `TerminalFrameMetricsMonitorTest` (3), and
 `TerminalRenderMetricsTest` (3), `EscapeSequenceLimitTest` (7),
 `EscapeSequenceFuzzTest` (1 harness test, 750 default cases), `MultipleCursorsProtocolTest` (7),
-and `KittyGraphicsProtocolTest` (8).
-The complete `terminal-emulator` (243 tests) and `terminal-view` (9 tests) suites pass with 0 failing.
-`:app:testDebugUnitTest` still fails the documented 48 environmental tests across the same
-12 classes and no others — compare against that baseline, not against green.
+`KittyGraphicsProtocolTest` (27, including raw-format, compression, placement, delete-form, and
+pure-helper coverage), and `KittyImageStoreTest` (6).
+The complete `terminal-emulator` (273 tests), `terminal-view` (15 tests), and `:app` (598 tests)
+suites pass with 0 failing in both debug and release variants. (The former "48 environmental
+failures" baseline was a misdiagnosis and is fixed — see `../terminal-modernization-status.md`.)
 
 Device pass (2026-07-27, one build, `com.termux` debug, fish 4 as the shell):
 

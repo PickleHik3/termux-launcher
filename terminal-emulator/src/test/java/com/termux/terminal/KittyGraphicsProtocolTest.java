@@ -71,11 +71,184 @@ public class KittyGraphicsProtocolTest extends TerminalTestCase {
     }
 
     public void testControlOnlyHeaderStartsAChunkedUploadLikeRealClients() {
-        // chafa emits a control-only header and then continuation chunks. The header must be accepted
-        // rather than answered with EINVAL, and the format rejection must be the declared Tier 1
-        // scope limit (PNG only) rather than a parse failure.
-        assertEnteringStringGivesResponse("\033_Gi=41,a=T,f=32,s=2,v=2,c=2,r=1,m=1\033\\",
-            "\033_Gi=41;ENOSYS:Tier 1 display accepts PNG only\033\\");
+        // chafa emits a control-only raw-RGBA header and then continuation chunks. The header must
+        // be accepted silently and the chunks collected; a payload that does not match s and v is
+        // answered when the final chunk arrives.
+        enterString("\033_Gi=41,a=T,f=32,s=2,v=2,c=2,r=1,m=1\033\\");
+        assertEquals("", mOutput.getOutputAndClear());
+        enterString("\033_Gm=1;" + base64(new byte[8]) + "\033\\");
+        assertEquals("", mOutput.getOutputAndClear());
+        assertEnteringStringGivesResponse("\033_Gm=0;" + base64(new byte[4]) + "\033\\",
+            "\033_Gi=41;EINVAL:pixel data does not match s and v\033\\");
+    }
+
+    public void testRawDisplayRequiresDimensions() {
+        assertEnteringStringGivesResponse("\033_Gi=42,a=T,f=32;AAAA\033\\",
+            "\033_Gi=42;EINVAL:raw pixel data requires s and v\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=43,a=T,f=24,s=2;AAAA\033\\",
+            "\033_Gi=43;EINVAL:raw pixel data requires s and v\033\\");
+    }
+
+    public void testRawDisplayRejectsOversizeAtHeader() {
+        // 4000 * 4000 * 4 bytes decoded is over the 32 MiB session limit, so the header is refused
+        // before any chunk data is accepted.
+        assertEnteringStringGivesResponse("\033_Gi=44,a=T,f=32,s=4000,v=4000,m=1\033\\",
+            "\033_Gi=44;ENOSPC:decoded image exceeds session limit\033\\");
+    }
+
+    public void testRawDisplayRejectsUnknownCompression() {
+        assertEnteringStringGivesResponse("\033_Gi=45,a=T,f=32,s=1,v=1,o=x;AAAA\033\\",
+            "\033_Gi=45;ENOSYS:unsupported compression\033\\");
+    }
+
+    public void testUnsupportedDisplayFormatIsRejected() {
+        assertEnteringStringGivesResponse("\033_Gi=46,a=T,f=7;AAAA\033\\",
+            "\033_Gi=46;ENOSYS:unsupported image format\033\\");
+    }
+
+    public void testRawSingleChunkSizeMismatchIsSynchronous() {
+        // 2x2 f=24 needs 12 bytes; 4 are sent.
+        assertEnteringStringGivesResponse("\033_Gi=47,a=T,f=24,s=2,v=2;" + base64(new byte[4]) + "\033\\",
+            "\033_Gi=47;EINVAL:pixel data does not match s and v\033\\");
+    }
+
+    public void testRawQueryHonorsZlibCompression() {
+        byte[] pixels = new byte[4];
+        assertEnteringStringGivesResponse("\033_Gi=48,s=1,v=1,a=q,t=d,f=32,o=z;"
+            + base64(deflate(pixels)) + "\033\\", "\033_Gi=48;OK\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=49,s=2,v=2,a=q,t=d,f=32,o=z;"
+            + base64(deflate(pixels)) + "\033\\", "\033_Gi=49;EINVAL:invalid image data\033\\");
+    }
+
+    public void testRawPixelsToArgbConvertsBothFormats() {
+        int[] rgb = KittyGraphicsProtocol.rawPixelsToArgb(
+            new byte[] {(byte) 0x11, (byte) 0x22, (byte) 0x33, (byte) 0xaa, (byte) 0xbb, (byte) 0xcc},
+            2, 1, 24);
+        assertEquals(0xff112233, rgb[0]);
+        assertEquals(0xffaabbcc, rgb[1]);
+        int[] rgba = KittyGraphicsProtocol.rawPixelsToArgb(
+            new byte[] {(byte) 0x11, (byte) 0x22, (byte) 0x33, (byte) 0x80}, 1, 1, 32);
+        assertEquals(0x80112233, rgba[0]);
+        try {
+            KittyGraphicsProtocol.rawPixelsToArgb(new byte[5], 1, 1, 32);
+            fail();
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    public void testInflateEnforcesExactExpectedSize() {
+        byte[] pixels = new byte[] {1, 2, 3, 4, 5, 6, 7, 8};
+        assertTrue(java.util.Arrays.equals(pixels, KittyGraphicsProtocol.inflate(deflate(pixels), 8)));
+        try {
+            KittyGraphicsProtocol.inflate(deflate(pixels), 4);
+            fail();
+        } catch (IllegalArgumentException expected) {
+        }
+        try {
+            KittyGraphicsProtocol.inflate(deflate(pixels), 16);
+            fail();
+        } catch (IllegalArgumentException expected) {
+        }
+        try {
+            KittyGraphicsProtocol.inflate(new byte[] {0x00, 0x00}, 8);
+            fail();
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    public void testPlacementOfUnknownImageAnswersEnoent() {
+        assertEnteringStringGivesResponse("\033_Ga=p,i=99\033\\",
+            "\033_Gi=99;ENOENT:image not found\033\\");
+        assertEnteringStringGivesResponse("\033_Ga=p,I=44\033\\",
+            "\033_GI=44;ENOENT:image not found\033\\");
+    }
+
+    public void testStoreOnlyTransmissionRequiresAnIdentifier() {
+        assertEnteringStringGivesResponse("\033_Ga=t,f=24,s=1,v=1;AAAA\033\\",
+            "\033_G;EINVAL:storing an image requires i or I\033\\");
+    }
+
+    public void testAnimationActionsAnswerEnosys() {
+        assertEnteringStringGivesResponse("\033_Gi=3,a=a\033\\",
+            "\033_Gi=3;ENOSYS:animation is not supported\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=3,a=f,f=24,s=1,v=1;AAAA\033\\",
+            "\033_Gi=3;ENOSYS:animation is not supported\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=3,a=c\033\\",
+            "\033_Gi=3;ENOSYS:animation is not supported\033\\");
+    }
+
+    public void testUnicodePlaceholdersAnswerEnosys() {
+        assertEnteringStringGivesResponse("\033_Gi=3,a=T,U=1,f=24,s=1,v=1;AAAA\033\\",
+            "\033_Gi=3;ENOSYS:unicode placeholders are not supported\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=3,a=p,U=1\033\\",
+            "\033_Gi=3;ENOSYS:unicode placeholders are not supported\033\\");
+    }
+
+    public void testDeleteFormsValidateTheirRequiredKeys() {
+        assertEnteringStringGivesResponse("\033_Ga=d,d=p\033\\",
+            "\033_G;EINVAL:delete by position requires x and y\033\\");
+        assertEnteringStringGivesResponse("\033_Ga=d,d=q,x=1,y=1\033\\",
+            "\033_G;EINVAL:delete by position requires x and y\033\\");
+        assertEnteringStringGivesResponse("\033_Ga=d,d=x\033\\",
+            "\033_G;EINVAL:delete by column requires x\033\\");
+        assertEnteringStringGivesResponse("\033_Ga=d,d=y\033\\",
+            "\033_G;EINVAL:delete by row requires y\033\\");
+        assertEnteringStringGivesResponse("\033_Ga=d,d=z\033\\",
+            "\033_G;EINVAL:delete by z requires z\033\\");
+        assertEnteringStringGivesResponse("\033_Ga=d,d=n\033\\",
+            "\033_G;EINVAL:delete by number requires I\033\\");
+        assertEnteringStringGivesResponse("\033_Ga=d,d=w\033\\",
+            "\033_G;EINVAL:unknown delete specifier\033\\");
+    }
+
+    public void testDeleteFormsWithValidKeysAnswerOkOnEmptyScreen() {
+        // Idempotent deletes: nothing on screen still answers OK, and only identified commands reply.
+        assertEnteringStringGivesResponse("\033_Ga=d,d=a\033\\", "");
+        assertEnteringStringGivesResponse("\033_Gi=8,a=d,d=I\033\\", "\033_Gi=8;OK\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=8,a=d,d=p,x=1,y=1\033\\", "\033_Gi=8;OK\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=8,a=d,d=q,x=1,y=1,z=0\033\\", "\033_Gi=8;OK\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=8,a=d,d=c\033\\", "\033_Gi=8;OK\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=8,a=d,d=Z,z=-1\033\\", "\033_Gi=8;OK\033\\");
+    }
+
+    public void testComputeCropClampsAndRejects() {
+        assertTrue(java.util.Arrays.equals(new int[] {0, 0, 10, 8},
+            KittyGraphicsProtocol.computeCrop(10, 8, 0, 0, 0, 0)));
+        assertTrue(java.util.Arrays.equals(new int[] {2, 3, 4, 5},
+            KittyGraphicsProtocol.computeCrop(10, 8, 2, 3, 4, 5)));
+        assertTrue("width and height clamp to the image edge", java.util.Arrays.equals(new int[] {8, 6, 2, 2},
+            KittyGraphicsProtocol.computeCrop(10, 8, 8, 6, 99, 99)));
+        assertNull(KittyGraphicsProtocol.computeCrop(10, 8, 10, 0, 1, 1));
+        assertNull(KittyGraphicsProtocol.computeCrop(10, 8, 0, 8, 1, 1));
+        assertNull(KittyGraphicsProtocol.computeCrop(10, 8, -1, 0, 1, 1));
+        assertNull(KittyGraphicsProtocol.computeCrop(10, 8, 0, 0, -1, 0));
+    }
+
+    public void testPlacementSourceRectangleIsValidatedAgainstReservedDimensions() {
+        // A raw store transmission reserves its dimensions synchronously, so a following placement
+        // with an out-of-range source rectangle is rejected synchronously too — even though the
+        // pixel decode itself is still in flight on the worker.
+        enterString("\033_Gi=21,a=t,q=2,f=24,s=2,v=2;" + base64(new byte[12]) + "\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=21,a=p,q=1,x=5\033\\",
+            "\033_Gi=21;EINVAL:invalid source rectangle\033\\");
+    }
+
+    private static String base64(byte[] data) {
+        return Base64.getEncoder().encodeToString(data);
+    }
+
+    private static byte[] deflate(byte[] data) {
+        java.util.zip.Deflater deflater = new java.util.zip.Deflater();
+        deflater.setInput(data);
+        deflater.finish();
+        byte[] buffer = new byte[256];
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        while (!deflater.finished()) {
+            int produced = deflater.deflate(buffer);
+            out.write(buffer, 0, produced);
+        }
+        deflater.end();
+        return out.toByteArray();
     }
 
     public void testChunkedUploadCollectsDataAndReportsInvalidPngAtEnd() {

@@ -402,6 +402,23 @@ public final class TerminalRenderer {
                 final int decorationColor = rowHasDecorationColors ? lineObject.getDecorationColor(column) : TextStyle.DECORATION_COLOR_DEFAULT;
                 final int hyperlinkId = rowHasHyperlinks ? lineObject.getHyperlinkId(column) : 0;
                 if (TextStyle.isBitmap(style)) {
+                    // Flush the text run accumulated to the left of this image cell. Without this
+                    // a row that mixes text and image cells — which a z<0 kitty placement produces
+                    // routinely — silently dropped its text.
+                    if (column > 0 && column != lastRunStartColumn) {
+                        final int columnWidthSinceLastRun = column - lastRunStartColumn;
+                        final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
+                        int cursorColor = lastRunInsideCursor ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
+                        boolean invertCursorTextColor = lastRunInsideCursor
+                            && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
+                        drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
+                            columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
+                            measuredWidthForRun, cursorColor, cursorShape, lastRunStyle,
+                            boldWithBright, reverseVideo || invertCursorTextColor
+                                || lastRunInsideSelection,
+                            horizontalOffset, lastRunDecorationColor,
+                            lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface);
+                    }
                     Bitmap bm = mEmulator.getScreen().getSixelBitmap(codePoint, style);
                     if (bm != null) {
                         float left = horizontalOffset + column * mFontWidth;
@@ -410,16 +427,17 @@ public final class TerminalRenderer {
                         canvas.drawBitmap(mEmulator.getScreen().getSixelBitmap(codePoint, style), mEmulator.getScreen().getSixelRect(codePoint, style), mSixelRect, null);
                     }
                     column += 1;
+                    currentCharIndex += charsForCodePoint;
                     measuredWidthForRun = 0.f;
                     lastRunStyle = 0;
                     lastRunInsideCursor = false;
-                    lastRunStartColumn = column + 1;
+                    lastRunInsideSelection = false;
+                    lastRunStartColumn = column;
                     lastRunStartIndex = currentCharIndex;
                     lastRunFontWidthMismatch = false;
                     lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
                     lastRunHyperlinkId = 0;
                     lastRunSymbolTypeface = null;
-                    currentCharIndex += charsForCodePoint;
                     continue;
                 }
                 final int codePointWcWidth = lineObject.getDisplayWidthAt(currentCharIndex);

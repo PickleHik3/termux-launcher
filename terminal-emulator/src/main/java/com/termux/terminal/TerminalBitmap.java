@@ -47,6 +47,12 @@ public class TerminalBitmap {
     /** Non-negative for a kitty graphics placement, -1 for sixel and iTerm images. */
     public long kittyImageId = -1;
 
+    /** The kitty placement id, or 0 for an unidentified placement and for sixel/iTerm images. */
+    public long kittyPlacementId;
+
+    /** The kitty z-index. Negative places under text; sixel/iTerm images are 0. */
+    public int kittyZ;
+
     private static final String LOG_TAG = "TerminalBitmap";
 
     public TerminalBitmap(int num, TerminalSixel sixel, int Y, int X, int cellW, int cellH, TerminalBuffer screen) {
@@ -143,9 +149,11 @@ public class TerminalBitmap {
         cursorDelta = new int[] { scrollLines, (bitmap.getWidth() + cellW - 1) / cellW };
     }
 
-    public TerminalBitmap(int num, Bitmap image, long imageId, int y, int x, int cellW, int cellH,
-                          TerminalBuffer screen) {
+    public TerminalBitmap(int num, Bitmap image, long imageId, long placementId, int z, int y, int x,
+                          int cellW, int cellH, TerminalBuffer screen) {
         kittyImageId = imageId;
+        kittyPlacementId = placementId;
+        kittyZ = z;
         Bitmap constrained = resizeBitmapConstraints(image, image.getWidth(), image.getHeight(), cellW, cellH,
             screen.mColumns - x);
         if (constrained != image) image.recycle();
@@ -165,6 +173,7 @@ public class TerminalBitmap {
         cellHeight = cellH;
         int w = Math.min(screen.mColumns - X, (width + cellW - 1) / cellW);
         int h = (height + cellH - 1) / cellH;
+        boolean stampedAny = false;
         int s = 0;
         for (int i = 0; i < h; i++) {
             if (Y + i - s == screen.mScreenRows) {
@@ -172,8 +181,20 @@ public class TerminalBitmap {
                 s++;
             }
             for (int j = 0; j < w; j++) {
+                // A negative z keeps visible text, and a lower z never overwrites a higher one.
+                // The cell model shows one owner per cell, so this is z-ordering by stamping
+                // priority rather than true compositing.
+                if (!screen.kittyAllowsStamp(X + j, Y + i - s, kittyZ)) continue;
                 screen.setChar(X + j, Y + i - s, '+', TextStyle.encodeBitmap(num, j, i));
+                stampedAny = true;
             }
+        }
+        if (kittyImageId >= 0 && !stampedAny) {
+            // Every cell was withheld (all text under a z<0 placement, or all covered by higher
+            // placements). Without one stamped cell the bitmap would be garbage-collected at once,
+            // so report failure instead of storing an invisible placement.
+            bitmap = null;
+            return;
         }
         if (w * cellW < width) {
             try {

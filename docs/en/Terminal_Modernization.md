@@ -424,16 +424,21 @@ The terminal supports these application-facing capabilities without user configu
 - Kitty keyboard protocol negotiation, including disambiguation, event reporting, alternate keys,
   all-keys reporting, and associated text;
 - Kitty multiple-cursors protocol, including point/rectangle cursors, shapes, and colors;
-- Kitty graphics Tier 1: direct PNG transmission, chunking, display, placement, scaling, acknowledgments,
-  quiet modes, and deletion; and
+- Kitty graphics through the Tier 2 core: direct PNG and raw RGB/RGBA pixel transmission (including
+  zlib-compressed raw data), chunking, stored images (`a=t`) with image ids and numbers, placements
+  (`a=p`) with source rectangles, cell scaling, sub-cell offsets, and z-index, acknowledgments,
+  quiet modes, and the full set of delete forms; and
 - existing Sixel/iTerm bitmap rendering paths.
 
 Programs negotiate the keyboard and graphics protocols themselves. Legacy applications continue
 through the normal Termux key encoder. Main and alternate screens retain independent Kitty keyboard
 flags and bounded mode stacks.
 
-Kitty graphics support is intentionally Tier 1. Shared memory, temporary-file transmission,
-animation, composition, pixel queries, and other Tier 2/3 operations return a bounded protocol error.
+Animation, Unicode placeholders, and shared-memory or file transmission remain out of scope and
+return a bounded protocol error. Images placed with a negative z-index never overwrite visible
+text: the terminal keeps the text and shows the image in the surrounding blank cells.
+`timg -pk` (PNG), `chafa -f kitty` (raw RGBA), and yazi image previews all work with no
+configuration.
 
 ## Appearance and diagnostics
 
