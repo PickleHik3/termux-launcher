@@ -36,19 +36,19 @@ final class KittyGraphicsProtocol {
 
     void accept(String apc) {
         if (apc == null || apc.length() < 2 || apc.charAt(0) != 'G') return;
+        // The payload, and therefore the ';' separator, is optional: a control-only command is well
+        // formed. Requiring the separator made the canonical delete form (ESC _ G a=d ESC \) and the
+        // control-only header that real clients send before chunked data fail with EINVAL.
         int separator = apc.indexOf(';', 1);
-        if (separator < 0) {
-            reply(null, "EINVAL:missing payload separator", true, true);
-            return;
-        }
+        String controlData = separator < 0 ? apc.substring(1) : apc.substring(1, separator);
+        String payload = separator < 0 ? "" : apc.substring(separator + 1);
         Command command;
         try {
-            command = Command.parse(apc.substring(1, separator));
+            command = Command.parse(controlData);
         } catch (IllegalArgumentException e) {
             reply(null, "EINVAL:" + printable(e.getMessage()), true, true);
             return;
         }
-        String payload = apc.substring(separator + 1);
 
         if (command.action == 'd') {
             resetUploadAndDecodes();
@@ -229,7 +229,11 @@ final class KittyGraphicsProtocol {
 
     private void reply(Command command, String status, boolean error, boolean always) {
         int quiet = command == null ? 0 : command.quiet;
-        if ((!error && quiet == 1) || (error && quiet == 2)) return;
+        // q=1 suppresses success, q=2 suppresses everything. The old check compared q to 1 and 2
+        // exactly, so q=2 still emitted OK — which lands in the tty and, with no application reading
+        // it, corrupts the shell's input line.
+        if (!error && quiet >= 1) return;
+        if (error && quiet >= 2) return;
         if (!always && command != null && command.imageId == 0) return;
         StringBuilder response = new StringBuilder("\033_G");
         if (command != null && command.imageId != 0) {

@@ -86,7 +86,7 @@ The completion state includes:
 The app-wide `:app:testDebugUnitTest` task passes: 598 tests across 92 classes, zero failures.
 Expect green and treat any failure as a regression. Run `:app:testReleaseUnitTest` too — it was
 outside the old baseline and hid its own failure, and it now passes with one debug-only case skipped.
-`terminal-emulator` (248), `inapp-keyboard` (17), `terminal-view` (15), and `termux-shared` (2) are
+`terminal-emulator` (251), `inapp-keyboard` (17), `terminal-view` (15), and `termux-shared` (2) are
 green in both variants as well. Read the counts out of
 `<module>/build/test-results/<task>/*.xml`: Gradle can exit `0` while that XML records failures.
 

@@ -43,8 +43,9 @@ Not "forgotten" — each has a stated reason to wait.
 
 | Item | Size | Why it waits |
 |---|---|---|
-| Kitty graphics Tier 2 and 3 | L–XL | Reusable images, multiple placements, z-index, crop, Unicode placeholders, animation. Only after Tier 1 has been proven against real clients such as `kitten icat` and yazi. |
-| Explicit OpenGL ES / Vulkan renderer | XL | Benchmark-gated by the study. Do not start until the completed Phase 0 counters show that frame time, allocation, or power cannot be fixed within Canvas. It also owes accessibility, IME positioning, and selection snapshots, which are part of the work rather than follow-ups. |
+| Raw pixel formats for Tier 1 display (`f=24`/`f=32`) | S–M | **Newly identified and now the recommended next graphics step.** The real-client pass showed Tier 1's PNG-only scope structurally excludes `chafa`, which emits raw RGBA and has no PNG mode. Smaller and better motivated than any Tier 2 feature. See `kitty-protocol-features.md` slice 13a. |
+| Kitty graphics Tier 2 and 3 | L–XL | Reusable images, multiple placements, z-index, crop, Unicode placeholders, animation. The "prove Tier 1 against real clients" gate has now been run: `timg` renders correctly, `chafa` is excluded by the PNG-only scope, and `kitten` is not packaged for Termux at all. Do the raw-pixel-format row above first. |
+| Explicit OpenGL ES / Vulkan renderer | XL | **Gate measured, condition not met — recommend closing.** Canvas draw is ~2.4 ms typical and 5.0 ms worst against an 8.333 ms budget with zero slow draws, and 36 s of sustained glyph work caused no GC. Frame time does overrun at 120 Hz but outside draw, where a renderer swap cannot help. Numbers in `kitty-protocol-features.md` slice 10a. Reopen only if draw percentiles or GC counts move materially. |
 | Multicell / variable-sized text | XL | Every buffer mutation and reflow path would need multirow ownership metadata. Wait until a concrete Android workflow depends on it. |
 | Desktop notification protocol | M | Needs runtime notification permission, channels, background restrictions, and intent validation to be designed together. |
 | File transfer over TTY | M | Security sensitive. Android share and SAF flows may simply be better UX. |
@@ -59,8 +60,10 @@ Small, deliberate omissions recorded where they happened. Listed here so they ar
 - The terminal action sheet is still hand-curated rather than generated from the registry. That was a
   product decision, not an oversight: auto-generating all 50 UI tools into it would bury the common
   actions. See `action-registry-terminal-actions.md` slice 7.
-- `appearance.set_wallpaper` is registered and advertised but was never invoked in a device pass,
-  because it launches an external picker and crop flow. Exercise by hand.
+- `appearance.set_wallpaper` was device-invoked: it returns 200 and launches the system photo picker
+  (`com.google.android.photopicker`), and cancelling returns to `TermuxActivity` with no crash and the
+  API still responsive. The pick-and-crop completion is still unexercised, deliberately — finishing it
+  writes a real wallpaper to the device, so it needs a human who wants that outcome.
 - The keyboard protocol reports the shifted alternate key but not the base-layout one: Android
   exposes no PC-101 physical mapping to derive it from.
 - Workspace files do not record a window's retained layout, so a window restored by `workspace.load`

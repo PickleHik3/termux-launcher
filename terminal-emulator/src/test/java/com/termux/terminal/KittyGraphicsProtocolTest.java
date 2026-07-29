@@ -42,6 +42,42 @@ public class KittyGraphicsProtocolTest extends TerminalTestCase {
         assertEnteringStringGivesResponse("\033_Gi=2,s=2,v=1,a=q,f=24,q=2;AAAA\033\\", "");
     }
 
+    /**
+     * q=2 means "suppress everything", not just failures. Only the error half was covered before, so
+     * a q=2 success still wrote OK to the tty; with no application reading the reply that lands in
+     * the shell's input line and corrupts the next prompt. timg sends a=T with q=2.
+     */
+    public void testQuietTwoAlsoSuppressesSuccessResponses() {
+        assertEnteringStringGivesResponse("\033_Gi=1,s=1,v=1,a=q,f=24,q=2;AAAA\033\\", "");
+        assertEnteringStringGivesResponse("\033_Gi=5,a=d,q=2;\033\\", "");
+        // q=1 still reports errors, so the two levels stay distinguishable.
+        assertEnteringStringGivesResponse("\033_Gi=6,s=2,v=1,a=q,f=24,q=1;AAAA\033\\",
+            "\033_Gi=6;EINVAL:invalid image data\033\\");
+    }
+
+    /**
+     * A control-only command carries no payload, so it has no ';'. Requiring one rejected the
+     * canonical delete form outright and made the parser answer EINVAL to well-formed input.
+     */
+    public void testControlOnlyCommandsNeedNoPayloadSeparator() {
+        assertEnteringStringGivesResponse("\033_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\033\\",
+            "\033_Gi=31;OK\033\\");
+        assertEnteringStringGivesResponse("\033_Ga=d,d=I,i=31\033\\", "\033_Gi=31;OK\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=32,a=d\033\\", "\033_Gi=32;OK\033\\");
+        // Malformed control data is still reported, so dropping the separator check did not turn the
+        // parser permissive.
+        assertEnteringStringGivesResponse("\033_Ga=T,f=nope\033\\",
+            "\033_G;EINVAL:invalid f value\033\\");
+    }
+
+    public void testControlOnlyHeaderStartsAChunkedUploadLikeRealClients() {
+        // chafa emits a control-only header and then continuation chunks. The header must be accepted
+        // rather than answered with EINVAL, and the format rejection must be the declared Tier 1
+        // scope limit (PNG only) rather than a parse failure.
+        assertEnteringStringGivesResponse("\033_Gi=41,a=T,f=32,s=2,v=2,c=2,r=1,m=1\033\\",
+            "\033_Gi=41;ENOSYS:Tier 1 display accepts PNG only\033\\");
+    }
+
     public void testChunkedUploadCollectsDataAndReportsInvalidPngAtEnd() {
         enterString("\033_Gi=7,a=T,f=100,m=1;bm90\033\\");
         assertEquals("", mOutput.getOutputAndClear());

@@ -247,6 +247,36 @@ Both are preserved by the same paths: `setChar`, `copyInterval`, reflow inside
   comparable while drawing is active, and process allocation covers the whole app rather than just
   terminal rendering.
 
+- **Slice 10a — the counters were read, and they close the renderer question.** Pong (A065,
+  Android 16, 120 Hz so an 8.333 ms budget). Counters reset, then a sustained glyph-heavy workload
+  (900 iterations of wide mixed-width lines) held drawing active for 36.3 s and produced 143 window
+  frames / 129 pane draws:
+
+  | Metric | Value |
+  |---|---|
+  | Frame budget | 8.333 ms |
+  | Window frame: avg / median / p95 / max | 11.77 / 10.57 / 22.00 / 26.51 ms |
+  | Window **draw**: avg / median / p95 / max | 2.38 / 2.45 / 3.23 / 5.18 ms |
+  | Pane **render**: avg / median / p95 / max | 2.44 / 2.36 / 3.10 / 5.00 ms |
+  | `slowDraws` | 0 |
+  | `jankyFrames` / `estimatedDroppedFrames` | 21 / 27 of 143 |
+  | Allocation / GC | 12.19 MB over 36.3 s (~336 KB/s), 0 collections |
+
+  A shorter 40 000-line scroll run agreed: draw avg 2.66 ms, max 5.80 ms, `slowDraws` 0.
+
+  **Reading:** Canvas glyph drawing costs about 29% of the frame budget typically and 62% at its
+  worst, with zero slow draws, and allocation produced no GC at all in 36 s. Total frame time does
+  exceed the 120 Hz budget at the median, but the excess is outside draw — measure/layout/input and
+  other UI work — and swapping the glyph renderer cannot recover time that is not spent drawing
+  glyphs. At a 60 Hz budget the median frame would sit inside the deadline entirely.
+
+  **Gate outcome:** the study's condition for starting the explicit OpenGL ES / Vulkan renderer was
+  that "frame time, allocation, or power cannot be fixed within Canvas". These numbers do not meet
+  it, and the GPU renderer additionally owes accessibility, IME positioning, and selection snapshots.
+  Recommend closing that XL item as not justified by measurement rather than leaving it open, and
+  attributing any future frame-time work to the non-draw portion of the frame. Re-measure if the
+  draw percentiles or GC counts move materially.
+
 - **Slice 11 — escape parser fuzzing and per-sequence limits (done).** Every variable-length parser
   now has a finite contract. CSI payloads stop after 256 code points in addition to the existing
   32-argument/9999-value caps. OSC and ordinary DCS accumulators stop at 16,384 UTF-16 units, and
@@ -291,6 +321,38 @@ Both are preserved by the same paths: `setChar`, `copyInterval`, reflow inside
   Pong device verification transmitted a 12-by-6-cell pink/green checkerboard to the active PTY,
   observed `Gi=4242;OK`, visually confirmed display, deleted it, and found no app-process fatal,
   bitmap, or protocol error. The temporary local/remote payloads and test process were removed.
+
+- **Slice 13a — real-client pass, two protocol bugs fixed.** The hand-written checkerboard above was
+  self-consistent, which is exactly why it proved less than it looked. Running the real clients
+  packaged for Termux found two defects that a first-party payload could not:
+
+  - **`q=2` did not suppress success replies.** The check compared `quiet` to `1` and `2` exactly, so
+    a `q=2` command still wrote `OK`. Per the protocol `q=1` suppresses success and `q=2` suppresses
+    everything. The reply goes to the tty, and with no application reading it, it lands in the
+    shell's input line: on device this left `Gi=888985473;OK` in the prompt and broke the next fish
+    command outright. The existing test only covered `q=2` with a *failure*, which was suppressed
+    correctly, so the bug sat in the gap.
+  - **A control-only command was rejected.** The parser required a `;`, answering
+    `EINVAL:missing payload separator` when it was absent. The payload is optional, so this rejected
+    well-formed input — including the canonical delete form `ESC_G a=d ESC\`, which meant the
+    `action == 'd'` branch was unreachable in its most common spelling. Every existing test wrote the
+    separator, so again nothing caught it.
+
+  Both are `KittyGraphicsProtocol` fixes with new tests (11 in `KittyGraphicsProtocolTest`).
+
+  **Client outcome.** `kitten` is not packaged for Termux, so `kitten icat` is unavailable; `chafa`
+  and `timg` were used instead, and both emit genuine `ESC_Ga=T` sequences. `timg` (`-p k`) sends
+  inline PNG (`f=100`, single chunk, image id) and now renders correctly and silently. `chafa`
+  (`-f kitty`) sends raw RGBA (`f=32`) as a control-only header plus 296 continuation chunks; after
+  the fixes it is cleanly and silently declined, because **Tier 1 is PNG-only by design**. That is
+  the honest state: chafa cannot be displayed until Tier 1 accepts raw pixel formats, and chafa has
+  no PNG mode to fall back to.
+
+  **This matters for the Tier 2/3 gate**, which was worded as "only after Tier 1 has been proven
+  against real clients". Tier 1 is now proven against one real client and shown to structurally
+  exclude another — not because of a bug, but because of the PNG-only scope decision. Accepting
+  `f=24`/`f=32` raw pixel data is a smaller and better-motivated next step than any of Tier 2's
+  image-management features, and should be sequenced first.
 
 ## User config path
 
