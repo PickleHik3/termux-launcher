@@ -1,23 +1,10 @@
 package com.termux.app.terminal;
 
 import android.content.Context;
-import android.text.Editable;
-import android.text.TextWatcher;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.AdapterView;
-import android.widget.BaseAdapter;
-import android.widget.EditText;
-import android.widget.ListView;
-import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
 
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
@@ -25,7 +12,6 @@ import com.termux.app.launcher.data.LauncherRankingEngine;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.launcherctl.LauncherToolRegistry;
-import com.termux.shared.logger.Logger;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -33,38 +19,43 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Searchable command palette over the registry's UI projection.
+ * Row sources for the command palette, and its entry point.
  *
- * <p>Entries come from {@link LauncherToolRegistry#getUiToolsByCategory()} and run
- * through {@link TerminalActionDispatcher}, so a palette selection, a keystroke,
- * and {@code /v1/agent/execute} share one execution path.
+ * <p>The palette itself is {@link TerminalCommandPaletteController}, an in-activity glass
+ * overlay. This class stays the seam the registry calls into ({@code app.command_palette}) and
+ * owns the projection from data sources to rows, so what appears in the palette is decided in
+ * one place and stays unit-testable without inflating anything.
  *
- * <p>Two rules decide what appears here:
+ * <p>Entries come from {@link LauncherToolRegistry#getUiToolsByCategory()} and run through
+ * {@link TerminalActionDispatcher}, so a palette selection, a keystroke, and
+ * {@code /v1/agent/execute} share one execution path.
+ *
+ * <p>Which tools appear, and how:
  *
  * <ul>
- *   <li>A tool needs a {@code titleRes}. That is what marks it user-facing, which
- *       is why {@code terminal.state} (an introspection tool) stays out.
- *   <li>A tool must have no required schema arguments, because the palette has
- *       nowhere to ask for them. That self-excludes {@code pane.focus_direction}
- *       and {@code pane.resize}, which only make sense from a directional key.
+ *   <li>A tool needs a {@code titleRes}. That is what marks it user-facing, which is why
+ *       {@code terminal.state} (an introspection tool) stays out.
+ *   <li>A tool with no required arguments is a plain row.
+ *   <li>A tool whose single required argument is a free-text string becomes an
+ *       argument-mode row ({@code session.rename}); one whose single required argument is an
+ *       enum becomes a submenu row ({@code pane.focus_direction}).
+ *   <li>Anything else — a required integer, or several required arguments — stays out, because
+ *       the palette has no way to ask for it. That still excludes {@code window.select} and
+ *       {@code session.activate_by_index}, which only make sense from a directional or digit
+ *       key; the Sessions rows supply that index themselves.
  * </ul>
  *
- * <p>Installed apps are the one row source that is not a tool projection. They are
- * rebuilt per query — usage-ranked with no query, fuzzy-ranked with one — and each
- * row runs {@code app.launch} with its own stable id, so a launch from here takes
- * the same path as a launch from a keybind.
- *
- * <p>The view is built in code rather than XML to keep the change small; a first
- * pass at Material styling comes with the eventual layout file.
+ * <p>Installed apps and live sessions are the two row sources that are not tool projections.
+ * Apps are rebuilt per query — usage-ranked with no query, fuzzy-ranked with one — and each row
+ * runs {@code app.launch} with its own stable id; sessions run
+ * {@code session.activate_by_index} with their own index. Either way a run from here takes the
+ * same path as a run from a keybind.
  */
 public final class TerminalCommandPalette {
-
-    private static final String LOG_TAG = "TerminalCommandPalette";
 
     /** Installed apps shown before the user narrows the list. */
     private static final int APP_ROWS_UNFILTERED = 8;
@@ -73,92 +64,20 @@ public final class TerminalCommandPalette {
     /** Minimum fuzzy score for an app row, matching the suggestion bar. */
     private static final int APP_MATCH_TOLERANCE = 70;
 
+    /** Display-only grouping key for live sessions; not a registry category. */
+    public static final String CATEGORY_SESSIONS = "sessions";
+
     private TerminalCommandPalette() {
     }
 
     /** Shows the palette. Must be called on the main thread. */
     public static void show(@NonNull TermuxActivity activity) {
-        List<CommandPaletteFilter.Entry> entries = buildEntries(activity);
-        if (entries.isEmpty()) {
-            Toast.makeText(activity, R.string.palette_empty, Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        View container = activity.getLayoutInflater().inflate(R.layout.command_palette, null);
-        EditText search = container.findViewById(R.id.palette_search);
-        ListView list = container.findViewById(R.id.palette_list);
-        final TextView empty = container.findViewById(R.id.palette_empty);
-
-        final PaletteAdapter adapter = new PaletteAdapter(activity, entries);
-        list.setAdapter(adapter);
-        list.setEmptyView(empty);
-
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
-            .setTitle(R.string.palette_title)
-            .setView(container)
-            .setNegativeButton(android.R.string.cancel, null)
-            .create();
-
-        search.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
-            @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
-
-            @Override
-            public void afterTextChanged(Editable editable) {
-                adapter.setQuery(editable.toString());
-            }
-        });
-
-        list.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                CommandPaletteFilter.Entry entry = adapter.entryAt(position);
-                if (entry == null) return; // a category header
-                if (!entry.enabled) {
-                    Toast.makeText(activity,
-                        entry.disabledReason != null ? entry.disabledReason
-                            : activity.getString(R.string.palette_empty),
-                        Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                dialog.dismiss();
-                if (entry.isDestructive()) {
-                    confirmThenRun(activity, entry);
-                } else {
-                    run(activity, entry);
-                }
-            }
-        });
-
-        dialog.show();
-    }
-
-    private static void confirmThenRun(@NonNull TermuxActivity activity,
-                                       @NonNull CommandPaletteFilter.Entry entry) {
-        new MaterialAlertDialogBuilder(activity)
-            .setTitle(activity.getString(R.string.palette_confirm_title, entry.title))
-            .setMessage(entry.subtitle)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.palette_confirm_run,
-                (d, which) -> run(activity, entry))
-            .show();
-    }
-
-    private static void run(@NonNull TermuxActivity activity,
-                            @NonNull CommandPaletteFilter.Entry entry) {
-        JSONObject result = TerminalActionDispatcher.getInstance()
-            .execute(entry.toolName, entry.arguments == null ? new JSONObject() : entry.arguments);
-        if (!result.optBoolean("ok", false)) {
-            String message = result.optString("message",
-                activity.getString(R.string.palette_action_failed, entry.title));
-            Logger.logWarn(LOG_TAG, "Palette action " + entry.toolName + " failed: " + message);
-            Toast.makeText(activity, message, Toast.LENGTH_SHORT).show();
-        }
+        activity.getCommandPaletteController().toggle();
     }
 
     /**
-     * Builds the palette rows, grouped by category in registration order.
-     * Visible for testing the inclusion rules without inflating a dialog.
+     * Builds the palette's tool rows, grouped by category in registration order.
+     * Visible for testing the inclusion rules without inflating a view.
      */
     @NonNull
     static List<CommandPaletteFilter.Entry> buildEntries(@NonNull TermuxActivity activity) {
@@ -171,7 +90,8 @@ public final class TerminalCommandPalette {
         for (Map.Entry<String, List<LauncherToolRegistry.ToolMetadata>> group : grouped.entrySet()) {
             for (LauncherToolRegistry.ToolMetadata tool : group.getValue()) {
                 if (tool.titleRes == 0) continue;          // not user-facing
-                if (hasRequiredArguments(tool)) continue;  // palette cannot supply them
+                String argumentName = promptableArgument(tool);
+                if (hasRequiredArguments(tool) && argumentName == null) continue;
 
                 LauncherToolRegistry.Availability availability = tool.availabilityIn(context);
                 String reason = availability.available || availability.reasonRes == 0
@@ -181,34 +101,31 @@ public final class TerminalCommandPalette {
                 entries.add(new CommandPaletteFilter.Entry(
                     tool.name,
                     activity.getString(tool.titleRes),
-                    subtitleFor(activity, tool, context),
+                    subtitleFor(activity, tool),
                     tool.category,
                     strokesFor(tool, context),
                     availability.available,
                     reason,
                     tool.requiresConfirmation,
-                    tool.risk));
+                    tool.risk,
+                    null,
+                    argumentName,
+                    argumentChoices(tool, argumentName)));
             }
         }
         return entries;
     }
 
     /**
-     * Subtitle is the localized description plus the stroke that currently applies,
-     * so a row explains itself and teaches its keybind at the same time. Only
-     * bindings whose condition holds are shown.
+     * Localized description of a row. The stroke is no longer appended: the ledger gives the
+     * shortcut its own right-aligned column, so repeating it in the description would show it
+     * twice on the focused row.
      */
     private static String subtitleFor(@NonNull Context context,
-                                      @NonNull LauncherToolRegistry.ToolMetadata tool,
-                                      @NonNull LauncherToolRegistry.ActionContext actionContext) {
-        String description = tool.descriptionRes != 0
+                                      @NonNull LauncherToolRegistry.ToolMetadata tool) {
+        return tool.descriptionRes != 0
             ? context.getString(tool.descriptionRes)
             : tool.description;
-        List<String> strokes = strokesFor(tool, actionContext);
-        if (strokes.isEmpty()) {
-            return description;
-        }
-        return description + "  ·  " + strokes.get(0);
     }
 
     /**
@@ -220,6 +137,42 @@ public final class TerminalCommandPalette {
     static List<String> strokesFor(@NonNull LauncherToolRegistry.ToolMetadata tool,
                                    @NonNull LauncherToolRegistry.ActionContext context) {
         return TerminalKeyBindingResolver.getInstance().getStrokesForTool(tool.name, context);
+    }
+
+    /**
+     * One row per live session, activating it by index. Uses the session browser's projection
+     * so the palette and the sessions panel always agree on what exists.
+     */
+    @NonNull
+    static List<CommandPaletteFilter.Entry> buildSessionEntries(@NonNull TermuxActivity activity) {
+        List<SessionBrowserModel.Session> sessions = activity.getSessionBrowserSessions();
+        if (sessions.isEmpty()) return Collections.emptyList();
+        List<CommandPaletteFilter.Entry> entries = new ArrayList<>(sessions.size());
+        for (SessionBrowserModel.Session session : sessions) {
+            JSONObject arguments = new JSONObject();
+            try {
+                arguments.put("index", session.index);
+            } catch (JSONException ignored) {
+            }
+            String title = session.name == null
+                ? activity.getString(R.string.session_browser_unnamed, session.index + 1)
+                : activity.getString(R.string.session_browser_named, session.index + 1,
+                    session.name);
+            entries.add(new CommandPaletteFilter.Entry(
+                LauncherToolRegistry.TOOL_SESSION_ACTIVATE_BY_INDEX,
+                session.current ? title + " · "
+                    + activity.getString(R.string.session_browser_current) : title,
+                activity.getResources().getQuantityString(R.plurals.session_browser_pane_count,
+                    session.paneCount(), session.paneCount()),
+                CATEGORY_SESSIONS,
+                Collections.<String>emptyList(),
+                true,
+                null,
+                false,
+                LauncherToolRegistry.ToolRisk.LOW,
+                arguments));
+        }
+        return entries;
     }
 
     /**
@@ -272,6 +225,43 @@ public final class TerminalCommandPalette {
         return required != null && required.length() > 0;
     }
 
+    /**
+     * The single string argument this tool can be asked for in the palette, or {@code null}
+     * when it takes none or takes something the palette cannot prompt for.
+     *
+     * <p>{@code app.launch} is excluded on purpose: its required query is already supplied per
+     * row by the Apps section, so an extra "type a package name" row would be noise.
+     */
+    @Nullable
+    static String promptableArgument(@NonNull LauncherToolRegistry.ToolMetadata tool) {
+        if (LauncherToolRegistry.TOOL_APP_LAUNCH.equals(tool.name)) return null;
+        JSONArray required = tool.schema.optJSONArray("required");
+        if (required == null || required.length() != 1) return null;
+        String name = required.optString(0, "");
+        if (name.isEmpty()) return null;
+        JSONObject properties = tool.schema.optJSONObject("properties");
+        JSONObject property = properties == null ? null : properties.optJSONObject(name);
+        if (property == null) return null;
+        return "string".equals(property.optString("type")) ? name : null;
+    }
+
+    /** Allowed values for a promptable argument, or {@code null} when it is free text. */
+    @Nullable
+    static List<String> argumentChoices(@NonNull LauncherToolRegistry.ToolMetadata tool,
+                                        @Nullable String argumentName) {
+        if (argumentName == null) return null;
+        JSONObject properties = tool.schema.optJSONObject("properties");
+        JSONObject property = properties == null ? null : properties.optJSONObject(argumentName);
+        JSONArray values = property == null ? null : property.optJSONArray("enum");
+        if (values == null || values.length() == 0) return null;
+        List<String> choices = new ArrayList<>(values.length());
+        for (int i = 0; i < values.length(); i++) {
+            String value = values.optString(i, "");
+            if (!value.isEmpty()) choices.add(value);
+        }
+        return choices.isEmpty() ? null : choices;
+    }
+
     @NonNull
     static String categoryLabel(@NonNull Context context, @NonNull String category) {
         switch (category) {
@@ -283,119 +273,8 @@ public final class TerminalCommandPalette {
             case LauncherToolRegistry.CATEGORY_APPEARANCE: return context.getString(R.string.palette_category_appearance);
             case LauncherToolRegistry.CATEGORY_APP: return context.getString(R.string.palette_category_app);
             case LauncherToolRegistry.CATEGORY_APPS: return context.getString(R.string.palette_category_apps);
+            case CATEGORY_SESSIONS: return context.getString(R.string.palette_category_sessions);
             default: return category;
-        }
-    }
-
-
-    /**
-     * Flat list of rows. Category headers appear only in the unfiltered view; a
-     * search shows a single ranked list, because grouping a ranked result would
-     * fight the ranking.
-     */
-    private static final class PaletteAdapter extends BaseAdapter {
-
-        private final Context context;
-        private final List<CommandPaletteFilter.Entry> all;
-        private final LauncherAppDataProvider appProvider;
-        private final LauncherUsageStatsStore usageStats;
-        /** Null marks a header row; the parallel list holds its label. */
-        private final List<CommandPaletteFilter.Entry> rows = new ArrayList<>();
-        private final List<String> headers = new ArrayList<>();
-        @NonNull private String query = "";
-
-        PaletteAdapter(@NonNull Context context, @NonNull List<CommandPaletteFilter.Entry> all) {
-            this.context = context;
-            this.all = all;
-            this.appProvider = LauncherAppDataProvider.getInstance(context);
-            this.usageStats = new LauncherUsageStatsStore(context);
-            // A cold app list arrives later; the dialog opens now and grows its Apps
-            // section when the load lands.
-            if (!appProvider.hasLoadedApps())
-                appProvider.warmAsync(() -> setQuery(this.query));
-            setQuery("");
-        }
-
-        void setQuery(@Nullable String query) {
-            this.query = query == null ? "" : query;
-            rows.clear();
-            headers.clear();
-            List<CommandPaletteFilter.Entry> ranked =
-                new ArrayList<>(CommandPaletteFilter.filterAndRank(all, this.query));
-            ranked.addAll(buildAppEntries(appProvider, usageStats, this.query));
-            boolean grouped = this.query.trim().isEmpty();
-            if (!grouped) {
-                for (CommandPaletteFilter.Entry entry : ranked) {
-                    rows.add(entry);
-                    headers.add(null);
-                }
-                notifyDataSetChanged();
-                return;
-            }
-            Map<String, List<CommandPaletteFilter.Entry>> byCategory = new LinkedHashMap<>();
-            for (CommandPaletteFilter.Entry entry : ranked) {
-                List<CommandPaletteFilter.Entry> group = byCategory.get(entry.category);
-                if (group == null) {
-                    group = new ArrayList<>();
-                    byCategory.put(entry.category, group);
-                }
-                group.add(entry);
-            }
-            for (Map.Entry<String, List<CommandPaletteFilter.Entry>> group : byCategory.entrySet()) {
-                rows.add(null);
-                headers.add(categoryLabel(context, group.getKey()));
-                for (CommandPaletteFilter.Entry entry : group.getValue()) {
-                    rows.add(entry);
-                    headers.add(null);
-                }
-            }
-            notifyDataSetChanged();
-        }
-
-        @Nullable
-        CommandPaletteFilter.Entry entryAt(int position) {
-            return position >= 0 && position < rows.size() ? rows.get(position) : null;
-        }
-
-        @Override public int getCount() { return rows.size(); }
-        @Override public Object getItem(int position) { return rows.get(position); }
-        @Override public long getItemId(int position) { return position; }
-
-        @Override
-        public boolean isEnabled(int position) {
-            return rows.get(position) != null;
-        }
-
-        @Override
-        public int getViewTypeCount() {
-            return 2;
-        }
-
-        @Override
-        public int getItemViewType(int position) {
-            return rows.get(position) == null ? 0 : 1;
-        }
-
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-            CommandPaletteFilter.Entry entry = rows.get(position);
-            LayoutInflater inflater = LayoutInflater.from(context);
-            if (entry == null) {
-                TextView header = (TextView) (convertView != null ? convertView
-                    : inflater.inflate(R.layout.command_palette_header, parent, false));
-                header.setText(headers.get(position));
-                return header;
-            }
-
-            View row = convertView != null ? convertView
-                : inflater.inflate(R.layout.command_palette_row, parent, false);
-            TextView title = row.findViewById(R.id.palette_row_title);
-            TextView subtitle = row.findViewById(R.id.palette_row_subtitle);
-            title.setText(entry.title);
-            title.setAlpha(entry.enabled ? 1f : 0.4f);
-            subtitle.setText(entry.enabled ? entry.subtitle : entry.disabledReason);
-            subtitle.setAlpha(entry.enabled ? 0.7f : 0.5f);
-            return row;
         }
     }
 }

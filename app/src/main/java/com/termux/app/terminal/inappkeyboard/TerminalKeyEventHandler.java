@@ -7,6 +7,9 @@ import android.view.InputDevice;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalView;
 
@@ -37,6 +40,7 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
     private TerminalModifiers mModifiers = TerminalModifiers.NONE;
     private MacroTask mMacroTask;
     private boolean mLoggedSelectionSlider;
+    private KeyValueInterceptor mInterceptor;
 
     public TerminalKeyEventHandler(Supplier<TerminalView> terminalView,
                                    Supplier<TerminalSession> currentSession,
@@ -87,6 +91,24 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
             mods.isCtrl(), mods.isAlt(), mods.isShift());
     }
 
+    /**
+     * Claims resolved key values before they reach the terminal.
+     *
+     * <p>This is how an in-activity overlay — the command palette — types from the in-app
+     * keyboard without the system IME: the keyboard's own pipeline stays intact and the
+     * overlay only decides, per value, whether the terminal ever sees it.
+     */
+    public interface KeyValueInterceptor {
+
+        /** @return true when the value was consumed and must not reach the terminal. */
+        boolean interceptKeyValue(@NonNull KeyValue value, boolean ctrl, boolean alt, boolean shift);
+    }
+
+    /** Installs the overlay interceptor, or clears it with {@code null}. */
+    public void setKeyValueInterceptor(@Nullable KeyValueInterceptor interceptor) {
+        mInterceptor = interceptor;
+    }
+
     /** Cancel asynchronous macro output, for hide, detach, layout, or session lifecycle changes. */
     public void cancelPendingMacros() {
         MacroTask task = mMacroTask;
@@ -109,6 +131,10 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
     }
 
     private void dispatch(KeyValue value, TerminalModifiers modifiers) {
+        KeyValueInterceptor interceptor = mInterceptor;
+        if (interceptor != null && interceptor.interceptKeyValue(value,
+            modifiers.isCtrl(), modifiers.isAlt(), modifiers.isShift()))
+            return;
         switch (value.getKind()) {
             case Char:
                 inputCodePoint(value.getChar(), modifiers);

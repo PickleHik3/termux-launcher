@@ -4,12 +4,14 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.res.Configuration;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
 import android.view.WindowManager;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -71,6 +73,7 @@ public final class TermuxInAppKeyboard {
     private KeyboardData mNumericKeyboardData;
     private KeyboardData mGreekMathKeyboardData;
     private View.OnFocusChangeListener mSystemImeFocusListener;
+    private TerminalKeyEventHandler.KeyValueInterceptor mKeyValueInterceptor;
 
     private boolean mEnabled;
     private boolean mVisible;
@@ -515,6 +518,24 @@ public final class TermuxInAppKeyboard {
         selectRelativeLayout(-1);
     }
 
+    /**
+     * Routes resolved key values to an in-activity overlay before the terminal sees them.
+     * Held here rather than on the handler because the renderer — and with it the handler —
+     * is rebuilt whenever the layout or theme changes.
+     */
+    public void setKeyValueInterceptor(
+        @Nullable TerminalKeyEventHandler.KeyValueInterceptor interceptor) {
+        mKeyValueInterceptor = interceptor;
+        if (mKeyEventHandler != null)
+            mKeyEventHandler.setKeyValueInterceptor(interceptor);
+    }
+
+    /** On-screen bounds of the rendered space bar, or false when there is none to seed from. */
+    public boolean getSpaceBarRectOnScreen(@NonNull Rect out) {
+        return mKeyboardView != null && isVisible()
+            && mKeyboardView.getSpaceBarRectOnScreen(out);
+    }
+
     /** Forwards the default-dock launch wave into the embedded key renderer. */
     public void animateLaunchWave(int color, float originXOnScreen, float originYOnScreen) {
         if (mKeyboardView == null || !isVisible()) return;
@@ -648,6 +669,7 @@ public final class TermuxInAppKeyboard {
         mKeyEventHandler = new TerminalKeyEventHandler(mHost::getTerminalView,
             () -> mAttachedSession != null ? mAttachedSession : mHost.getCurrentSession(),
             mHost, new Handler(Looper.getMainLooper()));
+        mKeyEventHandler.setKeyValueInterceptor(mKeyValueInterceptor);
         Config.Builder configBuilder = new Config.Builder(
             requireContainer().getResources(), mKeyEventHandler);
         configBuilder.hapticEnabled = mPreferences.isInAppKeyboardHapticsEnabled();

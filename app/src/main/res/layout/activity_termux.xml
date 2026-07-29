@@ -1395,6 +1395,34 @@
             android:focusable="false"
             android:visibility="gone" />
         </RelativeLayout>
+
+        <!-- Command palette overlay. Last child of the content root so the palette can sprout
+             from the in-app keyboard's space bar and land over the terminal without a Dialog
+             window - a dialog would take focus and summon the system IME, which embedded-keyboard
+             mode suppresses. INVISIBLE rather than gone so the host stays measured; the blur
+             gates its own work on isShown(). TerminalCommandPaletteController drives it, and
+             clips the blur to the animated rounded rect through the glass host's outline. -->
+        <FrameLayout
+            android:id="@+id/command_palette_host"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:visibility="invisible">
+
+            <FrameLayout
+                android:id="@+id/command_palette_glass"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="invisible">
+
+                <com.github.mmin18.widget.RealtimeBlurView
+                    android:id="@+id/command_palette_blur"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    app:realtimeBlurRadius="18dp"
+                    app:realtimeOverlayColor="@android:color/transparent" />
+            </FrameLayout>
+        </FrameLayout>
     </FrameLayout>
 
     <FrameLayout

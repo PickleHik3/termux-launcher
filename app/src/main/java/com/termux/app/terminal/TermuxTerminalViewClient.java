@@ -334,6 +334,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         TerminalKeyInspector inspector = TerminalKeyInspector.active();
         if (inspector != null)
             inspector.recordEvent(e, true);
+        // The palette overlay claims typing before the terminal writes it, the same point the
+        // in-app keyboard's interceptor sits at. Checked first so nothing else can consume esc.
+        if (mActivity.handleCommandPaletteKey(keyCode, e))
+            return true;
         if (mActivity.handleTerminalAppSearchKey(keyCode))
             return true;
         if (mSuggestionBarCallback != null && mActivity.shouldProcessSuggestionBarKeyEvent(keyCode)) {
@@ -558,6 +562,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         TerminalKeyInspector inspector = TerminalKeyInspector.active();
         if (inspector != null)
             inspector.recordEvent(e, false);
+        // Swallow the release of a stroke the palette consumed on the way down.
+        if (mActivity.isCommandPaletteOpen())
+            return true;
         // If emulator is not set, like if bootstrap installation failed and user dismissed the error
         // dialog, then just exit the activity, otherwise they will be stuck in a broken state.
         if (keyCode == KeyEvent.KEYCODE_BACK && mActivity.getTerminalView().mEmulator == null) {

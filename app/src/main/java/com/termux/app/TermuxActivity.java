@@ -348,6 +348,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     Toast mLastToast;
     @Nullable private AlertDialog mTerminalActionDialog;
     @Nullable private com.termux.app.terminal.SessionSwitchIndicatorView mSessionSwitchIndicator;
+    @Nullable private com.termux.app.terminal.TerminalCommandPaletteController mCommandPalette;
 
     /**
      * If between onResume() and onStop(). Note that only one session is in the foreground of the terminal view at the
@@ -4292,6 +4293,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mDockPlankController != null) {
             mDockPlankController.reset();
         }
+        if (mCommandPalette != null)
+            mCommandPalette.dismissImmediately();
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onStop();
         if (mTermuxTerminalViewClient != null)
@@ -4338,6 +4341,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         clearCachedAccessoryWallpaperBlur();
         if (mIsInvalidState)
             return;
+        if (mCommandPalette != null) {
+            mCommandPalette.dismissImmediately();
+            mCommandPalette = null;
+        }
         if (mInAppKeyboard != null) {
             mTermuxTerminalViewClient.setInAppKeyboardController(null);
             mInAppKeyboard.onDestroy();
@@ -4383,6 +4390,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mInAppKeyboard != null) {
             mInAppKeyboardShiftLocked = false;
             mInAppKeyboard.onConfigurationChanged(newConfig);
+        }
+        if (mCommandPalette != null) {
+            mCommandPalette.dismissImmediately();
+            mCommandPalette.refreshAppearance();
         }
         updateWindowBackgroundForCurrentSession();
     }
@@ -8102,10 +8113,52 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
+    /**
+     * The command palette overlay, created on first use. It lives in the activity rather than in
+     * a dialog window so typing reaches it from the in-app keyboard without the system IME.
+     */
+    @NonNull
+    public com.termux.app.terminal.TerminalCommandPaletteController getCommandPaletteController() {
+        if (mCommandPalette == null)
+            mCommandPalette = new com.termux.app.terminal.TerminalCommandPaletteController(this);
+        return mCommandPalette;
+    }
+
+    public boolean isCommandPaletteOpen() {
+        return mCommandPalette != null && mCommandPalette.isOpen();
+    }
+
+    /** Row-level haptic ticks, shared by the dock rows and the palette's focus movement. */
+    public boolean isRowHapticsEnabled() {
+        return mPreferences != null && mPreferences.isAppLauncherRowHapticsEnabled();
+    }
+
+    /**
+     * Routes in-app keyboard values to the palette while it is open. The palette owns the
+     * interceptor slot on the keyboard's own handler, so nothing forks the key pipeline.
+     */
+    public void setCommandPaletteInterceptorActive(boolean active) {
+        if (mInAppKeyboard == null)
+            return;
+        mInAppKeyboard.setKeyValueInterceptor(active ? getCommandPaletteController() : null);
+    }
+
+    /** Seed rect for surfaces growing out of the space bar; false when the keyboard is hidden. */
+    public boolean getInAppKeyboardSpaceBarRect(@NonNull Rect out) {
+        return mInAppKeyboard != null && mInAppKeyboard.getSpaceBarRectOnScreen(out);
+    }
+
+    /** Hardware and external-keyboard strokes claimed by the open palette. */
+    public boolean handleCommandPaletteKey(int keyCode, @NonNull KeyEvent event) {
+        return mCommandPalette != null && mCommandPalette.handleHardwareKey(keyCode, event);
+    }
+
     @SuppressLint("RtlHardcoded")
     @Override
     public void onBackPressed() {
-        if (mDockTuningMode) {
+        if (isCommandPaletteOpen()) {
+            mCommandPalette.collapse();
+        } else if (mDockTuningMode) {
             exitDockTuningMode();
         } else if (getDrawer().isDrawerOpen(Gravity.LEFT)) {
             getDrawer().closeDrawers();

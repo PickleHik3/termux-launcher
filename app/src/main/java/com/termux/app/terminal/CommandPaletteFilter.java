@@ -24,14 +24,19 @@ import java.util.Locale;
  */
 public final class CommandPaletteFilter {
 
-    /** Score tiers, highest first. */
+    /**
+     * Score tiers, highest first. Every title tier — including the subsequence pass — outranks
+     * every non-title tier, so what the row actually says decides the order before its id,
+     * category, description or shortcut get a vote.
+     */
     private static final int SCORE_EXACT_TITLE = 100;
     private static final int SCORE_TITLE_PREFIX = 90;
     private static final int SCORE_WORD_PREFIX = 80;
     private static final int SCORE_TITLE_SUBSTRING = 70;
+    private static final int SCORE_TITLE_SUBSEQUENCE = 65;
     private static final int SCORE_ID_SUBSTRING = 60;
     private static final int SCORE_CATEGORY_MATCH = 50;
-    private static final int SCORE_FUZZY = 40;
+    private static final int SCORE_TEXT_MATCH = 45;
     private static final int SCORE_NONE = 0;
 
     /** Fuzzy subsequence matching needs at least this many characters to be useful. */
@@ -54,6 +59,14 @@ public final class CommandPaletteFilter {
          * every app row runs {@code app.launch} with its own query.
          */
         @Nullable public final JSONObject arguments;
+        /**
+         * Schema property this row still has to collect before it can run, or {@code null}
+         * when the row is ready to go. A free-text property puts the palette in argument
+         * mode; one with {@link #argumentChoices} pushes a submenu instead.
+         */
+        @Nullable public final String argumentName;
+        /** Allowed values for {@link #argumentName}, or {@code null} for free text. */
+        @Nullable public final List<String> argumentChoices;
 
         public Entry(
             @NonNull String toolName,
@@ -82,6 +95,24 @@ public final class CommandPaletteFilter {
             @NonNull LauncherToolRegistry.ToolRisk risk,
             @Nullable JSONObject arguments
         ) {
+            this(toolName, title, subtitle, category, bindings, enabled, disabledReason,
+                requiresConfirmation, risk, arguments, null, null);
+        }
+
+        public Entry(
+            @NonNull String toolName,
+            @NonNull String title,
+            @NonNull String subtitle,
+            @NonNull String category,
+            @NonNull List<String> bindings,
+            boolean enabled,
+            @Nullable String disabledReason,
+            boolean requiresConfirmation,
+            @NonNull LauncherToolRegistry.ToolRisk risk,
+            @Nullable JSONObject arguments,
+            @Nullable String argumentName,
+            @Nullable List<String> argumentChoices
+        ) {
             this.arguments = arguments;
             this.toolName = toolName;
             this.title = title;
@@ -92,6 +123,9 @@ public final class CommandPaletteFilter {
             this.disabledReason = disabledReason;
             this.requiresConfirmation = requiresConfirmation;
             this.risk = risk;
+            this.argumentName = argumentName;
+            this.argumentChoices = argumentChoices == null
+                ? null : Collections.unmodifiableList(new ArrayList<>(argumentChoices));
         }
 
         /** True when this action is destructive enough to confirm before running. */
@@ -99,6 +133,56 @@ public final class CommandPaletteFilter {
             return risk == LauncherToolRegistry.ToolRisk.HIGH
                 || risk == LauncherToolRegistry.ToolRisk.CRITICAL;
         }
+
+        /** True when ⏎ opens a choice list rather than running the action. */
+        public boolean isSubmenu() {
+            return argumentName != null && argumentChoices != null && !argumentChoices.isEmpty();
+        }
+
+        /** True when ⏎ switches the palette into argument mode. */
+        public boolean isArgumentPrompt() {
+            return argumentName != null && !isSubmenu();
+        }
+
+        /**
+         * Right-hand column of the row: the compacted stroke that applies, else the marker
+         * for what ⏎ will do with the row.
+         */
+        @NonNull
+        public String shortcutLabel() {
+            if (isSubmenu()) return "›";
+            if (isArgumentPrompt()) return "args";
+            for (String binding : bindings) {
+                // Gesture strokes ("kbd:space:swipe-north") do not compact into the column.
+                if (!binding.startsWith("kbd:")) return compactStroke(binding);
+            }
+            if (LauncherToolRegistry.CATEGORY_APPS.equals(category)) return "app";
+            return "";
+        }
+    }
+
+    /**
+     * Compacts a binding into the ledger's shorthand: {@code ctrl+alt+k} reads {@code C-A-k},
+     * matching the emacs-style notation the mock uses in the shortcut column.
+     */
+    @NonNull
+    static String compactStroke(@NonNull String stroke) {
+        int condition = stroke.indexOf(" (");
+        String bare = condition < 0 ? stroke : stroke.substring(0, condition);
+        StringBuilder out = new StringBuilder();
+        for (String part : bare.split("\\+")) {
+            if (part.isEmpty()) continue;
+            if (out.length() > 0) out.append('-');
+            String lower = part.toLowerCase(Locale.US);
+            switch (lower) {
+                case "ctrl": out.append('C'); break;
+                case "alt": out.append('A'); break;
+                case "shift": out.append('S'); break;
+                case "meta": out.append('M'); break;
+                default: out.append(part); break;
+            }
+        }
+        return out.toString();
     }
 
     private CommandPaletteFilter() {
@@ -155,6 +239,9 @@ public final class CommandPaletteFilter {
             if (!word.isEmpty() && word.startsWith(query)) return SCORE_WORD_PREFIX;
         }
         if (title.contains(query)) return SCORE_TITLE_SUBSTRING;
+        if (query.length() >= FUZZY_MIN_QUERY_LENGTH && isSubsequence(query, title)) {
+            return SCORE_TITLE_SUBSEQUENCE;
+        }
 
         // "split pane" should find pane.split_vertical, so match the id with its
         // separators treated as spaces.
@@ -166,12 +253,9 @@ public final class CommandPaletteFilter {
 
         // Bindings are searchable so "ctrl+alt+v" finds its action.
         for (String binding : entry.bindings) {
-            if (binding.toLowerCase(Locale.US).contains(query)) return SCORE_CATEGORY_MATCH;
+            if (binding.toLowerCase(Locale.US).contains(query)) return SCORE_TEXT_MATCH;
         }
-
-        if (query.length() >= FUZZY_MIN_QUERY_LENGTH && isSubsequence(query, title)) {
-            return SCORE_FUZZY;
-        }
+        if (entry.subtitle.toLowerCase(Locale.US).contains(query)) return SCORE_TEXT_MATCH;
         return SCORE_NONE;
     }
 

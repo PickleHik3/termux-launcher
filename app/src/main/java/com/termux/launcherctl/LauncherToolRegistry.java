@@ -595,9 +595,10 @@ public final class LauncherToolRegistry {
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_TERMINAL, 0, 0, null);
-        // Workspace tools require arguments and intentionally stay agent/CLI-only until the palette
-        // has a general argument prompt. Loading is HIGH because runCommands may execute user-owned
-        // JSON and replace mode terminates the existing live workspace.
+        // Workspace tools stay agent/CLI-only: they have no title or description resource, which
+        // is what marks a tool user-facing. The palette can prompt for a single string argument
+        // now, so promoting them is only a matter of adding those strings. Loading is HIGH because
+        // runCommands may execute user-owned JSON and replace mode terminates the live workspace.
         add(map, TOOL_WORKSPACE_SAVE,
             "Save the live session, window, and pane topology to ~/.termux/workspaces/<name>.json.",
             schemaObject()

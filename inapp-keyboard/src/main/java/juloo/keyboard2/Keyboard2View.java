@@ -68,6 +68,7 @@ public class Keyboard2View extends View
   private OnKeyPaintListener _keyPaintListener;
   private String _lastPaintedKeyId;
   private float _launchWaveDensity;
+  private final int[] _spaceBarLocation = new int[2];
   private final Paint _trailPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _fxFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _fxStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -390,6 +391,56 @@ public class Keyboard2View extends View
     _shift_key = _keyboard.findKeyWithValue(KeyValue.SHIFT);
     _compose_key = _keyboard.findKeyWithValue(KeyValue.COMPOSE);
     resetInputStateInternal(true);
+  }
+
+  /**
+   * On-screen bounds of the space bar in the rendered layout. The host uses this as the
+   * origin rect for surfaces that grow out of the space bar; the geometry mirrors
+   * {@link #onDraw} exactly so the seed lands on the drawn cap, not on its cell.
+   *
+   * @return false when the layout has no space bar or has not been measured yet
+   */
+  public boolean getSpaceBarRectOnScreen(Rect out)
+  {
+    if (_keyboard == null || _tc == null)
+      return false;
+    getLocationOnScreen(_spaceBarLocation);
+    float y = getPaddingTop() + _tc.margin_top;
+    for (KeyboardData.Row row : _keyboard.rows)
+    {
+      y += row.shift * _tc.row_height;
+      float x = _marginLeft + _tc.margin_left;
+      float keyH = row.height * _tc.row_height - _tc.vertical_margin;
+      for (KeyboardData.Key k : row.keys)
+      {
+        x += k.shift * _keyWidth;
+        float keyW = _keyWidth * k.width - _tc.horizontal_margin;
+        if (isSpaceBar(k))
+        {
+          out.set(Math.round(_spaceBarLocation[0] + x),
+              Math.round(_spaceBarLocation[1] + y),
+              Math.round(_spaceBarLocation[0] + x + keyW),
+              Math.round(_spaceBarLocation[1] + y + keyH));
+          return true;
+        }
+        x += _keyWidth * k.width;
+      }
+      y += row.height * _tc.row_height;
+    }
+    return false;
+  }
+
+  /**
+   * Space bar identity, matching {@code Pointers.swipeKeyName}: the role attribute, or the
+   * center value for user layout files that predate it.
+   */
+  private static boolean isSpaceBar(KeyboardData.Key key)
+  {
+    if (key.role == KeyboardData.Key.Role.Space_bar)
+      return true;
+    KeyValue center = key.keys[0];
+    return center != null && center.getKind() == KeyValue.Kind.Editing
+      && center.getEditing() == KeyValue.Editing.SPACE_BAR;
   }
 
   /** @deprecated Use [resetInputState()]. */
