@@ -1,5 +1,7 @@
 package com.termux.ai;
 
+import com.termux.BuildConfig;
+
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Test;
@@ -15,6 +17,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
 
 @RunWith(RobolectricTestRunner.class)
 public class TaiDeviceCapabilitiesTest {
@@ -70,8 +73,14 @@ public class TaiDeviceCapabilitiesTest {
             device.mnnUnsupportedReason.contains("requires Android 7.0"));
     }
 
+    /**
+     * Debug-variant only: {@code setDebugMnnUnsupportedReason} is a deliberate no-op when
+     * {@code BuildConfig.DEBUG} is false, so this cannot pass under {@code testReleaseUnitTest}.
+     * The release side of the same seam is asserted by {@link #releaseBuildIgnoresDebugOverride()}.
+     */
     @Test
     public void debugOverrideForcesUnsupportedState() {
+        assumeTrue("debug-only override, ignored by design in release builds", BuildConfig.DEBUG);
         TaiDeviceCapabilities.setDebugMnnUnsupportedReason("Debug override: forced unsupported.");
 
         TaiDeviceCapabilities device = TaiDeviceCapabilities.createForTest(
