@@ -341,6 +341,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     Toast mLastToast;
     @Nullable private AlertDialog mTerminalActionDialog;
+    @Nullable private com.termux.app.terminal.SessionSwitchIndicatorView mSessionSwitchIndicator;
 
     /**
      * If between onResume() and onStop(). Note that only one session is in the foreground of the terminal view at the
@@ -1178,7 +1179,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int grain = mPreferences != null
             ? mPreferences.getStatusBarGrain()
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN;
-        return buildGlassSurface(barAlpha, sliceStart, sliceEnd, true, grain);
+        // Matches the dock/keyboard stack's own in-content surface (buildDockGlassSurface's
+        // extraKeysBackground caller): withFoot=false so this in-content pane is not darker than
+        // the dock body - same reasoning as the dock's under-pill nav strip split.
+        return buildGlassSurface(barAlpha, sliceStart, sliceEnd, false, grain);
     }
 
     @NonNull
@@ -3985,14 +3989,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         float opacity = mPreferences != null ? mPreferences.getStatusBarOpacity() / 100f : 1f;
         int blurRadiusDp = getEffectiveStatusBarBlurRadius();
+        boolean statusBlurEnabled = dockBlurEnabled(blurRadiusDp);
         statusGlass.setTranslationY(-mLastStatusBarInsetTop);
         statusGlass.setBackgroundColor(Color.TRANSPARENT);
         statusGlass.setVisibility(View.VISIBLE);
         applyRealtimeBlurRadius(statusBlur, blurRadiusDp);
         applyRealtimeBlurDownsampleFactor(statusBlur, ACCESSORY_BLUR_DOWNSAMPLE_FACTOR);
-        applyRealtimeBlurOverlayColor(statusBlur, Color.TRANSPARENT);
+        // Same tinted-overlay treatment as the dock's extraKeysBackgroundBlur: colored when blur
+        // is actually contributing, transparent otherwise.
+        applyRealtimeBlurOverlayColor(statusBlur,
+            statusBlurEnabled ? resolveAccessorySurfaceColor(opacity) : Color.TRANSPARENT);
         if (statusBlur != null) {
-            statusBlur.setVisibility(dockBlurEnabled(blurRadiusDp) ? View.VISIBLE : View.GONE);
+            statusBlur.setVisibility(statusBlurEnabled ? View.VISIBLE : View.GONE);
         }
         if (statusSurface != null) {
             statusSurface.setBackground(buildStatusBarGlassSurface(opacity, 0f,
@@ -7613,6 +7621,37 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Fork-styled replacement for {@link #showToast(String, boolean)} used for session switch,
+     * title-change and session-exit notices: a small glass chip centered near the top of the
+     * terminal surface instead of a stock Android toast.
+     */
+    public void showSessionSwitchIndicator(@Nullable String text) {
+        if (text == null || text.isEmpty() || isFinishing())
+            return;
+        com.termux.app.terminal.SessionSwitchIndicatorView indicator = obtainSessionSwitchIndicator();
+        if (indicator != null)
+            indicator.show(text);
+    }
+
+    @Nullable
+    private com.termux.app.terminal.SessionSwitchIndicatorView obtainSessionSwitchIndicator() {
+        FrameLayout host = findViewById(R.id.terminal_surface_host);
+        if (host == null)
+            return null;
+        if (mSessionSwitchIndicator == null) {
+            mSessionSwitchIndicator = new com.termux.app.terminal.SessionSwitchIndicatorView(this);
+        }
+        if (mSessionSwitchIndicator.getParent() == null) {
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+            params.topMargin = Math.round(dpToPx(8));
+            host.addView(mSessionSwitchIndicator, params);
+        }
+        return mSessionSwitchIndicator;
+    }
+
+    /**
      * Hook system menu to show the terminal action sheet instead.
      */
     @Override
@@ -8661,11 +8700,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         float opacity = mPreferences != null ? mPreferences.getStatusBarOpacity() / 100f : 1f;
         int blurRadiusDp = getEffectiveStatusBarBlurRadius();
+        boolean windowBarBlurEnabled = dockBlurEnabled(blurRadiusDp);
         View blur = findViewById(R.id.terminal_window_bar_blur);
         applyRealtimeBlurRadius(blur, blurRadiusDp);
         applyRealtimeBlurDownsampleFactor(blur, ACCESSORY_BLUR_DOWNSAMPLE_FACTOR);
-        applyRealtimeBlurOverlayColor(blur, Color.TRANSPARENT);
-        if (blur != null) blur.setVisibility(dockBlurEnabled(blurRadiusDp) ? View.VISIBLE : View.GONE);
+        // Same tinted-overlay treatment as the dock's extraKeysBackgroundBlur: colored when blur
+        // is actually contributing, transparent otherwise.
+        applyRealtimeBlurOverlayColor(blur,
+            windowBarBlurEnabled ? resolveAccessorySurfaceColor(opacity) : Color.TRANSPARENT);
+        if (blur != null) blur.setVisibility(windowBarBlurEnabled ? View.VISIBLE : View.GONE);
         boolean capsuleStatusBar = isRoundedDockStyle();
         View background = findViewById(R.id.terminal_window_bar_background);
         if (background != null) {

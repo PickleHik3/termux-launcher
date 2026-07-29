@@ -637,6 +637,7 @@ public final class TerminalEmulator {
             case 1000:
                 return DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE;
             case 1002:
+            case 1003:
                 return DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT;
             case 1004:
                 return DECSET_BIT_SEND_FOCUS_EVENTS;
@@ -829,6 +830,13 @@ public final class TerminalEmulator {
      */
     public boolean isMouseTrackingActive() {
         return isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE) || isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT);
+    }
+
+    /**
+     * If motion while a button is held should be reported, i.e. DECSET 1002 or 1003 is set.
+     */
+    public boolean isMouseTrackingMotionActive() {
+        return isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT);
     }
 
     /**
