@@ -98,6 +98,28 @@ public class DockAppearancePreferencesTest {
     }
 
     @Test
+    public void surfaceEdgeInsetsDefaultToTheCapsuleOuterMargin() {
+        assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET,
+            preferences.getDockHorizontalInset());
+        assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET,
+            preferences.getInAppKeyboardHorizontalInset());
+        assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET,
+            preferences.getStatusBarHorizontalInset());
+    }
+
+    @Test
+    public void surfaceEdgeInsetsAreIndependentAndClampedToTheirSliderBounds() {
+        preferences.setDockHorizontalInset(-3);
+        preferences.setInAppKeyboardHorizontalInset(96);
+        preferences.setStatusBarHorizontalInset(24);
+
+        assertEquals(0, preferences.getDockHorizontalInset());
+        assertEquals(TermuxPreferenceConstants.TERMUX_APP.MAX_SURFACE_HORIZONTAL_INSET,
+            preferences.getInAppKeyboardHorizontalInset());
+        assertEquals(24, preferences.getStatusBarHorizontalInset());
+    }
+
+    @Test
     public void surfaceShapeUsesOneCanonicalPreference() {
         preferences.setAppLauncherDockStyle(
             TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED);

@@ -263,6 +263,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mInAppKeyboardHeightDragStartY;
     private float mInAppKeyboardHeightDragStartScale;
     private float mInAppKeyboardUnscaledDragHeight;
+    private float mSurfaceTuningInsetDragStartX;
+    private int mSurfaceTuningInsetDragStartDp;
+    private float mSurfaceTuningDockHeightDragStartY;
+    private float mSurfaceTuningDockHeightDragStartScale;
     private boolean mDockTuningMode;
     private boolean mDockTuningRestoreExpandedStatus;
     private ViewTreeObserver.OnGlobalLayoutListener mDockTuningLayoutListener;
@@ -1016,7 +1020,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean enabled = mPreferences.isTerminalBorderEnabled();
         borderView.setVisibility(enabled ? View.VISIBLE : View.GONE);
         boolean capsule = isRoundedDockStyle();
-        int capsuleMarginPx = capsule ? resolveDockCapsuleHorizontalMarginPx() : 0;
+        int capsuleMarginPx = resolveDockHorizontalInsetPx();
 
         ViewGroup.LayoutParams borderParams = borderView.getLayoutParams();
         if (borderParams instanceof ViewGroup.MarginLayoutParams) {
@@ -1939,8 +1943,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             targetTop = Math.max(0, bounds.top);
             targetHeight = Math.max(0, bounds.height());
         }
-        if (capsuleSurface && targetWidth > 0) {
-            int horizontalMargin = resolveDockCapsuleHorizontalMarginPx();
+        if (viewId == R.id.accessory_surface_host && targetWidth > 0) {
+            int horizontalMargin = resolveDockHorizontalInsetPx();
             targetLeftMargin = horizontalMargin;
             targetRightMargin = horizontalMargin;
             targetWidth = Math.max(1, targetWidth - (horizontalMargin * 2));
@@ -2023,7 +2027,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ViewGroup.LayoutParams lp = host.getLayoutParams();
         if (lp instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
-            int hMargin = capsule ? resolveDockCapsuleHorizontalMarginPx() : 0;
+            int hMargin = resolveStatusBarHorizontalInsetPx();
             // Extend Rounded upward without moving its lower edge or the terminal content.
             int topMargin = capsule ? Math.round(dpToPx(2)) : 0;
             int targetHeight = targetStatusBarHeightPx(capsule, collapsed);
@@ -2147,9 +2151,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /**
+     * Symmetric outer screen inset for one editable surface. The floating capsule sits at the
+     * configured dp (10dp by default · design redline · Outer margin 10); the edge-to-edge default
+     * shape stays flush until the user pushes the inset past that baseline.
+     */
+    private int resolveSurfaceHorizontalInsetPx(int configuredDp, boolean capsule) {
+        int insetDp = TermuxAppSharedPreferences.clampSurfaceHorizontalInset(configuredDp);
+        if (!capsule)
+            insetDp = Math.max(0, insetDp
+                - TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET);
+        return Math.round(dpToPx(insetDp));
+    }
+
     private int resolveDockCapsuleHorizontalMarginPx() {
-        // Floating capsule floats 10dp off the screen edges (design redline · Outer margin 10).
-        return Math.round(dpToPx(10));
+        return resolveSurfaceHorizontalInsetPx(mPreferences == null
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET
+            : mPreferences.getDockHorizontalInset(), true);
+    }
+
+    private int resolveDockHorizontalInsetPx() {
+        return resolveSurfaceHorizontalInsetPx(mPreferences == null
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET
+            : mPreferences.getDockHorizontalInset(), isRoundedDockStyle());
+    }
+
+    private int resolveInAppKeyboardHorizontalInsetPx() {
+        return resolveSurfaceHorizontalInsetPx(mPreferences == null
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET
+            : mPreferences.getInAppKeyboardHorizontalInset(), isInAppKeyboardCapsule());
+    }
+
+    private int resolveStatusBarHorizontalInsetPx() {
+        return resolveSurfaceHorizontalInsetPx(mPreferences == null
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET
+            : mPreferences.getStatusBarHorizontalInset(), isRoundedDockStyle());
     }
 
     /** Internal row inset only; the floating capsule's outer screen margin remains unchanged. */
@@ -2849,7 +2885,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         boolean capsule = isInAppKeyboardCapsule();
         boolean glassTheme = isInAppKeyboardGlassSurface();
-        int horizontalMargin = capsule ? resolveDockCapsuleHorizontalMarginPx() : 0;
+        int horizontalMargin = resolveInAppKeyboardHorizontalInsetPx();
         int bottomMargin = capsule ? resolveDockCapsuleBottomGapPx() : 0;
         int topMargin = capsule ? Math.round(dpToPx(4)) : 0;
         int innerPadding = capsule ? Math.round(dpToPx(6)) : 0;
@@ -4077,6 +4113,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float opacity = mPreferences != null ? mPreferences.getStatusBarOpacity() / 100f : 1f;
         int blurRadiusDp = getEffectiveStatusBarBlurRadius();
         boolean statusBlurEnabled = dockBlurEnabled(blurRadiusDp);
+        int glassInset = resolveStatusBarHorizontalInsetPx();
+        ViewGroup.LayoutParams glassParams = statusGlass.getLayoutParams();
+        if (glassParams instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams glassMargins = (ViewGroup.MarginLayoutParams) glassParams;
+            if (glassMargins.leftMargin != glassInset || glassMargins.rightMargin != glassInset) {
+                glassMargins.leftMargin = glassInset;
+                glassMargins.rightMargin = glassInset;
+                statusGlass.setLayoutParams(glassMargins);
+            }
+        }
         statusGlass.setTranslationY(-mLastStatusBarInsetTop);
         statusGlass.setBackgroundColor(Color.TRANSPARENT);
         statusGlass.setVisibility(View.VISIBLE);
@@ -5582,6 +5628,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return dp * getResources().getDisplayMetrics().density;
     }
 
+    private float pxToDp(float px) {
+        return px / getResources().getDisplayMetrics().density;
+    }
+
     private int resolveAzGestureAccentColor() {
         return MaterialColors.getColor(this, com.google.android.material.R.attr.colorPrimary,
             ContextCompat.getColor(this, R.color.termux_primary));
@@ -5870,6 +5920,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final int initialStatusOpacity = mPreferences.getStatusBarOpacity();
         final int initialStatusGrain = mPreferences.getStatusBarGrain();
         final int initialStatusRadius = mPreferences.getStatusBarCornerRadius();
+        final int initialDockInset = mPreferences.getDockHorizontalInset();
+        final int initialKeyboardInset = mPreferences.getInAppKeyboardHorizontalInset();
+        final int initialStatusInset = mPreferences.getStatusBarHorizontalInset();
 
         blur.setProgress(initialBlur);
         opacity.setProgress(initialOpacity);
@@ -6073,6 +6126,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             value -> mPreferences.setStatusBarGrain(value));
         bindStatusSeekBar(statusRadius, statusRadiusValue, true,
             value -> mPreferences.setStatusBarCornerRadius(value));
+        bindSurfaceTuningGestures();
         reset.setOnClickListener(view -> {
             int section = sectionGroup.getCheckedButtonId();
             if (section == R.id.surface_tuning_section_dock) {
@@ -6090,6 +6144,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_BUTTON_COUNT);
                 mPreferences.setAppLauncherDockStyle(
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_STYLE);
+                mPreferences.setDockHorizontalInset(
+                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET);
             } else if (section == R.id.surface_tuning_section_keyboard) {
                 mPreferences.setInAppKeyboardHeightScale(
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE);
@@ -6097,6 +6153,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE);
                 mPreferences.setInAppKeyboardKeyCornerRadiusDp(
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP);
+                mPreferences.setInAppKeyboardHorizontalInset(
+                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET);
+                if (mInAppKeyboard != null)
+                    mInAppKeyboard.previewSurfaceEditorHeightScale(
+                        TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE);
             } else if (section == R.id.surface_tuning_section_status) {
                 mPreferences.setStatusBarBlurRadius(
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS);
@@ -6106,6 +6167,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN);
                 mPreferences.setStatusBarCornerRadius(
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS);
+                mPreferences.setStatusBarHorizontalInset(
+                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET);
             } else {
                 mPreferences.setTerminalBackgroundOpacity(
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY);
@@ -6140,6 +6203,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (terminalBorder != null)
                 terminalBorder.setChecked(mPreferences.isTerminalBorderEnabled());
             sessions.setProgress(mPreferences.getSessionsOpacity());
+            syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_DOCK);
+            syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_KEYBOARD);
+            syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_STATUS);
             applyDockTuningStructuralPreview();
         });
         confirm.setOnClickListener(view -> exitDockTuningMode());
@@ -6163,11 +6229,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.setStatusBarOpacity(initialStatusOpacity);
                 mPreferences.setStatusBarGrain(initialStatusGrain);
                 mPreferences.setStatusBarCornerRadius(initialStatusRadius);
+                mPreferences.setDockHorizontalInset(initialDockInset);
+                mPreferences.setInAppKeyboardHorizontalInset(initialKeyboardInset);
+                mPreferences.setStatusBarHorizontalInset(initialStatusInset);
+                if (mInAppKeyboard != null)
+                    mInAppKeyboard.previewSurfaceEditorHeightScale(initialKeyboardHeight);
                 applyDockTuningStructuralPreview();
                 exitDockTuningMode();
             });
         }
         controls.bringToFront();
+        setSurfaceTuningGestureOverlayVisible(true);
         registerDockTuningLayoutListener(controls);
         controls.post(this::adjustDockTuningCardHeight);
     }
@@ -6237,10 +6309,340 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
     }
 
+    private static final int SURFACE_TUNING_TARGET_DOCK = 0;
+    private static final int SURFACE_TUNING_TARGET_KEYBOARD = 1;
+    private static final int SURFACE_TUNING_TARGET_STATUS = 2;
+
+    /** A finger travel of 1dp moves a surface edge half a dp, so the 0..48dp span needs ~96dp. */
+    private static final float SURFACE_TUNING_INSET_DRAG_GAIN = 0.5f;
+    /** Finger travel that walks the dock across its whole preset height range. */
+    private static final float SURFACE_TUNING_DOCK_HEIGHT_DRAG_SPAN_DP = 40f;
+    /** How far the capture groups reach above their surface so the border handle is inside. */
+    private static final int SURFACE_TUNING_HANDLE_OVERHANG_DP = 14;
+    private static final long SURFACE_TUNING_FADE_DURATION_MS = 200;
+
+    private int surfaceTuningInsetDp(int target) {
+        if (mPreferences == null)
+            return TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET;
+        switch (target) {
+            case SURFACE_TUNING_TARGET_KEYBOARD:
+                return mPreferences.getInAppKeyboardHorizontalInset();
+            case SURFACE_TUNING_TARGET_STATUS:
+                return mPreferences.getStatusBarHorizontalInset();
+            default:
+                return mPreferences.getDockHorizontalInset();
+        }
+    }
+
+    private void setSurfaceTuningInsetDp(int target, int insetDp) {
+        if (mPreferences == null)
+            return;
+        switch (target) {
+            case SURFACE_TUNING_TARGET_KEYBOARD:
+                mPreferences.setInAppKeyboardHorizontalInset(insetDp);
+                break;
+            case SURFACE_TUNING_TARGET_STATUS:
+                mPreferences.setStatusBarHorizontalInset(insetDp);
+                break;
+            default:
+                mPreferences.setDockHorizontalInset(insetDp);
+                break;
+        }
+        syncSurfaceTuningInsetSlider(target);
+        applyDockTuningStructuralPreview();
+    }
+
+    private int surfaceTuningInsetSliderId(int target) {
+        switch (target) {
+            case SURFACE_TUNING_TARGET_KEYBOARD:
+                return R.id.surface_tuning_keyboard_inset_slider;
+            case SURFACE_TUNING_TARGET_STATUS:
+                return R.id.surface_tuning_status_inset_slider;
+            default:
+                return R.id.surface_tuning_dock_inset_slider;
+        }
+    }
+
+    private int surfaceTuningInsetValueId(int target) {
+        switch (target) {
+            case SURFACE_TUNING_TARGET_KEYBOARD:
+                return R.id.surface_tuning_keyboard_inset_value;
+            case SURFACE_TUNING_TARGET_STATUS:
+                return R.id.surface_tuning_status_inset_value;
+            default:
+                return R.id.surface_tuning_dock_inset_value;
+        }
+    }
+
+    private void syncSurfaceTuningInsetSlider(int target) {
+        int insetDp = surfaceTuningInsetDp(target);
+        SeekBar slider = findViewById(surfaceTuningInsetSliderId(target));
+        TextView value = findViewById(surfaceTuningInsetValueId(target));
+        if (slider != null && slider.getProgress() != insetDp)
+            slider.setProgress(insetDp);
+        if (value != null)
+            value.setText(getString(R.string.termux_dock_tuning_value_dp, insetDp));
+    }
+
+    private void bindSurfaceTuningInsetSeekBar(int target) {
+        SeekBar slider = findViewById(surfaceTuningInsetSliderId(target));
+        if (slider == null)
+            return;
+        slider.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                TextView value = findViewById(surfaceTuningInsetValueId(target));
+                if (value != null)
+                    value.setText(getString(R.string.termux_dock_tuning_value_dp, progress));
+                if (fromUser && mPreferences != null && progress != surfaceTuningInsetDp(target))
+                    setSurfaceTuningInsetDp(target, progress);
+            }
+        });
+        syncSurfaceTuningInsetSlider(target);
+    }
+
+    /**
+     * Horizontal drag anywhere over a surface walks its symmetric screen-edge inset: right widens
+     * both edges, left narrows them. Previews land in preferences immediately like the card's own
+     * sliders, so Done keeps them and Close restores the values captured on entry.
+     */
+    @SuppressLint("ClickableViewAccessibility")
+    private void bindSurfaceTuningInsetGesture(int groupId, int target) {
+        View group = findViewById(groupId);
+        if (group == null)
+            return;
+        group.setOnTouchListener((view, event) -> {
+            if (!mDockTuningMode || mPreferences == null)
+                return false;
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    mSurfaceTuningInsetDragStartX = event.getRawX();
+                    mSurfaceTuningInsetDragStartDp = surfaceTuningInsetDp(target);
+                    view.getParent().requestDisallowInterceptTouchEvent(true);
+                    return true;
+                case MotionEvent.ACTION_MOVE: {
+                    float travelDp = pxToDp(event.getRawX() - mSurfaceTuningInsetDragStartX);
+                    int insetDp = TermuxAppSharedPreferences.clampSurfaceHorizontalInset(
+                        Math.round(mSurfaceTuningInsetDragStartDp
+                            + (travelDp * SURFACE_TUNING_INSET_DRAG_GAIN)));
+                    if (insetDp != surfaceTuningInsetDp(target))
+                        setSurfaceTuningInsetDp(target, insetDp);
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    view.getParent().requestDisallowInterceptTouchEvent(false);
+                    return true;
+                default:
+                    return false;
+            }
+        });
+    }
+
+    /** Vertical drag on the dock's top-border pill walks the preset height range continuously. */
+    @SuppressLint("ClickableViewAccessibility")
+    private void bindSurfaceTuningDockHeightGesture() {
+        View handle = findViewById(R.id.surface_tuning_dock_height_handle);
+        if (handle == null)
+            return;
+        handle.setOnTouchListener((view, event) -> {
+            if (!mDockTuningMode || mPreferences == null)
+                return false;
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    mSurfaceTuningDockHeightDragStartY = event.getRawY();
+                    mSurfaceTuningDockHeightDragStartScale =
+                        mPreferences.getAppLauncherBarHeightScale();
+                    view.getParent().requestDisallowInterceptTouchEvent(true);
+                    return true;
+                case MotionEvent.ACTION_MOVE: {
+                    float minScale = DOCK_TUNING_SIZE_PRESETS[0];
+                    float maxScale = DOCK_TUNING_SIZE_PRESETS[DOCK_TUNING_SIZE_PRESETS.length - 1];
+                    float travelDp = pxToDp(mSurfaceTuningDockHeightDragStartY - event.getRawY());
+                    float scale = mSurfaceTuningDockHeightDragStartScale
+                        + ((travelDp / SURFACE_TUNING_DOCK_HEIGHT_DRAG_SPAN_DP)
+                            * (maxScale - minScale));
+                    scale = Math.max(minScale, Math.min(maxScale, scale));
+                    if (Float.compare(scale, mPreferences.getAppLauncherBarHeightScale()) != 0) {
+                        mPreferences.setAppLauncherBarHeightScale(scale);
+                        syncSurfaceTuningDockHeightSlider();
+                        applyDockTuningStructuralPreview();
+                    }
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    view.getParent().requestDisallowInterceptTouchEvent(false);
+                    return true;
+                default:
+                    return false;
+            }
+        });
+    }
+
+    /** Vertical drag on the keyboard's top-border pill, on the same 1:1 mapping as the old handle. */
+    @SuppressLint("ClickableViewAccessibility")
+    private void bindSurfaceTuningKeyboardHeightGesture() {
+        View handle = findViewById(R.id.surface_tuning_keyboard_height_handle);
+        if (handle == null)
+            return;
+        handle.setOnTouchListener((view, event) -> {
+            if (!mDockTuningMode || mPreferences == null || mInAppKeyboard == null)
+                return false;
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    mInAppKeyboardHeightDragStartY = event.getRawY();
+                    mInAppKeyboardHeightDragStartScale = mInAppKeyboard.getHeightScale();
+                    int renderedHeight = mAttachedInAppKeyboardView == null
+                        ? 0 : mAttachedInAppKeyboardView.getMeasuredHeight();
+                    mInAppKeyboardUnscaledDragHeight = Math.max(1f,
+                        renderedHeight / Math.max(0.01f, mInAppKeyboardHeightDragStartScale));
+                    view.getParent().requestDisallowInterceptTouchEvent(true);
+                    return true;
+                case MotionEvent.ACTION_MOVE: {
+                    float scale = TermuxInAppKeyboard.calculateHeightScaleForDrag(
+                        mInAppKeyboardHeightDragStartScale,
+                        event.getRawY() - mInAppKeyboardHeightDragStartY,
+                        mInAppKeyboardUnscaledDragHeight);
+                    mInAppKeyboard.previewSurfaceEditorHeightScale(scale);
+                    syncSurfaceTuningKeyboardHeightSlider(mInAppKeyboard.getHeightScale());
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    mPreferences.setInAppKeyboardHeightScale(mInAppKeyboard.getHeightScale());
+                    view.getParent().requestDisallowInterceptTouchEvent(false);
+                    return true;
+                default:
+                    return false;
+            }
+        });
+    }
+
+    private void syncSurfaceTuningDockHeightSlider() {
+        if (mPreferences == null)
+            return;
+        int index = nearestDockSizePresetIndex(mPreferences.getAppLauncherBarHeightScale());
+        SeekBar slider = findViewById(R.id.dock_tuning_size_slider);
+        TextView value = findViewById(R.id.dock_tuning_size_value);
+        if (slider != null && slider.getProgress() != index)
+            slider.setProgress(index);
+        if (value != null)
+            value.setText(dockSizePresetLabel(index));
+    }
+
+    private void syncSurfaceTuningKeyboardHeightSlider(float heightScale) {
+        int progress = keyboardEditorProgress(heightScale,
+            TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE);
+        SeekBar slider = findViewById(R.id.surface_tuning_keyboard_height_slider);
+        TextView value = findViewById(R.id.surface_tuning_keyboard_height_value);
+        if (slider != null && slider.getProgress() != progress)
+            slider.setProgress(progress);
+        if (value != null)
+            value.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
+    }
+
+    private void bindSurfaceTuningGestures() {
+        bindSurfaceTuningInsetSeekBar(SURFACE_TUNING_TARGET_DOCK);
+        bindSurfaceTuningInsetSeekBar(SURFACE_TUNING_TARGET_KEYBOARD);
+        bindSurfaceTuningInsetSeekBar(SURFACE_TUNING_TARGET_STATUS);
+        bindSurfaceTuningInsetGesture(R.id.surface_tuning_dock_gesture_group,
+            SURFACE_TUNING_TARGET_DOCK);
+        bindSurfaceTuningInsetGesture(R.id.surface_tuning_keyboard_gesture_group,
+            SURFACE_TUNING_TARGET_KEYBOARD);
+        bindSurfaceTuningInsetGesture(R.id.surface_tuning_status_gesture_group,
+            SURFACE_TUNING_TARGET_STATUS);
+        bindSurfaceTuningDockHeightGesture();
+        bindSurfaceTuningKeyboardHeightGesture();
+    }
+
+    private void setSurfaceTuningGestureOverlayVisible(boolean visible) {
+        View overlay = findViewById(R.id.surface_tuning_gesture_overlay);
+        if (overlay == null)
+            return;
+        overlay.animate().cancel();
+        if (visible) {
+            positionSurfaceTuningGestureTargets();
+            overlay.setAlpha(0f);
+            overlay.setVisibility(View.VISIBLE);
+            overlay.animate().alpha(1f).setDuration(SURFACE_TUNING_FADE_DURATION_MS)
+                .setInterpolator(surfaceTuningFadeInterpolator()).start();
+            return;
+        }
+        overlay.animate().alpha(0f).setDuration(SURFACE_TUNING_FADE_DURATION_MS)
+            .setInterpolator(surfaceTuningFadeInterpolator())
+            .withEndAction(() -> {
+                overlay.setVisibility(View.GONE);
+                overlay.setAlpha(1f);
+            }).start();
+    }
+
+    private android.view.animation.Interpolator surfaceTuningFadeInterpolator() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
+            ? new android.view.animation.PathInterpolator(0.16f, 1f, 0.3f, 1f)
+            : new android.view.animation.DecelerateInterpolator(1.8f);
+    }
+
+    private void positionSurfaceTuningGestureTargets() {
+        View overlay = findViewById(R.id.surface_tuning_gesture_overlay);
+        if (overlay == null || !mDockTuningMode || overlay.getWidth() <= 0)
+            return;
+        positionSurfaceTuningGestureGroup(R.id.surface_tuning_status_gesture_group, overlay,
+            findViewById(R.id.terminal_window_bar_host));
+        positionSurfaceTuningGestureGroup(R.id.surface_tuning_dock_gesture_group, overlay,
+            findViewById(R.id.accessory_surface_host));
+        positionSurfaceTuningGestureGroup(R.id.surface_tuning_keyboard_gesture_group, overlay,
+            isInAppKeyboardShown() ? findViewById(R.id.inapp_keyboard_view_host) : null);
+    }
+
+    /**
+     * Tracks one surface's measured rect with its capture group, reaching
+     * {@link #SURFACE_TUNING_HANDLE_OVERHANG_DP} further up so the pill centred on the top border
+     * still falls inside the group's hit area.
+     */
+    private void positionSurfaceTuningGestureGroup(int groupId, @NonNull View overlay,
+                                                   @Nullable View surface) {
+        View group = findViewById(groupId);
+        if (group == null)
+            return;
+        if (surface == null || surface.getVisibility() != View.VISIBLE
+            || surface.getWidth() <= 0 || surface.getHeight() <= 0) {
+            group.setVisibility(View.GONE);
+            return;
+        }
+        int[] overlayLocation = new int[2];
+        int[] surfaceLocation = new int[2];
+        overlay.getLocationInWindow(overlayLocation);
+        surface.getLocationInWindow(surfaceLocation);
+        int surfaceTop = surfaceLocation[1] - overlayLocation[1];
+        int top = Math.max(0, surfaceTop - Math.round(dpToPx(SURFACE_TUNING_HANDLE_OVERHANG_DP)));
+        int left = Math.max(0, surfaceLocation[0] - overlayLocation[0]);
+        // Pin both margins against a match_parent width so the group never depends on how the
+        // overlay resolves an absent horizontal gravity.
+        int right = Math.max(0, overlay.getWidth() - (left + surface.getWidth()));
+        int height = Math.max(1, (surfaceTop + surface.getHeight()) - top);
+        ViewGroup.LayoutParams layoutParams = group.getLayoutParams();
+        if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) layoutParams;
+            if (params.leftMargin != left || params.rightMargin != right
+                || params.topMargin != top || params.height != height) {
+                params.leftMargin = left;
+                params.rightMargin = right;
+                params.topMargin = top;
+                params.height = height;
+                group.setLayoutParams(params);
+            }
+        }
+        group.setVisibility(View.VISIBLE);
+    }
+
     private void registerDockTuningLayoutListener(@NonNull View controls) {
         if (mDockTuningLayoutListener != null)
             return;
-        mDockTuningLayoutListener = this::adjustDockTuningCardHeight;
+        mDockTuningLayoutListener = () -> {
+            adjustDockTuningCardHeight();
+            positionSurfaceTuningGestureTargets();
+        };
         controls.getViewTreeObserver().addOnGlobalLayoutListener(mDockTuningLayoutListener);
     }
 
@@ -6353,6 +6755,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void exitDockTuningMode() {
         mDockTuningMode = false;
+        setSurfaceTuningGestureOverlayVisible(false);
         unregisterDockTuningLayoutListener();
         ScrollView scroll = findViewById(R.id.dock_tuning_scroll);
         if (scroll != null) {
@@ -7045,9 +7448,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void applyDockRowHorizontalInsets() {
-        int contentInset = isRoundedDockStyle() ? resolveDockCapsuleContentInsetPx() : 0;
-        int extraKeysInset = isRoundedDockStyle() ? resolveDockCapsuleExtraKeysInsetPx() : 0;
-        int surfaceInset = isRoundedDockStyle() ? resolveDockCapsuleHorizontalMarginPx() : 0;
+        int surfaceInset = resolveDockHorizontalInsetPx();
+        int contentInset = isRoundedDockStyle() ? resolveDockCapsuleContentInsetPx() : surfaceInset;
+        int extraKeysInset = isRoundedDockStyle()
+            ? resolveDockCapsuleExtraKeysInsetPx() : surfaceInset;
         int appsTopPadding = isRoundedDockStyle() ? resolveDockCapsuleAppsTopPaddingPx() : resolveDefaultDockAppsTopPaddingPx();
         int appsBottomPadding = isRoundedDockStyle() ? resolveDockCapsuleAppsBottomPaddingPx() : resolveDefaultDockAppsBottomPaddingPx();
         // The apps row reads with more side padding than the A–Z row because its icons are

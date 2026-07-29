@@ -221,6 +221,44 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 : Math.min(TERMUX_APP.MAX_STATUS_BAR_CORNER_RADIUS, value), false);
     }
 
+    public static int clampSurfaceHorizontalInset(int value) {
+        return DataUtils.clamp(value, 0, TERMUX_APP.MAX_SURFACE_HORIZONTAL_INSET);
+    }
+
+    public int getDockHorizontalInset() {
+        return clampSurfaceHorizontalInset(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET, TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET));
+    }
+
+    public void setDockHorizontalInset(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET,
+            clampSurfaceHorizontalInset(value), false);
+    }
+
+    public int getInAppKeyboardHorizontalInset() {
+        return clampSurfaceHorizontalInset(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET,
+            TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET));
+    }
+
+    public void setInAppKeyboardHorizontalInset(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET,
+            clampSurfaceHorizontalInset(value), false);
+    }
+
+    public int getStatusBarHorizontalInset() {
+        return clampSurfaceHorizontalInset(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET,
+            TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET));
+    }
+
+    public void setStatusBarHorizontalInset(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET,
+            clampSurfaceHorizontalInset(value), false);
+    }
+
     public boolean isStatusWidgetCpuEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_STATUS_WIDGET_CPU, TERMUX_APP.DEFAULT_STATUS_WIDGET_CPU);

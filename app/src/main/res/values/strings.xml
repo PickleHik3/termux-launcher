@@ -981,6 +981,9 @@
                 <string name="termux_surface_tuning_reset">Reset tab</string>
                 <string name="termux_surface_tuning_keyboard_height">Height</string>
                 <string name="termux_surface_tuning_keyboard_spacing">Spacing</string>
+                <string name="termux_surface_tuning_edges">Edges</string>
+                <string name="termux_surface_tuning_dock_height_handle">Drag to resize the dock</string>
+                <string name="termux_surface_tuning_keyboard_height_handle">Drag to resize the keyboard</string>
                 <string name="termux_dock_tuning_blur">Blur</string>
                 <string name="termux_dock_tuning_opacity">Opacity</string>
                 <string name="termux_dock_tuning_grain">Grain</string>

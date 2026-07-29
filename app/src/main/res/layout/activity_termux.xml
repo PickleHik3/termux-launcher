@@ -577,6 +577,129 @@
             </LinearLayout>
         </RelativeLayout>
 
+        <!-- Capture layer for the surface editor's drag gestures. Sized in code to each surface's
+             measured rect (expanded upward so the top-border handle is inside the hit area); the
+             frame itself is not clickable, so touches outside the groups fall through. -->
+        <FrameLayout
+            android:id="@+id/surface_tuning_gesture_overlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_alignParentTop="true"
+            android:layout_alignParentBottom="true"
+            android:elevation="12dp"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:id="@+id/surface_tuning_status_gesture_group"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_gravity="top"
+                android:clickable="true"
+                android:focusable="false"
+                android:visibility="gone">
+
+                <View
+                    android:layout_width="3dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="start|center_vertical"
+                    android:layout_marginStart="4dp"
+                    android:alpha="0.5"
+                    android:background="@drawable/surface_tuning_gesture_pill" />
+
+                <View
+                    android:layout_width="3dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:layout_marginEnd="4dp"
+                    android:alpha="0.5"
+                    android:background="@drawable/surface_tuning_gesture_pill" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/surface_tuning_dock_gesture_group"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_gravity="top"
+                android:clickable="true"
+                android:focusable="false"
+                android:visibility="gone">
+
+                <View
+                    android:layout_width="3dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="start|center_vertical"
+                    android:layout_marginStart="4dp"
+                    android:alpha="0.5"
+                    android:background="@drawable/surface_tuning_gesture_pill" />
+
+                <View
+                    android:layout_width="3dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:layout_marginEnd="4dp"
+                    android:alpha="0.5"
+                    android:background="@drawable/surface_tuning_gesture_pill" />
+
+                <FrameLayout
+                    android:id="@+id/surface_tuning_dock_height_handle"
+                    android:layout_width="72dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="top|center_horizontal"
+                    android:clickable="true"
+                    android:contentDescription="@string/termux_surface_tuning_dock_height_handle"
+                    android:focusable="true">
+
+                    <View
+                        android:layout_width="32dp"
+                        android:layout_height="4dp"
+                        android:layout_gravity="center"
+                        android:background="@drawable/surface_tuning_gesture_pill" />
+                </FrameLayout>
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/surface_tuning_keyboard_gesture_group"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_gravity="top"
+                android:clickable="true"
+                android:focusable="false"
+                android:visibility="gone">
+
+                <View
+                    android:layout_width="3dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="start|center_vertical"
+                    android:layout_marginStart="4dp"
+                    android:alpha="0.5"
+                    android:background="@drawable/surface_tuning_gesture_pill" />
+
+                <View
+                    android:layout_width="3dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:layout_marginEnd="4dp"
+                    android:alpha="0.5"
+                    android:background="@drawable/surface_tuning_gesture_pill" />
+
+                <FrameLayout
+                    android:id="@+id/surface_tuning_keyboard_height_handle"
+                    android:layout_width="72dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="top|center_horizontal"
+                    android:clickable="true"
+                    android:contentDescription="@string/termux_surface_tuning_keyboard_height_handle"
+                    android:focusable="true">
+
+                    <View
+                        android:layout_width="32dp"
+                        android:layout_height="4dp"
+                        android:layout_gravity="center"
+                        android:background="@drawable/surface_tuning_gesture_pill" />
+                </FrameLayout>
+            </FrameLayout>
+        </FrameLayout>
+
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/dock_tuning_controls"
             android:layout_width="match_parent"
@@ -875,6 +998,12 @@
                             android:textSize="11sp" />
                     </LinearLayout>
 
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="36dp" android:gravity="center_vertical" android:orientation="horizontal">
+                        <TextView android:layout_width="64dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_edges" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                        <SeekBar android:id="@+id/surface_tuning_dock_inset_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="48" android:splitTrack="false" />
+                        <TextView android:id="@+id/surface_tuning_dock_inset_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                    </LinearLayout>
+
                     </LinearLayout>
 
                     <LinearLayout
@@ -914,6 +1043,12 @@
                             <SeekBar android:id="@+id/surface_tuning_keyboard_radius_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="240" android:splitTrack="false" />
                             <TextView android:id="@+id/surface_tuning_keyboard_radius_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
                         </LinearLayout>
+
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
+                            <TextView android:layout_width="76dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_edges" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <SeekBar android:id="@+id/surface_tuning_keyboard_inset_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="48" android:splitTrack="false" />
+                            <TextView android:id="@+id/surface_tuning_keyboard_inset_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                        </LinearLayout>
                     </LinearLayout>
 
                     <LinearLayout
@@ -942,6 +1077,11 @@
                             <TextView android:layout_width="64dp" android:layout_height="wrap_content" android:text="@string/termux_dock_tuning_radius" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
                             <SeekBar android:id="@+id/surface_tuning_status_radius_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="40" android:splitTrack="false" />
                             <TextView android:id="@+id/surface_tuning_status_radius_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                        </LinearLayout>
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
+                            <TextView android:layout_width="64dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_edges" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <SeekBar android:id="@+id/surface_tuning_status_inset_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="48" android:splitTrack="false" />
+                            <TextView android:id="@+id/surface_tuning_status_inset_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
                         </LinearLayout>
                     </LinearLayout>
 

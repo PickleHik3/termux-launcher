@@ -194,6 +194,18 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_STATUS_BAR_CORNER_RADIUS = -1;
         public static final int MAX_STATUS_BAR_CORNER_RADIUS = 40;
 
+        /**
+         * Symmetric left/right inset in dp between a surface and the physical screen edges. The
+         * default matches the floating capsule's redline outer margin; the edge-to-edge default
+         * shape only honours whatever is configured beyond that baseline.
+         */
+        public static final int DEFAULT_SURFACE_HORIZONTAL_INSET = 10;
+        public static final int MAX_SURFACE_HORIZONTAL_INSET = 48;
+        public static final String KEY_DOCK_HORIZONTAL_INSET = "dock_horizontal_inset";
+        public static final String KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET =
+            "in_app_keyboard_horizontal_inset";
+        public static final String KEY_STATUS_BAR_HORIZONTAL_INSET = "status_bar_horizontal_inset";
+
         /** Optional trailing system widgets on the status row. */
         public static final String KEY_STATUS_WIDGET_CPU = "status_widget_cpu";
         public static final boolean DEFAULT_STATUS_WIDGET_CPU = true;
