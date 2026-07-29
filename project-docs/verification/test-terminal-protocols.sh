@@ -80,6 +80,26 @@ printf '  Same icons with a default background to their right (must also stay in
 printf '  %s[44m\356\202\260%s[0m.  %s[100m\356\230\215%s[0mX  %s[7m\357\200\223%s[0m.\n' \
     "$esc" "$esc" "$esc" "$esc" "$esc" "$esc"
 
+section 'Kitty graphics animation (terminal-driven)'
+printf '  A block should cycle red, green, blue, yellow at ~3 flips per second,\n'
+printf '  continuing after this script exits. Delete it with: printf "\\033_Ga=d,d=I,i=707\\033\\\\\\\\"\n'
+kg_px() {
+    i=0
+    while [ $i -lt 64 ]; do printf "$1"; i=$((i + 1)); done
+}
+kg_red=$(kg_px '\377\000\000\377' | base64 -w0)
+kg_green=$(kg_px '\000\377\000\377' | base64 -w0)
+kg_blue=$(kg_px '\000\000\377\377' | base64 -w0)
+kg_yellow=$(kg_px '\377\377\000\377' | base64 -w0)
+printf '\033_Gi=707,a=t,q=2,f=32,s=8,v=8;%s\033\\' "$kg_red"
+printf '\033_Gi=707,a=f,q=2,f=32,s=8,v=8,z=300;%s\033\\' "$kg_green"
+printf '\033_Gi=707,a=f,q=2,f=32,s=8,v=8,z=300;%s\033\\' "$kg_blue"
+printf '\033_Gi=707,a=f,q=2,f=32,s=8,v=8,z=300;%s\033\\' "$kg_yellow"
+printf '\033_Gi=707,a=p,q=2,c=6,r=3\033\\'
+printf '\033_Gi=707,a=a,r=1,z=300\033\\'
+printf '\033_Gi=707,a=a,s=3,v=1\033\\'
+printf '\n\n\n\n'
+
 if [ "${1:-}" = "--keys" ]; then
     section 'Kitty keyboard protocol'
     printf '  Enabling disambiguate and querying. Expect the reply ^[[?1u, then one escape\n'

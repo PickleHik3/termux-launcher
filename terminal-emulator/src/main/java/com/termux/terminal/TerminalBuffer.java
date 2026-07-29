@@ -755,12 +755,12 @@ public final class TerminalBuffer {
 
     /** Add one decoded kitty placement at a screen cell. */
     public int[] addKittyImage(Bitmap image, long imageId, long placementId, int z, int y, int x,
-                               int cellW, int cellH) {
+                               int cellW, int cellH, int[] transform) {
         if (image == null || x < 0 || x >= mColumns || y < 0 || y >= mScreenRows)
             return new int[] { 0, 0 };
         int num = findFreeBitmap();
         TerminalBitmap terminalBitmap = new TerminalBitmap(num, image, imageId, placementId, z, y, x,
-            cellW, cellH, this);
+            cellW, cellH, transform, this);
         if (terminalBitmap.bitmap == null)
             return new int[] { 0, 0 };
         bitmaps.put(num, terminalBitmap);
@@ -785,6 +785,14 @@ public final class TerminalBuffer {
         if (z >= 0) return true;
         int charIndex = line.findStartOfColumn(column);
         return charIndex >= line.getSpaceUsed() || line.mText[charIndex] == ' ';
+    }
+
+    /** Collect the live placements of one kitty image, for animation frame re-rendering. */
+    void collectKittyPlacements(long imageId, java.util.List<TerminalBitmap> out) {
+        for (TerminalBitmap bitmap : bitmaps.values()) {
+            if (bitmap.kittyImageId == imageId && bitmap.bitmap != null && bitmap.kittyTransform != null)
+                out.add(bitmap);
+        }
     }
 
     /** Bytes currently owned by decoded kitty placements in this buffer. */

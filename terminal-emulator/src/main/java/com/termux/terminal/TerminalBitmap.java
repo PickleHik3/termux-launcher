@@ -53,6 +53,19 @@ public class TerminalBitmap {
     /** The kitty z-index. Negative places under text; sixel/iTerm images are 0. */
     public int kittyZ;
 
+    /**
+     * How this placement renders its image: {srcX, srcY, srcW, srcH, dstW, dstH, offX, offY}.
+     * Kept so an animation frame flip can re-render the placement without retransmission; null
+     * for sixel/iTerm images and for kitty placements that cannot animate (no stored image).
+     */
+    public int[] kittyTransform;
+
+    /**
+     * The spare buffer an animation frame is rendered into off-thread before being swapped in as
+     * {@link #bitmap}; the two rotate so steady-state playback allocates nothing.
+     */
+    public Bitmap kittyBackBuffer;
+
     private static final String LOG_TAG = "TerminalBitmap";
 
     public TerminalBitmap(int num, TerminalSixel sixel, int Y, int X, int cellW, int cellH, TerminalBuffer screen) {
@@ -150,10 +163,11 @@ public class TerminalBitmap {
     }
 
     public TerminalBitmap(int num, Bitmap image, long imageId, long placementId, int z, int y, int x,
-                          int cellW, int cellH, TerminalBuffer screen) {
+                          int cellW, int cellH, int[] transform, TerminalBuffer screen) {
         kittyImageId = imageId;
         kittyPlacementId = placementId;
         kittyZ = z;
+        kittyTransform = transform;
         Bitmap constrained = resizeBitmapConstraints(image, image.getWidth(), image.getHeight(), cellW, cellH,
             screen.mColumns - x);
         if (constrained != image) image.recycle();

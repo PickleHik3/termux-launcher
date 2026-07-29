@@ -3849,7 +3849,7 @@ public final class TerminalEmulator {
     }
 
     boolean placeKittyGraphics(Bitmap bitmap, KittyGraphicsProtocol.Command command, long imageId,
-                               int row, int col, int cellWidth, int cellHeight) {
+                               int row, int col, int cellWidth, int cellHeight, int[] transform) {
         if (command.action == 'p') {
             // A placement command replaces only its own (image, placement) pair; unidentified
             // placements are additive, which is what makes multiple placements per image work.
@@ -3870,8 +3870,16 @@ public final class TerminalEmulator {
         if (placedBytes <= 0 || getKittyGraphicsBytes() + placedBytes > KittyGraphicsProtocol.MAX_DECODED_BYTES)
             return false;
         int[] delta = mScreen.addKittyImage(bitmap, imageId, command.placementId, command.z, row, col,
-            cellWidth, cellHeight);
+            cellWidth, cellHeight, transform);
         return delta[0] != 0 || delta[1] != 0;
+    }
+
+    /** Live placements of one stored kitty image on both screens, for animation frame flips. */
+    java.util.List<TerminalBitmap> kittyPlacementsFor(long imageId) {
+        java.util.List<TerminalBitmap> result = new java.util.ArrayList<>();
+        mMainBuffer.collectKittyPlacements(imageId, result);
+        mAltBuffer.collectKittyPlacements(imageId, result);
+        return result;
     }
 
     /** Delete kitty placement cells the filter matches on the current screen. */

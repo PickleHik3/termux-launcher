@@ -75,4 +75,90 @@ public class KittyImageStoreTest extends TestCase {
         assertEquals(0, store.totalBytes());
         assertEquals(0, store.resolveId(0, 7));
     }
+
+    private static KittyImageStore.Entry animatedEntry(KittyImageStore store, int frames, int gapMs) {
+        store.reserve(1, 0, 2, 2, 16);
+        store.complete(1, null, 16);
+        KittyImageStore.Entry entry = store.get(1);
+        KittyImageStore.setFrameGap(entry, 1, gapMs);
+        for (int i = 0; i < frames; i++) store.addFrame(entry, null, 16, gapMs);
+        return entry;
+    }
+
+    public void testFrameBookkeepingAndGapEdits() {
+        KittyImageStore store = new KittyImageStore();
+        KittyImageStore.Entry entry = animatedEntry(store, 2, 100);
+        assertEquals(3, KittyImageStore.frameCount(entry));
+        assertEquals(300, entry.animationDurationMs);
+        assertEquals(32, store.totalFrameBytes());
+        KittyImageStore.setFrameGap(entry, 2, 40);
+        assertEquals(240, entry.animationDurationMs);
+        assertEquals(40, KittyImageStore.frameGap(entry, 2));
+        KittyImageStore.setFrameGap(entry, 3, -5);
+        assertEquals("negative gaps clamp to gapless", 0, KittyImageStore.frameGap(entry, 3));
+        store.remove(1);
+        assertEquals("removing the image releases its frame quota", 0, store.totalFrameBytes());
+    }
+
+    public void testAdvanceRunsLoopsAndStops() {
+        KittyImageStore store = new KittyImageStore();
+        KittyImageStore.Entry entry = animatedEntry(store, 2, 100);
+        entry.animationState = KittyImageStore.ANIMATION_RUNNING;
+        entry.maxLoops = 2; // v=3: loop twice
+        entry.frameShownAtUptime = 1000;
+        assertFalse("not due yet", KittyImageStore.advanceAnimation(entry, 1050));
+        assertTrue(KittyImageStore.advanceAnimation(entry, 1100));
+        assertEquals(1, entry.currentFrame);
+        assertTrue(KittyImageStore.advanceAnimation(entry, 1200));
+        assertEquals(2, entry.currentFrame);
+        assertTrue("wraps to the root frame on loop", KittyImageStore.advanceAnimation(entry, 1300));
+        assertEquals(0, entry.currentFrame);
+        assertEquals(1, entry.currentLoop);
+        for (int i = 0; i < 2; i++) {
+            KittyImageStore.advanceAnimation(entry, 1400 + i * 100);
+        }
+        assertEquals(2, entry.currentFrame);
+        assertFalse("second wrap exhausts the loop budget", KittyImageStore.advanceAnimation(entry, 1600));
+        assertFalse("an exhausted animation reports no deadline",
+            KittyImageStore.nextAnimationDeadline(entry) >= 0);
+    }
+
+    public void testAdvanceSkipsGaplessFramesAndWaitsWhenLoading() {
+        KittyImageStore store = new KittyImageStore();
+        KittyImageStore.Entry entry = animatedEntry(store, 3, 100);
+        KittyImageStore.setFrameGap(entry, 2, 0); // frame 2 is gapless base data
+        entry.animationState = KittyImageStore.ANIMATION_RUNNING;
+        entry.frameShownAtUptime = 0;
+        assertTrue(KittyImageStore.advanceAnimation(entry, 100));
+        assertEquals("gapless frame 2 is skipped over", 2, entry.currentFrame);
+
+        entry.animationState = KittyImageStore.ANIMATION_LOADING;
+        entry.currentFrame = 3;
+        entry.frameShownAtUptime = 200;
+        assertFalse("loading mode waits at the last frame instead of looping",
+            KittyImageStore.advanceAnimation(entry, 5000));
+        assertEquals(3, entry.currentFrame);
+        assertEquals("a waiting loading-mode animation must not spin the scheduler",
+            -1, KittyImageStore.nextAnimationDeadline(entry));
+    }
+
+    public void testRemoveFramePromotesRootAndFollowsCurrent() {
+        KittyImageStore store = new KittyImageStore();
+        KittyImageStore.Entry entry = animatedEntry(store, 3, 100);
+        entry.currentFrame = 2;
+        assertTrue(store.removeFrame(entry, 2));
+        assertEquals(3, KittyImageStore.frameCount(entry));
+        assertEquals("current frame index follows the removed predecessor", 1, entry.currentFrame);
+        assertEquals(300, entry.animationDurationMs);
+
+        assertTrue("deleting the root promotes frame 2", store.removeFrame(entry, 1));
+        assertEquals(2, KittyImageStore.frameCount(entry));
+        assertEquals(0, entry.currentFrame);
+        assertEquals("the promoted frame's bytes move to the image quota",
+            16, store.totalFrameBytes());
+
+        assertTrue(store.removeFrame(entry, 99));
+        assertEquals("an out-of-range number clamps to the last frame", 1, KittyImageStore.frameCount(entry));
+        assertFalse("no extra frames left to delete", store.removeFrame(entry, 1));
+    }
 }

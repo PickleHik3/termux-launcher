@@ -6,7 +6,7 @@ Phase 1–2; this file covers Phase 4 (protocol/render upgrades) and the first P
 project (the keyboard protocol).
 
 Status: delivered through graphics Tier 2 core — stored images, placements, crop, z-index, and the
-full delete forms (slice 14); animation, Unicode placeholders, and file/shm media remain excluded. User setup and compatibility guidance are in
+full delete forms (slice 14), and animation with terminal-driven playback (slice 16); Unicode placeholders and file/shm media remain excluded. User setup and compatibility guidance are in
 [`../../docs/en/Terminal_Modernization.md`](../../docs/en/Terminal_Modernization.md); the cross-project
 status map is [`../terminal-modernization-status.md`](../terminal-modernization-status.md).
 
@@ -448,6 +448,54 @@ Both are preserved by the same paths: `setChar`, `copyInterval`, reflow inside
   `com.termux` debug upgraded in place): powerline arrows and gear icons directly against filled
   cells kept intact right edges, including a four-arrow powerline stack with per-cell colours;
   default-background controls unchanged; cursor and prompt normal; no app-scoped fatal in logcat.
+
+- **Slice 16 — graphics animation: terminal-driven GIF playback (done).** The one Tier 2 exclusion
+  slice 14 kept — "needs a render loop the terminal does not have" — implemented as `a=f` (frame
+  transmission), `a=a` (control), `a=c` (frame composition), and `d=f`/`d=F` (frame deletion),
+  ported against kitty's `graphics.c` rather than the spec alone, because the spec's compose
+  section documents its own offsets backwards (`x,y` is the destination, `X,Y` the source — the
+  implementation and the spec's own example agree, the prose does not).
+
+  Frames live on `KittyImageStore.Entry` (root frame = the entry's own bitmap) under a separate
+  64 MiB / 512-frames-per-image quota, kitty's separate-frame-quota model. Frame data composes
+  onto a canvas — a previous frame (`c=`), the frame being edited (`r=`), or a `Y=` background
+  colour — via a pure `composeRegion` int[] helper (straight-alpha source-over or `X=1` replace),
+  JVM-tested like the other pixel helpers. New frames default to kitty's 40 ms gap; `z<0` is
+  gapless; the root frame's gap is set by `a=a,r=1,z=...`, which is what real clients do.
+
+  **The render loop.** `TerminalOutput` gained `postTerminalUpdateDelayed` (session: main-thread
+  handler + screen-update notify; default: drop, so JVM tests drive advancement explicitly). One
+  tick is armed for the earliest deadline across all running animations; each tick advances due
+  frames through `advanceAnimation` — a port of kitty's `scan_active_animations`: gapless frames
+  skipped, loop counting on wrap (`v=1` forever, else `v-1`), loading mode waits at the end
+  instead of looping, and a waiting loading-mode animation reports no deadline so the scheduler
+  cannot spin at 1 ms.
+
+  **The flip is a bitmap swap, not a restamp.** Placements now carry their crop/scale/offset
+  transform (`TerminalBitmap.kittyTransform`); a flip draws the new frame into the placement's
+  spare buffer off-thread (one `drawBitmap` with src/dst rects) and swaps it in as the displayed
+  bitmap on the update thread. Cells are untouched, so a flip cannot flicker, and the two buffers
+  rotate so steady-state playback allocates nothing. The update thread is the render thread, so
+  the swap cannot tear. Displaced immutable bitmaps are dropped to the GC, never recycled.
+  Client-driven animation (`a=a,c=N`, how mpv-style players work) re-renders immediately, and new
+  placements of an animated image start from its current frame, not the root.
+
+  Matching kitty exactly: a successful `a=a` sends **no reply**; `d=f` on an image with no extra
+  frames is a no-op while `d=F` deletes the whole image; deleting the root frame promotes frame 2.
+  Frame chunks must repeat `a=f`, so `isContinuation` accepts it alongside `m`/`q`.
+
+  Tests: `KittyImageStoreTest` grew the advance/loop/gapless/loading/removal state-machine pins
+  (10 total), `KittyGraphicsProtocolTest` the synchronous protocol surfaces and `composeRegion`
+  math (33 total); the full emulator suite is 283 in both variants.
+
+  Device pass (2026-07-29, Pong, `com.termux` debug upgraded in place): a hand-rolled 4-frame
+  animation cycled colours on the terminal's clock with the sending script exited; a 10-frame
+  128x96 GIF converted to chunked raw-RGBA `a=f` transmissions (the exact byte shape `kitten
+  icat` emits) played at its 200 ms gaps through `cat` of a file — four spaced screenshots show
+  four distinct frames, stable placement, clean prompt, no app-scoped logcat errors. `kitten`
+  itself was tried on-device and crashes in its own runtime before reaching the terminal
+  (seccomp register dump), so it cannot be the verification client on Android; the byte-stream
+  replay stands in for it. `test-terminal-protocols.sh` gained a self-contained animation section.
 
 ## User config path
 

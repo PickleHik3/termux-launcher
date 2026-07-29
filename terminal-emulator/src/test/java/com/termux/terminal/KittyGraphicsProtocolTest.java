@@ -168,13 +168,75 @@ public class KittyGraphicsProtocolTest extends TerminalTestCase {
             "\033_G;EINVAL:storing an image requires i or I\033\\");
     }
 
-    public void testAnimationActionsAnswerEnosys() {
+    public void testAnimationActionsOnMissingImagesAnswerEnoent() {
         assertEnteringStringGivesResponse("\033_Gi=3,a=a\033\\",
-            "\033_Gi=3;ENOSYS:animation is not supported\033\\");
+            "\033_Gi=3;ENOENT:image not found\033\\");
         assertEnteringStringGivesResponse("\033_Gi=3,a=f,f=24,s=1,v=1;AAAA\033\\",
-            "\033_Gi=3;ENOSYS:animation is not supported\033\\");
+            "\033_Gi=3;ENOENT:image not found\033\\");
         assertEnteringStringGivesResponse("\033_Gi=3,a=c\033\\",
-            "\033_Gi=3;ENOSYS:animation is not supported\033\\");
+            "\033_Gi=3;ENOENT:image not found\033\\");
+    }
+
+    public void testAnimationControlSucceedsSilentlyOnAReservedImage() {
+        // The reservation is synchronous, so the entry exists while its decode is still pending.
+        enterString("\033_Gi=44,a=t,f=24,s=1,v=1;AAAA\033\\");
+        // Matching kitty, a successful a=a produces no reply at all.
+        assertEnteringStringGivesResponse("\033_Gi=44,a=a,s=3,v=2,r=1,z=120\033\\", "");
+    }
+
+    public void testFrameTransmitValidatesItsRectangleSynchronously() {
+        enterString("\033_Gi=45,a=t,f=24,s=2,v=2;" + base64(new byte[12]) + "\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=45,a=f,f=24,s=3,v=1,x=0,y=0;" + base64(new byte[9]) + "\033\\",
+            "\033_Gi=45;EINVAL:frame rectangle out of bounds\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=45,a=f,f=24,s=1,v=1,x=2,y=0;AAAA\033\\",
+            "\033_Gi=45;EINVAL:frame rectangle out of bounds\033\\");
+    }
+
+    public void testFrameChunksMustRepeatTheFrameAction() {
+        enterString("\033_Gi=46,a=t,f=24,s=1,v=1;AAAA\033\\");
+        enterString("\033_Gi=46,a=f,f=24,s=1,v=1,m=1;AA\033\\");
+        // A continuation chunk may carry a=f alongside m and q, so it must not read as a new command.
+        assertEnteringStringGivesResponse("\033_Ga=f,m=1,q=1;AA\033\\", "");
+        // A fresh non-continuation command interrupts the pending frame upload.
+        assertEnteringStringGivesResponse("\033_Gi=47,a=t,f=24,s=1,v=1;AAAA\033\\",
+            "\033_Gi=46;EINVAL:chunk upload interrupted\033\\");
+    }
+
+    public void testComposeValidatesFramesAndRectanglesSynchronously() {
+        enterString("\033_Gi=48,a=t,f=24,s=4,v=4;" + base64(new byte[48]) + "\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=48,a=c,r=2,c=1\033\\",
+            "\033_Gi=48;ENOENT:no such frame\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=48,a=c,r=1,c=1,w=9,h=1\033\\",
+            "\033_Gi=48;EINVAL:rectangle out of bounds\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=48,a=c,r=1,c=1,w=2,h=2,x=1,y=1,X=0,Y=0\033\\",
+            "\033_Gi=48;EINVAL:source and destination rectangles overlap\033\\");
+    }
+
+    public void testDeleteFrameFormsOnAFramelessImage() {
+        enterString("\033_Gi=49,a=t,f=24,s=1,v=1;AAAA\033\\");
+        // d=f with no extra frames is a no-op; d=F deletes the whole image.
+        assertEnteringStringGivesResponse("\033_Gi=49,a=d,d=f\033\\", "\033_Gi=49;OK\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=49,a=d,d=F\033\\", "\033_Gi=49;OK\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=49,a=a\033\\",
+            "\033_Gi=49;ENOENT:image not found\033\\");
+    }
+
+    public void testComposeRegionBlendsAndReplaces() {
+        int[] under = { 0xff000000, 0xff000000, 0xff000000, 0xff000000 };
+        int[] over = { 0x80ff0000, 0x00ff0000, 0xffffffff, 0x40008000 };
+        int[] blended = under.clone();
+        KittyGraphicsProtocol.composeRegion(blended, 2, over, 2, 2, 2, 0, 0, 0, 0, false);
+        assertEquals("opaque over pixel replaces", 0xffffffff, blended[2]);
+        assertEquals("fully transparent over pixel leaves the canvas", 0xff000000, blended[1]);
+        assertEquals("alpha stays full over an opaque canvas", 0xff, blended[0] >>> 24);
+        assertEquals("half red over black is half-bright red", 0x80, (blended[0] >> 16) & 0xff);
+        int[] replaced = under.clone();
+        KittyGraphicsProtocol.composeRegion(replaced, 2, over, 2, 2, 2, 0, 0, 0, 0, true);
+        assertEquals("replace mode copies alpha verbatim", 0x00ff0000, replaced[1]);
+        int[] offset = new int[9];
+        KittyGraphicsProtocol.composeRegion(offset, 3, over, 2, 1, 1, 1, 1, 2, 2, true);
+        assertEquals("offsets address the right cells", 0x40008000, offset[8]);
+        assertEquals(0, offset[0]);
     }
 
     public void testUnicodePlaceholdersAnswerEnosys() {

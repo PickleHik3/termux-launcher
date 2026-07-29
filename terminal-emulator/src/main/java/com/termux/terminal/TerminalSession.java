@@ -350,6 +350,14 @@ public final class TerminalSession extends TerminalOutput {
         });
     }
 
+    @Override
+    public void postTerminalUpdateDelayed(Runnable update, long delayMillis) {
+        mMainThreadHandler.postDelayed(() -> {
+            update.run();
+            notifyScreenUpdate();
+        }, delayMillis);
+    }
+
     public int getPid() {
         return mShellPid;
     }

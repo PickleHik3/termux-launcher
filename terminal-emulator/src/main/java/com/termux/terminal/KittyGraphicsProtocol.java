@@ -3,10 +3,15 @@ package com.termux.terminal;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Rect;
+import android.graphics.RectF;
+import android.os.SystemClock;
 
 import java.io.ByteArrayOutputStream;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -79,11 +84,15 @@ final class KittyGraphicsProtocol {
             handlePlacement(command);
             return;
         }
-        if (command.action == 'a' || command.action == 'f' || command.action == 'c') {
-            reply(command, "ENOSYS:animation is not supported", true, false);
+        if (command.action == 'a') {
+            handleAnimationControl(command);
             return;
         }
-        if (command.action != 'T' && command.action != 't') {
+        if (command.action == 'c') {
+            handleCompose(command);
+            return;
+        }
+        if (command.action != 'T' && command.action != 't' && command.action != 'f') {
             reply(command, "ENOSYS:unsupported action", true, false);
             return;
         }
@@ -113,8 +122,26 @@ final class KittyGraphicsProtocol {
             reply(command, "ENOSYS:unsupported compression", true, false);
             return;
         }
+        if (command.action == 'f') {
+            // Frame data needs an existing image, and a raw frame's rectangle is checkable now.
+            KittyImageStore.Entry entry = store.get(store.resolveId(command.imageId, command.number));
+            if (entry == null) {
+                reply(command, "ENOENT:image not found", true, false);
+                return;
+            }
+            if (command.format != 100
+                && !frameRectFits(entry, command.srcX, command.srcY, command.width, command.height)) {
+                reply(command, "EINVAL:frame rectangle out of bounds", true, false);
+                return;
+            }
+        }
         Upload next = new Upload(command);
         appendChunk(next, command, payload);
+    }
+
+    private static boolean frameRectFits(KittyImageStore.Entry entry, int x, int y, int w, int h) {
+        return x >= 0 && y >= 0 && w > 0 && h > 0
+            && (long) x + w <= entry.width && (long) y + h <= entry.height;
     }
 
     private void appendChunk(Upload target, Command chunkCommand, String payload) {
@@ -137,7 +164,9 @@ final class KittyGraphicsProtocol {
             return;
         }
         upload = null;
-        if (target.command.format == 100) {
+        if (target.command.action == 'f') {
+            submitFrame(target.command, target.data.toByteArray());
+        } else if (target.command.format == 100) {
             submitPng(target.command, target.data.toByteArray());
         } else {
             submitRaw(target.command, target.data.toByteArray());
@@ -412,7 +441,10 @@ final class KittyGraphicsProtocol {
                     result.recycle();
                     return;
                 }
-                if (!emulator.placeKittyGraphics(result, command, effectiveId, row, col, cellWidth, cellHeight)) {
+                int[] transform = storeCopy
+                    ? new int[] { 0, 0, sourceWidth, sourceHeight, displaySize[0], displaySize[1], offsetX, offsetY }
+                    : null;
+                if (!emulator.placeKittyGraphics(result, command, effectiveId, row, col, cellWidth, cellHeight, transform)) {
                     result.recycle();
                     reply(command, "EINVAL:image placement failed", true, false, effectiveId);
                     return;
@@ -473,7 +505,10 @@ final class KittyGraphicsProtocol {
                     reply(command, "ENOENT:image not found", true, false, id);
                 return;
             }
-            final Bitmap source = ready.bitmap;
+            // An animated image places its current frame, so a client-driven animation's new
+            // placements agree with what a=a,c=N selected; a still-decoding frame falls back to root.
+            Bitmap currentFrame = KittyImageStore.frameBitmap(ready, ready.currentFrame + 1);
+            final Bitmap source = currentFrame != null ? currentFrame : ready.bitmap;
             PNG_DECODER.execute(() -> {
                 Bitmap placed = null;
                 String error = null;
@@ -510,7 +545,9 @@ final class KittyGraphicsProtocol {
                         reply(command, rasterError, true, false, id);
                         return;
                     }
-                    if (!emulator.placeKittyGraphics(result, command, id, row, col, cellWidth, cellHeight)) {
+                    int[] transform = new int[] { crop[0], crop[1], crop[2], crop[3],
+                        displaySize[0], displaySize[1], offsetX, offsetY };
+                    if (!emulator.placeKittyGraphics(result, command, id, row, col, cellWidth, cellHeight, transform)) {
                         result.recycle();
                         reply(command, "EINVAL:image placement failed", true, false, id);
                         return;
@@ -519,6 +556,393 @@ final class KittyGraphicsProtocol {
                 });
             });
         }));
+    }
+
+    /**
+     * Frame data transmission ({@code a=f}): decode off-thread, resolve the base canvas on the
+     * update thread strictly after earlier decodes have landed, compose off-thread, commit. The
+     * canvas is a previous frame's pixels ({@code c=}), the frame being edited ({@code r=}), or a
+     * solid {@code Y=} colour; {@code X=1} replaces instead of alpha blending, and {@code z} is
+     * the frame gap (positive milliseconds, negative gapless, absent defaults to 40 ms).
+     */
+    private void submitFrame(Command command, byte[] data) {
+        final long id = store.resolveId(command.imageId, command.number);
+        KittyImageStore.Entry initial = id == 0 ? null : store.get(id);
+        if (initial == null) {
+            reply(command, "ENOENT:image not found", true, false);
+            return;
+        }
+        // r selects an existing frame to edit; anything else appends a new frame, as kitty does.
+        final int frameCountAtAccept = KittyImageStore.frameCount(initial);
+        final int editNumber = (command.displayRows >= 1 && command.displayRows <= frameCountAtAccept)
+            ? command.displayRows : 0;
+        final int estimate = (int) Math.min(Integer.MAX_VALUE, (long) initial.width * initial.height * 4L);
+        if (editNumber == 0 && store.wouldExceedFrameLimits(initial, estimate)) {
+            reply(command, "ENOSPC:frame store is full", true, false, id);
+            return;
+        }
+        if (decodeBytesInFlight + data.length > MAX_TRANSMITTED_BYTES) {
+            reply(command, "ENOSPC:too much image data pending", true, false, id);
+            return;
+        }
+        final int transmittedBytes = data.length;
+        decodeBytesInFlight += transmittedBytes;
+
+        PNG_DECODER.execute(() -> {
+            int[] pixels = null;
+            int pixelsWidth = 0;
+            int pixelsHeight = 0;
+            String error = null;
+            try {
+                if (command.format == 100) {
+                    BitmapFactory.Options options = new BitmapFactory.Options();
+                    options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+                    Bitmap decoded = BitmapFactory.decodeByteArray(data, 0, data.length, options);
+                    if (decoded == null) throw new IllegalArgumentException("PNG decode failed");
+                    pixelsWidth = decoded.getWidth();
+                    pixelsHeight = decoded.getHeight();
+                    pixels = new int[pixelsWidth * pixelsHeight];
+                    decoded.getPixels(pixels, 0, pixelsWidth, 0, 0, pixelsWidth, pixelsHeight);
+                    decoded.recycle();
+                } else {
+                    byte[] raw = command.compression == 'z'
+                        ? inflate(data, (long) command.width * command.height * (command.format / 8))
+                        : data;
+                    pixels = rawPixelsToArgb(raw, command.width, command.height, command.format);
+                    pixelsWidth = command.width;
+                    pixelsHeight = command.height;
+                }
+            } catch (IllegalArgumentException e) {
+                error = "EINVAL:" + printable(e.getMessage());
+            } catch (RuntimeException | OutOfMemoryError e) {
+                error = "ENOMEM:frame decode failed";
+            }
+            final int[] framePixels = pixels;
+            final int frameWidth = pixelsWidth;
+            final int frameHeight = pixelsHeight;
+            final String decodeError = error;
+            output.postTerminalUpdate(() -> {
+                decodeBytesInFlight = Math.max(0, decodeBytesInFlight - transmittedBytes);
+                KittyImageStore.Entry entry = store.get(id);
+                if (decodeError != null || entry == null) {
+                    reply(command, decodeError != null ? decodeError : "ENOENT:image not found",
+                        true, false, id);
+                    return;
+                }
+                if (!frameRectFits(entry, command.srcX, command.srcY, frameWidth, frameHeight)) {
+                    reply(command, "EINVAL:frame rectangle out of bounds", true, false, id);
+                    return;
+                }
+                int frameCount = KittyImageStore.frameCount(entry);
+                final int targetNumber = (editNumber >= 1 && editNumber <= frameCount) ? editNumber : 0;
+                Bitmap base = null;
+                if (targetNumber != 0) {
+                    base = KittyImageStore.frameBitmap(entry, targetNumber);
+                } else if (command.displayColumns >= 1 && command.displayColumns <= frameCount) {
+                    base = KittyImageStore.frameBitmap(entry, command.displayColumns);
+                }
+                if ((targetNumber != 0 || (command.displayColumns >= 1 && command.displayColumns <= frameCount))
+                    && base == null) {
+                    reply(command, "ENOENT:base frame data unavailable", true, false, id);
+                    return;
+                }
+                final Bitmap canvasSource = base;
+                final long backgroundColor = command.values.containsKey('Y')
+                    ? Command.unsigned(command.values, 'Y') : 0;
+                final int imageWidth = entry.width;
+                final int imageHeight = entry.height;
+                PNG_DECODER.execute(() -> {
+                    Bitmap composed = null;
+                    String composeError = null;
+                    try {
+                        int[] canvas = new int[imageWidth * imageHeight];
+                        if (canvasSource != null) {
+                            canvasSource.getPixels(canvas, 0, imageWidth, 0, 0, imageWidth, imageHeight);
+                        } else if (backgroundColor != 0) {
+                            // The protocol's Y is 32-bit RGBA; ARGB ints are what Bitmap takes.
+                            int rgba = (int) backgroundColor;
+                            int argb = (rgba << 24) | (rgba >>> 8);
+                            java.util.Arrays.fill(canvas, argb);
+                        }
+                        composeRegion(canvas, imageWidth, framePixels, frameWidth,
+                            frameWidth, frameHeight, 0, 0, command.srcX, command.srcY,
+                            command.cellOffsetX == 1);
+                        composed = Bitmap.createBitmap(canvas, imageWidth, imageHeight,
+                            Bitmap.Config.ARGB_8888);
+                        if (composed == null) throw new OutOfMemoryError("frame compose failed");
+                    } catch (IllegalArgumentException e) {
+                        composeError = "EINVAL:" + printable(e.getMessage());
+                    } catch (RuntimeException | OutOfMemoryError e) {
+                        composeError = "ENOMEM:frame compose failed";
+                    }
+                    final Bitmap frameBitmap = composed;
+                    final String finalError = composeError;
+                    output.postTerminalUpdate(() -> {
+                        KittyImageStore.Entry live = store.get(id);
+                        if (finalError != null || live != entry) {
+                            reply(command, finalError != null ? finalError : "ENOENT:image not found",
+                                true, false, id);
+                            return;
+                        }
+                        int byteCount = imageWidth * imageHeight * 4;
+                        if (targetNumber != 0) {
+                            store.replaceFrameBitmap(entry, targetNumber, frameBitmap, byteCount);
+                            if (command.z != 0)
+                                KittyImageStore.setFrameGap(entry, targetNumber, Math.max(0, command.z));
+                            if (targetNumber == entry.currentFrame + 1) renderAnimationFrame(entry);
+                        } else {
+                            int gap = command.z > 0 ? command.z
+                                : command.z < 0 ? 0 : KittyImageStore.DEFAULT_FRAME_GAP_MS;
+                            store.addFrame(entry, frameBitmap, byteCount, gap);
+                        }
+                        reply(command, "OK", false, false, id);
+                        scheduleAnimationTick();
+                    });
+                });
+            });
+        });
+    }
+
+    /**
+     * Animation control ({@code a=a}): all synchronous state. Matching kitty, a successful
+     * control produces no reply; only a missing image answers.
+     */
+    private void handleAnimationControl(Command command) {
+        KittyImageStore.Entry entry = store.get(store.resolveId(command.imageId, command.number));
+        if (entry == null) {
+            reply(command, "ENOENT:image not found", true, false);
+            return;
+        }
+        int frameCount = KittyImageStore.frameCount(entry);
+        // r + z set one frame's gap; out-of-range frame numbers are ignored, as kitty ignores them.
+        if (command.displayRows >= 1 && command.displayRows <= frameCount && command.z != 0)
+            KittyImageStore.setFrameGap(entry, command.displayRows, Math.max(0, command.z));
+        // c makes a frame current — the client-driven animation primitive.
+        if (command.displayColumns >= 1 && command.displayColumns <= frameCount
+            && command.displayColumns - 1 != entry.currentFrame) {
+            entry.currentFrame = command.displayColumns - 1;
+            entry.frameShownAtUptime = SystemClock.uptimeMillis();
+            renderAnimationFrame(entry);
+        }
+        String state = command.values.get('s');
+        if (state != null) {
+            int previous = entry.animationState;
+            int requested = Command.integer(command.values, 's', 0);
+            if (requested >= 1 && requested <= 3) entry.animationState = requested;
+            if (entry.animationState != KittyImageStore.ANIMATION_STOPPED
+                && previous != entry.animationState) {
+                entry.frameShownAtUptime = SystemClock.uptimeMillis();
+            }
+            entry.currentLoop = 0;
+        }
+        // v=1 loops forever; any larger v runs v-1 loops, kitty's exact reading.
+        int loops = Command.integer(command.values, 'v', 0);
+        if (loops > 0) entry.maxLoops = loops - 1;
+        scheduleAnimationTick();
+    }
+
+    /** Frame composition ({@code a=c}): copy or blend a rectangle from one frame onto another. */
+    private void handleCompose(Command command) {
+        final long id = store.resolveId(command.imageId, command.number);
+        final KittyImageStore.Entry entry = id == 0 ? null : store.get(id);
+        if (entry == null) {
+            reply(command, "ENOENT:image not found", true, false);
+            return;
+        }
+        int frameCount = KittyImageStore.frameCount(entry);
+        // r is the source frame and c the destination; x,y offset the destination rectangle and
+        // X,Y the source one — kitty's implementation, which its own spec prose has backwards.
+        final int sourceNumber = command.displayRows;
+        final int destinationNumber = command.displayColumns;
+        if (sourceNumber < 1 || sourceNumber > frameCount
+            || destinationNumber < 1 || destinationNumber > frameCount) {
+            reply(command, "ENOENT:no such frame", true, false, id);
+            return;
+        }
+        final int width = command.srcW > 0 ? command.srcW : entry.width;
+        final int height = command.srcH > 0 ? command.srcH : entry.height;
+        final int srcX = command.cellOffsetX;
+        final int srcY = command.cellOffsetY;
+        final int dstX = command.srcX;
+        final int dstY = command.srcY;
+        if (!frameRectFits(entry, srcX, srcY, width, height)
+            || !frameRectFits(entry, dstX, dstY, width, height)) {
+            reply(command, "EINVAL:rectangle out of bounds", true, false, id);
+            return;
+        }
+        if (sourceNumber == destinationNumber
+            && Math.max(srcX, dstX) < Math.min(srcX, dstX) + width
+            && Math.max(srcY, dstY) < Math.min(srcY, dstY) + height) {
+            reply(command, "EINVAL:source and destination rectangles overlap", true, false, id);
+            return;
+        }
+        final boolean replace = command.noCursorMovement; // C=1 means replace in a=c
+        final int imageWidth = entry.width;
+        final int imageHeight = entry.height;
+
+        PNG_DECODER.execute(() -> output.postTerminalUpdate(() -> {
+            KittyImageStore.Entry live = store.get(id);
+            if (live != entry) {
+                reply(command, "ENOENT:image not found", true, false, id);
+                return;
+            }
+            final Bitmap source = KittyImageStore.frameBitmap(entry, sourceNumber);
+            final Bitmap destination = KittyImageStore.frameBitmap(entry, destinationNumber);
+            if (source == null || destination == null) {
+                reply(command, "EINVAL:frame data unavailable", true, false, id);
+                return;
+            }
+            PNG_DECODER.execute(() -> {
+                Bitmap composed = null;
+                String error = null;
+                try {
+                    int[] under = new int[imageWidth * imageHeight];
+                    destination.getPixels(under, 0, imageWidth, 0, 0, imageWidth, imageHeight);
+                    int[] over = new int[imageWidth * imageHeight];
+                    source.getPixels(over, 0, imageWidth, 0, 0, imageWidth, imageHeight);
+                    composeRegion(under, imageWidth, over, imageWidth,
+                        width, height, srcX, srcY, dstX, dstY, replace);
+                    composed = Bitmap.createBitmap(under, imageWidth, imageHeight,
+                        Bitmap.Config.ARGB_8888);
+                    if (composed == null) throw new OutOfMemoryError("compose failed");
+                } catch (RuntimeException | OutOfMemoryError e) {
+                    error = "ENOMEM:frame compose failed";
+                }
+                final Bitmap result = composed;
+                final String composeError = error;
+                output.postTerminalUpdate(() -> {
+                    KittyImageStore.Entry still = store.get(id);
+                    if (composeError != null || still != entry) {
+                        reply(command, composeError != null ? composeError : "ENOENT:image not found",
+                            true, false, id);
+                        return;
+                    }
+                    store.replaceFrameBitmap(entry, destinationNumber, result,
+                        imageWidth * imageHeight * 4);
+                    if (destinationNumber == entry.currentFrame + 1) renderAnimationFrame(entry);
+                    reply(command, "OK", false, false, id);
+                });
+            });
+        }));
+    }
+
+    // ------------------------------------------------------------------ terminal-driven playback
+
+    private static final Paint FRAME_PAINT = new Paint(Paint.FILTER_BITMAP_FLAG);
+    private boolean animationTickScheduled;
+
+    /** Arm one delayed tick for the earliest due frame across all running animations. */
+    private void scheduleAnimationTick() {
+        if (animationTickScheduled) return;
+        long earliest = Long.MAX_VALUE;
+        for (KittyImageStore.Entry entry : store.entries()) {
+            long deadline = KittyImageStore.nextAnimationDeadline(entry);
+            if (deadline >= 0 && deadline < earliest) earliest = deadline;
+        }
+        if (earliest == Long.MAX_VALUE) return;
+        long delay = Math.min(60_000, Math.max(1, earliest - SystemClock.uptimeMillis()));
+        animationTickScheduled = true;
+        output.postTerminalUpdateDelayed(this::animationTick, delay);
+    }
+
+    private void animationTick() {
+        animationTickScheduled = false;
+        long now = SystemClock.uptimeMillis();
+        for (KittyImageStore.Entry entry : store.entries()) {
+            if (KittyImageStore.advanceAnimation(entry, now)) renderAnimationFrame(entry);
+        }
+        scheduleAnimationTick();
+    }
+
+    /**
+     * Re-render every placement of this image from its current frame. Each placement rotates two
+     * buffers: the frame is drawn into the spare one off-thread with the placement's stored
+     * crop/scale/offset transform, then swapped in as the displayed bitmap on the update thread —
+     * cells are never restamped, so a flip cannot flicker, and steady-state playback allocates
+     * nothing. Displaced immutable bitmaps are dropped to the garbage collector, never recycled,
+     * because the render thread may still be uploading them.
+     */
+    private void renderAnimationFrame(KittyImageStore.Entry entry) {
+        final Bitmap frame = KittyImageStore.frameBitmap(entry, entry.currentFrame + 1);
+        if (frame == null) return;
+        final List<TerminalBitmap> placements = emulator.kittyPlacementsFor(entry.id);
+        if (placements.isEmpty()) return;
+        final Bitmap[] buffers = new Bitmap[placements.size()];
+        for (int i = 0; i < placements.size(); i++) {
+            TerminalBitmap placement = placements.get(i);
+            buffers[i] = placement.kittyBackBuffer;
+            placement.kittyBackBuffer = null;
+        }
+        PNG_DECODER.execute(() -> {
+            for (int i = 0; i < placements.size(); i++) {
+                TerminalBitmap placement = placements.get(i);
+                try {
+                    int width = placement.bitmap.getWidth();
+                    int height = placement.bitmap.getHeight();
+                    Bitmap buffer = buffers[i];
+                    if (buffer == null || !buffer.isMutable()
+                        || buffer.getWidth() != width || buffer.getHeight() != height) {
+                        buffer = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+                    }
+                    buffer.eraseColor(0);
+                    int[] t = placement.kittyTransform;
+                    Canvas canvas = new Canvas(buffer);
+                    canvas.drawBitmap(frame, new Rect(t[0], t[1], t[0] + t[2], t[1] + t[3]),
+                        new RectF(t[6], t[7], t[6] + t[4], t[7] + t[5]), FRAME_PAINT);
+                    buffers[i] = buffer;
+                } catch (RuntimeException | OutOfMemoryError e) {
+                    // This placement keeps its previous frame; playback continues.
+                    buffers[i] = null;
+                }
+            }
+            output.postTerminalUpdate(() -> {
+                for (int i = 0; i < placements.size(); i++) {
+                    Bitmap fresh = buffers[i];
+                    if (fresh == null) continue;
+                    TerminalBitmap placement = placements.get(i);
+                    Bitmap old = placement.bitmap;
+                    placement.bitmap = fresh;
+                    placement.kittyBackBuffer = (old != null && old.isMutable()) ? old : null;
+                }
+            });
+        });
+    }
+
+    /**
+     * Compose a {@code w*h} rectangle of {@code over} at source offset {@code (ox,oy)} onto
+     * {@code under} at {@code (dx,dy)}. Both are row-major, non-premultiplied ARGB. Straight-alpha
+     * source-over unless {@code replace}. Bounds must already be validated.
+     */
+    static void composeRegion(int[] under, int underWidth, int[] over, int overWidth,
+                              int w, int h, int ox, int oy, int dx, int dy, boolean replace) {
+        for (int row = 0; row < h; row++) {
+            int src = (oy + row) * overWidth + ox;
+            int dst = (dy + row) * underWidth + dx;
+            for (int col = 0; col < w; col++, src++, dst++) {
+                int overPixel = over[src];
+                int overAlpha = overPixel >>> 24;
+                if (replace || overAlpha == 0xff) {
+                    under[dst] = overPixel;
+                    continue;
+                }
+                if (overAlpha == 0) continue;
+                int underPixel = under[dst];
+                int underAlpha = underPixel >>> 24;
+                int contribution = underAlpha * (255 - overAlpha) / 255;
+                int outAlpha = overAlpha + contribution;
+                if (outAlpha == 0) {
+                    under[dst] = 0;
+                    continue;
+                }
+                int r = (((overPixel >> 16) & 0xff) * overAlpha
+                    + ((underPixel >> 16) & 0xff) * contribution) / outAlpha;
+                int g = (((overPixel >> 8) & 0xff) * overAlpha
+                    + ((underPixel >> 8) & 0xff) * contribution) / outAlpha;
+                int b = ((overPixel & 0xff) * overAlpha
+                    + (underPixel & 0xff) * contribution) / outAlpha;
+                under[dst] = (outAlpha << 24) | (r << 16) | (g << 8) | b;
+            }
+        }
     }
 
     /** The delete forms ({@code a=d}). An uppercase specifier also frees the targeted stored data. */
@@ -557,6 +981,26 @@ final class KittyGraphicsProtocol {
             case 'c':
                 deleteAtCell(emulator.getCursorCol(), emulator.getCursorRow(), null, free);
                 break;
+            case 'f': {
+                long id = store.resolveId(command.imageId, command.number);
+                KittyImageStore.Entry entry = id == 0 ? null : store.get(id);
+                if (entry == null) {
+                    reply(command, "ENOENT:image not found", true, true);
+                    return;
+                }
+                int before = entry.currentFrame;
+                if (!store.removeFrame(entry, command.displayRows)) {
+                    // No extra frames: d=F deletes the whole image, d=f is a no-op — kitty's rule.
+                    if (free) {
+                        emulator.deleteKittyPlacements((bitmap, column, row) ->
+                            bitmap.kittyImageId == id, true);
+                        store.remove(id);
+                    }
+                } else if (entry.currentFrame != before) {
+                    renderAnimationFrame(entry);
+                }
+                break;
+            }
             case 'p':
             case 'q': {
                 if (!command.values.containsKey('x') || !command.values.containsKey('y')
@@ -909,8 +1353,9 @@ final class KittyGraphicsProtocol {
         }
 
         boolean isContinuation() {
+            // Frame-data chunks must repeat a=f, so it is allowed alongside m and q.
             for (Character key : values.keySet()) {
-                if (key != 'm' && key != 'q') return false;
+                if (key != 'm' && key != 'q' && !(key == 'a' && action == 'f')) return false;
             }
             return values.containsKey('m');
         }
@@ -922,7 +1367,7 @@ final class KittyGraphicsProtocol {
             return value.charAt(0);
         }
 
-        private static int integer(Map<Character, String> values, char key, int fallback) {
+        static int integer(Map<Character, String> values, char key, int fallback) {
             String value = values.get(key);
             if (value == null) return fallback;
             try {
@@ -932,7 +1377,7 @@ final class KittyGraphicsProtocol {
             }
         }
 
-        private static long unsigned(Map<Character, String> values, char key) {
+        static long unsigned(Map<Character, String> values, char key) {
             String value = values.get(key);
             if (value == null) return 0;
             try {

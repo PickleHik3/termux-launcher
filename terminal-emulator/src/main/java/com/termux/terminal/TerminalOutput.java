@@ -51,4 +51,13 @@ public abstract class TerminalOutput {
     public void postTerminalUpdate(Runnable update) {
         update.run();
     }
+
+    /**
+     * Run work on the terminal's serialized update thread after a delay, used to drive
+     * terminal-side kitty graphics animation. The default drops the request — an environment
+     * without a looper has no way to wait, and running it synchronously would spin the animation
+     * scheduler — so tests drive frame advancement explicitly instead.
+     */
+    public void postTerminalUpdateDelayed(Runnable update, long delayMillis) {
+    }
 }

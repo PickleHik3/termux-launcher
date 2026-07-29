@@ -427,14 +427,19 @@ The terminal supports these application-facing capabilities without user configu
 - Kitty graphics through the Tier 2 core: direct PNG and raw RGB/RGBA pixel transmission (including
   zlib-compressed raw data), chunking, stored images (`a=t`) with image ids and numbers, placements
   (`a=p`) with source rectangles, cell scaling, sub-cell offsets, and z-index, acknowledgments,
-  quiet modes, and the full set of delete forms; and
+  quiet modes, and the full set of delete forms;
+- Kitty graphics animation: frame transmission (`a=f`) with partial-frame rectangles, base-frame
+  and background-colour composition, and per-frame gaps; animation control (`a=a`) for both
+  client-driven (current-frame) and terminal-driven (gap-timed, looping) playback; frame
+  composition (`a=c`); and frame deletion (`d=f`/`d=F`) — animated GIFs sent through the protocol
+  keep playing on the terminal's own clock after the sending program exits; and
 - existing Sixel/iTerm bitmap rendering paths.
 
 Programs negotiate the keyboard and graphics protocols themselves. Legacy applications continue
 through the normal Termux key encoder. Main and alternate screens retain independent Kitty keyboard
 flags and bounded mode stacks.
 
-Animation, Unicode placeholders, and shared-memory or file transmission remain out of scope and
+Unicode placeholders and shared-memory or file transmission remain out of scope and
 return a bounded protocol error. Images placed with a negative z-index never overwrite visible
 text: the terminal keeps the text and shows the image in the surrounding blank cells.
 `timg -pk` (PNG), `chafa -f kitty` (raw RGBA), and yazi image previews all work with no
