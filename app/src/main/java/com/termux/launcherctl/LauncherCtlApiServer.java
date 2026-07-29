@@ -147,11 +147,7 @@ public class LauncherCtlApiServer {
             serverSocket = createLoopbackServerSocket(settings.getApiPort(), bindMode);
             port = serverSocket.getLocalPort();
             running = true;
-            writeClientConfig();
-            installLauncherCtlCliScript();
-            installLauncherCtlMcpScript();
-            installLauncherRestartScript();
-            installTaiCliScripts();
+            installClientFiles();
             startAcceptLoop(context.getApplicationContext());
             Logger.logInfo(LOG_TAG, "LauncherCtl API listening on " + bindAddressForMode(bindMode) + ":" + port);
         } catch (Exception e) {
@@ -160,6 +156,30 @@ public class LauncherCtlApiServer {
             cleanupSocket();
         } finally {
             starting = false;
+        }
+    }
+
+    /**
+     * Writes the token/endpoint files and installs the shell helpers under the Termux home.
+     *
+     * None of it is required to serve requests: it is discoverability for a shell that already has
+     * the socket. Letting an unwritable home abort {@link #start(Context)} would close a listener
+     * that had already bound successfully, so every client sees "connection refused" for a reason
+     * that has nothing to do with the socket. Log and keep serving instead.
+     */
+    private void installClientFiles() {
+        try {
+            writeClientConfig();
+        } catch (Exception e) {
+            Logger.logWarn(LOG_TAG, "LauncherCtl API is listening but its client config could not be written: " + e.getMessage());
+        }
+        try {
+            installLauncherCtlCliScript();
+            installLauncherCtlMcpScript();
+            installLauncherRestartScript();
+            installTaiCliScripts();
+        } catch (Exception e) {
+            Logger.logWarn(LOG_TAG, "LauncherCtl API is listening but its shell helpers could not be installed: " + e.getMessage());
         }
     }
 

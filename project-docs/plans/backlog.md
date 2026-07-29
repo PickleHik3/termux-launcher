@@ -66,6 +66,12 @@ Small, deliberate omissions recorded where they happened. Listed here so they ar
 - Automatic pane layouts are currently one-shot tree transforms. They still need a retained
   per-window layout policy, automatic reflow after pane creation/removal, and a `next_layout`
   action/keybind matching kitty's layout-cycling workflow. See `automatic-pane-layouts.md`.
-- `:app:testDebugUnitTest` fails 48 tests across 12 classes for environmental reasons — loopback HTTP
-  and an unmocked `XmlPullParserFactory`. Compare against that baseline rather than expecting green.
-  Fixing the harness so those tests can run is itself unclaimed work.
+- `:app:testDebugUnitTest` is green (592 tests, 92 classes). The former "48 environmental failures
+  across 12 classes" baseline was a misdiagnosis — nothing in it was environmental, and 9 of the 48
+  were real assertion failures the label concealed. Fixed; see the verification section of
+  `../terminal-modernization-status.md` for the breakdown. Do not reintroduce an accepted-failure
+  count: it launders regressions exactly the way a duplicated backlog launders unfinished scope.
+- The positive case for the speculative-decoding settings switch has no JVM coverage.
+  `TaiModelSpec` only promotes that capability into its endpoint set after reading flags out of a
+  real `.litertlm` package, so the shown path needs instrumentation with a model installed.
+  `TaiParameterPreferencesFragmentHidingTest` covers only the hidden cases.

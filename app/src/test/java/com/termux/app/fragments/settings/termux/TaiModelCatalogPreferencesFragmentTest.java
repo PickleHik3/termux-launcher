@@ -25,8 +25,12 @@ public class TaiModelCatalogPreferencesFragmentTest {
         List<TaiModelCatalog.CatalogEntry> mnn = TaiModelCatalogPreferencesFragment.filterEntries(
             TaiModelCatalog.entries().values(), TaiModelCatalogPreferencesFragment.BackendFilter.MNN, "");
 
-        assertEquals(5, liteRt.size());
-        assertEquals(6, mnn.size());
+        // Counts are derived, not hardcoded: the catalog grows, and a magic number here only
+        // records how many models existed the day the test was written.
+        assertTrue("catalog should expose LiteRT models", liteRt.size() > 0);
+        assertTrue("catalog should expose MNN models", mnn.size() > 0);
+        assertEquals("LiteRT and MNN must partition the whole catalog",
+            TaiModelCatalog.entries().size(), liteRt.size() + mnn.size());
         for (TaiModelCatalog.CatalogEntry entry : liteRt) {
             assertEquals(TaiModelSpec.BACKEND_LITERT_LM, entry.backend);
         }

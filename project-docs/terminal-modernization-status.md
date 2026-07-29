@@ -80,10 +80,29 @@ The completion state includes:
 - bounded error handling and cleanup checks for malformed fonts, hostile workspace definitions,
   overlong escape sequences, graphics payloads, and link-pool saturation.
 
-The app-wide `:app:testDebugUnitTest` task retains the pre-existing baseline of 48 environmental
-failures across 12 classes: loopback HTTP is refused by the host environment and
-`IconPackXmlParserTest` lacks a mocked `XmlPullParserFactory`. A change should be compared against
-the set of failing classes, not described as a fully green app suite.
+The app-wide `:app:testDebugUnitTest` task passes: 592 tests across 92 classes, zero failures.
+Expect green and treat any failure as a regression.
+
+This replaces a long-standing "48 environmental failures across 12 classes" baseline, which was a
+misdiagnosis worth recording so it is not reintroduced. Nothing in it was environmental, and none of
+it was WSL-specific — all 48 failed identically on any host JVM:
+
+- **36 failures, 6 classes** were attributed to the host refusing loopback HTTP. Loopback was never
+  the problem. `LauncherCtlApiServer.start()` bound its socket successfully and then threw from
+  `writeClientConfig()`, which could not create `/data/data/com.termux/files/home/.launcherctl` off
+  device; the `catch` closed the socket it had just opened, so clients saw `ConnectException`. Config
+  and shell-helper installation is now non-fatal — the listener survives an unwritable Termux home,
+  which was also a real on-device robustness bug.
+- **3 failures** were `IconPackXmlParserTest` calling `XmlPullParserFactory.newInstance()` on the
+  bare JVM classpath, where it is an android.jar stub. Robolectric was already a test dependency; the
+  class simply was not running under it.
+- **9 failures, 5 classes** were genuine assertion failures that the "environmental" label hid for
+  as long as it stood: a default that had changed (`%`, not `/`), a hardcoded model-catalog count, a
+  layout that moved its views into a `FrameLayout`, an unlaid-out `SuggestionBarView` that renders
+  nothing, and embedding-only models becoming non-loadable by design.
+
+The lesson is the one the backlog already records for duplicated lists: an accepted-failure baseline
+launders real regressions. Prefer a green suite plus explicit skips over a failure count.
 
 ## Documentation maintenance
 
