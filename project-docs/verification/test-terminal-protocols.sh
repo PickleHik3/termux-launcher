@@ -68,6 +68,18 @@ done
 printf '\n  A streak should follow it. Turn it off with appearance.toggle_cursor_trail\n'
 printf '  and repeat: the cursor must then jump with no streak.\n'
 
+section 'Glyph overhang vs neighbour background fill'
+printf '  Wide symbol glyphs (Nerd Font icons, powerline arrows) whose ink overhangs the\n'
+printf '  cell must not be clipped by the next cell'"'"'s background. Each icon below sits\n'
+printf '  directly against a filled cell; the icon'"'"'s right edge must stay intact.\n'
+printf '  %s[44m\356\202\260%s[41m  %s[0m  %s[42m\356\202\262%s[45m  %s[0m  ' \
+    "$esc" "$esc" "$esc" "$esc" "$esc" "$esc"
+printf '%s[100m\356\230\215%s[101mX%s[0m  %s[7m\357\200\223%s[27m%s[46m  %s[0m\n' \
+    "$esc" "$esc" "$esc" "$esc" "$esc" "$esc" "$esc"
+printf '  Same icons with a default background to their right (must also stay intact):\n'
+printf '  %s[44m\356\202\260%s[0m.  %s[100m\356\230\215%s[0mX  %s[7m\357\200\223%s[0m.\n' \
+    "$esc" "$esc" "$esc" "$esc" "$esc" "$esc"
+
 if [ "${1:-}" = "--keys" ]; then
     section 'Kitty keyboard protocol'
     printf '  Enabling disambiguate and querying. Expect the reply ^[[?1u, then one escape\n'

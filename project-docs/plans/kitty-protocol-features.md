@@ -429,6 +429,26 @@ Both are preserved by the same paths: `setChar`, `copyInterval`, reflow inside
   through store/place/delete cycles — hovering a PNG rendered it, moving to a JSON file replaced it
   with a text preview, no ghost images, and app-scoped logcat stayed clean throughout.
 
+- **Slice 15 — glyph overhang no longer clipped by neighbour backgrounds (done).** Nerd Font and
+  powerline glyphs keep advance = 1 cell but their ink often overhangs it. Runs were drawn
+  left-to-right, each painting background rect then text, so the next run's fill painted over the
+  previous glyph's overhang — clipped right edges, but only when the neighbour had a non-default
+  background (powerline prompts), which is why the symptom came and went.
+
+  Fix: backgrounds and the cursor block for the whole frame are painted before any glyph. The
+  per-run scale matrix cancels out for rectangles, so cell backgrounds are exactly cell-aligned and
+  the new pass (`drawRowBackgroundAndCursor`) needs no font configuration or shaping — it walks the
+  row by code point, merges adjacent equal fills into one rect, and skips default backgrounds
+  exactly as before. Colour resolution (palette, bold-is-bright, reverse video) moved into one
+  shared `resolveRunColors` so the two passes cannot disagree. The glyph pass keeps its structure;
+  `drawTextRun` grew a `drawBackgroundAndCursor` flag, true only for the extra-cursor overlay,
+  which still draws its own rects because it runs after everything.
+
+  `test-terminal-protocols.sh` gained an overhang section. Device pass (2026-07-29, Pong,
+  `com.termux` debug upgraded in place): powerline arrows and gear icons directly against filled
+  cells kept intact right edges, including a four-arrow powerline stack with per-cell colours;
+  default-background controls unchanged; cursor and prompt normal; no app-scoped fatal in logcat.
+
 ## User config path
 
 Decided 2026-07-27: everything this roadmap needs to write for the user goes under

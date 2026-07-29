@@ -366,6 +366,26 @@ public final class TerminalRenderer {
             canvas.drawColor(transparentOverlayColor, PorterDuff.Mode.SRC);
         }
         float heightOffset = mFontLineSpacingAndAscent;
+        // Backgrounds and the cursor block for every row are painted before any glyph, so a glyph
+        // whose ink overhangs its cells — Nerd Font symbols routinely do — lands on top of a
+        // neighbouring cell's fill instead of being clipped by it. Cell backgrounds are exactly
+        // cell-aligned on screen (the per-run scale matrix cancels out for rectangles), so this
+        // pass needs no font configuration or shaping.
+        for (int row = topRow; row < endRow; row++) {
+            heightOffset += mFontLineSpacing;
+            final int cursorX = (row == cursorRow && cursorVisible) ? cursorCol : -1;
+            int selx1 = -1, selx2 = -1;
+            if (row >= selectionY1 && row <= selectionY2) {
+                if (row == selectionY1)
+                    selx1 = selectionX1;
+                selx2 = (row == selectionY2) ? selectionX2 : mEmulator.mColumns;
+            }
+            TerminalRow lineObject = screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row));
+            drawRowBackgroundAndCursor(canvas, lineObject, palette, heightOffset, columns, cursorX,
+                cursorShape, selx1, selx2, boldWithBright, reverseVideo, horizontalOffset,
+                palette[TextStyle.COLOR_INDEX_CURSOR]);
+        }
+        heightOffset = mFontLineSpacingAndAscent;
         for (int row = topRow; row < endRow; row++) {
             heightOffset += mFontLineSpacing;
             final int cursorX = (row == cursorRow && cursorVisible) ? cursorCol : -1;
@@ -417,7 +437,7 @@ public final class TerminalRenderer {
                             boldWithBright, reverseVideo || invertCursorTextColor
                                 || lastRunInsideSelection,
                             horizontalOffset, lastRunDecorationColor,
-                            lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface);
+                            lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface, false);
                     }
                     Bitmap bm = mEmulator.getScreen().getSixelBitmap(codePoint, style);
                     if (bm != null) {
@@ -480,7 +500,7 @@ public final class TerminalRenderer {
                             boldWithBright, reverseVideo || invertCursorTextColor
                                 || lastRunInsideSelection,
                             horizontalOffset, lastRunDecorationColor,
-                            lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface);
+                            lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface, false);
                     }
                     measuredWidthForRun = 0.f;
                     lastRunStyle = style;
@@ -515,7 +535,7 @@ public final class TerminalRenderer {
                 measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, boldWithBright,
                 reverseVideo || invertCursorTextColor || lastRunInsideSelection,
                 horizontalOffset, lastRunDecorationColor, lastRunHyperlinkId != 0, 0,
-                lastRunSymbolTypeface);
+                lastRunSymbolTypeface, false);
         }
         drawExtraCursors(mEmulator, canvas, screen, palette, topRow, endRow, boldWithBright, reverseVideo, horizontalOffset);
     }
@@ -525,7 +545,7 @@ public final class TerminalRenderer {
                              int cursor, int cursorStyle, long textStyle, boolean boldWithBright,
                              boolean reverseVideo, float horizontalOffset, int decorationColor,
                              boolean hyperlink, int foregroundOverride,
-                             @Nullable Typeface symbolTypeface) {
+                             @Nullable Typeface symbolTypeface, boolean drawBackgroundAndCursor) {
         boolean disableLigatures = disablesLigatures(mLigaturePolicy, cursor != 0);
         int effect = TextStyle.decodeEffect(textStyle);
         boolean bold = (effect & (TextStyle.CHARACTER_ATTRIBUTE_BOLD
@@ -559,7 +579,7 @@ public final class TerminalRenderer {
             drawTextRunConfigured(canvas, text, palette, y, startColumn, runWidthColumns,
                 startCharIndex, runWidthChars, mes, cursor, cursorStyle, textStyle,
                 boldWithBright, reverseVideo, horizontalOffset, decorationColor, hyperlink,
-                foregroundOverride, symbolTypeface);
+                foregroundOverride, symbolTypeface, drawBackgroundAndCursor);
         } finally {
             if (restoreVariations) {
                 try {
@@ -587,10 +607,9 @@ public final class TerminalRenderer {
                                        long textStyle, boolean boldWithBright, boolean reverseVideo,
                                        float horizontalOffset, int decorationColor,
                                        boolean hyperlink, int foregroundOverride,
-                                       @Nullable Typeface symbolTypeface) {
-        int foreColor = TextStyle.decodeForeColor(textStyle);
+                                       @Nullable Typeface symbolTypeface,
+                                       boolean drawBackgroundAndCursor) {
         final int effect = TextStyle.decodeEffect(textStyle);
-        int backColor = TextStyle.decodeBackColor(textStyle);
         final boolean bold = (effect & (TextStyle.CHARACTER_ATTRIBUTE_BOLD | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0;
         final boolean underline = (effect & TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0;
         final boolean italic = (effect & TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0;
@@ -607,22 +626,9 @@ public final class TerminalRenderer {
         mes = mTextPaint.getTextRunAdvances(text, startCharIndex, runWidthChars,
             startCharIndex, runWidthChars, false, null, 0);
         if (!(mes > 0f)) mes = runWidthColumns * fontWidth;
-        if ((foreColor & 0xff000000) != 0xff000000) {
-            // If enabled, let bold have bright colors if applicable (one of the first 8):
-            if (boldWithBright && bold && foreColor >= 0 && foreColor < 8)
-                foreColor += 8;
-            foreColor = palette[foreColor];
-        }
-        if ((backColor & 0xff000000) != 0xff000000) {
-            backColor = palette[backColor];
-        }
-        // Reverse video here if _one and only one_ of the reverse flags are set:
-        final boolean reverseVideoHere = reverseVideo ^ (effect & (TextStyle.CHARACTER_ATTRIBUTE_INVERSE)) != 0;
-        if (reverseVideoHere) {
-            int tmp = foreColor;
-            foreColor = backColor;
-            backColor = tmp;
-        }
+        final long resolvedColors = resolveRunColors(textStyle, palette, boldWithBright, reverseVideo);
+        int foreColor = (int) (resolvedColors >>> 32);
+        int backColor = (int) resolvedColors;
         if (foregroundOverride != 0)
             foreColor = foregroundOverride;
         float left = horizontalOffset + startColumn * fontWidth;
@@ -636,19 +642,23 @@ public final class TerminalRenderer {
             right *= mes / runWidthColumns;
             savedMatrix = true;
         }
-        if (backColor != palette[TextStyle.COLOR_INDEX_BACKGROUND]) {
-            // Only draw non-default background.
-            mTextPaint.setColor(backColor);
-            canvas.drawRect(left, y - fontLineSpacing, right, y, mTextPaint);
-        }
-        if (cursor != 0) {
-            mTextPaint.setColor(cursor);
-            float cursorHeight = fontLineSpacing;
-            if (cursorStyle == TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE)
-                cursorHeight /= 4.;
-            else if (cursorStyle == TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR)
-                right -= ((right - left) * 3) / 4.;
-            canvas.drawRect(left, y - cursorHeight, right, y, mTextPaint);
+        if (drawBackgroundAndCursor) {
+            // The normal screen paints backgrounds and the cursor in a separate pass before any
+            // glyph (see render()); only the extra-cursor overlay still draws them per run.
+            if (backColor != palette[TextStyle.COLOR_INDEX_BACKGROUND]) {
+                // Only draw non-default background.
+                mTextPaint.setColor(backColor);
+                canvas.drawRect(left, y - fontLineSpacing, right, y, mTextPaint);
+            }
+            if (cursor != 0) {
+                mTextPaint.setColor(cursor);
+                float cursorHeight = fontLineSpacing;
+                if (cursorStyle == TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE)
+                    cursorHeight /= 4.;
+                else if (cursorStyle == TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR)
+                    right -= ((right - left) * 3) / 4.;
+                canvas.drawRect(left, y - cursorHeight, right, y, mTextPaint);
+            }
         }
         if ((effect & TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE) == 0) {
             if (dim) {
@@ -690,6 +700,122 @@ public final class TerminalRenderer {
         }
         if (savedMatrix)
             canvas.restore();
+    }
+
+    /**
+     * Resolve a cell's final foreground and background colour — palette lookup, bold-is-bright,
+     * and reverse video — packed as {@code (foreground << 32) | background}. The single source of
+     * truth for both the background pass and the glyph pass, so the two cannot disagree.
+     */
+    static long resolveRunColors(long textStyle, int[] palette, boolean boldWithBright, boolean reverseVideo) {
+        int foreColor = TextStyle.decodeForeColor(textStyle);
+        final int effect = TextStyle.decodeEffect(textStyle);
+        int backColor = TextStyle.decodeBackColor(textStyle);
+        final boolean bold = (effect & (TextStyle.CHARACTER_ATTRIBUTE_BOLD | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0;
+        if ((foreColor & 0xff000000) != 0xff000000) {
+            // If enabled, let bold have bright colors if applicable (one of the first 8):
+            if (boldWithBright && bold && foreColor >= 0 && foreColor < 8)
+                foreColor += 8;
+            foreColor = palette[foreColor];
+        }
+        if ((backColor & 0xff000000) != 0xff000000) {
+            backColor = palette[backColor];
+        }
+        // Reverse video here if _one and only one_ of the reverse flags are set:
+        if (reverseVideo ^ (effect & (TextStyle.CHARACTER_ATTRIBUTE_INVERSE)) != 0) {
+            final int swap = foreColor;
+            foreColor = backColor;
+            backColor = swap;
+        }
+        return ((long) foreColor << 32) | (backColor & 0xffffffffL);
+    }
+
+    /**
+     * Paint one row's cell backgrounds and its cursor block before any glyph is drawn, so glyph
+     * ink that overhangs its cells is drawn over a neighbour's fill rather than clipped under it.
+     * Rectangles are cell-aligned, so no font configuration or measurement happens here; the walk
+     * mirrors the run segmentation in {@link #render} so both passes agree on every cell's style.
+     */
+    private void drawRowBackgroundAndCursor(Canvas canvas, TerminalRow lineObject, int[] palette,
+                                            float y, int columns, int cursorX, int cursorShape,
+                                            int selx1, int selx2, boolean boldWithBright,
+                                            boolean reverseVideo, float horizontalOffset,
+                                            int cursorColor) {
+        final char[] line = lineObject.mText;
+        final int charsUsedInLine = lineObject.getSpaceUsed();
+        final int defaultBackColor = palette[TextStyle.COLOR_INDEX_BACKGROUND];
+        final float top = y - mFontLineSpacing;
+        int pendingStartColumn = -1;
+        int pendingEndColumn = -1;
+        int pendingColor = 0;
+        int currentCharIndex = 0;
+        for (int column = 0; column < columns; ) {
+            final char charAtIndex = line[currentCharIndex];
+            final int charsForCodePoint = Character.isHighSurrogate(charAtIndex) ? 2 : 1;
+            final long style = lineObject.getStyle(column);
+            if (TextStyle.isBitmap(style)) {
+                if (pendingStartColumn != -1) {
+                    drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor);
+                    pendingStartColumn = -1;
+                }
+                column += 1;
+                currentCharIndex += charsForCodePoint;
+                continue;
+            }
+            final int codePointWcWidth = lineObject.getDisplayWidthAt(currentCharIndex);
+            final int cellColumns = Math.max(1, codePointWcWidth);
+            final boolean insideCursor = cursorX == column || (codePointWcWidth == 2 && cursorX == column + 1);
+            final boolean insideSelection = column >= selx1 && column <= selx2;
+            final boolean invertCursorTextColor = insideCursor
+                && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
+            final int backColor = (int) resolveRunColors(style, palette, boldWithBright,
+                reverseVideo || invertCursorTextColor || insideSelection);
+            if (insideCursor) {
+                if (pendingStartColumn != -1) {
+                    drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor);
+                    pendingStartColumn = -1;
+                }
+                if (backColor != defaultBackColor)
+                    drawCellRect(canvas, column, column + cellColumns, top, y, horizontalOffset, backColor);
+                float left = horizontalOffset + column * mFontWidth;
+                float right = left + cellColumns * mFontWidth;
+                float cursorTop = top;
+                if (cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE)
+                    cursorTop = y - mFontLineSpacing / 4f;
+                else if (cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR)
+                    right -= ((right - left) * 3) / 4f;
+                mTextPaint.setColor(cursorColor);
+                canvas.drawRect(left, cursorTop, right, y, mTextPaint);
+            } else if (backColor != defaultBackColor) {
+                if (pendingStartColumn != -1 && pendingColor == backColor) {
+                    pendingEndColumn = column + cellColumns;
+                } else {
+                    if (pendingStartColumn != -1)
+                        drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor);
+                    pendingStartColumn = column;
+                    pendingEndColumn = column + cellColumns;
+                    pendingColor = backColor;
+                }
+            } else if (pendingStartColumn != -1) {
+                drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor);
+                pendingStartColumn = -1;
+            }
+            column += codePointWcWidth;
+            currentCharIndex += charsForCodePoint;
+            while (currentCharIndex < charsUsedInLine
+                && lineObject.getDisplayWidthAt(currentCharIndex) <= 0) {
+                currentCharIndex += Character.isHighSurrogate(line[currentCharIndex]) ? 2 : 1;
+            }
+        }
+        if (pendingStartColumn != -1)
+            drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor);
+    }
+
+    private void drawCellRect(Canvas canvas, int startColumn, int endColumn, float top, float bottom,
+                              float horizontalOffset, int color) {
+        mTextPaint.setColor(color);
+        canvas.drawRect(horizontalOffset + startColumn * mFontWidth, top,
+            horizontalOffset + endColumn * mFontWidth, bottom, mTextPaint);
     }
 
     /** Draw kitty-protocol cursors after the normal screen, so they do not perturb text run batching. */
@@ -760,7 +886,7 @@ public final class TerminalRenderer {
             boolean hyperlink = row.hasHyperlinks() && row.getHyperlinkId(startColumn) != 0;
             drawTextRun(canvas, text, palette, y, startColumn, width, startIndex, chars, measured,
                 cursorColor, shape, style, boldWithBright, reverseVideo || invertText, horizontalOffset,
-                decorationColor, hyperlink, textOverride, symbolTypeface);
+                decorationColor, hyperlink, textOverride, symbolTypeface, true);
         }
     }
 
