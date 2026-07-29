@@ -75,6 +75,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_WINDOW_PREVIOUS = "window.previous";
     public static final String TOOL_SESSION_NEW = "session.new";
     public static final String TOOL_SESSION_BROWSER = "session.browser";
+    public static final String TOOL_SESSION_PANEL = "session.panel";
     public static final String TOOL_SESSION_CLONE_CURRENT = "session.clone_current";
     public static final String TOOL_SESSION_NEXT = "session.next";
     public static final String TOOL_SESSION_PREVIOUS = "session.previous";
@@ -175,6 +176,7 @@ public final class TerminalActionDispatcher {
             case TOOL_WINDOW_PREVIOUS:
             case TOOL_SESSION_NEW:
             case TOOL_SESSION_BROWSER:
+            case TOOL_SESSION_PANEL:
             case TOOL_SESSION_CLONE_CURRENT:
             case TOOL_SESSION_NEXT:
             case TOOL_SESSION_PREVIOUS:
@@ -457,6 +459,9 @@ public final class TerminalActionDispatcher {
                 case TOOL_SESSION_BROWSER:
                     TerminalSessionBrowser.show(activity);
                     return ok().put("browserOpen", true);
+                case TOOL_SESSION_PANEL:
+                    activity.toggleSessionsPanel();
+                    return ok().put("panelOpen", activity.isSessionsPanelShowing());
                 case TOOL_SESSION_CLONE_CURRENT:
                     if (!activity.cloneCurrentBrowserSession()) return noSession(toolName);
                     return ok().put("cloned", true);

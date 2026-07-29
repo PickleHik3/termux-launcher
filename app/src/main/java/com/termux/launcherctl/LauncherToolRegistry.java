@@ -420,6 +420,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_WINDOW_PREVIOUS = "window.previous";
     public static final String TOOL_SESSION_NEW = "session.new";
     public static final String TOOL_SESSION_BROWSER = "session.browser";
+    public static final String TOOL_SESSION_PANEL = "session.panel";
     public static final String TOOL_SESSION_CLONE_CURRENT = "session.clone_current";
     public static final String TOOL_SESSION_NEXT = "session.next";
     public static final String TOOL_SESSION_PREVIOUS = "session.previous";
@@ -735,6 +736,12 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_SESSION, R.string.tool_session_browser, R.string.tool_desc_session_browser,
             null, REQUIRES_SESSION);
+        addUi(map, TOOL_SESSION_PANEL,
+            "Open or close the sessions panel under the status row.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_SESSION, R.string.tool_session_panel, R.string.tool_desc_session_panel,
+            Binding.all("ctrl+alt+shift+s"), REQUIRES_SESSION);
         addUi(map, TOOL_SESSION_CLONE_CURRENT,
             "Create a fresh terminal session at the current pane's working directory.",
             schemaEmpty(),

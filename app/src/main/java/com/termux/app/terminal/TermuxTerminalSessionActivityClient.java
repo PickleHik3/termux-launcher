@@ -373,10 +373,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     void notifyOfSessionChange() {
         if (!mActivity.isVisible())
             return;
-        if (!mActivity.getProperties().areTerminalSessionChangeToastsDisabled()) {
-            TerminalSession session = mActivity.getCurrentSession();
-            mActivity.showSessionSwitchIndicator(toToastTitle(session));
-        }
+        // The indicator replaces the old Android toast, so disable-terminal-session-change-toast
+        // must not suppress it.
+        mActivity.showSessionSwitchIndicator(toToastTitle(mActivity.getCurrentSession()));
     }
 
     public void switchToSession(boolean forward) {

@@ -232,6 +232,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.statusbar.SystemStatsCardView mStatsCardView;
     @Nullable private com.termux.app.statusbar.WeatherController mWeatherController;
     @Nullable private com.termux.app.statusbar.WeatherCardView mWeatherCardView;
+    /** Fork-native sessions list dropped beneath the status-row session chip. */
+    @Nullable private com.termux.app.statusbar.SessionsPanelView mSessionsPanelView;
     private final TerminalFrameMetricsMonitor mTerminalFrameMetricsMonitor =
         new TerminalFrameMetricsMonitor();
     private final com.termux.app.statusbar.StatusCardHost mStatusCardHost =
@@ -7233,7 +7235,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View newSessionButton = findViewById(R.id.new_session_button);
         newSessionButton.setOnClickListener(v -> mTermuxTerminalSessionActivityClient.addNewSession(false, null));
         newSessionButton.setOnLongClickListener(v -> {
-            TextInputDialogUtils.textInput(TermuxActivity.this, R.string.title_create_named_session, null, R.string.action_create_named_session_confirm, text -> mTermuxTerminalSessionActivityClient.addNewSession(false, text), R.string.action_new_session_failsafe, text -> mTermuxTerminalSessionActivityClient.addNewSession(true, text), -1, null, null);
+            promptNewSession();
             return true;
         });
     }
@@ -8187,6 +8189,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void onWindowForegroundResolved() {
         refreshTerminalWindowBar();
+        refreshSessionsPanel();
         if (mSessionBrowserRefreshCallback != null) mSessionBrowserRefreshCallback.run();
     }
 
@@ -8603,6 +8606,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTermuxSessionListViewController != null)
             mTermuxSessionListViewController.notifyDataSetChanged();
         refreshTerminalWindowBar();
+        refreshSessionsPanel();
     }
 
     /** Wire the app-owned window strip. Window chips are indicators and direct switch targets. */
@@ -8618,10 +8622,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.statusbar.SessionsIndicatorView sessionsIndicator =
             findViewById(R.id.terminal_sessions_indicator);
         if (sessionsIndicator != null) {
-            sessionsIndicator.setOnClickListener(v -> {
-                if (getDrawer().isDrawerOpen(Gravity.LEFT)) getDrawer().closeDrawers();
-                else getDrawer().openDrawer(Gravity.LEFT);
-            });
+            // The chip owns the fork's sessions panel. The native drawer stays reachable by its
+            // edge swipe and by the app.open_drawer action, but no longer by this tap.
+            sessionsIndicator.setOnClickListener(v -> toggleSessionsPanel());
         }
         View statusBarHost = findViewById(R.id.terminal_window_bar_host);
         if (statusBarHost instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
@@ -9022,6 +9025,128 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mStatsController.start(4000L, false);
             }
         });
+    }
+
+    /**
+     * Seam for {@code session.panel} and for the status-row session chip: drop the fork's sessions
+     * list beneath the chip, or close it when it is already the open card. Another status card gives
+     * way to it, matching how the stats and weather cards trade places.
+     */
+    public void toggleSessionsPanel() {
+        View anchor = findViewById(R.id.terminal_sessions_indicator);
+        if (anchor == null) return;
+        if (mStatusCardHost.isShowing()) {
+            boolean same = mStatusCardHost.isShowingFor(anchor);
+            mStatusCardHost.dismissAnimated();
+            if (same) return;
+        }
+        if (mSessionsPanelView == null) {
+            mSessionsPanelView = new com.termux.app.statusbar.SessionsPanelView(this);
+            mSessionsPanelView.setListener(sessionsPanelListener());
+        }
+        detachFromParent(mSessionsPanelView);
+        mSessionsPanelView.setSurfaceStyle(isRoundedDockStyle(),
+            resolveStatusBarCapsuleCornerRadiusPx(Math.round(dpToPx(44))));
+        mSessionsPanelView.bind(getSessionBrowserSessions());
+        mStatusCardHost.showPanel(anchor, mSessionsPanelView, statusCardStyleProvider(), 320, null);
+        requestSessionBrowserForegroundRefresh();
+    }
+
+    /** Whether the sessions panel is the card currently on screen. */
+    public boolean isSessionsPanelShowing() {
+        View anchor = findViewById(R.id.terminal_sessions_indicator);
+        return anchor != null && mStatusCardHost.isShowingFor(anchor);
+    }
+
+    /** Re-bind the open panel after a session was created, closed, renamed, or switched. */
+    private void refreshSessionsPanel() {
+        if (mSessionsPanelView == null || !isSessionsPanelShowing()) return;
+        mSessionsPanelView.bind(getSessionBrowserSessions());
+    }
+
+    @NonNull
+    private com.termux.app.statusbar.SessionsPanelView.Listener sessionsPanelListener() {
+        return new com.termux.app.statusbar.SessionsPanelView.Listener() {
+            @Override
+            public void onSessionSelected(int index) {
+                if (activateBrowserSession(index)) mStatusCardHost.dismissAnimated();
+            }
+
+            @Override
+            public void onSessionClosed(int index) {
+                if (!sessionHasForegroundJob(index)) {
+                    // Nothing is running, so the panel stays open and just loses the row.
+                    closeBrowserSession(index);
+                    return;
+                }
+                mStatusCardHost.dismissAnimated();
+                confirmCloseBrowserSession(index);
+            }
+
+            @Override
+            public void onSessionRenameRequested(int index) {
+                mStatusCardHost.dismissAnimated();
+                if (index < 0 || index >= mWSessions.size()) return;
+                promptWindowSessionRename(mWSessions.get(index));
+            }
+
+            @Override
+            public void onNewSession() {
+                if (createBrowserSession()) mStatusCardHost.dismissAnimated();
+            }
+
+            @Override
+            public void onNewSessionPrompt() {
+                mStatusCardHost.dismissAnimated();
+                promptNewSession();
+            }
+        };
+    }
+
+    /** True when any pane of the session at {@code index} has a non-idle foreground process. */
+    private boolean sessionHasForegroundJob(int index) {
+        if (mPaneController == null || mWindowForegroundResolver == null
+            || index < 0 || index >= mWSessions.size()) return false;
+        for (com.termux.app.terminal.TerminalPaneController.Window window :
+                mWSessions.get(index).windows) {
+            for (TerminalSession shell : mPaneController.shellsOf(window)) {
+                com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+                    mWindowForegroundResolver.get(shell.getPid());
+                if (info != null && !info.idle) return true;
+            }
+        }
+        return false;
+    }
+
+    /** Shared close confirmation for the sessions panel; mirrors the browser's wording. */
+    private void confirmCloseBrowserSession(int index) {
+        if (index < 0 || index >= mWSessions.size() || mPaneController == null) return;
+        WSession session = mWSessions.get(index);
+        int paneCount = 0;
+        for (com.termux.app.terminal.TerminalPaneController.Window window : session.windows)
+            paneCount += mPaneController.shellsOf(window).size();
+        String title = WindowSessionName.normalize(session.name) == null
+            ? getString(R.string.session_browser_unnamed, index + 1)
+            : getString(R.string.session_browser_named, index + 1, session.name);
+        final int panes = paneCount;
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.session_browser_close_title, title))
+            .setMessage(getResources().getQuantityString(
+                R.plurals.session_browser_close_message, panes, panes))
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.session_browser_close,
+                (dialog, which) -> closeBrowserSession(index))
+            .show();
+    }
+
+    /** Named-session prompt with the fail-safe alternative, shared by the drawer and the panel. */
+    public void promptNewSession() {
+        if (mTermuxTerminalSessionActivityClient == null) return;
+        TextInputDialogUtils.textInput(this, R.string.title_create_named_session, null,
+            R.string.action_create_named_session_confirm,
+            text -> mTermuxTerminalSessionActivityClient.addNewSession(false, text),
+            R.string.action_new_session_failsafe,
+            text -> mTermuxTerminalSessionActivityClient.addNewSession(true, text), -1, null, null);
     }
 
     @NonNull

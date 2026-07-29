@@ -31,7 +31,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void registry_containsExpectedTools() {
         List<LauncherToolRegistry.ToolMetadata> tools = registry.getTools();
-        assertEquals(72, tools.size());
+        assertEquals(73, tools.size());
         assertNotNull(registry.getTool("capabilities.get"));
         assertNotNull(registry.getTool("apps.search"));
         assertNotNull(registry.getTool("apps.launch"));
@@ -86,7 +86,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void toOpenAiToolsJson_producesFunctionTools() throws Exception {
         JSONArray openAiTools = registry.toOpenAiToolsJson();
-        assertEquals(72, openAiTools.length());
+        assertEquals(73, openAiTools.length());
         for (int i = 0; i < openAiTools.length(); i++) {
             JSONObject item = openAiTools.getJSONObject(i);
             assertEquals("function", item.getString("type"));
@@ -101,7 +101,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void toInternalJson_includesSchemaAndRisk() throws Exception {
         JSONArray internal = registry.toInternalJson();
-        assertEquals(72, internal.length());
+        assertEquals(73, internal.length());
         JSONObject first = internal.getJSONObject(0);
         assertTrue(first.has("name"));
         assertTrue(first.has("description"));
@@ -115,9 +115,9 @@ public class LauncherToolRegistryTest {
     public void responseJson_containsBothFormats() throws Exception {
         JSONObject response = registry.toResponseJson();
         assertTrue(response.getBoolean("ok"));
-        assertEquals(72, response.getInt("count"));
-        assertEquals(72, response.getJSONArray("tools").length());
-        assertEquals(72, response.getJSONArray("openAiTools").length());
+        assertEquals(73, response.getInt("count"));
+        assertEquals(73, response.getJSONArray("tools").length());
+        assertEquals(73, response.getJSONArray("openAiTools").length());
     }
 
     @Test
@@ -206,7 +206,7 @@ public class LauncherToolRegistryTest {
         String[] terminalTools = {"terminal.state", "pane.split_vertical", "pane.split_horizontal",
             "pane.focus_direction", "pane.resize", "pane.kill_focused", "window.new", "window.close",
             "window.next", "window.previous", "session.new", "session.next", "session.previous",
-            "session.close_current", "session.browser", "session.clone_current",
+            "session.close_current", "session.browser", "session.panel", "session.clone_current",
             "pane.equalize", "pane.rotate", "pane.next_layout"};
         for (String name : terminalTools) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
@@ -215,7 +215,7 @@ public class LauncherToolRegistryTest {
             assertNotNull(name, tool.category);
             assertTrue(name, tool.hasUiMetadata());
         }
-        assertEquals(52, registry.getUiTools().size());
+        assertEquals(53, registry.getUiTools().size());
     }
 
     @Test

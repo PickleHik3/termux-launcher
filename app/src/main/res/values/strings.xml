@@ -1232,6 +1232,7 @@
     <string name="tool_session_previous">Previous session</string>
     <string name="tool_session_close_current">Close session</string>
     <string name="tool_session_browser">Session browser</string>
+    <string name="tool_session_panel">Sessions panel</string>
     <string name="tool_session_clone_current">Clone session with CWD</string>
     <string name="tool_terminal_toggle_soft_keyboard">Toggle keyboard</string>
     <string name="tool_terminal_toggle_toolbar">Toggle extra keys</string>
@@ -1280,6 +1281,7 @@
     <string name="tool_desc_session_previous">Switch to the previous terminal session.</string>
     <string name="tool_desc_session_close_current">Close the current session, including all of its windows and panes.</string>
     <string name="tool_desc_session_browser">Search sessions by name, working directory, or foreground process.</string>
+    <string name="tool_desc_session_panel">Drop the sessions list beneath the status row to switch, rename, close, or create sessions.</string>
     <string name="tool_desc_session_clone_current">Create a fresh shell session in the current working directory.</string>
     <string name="tool_desc_terminal_reset">Reset the terminal emulator state for the focused shell.</string>
     <string name="tool_desc_terminal_toggle_soft_keyboard">Show or hide the keyboard.</string>
@@ -1374,6 +1376,12 @@
     <string name="session_browser_workspace_overwrite_message">A workspace with this name already exists.</string>
     <string name="session_browser_overwrite">Replace</string>
     <string name="session_browser_action_failed">Could not complete the session action</string>
+
+    <!-- Status-row sessions panel -->
+    <string name="sessions_panel_empty">No sessions</string>
+    <string name="sessions_panel_new">New session</string>
+    <string name="sessions_panel_shell">shell</string>
+    <string name="sessions_panel_close_session">Close session %1$d</string>
     <string name="palette_unavailable_no_selection">Unavailable: no text selected</string>
     <string name="palette_unavailable_no_session">Unavailable: no active session</string>
 
