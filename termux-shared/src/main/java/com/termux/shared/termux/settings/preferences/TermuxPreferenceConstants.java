@@ -547,6 +547,13 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_TERMINAL_FLUSH_DOCK = false;
 
         /**
+         * Defines whether a thin outline border is drawn around the terminal surface.
+         */
+        public static final String KEY_TERMINAL_BORDER_ENABLED = "terminal_border_enabled";
+
+        public static final boolean DEFAULT_VALUE_TERMINAL_BORDER_ENABLED = false;
+
+        /**
          * Stores the user's preferred terminal opacity while wallpaper mode is enabled so it can
          * be restored after temporarily disabling wallpaper.
          */

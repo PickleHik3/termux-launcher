@@ -944,6 +944,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (terminalSurfaceHost == null || terminalBodySurface == null || terminalStatusSurface == null) {
             return;
         }
+        applyTerminalBorderAppearance();
         boolean wallpaperMode = shouldUseWallpaperPassthroughMode();
         int accessoryBaseColor = resolveAccessoryGlassBaseColor();
         int sessionsBaseColor = resolveAccessoryGlassBaseColor();
@@ -992,6 +993,90 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         applyTerminalStatusBarSurfaceColor(showSurface, terminalSurfaceColor);
         applyTerminalWindowBarBackdropInsets();
+    }
+
+    /**
+     * Optional thin outline framing the terminal area. Rounded to the same radius as other capsule
+     * surfaces and inset from the dock/keyboard edges by the same 10dp when the Rounded surface
+     * style is active; square and edge-to-edge otherwise. The pane host is inset by the stroke
+     * width plus a small gap so terminal content never renders under the line, and is clipped to
+     * the same rounded outline so its corners don't poke past a rounded border.
+     */
+    private void applyTerminalBorderAppearance() {
+        if (mPreferences == null) {
+            return;
+        }
+        View borderView = findViewById(R.id.terminal_border_overlay);
+        View paneHost = findViewById(R.id.terminal_pane_host);
+        if (borderView == null || paneHost == null) {
+            return;
+        }
+        boolean enabled = mPreferences.isTerminalBorderEnabled();
+        borderView.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        boolean capsule = isRoundedDockStyle();
+        int capsuleMarginPx = capsule ? resolveDockCapsuleHorizontalMarginPx() : 0;
+
+        ViewGroup.LayoutParams borderParams = borderView.getLayoutParams();
+        if (borderParams instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) borderParams;
+            if (marginParams.leftMargin != capsuleMarginPx || marginParams.rightMargin != capsuleMarginPx) {
+                marginParams.leftMargin = capsuleMarginPx;
+                marginParams.rightMargin = capsuleMarginPx;
+                borderView.setLayoutParams(marginParams);
+            }
+        }
+
+        int strokePx = Math.max(1, Math.round(dpToPx(1)));
+        int paneInsetPx = enabled ? strokePx + Math.round(dpToPx(2)) : 0;
+        int paneHorizontalInsetPx = capsuleMarginPx + paneInsetPx;
+        ViewGroup.LayoutParams paneParams = paneHost.getLayoutParams();
+        if (paneParams instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) paneParams;
+            if (marginParams.leftMargin != paneHorizontalInsetPx || marginParams.rightMargin != paneHorizontalInsetPx
+                || marginParams.topMargin != paneInsetPx || marginParams.bottomMargin != paneInsetPx) {
+                marginParams.leftMargin = paneHorizontalInsetPx;
+                marginParams.rightMargin = paneHorizontalInsetPx;
+                marginParams.topMargin = paneInsetPx;
+                marginParams.bottomMargin = paneInsetPx;
+                paneHost.setLayoutParams(marginParams);
+            }
+        }
+
+        if (!enabled) {
+            borderView.setBackground(null);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                paneHost.setOutlineProvider(ViewOutlineProvider.BOUNDS);
+                paneHost.setClipToOutline(false);
+            }
+            return;
+        }
+
+        float cornerRadiusPx = capsule ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
+        // Harmonize with the split-pane focus border (pane_active_border.xml uses colorPrimary to
+        // mark the active pane): the ambient outer border must read as a quiet structural outline
+        // rather than a second focus indicator, so it uses termuxColorOutlineVariant (the same role
+        // already used for the dock/keyboard capsule's containing stroke) at a moderate alpha.
+        GradientDrawable border = new GradientDrawable();
+        border.setColor(Color.TRANSPARENT);
+        border.setCornerRadius(cornerRadiusPx);
+        border.setStroke(strokePx, withAlphaComponent(resolveAccessoryOutlineColor(), 150));
+        borderView.setBackground(border);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            if (capsule) {
+                float innerRadiusPx = Math.max(0f, cornerRadiusPx - paneInsetPx);
+                paneHost.setOutlineProvider(new ViewOutlineProvider() {
+                    @Override
+                    public void getOutline(View view, android.graphics.Outline outline) {
+                        outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), innerRadiusPx);
+                    }
+                });
+                paneHost.setClipToOutline(true);
+            } else {
+                paneHost.setOutlineProvider(ViewOutlineProvider.BOUNDS);
+                paneHost.setClipToOutline(true);
+            }
+        }
     }
 
     /**
@@ -5711,6 +5796,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         SeekBar grain = findViewById(R.id.dock_tuning_grain_slider);
         SeekBar dockRadius = findViewById(R.id.dock_tuning_radius_slider);
         SeekBar terminal = findViewById(R.id.dock_tuning_terminal_slider);
+        com.google.android.material.materialswitch.MaterialSwitch terminalBorder =
+            findViewById(R.id.dock_tuning_terminal_border_switch);
         SeekBar sessions = findViewById(R.id.dock_tuning_sessions_slider);
         SeekBar size = findViewById(R.id.dock_tuning_size_slider);
         SeekBar icons = findViewById(R.id.dock_tuning_icons_slider);
@@ -5768,6 +5855,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final int initialGrain = mPreferences.getDockGlassGrain();
         final int initialDockRadius = mPreferences.getAppLauncherDockCornerRadius();
         final int initialTerminal = mPreferences.getTerminalBackgroundOpacity();
+        final boolean initialTerminalBorder = mPreferences.isTerminalBorderEnabled();
         final int initialSessions = mPreferences.getSessionsOpacity();
         final float initialBarHeight = mPreferences.getAppLauncherBarHeightScale();
         final int initialSizeIndex = nearestDockSizePresetIndex(initialBarHeight);
@@ -5786,6 +5874,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         grain.setProgress(initialGrain);
         dockRadius.setProgress(editorRadius(initialDockRadius));
         terminal.setProgress(initialTerminal);
+        if (terminalBorder != null) {
+            terminalBorder.setOnCheckedChangeListener(null);
+            terminalBorder.setChecked(mPreferences.isTerminalBorderEnabled());
+        }
         sessions.setProgress(initialSessions);
         size.setProgress(initialSizeIndex);
         icons.setProgress(Math.max(1, Math.min(20, initialButtonCount)));
@@ -5880,6 +5972,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             }
         });
+        if (terminalBorder != null) {
+            terminalBorder.setOnCheckedChangeListener((button, isChecked) -> {
+                mPreferences.setTerminalBorderEnabled(isChecked);
+                applyDockTuningStructuralPreview();
+            });
+        }
         sessions.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 sessionsValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
@@ -6011,6 +6109,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY);
                 mPreferences.setSessionsOpacity(
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_SESSIONS_OPACITY);
+                mPreferences.setTerminalBorderEnabled(
+                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERMINAL_BORDER_ENABLED);
             }
             blur.setProgress(mPreferences.getExtraKeysBlurRadius());
             opacity.setProgress(mPreferences.getAppBarOpacity());
@@ -6035,6 +6135,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             statusGrain.setProgress(mPreferences.getStatusBarGrain());
             statusRadius.setProgress(editorRadius(mPreferences.getStatusBarCornerRadius()));
             terminal.setProgress(mPreferences.getTerminalBackgroundOpacity());
+            if (terminalBorder != null)
+                terminalBorder.setChecked(mPreferences.isTerminalBorderEnabled());
             sessions.setProgress(mPreferences.getSessionsOpacity());
             applyDockTuningStructuralPreview();
         });
@@ -6047,6 +6149,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.setDockGlassGrain(initialGrain);
                 mPreferences.setAppLauncherDockCornerRadius(initialDockRadius);
                 mPreferences.setTerminalBackgroundOpacity(initialTerminal);
+                mPreferences.setTerminalBorderEnabled(initialTerminalBorder);
                 mPreferences.setSessionsOpacity(initialSessions);
                 mPreferences.setAppLauncherBarHeightScale(initialBarHeight);
                 mPreferences.setAppLauncherButtonCount(initialButtonCount);

@@ -214,6 +214,14 @@
                         android:layout_height="match_parent"
                         android:clipChildren="false"
                         android:clipToPadding="false" />
+
+                    <!-- Optional thin outline framing the terminal area; background/shape/margins
+                         are set programmatically in applyTerminalBorderAppearance(). -->
+                    <View
+                        android:id="@+id/terminal_border_overlay"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:visibility="gone" />
                 </FrameLayout>
             </LinearLayout>
 
@@ -1120,6 +1128,26 @@
                             android:gravity="center"
                             android:textColor="?attr/termuxColorOnSurfaceVariant"
                             android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="36dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/termux_dock_tuning_terminal_border"
+                            android:textColor="?attr/termuxColorOnSurface"
+                            android:textSize="12sp" />
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/dock_tuning_terminal_border_switch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" />
                     </LinearLayout>
 
                     <TextView

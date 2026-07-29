@@ -990,6 +990,7 @@
                 <string name="termux_dock_tuning_size">Size</string>
                 <string name="termux_dock_tuning_icons">Apps per page</string>
                 <string name="termux_dock_tuning_terminal">Opacity</string>
+                <string name="termux_dock_tuning_terminal_border">Border</string>
                 <string name="termux_dock_tuning_sessions">Opacity</string>
                 <string name="termux_dock_tuning_section_dock">Dock</string>
                 <string name="termux_dock_tuning_section_terminal">Terminal</string>
