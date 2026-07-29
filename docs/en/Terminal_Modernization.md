@@ -447,7 +447,9 @@ the exact bytes written to the shell. It is intentionally unbound so it can insp
 shortcut, including the one you might later assign to it.
 
 `terminal.state` on the authenticated API reports the live terminal hierarchy and performance
-counters. Counters include whole-window frame timing/deadline misses, per-pane render timing, process
+counters. It includes `paneLayout`, the current window's retained automatic layout; the field is
+absent when the window is manually managed, so it doubles as the way to check whether a layout is
+still in charge. Counters include whole-window frame timing/deadline misses, per-pane render timing, process
 allocation deltas, GC deltas, and listener-report loss. Pass `resetPerformance: true` to establish a
 new common measurement baseline. These are app/render diagnostics, not SurfaceFlinger presentation
 telemetry.

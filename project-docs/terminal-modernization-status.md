@@ -15,7 +15,7 @@ scope.
 | Action surface | One registry for palette, keybindings, LauncherCtl/MCP schemas, risk, requirements, and dispatch; searchable palette; conditional shortcuts; chords; modal maps; hints; scrollback search | [`plans/action-registry-terminal-actions.md`](plans/action-registry-terminal-actions.md) |
 | Terminal hierarchy | Session → window → unlimited recursive horizontal/vertical pane tree; app-owned window strip; directional focus, resize, close, switching, and single-pane compatibility mode | [`plans/split-panes.md`](plans/split-panes.md) |
 | Workspaces | Versioned, owner-only, atomically saved hierarchy definitions; append/replace restore; safe CWD restore; separately gated command capture/execution | [`plans/durable-workspaces.md`](plans/durable-workspaces.md) |
-| Pane layouts | `stack`, `grid`, `tall`, `fat`, `horizontal`, and `vertical`; equalize; geometric rotation; move focused pane to an outer edge; retained per-window layout policy that re-tiles on split/close, plus `pane.next_layout` cycling (`Ctrl+Alt+L`) — policy work is JVM-verified but still owes a device pass | [`plans/automatic-pane-layouts.md`](plans/automatic-pane-layouts.md) |
+| Pane layouts | `stack`, `grid`, `tall`, `fat`, `horizontal`, and `vertical`; equalize; geometric rotation; move focused pane to an outer edge; retained per-window layout policy that re-tiles on split/close, plus `pane.next_layout` cycling (`Ctrl+Alt+L`) | [`plans/automatic-pane-layouts.md`](plans/automatic-pane-layouts.md) |
 | Session browser | Searchable session/window/pane hierarchy; create, activate, clone with CWD, rename, close, and save workspace | [`plans/session-browser.md`](plans/session-browser.md) |
 | Terminal protocols | Extended underlines and color, safe OSC 8, cursor trail, OSC 133, Kitty keyboard protocol, multiple cursors, Kitty graphics Tier 1 | [`plans/kitty-protocol-features.md`](plans/kitty-protocol-features.md) |
 | Fonts and shaping | Native-font compatibility, four real faces, grapheme-aware Canvas shaping, symbol maps, ligature policy, OpenType features, variable axes, and bounded metrics | [`plans/fonts-and-shaping.md`](plans/fonts-and-shaping.md) |
@@ -83,7 +83,7 @@ The completion state includes:
 - bounded error handling and cleanup checks for malformed fonts, hostile workspace definitions,
   overlong escape sequences, graphics payloads, and link-pool saturation.
 
-The app-wide `:app:testDebugUnitTest` task passes: 592 tests across 92 classes, zero failures.
+The app-wide `:app:testDebugUnitTest` task passes: 598 tests across 92 classes, zero failures.
 Expect green and treat any failure as a regression. Run `:app:testReleaseUnitTest` too — it was
 outside the old baseline and hid its own failure, and it now passes with one debug-only case skipped.
 `terminal-emulator` (248), `inapp-keyboard` (17), `terminal-view` (15), and `termux-shared` (2) are

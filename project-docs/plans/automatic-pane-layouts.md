@@ -111,11 +111,41 @@ metadata, and binding, and adds `defaultBindings_neverCollideUnderSimultaneously
 which asserts no two tools claim one stroke under conditions that can be active together — the
 `SPLITS_ON`/`SPLITS_OFF` pairs are legal, anything else is one binding shadowing another.
 
-**Not yet device-verified.** No device was attached when this landed, so unlike the original
-six-preset slice this has JVM coverage only. It needs a pass matching that one: create a disposable
-window, split to three panes, cycle every layout with `Ctrl+Alt+L`, confirm split/close re-tiling and
-that rotate/edge-move/resize release the policy, recreate the Activity to confirm the layout
-survives, then clean up and scan the app log for dispatcher/layout errors.
+`terminal.state` reports the retained layout as `paneLayout`, omitted when the window is manually
+managed. It was added for this slice: without it the policy is invisible to agents and to any device
+check, which made the behaviour unverifiable from outside the process.
+
+### Device pass
+
+Run on `Pong` (A065, Android 16) against the installed universal debug APK and the authenticated
+launcher API. A disposable window was created and split to three panes, then:
+
+- `pane.next_layout` seven times returned `grid`, `tall`, `fat`, `horizontal`, `vertical`, `stack`,
+  `grid`, with `terminal.state.paneLayout` agreeing at each step. `visiblePanes` was 3 for every
+  tiling and 1 for `stack`, confirming stack still hides rather than closes.
+- Splitting under a `vertical` policy left `paneLayout` at `vertical` and `visiblePanes` at 4.
+  Closing a pane with `pane.kill_focused` left `paneLayout` at `vertical` and `visiblePanes` at 3.
+  Screenshots confirmed the geometry rather than just the label: three *equal-height* panes in one
+  column, which is the re-tiled tree. A one-shot transform would instead have left the survivor
+  sharing the closed pane's slot, giving unequal heights.
+- `pane.rotate`, `pane.move_to_edge`, and `pane.resize` each dropped `paneLayout` from the response.
+  The release is decisive rather than incidental: the following `pane.next_layout` returned `grid`,
+  which is `nextLayoutAfter(null)`, so the policy really was cleared and not merely hidden.
+  `pane.equalize` after `pane.layout grid` kept `paneLayout` at `grid`.
+- Activity recreation was forced with a `font_scale` change, which `TermuxActivity` does not declare
+  in `configChanges`. The event log shows `handleRelaunchActivity` → `wm_on_stop_called` →
+  `wm_on_destroy_called` (`performDestroy`) → `wm_on_create_called` (`performCreate`), and
+  `paneLayout` survived both that change and the revert.
+- Cleanup restored the original one session, one window, one visible pane. A 500-line log scan found
+  no fatal exception and no dispatcher/layout error.
+
+Two false starts are worth recording, because both produce a *passing-looking* result that proves
+nothing. `always_finish_activities` does not destroy this Activity — `com.termux` is the device's
+HOME, so leaving it does not background it, and the event log showed only `performRestart`. And on
+this Android version the activity lifecycle event tags are `wm_on_*`, not `am_*`; grepping for
+`am_relaunch` silently matches nothing, which reads identically to "no recreation happened". Confirm
+recreation from the `wm_on_destroy_called`/`wm_on_create_called` pair, never from the absence of a
+pattern.
 
 ## Follow-up
 

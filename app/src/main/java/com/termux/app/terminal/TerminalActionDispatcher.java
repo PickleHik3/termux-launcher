@@ -672,6 +672,10 @@ public final class TerminalActionDispatcher {
             state.put("visiblePanes", controller == null ? 0 : controller.getVisiblePaneViews().size());
             state.put("windows", activity.getCurrentWindowCount());
             state.put("currentWindow", activity.getCurrentWindowIndex());
+            // The retained automatic layout, absent when the window is manually managed. Without
+            // this the policy is invisible to agents and to any device check.
+            String paneLayout = activity.activePaneLayoutPolicy();
+            if (paneLayout != null) state.put("paneLayout", paneLayout);
             String sessionName = activity.getCurrentWindowSessionName();
             if (sessionName != null) state.put("windowSessionName", sessionName);
             state.put("wallpaperEnabled", activity.isWallpaperModeEnabled());

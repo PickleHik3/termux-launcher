@@ -63,15 +63,12 @@ Small, deliberate omissions recorded where they happened. Listed here so they ar
   because it launches an external picker and crop flow. Exercise by hand.
 - The keyboard protocol reports the shifted alternate key but not the base-layout one: Android
   exposes no PC-101 physical mapping to derive it from.
-- The retained pane-layout policy and `pane.next_layout` (`Ctrl+Alt+L`) are implemented with JVM
-  coverage but **have not had a device pass**. See the verification section of
-  `automatic-pane-layouts.md` for the specific run they still owe.
 - Workspace files do not record a window's retained layout, so a window restored by `workspace.load`
   starts manually managed. Adding the field is a `TerminalWorkspace` format/version decision owned by
   `durable-workspaces.md`, not by the layout slice.
 - Direct `goto_layout`/`toggle_layout` bindings still wait on user-editable bindings being able to
   carry an enum argument. `next_layout` cycling is the shipped substitute.
-- `:app:testDebugUnitTest` is green (592 tests, 92 classes). The former "48 environmental failures
+- `:app:testDebugUnitTest` is green (598 tests, 92 classes). The former "48 environmental failures
   across 12 classes" baseline was a misdiagnosis — nothing in it was environmental, and 9 of the 48
   were real assertion failures the label concealed. Fixed; see the verification section of
   `../terminal-modernization-status.md` for the breakdown. Do not reintroduce an accepted-failure
