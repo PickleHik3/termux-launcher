@@ -299,7 +299,14 @@ public final class Pointers implements Handler.Callback
     if (k.role == KeyboardData.Key.Role.Space_bar)
       return "space";
     KeyValue center = k.keys[0];
-    if (center == null || center.getKind() != KeyValue.Kind.Char)
+    if (center == null)
+      return null;
+    // User layout files predate the role attribute; recognize their space bar
+    // by its center value so swipe bindings keep working on them.
+    if (center.getKind() == KeyValue.Kind.Editing
+        && center.getEditing() == KeyValue.Editing.SPACE_BAR)
+      return "space";
+    if (center.getKind() != KeyValue.Kind.Char)
       return null;
     String symbol = center.getString();
     if (symbol.length() != 1 || !Character.isLetterOrDigit(symbol.charAt(0)))
