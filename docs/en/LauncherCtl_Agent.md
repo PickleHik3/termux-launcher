@@ -106,6 +106,9 @@ LauncherCtl currently exposes these tools:
 | `notifications.since` | Reads notification history since an epoch-millisecond timestamp. | Low |
 | `notifications.search` | Searches notification history text. | Low |
 | `notifications.stats` | Counts notification history events. | Low |
+| `notifications.pin_rules` | Lists the status-bar notification pin rules. | Low |
+| `notifications.pin_rule_add` | Adds a status-bar notification pin rule. | Medium |
+| `notifications.pin_rule_remove` | Removes a status-bar notification pin rule by id. | Medium |
 | `media.now_playing` | Reads the current media session. | Low |
 | `system.resources` | Reads CPU, memory, storage, battery, network, and backend state. | Low |
 | `intent.open` | Opens an Android URI/action intent. | Medium |

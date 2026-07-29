@@ -32,10 +32,13 @@ import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.terminal.TerminalActionDispatcher;
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
+import com.termux.app.statusbar.EssentialNotificationRule;
+import com.termux.app.statusbar.EssentialNotificationRules;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.PrivilegedPolicyStore;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -381,6 +384,12 @@ public class LauncherCtlApiServer {
                 return jsonResponse(buildNotificationsSearch(request.body));
             } else if ("POST".equals(request.method) && "/v1/notifications/stats".equals(request.path)) {
                 return jsonResponse(buildNotificationsStats(request.body));
+            } else if ("GET".equals(request.method) && "/v1/notifications/pin-rules".equals(request.path)) {
+                return jsonResponse(buildPinRules(context));
+            } else if ("POST".equals(request.method) && "/v1/notifications/pin-rules/add".equals(request.path)) {
+                return jsonResponse(runPinRuleAdd(context, parseJsonBody(request.body)));
+            } else if ("POST".equals(request.method) && "/v1/notifications/pin-rules/remove".equals(request.path)) {
+                return jsonResponse(runPinRuleRemove(context, parseJsonBody(request.body)));
             } else if ("GET".equals(request.method) && "/v1/launcher/capabilities".equals(request.path)) {
                 return jsonResponse(buildLauncherCapabilities(context));
             } else if ("GET".equals(request.method) && "/v1/agent/tools".equals(request.path)) {
@@ -687,6 +696,64 @@ public class LauncherCtlApiServer {
         JSONObject snapshot = LauncherCtlNotificationListener.getNowPlayingArtSnapshot();
         snapshot.put("ok", true);
         return snapshot;
+    }
+
+    private JSONObject buildPinRules(Context context) throws JSONException {
+        JSONObject response = EssentialNotificationRules.describe(
+            EssentialNotificationRules.load(context));
+        response.put("ok", true);
+        response.put("listenerConnected", LauncherCtlNotificationListener.isListenerConnected());
+        if (!LauncherCtlNotificationListener.isListenerConnected()) {
+            response.put("hint", LauncherCtlNotificationListener.getListenerHint());
+            response.put("settingsAction", LauncherCtlNotificationListener.getListenerSettingsAction());
+        }
+        return response;
+    }
+
+    private JSONObject runPinRuleAdd(Context context, JSONObject arguments) throws JSONException {
+        String packageName = arguments.optString("package", "").trim();
+        String match = arguments.optString("match", "").trim();
+        if (packageName.isEmpty() && match.isEmpty()) {
+            JSONObject error = jsonError("bad_request", "A rule needs a package, a match, or both");
+            error.put("_statusCode", 400);
+            return error;
+        }
+        EssentialNotificationRule rule = new EssentialNotificationRule(
+            EssentialNotificationRules.deriveId(packageName, match), packageName, match,
+            arguments.optBoolean("clear", false));
+        List<EssentialNotificationRule> rules = EssentialNotificationRules.add(
+            TermuxAppSharedPreferences.build(context), rule);
+        if (rules == null) {
+            JSONObject error = jsonError("conflict", "Rule list is full or the rule is unusable");
+            error.put("_statusCode", 409);
+            return error;
+        }
+        LauncherCtlNotificationListener.requestPinnedRefresh();
+        JSONObject response = EssentialNotificationRules.describe(rules);
+        response.put("ok", true);
+        response.put("rule", rule.toJson());
+        return response;
+    }
+
+    private JSONObject runPinRuleRemove(Context context, JSONObject arguments) throws JSONException {
+        String id = arguments.optString("id", "").trim();
+        if (id.isEmpty()) {
+            JSONObject error = jsonError("bad_request", "Missing rule id");
+            error.put("_statusCode", 400);
+            return error;
+        }
+        List<EssentialNotificationRule> rules = EssentialNotificationRules.remove(
+            TermuxAppSharedPreferences.build(context), id);
+        if (rules == null) {
+            JSONObject error = jsonError("not_found", "No pin rule with id " + id);
+            error.put("_statusCode", 404);
+            return error;
+        }
+        LauncherCtlNotificationListener.requestPinnedRefresh();
+        JSONObject response = EssentialNotificationRules.describe(rules);
+        response.put("ok", true);
+        response.put("removed", id);
+        return response;
     }
 
     private JSONObject buildNotifications() throws JSONException {
@@ -3024,6 +3091,12 @@ public class LauncherCtlApiServer {
                     return wrapExecutionResult(buildNotificationsSearch(arguments.toString()));
                 case LauncherToolRegistry.TOOL_NOTIFICATIONS_STATS:
                     return wrapExecutionResult(buildNotificationsStats(arguments.toString()));
+                case LauncherToolRegistry.TOOL_NOTIFICATIONS_PIN_RULES:
+                    return wrapExecutionResult(buildPinRules(context));
+                case LauncherToolRegistry.TOOL_NOTIFICATIONS_PIN_RULE_ADD:
+                    return wrapExecutionResult(runPinRuleAdd(context, arguments));
+                case LauncherToolRegistry.TOOL_NOTIFICATIONS_PIN_RULE_REMOVE:
+                    return wrapExecutionResult(runPinRuleRemove(context, arguments));
                 case LauncherToolRegistry.TOOL_MEDIA_NOW_PLAYING:
                     return wrapExecutionResult(buildNowPlaying());
                 case LauncherToolRegistry.TOOL_SYSTEM_RESOURCES:

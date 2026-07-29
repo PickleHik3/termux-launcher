@@ -868,6 +868,19 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_TOP_PANE_CLOCK_COLLAPSED, value, false);
     }
 
+    public String getEssentialNotificationRules() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_ESSENTIAL_NOTIFICATION_RULES,
+            TERMUX_APP.DEFAULT_ESSENTIAL_NOTIFICATION_RULES, true);
+    }
+
+    public void setEssentialNotificationRules(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_ESSENTIAL_NOTIFICATION_RULES,
+            value == null || value.isEmpty()
+                ? TERMUX_APP.DEFAULT_ESSENTIAL_NOTIFICATION_RULES : value, true);
+    }
+
     public static int[] getDefaultFontSizes(Context context) {
         float dipInPixels = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 1, context.getResources().getDisplayMetrics());
         int[] sizes = new int[3];

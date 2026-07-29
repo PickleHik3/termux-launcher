@@ -177,6 +177,9 @@ approved the action.
 | `notifications_since` | `notifications.since` | Low | Reads notification history since an epoch-millisecond timestamp. |
 | `notifications_search` | `notifications.search` | Low | Searches notification history text. |
 | `notifications_stats` | `notifications.stats` | Low | Counts notification history events. |
+| `notifications_pin_rules` | `notifications.pin_rules` | Low | Lists the status-bar notification pin rules. |
+| `notifications_pin_rule_add` | `notifications.pin_rule_add` | Medium | Adds a status-bar notification pin rule. |
+| `notifications_pin_rule_remove` | `notifications.pin_rule_remove` | Medium | Removes a status-bar notification pin rule by id. |
 | `media_now_playing` | `media.now_playing` | Low | Reads the current media session. |
 | `system_resources` | `system.resources` | Low | Reads CPU, memory, storage, battery, network, and backend state. |
 | `intent_open` | `intent.open` | Medium | Opens an Android URI/action intent. |

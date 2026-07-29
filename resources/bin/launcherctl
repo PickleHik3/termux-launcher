@@ -26,6 +26,11 @@ Commands:
   notifications search <text>
                             Search notification events.
   notifications stats       Notification event statistics.
+  notifications pin-rules   List status-bar notification pin rules.
+  notifications pin-add [--clear] [package] [match...]
+                            Pin notifications matching a package and/or substring.
+  notifications pin-remove <id>
+                            Remove a pin rule by id.
   agent [--dry-run] <request>
                             Route a request through the agent (dry-run only routes).
   mcp                       Run MCP stdio server backed by LauncherCtl tools.
@@ -433,9 +438,31 @@ case "$cmd" in
       stats)
         post_json /v1/notifications/stats "{}"
         ;;
+      pin-rules)
+        curl $CURL_COMMON -H "Authorization: Bearer $TOKEN" "$BASE/v1/notifications/pin-rules"
+        ;;
+      pin-add)
+        clear="false"
+        if [ "$#" -gt 0 ] && [ "$1" = "--clear" ]; then
+          clear="true"; shift || true
+        fi
+        pkg="${1:-}"
+        [ "$#" -gt 0 ] && shift || true
+        match="$*"
+        if [ -z "$pkg" ] && [ -z "$match" ]; then
+          echo "usage: launcherctl notifications pin-add [--clear] [package] [match...]" >&2
+          exit 2
+        fi
+        post_json /v1/notifications/pin-rules/add \
+          "{\"package\":\"$(json_escape "$pkg")\",\"match\":\"$(json_escape "$match")\",\"clear\":$clear}"
+        ;;
+      pin-remove)
+        [ "$#" -gt 0 ] || { echo "usage: launcherctl notifications pin-remove <id>" >&2; exit 2; }
+        post_json /v1/notifications/pin-rules/remove "{\"id\":\"$(json_escape "$1")\"}"
+        ;;
       *)
         echo "launcherctl: unknown notifications subcommand: $sub" >&2
-        echo "usage: launcherctl notifications {active|recent|since|search|stats}" >&2
+        echo "usage: launcherctl notifications {active|recent|since|search|stats|pin-rules|pin-add|pin-remove}" >&2
         exit 2
         ;;
     esac

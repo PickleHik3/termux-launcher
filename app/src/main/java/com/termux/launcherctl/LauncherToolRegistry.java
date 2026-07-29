@@ -386,6 +386,13 @@ public final class LauncherToolRegistry {
     public static final String TOOL_NOTIFICATIONS_SINCE = "notifications.since";
     public static final String TOOL_NOTIFICATIONS_SEARCH = "notifications.search";
     public static final String TOOL_NOTIFICATIONS_STATS = "notifications.stats";
+    /**
+     * Essential-notification pin rules for the top-pane widget slot. These stand in for a settings
+     * screen: the storage and matching engine exist, and these tools are how rules are managed today.
+     */
+    public static final String TOOL_NOTIFICATIONS_PIN_RULES = "notifications.pin_rules";
+    public static final String TOOL_NOTIFICATIONS_PIN_RULE_ADD = "notifications.pin_rule_add";
+    public static final String TOOL_NOTIFICATIONS_PIN_RULE_REMOVE = "notifications.pin_rule_remove";
     public static final String TOOL_MEDIA_NOW_PLAYING = "media.now_playing";
     public static final String TOOL_SYSTEM_RESOURCES = "system.resources";
     public static final String TOOL_INTENT_OPEN = "intent.open";
@@ -521,6 +528,31 @@ public final class LauncherToolRegistry {
                 .build(),
             ToolRisk.LOW,
             false,
+            ToolExecutor.NOTIFICATIONS);
+        add(map, TOOL_NOTIFICATIONS_PIN_RULES,
+            "List the rules that pin notifications into the status-bar widget slot.",
+            schemaEmpty(),
+            ToolRisk.LOW,
+            false,
+            ToolExecutor.NOTIFICATIONS);
+        add(map, TOOL_NOTIFICATIONS_PIN_RULE_ADD,
+            "Add a rule that pins matching notifications into the status-bar widget slot.",
+            schemaObject()
+                .withString("package", "Package name to match, or empty for any app", false)
+                .withString("match", "Case-insensitive substring of the title or body", false)
+                .withBoolean("clear",
+                    "Whether dismissing the pin also cancels the notification", false, false)
+                .build(),
+            ToolRisk.MEDIUM,
+            true,
+            ToolExecutor.NOTIFICATIONS);
+        add(map, TOOL_NOTIFICATIONS_PIN_RULE_REMOVE,
+            "Remove a notification pin rule by its id.",
+            schemaObject()
+                .withString("id", "Rule id returned by notifications.pin_rules", true)
+                .build(),
+            ToolRisk.MEDIUM,
+            true,
             ToolExecutor.NOTIFICATIONS);
         add(map, TOOL_MEDIA_NOW_PLAYING,
             "Return the current media session / now playing information.",

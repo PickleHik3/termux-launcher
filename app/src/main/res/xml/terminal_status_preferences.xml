@@ -61,6 +61,11 @@
             app:title="@string/settings_weather_title"
             app:summary="@string/settings_weather_summary"
             app:defaultValue="true" />
+        <Preference
+            app:key="top_pane_notification_access"
+            app:persistent="false"
+            app:title="@string/termux_top_pane_notification_access_title"
+            app:summary="@string/termux_top_pane_notification_access_summary" />
     </PreferenceCategory>
 
 </PreferenceScreen>

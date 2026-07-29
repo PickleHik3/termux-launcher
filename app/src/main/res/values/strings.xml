@@ -510,6 +510,10 @@
                 <string name="termux_window_tab_content_description">Window %1$d of %2$d: %3$s</string>
                 <string name="termux_window_new_content_description">New terminal window</string>
                 <string name="termux_top_pane_clock_content_description">Clock and status panel</string>
+                <string name="termux_top_pane_media_content_description">Media playback controls</string>
+                <string name="termux_top_pane_pinned_notifications_content_description">Pinned notifications</string>
+                <string name="termux_top_pane_notification_access_title">Media and pinned notifications</string>
+                <string name="termux_top_pane_notification_access_summary">Grant notification access so the status bar can show the active media session and rule-matched notifications.</string>
                 <string name="termux_sessions_indicator_content_description">Session %1$d of %2$d</string>
                 <string name="termux_named_sessions_indicator_content_description">Session %1$d of %2$d: %3$s</string>
                 <string name="termux_sessions_indicator_empty_content_description">No sessions</string>

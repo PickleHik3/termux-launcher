@@ -31,7 +31,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void registry_containsExpectedTools() {
         List<LauncherToolRegistry.ToolMetadata> tools = registry.getTools();
-        assertEquals(73, tools.size());
+        assertEquals(76, tools.size());
         assertNotNull(registry.getTool("capabilities.get"));
         assertNotNull(registry.getTool("apps.search"));
         assertNotNull(registry.getTool("apps.launch"));
@@ -39,6 +39,9 @@ public class LauncherToolRegistryTest {
         assertNotNull(registry.getTool("notifications.since"));
         assertNotNull(registry.getTool("notifications.search"));
         assertNotNull(registry.getTool("notifications.stats"));
+        assertNotNull(registry.getTool("notifications.pin_rules"));
+        assertNotNull(registry.getTool("notifications.pin_rule_add"));
+        assertNotNull(registry.getTool("notifications.pin_rule_remove"));
         assertNotNull(registry.getTool("media.now_playing"));
         assertNotNull(registry.getTool("system.resources"));
         assertNotNull(registry.getTool("intent.open"));
@@ -66,7 +69,8 @@ public class LauncherToolRegistryTest {
     @Test
     public void readOnlyTools_areLowRiskAndDoNotRequireConfirmation() {
         String[] names = {"capabilities.get", "apps.search", "notifications.recent", "notifications.since",
-            "notifications.search", "notifications.stats", "media.now_playing", "system.resources", "events.tail"};
+            "notifications.search", "notifications.stats", "notifications.pin_rules",
+            "media.now_playing", "system.resources", "events.tail"};
         for (String name : names) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
             assertNotNull(name, tool);
@@ -86,7 +90,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void toOpenAiToolsJson_producesFunctionTools() throws Exception {
         JSONArray openAiTools = registry.toOpenAiToolsJson();
-        assertEquals(73, openAiTools.length());
+        assertEquals(76, openAiTools.length());
         for (int i = 0; i < openAiTools.length(); i++) {
             JSONObject item = openAiTools.getJSONObject(i);
             assertEquals("function", item.getString("type"));
@@ -101,7 +105,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void toInternalJson_includesSchemaAndRisk() throws Exception {
         JSONArray internal = registry.toInternalJson();
-        assertEquals(73, internal.length());
+        assertEquals(76, internal.length());
         JSONObject first = internal.getJSONObject(0);
         assertTrue(first.has("name"));
         assertTrue(first.has("description"));
@@ -115,9 +119,9 @@ public class LauncherToolRegistryTest {
     public void responseJson_containsBothFormats() throws Exception {
         JSONObject response = registry.toResponseJson();
         assertTrue(response.getBoolean("ok"));
-        assertEquals(73, response.getInt("count"));
-        assertEquals(73, response.getJSONArray("tools").length());
-        assertEquals(73, response.getJSONArray("openAiTools").length());
+        assertEquals(76, response.getInt("count"));
+        assertEquals(76, response.getJSONArray("tools").length());
+        assertEquals(76, response.getJSONArray("openAiTools").length());
     }
 
     @Test
@@ -131,6 +135,27 @@ public class LauncherToolRegistryTest {
         assertTrue(properties.has("component"));
         assertTrue(properties.has("extras"));
         assertEquals("android.intent.action.VIEW", properties.optJSONObject("action").optString("default"));
+    }
+
+    @Test
+    public void pinRuleTools_persistConfigurationSoTheyAreConfirmed() {
+        // Adding a rule persists it and puts notification content on the home screen; listing does
+        // neither.
+        for (String name : new String[]{"notifications.pin_rule_add", "notifications.pin_rule_remove"}) {
+            LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
+            assertNotNull(name, tool);
+            assertEquals(name, LauncherToolRegistry.ToolRisk.MEDIUM, tool.risk);
+            assertTrue(name + " must require confirmation", tool.requiresConfirmation);
+            assertEquals(name, "notifications", tool.executor.label);
+        }
+        JSONObject add = registry.getTool("notifications.pin_rule_add").schema;
+        assertTrue(add.optJSONObject("properties").has("package"));
+        assertTrue(add.optJSONObject("properties").has("match"));
+        assertTrue(add.optJSONObject("properties").has("clear"));
+        // Both halves of the match are optional; the executor rejects a rule with neither.
+        assertNull(add.optJSONArray("required"));
+        assertEquals("id", registry.getTool("notifications.pin_rule_remove")
+            .schema.optJSONArray("required").optString(0));
     }
 
     @Test
@@ -187,7 +212,9 @@ public class LauncherToolRegistryTest {
     @Test
     public void agentOnlyTools_haveNoUiMetadata() {
         String[] agentOnly = {"capabilities.get", "apps.search", "apps.launch", "notifications.recent",
-            "notifications.since", "notifications.search", "notifications.stats", "media.now_playing",
+            "notifications.since", "notifications.search", "notifications.stats",
+            "notifications.pin_rules", "notifications.pin_rule_add", "notifications.pin_rule_remove",
+            "media.now_playing",
             "system.resources", "intent.open", "memory.write", "memory.search", "events.tail", "user.confirm",
             "workspace.save", "workspace.load", "workspace.list", "workspace.delete",
             "pane.layout", "pane.move_to_edge"};

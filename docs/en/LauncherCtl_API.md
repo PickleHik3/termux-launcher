@@ -194,6 +194,15 @@ Notification listener events are persisted under `~/.launcherctl` and can be que
 
 The `launcherctl notifications recent|since|search|stats` commands wrap these endpoints.
 
+### Status-bar pin rules
+Rules decide which notifications are pinned into the expanded status bar's widget slot (max 3, oldest evicted). An empty rule list leaves the feature idle. A rule matches on package name, on a case-insensitive substring of the title or body, or on both; `clear` decides whether dismissing the pin also cancels the notification.
+
+- `GET /v1/notifications/pin-rules`
+- `POST /v1/notifications/pin-rules/add` with `{ "package": "com.whatsapp", "match": "Amma", "clear": false }`
+- `POST /v1/notifications/pin-rules/remove` with `{ "id": "1f2e3d" }`
+
+The `launcherctl notifications pin-rules|pin-add|pin-remove` commands wrap these endpoints. Pinned notifications and the media widget both require notification listener access.
+
 ### `GET /v1/launcher/capabilities`
 Returns device and integration capability metadata for scripts and agents:
 

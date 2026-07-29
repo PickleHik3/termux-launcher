@@ -459,6 +459,13 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_TOP_PANE_CLOCK_COLLAPSED = false;
 
         /**
+         * Rules that pin a notification into the top-pane widget slot, stored as a JSON array of
+         * {@code {id, package, match, clear}}. Empty leaves the feature idle.
+         */
+        public static final String KEY_ESSENTIAL_NOTIFICATION_RULES = "essential_notification_rules";
+        public static final String DEFAULT_ESSENTIAL_NOTIFICATION_RULES = "[]";
+
+        /**
          * Defines the key for font size of termux terminal view.
          */
         public static final String KEY_FONTSIZE = "fontsize";

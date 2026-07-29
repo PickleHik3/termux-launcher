@@ -14,6 +14,7 @@ import com.termux.R;
 import com.termux.app.TermuxActivity;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.app.launcher.notifications.LauncherNotificationAccess;
 
 /** User-facing terminal page that combines the old Terminal I/O and Terminal view screens. */
 @Keep
@@ -32,6 +33,11 @@ public final class TerminalStatusPreferencesFragment extends MaterialPreferenceF
             openSurfaceEditor(context, "status");
             return true;
         });
+        Preference access = findPreference("top_pane_notification_access");
+        if (access != null) access.setOnPreferenceClickListener(preference -> {
+            openNotificationAccessSettings(context);
+            return true;
+        });
     }
 
     @Override
@@ -39,6 +45,31 @@ public final class TerminalStatusPreferencesFragment extends MaterialPreferenceF
         super.onResume();
         if (getActivity() != null) {
             getActivity().setTitle(R.string.settings_destination_terminal_status);
+        }
+        Context context = getContext();
+        Preference access = findPreference("top_pane_notification_access");
+        if (context != null && access != null) {
+            access.setSummary(LauncherNotificationAccess.isEnabled(context)
+                ? R.string.termux_app_launcher_access_status_on
+                : R.string.termux_top_pane_notification_access_summary);
+        }
+    }
+
+    /** The media widget and pinned notifications both need listener access to have any data. */
+    private void openNotificationAccessSettings(Context context) {
+        Intent detail = LauncherNotificationAccess.detailSettingsIntent(context);
+        if (detail != null && startSettingsIntent(context, detail)) return;
+        startSettingsIntent(context, LauncherNotificationAccess.listSettingsIntent());
+    }
+
+    private boolean startSettingsIntent(Context context, @Nullable Intent intent) {
+        if (intent == null) return false;
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            context.startActivity(intent);
+            return true;
+        } catch (Exception ignored) {
+            return false;
         }
     }
 
