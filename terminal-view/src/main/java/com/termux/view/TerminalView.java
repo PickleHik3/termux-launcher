@@ -130,6 +130,15 @@ public final class TerminalView extends View {
 
     float mScaleFactor = 1.f;
 
+    /**
+     * Per-event scale factor deviation from 1 below which {@link #mScaleFactor} is left alone.
+     * A two-finger scroll drag has near-constant span between fingers, but hand tremor still
+     * makes the scale detector report a scale factor that isn't exactly 1 each frame; without
+     * this the jitter is read as a deliberate pinch and changes the font size while scrolling.
+     * A real pinch changes span by much more than this per frame.
+     */
+    private static final float SCALE_JITTER_THRESHOLD = 0.015f;
+
     final GestureAndScaleRecognizer mGestureRecognizer;
 
     /**
@@ -175,9 +184,16 @@ public final class TerminalView extends View {
      */
     private boolean mTouchMouseDragReported;
 
-    private float mTouchMouseDownX, mTouchMouseDownY;
-
     private int mTouchMouseDragLastCol, mTouchMouseDragLastRow;
+
+    /**
+     * Set from a long press until the following move either commits to a mouse drag (past touch
+     * slop) or the finger lifts without having moved, in which case local text selection starts
+     * instead - see {@link #handleTouchMouseDrag(MotionEvent)}.
+     */
+    private boolean mTouchMouseDragArmed;
+
+    private MotionEvent mTouchMouseDragArmEvent;
 
     private final int mTouchSlopSquared;
 
@@ -319,6 +335,8 @@ public final class TerminalView extends View {
             public boolean onScale(float focusX, float focusY, float scale) {
                 if (mEmulator == null || isSelectingText())
                     return true;
+                if (Math.abs(scale - 1f) < SCALE_JITTER_THRESHOLD)
+                    return true;
                 mScaleFactor *= scale;
                 mScaleFactor = mClient.onScale(mScaleFactor);
                 return true;
@@ -395,8 +413,12 @@ public final class TerminalView extends View {
                     return;
                 if (mClient.onLongPress(event))
                     return;
-                if (!isSelectingText()) {
-                    performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                if (isSelectingText())
+                    return;
+                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                if (isTouchMouseDragReportingEnabled()) {
+                    armTouchMouseDragFromLongPress(event);
+                } else {
                     startTextSelectionMode(event);
                 }
             }
@@ -1212,31 +1234,61 @@ public final class TerminalView extends View {
     }
 
     /**
-     * Report a single finger drag as a press, a motion event per cell entered, and a release. The
-     * press is held back until the gesture is known not to be a tap, since a tap is reported when
-     * the finger is lifted instead.
+     * Arm a possible mouse drag from a long press, without reporting anything yet: a long press
+     * alone - held then released without moving - is still local text selection (so its floating
+     * toolbar, e.g. copy, stays reachable), same as when no application asked for motion reporting.
+     * Only once the finger actually moves past touch slop does {@link #handleTouchMouseDrag} commit
+     * to reporting a mouse drag, at which point local selection is no longer offered for this
+     * gesture. Gating on a long press at all - rather than on slop and a short timeout - means an
+     * ordinary fast drag, one or two finger, never gets reported as a click in the first place, so
+     * it is free to scroll.
+     */
+    private void armTouchMouseDragFromLongPress(MotionEvent event) {
+        mTouchMouseDragArmed = true;
+        mTouchMouseDragArmEvent = MotionEvent.obtain(event);
+        mTouchMouseDragLastCol = getColumnForX(event.getX());
+        mTouchMouseDragLastRow = getRowForY(event.getY());
+    }
+
+    private void clearArmedTouchMouseDrag() {
+        mTouchMouseDragArmed = false;
+        if (mTouchMouseDragArmEvent != null) {
+            mTouchMouseDragArmEvent.recycle();
+            mTouchMouseDragArmEvent = null;
+        }
+    }
+
+    /**
+     * Continue a mouse drag armed by {@link #armTouchMouseDragFromLongPress(MotionEvent)}: once
+     * past touch slop, send the deferred press and a motion event per cell entered, then the
+     * eventual release. A finger lifted while still only armed - never having moved past slop -
+     * falls back to starting local text selection at the long press instead.
      */
     private void handleTouchMouseDrag(MotionEvent event) {
         switch (event.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN:
-                mTouchMouseDownX = event.getX();
-                mTouchMouseDownY = event.getY();
-                break;
             case MotionEvent.ACTION_MOVE:
-                if (event.getPointerCount() != 1 || mGestureRecognizer.isInProgress()) {
-                    releaseTouchMouseDrag();
-                    break;
-                }
-                if (!mTouchMouseDragActive) {
-                    float dx = event.getX() - mTouchMouseDownX;
-                    float dy = event.getY() - mTouchMouseDownY;
+                if (mTouchMouseDragArmed && !mTouchMouseDragActive) {
+                    if (event.getPointerCount() != 1) {
+                        clearArmedTouchMouseDrag();
+                        break;
+                    }
+                    float dx = event.getX() - mTouchMouseDragArmEvent.getX();
+                    float dy = event.getY() - mTouchMouseDragArmEvent.getY();
                     if (dx * dx + dy * dy <= mTouchSlopSquared)
                         break;
+                    clearArmedTouchMouseDrag();
                     mTouchMouseDragActive = true;
                     mTouchMouseDragReported = true;
-                    mTouchMouseDragLastCol = getColumnForX(mTouchMouseDownX);
-                    mTouchMouseDragLastRow = getRowForY(mTouchMouseDownY);
+                    // Distinct from the long press's own haptic, so committing to a reported drag -
+                    // as opposed to the finger lifting straight into local text selection - is felt.
+                    performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
                     sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseDragLastCol, mTouchMouseDragLastRow, true);
+                }
+                if (!mTouchMouseDragActive)
+                    break;
+                if (event.getPointerCount() != 1) {
+                    releaseTouchMouseDrag();
+                    break;
                 }
                 int column = getColumnForX(event.getX());
                 int row = getRowForY(event.getY());
@@ -1247,8 +1299,27 @@ public final class TerminalView extends View {
                 }
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
+                if (mTouchMouseDragArmed && !mTouchMouseDragActive) {
+                    // A second finger joining before any movement was decided reads as a scroll,
+                    // not a selection - drop the arm rather than falling back to local selection.
+                    clearArmedTouchMouseDrag();
+                    break;
+                }
+                releaseTouchMouseDrag();
+                break;
             case MotionEvent.ACTION_UP:
+                if (mTouchMouseDragArmed && !mTouchMouseDragActive) {
+                    MotionEvent armEvent = mTouchMouseDragArmEvent;
+                    mTouchMouseDragArmEvent = null;
+                    mTouchMouseDragArmed = false;
+                    startTextSelectionMode(armEvent);
+                    armEvent.recycle();
+                    break;
+                }
+                releaseTouchMouseDrag();
+                break;
             case MotionEvent.ACTION_CANCEL:
+                clearArmedTouchMouseDrag();
                 releaseTouchMouseDrag();
                 break;
         }
@@ -1285,6 +1356,7 @@ public final class TerminalView extends View {
         if (action == MotionEvent.ACTION_DOWN) {
             mTouchMouseDragActive = false;
             mTouchMouseDragReported = false;
+            clearArmedTouchMouseDrag();
         }
         if (isSelectingText()) {
             updateFloatingToolbarVisibility(event);
