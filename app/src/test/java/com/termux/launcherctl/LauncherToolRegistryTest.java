@@ -667,18 +667,20 @@ public class LauncherToolRegistryTest {
         assertEquals(4, registry.getTool("pane.resize").defaultBindings.size());
         // terminal.state has no keybind today.
         assertTrue(registry.getTool("terminal.state").defaultBindings.isEmpty());
-        // Session switching now records its legacy letter, the in-app keyboard
-        // swipe, and the compatibility-mode arrow, the last conditioned so it
-        // cannot lie.
-        assertEquals(3, registry.getTool("session.next").defaultBindings.size());
+        // Session switching records its legacy letter plus the compatibility-mode arrow, the
+        // latter conditioned so it cannot lie. The space bar swipe is not here: swipes live in
+        // the keyboard layout file as tool: keys, not as strokes in this table.
+        assertEquals(2, registry.getTool("session.next").defaultBindings.size());
         assertEquals("ctrl+alt+n", registry.getTool("session.next").defaultBindings.get(0).stroke);
         assertEquals(LauncherToolRegistry.BindingCondition.ALWAYS,
             registry.getTool("session.next").defaultBindings.get(0).condition);
-        assertEquals("alt+kbd:space:swipe-south",
-            registry.getTool("session.next").defaultBindings.get(1).stroke);
-        assertEquals("ctrl+alt+down", registry.getTool("session.next").defaultBindings.get(2).stroke);
+        assertEquals("ctrl+alt+down", registry.getTool("session.next").defaultBindings.get(1).stroke);
         assertEquals(LauncherToolRegistry.BindingCondition.SPLITS_OFF,
-            registry.getTool("session.next").defaultBindings.get(2).condition);
+            registry.getTool("session.next").defaultBindings.get(1).condition);
+        // No default binding anywhere names a keyboard gesture any more.
+        for (LauncherToolRegistry.ToolMetadata tool : registry.getTools())
+            for (LauncherToolRegistry.Binding binding : tool.defaultBindings)
+                assertFalse(binding.stroke, binding.stroke.contains("kbd:"));
     }
 
     @Test

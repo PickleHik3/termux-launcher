@@ -45,6 +45,8 @@ import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.logger.Logger;
 
 import org.json.JSONObject;
+
+import juloo.keyboard2.KeyValue;
 import com.termux.shared.markdown.MarkdownUtils;
 import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.termux.data.TermuxUrlUtils;
@@ -435,26 +437,21 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     /**
-     * Resolves an in-app keyboard swipe against the same binding table as
-     * hardware strokes.
+     * Runs a {@code tool:<id>} key from the in-app keyboard layout.
      *
-     * <p>Returns false for an unbound swipe so the keyboard keeps its own meaning
-     * for that direction — the plain east/west spacebar cursor sliders stay
-     * reachable precisely because nothing claims them here.
+     * <p>The layout file names the registry tool directly, so a key slot reaches the same
+     * dispatcher a keybind, a palette row and {@code /v1/agent/execute} do — there is no
+     * keyboard-side table of supported actions to extend.
      */
-    public boolean handleKeyboardGesture(@NonNull String keyName, @NonNull String direction,
-                                         boolean ctrl, boolean alt, boolean shift) {
-        TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
+    public void runLauncherTool(@NonNull String toolId) {
         TerminalActionDispatcher dispatcher = TerminalActionDispatcher.getInstance();
-        TerminalKeyBindingResolver.Match match = resolver.resolveGesture(keyName, direction,
-            ctrl, alt, shift, dispatcher.actionContext());
-        if (match == null) return false;
         TerminalKeyInspector inspector = TerminalKeyInspector.active();
-        if (inspector != null) inspector.recordBinding(match.stroke, match.toolName);
-        boolean handled = runMatch(resolver, dispatcher, match);
-        resolver.afterMatch(match);
-        refreshKeyModeUi(resolver);
-        return handled;
+        if (inspector != null)
+            inspector.recordBinding(KeyValue.LAUNCHER_TOOL_PREFIX + toolId, toolId);
+        JSONObject result = dispatcher.execute(toolId, new JSONObject());
+        if (!result.optBoolean("ok", false))
+            Logger.logWarn(LOG_TAG, "Keyboard tool " + toolId + " failed: "
+                + result.optString("message"));
     }
 
     /** Runs every action of a resolved binding, in the order the config declared them. */

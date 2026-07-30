@@ -3,6 +3,7 @@ package com.termux.app.terminal;
 import android.graphics.Outline;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
@@ -12,6 +13,7 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -31,6 +33,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -62,6 +65,11 @@ public final class TerminalCommandPaletteController
 
     // Geometry, in dp, from the handoff's reference frame.
     private static final float SIDE_INSET = 14f;
+    /**
+     * Floor for the anchor clamp only — enough room for a palette that has grown a few rows. The
+     * height spring's own floor is {@link CommandPaletteView#chromeHeight()}, since the palette
+     * opens as a bare search box.
+     */
     private static final float MIN_HEIGHT = 120f;
     private static final float MAX_HEIGHT = 296f;
     private static final float RADIUS_SEED = 6f;
@@ -70,16 +78,21 @@ public final class TerminalCommandPaletteController
     private static final float SEED_HEIGHT = 52f;
     private static final float STRIP_RESERVE = 46f;
     private static final float STRIP_RISE = 8f;
+    /** Lift of the glass pane at full sprout; the platform casts the shadow from its outline. */
+    private static final float SHADOW_ELEVATION = 10f;
 
     /** Bottom edge sits this far down the terminal area, then clamps clear of the strip. */
     private static final float ANCHOR_FRACTION = 0.71f;
 
     private static final long CONFIRMATION_MS = 2600L;
 
-    private static final float BODY_FADE_START = 0.45f;
-    private static final float BODY_FADE_END = 0.95f;
-    private static final float STRIP_FADE_START = 0.65f;
-    private static final float STRIP_FADE_END = 1f;
+    // Content reads well before the sprout settles: the rectangle is recognisable from about a
+    // fifth of the way in, and an end of exactly 1 would leave the strip waiting on the spring's
+    // last, invisible millimetres.
+    private static final float BODY_FADE_START = 0.22f;
+    private static final float BODY_FADE_END = 0.72f;
+    private static final float STRIP_FADE_START = 0.50f;
+    private static final float STRIP_FADE_END = 0.92f;
 
     private enum Mode { LIST, ARGUMENT, CHOICES }
 
@@ -100,13 +113,23 @@ public final class TerminalCommandPaletteController
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final float mDensity;
 
-    private final Spring mProgress = new Spring(0f, 170f, 17f);
-    private final Spring mHeight = new Spring(0f, 170f, 24f);
+    /**
+     * The dock plank's 170/17 pair is tuned for a plank that tilts continuously under a finger; a
+     * surface that appears on demand wants to be there in about a fifth of a second, so both
+     * channels run much stiffer. This stiffness is only safe because {@link Spring} substeps —
+     * integrated in one jump it diverges on any dropped frame. The sprout keeps a trace of
+     * overshoot, the height channel none, since a bouncing bottom edge would read as the list
+     * resizing twice.
+     */
+    private final Spring mProgress = new Spring(0f, 900f, 50f);
+    private final Spring mHeight = new Spring(0f, 820f, 55f);
 
     private final Rect mScratchRect = new Rect();
     private final int[] mLocation = new int[2];
     private final RectF mSeed = new RectF();
     private final RectF mFrame = new RectF();
+    /** Terminal area, in host coordinates: the only region the overlay swallows taps over. */
+    private final RectF mModalBounds = new RectF();
 
     private FrameLayout mHost;
     private FrameLayout mGlass;
@@ -124,9 +147,22 @@ public final class TerminalCommandPaletteController
     private final List<CommandPaletteFilter.Entry> mKeycapEntries = new ArrayList<>();
     private List<CommandPaletteView.Row> mRows = new ArrayList<>();
 
+    /**
+     * Row artwork for the current row list, keyed by {@link CommandPaletteFilter.Entry#iconKey}.
+     * Rebuilt with the rows so a stale icon can never outlive the app row it belonged to.
+     */
+    private final Map<String, Drawable> mRowIcons = new HashMap<>();
+
     private Mode mMode = Mode.LIST;
     private String mQuery = "";
+    /** Caret position inside {@link #mQuery}, clamped to [0, length]. */
+    private int mQueryCursor;
     private int mFocus = 0;
+    /**
+     * The palette opens as a search box: no rows until there is a query. ↓ opts into the full
+     * catalogue for browsing, which is what this remembers.
+     */
+    private boolean mListRevealed;
     @Nullable private CommandPaletteFilter.Entry mPendingEntry;
     private String mCrumb = "";
     private final Runnable mClearConfirmation = this::clearConfirmation;
@@ -164,9 +200,11 @@ public final class TerminalCommandPaletteController
         mHandler.removeCallbacks(mClearConfirmation);
         mMode = Mode.LIST;
         mQuery = "";
+        mQueryCursor = 0;
         mCrumb = "";
         mPendingEntry = null;
         mFocus = 0;
+        mListRevealed = false;
         mOpen = true;
 
         mView.refreshPalette();
@@ -184,9 +222,12 @@ public final class TerminalCommandPaletteController
 
         resolveAnchor();
         resolveSeed();
+        mView.setModalBounds(mModalBounds);
+        mView.resetScroll();
         mProgress.reset(0f);
         mHeight.reset(targetHeight());
         mProgress.target = 1f;
+        applyBackdropMaterial();
         mGlass.setVisibility(View.VISIBLE);
         mHost.setVisibility(View.VISIBLE);
         applyFrame();
@@ -200,6 +241,7 @@ public final class TerminalCommandPaletteController
         mOpen = false;
         mMode = Mode.LIST;
         mQuery = "";
+        mQueryCursor = 0;
         mPendingEntry = null;
         mCrumb = "";
         mActivity.setCommandPaletteInterceptorActive(false);
@@ -235,14 +277,24 @@ public final class TerminalCommandPaletteController
             public void getOutline(View view, Outline outline) {
                 // Clipping the blur to the animated rounded rect is what keeps the backdrop
                 // frost inside the palette without re-measuring a view per frame.
-                outline.setRoundRect(Math.round(mFrame.left), Math.round(mFrame.top),
-                    Math.round(mFrame.right), Math.round(mFrame.bottom), mCurrentRadius);
+                //
+                // Round INWARD, never with Math.round: the frame is fractional, and a clip half a
+                // pixel outside the painted surface let the bright frosted wallpaper leak past the
+                // paint as a hairline. It showed up as a light seam along the bottom edge — the
+                // edge where the glass interior is darkest and the leak most visible.
+                outline.setRoundRect((int) Math.ceil(mFrame.left), (int) Math.ceil(mFrame.top),
+                    (int) Math.floor(mFrame.right), (int) Math.floor(mFrame.bottom),
+                    mCurrentRadius);
             }
         });
         mView = new CommandPaletteView(mActivity);
         mView.setCallbacks(this);
         mHost.addView(mView, new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        // Stay above the backdrop pane in z. Without this the whole ledger — surface tint and
+        // text — renders UNDER the translucent pane and reads muted and fuzzy. No outline on this
+        // view, so the elevation casts no shadow of its own.
+        mView.setElevation(dp(1f));
         return true;
     }
 
@@ -267,11 +319,18 @@ public final class TerminalCommandPaletteController
         boolean moving = mProgress.tick(reduced, dt);
         moving |= mHeight.tick(reduced, dt);
         applyFrame();
-        if (moving) {
-            kick();
+        // Faded out is enough to tear down — deliberately not "and both channels have settled".
+        // The height channel tracks a result count that can keep nudging it, and anything that
+        // leaves it in motion would otherwise pin the blur pane open over the space bar, since
+        // the pane is clipped to the collapsed frame and the seed frame is the space bar.
+        if (!mOpen && mProgress.value < 0.002f) {
+            mProgress.reset(0f);
+            mHeight.reset(mHeight.target);
+            applyFrame();
+            onCollapsed();
             return;
         }
-        if (!mOpen && mProgress.value < 0.002f) onCollapsed();
+        if (moving) kick();
     }
 
     /**
@@ -281,8 +340,26 @@ public final class TerminalCommandPaletteController
      */
     private void onCollapsed() {
         mGlass.setVisibility(View.INVISIBLE);
+        // Drop the full-screen frost bitmap while shut; the next show() rebuilds it.
+        ImageView frost = mActivity.findViewById(R.id.command_palette_wallpaper_backdrop);
+        if (frost != null) {
+            frost.setImageDrawable(null);
+            frost.setVisibility(View.GONE);
+        }
         if (mView.hasConfirmation()) return;
         mHost.setVisibility(View.INVISIBLE);
+    }
+
+    /**
+     * Picks the glass backdrop for this open: over the system wallpaper a pre-blurred wallpaper
+     * frost (the live blur cannot see through the window there and renders grey mud), otherwise
+     * the RealtimeBlurView blurring real window content.
+     */
+    private void applyBackdropMaterial() {
+        ImageView frost = mActivity.findViewById(R.id.command_palette_wallpaper_backdrop);
+        View blur = mActivity.findViewById(R.id.command_palette_blur);
+        boolean frosted = frost != null && mActivity.applyCommandPaletteWallpaperFrost(frost);
+        if (blur != null) blur.setVisibility(frosted ? View.GONE : View.VISIBLE);
     }
 
     private void applyFrame() {
@@ -298,6 +375,11 @@ public final class TerminalCommandPaletteController
             lerp(mSeed.right, openRight, p),
             lerp(mSeed.bottom, mAnchorY, p));
         mCurrentRadius = dp(lerp(RADIUS_SEED, RADIUS_OPEN, p));
+        // No platform elevation shadow. The caster would be this full-screen glass pane, and the
+        // shadow it produced was a flat 8dp band under the bottom edge with square ends that
+        // ignored the rounded corners and cut off hard instead of falling off. CommandPaletteView
+        // draws the shadow itself, outside the frame, following the same animated rounded rect.
+        mGlass.setElevation(0f);
         float bodyAlpha = ramp(p, BODY_FADE_START, BODY_FADE_END);
         float stripAlpha = ramp(p, STRIP_FADE_START, STRIP_FADE_END);
         mView.setFrame(mFrame, mCurrentRadius, bodyAlpha, stripAlpha,
@@ -334,6 +416,10 @@ public final class TerminalCommandPaletteController
         float lowest = bottom - dp(STRIP_RESERVE);
         float highest = top + dp(MIN_HEIGHT);
         mAnchorY = Math.max(Math.min(anchor, lowest), Math.min(highest, lowest));
+        // The overlay view fills the activity, but it may only claim touches over the terminal.
+        // Below that sits the in-app keyboard, whose keys are how the palette is typed into: if
+        // the overlay ate those taps, every keystroke would register as a dismissing outside tap.
+        mModalBounds.set(0f, top, mHost.getWidth(), bottom);
     }
 
     private float terminalTop() {
@@ -353,7 +439,7 @@ public final class TerminalCommandPaletteController
 
     private float targetHeight() {
         float content = mView.measuredContentHeight();
-        return Math.max(dp(MIN_HEIGHT), Math.min(dp(MAX_HEIGHT), content));
+        return Math.max(mView.chromeHeight(), Math.min(dp(MAX_HEIGHT), content));
     }
 
     private boolean isReducedMotion() {
@@ -366,6 +452,7 @@ public final class TerminalCommandPaletteController
     private void rebuildRows() {
         List<CommandPaletteView.Row> rows = new ArrayList<>();
         mRowEntries.clear();
+        mRowIcons.clear();
         switch (mMode) {
             case ARGUMENT:
                 rows.add(CommandPaletteView.Row.notice(mActivity
@@ -385,6 +472,7 @@ public final class TerminalCommandPaletteController
         mView.setRows(rows, mFocus);
         mView.setHeader(headerMeta(), mCrumb);
         mView.setQuery(mQuery, mActivity.getString(R.string.palette_search_hint));
+        mView.setQueryCursor(clampedQueryCursor());
         mHeight.target = targetHeight();
         kick();
     }
@@ -403,9 +491,14 @@ public final class TerminalCommandPaletteController
     }
 
     private void buildListRows(@NonNull List<CommandPaletteView.Row> rows) {
+        // Search-first: with nothing typed the palette is only its search box and the keycap
+        // strip, and it grows the ledger once there is something to narrow — or once ↓ asks for
+        // the whole catalogue.
+        if (!mListRevealed && mQuery.trim().isEmpty()) return;
         List<CommandPaletteFilter.Entry> ranked =
             new ArrayList<>(CommandPaletteFilter.filterAndRank(mEntries, mQuery));
-        ranked.addAll(TerminalCommandPalette.buildAppEntries(mAppProvider, mAppUsageStats, mQuery));
+        ranked.addAll(TerminalCommandPalette.buildAppEntries(mAppProvider, mAppUsageStats, mQuery,
+            mRowIcons));
         if (ranked.isEmpty()) {
             rows.add(CommandPaletteView.Row.notice(
                 mActivity.getString(R.string.palette_no_match, upper(mQuery))));
@@ -439,7 +532,8 @@ public final class TerminalCommandPaletteController
                              @NonNull CommandPaletteFilter.Entry entry) {
         rows.add(CommandPaletteView.Row.entry(entry.title,
             entry.enabled ? entry.subtitle : entry.disabledReason,
-            entry.shortcutLabel(), entry.enabled));
+            entry.shortcutLabel(), entry.enabled,
+            entry.iconKey == null ? null : mRowIcons.get(entry.iconKey)));
         mRowEntries.add(entry);
     }
 
@@ -447,6 +541,10 @@ public final class TerminalCommandPaletteController
     private String headerMeta() {
         if (mMode == Mode.ARGUMENT)
             return mActivity.getString(R.string.palette_meta_awaiting_value);
+        // Nothing typed and nothing revealed: a "0 results" count would read as a failed search
+        // rather than as a search box waiting for one.
+        if (mMode == Mode.LIST && !mListRevealed && mQuery.trim().isEmpty())
+            return mActivity.getString(R.string.palette_meta_idle);
         int count = 0;
         for (CommandPaletteFilter.Entry entry : mRowEntries) if (entry != null) count++;
         return mActivity.getResources().getQuantityString(R.plurals.palette_meta_results,
@@ -468,6 +566,15 @@ public final class TerminalCommandPaletteController
     }
 
     private void moveFocus(int delta) {
+        // An arrow on the bare search box is a request to browse, not to move a focus there is
+        // nothing to move.
+        if (mMode == Mode.LIST && !mListRevealed && mQuery.trim().isEmpty()) {
+            mListRevealed = true;
+            mFocus = 0;
+            rebuildRows();
+            playTick();
+            return;
+        }
         if (mRowEntries.isEmpty()) return;
         int index = mFocus;
         for (int step = 0; step < mRowEntries.size(); step++) {
@@ -565,6 +672,9 @@ public final class TerminalCommandPaletteController
                 switch (value.getSlider()) {
                     case Cursor_up: moveFocus(-1); break;
                     case Cursor_down: moveFocus(1); break;
+                    // Space-bar slider swipes walk the caret through the query.
+                    case Cursor_left: moveQueryCursor(-Math.max(1, value.getSliderRepeat())); break;
+                    case Cursor_right: moveQueryCursor(Math.max(1, value.getSliderRepeat())); break;
                     default: break;
                 }
                 return true;
@@ -590,6 +700,8 @@ public final class TerminalCommandPaletteController
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_UP: moveFocus(-1); return true;
             case KeyEvent.KEYCODE_DPAD_DOWN: moveFocus(1); return true;
+            case KeyEvent.KEYCODE_DPAD_LEFT: moveQueryCursor(-1); return true;
+            case KeyEvent.KEYCODE_DPAD_RIGHT: moveQueryCursor(1); return true;
             case KeyEvent.KEYCODE_DEL: backspace(); return true;
             case KeyEvent.KEYCODE_ENTER:
             case KeyEvent.KEYCODE_NUMPAD_ENTER: commit(); return true;
@@ -601,7 +713,12 @@ public final class TerminalCommandPaletteController
 
     private void appendText(@NonNull String text) {
         if (text.isEmpty()) return;
-        mQuery = mQuery + text;
+        // The space bar is also the palette's own gesture seat, so a trailing space from the
+        // opening swipe must not become a filter that matches nothing.
+        if (mQuery.isEmpty() && mMode != Mode.ARGUMENT && text.trim().isEmpty()) return;
+        int cursor = clampedQueryCursor();
+        mQuery = mQuery.substring(0, cursor) + text + mQuery.substring(cursor);
+        mQueryCursor = cursor + text.length();
         onQueryChanged();
     }
 
@@ -610,8 +727,23 @@ public final class TerminalCommandPaletteController
             if (mMode != Mode.LIST) popMode();
             return;
         }
-        mQuery = mQuery.substring(0, mQuery.length() - 1);
+        int cursor = clampedQueryCursor();
+        if (cursor <= 0) return;
+        mQuery = mQuery.substring(0, cursor - 1) + mQuery.substring(cursor);
+        mQueryCursor = cursor - 1;
         onQueryChanged();
+    }
+
+    private int clampedQueryCursor() {
+        return Math.max(0, Math.min(mQueryCursor, mQuery.length()));
+    }
+
+    private void moveQueryCursor(int delta) {
+        if (mQuery.isEmpty()) return;
+        int moved = Math.max(0, Math.min(clampedQueryCursor() + delta, mQuery.length()));
+        if (moved == mQueryCursor) return;
+        mQueryCursor = moved;
+        if (mView != null) mView.setQueryCursor(mQueryCursor);
     }
 
     private void onQueryChanged() {
@@ -620,6 +752,7 @@ public final class TerminalCommandPaletteController
             mFocus = -1;
             mView.setQuery("", "");
             mView.setArgumentMode(true, argumentPlaceholder(), mQuery);
+            mView.setQueryCursor(clampedQueryCursor());
             mView.setHeader(headerMeta(), mCrumb);
             return;
         }
@@ -632,7 +765,10 @@ public final class TerminalCommandPaletteController
         mCrumb = "";
         mPendingEntry = null;
         mQuery = "";
+        mQueryCursor = 0;
         mFocus = 0;
+        // Backing out of a submenu lands on the list that was there, not on a bare box.
+        mListRevealed = true;
         mView.setArgumentMode(false, "", "");
         rebuildRows();
     }
@@ -667,6 +803,7 @@ public final class TerminalCommandPaletteController
             mPendingEntry = entry;
             mCrumb = entry.title;
             mQuery = "";
+            mQueryCursor = 0;
             mFocus = 0;
             rebuildRows();
             return;
@@ -676,6 +813,7 @@ public final class TerminalCommandPaletteController
             mPendingEntry = entry;
             mCrumb = entry.title;
             mQuery = "";
+            mQueryCursor = 0;
             mFocus = -1;
             mView.setArgumentMode(true, argumentPlaceholder(), "");
             rebuildRows();
@@ -770,7 +908,7 @@ public final class TerminalCommandPaletteController
         }
         return new CommandPaletteFilter.Entry(entry.toolName, entry.title, entry.subtitle,
             entry.category, entry.bindings, entry.enabled, entry.disabledReason,
-            entry.requiresConfirmation, entry.risk, arguments);
+            entry.requiresConfirmation, entry.risk, arguments, null, null, entry.iconKey);
     }
 
     // ------------------------------------------------------------------ taps

@@ -1,6 +1,7 @@
 package com.termux.app.terminal;
 
 import android.content.Context;
+import android.graphics.drawable.Drawable;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -187,6 +188,21 @@ public final class TerminalCommandPalette {
         @NonNull LauncherUsageStatsStore usageStats,
         @NonNull String query
     ) {
+        return buildAppEntries(provider, usageStats, query, null);
+    }
+
+    /**
+     * As above, and additionally fills {@code iconsOut} with the artwork for the rows it returns,
+     * keyed by {@link CommandPaletteFilter.Entry#iconKey}. Only these rows carry icons, so the
+     * map stays as short as the Apps section rather than the whole installed set.
+     */
+    @NonNull
+    static List<CommandPaletteFilter.Entry> buildAppEntries(
+        @NonNull LauncherAppDataProvider provider,
+        @NonNull LauncherUsageStatsStore usageStats,
+        @NonNull String query,
+        @Nullable Map<String, Drawable> iconsOut
+    ) {
         List<LauncherAppEntry> apps = provider.getAllApps();
         if (apps.isEmpty()) return Collections.emptyList();
         String trimmed = query.trim();
@@ -198,13 +214,15 @@ public final class TerminalCommandPalette {
         List<CommandPaletteFilter.Entry> entries = new ArrayList<>(limit);
         for (int i = 0; i < limit; i++) {
             LauncherAppEntry app = ranked.get(i);
+            String stableId = app.appRef.stableId();
             JSONObject arguments = new JSONObject();
             try {
                 // The stable id targets one activity exactly, so a row cannot drift
                 // to a different app of the same package.
-                arguments.put("query", app.appRef.stableId());
+                arguments.put("query", stableId);
             } catch (JSONException ignored) {
             }
+            if (iconsOut != null && app.icon != null) iconsOut.put(stableId, app.icon);
             entries.add(new CommandPaletteFilter.Entry(
                 LauncherToolRegistry.TOOL_APP_LAUNCH,
                 app.label,
@@ -215,7 +233,10 @@ public final class TerminalCommandPalette {
                 null,
                 false,
                 LauncherToolRegistry.ToolRisk.MEDIUM,
-                arguments));
+                arguments,
+                null,
+                null,
+                stableId));
         }
         return entries;
     }

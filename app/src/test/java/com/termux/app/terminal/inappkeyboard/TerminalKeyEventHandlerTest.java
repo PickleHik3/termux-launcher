@@ -22,6 +22,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
@@ -62,6 +63,7 @@ public class TerminalKeyEventHandlerTest {
         assertEquals(1, mHost.settings);
         assertTrue(mHost.composeStates.contains(true));
         assertTrue(mHost.composeStates.contains(false));
+        assertEquals(Collections.singletonList("app.command_palette"), mHost.launcherTools);
     }
 
     @Test
@@ -459,6 +461,8 @@ public class TerminalKeyEventHandlerTest {
                 return KeyValue.makeMacro("macro", new KeyValue[] { KeyValue.makeCharKey('m') }, 0);
             case Stateful:
                 return new KeyValue("stateful", KeyValue.Kind.Stateful, 0, 0);
+            case Launcher_tool:
+                return KeyValue.makeLauncherToolKey("app.command_palette", "⌘", 0);
             default:
                 throw new AssertionError(kind);
         }
@@ -600,6 +604,12 @@ public class TerminalKeyEventHandlerTest {
         private final List<Boolean> composeStates = new ArrayList<>();
         private final List<String> suggestions = new ArrayList<>();
         private final List<String> logs = new ArrayList<>();
+        private final List<String> launcherTools = new ArrayList<>();
+
+        @Override
+        public void runLauncherTool(String toolId) {
+            launcherTools.add(toolId);
+        }
 
         @Override
         public void paste() {

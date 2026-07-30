@@ -66,6 +66,11 @@
             app:persistent="false"
             app:title="@string/termux_top_pane_notification_access_title"
             app:summary="@string/termux_top_pane_notification_access_summary" />
+        <Preference
+            app:key="essential_notification_rules_manage"
+            app:persistent="false"
+            app:title="@string/settings_essential_notifications_title"
+            app:summary="@string/settings_essential_notifications_summary" />
     </PreferenceCategory>
 
 </PreferenceScreen>

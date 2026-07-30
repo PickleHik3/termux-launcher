@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <corners android:radius="2dp" />
+    <!-- Oversized radius clamps to half the view's short edge, so every pill gets true capsule
+         arc ends at whatever size code gives it. -->
+    <corners android:radius="999dp" />
     <solid android:color="?attr/termuxColorOutlineVariant" />
 </shape>

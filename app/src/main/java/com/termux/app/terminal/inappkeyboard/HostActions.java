@@ -40,17 +40,18 @@ public interface HostActions {
     default void onSuggestionEntered(String text) {}
 
     /**
-     * A swipe on an in-app keyboard key, named by the keyboard and resolved
-     * against the gesture binding table.
-     *
-     * @param keyName   key identity, e.g. {@code space}
-     * @param direction compass point, e.g. {@code north}
-     * @return whether a binding ran, which suppresses the swiped-to key value
+     * The keyboard's modifier snapshot changed (latch, lock or release). Drives the keybind
+     * hint popup the host shows while a Ctrl+Alt prefix is held.
      */
-    default boolean onKeyboardGesture(String keyName, String direction,
-                                      boolean ctrl, boolean alt, boolean shift) {
-        return false;
-    }
+    default void onKeyboardModifiersChanged(TerminalModifiers modifiers) {}
+
+    /**
+     * A {@code tool:<id>} key fired. The id is a launcher registry tool name, written straight
+     * into the layout file, so exposing a new action on a key needs no code on either side.
+     *
+     * @param toolId registry tool name, e.g. {@code app.command_palette}
+     */
+    default void runLauncherTool(String toolId) {}
 
     void debugLog(String message);
 }

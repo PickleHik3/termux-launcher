@@ -75,20 +75,12 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
     @Override
     public void mods_changed(Pointers.Modifiers modifiers) {
         mModifiers = TerminalModifiers.from(modifiers);
+        mHostActions.onKeyboardModifiersChanged(mModifiers);
     }
 
     @Override
     public void suggestion_entered(String text) {
         mHostActions.onSuggestionEntered(text);
-    }
-
-    @Override
-    public boolean swipe_gesture(String keyName, String direction, Pointers.Modifiers modifiers) {
-        if (keyName == null || direction == null)
-            return false;
-        TerminalModifiers mods = TerminalModifiers.from(modifiers);
-        return mHostActions.onKeyboardGesture(keyName, direction,
-            mods.isCtrl(), mods.isAlt(), mods.isShift());
     }
 
     /**
@@ -123,6 +115,7 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
     public void resetInputState() {
         cancelPendingMacros();
         mModifiers = TerminalModifiers.NONE;
+        mHostActions.onKeyboardModifiersChanged(mModifiers);
         mHostActions.setComposePending(false);
     }
 
@@ -167,6 +160,9 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
                 break;
             case Macro:
                 startMacro(value.getMacro());
+                break;
+            case Launcher_tool:
+                mHostActions.runLauncherTool(value.getLauncherTool().toolId);
                 break;
             case Stateful:
                 break;
@@ -353,6 +349,7 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
             case Keyevent:
             case Editing:
             case Event:
+            case Launcher_tool:
                 return true;
             default:
                 return false;

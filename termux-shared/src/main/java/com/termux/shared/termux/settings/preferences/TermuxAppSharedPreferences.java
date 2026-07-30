@@ -1056,6 +1056,19 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED, value, false);
     }
 
+    /**
+     * Whether the surface editor's glass controls write to every surface at once, so the dock,
+     * the in-app keyboard and the status bar stay one material instead of three.
+     */
+    public boolean isSurfaceTuningNormalized() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_SURFACE_TUNING_NORMALIZED,
+            TERMUX_APP.DEFAULT_VALUE_SURFACE_TUNING_NORMALIZED);
+    }
+
+    public void setSurfaceTuningNormalized(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_SURFACE_TUNING_NORMALIZED, value, false);
+    }
+
     public int getAppBarOpacity() {
         int opacity = SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_APP_BAR_OPACITY, TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY);
         return DataUtils.clamp(opacity, 0, 100);

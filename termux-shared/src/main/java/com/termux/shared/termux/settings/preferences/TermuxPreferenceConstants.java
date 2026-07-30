@@ -569,8 +569,11 @@ public final class TermuxPreferenceConstants {
          * Defines whether a thin outline border is drawn around the terminal surface.
          */
         public static final String KEY_TERMINAL_BORDER_ENABLED = "terminal_border_enabled";
+        /** Whether the surface editor writes its glass controls to every surface at once. */
+        public static final String KEY_SURFACE_TUNING_NORMALIZED = "surface_tuning_normalized";
 
         public static final boolean DEFAULT_VALUE_TERMINAL_BORDER_ENABLED = false;
+        public static final boolean DEFAULT_VALUE_SURFACE_TUNING_NORMALIZED = false;
 
         /**
          * Stores the user's preferred terminal opacity while wallpaper mode is enabled so it can

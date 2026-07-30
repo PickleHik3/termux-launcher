@@ -81,20 +81,6 @@ public class TerminalBindingConfigTest {
     }
 
     @Test
-    public void gestureSequencesMapAndUnmapLikeStrokes() {
-        TerminalBindingConfig.Result result = TerminalBindingConfig.parse(
-            "unmap kbd:space:swipe-north\n"
-                + "map Alt+KBD:space:swipe-east session.previous\n"
-                + "map ctrl+alt+q send-key kbd:space:swipe-east\n",
-            registry, true);
-
-        assertEquals(1, result.errors.size());
-        assertEquals(1, result.mappings.size());
-        assertEquals("alt+kbd:space:swipe-east", result.mappings.get(0).sequence);
-        assertTrue(result.overriddenSequences.contains("kbd:space:swipe-north"));
-    }
-
-    @Test
     public void unmapOverridesADefaultWithoutCreatingAMapping() {
         TerminalBindingConfig.Result result = TerminalBindingConfig.parse(
             "unmap ctrl+alt+v\n", registry, true);

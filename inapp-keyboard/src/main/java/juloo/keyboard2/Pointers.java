@@ -24,8 +24,13 @@ public final class Pointers implements Handler.Callback
   public static final int FLAG_P_CLEAR_LATCHED = (1 << 6);
   /** Can't be locked, even when long pressing. */
   public static final int FLAG_P_CANT_LOCK = (1 << 7);
-  /** The host claimed the swipe as a gesture binding; the key must not fire. */
-  public static final int FLAG_P_GESTURE_CONSUMED = (1 << 8);
+  /**
+   * The swipe settled on a key that must fire exactly once, so the rest of the pointer's travel
+   * is ignored. A launcher action typically opens an overlay that then owns the keyboard, and a
+   * long or sloppy swipe crossing further direction boundaries would otherwise keep selecting and
+   * firing values into whatever just appeared.
+   */
+  public static final int FLAG_P_GESTURE_LOCKED = (1 << 8);
 
   private Handler _longpress_handler;
   private ArrayList<Pointer> _ptrs = new ArrayList<Pointer>();
@@ -156,14 +161,6 @@ public final class Pointers implements Handler.Callback
     Pointer ptr = getPtr(pointerId);
     if (ptr == null)
       return;
-    if (ptr.hasFlagsAny(FLAG_P_GESTURE_CONSUMED))
-    {
-      stopLongPress(ptr);
-      removePtr(ptr);
-      clearLatched();
-      _handler.onPointerFlagsChanged(false);
-      return;
-    }
     if (ptr.hasFlagsAny(FLAG_P_SLIDING))
     {
       clearLatched();
@@ -269,50 +266,6 @@ public final class Pointers implements Handler.Callback
     return k.keys[DIRECTION_TO_INDEX[direction]];
   }
 
-  /**
-   * Compass name of a swipe, covering the same circle section as the key index
-   * [direction] selects. [null] for a direction with no key slot.
-   */
-  static String swipeDirectionName(int direction)
-  {
-    switch (DIRECTION_TO_INDEX[direction])
-    {
-      case 7: return "north";
-      case 2: return "northeast";
-      case 6: return "east";
-      case 4: return "southeast";
-      case 8: return "south";
-      case 3: return "southwest";
-      case 5: return "west";
-      case 1: return "northwest";
-      default: return null;
-    }
-  }
-
-  /**
-   * Stable name a host uses to bind swipes on [k], or [null] for a key that
-   * cannot be named. The space bar is named by its role; other keys by their
-   * center value when that is a single letter or digit.
-   */
-  static String swipeKeyName(KeyboardData.Key k)
-  {
-    if (k.role == KeyboardData.Key.Role.Space_bar)
-      return "space";
-    KeyValue center = k.keys[0];
-    if (center == null)
-      return null;
-    // User layout files predate the role attribute; recognize their space bar
-    // by its center value so swipe bindings keep working on them.
-    if (center.getKind() == KeyValue.Kind.Editing
-        && center.getEditing() == KeyValue.Editing.SPACE_BAR)
-      return "space";
-    if (center.getKind() != KeyValue.Kind.Char)
-      return null;
-    String symbol = center.getString();
-    if (symbol.length() != 1 || !Character.isLetterOrDigit(symbol.charAt(0)))
-      return null;
-    return String.valueOf(Character.toLowerCase(symbol.charAt(0)));
-  }
 
   /**
    * Get the key nearest to [direction] that is not key0. Take care
@@ -351,7 +304,7 @@ public final class Pointers implements Handler.Callback
     Pointer ptr = getPtr(pointerId);
     if (ptr == null)
       return;
-    if (ptr.hasFlagsAny(FLAG_P_GESTURE_CONSUMED))
+    if (ptr.hasFlagsAny(FLAG_P_GESTURE_LOCKED))
       return;
     if (ptr.hasFlagsAny(FLAG_P_SLIDING))
     {
@@ -387,18 +340,6 @@ public final class Pointers implements Handler.Callback
       int direction = ((int)(a * 8 / Math.PI) + 12) % 16;
       if (ptr.gesture == null)
       { // Gesture starts
-
-        String swipeKey = swipeKeyName(ptr.key);
-        String swipeDirection = swipeDirectionName(direction);
-        if (swipeKey != null && swipeDirection != null
-            && _handler.onSwipeGesture(swipeKey, swipeDirection, ptr.modifiers))
-        { // The host bound this swipe; the key value never applies.
-          stopLongPress(ptr);
-          ptr.value = null;
-          ptr.flags = FLAG_P_GESTURE_CONSUMED;
-          _handler.onPointerFlagsChanged(true);
-          return;
-        }
         ptr.gesture = new Gesture(direction, _config.circleSensitivity);
         KeyValue new_value = getNearestKeyAtDirection(ptr, direction);
         if (new_value != null)
@@ -406,6 +347,8 @@ public final class Pointers implements Handler.Callback
 
           ptr.value = new_value;
           ptr.flags = pointer_flags_of_kv(new_value);
+          if (new_value.getKind() == KeyValue.Kind.Launcher_tool)
+            ptr.flags |= FLAG_P_GESTURE_LOCKED;
           // Start sliding mode
           if (new_value.getKind() == KeyValue.Kind.Slider)
             startSliding(ptr, x, y, dx, dy, new_value);
@@ -920,12 +863,5 @@ public final class Pointers implements Handler.Callback
 
     /** Key is repeating. */
     public void onPointerHold(KeyValue k, Modifiers mods);
-
-    /** A swipe on a nameable key left the center region. Returning [true] means
-        the host ran a gesture binding, so the swiped-to key value is dropped. */
-    public default boolean onSwipeGesture(String keyName, String direction, Modifiers mods)
-    {
-      return false;
-    }
   }
 }

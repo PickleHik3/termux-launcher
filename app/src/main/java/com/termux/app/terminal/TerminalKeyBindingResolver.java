@@ -44,13 +44,6 @@ public final class TerminalKeyBindingResolver {
 
     private static final String LOG_TAG = "TerminalKeyBindingResolver";
 
-    /** Marks a stroke's key token as an in-app keyboard gesture. */
-    static final String GESTURE_PREFIX = "kbd:";
-    static final String GESTURE_SWIPE_INFIX = ":swipe-";
-    /** Compass points the in-app keyboard reports, matching its eight key slots. */
-    static final String[] GESTURE_DIRECTIONS = {
-        "north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"};
-
     /** A resolved action plus the arguments derived from the stroke itself. */
     public static final class Match {
         public final String toolName;
@@ -328,6 +321,28 @@ public final class TerminalKeyBindingResolver {
         return bindings;
     }
 
+    /**
+     * Root-keymap bindings exactly one key beyond {@code prefix} (e.g. {@code "ctrl+alt+"}), as
+     * suffix key -> claiming tool name under {@code context}, in registration order. Suffixes
+     * that add another modifier or start a sequence are excluded. Drives the in-app keyboard's
+     * modifier hint popup.
+     */
+    @NonNull
+    public Map<String, String> hintsForPrefix(@NonNull String prefix,
+                                              @NonNull LauncherToolRegistry.ActionContext context) {
+        Map<String, String> hints = new LinkedHashMap<>();
+        for (Map.Entry<String, List<Claim>> entry : bindings.entrySet()) {
+            String stroke = entry.getKey();
+            if (!stroke.startsWith(prefix)) continue;
+            String suffix = stroke.substring(prefix.length());
+            if (suffix.isEmpty() || suffix.indexOf('+') >= 0 || suffix.indexOf(' ') >= 0) continue;
+            Claim claim = firstHolding(entry.getValue(), context);
+            if (claim == null || "unmap".equals(claim.toolName)) continue;
+            hints.put(suffix, claim.toolName);
+        }
+        return hints;
+    }
+
     /** Strokes claimed twice under conditions that can both hold. */
     @NonNull
     public Map<String, List<String>> getConflicts() {
@@ -492,35 +507,6 @@ public final class TerminalKeyBindingResolver {
             if (claim.condition.holds(context)) return claim;
         }
         return null;
-    }
-
-    /**
-     * Resolves an in-app keyboard swipe against the same table as hardware
-     * strokes, or returns {@code null} when the swipe is unbound so the keyboard
-     * keeps its own meaning for it.
-     */
-    @Nullable
-    public Match resolveGesture(@NonNull String keyName, @NonNull String direction,
-                                boolean ctrl, boolean alt, boolean shift,
-                                @NonNull LauncherToolRegistry.ActionContext context) {
-        String stroke = gestureStroke(keyName, direction, ctrl, alt, shift);
-        if (!isValidStrokeSpec(stroke)) return null;
-        String modeName = getCurrentMode();
-        Map<String, List<Claim>> table = modeName.isEmpty() ? bindings : modalBindings.get(modeName);
-        Claim claim = firstHolding(table == null ? null : table.get(stroke), context);
-        return claim == null ? null : new Match(claim, new JSONObject(), stroke, modeName);
-    }
-
-    /** Normalized stroke naming one in-app keyboard swipe, e.g. {@code alt+kbd:space:swipe-east}. */
-    @NonNull
-    public static String gestureStroke(@NonNull String keyName, @NonNull String direction,
-                                       boolean ctrl, boolean alt, boolean shift) {
-        StringBuilder stroke = new StringBuilder();
-        if (ctrl) stroke.append("ctrl+");
-        if (alt) stroke.append("alt+");
-        if (shift) stroke.append("shift+");
-        return stroke.append(GESTURE_PREFIX).append(keyName.toLowerCase(Locale.US))
-            .append(GESTURE_SWIPE_INFIX).append(direction.toLowerCase(Locale.US)).toString();
     }
 
     /**
@@ -711,29 +697,7 @@ public final class TerminalKeyBindingResolver {
         int separator = stroke.lastIndexOf('+');
         String key = separator >= 0 ? stroke.substring(separator + 1) : stroke;
         if (key.isEmpty()) return false;
-        return isGestureToken(key) || keyCodeForToken(key) != null;
-    }
-
-    /**
-     * Whether a stroke's key token names an in-app keyboard swipe rather than a
-     * hardware key. Gestures share the stroke table so one {@code map}/{@code unmap}
-     * syntax, one conflict check, and one palette hint cover both.
-     */
-    static boolean isGestureToken(@NonNull String token) {
-        if (!token.startsWith(GESTURE_PREFIX)) return false;
-        int infix = token.indexOf(GESTURE_SWIPE_INFIX, GESTURE_PREFIX.length());
-        if (infix <= GESTURE_PREFIX.length()) return false;
-        String key = token.substring(GESTURE_PREFIX.length(), infix);
-        if (key.length() > 16) return false;
-        for (int i = 0; i < key.length(); i++) {
-            char c = key.charAt(i);
-            if (!Character.isLetterOrDigit(c) || c > 'z') return false;
-        }
-        String direction = token.substring(infix + GESTURE_SWIPE_INFIX.length());
-        for (String valid : GESTURE_DIRECTIONS) {
-            if (valid.equals(direction)) return true;
-        }
-        return false;
+        return keyCodeForToken(key) != null;
     }
 
     @NonNull

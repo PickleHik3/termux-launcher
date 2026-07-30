@@ -41,6 +41,10 @@ public final class SettingsSearchPreference extends Preference {
     @Override
     public void onBindViewHolder(@NonNull PreferenceViewHolder holder) {
         super.onBindViewHolder(holder);
+        // This row takes focus below (to keep the IME shut on entry), and the preference row's
+        // default selectable background paints its focused state as a light full-width band
+        // behind the pill. The pill drawable is the only chrome this row should show.
+        holder.itemView.setBackground(null);
         EditText input = (EditText) holder.findViewById(R.id.settings_search_input);
         if (input == null) return;
         Object oldWatcher = input.getTag(R.id.settings_search_input);

@@ -90,6 +90,12 @@ public class TerminalPaneController {
         void onActivePaneChanged();
         /** The set of windows/panes changed; activity should rebuild the drawer. */
         void onTreesChanged();
+        /**
+         * The pane tree was just laid into the host view. Fires for every structural change —
+         * split, close, maximize, layout change, window switch — so anything keyed off how many
+         * panes are on screen can refresh from one place.
+         */
+        default void onPanesRendered() {}
         /** Default working directory when a cwd can't be derived. */
         String defaultCwd();
     }
@@ -894,7 +900,10 @@ public class TerminalPaneController {
     private void render() {
         mHostView.removeAllViews();
         mSplitLayouts.clear();
-        if (mActiveWindow == null) return;
+        if (mActiveWindow == null) {
+            mHost.onPanesRendered();
+            return;
+        }
         View built = mMaximizedLeaf != null
             ? paneFrameFor(mMaximizedLeaf.session) : buildView(mActiveWindow.root);
         mHostView.addView(built, new FrameLayout.LayoutParams(
@@ -910,6 +919,7 @@ public class TerminalPaneController {
         }
         updateActiveBorders();
         focusActiveView();
+        mHost.onPanesRendered();
     }
 
     private View buildView(Node node) {

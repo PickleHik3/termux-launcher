@@ -176,6 +176,13 @@ public final class MediaWidgetView extends View {
                              float size, float radius, boolean stroke) {
         mRect.set(left, top, left + size, top + size);
         Bitmap art = state.art;
+        // Artwork is the one thing here drawn through a shader rather than a solid colour, and a
+        // shader is modulated by the paint's own alpha. Every other draw in this view sets its
+        // colour (and with it an alpha) on the shared fill paint, so whatever ran last leaks in:
+        // the strip's panel tint at alpha 20, or this method's own 15-alpha inner stroke on the
+        // frame before. Without reasserting opacity the cover renders as a washed-out grey block.
+        mFillPaint.setStyle(Paint.Style.FILL);
+        mFillPaint.setColorFilter(null);
         if (art != null && !art.isRecycled() && art.getWidth() > 0 && art.getHeight() > 0) {
             BitmapShader shader = new BitmapShader(art, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
             float scale = size / Math.min(art.getWidth(), art.getHeight());
@@ -185,6 +192,7 @@ public final class MediaWidgetView extends View {
                 top - (art.getHeight() * scale - size) / 2f);
             shader.setLocalMatrix(mShaderMatrix);
             mFillPaint.setShader(shader);
+            mFillPaint.setAlpha(255);
             canvas.drawRoundRect(mRect, radius, radius, mFillPaint);
             mFillPaint.setShader(null);
         } else {
@@ -194,6 +202,7 @@ public final class MediaWidgetView extends View {
             Drawable icon = mAppIcon;
             if (icon != null) {
                 float inset = size * .18f;
+                icon.setAlpha(255);
                 icon.setBounds(Math.round(left + inset), Math.round(top + inset),
                     Math.round(left + size - inset), Math.round(top + size - inset));
                 icon.draw(canvas);

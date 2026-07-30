@@ -327,10 +327,7 @@ public final class TerminalBindingConfig {
                     continue;
                 }
                 String key = TerminalKeyBindingResolver.normalizeSequenceSpec(words.get(cursor));
-                // A gesture is a valid stroke to bind but has no bytes to send.
-                if (key.indexOf('>') >= 0 || !TerminalKeyBindingResolver.isValidStrokeSpec(key)
-                    || TerminalKeyBindingResolver.isGestureToken(
-                        key.substring(key.lastIndexOf('+') + 1))) {
+                if (key.indexOf('>') >= 0 || !TerminalKeyBindingResolver.isValidStrokeSpec(key)) {
                     errors.add("line " + lineNumber + ": invalid send-key stroke '" + words.get(cursor) + "'");
                     continue;
                 }

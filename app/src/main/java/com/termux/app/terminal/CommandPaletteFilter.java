@@ -67,6 +67,12 @@ public final class CommandPaletteFilter {
         @Nullable public final String argumentName;
         /** Allowed values for {@link #argumentName}, or {@code null} for free text. */
         @Nullable public final List<String> argumentChoices;
+        /**
+         * Key the host resolves row artwork with — an app's stable id — or {@code null} for the
+         * rows the ledger draws as text alone. A key rather than a {@code Drawable} so this class
+         * stays free of Android types.
+         */
+        @Nullable public final String iconKey;
 
         public Entry(
             @NonNull String toolName,
@@ -113,7 +119,27 @@ public final class CommandPaletteFilter {
             @Nullable String argumentName,
             @Nullable List<String> argumentChoices
         ) {
+            this(toolName, title, subtitle, category, bindings, enabled, disabledReason,
+                requiresConfirmation, risk, arguments, argumentName, argumentChoices, null);
+        }
+
+        public Entry(
+            @NonNull String toolName,
+            @NonNull String title,
+            @NonNull String subtitle,
+            @NonNull String category,
+            @NonNull List<String> bindings,
+            boolean enabled,
+            @Nullable String disabledReason,
+            boolean requiresConfirmation,
+            @NonNull LauncherToolRegistry.ToolRisk risk,
+            @Nullable JSONObject arguments,
+            @Nullable String argumentName,
+            @Nullable List<String> argumentChoices,
+            @Nullable String iconKey
+        ) {
             this.arguments = arguments;
+            this.iconKey = iconKey;
             this.toolName = toolName;
             this.title = title;
             this.subtitle = subtitle;
@@ -152,10 +178,7 @@ public final class CommandPaletteFilter {
         public String shortcutLabel() {
             if (isSubmenu()) return "›";
             if (isArgumentPrompt()) return "args";
-            for (String binding : bindings) {
-                // Gesture strokes ("kbd:space:swipe-north") do not compact into the column.
-                if (!binding.startsWith("kbd:")) return compactStroke(binding);
-            }
+            if (!bindings.isEmpty()) return compactStroke(bindings.get(0));
             if (LauncherToolRegistry.CATEGORY_APPS.equals(category)) return "app";
             return "";
         }
@@ -255,7 +278,10 @@ public final class CommandPaletteFilter {
         for (String binding : entry.bindings) {
             if (binding.toLowerCase(Locale.US).contains(query)) return SCORE_TEXT_MATCH;
         }
-        if (entry.subtitle.toLowerCase(Locale.US).contains(query)) return SCORE_TEXT_MATCH;
+        // Descriptions are deliberately NOT searched. They are prose, so any common word matches
+        // several unrelated rows — "what" pulled in Key inspector, whose description happens to
+        // contain it, alongside the WhatsApp row the user was after. A row has to earn its place
+        // by what it says, what it is called, or what it is bound to.
         return SCORE_NONE;
     }
 

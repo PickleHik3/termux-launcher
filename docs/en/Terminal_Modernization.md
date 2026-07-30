@@ -304,35 +304,29 @@ map ctrl+alt+shift+m app.launch Maps
 Installed apps also appear in the command palette under **Apps**: the most-used ones with no query,
 and the full ranked match list while filtering. Selecting a row runs `app.launch`.
 
-### In-app keyboard gestures
+### Actions on in-app keyboard keys
 
-Swipes on the in-app keyboard are strokes too, written `kbd:<key>:swipe-<direction>` with the usual
-modifier prefixes. `<key>` is `space` for the space bar, or a single letter or digit for an ordinary
-key. `<direction>` is one of `north`, `northeast`, `east`, `southeast`, `south`, `southwest`, `west`,
-`northwest`, covering the same circle section as that key's corresponding swipe slot. The modifiers
-are the ones held or latched when the swipe starts.
+Keyboard swipes are not strokes and are not bound here. They live in the keyboard layout file, where
+any key slot can carry a launcher action written `tool:<registry id>` — optionally
+`tool:<registry id>:<glyph>` to choose what the slot draws:
 
-Defaults on the space bar:
-
-| Gesture | Action |
-| --- | --- |
-| `kbd:space:swipe-north` | `app.command_palette` |
-| `alt+kbd:space:swipe-east` | `window.next` |
-| `alt+kbd:space:swipe-west` | `window.previous` |
-| `alt+kbd:space:swipe-south` | `session.next` |
-| `alt+kbd:space:swipe-north` | `session.previous` |
-
-The plain north swipe deliberately takes over the keyboard's own layout-switch gesture. Plain east
-and west stay the keyboard's cursor sliders, because an unbound swipe keeps its keyboard meaning —
-which is also how remapping works:
-
-```text
-unmap kbd:space:swipe-north
-map alt+kbd:space:swipe-northeast app.launch com.termux
-map --when splits-on kbd:space:swipe-south pane.next_layout
+```xml
+<key width="4.4" role="space_bar" key0="space"
+     key7="tool:app.command_palette:⌘"
+     key1="tool:window.previous:◧" key2="tool:window.next:◨"
+     key3="tool:session.previous:↰" key4="tool:session.next:↳"
+     key5="cursor_left" key6="cursor_right" key8="switch_backward"/>
 ```
 
-Gestures are single strokes: they cannot start or continue a `>` chord.
+Slots are `key1` NW, `key2` NE, `key3` SW, `key4` SE, `key5` W, `key6` E, `key7` N, `key8` S — the
+keyboard's own eight swipe directions, unchanged. A `tool:` key reaches the same dispatcher as a
+keybind, a palette row and `POST /v1/agent/execute`, so every tool in the registry is available on
+every slot with no per-tool code and no separate binding syntax.
+
+The shipped defaults are in `inapp-keyboard/src/main/res/xml/bottom_row.xml`; the north swipe takes
+over the keyboard's layout-switch gesture and `switch_forward` is dropped, while plain east/west stay
+the cursor sliders. Override the whole row by writing your own space bar key into
+`~/.termux/keyboard/layout.xml` — that file is the single place swipe actions are configured.
 
 ### Modal keymaps
 

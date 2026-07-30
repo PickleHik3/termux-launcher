@@ -5,14 +5,18 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.view.MotionEvent;
+import android.view.VelocityTracker;
 import android.view.View;
+import android.view.ViewConfiguration;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
@@ -72,30 +76,40 @@ public final class CommandPaletteView extends View {
         @Nullable final String description;
         final String shortcut;
         final boolean enabled;
+        /** Leading artwork, for app rows; text rows leave the gutter out entirely. */
+        @Nullable final Drawable icon;
 
         private Row(int kind, @NonNull String primary, @Nullable String description,
-                    @NonNull String shortcut, boolean enabled) {
+                    @NonNull String shortcut, boolean enabled, @Nullable Drawable icon) {
             this.kind = kind;
             this.primary = primary;
             this.description = description;
             this.shortcut = shortcut;
             this.enabled = enabled;
+            this.icon = icon;
         }
 
         @NonNull
         public static Row category(@NonNull String label) {
-            return new Row(KIND_CATEGORY, label, null, "", true);
+            return new Row(KIND_CATEGORY, label, null, "", true, null);
         }
 
         @NonNull
         public static Row notice(@NonNull String text) {
-            return new Row(KIND_NOTICE, text, null, "", true);
+            return new Row(KIND_NOTICE, text, null, "", true, null);
         }
 
         @NonNull
         public static Row entry(@NonNull String title, @Nullable String description,
                                 @NonNull String shortcut, boolean enabled) {
-            return new Row(KIND_ENTRY, title, description, shortcut, enabled);
+            return entry(title, description, shortcut, enabled, null);
+        }
+
+        @NonNull
+        public static Row entry(@NonNull String title, @Nullable String description,
+                                @NonNull String shortcut, boolean enabled,
+                                @Nullable Drawable icon) {
+            return new Row(KIND_ENTRY, title, description, shortcut, enabled, icon);
         }
 
         public boolean isSelectable() {
@@ -123,6 +137,8 @@ public final class CommandPaletteView extends View {
     private static final float ROW_PAD_LEFT = 14f;
     private static final float ROW_PAD_RIGHT = 12f;
     private static final float CATEGORY_PAD_LEFT = 12f;
+    private static final float ICON_SIZE = 16f;
+    private static final float ICON_GAP = 7f;
     private static final float FOCUS_BAR_W = 2f;
     private static final float VIEWPORT_BOTTOM_SLACK = 26f;
     private static final float BOTTOM_FADE_H = 28f;
@@ -134,6 +150,23 @@ public final class CommandPaletteView extends View {
     private static final float CAP_RADIUS = 6f;
     private static final float HAIRLINE = 1f;
     private static final float SPECULAR_RADIUS = 320f;
+
+    // Drop shadow, drawn here rather than taken from View elevation: the caster would have to be
+    // the full-screen glass pane, whose platform shadow came out as a flat band under the bottom
+    // edge with square ends that ignored the rounded corners. These rings are concentric with the
+    // animated rounded rect, so the corners stay round and the falloff is smooth. Each ring is
+    // faint and they accumulate outward-to-inward into a ramp.
+    private static final float SHADOW_SPREAD = 14f;
+    private static final float SHADOW_DROP = 5f;
+    // Many thin rings rather than a few thick ones: at 7 rings the accumulation stepped in
+    // measurable ~4-level plateaus, which is the banding that makes a faked shadow look faked.
+    private static final int SHADOW_RINGS = 14;
+    private static final int SHADOW_RING_ALPHA = 4;
+
+    /** Fling decay per frame, and the speeds at which a fling starts and stops. */
+    private static final float FLING_DECAY = 0.90f;
+    private static final float FLING_MIN_START_DP = 60f;
+    private static final float FLING_MIN_KEEP_DP = 24f;
 
     // Type sizes, in dp for a stable ledger grid under any font scale.
     private static final float SIZE_TITLE = 10f;
@@ -154,6 +187,14 @@ public final class CommandPaletteView extends View {
     private final TextPaint mMonoBold = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final RectF mRect = new RectF();
     private final RectF mFrame = new RectF();
+    private final Path mShadowClip = new Path();
+    /**
+     * Region the overlay is modal over. The view fills the activity so the sprout can start at
+     * the space bar, but only this rectangle may swallow touches — everything below it is the
+     * in-app keyboard, and taps there have to reach the keys or the palette could never be typed
+     * into.
+     */
+    private final RectF mModalBounds = new RectF();
     private final List<RectF> mCapRects = new ArrayList<>();
 
     @Nullable private Callbacks mCallbacks;
@@ -180,6 +221,8 @@ public final class CommandPaletteView extends View {
     private String mCrumb = "";
     private String mQuery = "";
     private String mQueryPlaceholder = "";
+    /** Caret index into the active buffer (query or argument value); values past the end clamp. */
+    private int mQueryCursor = Integer.MAX_VALUE;
     private boolean mArgumentMode;
     private String mArgumentPlaceholder = "";
     private String mArgumentValue = "";
@@ -188,9 +231,21 @@ public final class CommandPaletteView extends View {
     private float mConfirmationBaseline;
     private float mScrollOffset;
 
+    private final float mTouchSlop;
+    /** True while the offset is the finger's rather than the focused row's. */
+    private boolean mUserScrolled;
+    private boolean mDragging;
+    private float mDownX;
+    private float mDownY;
+    private float mLastTouchY;
+    @Nullable private VelocityTracker mVelocity;
+    private float mFlingVelocity;
+    private final Runnable mFlingStep = this::stepFling;
+
     public CommandPaletteView(@NonNull Context context) {
         super(context);
         mDensity = context.getResources().getDisplayMetrics().density;
+        mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         Typeface mono = Typeface.MONOSPACE;
         mMono.setTypeface(mono);
         mMonoBold.setTypeface(Typeface.create(mono, Typeface.BOLD));
@@ -226,7 +281,7 @@ public final class CommandPaletteView extends View {
             ColorUtils.setAlphaComponent(Color.BLACK, 40), mGlassBase);
         mOnSurface = InAppKeyboardPaletteFactory.ensureContrast(onSurface, overGlass);
         mOnSurfaceVariant = InAppKeyboardPaletteFactory.ensureContrast(onSurfaceVariant, overGlass);
-        mMeta = ColorUtils.setAlphaComponent(mOnSurfaceVariant, 190);
+        mMeta = ColorUtils.setAlphaComponent(mOnSurfaceVariant, 212);
         mPrimary = InAppKeyboardPaletteFactory.ensureContrast(mPrimary, overGlass);
         mConfirmation = InAppKeyboardPaletteFactory.ensureContrast(
             MaterialColors.getColor(context, com.google.android.material.R.attr.colorTertiary,
@@ -234,7 +289,7 @@ public final class CommandPaletteView extends View {
 
         // Keycaps use the keyboard's chip recipe, so their labels are checked against the
         // chip composited over the glass rather than over the glass alone.
-        mChipFill = ColorUtils.setAlphaComponent(surfaceContainerHigh, 128);
+        mChipFill = ColorUtils.setAlphaComponent(surfaceContainerHigh, 160);
         int capOverGlass = ColorUtils.compositeColors(mChipFill, overGlass);
         mCapLabel = InAppKeyboardPaletteFactory.ensureContrast(onSurface, capOverGlass);
         invalidate();
@@ -252,10 +307,27 @@ public final class CommandPaletteView extends View {
         invalidate();
     }
 
+    /**
+     * Sets the rectangle inside which taps belong to the palette. Taps outside it fall through to
+     * whatever is underneath — in practice the in-app keyboard.
+     */
+    public void setModalBounds(@NonNull RectF bounds) {
+        mModalBounds.set(bounds);
+    }
+
     public void setRows(@NonNull List<Row> rows, int focusIndex) {
+        // Any focus move or result change hands the viewport back to the focused row.
+        if (focusIndex != mFocusIndex || rows != mRows) resetScroll();
         mRows = rows;
         mFocusIndex = focusIndex;
         invalidate();
+    }
+
+    /** Drops a manual scroll and any fling, so the next draw follows the focused row again. */
+    public void resetScroll() {
+        abortFling();
+        mUserScrolled = false;
+        mScrollOffset = 0f;
     }
 
     public void setKeycaps(@NonNull List<Keycap> keycaps) {
@@ -273,6 +345,17 @@ public final class CommandPaletteView extends View {
         mQuery = query;
         mQueryPlaceholder = placeholder;
         invalidate();
+    }
+
+    public void setQueryCursor(int cursor) {
+        mQueryCursor = cursor;
+        invalidate();
+    }
+
+    /** Advance of the text before the caret, so the caret can sit mid-string. */
+    private float measureToCursor(@NonNull TextPaint paint, @NonNull String text) {
+        int cursor = Math.max(0, Math.min(mQueryCursor, text.length()));
+        return paint.measureText(text.substring(0, cursor));
     }
 
     /**
@@ -308,9 +391,17 @@ public final class CommandPaletteView extends View {
      * the caller can target the height spring directly.
      */
     public float measuredContentHeight() {
-        float height = dp(TITLE_BAR_H) + dp(FILTER_ROW_H) + listContentHeight();
+        float height = chromeHeight() + listContentHeight();
         if (mArgumentMode) height += dp(ARG_ROW_H);
         return height;
+    }
+
+    /**
+     * Title bar plus filter row: what the palette is with no rows under it, and so the floor the
+     * height spring collapses to when the query is empty.
+     */
+    public float chromeHeight() {
+        return dp(TITLE_BAR_H) + dp(FILTER_ROW_H);
     }
 
     private float listContentHeight() {
@@ -342,33 +433,20 @@ public final class CommandPaletteView extends View {
         }
         if (mFrame.isEmpty() || mProgress <= 0.001f) return;
 
-        drawShadow(canvas);
         drawSurface(canvas);
         if (mBodyAlpha > 0.004f) drawBody(canvas);
         if (mStripAlpha > 0.004f) drawStrip(canvas);
         if (mConfirmationText != null) drawConfirmation(canvas);
     }
 
-    /**
-     * Layered stand-in for the spec's {@code 0 18px 40px} drop shadow: hardware canvases only
-     * honor {@code setShadowLayer} for text, and forcing a software layer here would defeat the
-     * blur underneath.
-     */
-    private void drawShadow(@NonNull Canvas canvas) {
-        float[] spreads = {dp(30f), dp(18f), dp(7f)};
-        int[] alphas = {22, 38, 58};
-        float lift = dp(18f) * mProgress;
-        mFill.setShader(null);
-        for (int i = 0; i < spreads.length; i++) {
-            mFill.setColor(ColorUtils.setAlphaComponent(Color.BLACK,
-                Math.round(alphas[i] * mProgress)));
-            mRect.set(mFrame.left - spreads[i], mFrame.top - spreads[i] + lift,
-                mFrame.right + spreads[i], mFrame.bottom + spreads[i] + lift);
-            canvas.drawRoundRect(mRect, mRadius + spreads[i], mRadius + spreads[i], mFill);
-        }
-    }
+    // The spec's `0 18px 40px` drop shadow used to be faked with three concentric black rounded
+    // rects at 30/18/7dp spread, because hardware canvases only honour setShadowLayer for text.
+    // At 30dp the outermost one reached past the keycap strip, so the palette read as three
+    // stacked panels behind the search box rather than one floating rectangle. The rim and the
+    // backdrop blur carry the separation on their own.
 
     private void drawSurface(@NonNull Canvas canvas) {
+        drawDropShadow(canvas);
         // Glass base at the dock's own tint alpha, then the vertical light model over it.
         mFill.setShader(null);
         mFill.setColor(ColorUtils.setAlphaComponent(mGlassBase, 158));
@@ -376,7 +454,7 @@ public final class CommandPaletteView extends View {
 
         mFill.setShader(new LinearGradient(0f, mFrame.top, 0f, mFrame.bottom,
             ColorUtils.setAlphaComponent(Color.WHITE, 20),
-            ColorUtils.setAlphaComponent(Color.BLACK, 61), Shader.TileMode.CLAMP));
+            ColorUtils.setAlphaComponent(Color.BLACK, 46), Shader.TileMode.CLAMP));
         canvas.drawRoundRect(mFrame, mRadius, mRadius, mFill);
         mFill.setShader(null);
 
@@ -394,7 +472,7 @@ public final class CommandPaletteView extends View {
         canvas.restoreToCount(save);
 
         // Accent-tinted rim: the palette rim is primary, unlike the keycaps' white hairline.
-        mStroke.setColor(ColorUtils.setAlphaComponent(mPrimary, 107));
+        mStroke.setColor(ColorUtils.setAlphaComponent(mPrimary, 150));
         float inset = mStroke.getStrokeWidth() / 2f;
         mRect.set(mFrame.left + inset, mFrame.top + inset,
             mFrame.right - inset, mFrame.bottom - inset);
@@ -403,6 +481,31 @@ public final class CommandPaletteView extends View {
 
     private void clipToFrame(@NonNull Canvas canvas) {
         canvas.clipRect(mFrame);
+    }
+
+    /**
+     * Soft shadow around the palette, clipped out of the frame itself so it darkens only what the
+     * glass floats over. Spread and drop scale with the sprout, so the panel lifts off the
+     * terminal as it opens.
+     */
+    private void drawDropShadow(@NonNull Canvas canvas) {
+        if (mProgress <= 0.02f) return;
+        int save = canvas.save();
+        mShadowClip.rewind();
+        mShadowClip.addRoundRect(mFrame, mRadius, mRadius, Path.Direction.CW);
+        canvas.clipOutPath(mShadowClip);
+        mFill.setShader(null);
+        mFill.setColor(ColorUtils.setAlphaComponent(Color.BLACK,
+            Math.max(1, Math.round(SHADOW_RING_ALPHA * mProgress))));
+        for (int ring = SHADOW_RINGS; ring >= 1; ring--) {
+            float scale = ring / (float) SHADOW_RINGS;
+            float spread = dp(SHADOW_SPREAD) * scale * mProgress;
+            float drop = dp(SHADOW_DROP) * scale * mProgress;
+            mRect.set(mFrame.left - spread, mFrame.top - spread + drop,
+                mFrame.right + spread, mFrame.bottom + spread + drop);
+            canvas.drawRoundRect(mRect, mRadius + spread, mRadius + spread, mFill);
+        }
+        canvas.restoreToCount(save);
     }
 
     private void drawBody(@NonNull Canvas canvas) {
@@ -452,17 +555,29 @@ public final class CommandPaletteView extends View {
         canvas.drawText(ellipsizeStart(mMono, queryText,
             mFrame.right - dp(ROW_PAD_RIGHT) - queryStart), queryStart, promptBaseline, mMono);
         if (!showPlaceholder) {
-            float caretX = queryStart + Math.min(mMono.measureText(mQuery),
+            float caretX = queryStart + Math.min(measureToCursor(mMono, mQuery),
                 mFrame.right - dp(ROW_PAD_RIGHT) - queryStart);
             mFill.setColor(withBodyAlpha(mPrimary, alpha));
             canvas.drawRect(caretX + dp(1f), promptBaseline - lineHeightOf(mMono) * 0.78f,
                 caretX + dp(1f) + mDensity, promptBaseline + dp(2f), mFill);
         }
 
-        float listBottom = mArgumentMode ? mFrame.bottom - dp(ARG_ROW_H) : mFrame.bottom;
+        float listBottom = listBottom();
         drawList(canvas, filterBottom, listBottom, alpha);
         if (mArgumentMode) drawArgumentRow(canvas, listBottom, alpha);
         canvas.restoreToCount(save);
+    }
+
+    private float listTop() {
+        return mFrame.top + dp(TITLE_BAR_H) + dp(FILTER_ROW_H);
+    }
+
+    private float listBottom() {
+        return mArgumentMode ? mFrame.bottom - dp(ARG_ROW_H) : mFrame.bottom;
+    }
+
+    private float maxScroll() {
+        return Math.max(0f, listContentHeight() - (listBottom() - listTop()));
     }
 
     private void drawList(@NonNull Canvas canvas, float top, float bottom, int alpha) {
@@ -491,6 +606,11 @@ public final class CommandPaletteView extends View {
     /** Keeps the focused row inside the clipped viewport, with the spec's bottom slack. */
     private void updateScrollOffset(float viewportHeight) {
         float contentHeight = listContentHeight();
+        if (mUserScrolled) {
+            // The finger owns the viewport; only re-clamp in case the content shrank under it.
+            mScrollOffset = Math.max(0f, Math.min(mScrollOffset, contentHeight - viewportHeight));
+            return;
+        }
         if (contentHeight <= viewportHeight || mFocusIndex < 0) {
             mScrollOffset = 0f;
             return;
@@ -525,14 +645,18 @@ public final class CommandPaletteView extends View {
         mMono.setLetterSpacing(0f);
         mMono.setColor(withBodyAlpha(titleColor, row.enabled ? alpha : alpha / 2));
         float titleBaseline = top + dp(ROW_PAD_V) - mMono.getFontMetrics().ascent;
+        float textLeft = mFrame.left + dp(ROW_PAD_LEFT);
+        if (row.icon != null) {
+            drawRowIcon(canvas, row.icon, textLeft, top, row.enabled ? alpha : alpha / 2);
+            textLeft += dp(ICON_SIZE) + dp(ICON_GAP);
+        }
 
         mMono.setTextSize(dp(SIZE_SHORTCUT));
         float shortcutWidth = row.shortcut.isEmpty() ? 0f
             : mMono.measureText(row.shortcut) + dp(10f);
         mMono.setTextSize(dp(SIZE_ROW));
-        float titleWidth = mFrame.width() - dp(ROW_PAD_LEFT) - dp(ROW_PAD_RIGHT) - shortcutWidth;
-        canvas.drawText(ellipsize(mMono, row.primary, titleWidth),
-            mFrame.left + dp(ROW_PAD_LEFT), titleBaseline, mMono);
+        float titleWidth = mFrame.right - dp(ROW_PAD_RIGHT) - shortcutWidth - textLeft;
+        canvas.drawText(ellipsize(mMono, row.primary, titleWidth), textLeft, titleBaseline, mMono);
 
         if (!row.shortcut.isEmpty()) {
             mMono.setTextSize(dp(SIZE_SHORTCUT));
@@ -545,10 +669,27 @@ public final class CommandPaletteView extends View {
             mMono.setTextSize(dp(SIZE_DESCRIPTION));
             mMono.setColor(withBodyAlpha(mMeta, alpha));
             float descriptionBaseline = titleBaseline + lineHeightOf(mMono);
-            float width = mFrame.width() - dp(ROW_PAD_LEFT) - dp(ROW_PAD_RIGHT);
+            float width = mFrame.right - dp(ROW_PAD_RIGHT) - textLeft;
             canvas.drawText(ellipsize(mMono, "↳ " + row.description, width),
-                mFrame.left + dp(ROW_PAD_LEFT), descriptionBaseline, mMono);
+                textLeft, descriptionBaseline, mMono);
         }
+    }
+
+    /**
+     * Draws row artwork centred on the title line. The alpha is set on the drawable and put back
+     * immediately: these are the launcher's own cached icon instances, shared with the app grid,
+     * and {@code mutate()} per frame would copy artwork on every scroll frame.
+     */
+    private void drawRowIcon(@NonNull Canvas canvas, @NonNull Drawable icon, float left, float top,
+                            int alpha) {
+        float size = dp(ICON_SIZE);
+        float iconTop = top + dp(ROW_PAD_V) + (lineHeight(SIZE_ROW) - size) / 2f;
+        icon.setBounds(Math.round(left), Math.round(iconTop),
+            Math.round(left + size), Math.round(iconTop + size));
+        int previous = icon.getAlpha();
+        icon.setAlpha(alpha);
+        icon.draw(canvas);
+        icon.setAlpha(previous);
     }
 
     /** {@code ── LABEL} followed by a hairline filling the remaining width. */
@@ -593,7 +734,7 @@ public final class CommandPaletteView extends View {
         canvas.drawText(ellipsizeStart(mMono, empty ? mArgumentPlaceholder : mArgumentValue,
             valueWidth), valueStart, argBaseline, mMono);
         if (!empty) {
-            float caretX = valueStart + Math.min(mMono.measureText(mArgumentValue), valueWidth);
+            float caretX = valueStart + Math.min(measureToCursor(mMono, mArgumentValue), valueWidth);
             mFill.setShader(null);
             mFill.setColor(withBodyAlpha(mPrimary, alpha));
             canvas.drawRect(caretX + dp(1f), argBaseline - lineHeightOf(mMono) * 0.78f,
@@ -622,7 +763,7 @@ public final class CommandPaletteView extends View {
                 ColorUtils.setAlphaComponent(Color.BLACK, 56), Shader.TileMode.CLAMP));
             canvas.drawRoundRect(cap, radius, radius, mFill);
             mFill.setShader(null);
-            mStroke.setColor(withBodyAlpha(ColorUtils.setAlphaComponent(Color.WHITE, 64), alpha));
+            mStroke.setColor(withBodyAlpha(ColorUtils.setAlphaComponent(Color.WHITE, 88), alpha));
             float inset = mStroke.getStrokeWidth() / 2f;
             mRect.set(cap.left + inset, cap.top + inset, cap.right - inset, cap.bottom - inset);
             canvas.drawRoundRect(mRect, radius, radius, mStroke);
@@ -641,8 +782,8 @@ public final class CommandPaletteView extends View {
     }
 
     /**
-     * Lays the caps out left to right under the palette's bottom border, scaling their padding
-     * down if the six of them would otherwise pass the palette's own width.
+     * Lays the caps out in a row centered under the palette's bottom border, scaling their
+     * padding down if the six of them would otherwise pass the palette's own width.
      */
     private void layoutKeycaps() {
         mCapRects.clear();
@@ -662,7 +803,7 @@ public final class CommandPaletteView extends View {
             total += widths[i];
         }
         float scale = total > available ? available / total : 1f;
-        float x = mFrame.left + dp(STRIP_LEFT_EXTRA);
+        float x = mFrame.left + (mFrame.width() - total * scale) / 2f;
         for (int i = 0; i < widths.length; i++) {
             float width = widths[i] * scale;
             mCapRects.add(new RectF(x, top, x + width, top + capHeight));
@@ -690,35 +831,140 @@ public final class CommandPaletteView extends View {
     public boolean onTouchEvent(MotionEvent event) {
         // Once collapsed to a confirmation line the overlay stops being modal, so taps fall
         // through to the terminal underneath.
-        if (mProgress <= 0.01f) return false;
-        if (mCallbacks == null || event.getAction() != MotionEvent.ACTION_UP) return true;
-        float x = event.getX();
-        float y = event.getY();
+        if (mProgress <= 0.01f || mCallbacks == null) return false;
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                if (!isModalAt(event.getX(), event.getY())) return false;
+                abortFling();
+                mDragging = false;
+                mDownX = event.getX();
+                mDownY = event.getY();
+                mLastTouchY = mDownY;
+                if (mVelocity != null) mVelocity.clear();
+                else mVelocity = VelocityTracker.obtain();
+                mVelocity.addMovement(event);
+                return true;
+            case MotionEvent.ACTION_MOVE: {
+                if (mVelocity != null) mVelocity.addMovement(event);
+                float y = event.getY();
+                if (!mDragging && Math.abs(y - mDownY) > mTouchSlop
+                    && maxScroll() > 0f && inList(mDownX, mDownY))
+                    mDragging = true;
+                if (mDragging) {
+                    scrollByPx(mLastTouchY - y);
+                    mLastTouchY = y;
+                }
+                return true;
+            }
+            case MotionEvent.ACTION_UP:
+                if (mDragging) {
+                    startFling();
+                    return true;
+                }
+                releaseVelocity();
+                handleTap(event.getX(), event.getY());
+                return true;
+            case MotionEvent.ACTION_CANCEL:
+                mDragging = false;
+                releaseVelocity();
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    /** Whether the palette owns this point, or it belongs to whatever is underneath. */
+    private boolean isModalAt(float x, float y) {
+        if (mFrame.contains(x, y)) return true;
+        for (RectF cap : mCapRects)
+            if (x >= cap.left && x <= cap.right
+                && y >= cap.top + mStripOffset && y <= cap.bottom + mStripOffset) return true;
+        // No bounds set yet: behave as a full-screen scrim rather than leaking every tap.
+        return mModalBounds.isEmpty() || mModalBounds.contains(x, y);
+    }
+
+    private boolean inList(float x, float y) {
+        return mFrame.contains(x, y) && y >= listTop() && y <= listBottom();
+    }
+
+    private void handleTap(float x, float y) {
+        if (mCallbacks == null) return;
         for (int i = 0; i < mCapRects.size(); i++) {
             RectF cap = mCapRects.get(i);
             if (x >= cap.left && x <= cap.right
                 && y >= cap.top + mStripOffset && y <= cap.bottom + mStripOffset) {
                 mCallbacks.onKeycapTapped(i);
-                return true;
+                return;
             }
         }
         if (!mFrame.contains(x, y)) {
             mCallbacks.onOutsideTapped();
-            return true;
+            return;
         }
-        float listTop = mFrame.top + dp(TITLE_BAR_H) + dp(FILTER_ROW_H);
-        float listBottom = mArgumentMode ? mFrame.bottom - dp(ARG_ROW_H) : mFrame.bottom;
-        if (y < listTop || y > listBottom) return true;
-        float rowY = listTop - mScrollOffset;
+        if (y < listTop() || y > listBottom()) return;
+        float rowY = listTop() - mScrollOffset;
         for (int i = 0; i < mRows.size(); i++) {
             float height = rowHeight(i);
             if (y >= rowY && y < rowY + height) {
                 if (mRows.get(i).isSelectable()) mCallbacks.onRowTapped(i);
-                return true;
+                return;
             }
             rowY += height;
         }
+    }
+
+    /** @return true when the offset actually moved, so a fling knows it has not hit an edge. */
+    private boolean scrollByPx(float dy) {
+        float max = maxScroll();
+        float next = Math.max(0f, Math.min(mScrollOffset + dy, max));
+        mUserScrolled = true;
+        if (next == mScrollOffset) return false;
+        mScrollOffset = next;
+        invalidate();
         return true;
+    }
+
+    private void startFling() {
+        mDragging = false;
+        float velocityY = 0f;
+        if (mVelocity != null) {
+            mVelocity.computeCurrentVelocity(1000);
+            velocityY = mVelocity.getYVelocity();
+        }
+        releaseVelocity();
+        // A flick up (negative y velocity) walks the list forward, so the offset grows.
+        mFlingVelocity = -velocityY;
+        if (Math.abs(mFlingVelocity) < dp(FLING_MIN_START_DP)) {
+            mFlingVelocity = 0f;
+            return;
+        }
+        postOnAnimation(mFlingStep);
+    }
+
+    private void stepFling() {
+        if (mFlingVelocity == 0f) return;
+        boolean moved = scrollByPx(mFlingVelocity / 60f);
+        mFlingVelocity *= FLING_DECAY;
+        if (moved && Math.abs(mFlingVelocity) > dp(FLING_MIN_KEEP_DP)) postOnAnimation(mFlingStep);
+        else mFlingVelocity = 0f;
+    }
+
+    private void abortFling() {
+        mFlingVelocity = 0f;
+        removeCallbacks(mFlingStep);
+    }
+
+    private void releaseVelocity() {
+        if (mVelocity == null) return;
+        mVelocity.recycle();
+        mVelocity = null;
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        abortFling();
+        releaseVelocity();
     }
 
     private float baseline(float top, float height, @NonNull Paint paint) {

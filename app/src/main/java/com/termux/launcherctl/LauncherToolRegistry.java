@@ -743,16 +743,16 @@ public final class LauncherToolRegistry {
             "Switch to the next window in the current session.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
-            CATEGORY_WINDOW, R.string.tool_window_next, R.string.tool_desc_window_next, Arrays.asList(
-                Binding.of("ctrl+alt+]", BindingCondition.SPLITS_ON),
-                Binding.of("alt+kbd:space:swipe-east", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
+            CATEGORY_WINDOW, R.string.tool_window_next, R.string.tool_desc_window_next,
+            Collections.singletonList(
+                Binding.of("ctrl+alt+]", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
         addUi(map, TOOL_WINDOW_PREVIOUS,
             "Switch to the previous window in the current session.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
-            CATEGORY_WINDOW, R.string.tool_window_previous, R.string.tool_desc_window_previous, Arrays.asList(
-                Binding.of("ctrl+alt+[", BindingCondition.SPLITS_ON),
-                Binding.of("alt+kbd:space:swipe-west", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
+            CATEGORY_WINDOW, R.string.tool_window_previous, R.string.tool_desc_window_previous,
+            Collections.singletonList(
+                Binding.of("ctrl+alt+[", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
         addUi(map, TOOL_SESSION_NEW,
             "Create a new terminal session, optionally named or fail-safe.",
             schemaObject()
@@ -792,7 +792,6 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_SESSION, R.string.tool_session_next, R.string.tool_desc_session_next, Arrays.asList(
                 Binding.of("ctrl+alt+n"),
-                Binding.of("alt+kbd:space:swipe-south"),
                 Binding.of("ctrl+alt+down", BindingCondition.SPLITS_OFF)));
         addUi(map, TOOL_SESSION_PREVIOUS,
             "Switch to the previous terminal session.",
@@ -800,7 +799,6 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_SESSION, R.string.tool_session_previous, R.string.tool_desc_session_previous, Arrays.asList(
                 Binding.of("ctrl+alt+p"),
-                Binding.of("alt+kbd:space:swipe-north"),
                 Binding.of("ctrl+alt+up", BindingCondition.SPLITS_OFF)));
         addUi(map, TOOL_SESSION_CLOSE_CURRENT,
             "Close the current session, including all of its windows and panes.",
@@ -817,7 +815,7 @@ public final class LauncherToolRegistry {
             CATEGORY_TERMINAL, R.string.tool_terminal_toggle_soft_keyboard, R.string.tool_desc_terminal_toggle_soft_keyboard,
             Binding.all("ctrl+alt+k"), REQUIRES_SESSION);
         addUi(map, TOOL_TERMINAL_TOGGLE_TOOLBAR,
-            "Show or hide the extra keys toolbar.",
+            "Show or hide the dock.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_TERMINAL, R.string.tool_terminal_toggle_toolbar, R.string.tool_desc_terminal_toggle_toolbar, null, REQUIRES_SESSION);
@@ -895,15 +893,14 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_SESSION, R.string.tool_session_rename, 0, null, REQUIRES_SESSION);
         // Reset clears the emulator state and scrollback; the shell survives.
-        // The plain north spacebar swipe deliberately takes over the in-app
-        // keyboard's own layout-switch gesture; alt+north remains free for
-        // session.previous because modifiers are part of the gesture stroke.
+        // The space bar's north swipe opens this, but that lives in the keyboard layout file
+        // as a tool: key rather than in a binding here — see bottom_row.xml.
         addUi(map, TOOL_APP_COMMAND_PALETTE,
             "Open the searchable command palette.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_APP, R.string.tool_app_command_palette, R.string.tool_desc_app_command_palette,
-            Binding.all("ctrl+alt+shift+p", "ctrl+alt+space>p", "kbd:space:swipe-north"));
+            Binding.all("ctrl+alt+shift+p", "ctrl+alt+space>p"));
         // Required 'query' keeps this out of the palette's tool rows; the palette
         // contributes one Apps row per installed app instead, and each row runs
         // this tool. Unbound by default: which app deserves a stroke is personal.
