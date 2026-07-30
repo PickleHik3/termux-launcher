@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~/.termux/keyboard/layout.xml — in-app keyboard layout for Termux Launcher.
+
+  THIS FILE IS AN EXAMPLE AND IS NOT LOADED FROM HERE. Copy it into place:
+
+      mkdir -p ~/.termux/keyboard
+      cp ~/.termux/launcher/examples/keyboard-layout.xml ~/.termux/keyboard/layout.xml
+
+  Then reload:
+
+      termux-reload-settings
+
+  Unlike the .conf files, this one is not seeded into ~/.termux automatically:
+  the moment layout.xml exists it replaces the bundled QWERTY layout, so
+  creating it is your decision, not the installer's. Remove the file to go back
+  to the built-in layout. If the file is missing or invalid the keyboard falls
+  back to the last working layout, or to bundled QWERTY (US).
+
+  Limit: 512 KiB. Update it atomically — write a temporary file next to it and
+  rename — so a half-written layout is never read.
+
+  Key slots. Each key holds a centre value plus eight directional values:
+
+       key1 (NW)   key7 (N)   key2 (NE)
+       key5 (W)    key0       key6 (E)
+       key3 (SW)   key8 (S)   key4 (SE)
+
+  The short names c, nw, ne, w, e, sw, s, se are equivalent to key0..key8 and
+  are what the bundled layouts use. Values prefixed `loc ` are hidden.
+
+  LAUNCHER ACTIONS ON A KEY
+
+  Any slot can carry a launcher registry action, written:
+
+      tool:<registry id>              draws a generic glyph
+      tool:<registry id>:<glyph>      draws <glyph>
+
+  A tool: key reaches the same dispatcher as a key binding or a palette row, so
+  every terminal action in the registry is available on every slot with no
+  per-tool code. Discover ids in the command palette (Ctrl+Alt+Shift+P).
+
+  A tool: key carries no arguments, so actions that require one — app.launch in
+  particular — cannot be driven from a key slot. Launch apps from a key chord
+  in ~/.termux/termux-launcher-bindings.conf instead:
+
+      map ctrl+alt+w app.launch com.whatsapp
+
+  Editing help:
+  - Web editor:  https://unexpected-keyboard-layout-editor.lixquid.com
+  - Layout guide: https://github.com/Julow/Unexpected-Keyboard/blob/master/doc/Custom-layouts.md
+
+  This example is bundled QWERTY (US) plus an explicit bottom row, so the space
+  bar's swipe slots are visible and editable. `bottom_row="false"` stops the
+  app from appending its own bottom row on top of the one defined here.
+-->
+<keyboard name="QWERTY (US) — launcher example" script="latin" bottom_row="false">
+  <row>
+    <key c="q" ne="1" se="loc esc"/>
+    <key c="w" nw="~" ne="2" sw="\@"/>
+    <key c="e" nw="!" ne="3" sw="\#" se="loc €"/>
+    <key c="r" ne="4" sw="$"/>
+    <key c="t" ne="5" sw="%"/>
+    <key c="y" ne="6" sw="^"/>
+    <key c="u" ne="7" sw="&amp;"/>
+    <key c="i" ne="8" sw="*"/>
+    <key c="o" ne="9" sw="(" se=")"/>
+    <key c="p" ne="0"/>
+  </row>
+  <row>
+    <key shift="0.5" c="a" nw="loc tab" ne="`"/>
+    <key c="s" ne="loc §" sw="loc ß"/>
+    <key c="d"/>
+    <key c="f"/>
+    <key c="g" ne="-" sw="_"/>
+    <key c="h" ne="=" sw="+"/>
+    <key c="j" se="}" sw="{"/>
+    <key c="k" sw="[" se="]"/>
+    <key c="l" ne="|" sw="\\"/>
+  </row>
+  <row>
+    <key width="1.5" role="action" c="shift" ne="loc capslock"/>
+    <key c="z"/>
+    <key c="x" ne="loc †"/>
+    <key c="c" ne="&lt;" sw="."/>
+    <key c="v" ne="&gt;" sw=","/>
+    <key c="b" ne="\?" sw="/"/>
+    <key c="n" ne=":" sw=";"/>
+    <key c="m" ne="&quot;" sw="'"/>
+    <key width="1.5" role="action" c="backspace" ne="delete"/>
+  </row>
+  <!--
+    Bottom row. This copy matches the app default; edit the space bar's
+    key1..key8 to put different launcher actions on the swipe slots, for
+    example key3="tool:terminal.hints:⌁" or key4="tool:session.browser:⌕".
+  -->
+  <row height="0.95">
+    <key width="1.7" role="action" key0="ctrl" key1="loc switch_greekmath" key2="loc meta" key4="switch_numeric"/>
+    <key width="1.1" role="action" key0="fn" key1="loc alt" key4="config"/>
+    <key width="4.4" role="space_bar" key0="space"
+         key7="tool:app.command_palette:⌘"
+         key8="switch_backward"
+         key5="cursor_left" key6="cursor_right"
+         key1="tool:window.previous:◧" key2="tool:window.next:◨"
+         key3="tool:session.previous:↰" key4="tool:session.next:↳"/>
+    <key width="1.1" role="action" key0="loc compose" key7="up" key6="right" key5="left" key8="down" key1="loc home" key2="loc page_up" key3="loc end" key4="loc page_down"/>
+    <key width="1.7" role="action" key0="enter" key2="action"/>
+  </row>
+</keyboard>

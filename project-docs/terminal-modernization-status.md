@@ -35,6 +35,7 @@ All terminal-modernization user files live under `~/.termux/` in both package ed
 | `~/.termux/fonts.conf` | Optional advanced faces, symbol maps, shaping policy, features, axes, and metrics |
 | `~/.termux/font.ttf` | Existing native Termux regular-font contract, retained when `fonts.conf` is absent |
 | `~/.termux/font-italic.ttf` | Existing optional italic-font contract, retained when `fonts.conf` is absent |
+| `~/.termux/launcher/examples/` | App-managed reference copies of every example, refreshed on each app start |
 | `~/.termux/shell-integration/termux-launcher.bash` | App-managed, user-opt-in Bash OSC 133 integration |
 | `~/.termux/shell-integration/termux-launcher.zsh` | App-managed, user-opt-in zsh OSC 133 integration |
 | `~/.termux/workspaces/<name>.json` | Versioned durable workspace definitions |
@@ -49,7 +50,9 @@ yet have an argument-entry UI.
 
 ## Compatibility decisions
 
-- No user configuration preserves existing Termux font and legacy keyboard behavior.
+- No user configuration preserves existing Termux font and legacy keyboard behavior. The seeded
+  `.conf` files ship every directive commented out, so seeding one is behavior-neutral; the keyboard
+  layout is deliberately not seeded because a present `layout.xml` replaces the bundled layout.
 - Single-pane compatibility mode disables the pane/window layer and restores conditional legacy
   shortcuts such as `Ctrl+Alt+V` for paste.
 - Protocol state belongs to the emulator/session so Activity recreation does not erase it; Android

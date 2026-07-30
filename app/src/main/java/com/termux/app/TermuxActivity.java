@@ -4685,6 +4685,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Bootstrap setup may complete after app startup; re-attempt launcher CLI script install.
             LauncherCtlApiServer.getInstance().ensureCliScriptsInstalled();
             TermuxShellIntegrationInstaller.ensureInstalled(this);
+            TermuxLauncherConfigInstaller.ensureInstalled(this);
 
             // Activity might have been destroyed.
             if (mTermuxService == null) {
