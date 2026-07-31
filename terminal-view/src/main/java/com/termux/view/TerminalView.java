@@ -622,34 +622,23 @@ public final class TerminalView extends View {
             mTopRow = -rowsInHistory;
             clearScrollOffset();
         }
-        if (isSelectingText() || mEmulator.isAutoScrollDisabled()) {
-            // Do not scroll when selecting text.
+        if (isSelectingText() || mEmulator.isAutoScrollDisabled() || mTopRow < 0) {
+            // Do not scroll when selecting text or when the user has scrolled up in the
+            // transcript: keep the viewport pinned to the same content while output arrives.
+            // The user gets back to following the output by scrolling to the bottom or by
+            // typing (see snapToBottomForInput()).
             int rowShift = mEmulator.getScrollCounter();
             if (-mTopRow + rowShift > rowsInHistory) {
-                // .. unless we're hitting the end of history transcript, in which
-                // case we abort text selection and scroll to end.
+                // .. unless we're hitting the end of the history transcript, in which
+                // case we abort text selection and stay pinned at the oldest line.
                 if (isSelectingText())
                     stopTextSelectionMode();
-                if (mEmulator.isAutoScrollDisabled()) {
-                    mTopRow = -rowsInHistory;
-                    skipScrolling = true;
-                }
+                mTopRow = -rowsInHistory;
+                clearScrollOffset();
             } else {
-                skipScrolling = true;
                 mTopRow -= rowShift;
                 decrementYTextSelectionCursors(rowShift);
             }
-        }
-        if (!skipScrolling && mTopRow != 0) {
-            // Scroll down if not already there.
-            if (mTopRow < -3) {
-                // Awaken scroll bars only if scrolling a noticeable amount
-                // - we do not want visible scroll bars during normal typing
-                // of one row at a time.
-                awakenScrollBars();
-            }
-            mTopRow = 0;
-            clearScrollOffset();
         }
         mEmulator.clearScrollCounter();
         invalidate();
@@ -1156,6 +1145,18 @@ public final class TerminalView extends View {
             invalidate();
     }
 
+    /**
+     * Scroll to the bottom of the transcript on user-initiated input, so typed characters are
+     * visible even when the user had scrolled up (matching desktop terminals' scroll-on-keystroke).
+     */
+    private void snapToBottomForInput() {
+        if (mTopRow != 0) {
+            mTopRow = 0;
+            clearScrollOffset();
+            invalidate();
+        }
+    }
+
     /** Drop any fractional offset, for the cases where the row position is set from elsewhere. */
     private void clearScrollOffset() {
         abortSmoothScroll();
@@ -1397,7 +1398,10 @@ public final class TerminalView extends View {
             ClipData.Item clipItem = clipData.getItemAt(0);
             if (clipItem != null) {
                 CharSequence text = clipItem.coerceToText(getContext());
-                if (!TextUtils.isEmpty(text)) mEmulator.paste(text.toString());
+                if (!TextUtils.isEmpty(text)) {
+                    snapToBottomForInput();
+                    mEmulator.paste(text.toString());
+                }
             }
         }
     }
@@ -1687,6 +1691,7 @@ public final class TerminalView extends View {
                         break;
                 }
             }
+            snapToBottomForInput();
             // If left alt, send escape before the code point to make e.g. Alt+B and Alt+F work in readline:
             mTermSession.writeCodePoint(altDown, codePoint);
             if (mKeyInputProbe != null) {
@@ -1708,6 +1713,7 @@ public final class TerminalView extends View {
         String code = KeyHandler.getCode(keyCode, keyMod, term.isCursorKeysApplicationMode(), term.isKeypadApplicationMode());
         if (code == null)
             return false;
+        snapToBottomForInput();
         mTermSession.write(code);
         probeKeyBytes("keyhandler", code);
         return true;
