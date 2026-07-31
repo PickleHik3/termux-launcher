@@ -526,6 +526,40 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
+    public void scratchpad_remembersUserShapedBoundsAcrossTogglesAndStateRoundtrip() {
+        // Animations off so the hide removes the float synchronously.
+        android.provider.Settings.Global.putFloat(
+            RuntimeEnvironment.getApplication().getContentResolver(),
+            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 0f);
+        TerminalPaneController controller = newScratchpadController();
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+
+        assertEquals(TerminalPaneController.SCRATCHPAD_TOGGLE_SHOWN,
+            controller.toggleScratchpad());
+        RectF shaped = new RectF(0.2f, 0.3f, 0.7f, 0.8f);
+        window.floating.get(0).floatFrac = new RectF(shaped);
+        assertEquals(TerminalPaneController.SCRATCHPAD_TOGGLE_HIDDEN,
+            controller.toggleScratchpad());
+        assertEquals(TerminalPaneController.SCRATCHPAD_TOGGLE_SHOWN,
+            controller.toggleScratchpad());
+        assertEquals(shaped, window.floating.get(0).floatFrac);
+
+        // The remembered bounds also survive a save/restore into a fresh controller.
+        assertEquals(TerminalPaneController.SCRATCHPAD_TOGGLE_HIDDEN,
+            controller.toggleScratchpad());
+        Bundle state = new Bundle();
+        controller.saveScratchpadState(state);
+        TerminalPaneController restored = newScratchpadController();
+        restored.restoreScratchpadState(state);
+        TerminalPaneController.Window second = restored.newWindow(terminal());
+        restored.showWindow(second);
+        assertEquals(TerminalPaneController.SCRATCHPAD_TOGGLE_SHOWN,
+            restored.toggleScratchpad());
+        assertEquals(shaped, second.floating.get(0).floatFrac);
+    }
+
+    @Test
     public void moveToEdge_rejectsSinglePaneWithoutChangingIt() {
         TerminalPaneController controller = newController();
         TerminalSession only = terminal();
@@ -618,6 +652,24 @@ public class TerminalPaneControllerTest {
         Context context = RuntimeEnvironment.getApplication();
         return new TerminalPaneController(new TerminalPaneController.Host() {
             @Override public TerminalSession createShell(String cwd) { return null; }
+            @Override public void configurePaneView(TerminalView view) {}
+            @Override public void removeShell(TerminalSession session) {}
+            @Override public void onActivePaneChanged() {}
+            @Override public void onTreesChanged() {}
+            @Override public String defaultCwd() { return "/"; }
+        }, new FrameLayout(context), LayoutInflater.from(context));
+    }
+
+    /** Controller whose host can create named shells, so the scratchpad toggle actually runs. */
+    private static TerminalPaneController newScratchpadController() {
+        Context context = RuntimeEnvironment.getApplication();
+        return new TerminalPaneController(new TerminalPaneController.Host() {
+            @Override public TerminalSession createShell(String cwd) { return terminal(); }
+            @Override public TerminalSession createNamedShell(String name, String cwd) {
+                TerminalSession session = terminal();
+                session.mSessionName = name;
+                return session;
+            }
             @Override public void configurePaneView(TerminalView view) {}
             @Override public void removeShell(TerminalSession session) {}
             @Override public void onActivePaneChanged() {}

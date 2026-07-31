@@ -59,6 +59,9 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_WORKSPACE_LOAD = "workspace.load";
     public static final String TOOL_WORKSPACE_LIST = "workspace.list";
     public static final String TOOL_WORKSPACE_DELETE = "workspace.delete";
+    public static final String TOOL_WORKSPACE_PICKER = "workspace.picker";
+    public static final String TOOL_WORKSPACE_SAVE_PROMPT = "workspace.save_prompt";
+    public static final String TOOL_TERMINAL_TOGGLE_SCRATCHPAD = "terminal.toggle_scratchpad";
     public static final String TOOL_PANE_SPLIT_VERTICAL = "pane.split_vertical";
     public static final String TOOL_PANE_SPLIT_HORIZONTAL = "pane.split_horizontal";
     public static final String TOOL_PANE_FOCUS_DIRECTION = "pane.focus_direction";
@@ -161,6 +164,9 @@ public final class TerminalActionDispatcher {
             case TOOL_WORKSPACE_LOAD:
             case TOOL_WORKSPACE_LIST:
             case TOOL_WORKSPACE_DELETE:
+            case TOOL_WORKSPACE_PICKER:
+            case TOOL_WORKSPACE_SAVE_PROMPT:
+            case TOOL_TERMINAL_TOGGLE_SCRATCHPAD:
             case TOOL_PANE_SPLIT_VERTICAL:
             case TOOL_PANE_SPLIT_HORIZONTAL:
             case TOOL_PANE_FOCUS_DIRECTION:
@@ -439,6 +445,27 @@ public final class TerminalActionDispatcher {
                             return noSession(toolName);
                     }
                 }
+                case TOOL_TERMINAL_TOGGLE_SCRATCHPAD: {
+                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
+                    TerminalPaneController controller = activity.getPaneController();
+                    if (controller == null) return noSession(toolName);
+                    switch (controller.toggleScratchpad()) {
+                        case TerminalPaneController.SCRATCHPAD_TOGGLE_SHOWN:
+                            return ok().put("shown", true);
+                        case TerminalPaneController.SCRATCHPAD_TOGGLE_HIDDEN:
+                            return ok().put("shown", false);
+                        default:
+                            return noSession(toolName);
+                    }
+                }
+                case TOOL_WORKSPACE_PICKER:
+                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
+                    activity.showWorkspacePicker();
+                    return ok();
+                case TOOL_WORKSPACE_SAVE_PROMPT:
+                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
+                    activity.promptSaveWorkspace();
+                    return ok();
                 case TOOL_PANE_MOVE_TO_EDGE: {
                     if (!activity.isSplitPanesEnabled()) return splitsDisabled();
                     if (!arguments.has("edge")) return error(400, "bad_request", "Missing 'edge'");

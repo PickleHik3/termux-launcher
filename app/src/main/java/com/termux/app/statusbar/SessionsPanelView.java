@@ -91,8 +91,8 @@ public final class SessionsPanelView extends LinearLayout {
         hairline.setBackgroundColor(ColorUtils.setAlphaComponent(mOutlineVariant, 96));
         LayoutParams hairlineParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             Math.max(1, dp(1)));
-        hairlineParams.topMargin = dp(6);
-        hairlineParams.bottomMargin = dp(4);
+        hairlineParams.topMargin = dp(4);
+        hairlineParams.bottomMargin = dp(3);
         addView(hairline, hairlineParams);
 
         mRows = new LinearLayout(context);
@@ -132,6 +132,32 @@ public final class SessionsPanelView extends LinearLayout {
         rebuild();
     }
 
+    /**
+     * Popup width that fits the widest row, so short session names get a compact panel instead
+     * of the old fixed 320dp. Titles longer than the cap truncate (the current row's marquees).
+     * Includes the card host's own 10dp-per-side container padding.
+     */
+    public int desiredWidthDp() {
+        android.text.TextPaint paint = new android.text.TextPaint(
+            android.text.TextPaint.ANTI_ALIAS_FLAG);
+        paint.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        float density = getResources().getDisplayMetrics().density;
+        float scaledDensity = getResources().getDisplayMetrics().scaledDensity;
+        float widest = 0f;
+        for (SessionBrowserModel.Session session : mSessions) {
+            paint.setTextSize(13f * scaledDensity);
+            widest = Math.max(widest, paint.measureText(rowTitle(session)));
+            paint.setTextSize(10.5f * scaledDensity);
+            widest = Math.max(widest, paint.measureText(rowSubtitle(session)));
+        }
+        widest = Math.min(widest, dp(190));
+        // Row chrome around the text block: index pill + its margin, close button, row padding,
+        // and the host container's padding.
+        float chrome = dp(22 + 7 + 32 + 4 + 4 + 20);
+        int desired = Math.round((widest + chrome) / density);
+        return Math.max(200, Math.min(320, desired));
+    }
+
     private LinearLayout buildHeader(@NonNull Context context) {
         LinearLayout header = new LinearLayout(context);
         header.setOrientation(HORIZONTAL);
@@ -166,7 +192,7 @@ public final class SessionsPanelView extends LinearLayout {
         for (SessionBrowserModel.Session session : mSessions) {
             LayoutParams params = new LayoutParams(LayoutParams.MATCH_PARENT,
                 LayoutParams.WRAP_CONTENT);
-            if (mRows.getChildCount() > 0) params.topMargin = dp(3);
+            if (mRows.getChildCount() > 0) params.topMargin = dp(2);
             mRows.addView(buildRow(session), params);
         }
         boolean empty = mSessions.isEmpty();
@@ -174,7 +200,7 @@ public final class SessionsPanelView extends LinearLayout {
         mScroll.setVisibility(empty ? GONE : VISIBLE);
         // Cap the list at roughly six rows; anything beyond that scrolls inside the panel.
         LayoutParams scrollParams = (LayoutParams) mScroll.getLayoutParams();
-        int maxHeight = dp(6 * 47);
+        int maxHeight = dp(6 * 42);
         int target = mSessions.size() > 6 ? maxHeight : LayoutParams.WRAP_CONTENT;
         if (scrollParams.height != target) {
             scrollParams.height = target;
@@ -187,22 +213,13 @@ public final class SessionsPanelView extends LinearLayout {
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setMinimumHeight(dp(44));
+        // 40dp keeps a sane touch target while dropping the dead band the old 44dp minimum
+        // left around the two text lines.
+        row.setMinimumHeight(dp(40));
         row.setClickable(true);
         row.setFocusable(true);
-        row.setPaddingRelative(dp(4), dp(3), dp(4), dp(3));
+        row.setPaddingRelative(dp(4), dp(2), dp(4), dp(2));
         row.setBackground(rowSurface(session.current));
-
-        View selectionBar = new View(context);
-        GradientDrawable bar = new GradientDrawable();
-        bar.setCornerRadius(dp(1.5f));
-        bar.setColor(session.current ? mPrimary : 0);
-        selectionBar.setBackground(bar);
-        selectionBar.setVisibility(session.current ? VISIBLE : INVISIBLE);
-        LayoutParams barParams = new LayoutParams(dp(3), dp(22));
-        barParams.gravity = Gravity.CENTER_VERTICAL;
-        barParams.setMarginEnd(dp(7));
-        row.addView(selectionBar, barParams);
 
         TextView pill = label(10.5f, mOnTertiaryContainer);
         pill.setGravity(Gravity.CENTER);
@@ -210,7 +227,7 @@ public final class SessionsPanelView extends LinearLayout {
         pill.setBackground(pillSurface());
         LayoutParams pillParams = new LayoutParams(dp(22), dp(22));
         pillParams.gravity = Gravity.CENTER_VERTICAL;
-        pillParams.setMarginEnd(dp(9));
+        pillParams.setMarginEnd(dp(7));
         row.addView(pill, pillParams);
 
         LinearLayout text = new LinearLayout(context);
@@ -218,6 +235,14 @@ public final class SessionsPanelView extends LinearLayout {
         TextView title = label(13f, session.current
             ? mOnSurface : ColorUtils.setAlphaComponent(mOnSurfaceVariant, 214));
         title.setText(rowTitle(session));
+        if (session.current) {
+            // The current row's long title autoscrolls instead of dying on an ellipsis; marquee
+            // only runs on a selected view, and only this row gets selection.
+            title.setEllipsize(TextUtils.TruncateAt.MARQUEE);
+            title.setMarqueeRepeatLimit(-1);
+            title.setHorizontalFadingEdgeEnabled(true);
+            title.setSelected(true);
+        }
         text.addView(title, new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.WRAP_CONTENT));
         TextView subtitle = label(10.5f, ColorUtils.setAlphaComponent(mOnSurfaceVariant, 148));
@@ -225,7 +250,7 @@ public final class SessionsPanelView extends LinearLayout {
         subtitle.setText(rowSubtitle(session));
         LayoutParams subtitleParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.WRAP_CONTENT);
-        subtitleParams.topMargin = dp(2);
+        subtitleParams.topMargin = dp(1);
         text.addView(subtitle, subtitleParams);
         LayoutParams textParams = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
         textParams.gravity = Gravity.CENTER_VERTICAL;
@@ -292,17 +317,14 @@ public final class SessionsPanelView extends LinearLayout {
             : foreground;
     }
 
+    /** Windows and panes only — the title already carries the cwd when the session is unnamed. */
     @NonNull
     private String rowSubtitle(@NonNull SessionBrowserModel.Session session) {
-        StringBuilder out = new StringBuilder();
-        String cwd = focusedCwd(session);
-        if (cwd != null) out.append(SessionBrowserModel.displayCwd(cwd)).append(" · ");
-        out.append(getResources().getQuantityString(R.plurals.session_browser_window_count,
-            session.windows.size(), session.windows.size()));
-        out.append(" · ");
-        out.append(getResources().getQuantityString(R.plurals.session_browser_pane_count,
-            session.paneCount(), session.paneCount()));
-        return out.toString();
+        return getResources().getQuantityString(R.plurals.session_browser_window_count,
+            session.windows.size(), session.windows.size())
+            + " · "
+            + getResources().getQuantityString(R.plurals.session_browser_pane_count,
+                session.paneCount(), session.paneCount());
     }
 
     @NonNull
@@ -319,12 +341,6 @@ public final class SessionsPanelView extends LinearLayout {
     private static String focusedForeground(@NonNull SessionBrowserModel.Session session) {
         SessionBrowserModel.Pane pane = focusedPane(session);
         return pane == null ? null : pane.foreground;
-    }
-
-    @Nullable
-    private static String focusedCwd(@NonNull SessionBrowserModel.Session session) {
-        SessionBrowserModel.Pane pane = focusedPane(session);
-        return pane == null ? null : pane.cwd;
     }
 
     @Nullable

@@ -145,6 +145,62 @@ public final class TerminalSessionBrowser {
             .show();
     }
 
+    /** Extra-keys/palette entry: the same save-name prompt the browser's Save button shows. */
+    public static void promptSaveWorkspace(@NonNull TermuxActivity activity) {
+        promptSave(activity);
+    }
+
+    /**
+     * Picker over the saved workspaces: tapping a name asks whether to load it in place of the
+     * live workspace or append its windows, then loads without running captured commands.
+     */
+    public static void showWorkspacePicker(@NonNull TermuxActivity activity) {
+        List<com.termux.app.terminal.TerminalWorkspaceStore.Entry> entries;
+        try {
+            entries = activity.listWorkspaces();
+        } catch (TerminalWorkspace.WorkspaceException e) {
+            Toast.makeText(activity, activity.getString(R.string.workspace_picker_failed,
+                e.getMessage()), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (entries.isEmpty()) {
+            Toast.makeText(activity, R.string.workspace_picker_empty, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String[] names = new String[entries.size()];
+        for (int i = 0; i < entries.size(); i++) names[i] = entries.get(i).name;
+        new MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.workspace_picker_title)
+            .setItems(names, (dialog, which) -> promptWorkspaceLoadMode(activity, names[which]))
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    private static void promptWorkspaceLoadMode(@NonNull TermuxActivity activity,
+                                                @NonNull String name) {
+        new MaterialAlertDialogBuilder(activity)
+            .setTitle(name)
+            .setMessage(activity.getString(R.string.workspace_picker_mode_message, name))
+            .setPositiveButton(R.string.workspace_picker_replace,
+                (dialog, which) -> loadWorkspace(activity, name, true))
+            .setNeutralButton(R.string.workspace_picker_append,
+                (dialog, which) -> loadWorkspace(activity, name, false))
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    private static void loadWorkspace(@NonNull TermuxActivity activity, @NonNull String name,
+                                      boolean replace) {
+        try {
+            activity.loadWorkspace(name, replace, false);
+            Toast.makeText(activity, activity.getString(R.string.workspace_picker_loaded, name),
+                Toast.LENGTH_SHORT).show();
+        } catch (TerminalWorkspace.WorkspaceException e) {
+            Toast.makeText(activity, activity.getString(R.string.workspace_picker_failed,
+                e.getMessage()), Toast.LENGTH_SHORT).show();
+        }
+    }
+
     private static void promptSave(@NonNull TermuxActivity activity) {
         TextInputDialogUtils.textInput(activity, R.string.session_browser_workspace_name, null,
             android.R.string.ok, text -> saveWorkspace(activity, text, false),

@@ -336,7 +336,15 @@ public final class TerminalKeyBindingResolver {
             if (!stroke.startsWith(prefix)) continue;
             String suffix = stroke.substring(prefix.length());
             if (suffix.isEmpty() || suffix.indexOf('+') >= 0 || suffix.indexOf(' ') >= 0) continue;
+            // Prefer the claim whose condition holds right now, but keep showing a configured
+            // binding whose condition doesn't (splits off, nothing selected): the hint map
+            // documents everything the config binds under the prefix, not just what would fire.
             Claim claim = firstHolding(entry.getValue(), context);
+            if (claim == null) {
+                for (Claim candidate : entry.getValue()) {
+                    if (!"unmap".equals(candidate.toolName)) { claim = candidate; break; }
+                }
+            }
             if (claim == null || "unmap".equals(claim.toolName)) continue;
             hints.put(suffix, claim.toolName);
         }
@@ -581,9 +589,12 @@ public final class TerminalKeyBindingResolver {
         }
     }
 
-    /** Key code -> stroke token. Letters use physical US positions. */
+    /**
+     * Key code -> stroke token. Letters use physical US positions. Public so the keybind hint
+     * board can name each drawn key the way a binding suffix would.
+     */
     @Nullable
-    static String keyToken(int keyCode) {
+    public static String keyToken(int keyCode) {
         if (keyCode >= KeyEvent.KEYCODE_A && keyCode <= KeyEvent.KEYCODE_Z) {
             return String.valueOf((char) ('a' + (keyCode - KeyEvent.KEYCODE_A)));
         }

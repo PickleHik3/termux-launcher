@@ -80,6 +80,10 @@ public class TerminalPaneController {
     private static final String STATE_FLOAT_TOP = "float_top";
     private static final String STATE_FLOAT_WIDTH = "float_width";
     private static final String STATE_FLOAT_HEIGHT = "float_height";
+    private static final String STATE_SCRATCHPAD_LEFT = "scratchpad_left";
+    private static final String STATE_SCRATCHPAD_TOP = "scratchpad_top";
+    private static final String STATE_SCRATCHPAD_WIDTH = "scratchpad_width";
+    private static final String STATE_SCRATCHPAD_HEIGHT = "scratchpad_height";
     private static final int NODE_LEAF = 0;
     private static final int NODE_SPLIT = 1;
 
@@ -93,8 +97,13 @@ public class TerminalPaneController {
     private static final int FLOAT_MIN_HEIGHT_DP = 90;
     /** How much of the drag handle must remain reachable after any move or host resize. */
     private static final int FLOAT_MIN_VISIBLE_DP = 48;
-    private static final int FLOAT_HANDLE_DP = 22;
+    private static final int FLOAT_HANDLE_DP = 26;
     private static final int FLOAT_GRIP_DP = 28;
+    /** The floating pill hovering in the (transparent) handle row above the terminal. */
+    private static final int FLOAT_PILL_WIDTH_DP = 48;
+    private static final int FLOAT_PILL_HEIGHT_DP = 18;
+    /** Per-button slot width once a pill tap expands it into its action buttons. */
+    private static final int FLOAT_PILL_BUTTON_DP = 44;
     /** Above tiled panes and the interaction overlay, below the 6dp key chord overlay. */
     private static final int FLOAT_ELEVATION_DP = 4;
 
@@ -118,6 +127,15 @@ public class TerminalPaneController {
         default void onPanesRendered() {}
         /** Default working directory when a cwd can't be derived. */
         String defaultCwd();
+        /** Spawn a new shell carrying a session name; defaults to an unnamed shell. */
+        @Nullable default TerminalSession createNamedShell(@NonNull String name,
+                                                           @Nullable String cwd) {
+            return createShell(cwd);
+        }
+        /** An existing, not-currently-displayed shell with this session name, or null. */
+        @Nullable default TerminalSession findIdleShellByName(@NonNull String name) {
+            return null;
+        }
     }
 
     /** Supplies durable metadata for a pane while its tree is being snapshotted. */
@@ -655,6 +673,7 @@ public class TerminalPaneController {
 
         if (owner.floating.contains(owningLeaf)) {
             // A float leaves no hole in the tree; drop it and its chrome, then refocus the tree.
+            if (isScratchpadLeaf(owningLeaf)) rememberScratchpadFrac(owningLeaf);
             owner.floating.remove(owningLeaf);
             removeFloatContainer(owningLeaf);
             detachPaneView(session);
@@ -976,6 +995,24 @@ public class TerminalPaneController {
         return FLOAT_TOGGLE_FLOATED;
     }
 
+    /** Close a float from its pill: the scratchpad just hides (shell survives), others die. */
+    private void closeFloat(@NonNull Leaf leaf) {
+        Window window = mActiveWindow;
+        if (window == null || !window.floating.contains(leaf)) return;
+        if (isScratchpadLeaf(leaf)) hideScratchpad(window, leaf);
+        else leaf.session.finishIfRunning();
+    }
+
+    /** Send a float back into the tiled tree from its pill. */
+    private void dockFloat(@NonNull Leaf leaf) {
+        Window window = mActiveWindow;
+        if (window == null || !window.floating.contains(leaf)) return;
+        dockLeaf(window, leaf);
+        render();
+        mHost.onActivePaneChanged();
+        mHost.onTreesChanged();
+    }
+
     /** Whether the active window's focused pane is currently floating. */
     public boolean isActivePaneFloating() {
         return mActiveWindow != null && mActiveWindow.active != null
@@ -985,6 +1022,175 @@ public class TerminalPaneController {
     /** How many of the active window's panes are floating. */
     public int activeFloatingPaneCount() {
         return mActiveWindow == null ? 0 : mActiveWindow.floating.size();
+    }
+
+    // ------------------------------------------------------------------ scratchpad
+
+    /** Session name that marks the scratchpad shell; it survives hides and activity restarts. */
+    public static final String SCRATCHPAD_SESSION_NAME = "scratchpad";
+
+    /** toggleScratchpad outcomes. */
+    public static final int SCRATCHPAD_TOGGLE_NONE = 0;
+    public static final int SCRATCHPAD_TOGGLE_SHOWN = 1;
+    public static final int SCRATCHPAD_TOGGLE_HIDDEN = 2;
+
+    /** Centered, top-biased overlay: wide enough for a real shell, clear of the keyboard. */
+    private static final float SCRATCHPAD_LEFT_FRAC = 0.07f;
+    private static final float SCRATCHPAD_TOP_FRAC = 0.06f;
+    private static final float SCRATCHPAD_RIGHT_FRAC = 0.93f;
+    private static final float SCRATCHPAD_BOTTOM_FRAC = 0.58f;
+    private static final long SCRATCHPAD_SHOW_DURATION_MS = 220L;
+    private static final long SCRATCHPAD_HIDE_DURATION_MS = 160L;
+
+    /** Float whose container should play the entry animation on the next render. */
+    @Nullable private Leaf mPendingFloatEntryLeaf;
+    /** Scratchpad float currently animating out; guards double-hide re-entry. */
+    @Nullable private Leaf mHidingScratchpadLeaf;
+    /** Last user-shaped scratchpad bounds; the next show reuses them instead of the default. */
+    @Nullable private RectF mScratchpadFrac;
+
+    /**
+     * tmux-style scratchpad: a dedicated shell named {@link #SCRATCHPAD_SESSION_NAME} shown as a
+     * floating pane over the active window and hidden again by the same toggle. Hiding removes
+     * the pane but keeps the shell running; the next toggle re-adopts it wherever the user is,
+     * so the scratchpad follows across windows and sessions. Appearance and disappearance are
+     * animated (a short rise/fade) unless system animations are disabled.
+     */
+    public int toggleScratchpad() {
+        if (mActiveWindow == null) return SCRATCHPAD_TOGGLE_NONE;
+        Window window = mActiveWindow;
+        Leaf shown = findScratchpadLeaf(window);
+        if (shown != null) {
+            if (shown == mHidingScratchpadLeaf) return SCRATCHPAD_TOGGLE_HIDDEN;
+            hideScratchpad(window, shown);
+            return SCRATCHPAD_TOGGLE_HIDDEN;
+        }
+        TerminalSession session = mHost.findIdleShellByName(SCRATCHPAD_SESSION_NAME);
+        if (session == null)
+            session = mHost.createNamedShell(SCRATCHPAD_SESSION_NAME, mHost.defaultCwd());
+        if (session == null) return SCRATCHPAD_TOGGLE_NONE;
+        Leaf leaf = new Leaf(session);
+        leaf.floatFrac = mScratchpadFrac != null ? new RectF(mScratchpadFrac)
+            : new RectF(SCRATCHPAD_LEFT_FRAC, SCRATCHPAD_TOP_FRAC,
+                SCRATCHPAD_RIGHT_FRAC, SCRATCHPAD_BOTTOM_FRAC);
+        mMaximizedLeaf = null;
+        window.floating.add(leaf);
+        window.active = leaf;
+        mPendingFloatEntryLeaf = leaf;
+        render();
+        mHost.onActivePaneChanged();
+        mHost.onTreesChanged();
+        return SCRATCHPAD_TOGGLE_SHOWN;
+    }
+
+    /** Whether the active window currently shows the scratchpad float. */
+    public boolean isScratchpadShown() {
+        return mActiveWindow != null && findScratchpadLeaf(mActiveWindow) != null;
+    }
+
+    /**
+     * Persist the remembered scratchpad bounds into {@code state} so a hidden scratchpad keeps
+     * its user-shaped size across activity recreation. A shown scratchpad is a float and saves
+     * its live bounds through {@link #saveWindow} independently of this.
+     */
+    public void saveScratchpadState(@NonNull Bundle state) {
+        if (mScratchpadFrac == null) return;
+        state.putFloat(STATE_SCRATCHPAD_LEFT, mScratchpadFrac.left);
+        state.putFloat(STATE_SCRATCHPAD_TOP, mScratchpadFrac.top);
+        state.putFloat(STATE_SCRATCHPAD_WIDTH, mScratchpadFrac.width());
+        state.putFloat(STATE_SCRATCHPAD_HEIGHT, mScratchpadFrac.height());
+    }
+
+    /** Counterpart of {@link #saveScratchpadState}; corrupt values leave the default in place. */
+    public void restoreScratchpadState(@Nullable Bundle state) {
+        if (state == null || !state.containsKey(STATE_SCRATCHPAD_LEFT)) return;
+        float left = state.getFloat(STATE_SCRATCHPAD_LEFT, Float.NaN);
+        float top = state.getFloat(STATE_SCRATCHPAD_TOP, Float.NaN);
+        float width = state.getFloat(STATE_SCRATCHPAD_WIDTH, Float.NaN);
+        float height = state.getFloat(STATE_SCRATCHPAD_HEIGHT, Float.NaN);
+        if (!Float.isFinite(left) || !Float.isFinite(top)
+            || !Float.isFinite(width) || !Float.isFinite(height)
+            || width <= 0f || height <= 0f) return;
+        mScratchpadFrac = new RectF(left, top, left + width, top + height);
+    }
+
+    /** True when {@code leaf} hosts the dedicated scratchpad shell. */
+    private static boolean isScratchpadLeaf(@NonNull Leaf leaf) {
+        return leaf.session != null
+            && SCRATCHPAD_SESSION_NAME.equals(leaf.session.mSessionName);
+    }
+
+    @Nullable
+    private static Leaf findScratchpadLeaf(@NonNull Window window) {
+        for (Leaf leaf : window.floating) {
+            if (isScratchpadLeaf(leaf)) return leaf;
+        }
+        return null;
+    }
+
+    /** Remember where the user last shaped the scratchpad so the next show restores it. */
+    private void rememberScratchpadFrac(@NonNull Leaf leaf) {
+        if (leaf.floatFrac != null) mScratchpadFrac = new RectF(leaf.floatFrac);
+    }
+
+    /** Remove the scratchpad float after its exit animation; the shell keeps running. */
+    private void hideScratchpad(@NonNull Window window, @NonNull Leaf leaf) {
+        rememberScratchpadFrac(leaf);
+        Runnable remove = () -> {
+            if (mHidingScratchpadLeaf == leaf) mHidingScratchpadLeaf = null;
+            if (!window.floating.remove(leaf)) return;
+            removeFloatContainer(leaf);
+            if (window.active == leaf)
+                window.active = window.root != null ? firstLeaf(window.root) : null;
+            if (window == mActiveWindow) {
+                render();
+                mHost.onActivePaneChanged();
+            }
+            mHost.onTreesChanged();
+        };
+        FloatingPaneContainer container = mFloatContainers.get(leaf);
+        if (container == null || !arePaneAnimationsEnabled()) {
+            remove.run();
+            return;
+        }
+        mHidingScratchpadLeaf = leaf;
+        container.animate().cancel();
+        container.animate()
+            .alpha(0f)
+            .translationY(dp(10))
+            .scaleX(0.97f).scaleY(0.97f)
+            .setDuration(SCRATCHPAD_HIDE_DURATION_MS)
+            .setInterpolator(new android.view.animation.PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
+            .withEndAction(remove)
+            .start();
+    }
+
+    private boolean arePaneAnimationsEnabled() {
+        try {
+            return android.provider.Settings.Global.getFloat(
+                mHostView.getContext().getContentResolver(),
+                android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f;
+        } catch (Throwable t) {
+            return true;
+        }
+    }
+
+    /** Plays the float entry animation queued by {@link #toggleScratchpad}. */
+    private void maybeAnimateFloatEntry(@NonNull Leaf leaf, @NonNull View container) {
+        if (leaf != mPendingFloatEntryLeaf) return;
+        mPendingFloatEntryLeaf = null;
+        if (!arePaneAnimationsEnabled()) return;
+        container.setAlpha(0f);
+        container.setTranslationY(dp(12));
+        container.setScaleX(0.96f);
+        container.setScaleY(0.96f);
+        container.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .scaleX(1f).scaleY(1f)
+            .setDuration(SCRATCHPAD_SHOW_DURATION_MS)
+            .setInterpolator(new android.view.animation.PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
+            .start();
     }
 
     /**
@@ -1227,6 +1433,7 @@ public class TerminalPaneController {
                 mFloatContainers.put(leaf, container);
                 mHostView.addView(container, new FrameLayout.LayoutParams(0, 0));
                 applyFloatBounds(leaf, container);
+                maybeAnimateFloatEntry(leaf, container);
             }
         }
         updateActiveBorders();
@@ -1989,8 +2196,10 @@ public class TerminalPaneController {
     }
 
     /**
-     * Chrome around one floating pane: a slim top drag handle (move) and a bottom-right grip band
-     * (resize). Move/resize deliberately never start from the terminal content itself — long-press
+     * Chrome around one floating pane: a transparent top handle row holding a floating pill
+     * (drag = move, tap = expand into action buttons) and a bottom-right grip band (resize).
+     * The panel surface starts at the terminal's top edge, so nothing extends under the pill.
+     * Move/resize deliberately never start from the terminal content itself — long-press
      * plus drag there is mouse-drag reporting (TerminalView.armTouchMouseDragFromLongPress) and
      * must keep reaching the shell — so only these chrome regions ever intercept.
      */
@@ -2000,25 +2209,39 @@ public class TerminalPaneController {
         private static final int DRAG_MOVE = 1;
         private static final int DRAG_RESIZE = 2;
 
+        private static final int PILL_ACTION_NONE = 0;
+        private static final int PILL_ACTION_CLOSE = 1;
+        private static final int PILL_ACTION_DOCK = 2;
+
         private final Leaf mLeaf;
         private final Paint mChromePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Runnable mCollapsePill = this::collapsePill;
         private int mDragMode = DRAG_NONE;
         private float mDownRawX;
         private float mDownRawY;
+        private boolean mDragMoved;
         @Nullable private RectF mDownFrac;
+        /** Pill expanded into its action buttons (close / dock) after a tap. */
+        private boolean mPillExpanded;
+        private int mPressedPillAction = PILL_ACTION_NONE;
 
         FloatingPaneContainer(@NonNull Leaf leaf) {
             super(mHostView.getContext());
             mLeaf = leaf;
             setElevation(dp(FLOAT_ELEVATION_DP));
-            setBackgroundColor(MaterialColors.getColor(getContext(),
+            // The container itself stays transparent so the handle row shows only the pill;
+            // the surface color lives on a wrapper rather than the shared pane frame, which
+            // must stay unstyled for tiled rendering.
+            FrameLayout content = new FrameLayout(getContext());
+            content.setBackgroundColor(MaterialColors.getColor(getContext(),
                 com.termux.shared.R.attr.termuxColorSurfacePanel,
                 ContextCompat.getColor(getContext(), R.color.termux_surface_panel)));
-            FrameLayout paneFrame = paneFrameFor(leaf.session);
-            LayoutParams content = new LayoutParams(
+            content.addView(paneFrameFor(leaf.session), new LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            LayoutParams contentParams = new LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-            content.topMargin = dp(FLOAT_HANDLE_DP);
-            addView(paneFrame, content);
+            contentParams.topMargin = dp(FLOAT_HANDLE_DP);
+            addView(content, contentParams);
         }
 
         @Override
@@ -2031,7 +2254,11 @@ public class TerminalPaneController {
                 if (mActiveWindow == null || mActiveWindow.active != mLeaf
                     || mActiveWindow.floating.indexOf(mLeaf) != mActiveWindow.floating.size() - 1)
                     post(() -> focusSession(mLeaf.session));
-                mDragMode = dragModeAt(event.getX(), event.getY());
+                if (mPillExpanded && event.getY() > dp(FLOAT_HANDLE_DP)) collapsePill();
+                // A press on an expanded pill button must fall through to onTouchEvent (the
+                // strip has no child, so it lands there) instead of starting a move drag.
+                mDragMode = pillActionAt(event.getX(), event.getY()) != PILL_ACTION_NONE
+                    ? DRAG_NONE : dragModeAt(event.getX(), event.getY());
                 if (mDragMode != DRAG_NONE) {
                     startDrag(event);
                     return true;
@@ -2046,20 +2273,45 @@ public class TerminalPaneController {
                 case MotionEvent.ACTION_DOWN:
                     // Down lands here directly when it hits the handle strip (no child there).
                     if (mDragMode == DRAG_NONE) {
+                        int action = pillActionAt(event.getX(), event.getY());
+                        if (action != PILL_ACTION_NONE) {
+                            mPressedPillAction = action;
+                            mDownRawX = event.getRawX();
+                            mDownRawY = event.getRawY();
+                            getParent().requestDisallowInterceptTouchEvent(true);
+                            invalidate();
+                            return true;
+                        }
                         mDragMode = dragModeAt(event.getX(), event.getY());
                         if (mDragMode == DRAG_NONE) return false;
                         startDrag(event);
                     }
                     return true;
                 case MotionEvent.ACTION_MOVE: {
+                    if (mPressedPillAction != PILL_ACTION_NONE) {
+                        if (Math.hypot(event.getRawX() - mDownRawX, event.getRawY() - mDownRawY)
+                                > dp(8)) {
+                            mPressedPillAction = PILL_ACTION_NONE;
+                            invalidate();
+                        }
+                        return true;
+                    }
                     if (mDragMode == DRAG_NONE || mDownFrac == null) return false;
                     float hostWidth = mHostView.getWidth();
                     float hostHeight = mHostView.getHeight();
                     if (hostWidth <= 0f || hostHeight <= 0f) return true;
                     // Raw coordinates: the container moves under the pointer, so view-local
                     // deltas would feed back into themselves.
-                    float dx = (event.getRawX() - mDownRawX) / hostWidth;
-                    float dy = (event.getRawY() - mDownRawY) / hostHeight;
+                    float dxRaw = event.getRawX() - mDownRawX;
+                    float dyRaw = event.getRawY() - mDownRawY;
+                    // A slop gate keeps a pill tap from nudging the float by a few pixels.
+                    if (!mDragMoved && Math.hypot(dxRaw, dyRaw) < dp(6)) return true;
+                    if (!mDragMoved) {
+                        mDragMoved = true;
+                        collapsePill();
+                    }
+                    float dx = dxRaw / hostWidth;
+                    float dy = dyRaw / hostHeight;
                     RectF candidate = new RectF(mDownFrac);
                     if (mDragMode == DRAG_MOVE) {
                         candidate.offset(dx, dy);
@@ -2073,7 +2325,23 @@ public class TerminalPaneController {
                     return true;
                 }
                 case MotionEvent.ACTION_UP:
+                    if (mPressedPillAction != PILL_ACTION_NONE) {
+                        int action = mPressedPillAction;
+                        mPressedPillAction = PILL_ACTION_NONE;
+                        if (pillActionAt(event.getX(), event.getY()) == action)
+                            performPillAction(action);
+                        else invalidate();
+                        return true;
+                    }
+                    if (mDragMode == DRAG_MOVE && !mDragMoved) togglePill();
+                    endDrag();
+                    return true;
                 case MotionEvent.ACTION_CANCEL:
+                    if (mPressedPillAction != PILL_ACTION_NONE) {
+                        mPressedPillAction = PILL_ACTION_NONE;
+                        invalidate();
+                        return true;
+                    }
                     endDrag();
                     return true;
                 default:
@@ -2084,6 +2352,7 @@ public class TerminalPaneController {
         private void startDrag(@NonNull MotionEvent event) {
             mDownRawX = event.getRawX();
             mDownRawY = event.getRawY();
+            mDragMoved = false;
             mDownFrac = mLeaf.floatFrac != null ? new RectF(mLeaf.floatFrac) : defaultFloatFrac(0);
             if (mDragMode == DRAG_RESIZE) setSizeUpdatesPaused(true);
             getParent().requestDisallowInterceptTouchEvent(true);
@@ -2092,7 +2361,67 @@ public class TerminalPaneController {
         private void endDrag() {
             if (mDragMode == DRAG_RESIZE) setSizeUpdatesPaused(false);
             mDragMode = DRAG_NONE;
+            mDragMoved = false;
             mDownFrac = null;
+        }
+
+        // --- Pill actions ---
+
+        /** Ordered action slots: floats offer dock + close, the scratchpad only close (hide). */
+        private int pillActionCount() {
+            return isScratchpadLeaf(mLeaf) ? 1 : 2;
+        }
+
+        private int pillActionForSlot(int slot) {
+            if (pillActionCount() == 1) return PILL_ACTION_CLOSE;
+            return slot == 0 ? PILL_ACTION_DOCK : PILL_ACTION_CLOSE;
+        }
+
+        /** The pill capsule, collapsed or grown to fit its action slots. */
+        @NonNull private RectF pillRect() {
+            float centerX = getWidth() / 2f;
+            float centerY = dp(FLOAT_HANDLE_DP) / 2f;
+            float width = mPillExpanded
+                ? pillActionCount() * dp(FLOAT_PILL_BUTTON_DP) : dp(FLOAT_PILL_WIDTH_DP);
+            float height = dp(FLOAT_PILL_HEIGHT_DP);
+            return new RectF(centerX - width / 2f, centerY - height / 2f,
+                centerX + width / 2f, centerY + height / 2f);
+        }
+
+        private int pillActionAt(float x, float y) {
+            if (!mPillExpanded) return PILL_ACTION_NONE;
+            RectF pill = pillRect();
+            RectF hit = new RectF(pill);
+            hit.inset(-dp(8), -dp(4));
+            hit.top = 0f; // The whole handle-row height above the pill is fair game.
+            if (!hit.contains(x, y)) return PILL_ACTION_NONE;
+            int slot = (int) ((x - pill.left) / dp(FLOAT_PILL_BUTTON_DP));
+            return pillActionForSlot(Math.max(0, Math.min(pillActionCount() - 1, slot)));
+        }
+
+        private void performPillAction(int action) {
+            collapsePill();
+            if (action == PILL_ACTION_CLOSE) closeFloat(mLeaf);
+            else if (action == PILL_ACTION_DOCK) dockFloat(mLeaf);
+        }
+
+        private void togglePill() {
+            if (mPillExpanded) {
+                collapsePill();
+                return;
+            }
+            mPillExpanded = true;
+            invalidate();
+            removeCallbacks(mCollapsePill);
+            postDelayed(mCollapsePill, 4000);
+        }
+
+        private void collapsePill() {
+            removeCallbacks(mCollapsePill);
+            if (!mPillExpanded && mPressedPillAction == PILL_ACTION_NONE) return;
+            mPillExpanded = false;
+            mPressedPillAction = PILL_ACTION_NONE;
+            invalidate();
         }
 
         /** Coalesce the resize drag into one final PTY resize, like divider drags do. */
@@ -2114,16 +2443,58 @@ public class TerminalPaneController {
             int primary = MaterialColors.getColor(getContext(),
                 com.termux.shared.R.attr.termuxColorPrimary,
                 ContextCompat.getColor(getContext(), R.color.termux_primary));
+            int panel = MaterialColors.getColor(getContext(),
+                com.termux.shared.R.attr.termuxColorSurfacePanel,
+                ContextCompat.getColor(getContext(), R.color.termux_surface_panel));
             boolean active = mActiveWindow != null && mActiveWindow.active == mLeaf;
+            RectF pill = pillRect();
+            float radius = pill.height() / 2f;
             mChromePaint.setStyle(Paint.Style.FILL);
-            mChromePaint.setColor(ColorUtils.setAlphaComponent(primary, active ? 200 : 90));
-            float centerX = getWidth() / 2f;
-            float centerY = dp(FLOAT_HANDLE_DP) / 2f;
-            canvas.drawRoundRect(new RectF(centerX - dp(14), centerY - dp(1.8f),
-                centerX + dp(14), centerY + dp(1.8f)), dp(1.8f), dp(1.8f), mChromePaint);
+            mChromePaint.setColor(panel);
+            canvas.drawRoundRect(pill, radius, radius, mChromePaint);
+            int chromeAlpha = active ? 200 : 90;
+            if (!mPillExpanded) {
+                mChromePaint.setColor(ColorUtils.setAlphaComponent(primary, chromeAlpha));
+                canvas.drawRoundRect(new RectF(pill.centerX() - dp(14),
+                    pill.centerY() - dp(1.8f), pill.centerX() + dp(14),
+                    pill.centerY() + dp(1.8f)), dp(1.8f), dp(1.8f), mChromePaint);
+            } else {
+                mChromePaint.setStyle(Paint.Style.STROKE);
+                mChromePaint.setStrokeWidth(dp(1.5f));
+                mChromePaint.setStrokeCap(Paint.Cap.ROUND);
+                int slots = pillActionCount();
+                for (int slot = 0; slot < slots; slot++) {
+                    int action = pillActionForSlot(slot);
+                    int alpha = mPressedPillAction == action ? 255 : Math.max(chromeAlpha, 150);
+                    mChromePaint.setColor(ColorUtils.setAlphaComponent(primary, alpha));
+                    float slotCenterX = pill.left + (slot + 0.5f) * dp(FLOAT_PILL_BUTTON_DP);
+                    float slotCenterY = pill.centerY();
+                    if (action == PILL_ACTION_CLOSE) {
+                        canvas.drawLine(slotCenterX - dp(4), slotCenterY - dp(4),
+                            slotCenterX + dp(4), slotCenterY + dp(4), mChromePaint);
+                        canvas.drawLine(slotCenterX + dp(4), slotCenterY - dp(4),
+                            slotCenterX - dp(4), slotCenterY + dp(4), mChromePaint);
+                    } else {
+                        // Dock-back-to-tiling: a small window split down the middle.
+                        RectF tiles = new RectF(slotCenterX - dp(6), slotCenterY - dp(4.5f),
+                            slotCenterX + dp(6), slotCenterY + dp(4.5f));
+                        canvas.drawRoundRect(tiles, dp(1.5f), dp(1.5f), mChromePaint);
+                        canvas.drawLine(slotCenterX, tiles.top, slotCenterX, tiles.bottom,
+                            mChromePaint);
+                    }
+                }
+                if (slots > 1) {
+                    mChromePaint.setColor(ColorUtils.setAlphaComponent(primary, 60));
+                    float dividerX = pill.left + dp(FLOAT_PILL_BUTTON_DP);
+                    canvas.drawLine(dividerX, pill.top + dp(4), dividerX, pill.bottom - dp(4),
+                        mChromePaint);
+                }
+                mChromePaint.setStyle(Paint.Style.FILL);
+            }
             mChromePaint.setStyle(Paint.Style.STROKE);
             mChromePaint.setStrokeWidth(dp(1.5f));
             mChromePaint.setStrokeCap(Paint.Cap.ROUND);
+            mChromePaint.setColor(ColorUtils.setAlphaComponent(primary, chromeAlpha));
             float right = getWidth() - dp(4);
             float bottom = getHeight() - dp(4);
             canvas.drawLine(right - dp(10), bottom, right, bottom - dp(10), mChromePaint);

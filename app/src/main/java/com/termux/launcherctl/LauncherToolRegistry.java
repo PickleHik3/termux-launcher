@@ -337,6 +337,9 @@ public final class LauncherToolRegistry {
     public static final String TOOL_WORKSPACE_LOAD = "workspace.load";
     public static final String TOOL_WORKSPACE_LIST = "workspace.list";
     public static final String TOOL_WORKSPACE_DELETE = "workspace.delete";
+    public static final String TOOL_WORKSPACE_PICKER = "workspace.picker";
+    public static final String TOOL_WORKSPACE_SAVE_PROMPT = "workspace.save_prompt";
+    public static final String TOOL_TERMINAL_TOGGLE_SCRATCHPAD = "terminal.toggle_scratchpad";
     public static final String TOOL_PANE_SPLIT_VERTICAL = "pane.split_vertical";
     public static final String TOOL_PANE_SPLIT_HORIZONTAL = "pane.split_horizontal";
     public static final String TOOL_PANE_FOCUS_DIRECTION = "pane.focus_direction";
@@ -440,6 +443,21 @@ public final class LauncherToolRegistry {
             "Delete a durable terminal workspace file.",
             schemaObject().withString("name", "Workspace file name without .json", true).build(),
             ToolRisk.HIGH, true, ToolExecutor.TERMINAL);
+        // Interactive front doors for the two workspace flows the extra-keys row and palette
+        // need: a picker dialog that loads a saved workspace, and the save-name prompt. The
+        // dialogs themselves confirm the destructive choices, so the tools are LOW/no-confirm.
+        addUi(map, TOOL_WORKSPACE_PICKER,
+            "Show the saved-workspace picker and load the chosen workspace.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_SESSION, R.string.tool_workspace_picker, R.string.tool_desc_workspace_picker,
+            null, REQUIRES_SPLITS);
+        addUi(map, TOOL_WORKSPACE_SAVE_PROMPT,
+            "Prompt for a name and save the live session, window, and pane topology.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_SESSION, R.string.tool_workspace_save_prompt,
+            R.string.tool_desc_workspace_save_prompt, null, REQUIRES_SPLITS);
         addUi(map, TOOL_PANE_SPLIT_VERTICAL,
             "Split the focused pane into two panes side by side.",
             schemaEmpty(),
@@ -521,6 +539,14 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_PANE, R.string.tool_pane_toggle_float, R.string.tool_desc_pane_toggle_float,
             Collections.singletonList(Binding.of("ctrl+alt+f", BindingCondition.SPLITS_ON)),
+            REQUIRES_SPLITS);
+        addUi(map, TOOL_TERMINAL_TOGGLE_SCRATCHPAD,
+            "Show or hide the scratchpad: a dedicated floating terminal whose shell keeps running while hidden.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_TERMINAL, R.string.tool_terminal_toggle_scratchpad,
+            R.string.tool_desc_terminal_toggle_scratchpad,
+            Collections.singletonList(Binding.of("ctrl+alt+`", BindingCondition.SPLITS_ON)),
             REQUIRES_SPLITS);
         addUi(map, TOOL_WINDOW_NEW,
             "Create a new window with a fresh shell in the current session.",

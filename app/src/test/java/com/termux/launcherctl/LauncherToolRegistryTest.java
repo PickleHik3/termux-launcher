@@ -48,7 +48,8 @@ public class LauncherToolRegistryTest {
             "pane.focus_direction", "pane.resize", "pane.kill_focused", "window.new", "window.close",
             "window.next", "window.previous", "session.new", "session.next", "session.previous",
             "session.close_current", "session.browser", "session.panel", "session.clone_current",
-            "pane.equalize", "pane.rotate", "pane.next_layout", "pane.toggle_float"};
+            "pane.equalize", "pane.rotate", "pane.next_layout", "pane.toggle_float",
+            "terminal.toggle_scratchpad", "workspace.picker", "workspace.save_prompt"};
         for (String name : terminalTools) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
             assertNotNull(name, tool);
@@ -56,7 +57,7 @@ public class LauncherToolRegistryTest {
             assertNotNull(name, tool.category);
             assertTrue(name, tool.hasUiMetadata());
         }
-        assertEquals(54, registry.getUiTools().size());
+        assertEquals(57, registry.getUiTools().size());
     }
 
     @Test

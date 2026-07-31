@@ -39,10 +39,22 @@ public final class StatusCardHost {
 
     private static final long ENTER_DURATION_MS = 200L;
     private static final long EXIT_DURATION_MS = 180L;
+    /** Thin, shared gap between the status bar's bottom edge and every card and panel. */
+    private static final int DROP_GAP_DP = 4;
 
     @Nullable private PopupWindow mPopup;
     @Nullable private View mAnchor;
     @Nullable private View mContainer;
+    @Nullable private View mDropEdge;
+
+    /**
+     * The surface whose bottom edge every card drops from — the status bar host. Anchors sit at
+     * varying heights inside the bar (the status row ends above the bar's edge), so offsetting
+     * from the anchor alone would give each widget's card a different, sometimes zero, gap.
+     */
+    public void setDropEdge(@Nullable View dropEdge) {
+        mDropEdge = dropEdge;
+    }
 
     public boolean isShowing() {
         return mPopup != null && mPopup.isShowing();
@@ -141,7 +153,7 @@ public final class StatusCardHost {
         // screen, then drop it just below the status row. Panels instead keep the anchor's leading
         // edge, which is where the leading session chip lives.
         int xOffset = alignStart ? 0 : anchorRightAlignedXOffset(anchor, maxWidth);
-        popup.showAsDropDown(anchor, xOffset, dp(context, 4), Gravity.START);
+        popup.showAsDropDown(anchor, xOffset, dropYOffset(anchor), Gravity.START);
         if (animate) {
             container.requestFocus();
             animateIn(container);
@@ -194,6 +206,21 @@ public final class StatusCardHost {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
             ? new PathInterpolator(0.16f, 1f, 0.3f, 1f)
             : new DecelerateInterpolator(1.8f);
+    }
+
+    /** {@link #DROP_GAP_DP} below the drop edge's bottom, or below the anchor without one. */
+    private int dropYOffset(@NonNull View anchor) {
+        int offset = dp(anchor.getContext(), DROP_GAP_DP);
+        View edge = mDropEdge;
+        if (edge != null && edge.isAttachedToWindow() && anchor.isAttachedToWindow()) {
+            int[] location = new int[2];
+            anchor.getLocationInWindow(location);
+            int anchorBottom = location[1] + anchor.getHeight();
+            edge.getLocationInWindow(location);
+            int edgeBottom = location[1] + edge.getHeight();
+            if (edgeBottom > anchorBottom) offset += edgeBottom - anchorBottom;
+        }
+        return offset;
     }
 
     private static int anchorRightAlignedXOffset(@NonNull View anchor, int cardWidth) {

@@ -401,82 +401,77 @@ public final class SystemStatsCardView extends LinearLayout {
         return value * getResources().getDisplayMetrics().density;
     }
 
-    /** Two close stacked rectangles; the bright half indicates ascending or descending order. */
+    /**
+     * Standard table sort marker: a muted stacked ▲▼ pair while the column is inactive, and the
+     * active column's single triangle pointing the way the sort runs.
+     */
     private final class SortGlyphView extends View {
         private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.Path mPath = new android.graphics.Path();
         private final SortMetric mMetric;
 
         SortGlyphView(@NonNull Context context, @NonNull SortMetric metric) {
             super(context);
             mMetric = metric;
+            mPaint.setStyle(Paint.Style.FILL);
+            mPaint.setPathEffect(new android.graphics.CornerPathEffect(dp(0.75f)));
         }
 
         @Override
         protected void onDraw(@NonNull Canvas canvas) {
             super.onDraw(canvas);
             boolean active = mSortMetric == mMetric;
-            int muted = ColorUtils.setAlphaComponent(mOnSurfaceVariant, active ? 92 : 58);
-            float left = dp(2);
-            float right = getWidth() - dp(2);
-            float half = getHeight() / 2f;
-            mPaint.setColor(active && mSortAscending ? mTertiary : muted);
-            canvas.drawRoundRect(left, half - dp(4), right, half - dp(1.5f),
-                dp(1.2f), dp(1.2f), mPaint);
-            mPaint.setColor(active && !mSortAscending ? mTertiary : muted);
-            canvas.drawRoundRect(left, half + dp(1.5f), right, half + dp(4),
-                dp(1.2f), dp(1.2f), mPaint);
+            float cx = getWidth() / 2f;
+            float cy = getHeight() / 2f;
+            if (active) {
+                mPaint.setColor(mTertiary);
+                drawTriangle(canvas, cx, cy, dp(7.5f), dp(5), mSortAscending);
+            } else {
+                mPaint.setColor(ColorUtils.setAlphaComponent(mOnSurfaceVariant, 110));
+                drawTriangle(canvas, cx, cy - dp(2.75f), dp(6), dp(3.5f), true);
+                drawTriangle(canvas, cx, cy + dp(2.75f), dp(6), dp(3.5f), false);
+            }
+        }
+
+        private void drawTriangle(@NonNull Canvas canvas, float cx, float cy, float width,
+                                  float height, boolean up) {
+            float base = up ? cy + height / 2f : cy - height / 2f;
+            float apex = up ? cy - height / 2f : cy + height / 2f;
+            mPath.rewind();
+            mPath.moveTo(cx - width / 2f, base);
+            mPath.lineTo(cx + width / 2f, base);
+            mPath.lineTo(cx, apex);
+            mPath.close();
+            canvas.drawPath(mPath, mPaint);
         }
     }
 
-    /** A slim rounded bar. Either a single filled fraction, or used + cached stacked segments. */
+    /** A slim rounded bar filled to a fraction. */
     private final class BarView extends View {
+        private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private float mUsed;
-        private float mCached;
-        private int mSingleColor;
-        private boolean mSegmented;
+        private int mColor;
 
         BarView(@NonNull Context context) {
             super(context);
         }
 
         void setSingle(float fraction, int color) {
-            mSegmented = false;
             mUsed = Math.max(0f, Math.min(1f, fraction));
-            mSingleColor = color;
-            rebuild();
-        }
-
-        void setSegments(float used, float cached) {
-            mSegmented = true;
-            mUsed = used;
-            mCached = Math.min(cached, 1f - used);
-            rebuild();
-        }
-
-        private void rebuild() {
+            mColor = color;
             invalidate();
         }
 
         @Override
-        protected void onDraw(@NonNull android.graphics.Canvas canvas) {
+        protected void onDraw(@NonNull Canvas canvas) {
             float h = getHeight();
             float w = getWidth();
             float r = h / 2f;
-            android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
-            paint.setColor(ColorUtils.setAlphaComponent(mPanel, 90));
-            canvas.drawRoundRect(0, 0, w, h, r, r, paint);
-            if (mSegmented) {
-                float usedW = w * mUsed;
-                paint.setColor(mSecondary);
-                canvas.drawRoundRect(0, 0, Math.max(usedW, r), h, r, r, paint);
-                float cachedEnd = w * (mUsed + mCached);
-                paint.setColor(ColorUtils.setAlphaComponent(mTertiary, 115));
-                if (cachedEnd > usedW) canvas.drawRect(usedW, 0, cachedEnd, h, paint);
-            } else {
-                float fillW = Math.max(w * mUsed, mUsed > 0 ? r : 0);
-                paint.setColor(mSingleColor);
-                canvas.drawRoundRect(0, 0, fillW, h, r, r, paint);
-            }
+            mPaint.setColor(ColorUtils.setAlphaComponent(mPanel, 90));
+            canvas.drawRoundRect(0, 0, w, h, r, r, mPaint);
+            float fillW = Math.max(w * mUsed, mUsed > 0 ? r : 0);
+            mPaint.setColor(mColor);
+            canvas.drawRoundRect(0, 0, fillW, h, r, r, mPaint);
         }
     }
 }
