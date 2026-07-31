@@ -34,7 +34,7 @@ public class TerminalActionDispatcherTest {
             "app.open_settings", "app.open_look_and_feel", "app.open_apps_bar",
             "workspace.save", "workspace.load", "workspace.list", "workspace.delete",
             "pane.layout", "pane.equalize", "pane.rotate", "pane.move_to_edge",
-            "pane.next_layout"};
+            "pane.next_layout", "pane.toggle_float"};
         for (String name : handled) {
             assertTrue(name, TerminalActionDispatcher.handles(name));
         }
@@ -80,7 +80,7 @@ public class TerminalActionDispatcherTest {
             "app.open_settings", "app.open_look_and_feel", "app.open_apps_bar",
             "workspace.save", "workspace.load", "workspace.list", "workspace.delete",
             "pane.layout", "pane.equalize", "pane.rotate", "pane.move_to_edge",
-            "pane.next_layout"};
+            "pane.next_layout", "pane.toggle_float"};
         for (String name : tools) {
             JSONObject result = dispatcher.execute(name, new JSONObject());
             assertFalse(name, result.getBoolean("ok"));

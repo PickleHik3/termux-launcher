@@ -9349,6 +9349,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     java.util.List<com.termux.app.terminal.TerminalWorkspace.Pane> panes =
                         new java.util.ArrayList<>();
                     collectWorkspacePanes(savedWindow.root, panes);
+                    // Floating panes come after the tree, matching newWorkspaceWindow's order.
+                    for (com.termux.app.terminal.TerminalWorkspace.FloatingPane floating : savedWindow.floats)
+                        panes.add(floating.pane);
                     java.util.List<TerminalSession> shells = new java.util.ArrayList<>();
                     for (com.termux.app.terminal.TerminalWorkspace.Pane pane : panes) {
                         String executable = null;

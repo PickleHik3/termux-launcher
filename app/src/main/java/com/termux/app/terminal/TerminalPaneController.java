@@ -75,8 +75,28 @@ public class TerminalPaneController {
     private static final String STATE_WINDOW_ROOT = "root";
     private static final String STATE_WINDOW_ACTIVE = "active";
     private static final String STATE_WINDOW_LAYOUT = "layout_policy";
+    private static final String STATE_WINDOW_FLOATS = "floats";
+    private static final String STATE_FLOAT_LEFT = "float_left";
+    private static final String STATE_FLOAT_TOP = "float_top";
+    private static final String STATE_FLOAT_WIDTH = "float_width";
+    private static final String STATE_FLOAT_HEIGHT = "float_height";
     private static final int NODE_LEAF = 0;
     private static final int NODE_SPLIT = 1;
+
+    /** toggleFloatActivePane outcomes. */
+    public static final int FLOAT_TOGGLE_NONE = 0;        // no active pane to act on
+    public static final int FLOAT_TOGGLE_FLOATED = 1;     // tiled pane detached into a float
+    public static final int FLOAT_TOGGLE_DOCKED = 2;      // float split back into the tree
+    public static final int FLOAT_TOGGLE_SINGLE_PANE = 3; // refused: window's only tiled pane
+
+    private static final int FLOAT_MIN_WIDTH_DP = 120;
+    private static final int FLOAT_MIN_HEIGHT_DP = 90;
+    /** How much of the drag handle must remain reachable after any move or host resize. */
+    private static final int FLOAT_MIN_VISIBLE_DP = 48;
+    private static final int FLOAT_HANDLE_DP = 22;
+    private static final int FLOAT_GRIP_DP = 28;
+    /** Above tiled panes and the interaction overlay, below the 6dp key chord overlay. */
+    private static final int FLOAT_ELEVATION_DP = 4;
 
     /** Callbacks into the hosting activity. */
     public interface Host {
@@ -117,6 +137,12 @@ public class TerminalPaneController {
 
     static final class Leaf extends Node {
         TerminalSession session;
+        /**
+         * Host-relative fractional bounds (0..1 left/top/right/bottom) while this leaf floats,
+         * null while it is tiled. Fractions rather than pixels so rotation and host resizes keep
+         * the pane proportionally where the user left it.
+         */
+        @Nullable RectF floatFrac;
         Leaf(TerminalSession session) { this.session = session; }
     }
 
@@ -137,6 +163,12 @@ public class TerminalPaneController {
          * throw that shaping away.
          */
         @Nullable String layoutPolicy;
+        /**
+         * Panes detached from the tiled tree into freely positioned floats. List order is z-order
+         * (last on top). A float always coexists with a non-empty tiled tree: the last tiled pane
+         * can never float, and a dying tiled root promotes a float back into the tree.
+         */
+        final List<Leaf> floating = new ArrayList<>();
         Window(Leaf leaf) { root = leaf; active = leaf; }
     }
 
@@ -150,6 +182,8 @@ public class TerminalPaneController {
     private final Map<TerminalSession, FrameLayout> mPaneFrames = new HashMap<>();
     private final Map<TerminalSession, TerminalView> mPaneViews = new HashMap<>();
     private final Map<Split, LinearLayout> mSplitLayouts = new HashMap<>();
+    /** Floating chrome containers of the rendered window, rebuilt on every render. */
+    private final Map<Leaf, FloatingPaneContainer> mFloatContainers = new HashMap<>();
     private final PaneInteractionOverlay mInteractionOverlay;
 
     @Nullable private Window mActiveWindow;
@@ -162,6 +196,14 @@ public class TerminalPaneController {
         mHostView = hostView;
         mInflater = inflater;
         mInteractionOverlay = new PaneInteractionOverlay();
+        // Fractional float bounds only become pixels against the live host size, so a rotation or
+        // keyboard resize must re-lay every float; the clamp keeps each drag handle reachable.
+        mHostView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if ((r - l) != (or - ol) || (b - t) != (ob - ot)) {
+                for (Map.Entry<Leaf, FloatingPaneContainer> entry : mFloatContainers.entrySet())
+                    applyFloatBounds(entry.getKey(), entry.getValue());
+            }
+        });
     }
 
     /**
@@ -191,29 +233,47 @@ public class TerminalPaneController {
     @NonNull
     public TerminalWorkspace.Window snapshotWorkspaceWindow(
         @NonNull Window window, @NonNull WorkspacePaneCapture capture) {
-        List<Leaf> leaves = leavesOf(window.root);
-        int active = Math.max(0, leaves.indexOf(window.active));
-        return new TerminalWorkspace.Window(active, snapshotWorkspaceNode(window.root, capture));
+        List<Leaf> panes = allLeavesOf(window);
+        int active = Math.max(0, panes.indexOf(window.active));
+        List<TerminalWorkspace.FloatingPane> floats = new ArrayList<>();
+        for (Leaf leaf : window.floating) {
+            RectF frac = leaf.floatFrac != null ? leaf.floatFrac : defaultFloatFrac(0);
+            floats.add(new TerminalWorkspace.FloatingPane(capture.capture(leaf.session),
+                frac.left, frac.top, frac.width(), frac.height()));
+        }
+        return new TerminalWorkspace.Window(active,
+            snapshotWorkspaceNode(window.root, capture), floats);
     }
 
     /**
      * Rebuild a durable pane tree around newly-created sessions. Sessions must be supplied in the
-     * same left-to-right leaf order as the definition. No views are rendered until showWindow().
+     * same left-to-right leaf order as the definition, floating panes last. No views are rendered
+     * until showWindow().
      */
     @NonNull
     public Window newWorkspaceWindow(@NonNull TerminalWorkspace.Window definition,
                                      @NonNull List<TerminalSession> sessions) {
         int[] position = {0};
         Node root = restoreWorkspaceNode(definition.root, sessions, position);
+        List<Leaf> floats = new ArrayList<>();
+        for (TerminalWorkspace.FloatingPane saved : definition.floats) {
+            if (position[0] >= sessions.size())
+                throw new IllegalArgumentException("Not enough sessions for workspace pane tree");
+            Leaf leaf = new Leaf(sessions.get(position[0]++));
+            leaf.floatFrac = sanitizedFloatFrac(saved.left, saved.top, saved.width, saved.height);
+            floats.add(leaf);
+        }
         if (position[0] != sessions.size())
             throw new IllegalArgumentException("Session count does not match workspace pane tree");
         root.parent = null;
-        List<Leaf> leaves = leavesOf(root);
-        if (leaves.isEmpty() || definition.activePane < 0 || definition.activePane >= leaves.size())
+        List<Leaf> panes = leavesOf(root);
+        panes.addAll(floats);
+        if (panes.isEmpty() || definition.activePane < 0 || definition.activePane >= panes.size())
             throw new IllegalArgumentException("Workspace active pane is outside pane tree");
-        Window window = new Window(leaves.get(0));
+        Window window = new Window(firstLeaf(root));
         window.root = root;
-        window.active = leaves.get(definition.activePane);
+        window.floating.addAll(floats);
+        window.active = panes.get(definition.activePane);
         mWindows.add(window);
         return window;
     }
@@ -261,6 +321,20 @@ public class TerminalPaneController {
         TerminalSession active = windowActiveSession(window);
         if (active != null) state.putString(STATE_WINDOW_ACTIVE, active.mHandle);
         if (window.layoutPolicy != null) state.putString(STATE_WINDOW_LAYOUT, window.layoutPolicy);
+        if (!window.floating.isEmpty()) {
+            ArrayList<Bundle> floats = new ArrayList<>();
+            for (Leaf leaf : window.floating) {
+                Bundle floatState = new Bundle();
+                floatState.putString(STATE_NODE_SESSION, leaf.session.mHandle);
+                RectF frac = leaf.floatFrac != null ? leaf.floatFrac : defaultFloatFrac(0);
+                floatState.putFloat(STATE_FLOAT_LEFT, frac.left);
+                floatState.putFloat(STATE_FLOAT_TOP, frac.top);
+                floatState.putFloat(STATE_FLOAT_WIDTH, frac.width());
+                floatState.putFloat(STATE_FLOAT_HEIGHT, frac.height());
+                floats.add(floatState);
+            }
+            state.putParcelableArrayList(STATE_WINDOW_FLOATS, floats);
+        }
         return state;
     }
 
@@ -273,15 +347,26 @@ public class TerminalPaneController {
                                 @NonNull Map<String, TerminalSession> sessionsByHandle) {
         if (state == null) return null;
         Node root = restoreNode(state.getBundle(STATE_WINDOW_ROOT), sessionsByHandle);
-        if (root == null) return null;
-        root.parent = null;
-        Leaf first = firstLeaf(root);
-        Window window = new Window(first);
-        window.root = root;
+        List<Leaf> floats = restoreFloatLeaves(
+            state.getParcelableArrayList(STATE_WINDOW_FLOATS), root, sessionsByHandle);
+        if (root == null && floats.isEmpty()) return null;
+        Window window;
+        if (root == null) {
+            // Every tiled terminal is gone but a float survives: promote it, because a window
+            // whose tree is empty cannot be rendered or split into.
+            Leaf promoted = floats.remove(0);
+            promoted.floatFrac = null;
+            window = new Window(promoted);
+        } else {
+            root.parent = null;
+            window = new Window(firstLeaf(root));
+            window.root = root;
+        }
+        window.floating.addAll(floats);
         String activeHandle = state.getString(STATE_WINDOW_ACTIVE);
         TerminalSession activeSession = activeHandle == null ? null : sessionsByHandle.get(activeHandle);
-        Leaf active = activeSession == null ? null : findLeafIn(root, activeSession);
-        window.active = active != null ? active : first;
+        Leaf active = activeSession == null ? null : findLeafInWindow(window, activeSession);
+        if (active != null) window.active = active;
         // Only accept a layout this build still knows; a stale or hand-edited name must leave the
         // window manually managed rather than wedge reapply on every later split.
         String layout = state.getString(STATE_WINDOW_LAYOUT);
@@ -336,6 +421,38 @@ public class TerminalPaneController {
         return split;
     }
 
+    /** Rebuild floating leaves from saved state, dropping dead or already-claimed terminals. */
+    @NonNull
+    private List<Leaf> restoreFloatLeaves(@Nullable ArrayList<Bundle> floatStates,
+                                          @Nullable Node root,
+                                          @NonNull Map<String, TerminalSession> sessionsByHandle) {
+        List<Leaf> floats = new ArrayList<>();
+        if (floatStates == null) return floats;
+        for (Bundle floatState : floatStates) {
+            if (floatState == null) continue;
+            TerminalSession session = sessionsByHandle.get(floatState.getString(STATE_NODE_SESSION));
+            if (session == null || windowOf(session) != null
+                || (root != null && findLeafIn(root, session) != null)) continue;
+            Leaf leaf = new Leaf(session);
+            leaf.floatFrac = sanitizedFloatFrac(
+                floatState.getFloat(STATE_FLOAT_LEFT, Float.NaN),
+                floatState.getFloat(STATE_FLOAT_TOP, Float.NaN),
+                floatState.getFloat(STATE_FLOAT_WIDTH, Float.NaN),
+                floatState.getFloat(STATE_FLOAT_HEIGHT, Float.NaN));
+            floats.add(leaf);
+        }
+        return floats;
+    }
+
+    /** Fractional bounds from persisted values, falling back to the default when corrupt. */
+    @NonNull
+    private RectF sanitizedFloatFrac(float left, float top, float width, float height) {
+        if (!Float.isFinite(left) || !Float.isFinite(top)
+            || !Float.isFinite(width) || !Float.isFinite(height)
+            || width <= 0f || height <= 0f) return defaultFloatFrac(0);
+        return new RectF(left, top, left + width, top + height);
+    }
+
     /** Make {@code w} the visible window and render its pane tree. */
     public void showWindow(Window w) {
         if (w == null) return;
@@ -353,19 +470,19 @@ public class TerminalPaneController {
 
     @Nullable public Window activeWindow() { return mActiveWindow; }
 
-    /** The window whose tree contains {@code shell}, or null. */
+    /** The window whose tree or floats contain {@code shell}, or null. */
     @Nullable public Window windowOf(@Nullable TerminalSession shell) {
         if (shell == null) return null;
         for (Window w : mWindows)
-            for (Leaf leaf : leavesOf(w.root))
+            for (Leaf leaf : allLeavesOf(w))
                 if (leaf.session == shell) return w;
         return null;
     }
 
-    /** All shells (leaves) of {@code w}. */
+    /** All shells of {@code w}: tiled leaves first, then floating panes. */
     public List<TerminalSession> shellsOf(Window w) {
         List<TerminalSession> out = new ArrayList<>();
-        if (w != null) for (Leaf leaf : leavesOf(w.root)) out.add(leaf.session);
+        if (w != null) for (Leaf leaf : allLeavesOf(w)) out.add(leaf.session);
         return out;
     }
 
@@ -374,12 +491,13 @@ public class TerminalPaneController {
         return w == null || w.active == null ? null : w.active.session;
     }
 
-    /** Remove a whole window (all panes). Returns its shells so the caller can kill them. */
+    /** Remove a whole window (all panes, floating included). Returns its shells to kill. */
     public List<TerminalSession> removeWindow(Window w) {
         List<TerminalSession> sessions = new ArrayList<>();
         if (w == null) return sessions;
-        for (Leaf leaf : leavesOf(w.root)) {
+        for (Leaf leaf : allLeavesOf(w)) {
             sessions.add(leaf.session);
+            removeFloatContainer(leaf);
             detachPaneView(leaf.session);
         }
         mWindows.remove(w);
@@ -401,7 +519,7 @@ public class TerminalPaneController {
         return s == null ? null : mPaneViews.get(s);
     }
 
-    /** All pane views currently rendered (leaves of the active window). */
+    /** All pane views currently rendered (tiled and floating leaves of the active window). */
     public List<TerminalView> getVisiblePaneViews() {
         List<TerminalView> out = new ArrayList<>();
         if (mActiveWindow == null) return out;
@@ -410,7 +528,7 @@ public class TerminalPaneController {
             if (view != null) out.add(view);
             return out;
         }
-        for (Leaf leaf : leavesOf(mActiveWindow.root))
+        for (Leaf leaf : allLeavesOf(mActiveWindow))
             if (mPaneViews.containsKey(leaf.session)) out.add(mPaneViews.get(leaf.session));
         return out;
     }
@@ -443,10 +561,11 @@ public class TerminalPaneController {
     /** Focus the pane showing {@code session} within the active window. */
     public void focusSession(TerminalSession session) {
         if (mActiveWindow == null) return;
-        Leaf leaf = findLeafIn(mActiveWindow.root, session);
+        Leaf leaf = findLeafInWindow(mActiveWindow, session);
         if (leaf != null) {
             mActiveWindow.active = leaf;
             if (mMaximizedLeaf != null) mMaximizedLeaf = leaf;
+            bringFloatToFront(mActiveWindow, leaf);
             updateActiveBorders();
             focusActiveView();
             mHost.onActivePaneChanged();
@@ -460,11 +579,13 @@ public class TerminalPaneController {
         mMaximizedLeaf = null;
         for (Window w : mWindows) {
             TerminalSession keep = w.active != null ? w.active.session : firstLeaf(w.root).session;
-            for (Leaf leaf : leavesOf(w.root)) {
+            for (Leaf leaf : allLeavesOf(w)) {
                 if (leaf.session == keep) continue;
                 dropped.add(leaf.session);
+                removeFloatContainer(leaf);
                 detachPaneView(leaf.session);
             }
+            w.floating.clear();
             Leaf single = new Leaf(keep);
             w.root = single;
             w.active = single;
@@ -482,6 +603,9 @@ public class TerminalPaneController {
         if (mActiveWindow == null || mActiveWindow.active == null) return;
         mMaximizedLeaf = null;
         Leaf oldLeaf = mActiveWindow.active;
+        // A floating pane shares no divider, so splitting while one is focused splits the tiled
+        // area instead of corrupting the tree with a leaf that lives outside it.
+        if (mActiveWindow.floating.contains(oldLeaf)) oldLeaf = firstLeaf(mActiveWindow.root);
         String cwd = oldLeaf.session.getCwd();
         TerminalSession newSession = mHost.createShell(cwd != null ? cwd : mHost.defaultCwd());
         if (newSession == null) return;
@@ -522,15 +646,44 @@ public class TerminalPaneController {
         Window owner = null;
         Leaf owningLeaf = null;
         for (Window w : mWindows) {
-            for (Leaf leaf : leavesOf(w.root))
+            for (Leaf leaf : allLeavesOf(w))
                 if (leaf.session == session) { owner = w; owningLeaf = leaf; break; }
             if (owningLeaf != null) break;
         }
         if (owningLeaf == null) return FINISHED_UNKNOWN;
         if (mMaximizedLeaf == owningLeaf) mMaximizedLeaf = null;
 
+        if (owner.floating.contains(owningLeaf)) {
+            // A float leaves no hole in the tree; drop it and its chrome, then refocus the tree.
+            owner.floating.remove(owningLeaf);
+            removeFloatContainer(owningLeaf);
+            detachPaneView(session);
+            if (owner.active == owningLeaf) owner.active = firstLeaf(owner.root);
+            if (owner == mActiveWindow) {
+                render();
+                mHost.onActivePaneChanged();
+            }
+            mHost.onTreesChanged();
+            return FINISHED_PANE;
+        }
+
         Split parent = owningLeaf.parent;
         if (parent == null) {
+            if (!owner.floating.isEmpty()) {
+                // The last tiled pane died but floats survive: promote the bottom-most float into
+                // the tree so the window keeps a renderable, splittable root.
+                detachPaneView(session);
+                owner.root = null;
+                Leaf promoted = owner.floating.get(0);
+                if (owner.active == owningLeaf) owner.active = promoted;
+                dockLeaf(owner, promoted);
+                if (owner == mActiveWindow) {
+                    render();
+                    mHost.onActivePaneChanged();
+                }
+                mHost.onTreesChanged();
+                return FINISHED_PANE;
+            }
             // Window's only pane -> remove the whole window; caller drops it from its session.
             detachPaneView(session);
             mWindows.remove(owner);
@@ -747,6 +900,7 @@ public class TerminalPaneController {
     /** Extract the focused pane and attach it as the requested outer edge of the window. */
     public boolean moveActivePaneToEdge(@NonNull String edge) {
         if (mActiveWindow == null || mActiveWindow.active == null
+            || mActiveWindow.floating.contains(mActiveWindow.active)
             || !(mActiveWindow.root instanceof Split)) return false;
         final int orientation;
         final boolean activeFirst;
@@ -787,6 +941,149 @@ public class TerminalPaneController {
         render();
         mHost.onTreesChanged();
         return true;
+    }
+
+    // --- Floating panes ---
+
+    /**
+     * Detach the focused tiled pane into a freely positioned float above the tree, or split a
+     * focused float back into the tree. Returns one of FLOAT_TOGGLE_*. The window's last tiled
+     * pane is refused: an empty tree has nothing to render behind the floats and nothing for a
+     * later re-dock to split against.
+     */
+    public int toggleFloatActivePane() {
+        if (mActiveWindow == null || mActiveWindow.active == null) return FLOAT_TOGGLE_NONE;
+        Window window = mActiveWindow;
+        Leaf leaf = window.active;
+        if (window.floating.contains(leaf)) {
+            dockLeaf(window, leaf);
+            render();
+            mHost.onActivePaneChanged();
+            mHost.onTreesChanged();
+            return FLOAT_TOGGLE_DOCKED;
+        }
+        if (!(window.root instanceof Split)) return FLOAT_TOGGLE_SINGLE_PANE;
+        mMaximizedLeaf = null;
+        detachLeaf(window, leaf);
+        leaf.parent = null;
+        leaf.floatFrac = defaultFloatFrac(window.floating.size());
+        window.floating.add(leaf);
+        // The survivors re-tile under a retained layout, exactly as if the pane had closed.
+        reapplyLayoutPolicy(window);
+        render();
+        mHost.onActivePaneChanged();
+        mHost.onTreesChanged();
+        return FLOAT_TOGGLE_FLOATED;
+    }
+
+    /** Whether the active window's focused pane is currently floating. */
+    public boolean isActivePaneFloating() {
+        return mActiveWindow != null && mActiveWindow.active != null
+            && mActiveWindow.floating.contains(mActiveWindow.active);
+    }
+
+    /** How many of the active window's panes are floating. */
+    public int activeFloatingPaneCount() {
+        return mActiveWindow == null ? 0 : mActiveWindow.floating.size();
+    }
+
+    /**
+     * Split a float back into the tiled tree: next to the focused tiled leaf when there is one,
+     * else next to the tree's first leaf, or as the root of an empty tree. Callers render.
+     */
+    private void dockLeaf(@NonNull Window window, @NonNull Leaf leaf) {
+        window.floating.remove(leaf);
+        leaf.floatFrac = null;
+        removeFloatContainer(leaf);
+        if (window.root == null) {
+            leaf.parent = null;
+            window.root = leaf;
+            window.active = leaf;
+            return;
+        }
+        Leaf anchor = window.active != null && window.active != leaf
+            && findLeafIn(window.root, window.active.session) != null
+            ? window.active : firstLeaf(window.root);
+        Split split = new Split();
+        split.orientation = mHostView.getWidth() >= mHostView.getHeight()
+            ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL;
+        split.a = anchor;
+        split.b = leaf;
+        split.parent = anchor.parent;
+        anchor.parent = split;
+        leaf.parent = split;
+        if (split.parent == null) {
+            window.root = split;
+        } else {
+            if (split.parent.a == anchor) split.parent.a = split; else split.parent.b = split;
+        }
+        window.active = leaf;
+        reapplyLayoutPolicy(window);
+    }
+
+    /** Cascaded default bounds so freshly floated panes don't stack exactly on each other. */
+    @NonNull
+    private static RectF defaultFloatFrac(int index) {
+        float offset = .05f * (index % 4);
+        float left = .14f + offset;
+        float top = .1f + offset;
+        return new RectF(left, top, left + .62f, top + .55f);
+    }
+
+    /**
+     * Clamp fractional float bounds against a host size: no smaller than the minimum pane size,
+     * no larger than the host, and always leaving at least {@code minVisiblePx} of the drag
+     * handle row on screen so a float can never be pushed somewhere it cannot be grabbed from.
+     */
+    @NonNull
+    static RectF clampFloatFractions(@NonNull RectF candidate, float hostWidth, float hostHeight,
+                                     float minWidthPx, float minHeightPx, float minVisiblePx) {
+        if (hostWidth <= 0f || hostHeight <= 0f) return new RectF(candidate);
+        float width = Math.min(1f, Math.max(Math.min(minWidthPx / hostWidth, 1f), candidate.width()));
+        float height = Math.min(1f, Math.max(Math.min(minHeightPx / hostHeight, 1f), candidate.height()));
+        float minVisibleX = Math.min(minVisiblePx / hostWidth, width);
+        float minVisibleY = Math.min(minVisiblePx / hostHeight, height);
+        float left = Math.max(minVisibleX - width, Math.min(1f - minVisibleX, candidate.left));
+        // The handle is the top edge, so the top may never leave the host upward at all.
+        float top = Math.max(0f, Math.min(1f - minVisibleY, candidate.top));
+        return new RectF(left, top, left + width, top + height);
+    }
+
+    /** Re-clamp {@code leaf}'s fractions against the live host size and lay its container out. */
+    private void applyFloatBounds(@NonNull Leaf leaf, @NonNull FloatingPaneContainer container) {
+        float hostWidth = mHostView.getWidth();
+        float hostHeight = mHostView.getHeight();
+        RectF frac = leaf.floatFrac != null ? leaf.floatFrac : defaultFloatFrac(0);
+        if (hostWidth > 0f && hostHeight > 0f) {
+            frac = clampFloatFractions(frac, hostWidth, hostHeight,
+                dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP), dp(FLOAT_MIN_VISIBLE_DP));
+            leaf.floatFrac = frac;
+        }
+        FrameLayout.LayoutParams params = container.getLayoutParams() instanceof FrameLayout.LayoutParams
+            ? (FrameLayout.LayoutParams) container.getLayoutParams()
+            : new FrameLayout.LayoutParams(0, 0);
+        params.width = Math.round(frac.width() * hostWidth);
+        params.height = Math.round(frac.height() * hostHeight);
+        params.leftMargin = Math.round(frac.left * hostWidth);
+        params.topMargin = Math.round(frac.top * hostHeight);
+        container.setLayoutParams(params);
+    }
+
+    /** Raise a floating leaf above its sibling floats, both in the view tree and in z-order. */
+    private void bringFloatToFront(@NonNull Window window, @NonNull Leaf leaf) {
+        if (!window.floating.contains(leaf)) return;
+        if (window.floating.indexOf(leaf) != window.floating.size() - 1) {
+            window.floating.remove(leaf);
+            window.floating.add(leaf);
+        }
+        FloatingPaneContainer container = mFloatContainers.get(leaf);
+        if (container != null) container.bringToFront();
+    }
+
+    private void removeFloatContainer(@NonNull Leaf leaf) {
+        FloatingPaneContainer container = mFloatContainers.remove(leaf);
+        if (container != null && container.getParent() instanceof ViewGroup)
+            ((ViewGroup) container.getParent()).removeView(container);
     }
 
     @NonNull
@@ -904,6 +1201,7 @@ public class TerminalPaneController {
     private void render() {
         mHostView.removeAllViews();
         mSplitLayouts.clear();
+        mFloatContainers.clear();
         if (mActiveWindow == null) {
             mHost.onPanesRendered();
             return;
@@ -920,6 +1218,16 @@ public class TerminalPaneController {
             mHostView.addView(mInteractionOverlay, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             mInteractionOverlay.onTreeRendered();
+        }
+        // Floats are added last so they sit above both the tree and the interaction overlay;
+        // list order is z-order. A maximized pane owns the whole surface, floats included.
+        if (mMaximizedLeaf == null) {
+            for (Leaf leaf : mActiveWindow.floating) {
+                FloatingPaneContainer container = new FloatingPaneContainer(leaf);
+                mFloatContainers.put(leaf, container);
+                mHostView.addView(container, new FrameLayout.LayoutParams(0, 0));
+                applyFloatBounds(leaf, container);
+            }
         }
         updateActiveBorders();
         focusActiveView();
@@ -1001,6 +1309,8 @@ public class TerminalPaneController {
             }
             frame.setForeground(border);
         }
+        // The float handle pill dims with focus like the pane borders do.
+        for (FloatingPaneContainer container : mFloatContainers.values()) container.invalidate();
     }
 
     private void focusActiveView() {
@@ -1678,10 +1988,167 @@ public class TerminalPaneController {
         }
     }
 
+    /**
+     * Chrome around one floating pane: a slim top drag handle (move) and a bottom-right grip band
+     * (resize). Move/resize deliberately never start from the terminal content itself — long-press
+     * plus drag there is mouse-drag reporting (TerminalView.armTouchMouseDragFromLongPress) and
+     * must keep reaching the shell — so only these chrome regions ever intercept.
+     */
+    private final class FloatingPaneContainer extends FrameLayout {
+
+        private static final int DRAG_NONE = 0;
+        private static final int DRAG_MOVE = 1;
+        private static final int DRAG_RESIZE = 2;
+
+        private final Leaf mLeaf;
+        private final Paint mChromePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private int mDragMode = DRAG_NONE;
+        private float mDownRawX;
+        private float mDownRawY;
+        @Nullable private RectF mDownFrac;
+
+        FloatingPaneContainer(@NonNull Leaf leaf) {
+            super(mHostView.getContext());
+            mLeaf = leaf;
+            setElevation(dp(FLOAT_ELEVATION_DP));
+            setBackgroundColor(MaterialColors.getColor(getContext(),
+                com.termux.shared.R.attr.termuxColorSurfacePanel,
+                ContextCompat.getColor(getContext(), R.color.termux_surface_panel)));
+            FrameLayout paneFrame = paneFrameFor(leaf.session);
+            LayoutParams content = new LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            content.topMargin = dp(FLOAT_HANDLE_DP);
+            addView(paneFrame, content);
+        }
+
+        @Override
+        public boolean onInterceptTouchEvent(MotionEvent event) {
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                // Any touch raises and focuses the float, including ones the terminal keeps.
+                // Posted because raising reorders the host's children mid-dispatch otherwise.
+                // Skipped while already the focused top-most float, so typing taps don't re-run
+                // border/focus work on every DOWN.
+                if (mActiveWindow == null || mActiveWindow.active != mLeaf
+                    || mActiveWindow.floating.indexOf(mLeaf) != mActiveWindow.floating.size() - 1)
+                    post(() -> focusSession(mLeaf.session));
+                mDragMode = dragModeAt(event.getX(), event.getY());
+                if (mDragMode != DRAG_NONE) {
+                    startDrag(event);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent event) {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    // Down lands here directly when it hits the handle strip (no child there).
+                    if (mDragMode == DRAG_NONE) {
+                        mDragMode = dragModeAt(event.getX(), event.getY());
+                        if (mDragMode == DRAG_NONE) return false;
+                        startDrag(event);
+                    }
+                    return true;
+                case MotionEvent.ACTION_MOVE: {
+                    if (mDragMode == DRAG_NONE || mDownFrac == null) return false;
+                    float hostWidth = mHostView.getWidth();
+                    float hostHeight = mHostView.getHeight();
+                    if (hostWidth <= 0f || hostHeight <= 0f) return true;
+                    // Raw coordinates: the container moves under the pointer, so view-local
+                    // deltas would feed back into themselves.
+                    float dx = (event.getRawX() - mDownRawX) / hostWidth;
+                    float dy = (event.getRawY() - mDownRawY) / hostHeight;
+                    RectF candidate = new RectF(mDownFrac);
+                    if (mDragMode == DRAG_MOVE) {
+                        candidate.offset(dx, dy);
+                    } else {
+                        candidate.right += dx;
+                        candidate.bottom += dy;
+                    }
+                    mLeaf.floatFrac = clampFloatFractions(candidate, hostWidth, hostHeight,
+                        dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP), dp(FLOAT_MIN_VISIBLE_DP));
+                    applyFloatBounds(mLeaf, this);
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    endDrag();
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private void startDrag(@NonNull MotionEvent event) {
+            mDownRawX = event.getRawX();
+            mDownRawY = event.getRawY();
+            mDownFrac = mLeaf.floatFrac != null ? new RectF(mLeaf.floatFrac) : defaultFloatFrac(0);
+            if (mDragMode == DRAG_RESIZE) setSizeUpdatesPaused(true);
+            getParent().requestDisallowInterceptTouchEvent(true);
+        }
+
+        private void endDrag() {
+            if (mDragMode == DRAG_RESIZE) setSizeUpdatesPaused(false);
+            mDragMode = DRAG_NONE;
+            mDownFrac = null;
+        }
+
+        /** Coalesce the resize drag into one final PTY resize, like divider drags do. */
+        private void setSizeUpdatesPaused(boolean paused) {
+            TerminalView view = mPaneViews.get(mLeaf.session);
+            if (view != null) view.setTerminalSizeUpdatesPaused(paused);
+        }
+
+        private int dragModeAt(float x, float y) {
+            if (x >= getWidth() - dp(FLOAT_GRIP_DP) && y >= getHeight() - dp(FLOAT_GRIP_DP))
+                return DRAG_RESIZE;
+            if (y <= dp(FLOAT_HANDLE_DP)) return DRAG_MOVE;
+            return DRAG_NONE;
+        }
+
+        @Override
+        protected void dispatchDraw(Canvas canvas) {
+            super.dispatchDraw(canvas);
+            int primary = MaterialColors.getColor(getContext(),
+                com.termux.shared.R.attr.termuxColorPrimary,
+                ContextCompat.getColor(getContext(), R.color.termux_primary));
+            boolean active = mActiveWindow != null && mActiveWindow.active == mLeaf;
+            mChromePaint.setStyle(Paint.Style.FILL);
+            mChromePaint.setColor(ColorUtils.setAlphaComponent(primary, active ? 200 : 90));
+            float centerX = getWidth() / 2f;
+            float centerY = dp(FLOAT_HANDLE_DP) / 2f;
+            canvas.drawRoundRect(new RectF(centerX - dp(14), centerY - dp(1.8f),
+                centerX + dp(14), centerY + dp(1.8f)), dp(1.8f), dp(1.8f), mChromePaint);
+            mChromePaint.setStyle(Paint.Style.STROKE);
+            mChromePaint.setStrokeWidth(dp(1.5f));
+            mChromePaint.setStrokeCap(Paint.Cap.ROUND);
+            float right = getWidth() - dp(4);
+            float bottom = getHeight() - dp(4);
+            canvas.drawLine(right - dp(10), bottom, right, bottom - dp(10), mChromePaint);
+            canvas.drawLine(right - dp(5), bottom, right, bottom - dp(5), mChromePaint);
+            mChromePaint.setStrokeCap(Paint.Cap.BUTT);
+        }
+    }
+
     // --- Tree helpers ---
 
     @Nullable private Leaf findLeafIn(@Nullable Node root, TerminalSession session) {
         for (Leaf leaf : leavesOf(root))
+            if (leaf.session == session) return leaf;
+        return null;
+    }
+
+    /** Every leaf of {@code w}: tiled tree leaves in order, then floats in z-order. */
+    @NonNull private List<Leaf> allLeavesOf(@NonNull Window w) {
+        List<Leaf> out = leavesOf(w.root);
+        out.addAll(w.floating);
+        return out;
+    }
+
+    @Nullable private Leaf findLeafInWindow(@NonNull Window w, TerminalSession session) {
+        for (Leaf leaf : allLeavesOf(w))
             if (leaf.session == session) return leaf;
         return null;
     }

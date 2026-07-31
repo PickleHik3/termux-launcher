@@ -347,6 +347,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_PANE_ROTATE = "pane.rotate";
     public static final String TOOL_PANE_MOVE_TO_EDGE = "pane.move_to_edge";
     public static final String TOOL_PANE_NEXT_LAYOUT = "pane.next_layout";
+    public static final String TOOL_PANE_TOGGLE_FLOAT = "pane.toggle_float";
     public static final String TOOL_WINDOW_NEW = "window.new";
     public static final String TOOL_WINDOW_CLOSE = "window.close";
     public static final String TOOL_WINDOW_NEXT = "window.next";
@@ -513,6 +514,13 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_PANE, R.string.tool_pane_next_layout, R.string.tool_desc_pane_next_layout,
             Collections.singletonList(Binding.of("ctrl+alt+l", BindingCondition.SPLITS_ON)),
+            REQUIRES_SPLITS);
+        addUi(map, TOOL_PANE_TOGGLE_FLOAT,
+            "Detach the focused pane into a movable floating window, or dock a floating pane back into the tiled layout.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_PANE, R.string.tool_pane_toggle_float, R.string.tool_desc_pane_toggle_float,
+            Collections.singletonList(Binding.of("ctrl+alt+f", BindingCondition.SPLITS_ON)),
             REQUIRES_SPLITS);
         addUi(map, TOOL_WINDOW_NEW,
             "Create a new window with a fresh shell in the current session.",

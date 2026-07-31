@@ -69,6 +69,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_PANE_ROTATE = "pane.rotate";
     public static final String TOOL_PANE_MOVE_TO_EDGE = "pane.move_to_edge";
     public static final String TOOL_PANE_NEXT_LAYOUT = "pane.next_layout";
+    public static final String TOOL_PANE_TOGGLE_FLOAT = "pane.toggle_float";
     public static final String TOOL_WINDOW_NEW = "window.new";
     public static final String TOOL_WINDOW_CLOSE = "window.close";
     public static final String TOOL_WINDOW_NEXT = "window.next";
@@ -170,6 +171,7 @@ public final class TerminalActionDispatcher {
             case TOOL_PANE_ROTATE:
             case TOOL_PANE_MOVE_TO_EDGE:
             case TOOL_PANE_NEXT_LAYOUT:
+            case TOOL_PANE_TOGGLE_FLOAT:
             case TOOL_WINDOW_NEW:
             case TOOL_WINDOW_CLOSE:
             case TOOL_WINDOW_NEXT:
@@ -420,6 +422,22 @@ public final class TerminalActionDispatcher {
                     }
                     if (!activity.rotatePaneLayout("clockwise".equals(direction))) return noSession(toolName);
                     return ok().put("direction", direction);
+                }
+                case TOOL_PANE_TOGGLE_FLOAT: {
+                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
+                    TerminalPaneController controller = activity.getPaneController();
+                    if (controller == null) return noSession(toolName);
+                    switch (controller.toggleFloatActivePane()) {
+                        case TerminalPaneController.FLOAT_TOGGLE_FLOATED:
+                            return ok().put("floating", true);
+                        case TerminalPaneController.FLOAT_TOGGLE_DOCKED:
+                            return ok().put("floating", false);
+                        case TerminalPaneController.FLOAT_TOGGLE_SINGLE_PANE:
+                            return error(409, "single_pane",
+                                "Floating requires at least two panes in the window");
+                        default:
+                            return noSession(toolName);
+                    }
                 }
                 case TOOL_PANE_MOVE_TO_EDGE: {
                     if (!activity.isSplitPanesEnabled()) return splitsDisabled();
@@ -701,6 +719,8 @@ public final class TerminalActionDispatcher {
             state.put("hasCurrentSession", activity.getCurrentSession() != null);
             TerminalPaneController controller = activity.getPaneController();
             state.put("visiblePanes", controller == null ? 0 : controller.getVisiblePaneViews().size());
+            state.put("floatingPanes", controller == null ? 0 : controller.activeFloatingPaneCount());
+            state.put("focusedPaneFloating", controller != null && controller.isActivePaneFloating());
             state.put("windows", activity.getCurrentWindowCount());
             state.put("currentWindow", activity.getCurrentWindowIndex());
             // The retained automatic layout, absent when the window is manually managed. Without

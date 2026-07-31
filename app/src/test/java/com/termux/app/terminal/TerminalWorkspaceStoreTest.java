@@ -98,6 +98,75 @@ public class TerminalWorkspaceStoreTest {
         expectCode("invalid_workspace", bad::validate);
     }
 
+    @Test
+    public void jsonRoundTrip_preservesFloatingPanesAndBounds() throws Exception {
+        TerminalWorkspace decoded = TerminalWorkspace.fromJson(sampleWithFloat("dev").toJson());
+
+        assertEquals(4, decoded.paneCount());
+        assertEquals(2, decoded.commandCount());
+        TerminalWorkspace.Window window = decoded.sessions.get(0).windows.get(0);
+        // The focused float indexes after the three tiled panes.
+        assertEquals(3, window.activePane);
+        assertEquals(1, window.floats.size());
+        TerminalWorkspace.FloatingPane floating = window.floats.get(0);
+        assertEquals("/home/floating", floating.pane.cwd);
+        assertEquals(Collections.singletonList("/data/data/com.termux/files/usr/bin/htop"),
+            floating.pane.command);
+        assertEquals(.2f, floating.left, .001f);
+        assertEquals(.15f, floating.top, .001f);
+        assertEquals(.6f, floating.width, .001f);
+        assertEquals(.5f, floating.height, .001f);
+    }
+
+    @Test
+    public void versionOneJsonWithoutFloats_stillLoads() throws Exception {
+        // Files written before floating panes carry version 1 and no floats key at all.
+        JSONObject legacy = sample("dev").toJson().put("version", 1);
+        TerminalWorkspace decoded = TerminalWorkspace.fromJson(legacy);
+
+        assertEquals(1, decoded.version);
+        assertEquals(3, decoded.paneCount());
+        assertTrue(decoded.sessions.get(0).windows.get(0).floats.isEmpty());
+    }
+
+    @Test
+    public void validationRejectsBadFloatBoundsAndCountsFloatsIntoActivePane() throws Exception {
+        TerminalWorkspace.FloatingPane badBounds = new TerminalWorkspace.FloatingPane(
+            new TerminalWorkspace.Pane("/", null, null), 0f, 0f, Float.NaN, .5f);
+        expectCode("invalid_workspace", () -> workspaceAround(
+            new TerminalWorkspace.Window(0, new TerminalWorkspace.Pane("/", null, null),
+                Collections.singletonList(badBounds))).validate());
+
+        TerminalWorkspace.FloatingPane sane = new TerminalWorkspace.FloatingPane(
+            new TerminalWorkspace.Pane("/", null, null), .1f, .1f, .5f, .5f);
+        // One tiled pane plus one float: index 1 is the float, index 2 is out of range.
+        workspaceAround(new TerminalWorkspace.Window(1,
+            new TerminalWorkspace.Pane("/", null, null),
+            Collections.singletonList(sane))).validate();
+        expectCode("invalid_workspace", () -> workspaceAround(
+            new TerminalWorkspace.Window(2, new TerminalWorkspace.Pane("/", null, null),
+                Collections.singletonList(sane))).validate());
+    }
+
+    private static TerminalWorkspace workspaceAround(TerminalWorkspace.Window window) {
+        return new TerminalWorkspace("w", 1L, 0, Collections.singletonList(
+            new TerminalWorkspace.Session(null, 0, Collections.singletonList(window))));
+    }
+
+    private static TerminalWorkspace sampleWithFloat(String name) {
+        TerminalWorkspace base = sample(name);
+        TerminalWorkspace.Window tiled = base.sessions.get(0).windows.get(0);
+        TerminalWorkspace.FloatingPane floating = new TerminalWorkspace.FloatingPane(
+            new TerminalWorkspace.Pane("/home/floating", "monitor",
+                Collections.singletonList("/data/data/com.termux/files/usr/bin/htop")),
+            .2f, .15f, .6f, .5f);
+        TerminalWorkspace.Window window = new TerminalWorkspace.Window(3, tiled.root,
+            Collections.singletonList(floating));
+        TerminalWorkspace.Session session = new TerminalWorkspace.Session(
+            "project", 0, Collections.singletonList(window));
+        return new TerminalWorkspace(name, 1234L, 0, Collections.singletonList(session));
+    }
+
     private static TerminalWorkspace sample(String name) {
         TerminalWorkspace.Node nested = new TerminalWorkspace.Split(
             TerminalWorkspace.Split.VERTICAL, .8f, 1.2f,

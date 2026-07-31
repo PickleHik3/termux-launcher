@@ -365,6 +365,167 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
+    public void clampFloatFractions_enforcesMinimumSizeAndKeepsHandleReachable() {
+        // Host 1000x800, minimum pane 120x90px, minimum visible handle 48px.
+        RectF grown = TerminalPaneController.clampFloatFractions(
+            new RectF(.2f, .2f, .21f, .21f), 1000f, 800f, 120f, 90f, 48f);
+        assertEquals(.12f, grown.width(), .001f);
+        assertEquals(.1125f, grown.height(), .001f);
+        assertEquals(.2f, grown.left, .001f);
+        assertEquals(.2f, grown.top, .001f);
+
+        // Dragged far past the bottom-right: at least 48px of the handle row stays on screen.
+        RectF offBottomRight = TerminalPaneController.clampFloatFractions(
+            new RectF(2f, 2f, 2.5f, 2.5f), 1000f, 800f, 120f, 90f, 48f);
+        assertEquals(1f - 48f / 1000f, offBottomRight.left, .001f);
+        assertEquals(1f - 48f / 800f, offBottomRight.top, .001f);
+
+        // Past the top-left: the top edge carries the handle, so it may never leave upward.
+        RectF offTopLeft = TerminalPaneController.clampFloatFractions(
+            new RectF(-3f, -3f, -2.5f, -2.5f), 1000f, 800f, 120f, 90f, 48f);
+        assertEquals(0f, offTopLeft.top, .001f);
+        assertEquals(48f / 1000f - .5f, offTopLeft.left, .001f);
+
+        // Oversized floats cap at the host.
+        RectF oversized = TerminalPaneController.clampFloatFractions(
+            new RectF(0f, 0f, 3f, 3f), 1000f, 800f, 120f, 90f, 48f);
+        assertEquals(1f, oversized.width(), .001f);
+        assertEquals(1f, oversized.height(), .001f);
+    }
+
+    @Test
+    public void toggleFloat_detachesFocusedPaneAndRedocksIt() {
+        PaneFixture fixture = fourPaneFixture();
+        TerminalSession focused = fixture.sessions.get(2);
+        assertEquals(focused, fixture.controller.getActiveSession());
+
+        assertEquals(TerminalPaneController.FLOAT_TOGGLE_FLOATED,
+            fixture.controller.toggleFloatActivePane());
+        assertTrue(fixture.controller.isActivePaneFloating());
+        assertEquals(1, fixture.controller.activeFloatingPaneCount());
+        assertEquals(focused, fixture.controller.getActiveSession());
+        // Still one of the window's shells and views, but no longer in the tiled tree.
+        assertEquals(4, fixture.controller.shellsOf(fixture.window).size());
+        assertEquals(4, fixture.controller.getVisiblePaneViews().size());
+        assertEquals(3, countLeaves(fixture.window.root));
+
+        assertEquals(TerminalPaneController.FLOAT_TOGGLE_DOCKED,
+            fixture.controller.toggleFloatActivePane());
+        assertFalse(fixture.controller.isActivePaneFloating());
+        assertEquals(0, fixture.controller.activeFloatingPaneCount());
+        assertEquals(4, countLeaves(fixture.window.root));
+        assertEquals(focused, fixture.controller.getActiveSession());
+    }
+
+    @Test
+    public void toggleFloat_refusesTheWindowsOnlyTiledPane() {
+        TerminalPaneController controller = newController();
+        TerminalSession only = terminal();
+        TerminalPaneController.Window window = controller.newWindow(only);
+        controller.showWindow(window);
+
+        assertEquals(TerminalPaneController.FLOAT_TOGGLE_SINGLE_PANE,
+            controller.toggleFloatActivePane());
+        assertEquals(Collections.singletonList(only), controller.shellsOf(window));
+        assertEquals(only, controller.getActiveSession());
+    }
+
+    @Test
+    public void savedWindow_roundTripsFloatingPanesAndTheirBounds() {
+        PaneFixture fixture = fourPaneFixture();
+        assertEquals(TerminalPaneController.FLOAT_TOGGLE_FLOATED,
+            fixture.controller.toggleFloatActivePane());
+        fixture.window.floating.get(0).floatFrac = new RectF(.25f, .3f, .75f, .8f);
+
+        Bundle saved = fixture.controller.saveWindow(fixture.window);
+        Map<String, TerminalSession> sessions = new HashMap<>();
+        for (TerminalSession session : fixture.sessions) sessions.put(session.mHandle, session);
+        TerminalPaneController.Window restored = newController().restoreWindow(saved, sessions);
+
+        assertEquals(1, restored.floating.size());
+        TerminalPaneController.Leaf floating = restored.floating.get(0);
+        assertEquals(fixture.sessions.get(2), floating.session);
+        assertEquals(.25f, floating.floatFrac.left, .001f);
+        assertEquals(.3f, floating.floatFrac.top, .001f);
+        assertEquals(.5f, floating.floatFrac.width(), .001f);
+        assertEquals(.5f, floating.floatFrac.height(), .001f);
+        assertEquals(floating, restored.active);
+        assertEquals(3, countLeaves(restored.root));
+
+        // A pre-float bundle (no floats key) must keep restoring.
+        saved.remove("floats");
+        TerminalPaneController.Window legacy = newController().restoreWindow(saved, sessions);
+        assertTrue(legacy.floating.isEmpty());
+        assertEquals(3, countLeaves(legacy.root));
+    }
+
+    @Test
+    public void workspaceWindow_roundTripsFloatingPanes() {
+        PaneFixture fixture = fourPaneFixture();
+        assertEquals(TerminalPaneController.FLOAT_TOGGLE_FLOATED,
+            fixture.controller.toggleFloatActivePane());
+        fixture.window.floating.get(0).floatFrac = new RectF(.2f, .25f, .7f, .75f);
+
+        TerminalWorkspace.Window saved = fixture.controller.snapshotWorkspaceWindow(fixture.window,
+            session -> new TerminalWorkspace.Pane("/cwd/" + session.mHandle, null, null));
+        assertEquals(1, saved.floats.size());
+        // The focused float indexes after the three tiled leaves.
+        assertEquals(3, saved.activePane);
+        assertEquals(.2f, saved.floats.get(0).left, .001f);
+        assertEquals(.5f, saved.floats.get(0).width, .001f);
+
+        List<TerminalSession> restoredSessions = Arrays.asList(
+            terminal(), terminal(), terminal(), terminal());
+        TerminalPaneController restoredController = newController();
+        TerminalPaneController.Window restored =
+            restoredController.newWorkspaceWindow(saved, restoredSessions);
+        assertEquals(1, restored.floating.size());
+        assertEquals(restoredSessions.get(3), restored.floating.get(0).session);
+        assertEquals(restoredSessions.get(3), restoredController.windowActiveSession(restored));
+        assertEquals(.25f, restored.floating.get(0).floatFrac.top, .001f);
+        assertEquals(restoredSessions, restoredController.shellsOf(restored));
+    }
+
+    @Test
+    public void finishedFloatingShell_freesThePaneAndKeepsTheWindow() {
+        PaneFixture fixture = fourPaneFixture();
+        TerminalSession floated = fixture.controller.getActiveSession();
+        assertEquals(TerminalPaneController.FLOAT_TOGGLE_FLOATED,
+            fixture.controller.toggleFloatActivePane());
+
+        assertEquals(TerminalPaneController.FINISHED_PANE,
+            fixture.controller.onSessionFinished(floated));
+        assertEquals(0, fixture.controller.activeFloatingPaneCount());
+        assertEquals(3, fixture.controller.shellsOf(fixture.window).size());
+        assertFalse(fixture.controller.shellsOf(fixture.window).contains(floated));
+        assertEquals(3, fixture.controller.getVisiblePaneViews().size());
+        assertTrue(fixture.controller.shellsOf(fixture.window)
+            .contains(fixture.controller.getActiveSession()));
+    }
+
+    @Test
+    public void finishedLastTiledShell_promotesAFloatIntoTheTree() {
+        TerminalPaneController controller = newController();
+        TerminalSession first = terminal();
+        TerminalSession second = terminal();
+        TerminalWorkspace.Node root = new TerminalWorkspace.Split(
+            TerminalWorkspace.Split.HORIZONTAL, 1f, 1f,
+            new TerminalWorkspace.Pane("/a", null, null),
+            new TerminalWorkspace.Pane("/b", null, null));
+        TerminalPaneController.Window window = controller.newWorkspaceWindow(
+            new TerminalWorkspace.Window(1, root), Arrays.asList(first, second));
+        controller.showWindow(window);
+        assertEquals(TerminalPaneController.FLOAT_TOGGLE_FLOATED,
+            controller.toggleFloatActivePane());
+
+        // The tiled root dies while a float survives: the window must live on around the float.
+        assertEquals(TerminalPaneController.FINISHED_PANE, controller.onSessionFinished(first));
+        assertEquals(Collections.singletonList(second), controller.shellsOf(window));
+        assertEquals(0, controller.activeFloatingPaneCount());
+        assertEquals(second, controller.getActiveSession());
+    }
+
+    @Test
     public void moveToEdge_rejectsSinglePaneWithoutChangingIt() {
         TerminalPaneController controller = newController();
         TerminalSession only = terminal();
@@ -413,6 +574,12 @@ public class TerminalPaneControllerTest {
             new TerminalWorkspace.Window(2, root), sessions);
         controller.showWindow(window);
         return new PaneFixture(controller, window, sessions);
+    }
+
+    private static int countLeaves(TerminalPaneController.Node node) {
+        if (node instanceof TerminalPaneController.Leaf) return 1;
+        TerminalPaneController.Split split = (TerminalPaneController.Split) node;
+        return countLeaves(split.a) + countLeaves(split.b);
     }
 
     private static void assertAllSplitsHaveOrientation(TerminalPaneController.Node node,
