@@ -19,9 +19,10 @@ The terminal hierarchy is:
 ```text
 Session
 └── Window
-    └── Pane tree
-        ├── Pane (one shell/PTTY)
-        └── Pane (one shell/PTTY)
+    ├── Tiled pane tree
+    │   ├── Pane (one shell/PTTY)
+    │   └── Pane (one shell/PTTY)
+    └── Floating panes
 ```
 
 - A **session** is a drawer entry. It may contain several windows.
@@ -46,7 +47,7 @@ The palette is the complete argument-free UI surface:
 
 | Category | Available operations |
 |---|---|
-| Pane | Split horizontally/vertically, cycle automatic layouts, equalize, rotate, terminate focused pane |
+| Pane | Split horizontally/vertically, float or dock, cycle automatic layouts, equalize, rotate, terminate focused pane |
 | Window | Create, close, next, previous, and rename |
 | Session | Create, browse, clone with CWD, next, previous, close, and rename |
 | Terminal | Keyboard/toolbar toggles, font size, URL picker, hints, scrollback search, prompt navigation, sharing, and reset |
@@ -57,6 +58,10 @@ The palette is the complete argument-free UI surface:
 The long-press **Terminal action sheet** remains deliberately short: command palette, URL picker,
 share transcript, wallpaper controls, Glass Lab, settings, reset terminal, and kill process. Use the
 palette for the full searchable surface.
+
+The palette is one glass rectangle with its search row at the top. The result count and current
+breadcrumb sit at the right of that row. Six frequent-action keycaps sit below the results. The
+open corner radius follows the dock capsule.
 
 ## Default keyboard shortcuts
 
@@ -73,6 +78,7 @@ produced by the current keyboard layout.
 | `Ctrl+Alt+X` | Close current window, after confirmation | Sent to the shell if unclaimed |
 | `Ctrl+Alt+[` / `Ctrl+Alt+]` | Previous/next window | Sent to the shell if unclaimed |
 | `Ctrl+Alt+L` | Next automatic pane layout | Sent to the shell if unclaimed |
+| `Ctrl+Alt+F` | Float or dock the focused pane | Sent to the shell if unclaimed |
 | `Ctrl+Alt+R` | Rename current window | Rename current session |
 | `Ctrl+Alt+Shift+C` | New session | New session |
 | `Ctrl+Alt+Shift+X` | Close current session, after confirmation | Sent to the shell if unclaimed |
@@ -91,6 +97,15 @@ produced by the current keyboard layout.
 Use the default shortcuts or search the command palette for pane and window actions. Splitting starts
 a fresh shell in the focused pane's working directory. Each pane retains its process, scrollback,
 selection, and terminal state while you focus another pane or window.
+
+Use **Float / dock pane**, `pane.toggle_float`, or `Ctrl+Alt+F` to detach the focused tiled pane
+above the tree. Drag the slim top handle to move it and the bottom-right grip to resize it. Terminal
+content keeps its normal touch behavior; long-press and drag inside it still reports a mouse drag to
+the running program. Toggle the action again to dock the pane back into the tiled tree. The last
+tiled pane in a window cannot float.
+
+Floating positions and sizes survive Activity recreation. Workspace save and load also record each
+floating pane and its bounds.
 
 With split panes enabled, the top terminal status surface contains a horizontal window strip. Tap a
 window chip to switch directly, or tap its `+` button to create a window. Labels prefer an editor's
@@ -114,8 +129,7 @@ through `grid`, `tall`, `fat`, `horizontal`, `vertical`, and `stack`, in that or
 layout applied yet jumps to `grid`, so a single press never hides panes behind `stack`.
 
 The palette also exposes **Equalize panes** and clockwise **Rotate panes**. Choosing a specific
-layout by name, and moving the focused pane to an edge, are available through the authenticated
-action API described in [Run terminal actions from the shell](#run-terminal-actions-from-the-shell).
+layout by name and moving the focused pane to an edge remain available through custom key bindings.
 
 ### The chosen layout keeps managing the window
 
@@ -142,6 +156,13 @@ session → window → pane hierarchy and can search:
 - every pane's current working directory; and
 - cached foreground-process, open-file, or terminal-title labels.
 
+Working directories inside the Termux home display as `~` or `~/subdirectory`. Directories outside
+the home keep their full `/data/data/com.termux/...` path. The sessions panel uses the same display.
+
+The session-switch chip numbers the launcher's sessions, not the number of shell processes behind
+their panes and windows. It appears only when the active launcher session changes. Creating a pane
+or window in the current session does not show it.
+
 The buttons at the top create a session, clone the current session, or save the whole terminal as a
 workspace. Each session row's overflow menu can activate, clone with CWD, rename, or close it.
 
@@ -153,7 +174,8 @@ a terminal.
 ## Save and restore workspaces
 
 A workspace records the ordered sessions, selected windows, recursive pane trees and ratios,
-focused panes, CWDs, and titles. Definitions are stored with owner-only permissions at:
+floating panes and bounds, focused panes, CWDs, and titles. Definitions are stored with owner-only
+permissions at:
 
 ```text
 ~/.termux/workspaces/<name>.json
@@ -185,9 +207,10 @@ still destructive and should only be used after saving anything important.
 
 ## Terminal actions and the palette
 
-Terminal commands share the LauncherCtl registry used by the command palette, the action sheet, and
-key bindings. Remote execution over HTTP was removed together with the agent endpoints; the local
-API now serves model inference only. Workspace tools (`workspace.save`, `workspace.load`,
+Terminal commands share the internal action registry used by the command palette, the action sheet,
+and key bindings. Remote action execution over HTTP was removed together with the agent endpoints;
+the local API now serves TAI and the separate `/v1/apps/launch` route. Workspace tools
+(`workspace.save`, `workspace.load`,
 `workspace.list`, `workspace.delete`) and the parameterized pane actions (`pane.layout`,
 `pane.move_to_edge`) remain reachable from custom key bindings.
 
@@ -499,14 +522,6 @@ shows the Android key event, the registry binding that claimed it, active Kitty 
 the exact bytes written to the shell. It is intentionally unbound so it can inspect any candidate
 shortcut, including the one you might later assign to it.
 
-`terminal.state` on the authenticated API reports the live terminal hierarchy and performance
-counters. It includes `paneLayout`, the current window's retained automatic layout; the field is
-absent when the window is manually managed, so it doubles as the way to check whether a layout is
-still in charge. Counters include whole-window frame timing/deadline misses, per-pane render timing, process
-allocation deltas, GC deltas, and listener-report loss. Pass `resetPerformance: true` to establish a
-new common measurement baseline. These are app/render diagnostics, not SurfaceFlinger presentation
-telemetry.
-
 ## Troubleshooting
 
 ### A shortcut reaches the shell instead of the app
@@ -546,5 +561,5 @@ Pane and window commands need split panes enabled; enable them in settings and r
 - Kitty graphics Tier 2/3, desktop notification escape sequences, TTY file transfer, Kitty kittens,
   and multiple Android top-level terminal windows are not implemented.
 
-See [LauncherCtl API](LauncherCtl_API) for the complete authenticated bridge and
+See [LauncherCtl API](LauncherCtl_API) for the authenticated TAI and app-launch routes and
 [Launcher troubleshooting](Launcher_Troubleshooting) for general app diagnostics.

@@ -2,7 +2,7 @@
 
 Termux AI (TAI) lets supported Android devices run language models locally. Your prompts and model output stay on the device unless you deliberately use a network service or expose the API to your local network.
 
-TAI is the model host. You can chat with it through an OpenAI- or Ollama-compatible app such as Codex, OpenCode, Crush, or AIChat. The local API is an inference endpoint plus model manager — it does not control Android apps or the device.
+TAI is the model host. You can chat with it through an OpenAI- or Ollama-compatible app such as Codex, OpenCode, Crush, or AIChat. TAI does not control Android apps or the device. The same local server has one separate app-launch route used by `launcherctl launch`; agent, MCP, and other device-control routes are not present.
 
 ## Quick start
 

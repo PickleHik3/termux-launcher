@@ -1,13 +1,14 @@
 # LauncherCtl API (Local AI Endpoint)
 
 ## Overview
-LauncherCtl is a localhost HTTP server that exposes an OpenAI- and Ollama-compatible inference endpoint plus model management for the on-device Termux AI (TAI) runtime. It is not a device-control or agent bridge.
+LauncherCtl is a localhost HTTP server that exposes an OpenAI- and Ollama-compatible inference endpoint, model management for the on-device Termux AI (TAI) runtime, and one app-launch route. It is not a general device-control or agent bridge.
 
 - Server: in app process, isolated from native model work which runs in `:tai_runtime`.
 - Bind mode: `localhost` (default, `127.0.0.1`) or opt-in `lan` (`0.0.0.0`).
 - Auth: bearer token from `~/.launcherctl/token`, or `X-Api-Key: <token>` header. The token can be made optional for localhost (see [Auth](#auth)).
 - Endpoint URL: `~/.launcherctl/endpoint`.
-- CLI: `$PREFIX/bin/tai` (installed by the launcher app when `TermuxActivity` starts). The legacy `launcherctl` CLI and `launcherctl-mcp`/`launcher-restart` scripts are no longer installed and are deleted on upgrade.
+- CLIs: `$PREFIX/bin/tai` for local AI and `$PREFIX/bin/launcherctl` for `launcherctl launch <app name, package, or activity>`. The launcher app installs both when `TermuxActivity` starts.
+- Removed helpers: `launcherctl-mcp` and `launcher-restart` are no longer installed and are deleted on upgrade.
 
 `tai` uses this authenticated server for the local Termux AI endpoint; native AI runtime work is isolated in `:tai_runtime`.
 
@@ -67,7 +68,7 @@ All responses include `Access-Control-Allow-Origin: *` so browser-based clients 
 
 ## Endpoint Reference
 
-The complete route surface is below. There are no device-control, app-launch, notification, media, agent, MCP, or event routes.
+The complete route surface is below. App launch is the only non-TAI action route. There are no notification, media, resource, event, agent, MCP, restart, or general device-control routes.
 
 ### Health and discovery
 
@@ -75,6 +76,50 @@ The complete route surface is below. There are no device-control, app-launch, no
 | --- | --- | :---: | --- |
 | GET | `/` | no | Health check, body `Ollama is running` |
 | OPTIONS | any | no | CORS preflight |
+
+### App launch
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/v1/apps/launch` | Match and launch one app from the launcher's app catalog |
+
+The request body contains one non-empty query:
+
+```json
+{"query":"maps"}
+```
+
+The query may be an app label, package name, activity name, or partial match. Exact package,
+activity, and stable-id matches rank first. Exact labels rank next, followed by prefix and
+substring matches. The best unique match launches and returns HTTP 200:
+
+```json
+{
+  "ok": true,
+  "query": "maps",
+  "label": "Maps",
+  "packageName": "com.example.maps",
+  "activityName": "com.example.maps.MainActivity",
+  "stableId": "com.example.maps/com.example.maps.MainActivity#user=0",
+  "userId": 0,
+  "clonedProfile": false
+}
+```
+
+No match returns HTTP 404 with error code `not_found`. Several matches tied at the best rank return
+HTTP 409 with error code `ambiguous` and a `candidates` array containing up to eight app records.
+An empty query returns HTTP 400 with `bad_request`. A matched app that Android cannot start returns
+HTTP 500 with `launch_failed`.
+
+The route allows 30 requests per minute. The installed shell client reads the endpoint and bearer
+token from `~/.launcherctl`, then sends this request:
+
+```sh
+launcherctl launch maps
+launcherctl launch com.example.maps
+```
+
+`launcherctl` has no other command. Use `tai` for model and inference commands.
 
 ### OpenAI-compatible
 
@@ -184,7 +229,7 @@ Ollama-style routes (`/api/*`) return a flat error string in the Ollama conventi
 }
 ```
 
-Rate-limit errors use `type: "rate_limit_error"` on `/v1/*` and the same flat `error` string on `/api/*`. HTTP status codes follow OpenAI/Ollama conventions (`400`, `401`, `404`, `429`, `500`, `501`).
+Rate-limit errors use `type: "rate_limit_error"` on `/v1/*` and the same flat `error` string on `/api/*`. HTTP status codes follow OpenAI/Ollama conventions (`400`, `401`, `404`, `409`, `429`, `500`, `501`).
 
 ## Terminal LLM Client Configuration
 

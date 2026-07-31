@@ -59,7 +59,7 @@ tai --json runtime
 
 ### LauncherCtl
 
-LauncherCtl is the local bridge used by Termux Launcher. It exposes localhost API endpoints and writes the connection details into your home directory.
+LauncherCtl is the local server used by Termux Launcher. It exposes the TAI endpoints and the separate `/v1/apps/launch` route, then writes the connection details into your home directory. The `launcherctl` shell client only launches apps. Use `tai` for local AI.
 
 Important files:
 

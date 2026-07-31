@@ -30,11 +30,13 @@ All credits go to the amazing developers and contributors of Termux, TEL, and Te
 
 - Termux as the actual Android home launcher
 - Sixel image drawing in terminal
-- Native sessions, windows, recursive split panes, layouts, workspace restore, and session browser
+- Native sessions, windows, recursive split and floating panes, layouts, workspace restore, and session browser
 - Kitty keyboard/graphics protocols, safe hyperlinks, prompt navigation, and advanced font shaping
 - Searchable terminal command palette with customizable chords and modal keymaps
 - App dock with terminal app search
 - Android Material theme integration for launcher surfaces and Termux shell theming
+- Built-in terminal keyboard by default on fresh installs, with Android keyboard and no-keyboard options
+- Launch Android apps from the shell with `launcherctl launch`
 - `tai` shell command and OpenAI/Ollama-compatible localhost API for on-device LLM inference and model management
 - Cloned/work-profile app discovery where Android exposes launcher profiles
 - On-device LLM backends using Google's LiteRT and Alibaba's MNN
@@ -78,7 +80,7 @@ See [Getting Started](docs/en/Launcher_Getting_Started.md) for the setup flow.
 
 - [Getting Started](docs/en/Launcher_Getting_Started.md): install, launcher basics, tmux setup, rish setup, Extra Keys, and troubleshooting.
 - [Modern terminal guide](docs/en/Terminal_Modernization.md): panes, windows, sessions, layouts, workspaces, bindings, fonts, protocols, and diagnostics.
-- [Local AI API](docs/en/LauncherCtl_API.md): OpenAI/Ollama-compatible localhost endpoint, model management, auth, and route tables.
+- [Local AI API](docs/en/LauncherCtl_API.md): OpenAI/Ollama-compatible localhost endpoint, app launch, model management, auth, and route tables.
 - [Termux AI](docs/en/Termux_AI.md): local model setup, `tai`, OpenAI-compatible clients, and troubleshooting.
 - [Developer Docs](docs/en/Developer_Docs.md): advanced API routes, runtime notes, helper scripts, and security details.
 

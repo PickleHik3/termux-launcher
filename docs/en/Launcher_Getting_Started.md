@@ -3,7 +3,7 @@
 This page is the main setup guide for Termux Launcher. Start here, then use the smaller reference pages only when you need them:
 
 - [Illustrated web guide](https://picklehik3.github.io/termux-launcher-site/#wiki) for the current live screenshots and recordings.
-- [LauncherCtl API](LauncherCtl_API.md) for the local OpenAI/Ollama-compatible AI endpoint and model management.
+- [LauncherCtl API](LauncherCtl_API.md) for app launch, the local OpenAI/Ollama-compatible AI endpoint, and model management.
 - [Termux AI](Termux_AI.md) for the local on-device AI endpoint.
 - [Developer docs](Developer_Docs.md) for advanced API, runtime, helper-script, and security details.
 
@@ -67,7 +67,7 @@ Long press Terminal -> More
 Useful places:
 
 - **Quick start tour:** Replay the beginner walkthrough at any time.
-- **Appearance:** Terminal opacity, blur, dock size, compact dock spacing, monochrome icons, and Terminal Material colors.
+- **Appearance:** Terminal opacity, blur, dock size, compact dock spacing, monochrome icons, and Terminal Material colors. The surface editor returns to the Dock, Keyboard, Status, or Other section used last.
 - **Apps Bar:** Input split character, app ranking reset, Home launcher shortcut, and lock-screen behavior.
 - **TAI / Termux AI:** Local model downloads, imports, runtime settings, API port, and API token.
 
@@ -75,6 +75,14 @@ The terminal also has a native command palette, recursive split panes, windows, 
 and durable layout/CWD workspaces. Long-press the terminal and choose **Command palette**, or press
 `Ctrl+Alt+Shift+P` on a hardware keyboard. Split panes are enabled by default; traditional
 single-pane behavior is available at **Settings → Termux → Terminal IO → Split panes**.
+
+Press `Ctrl+Alt+F`, or choose **Float / dock pane** in the command palette, to detach the focused
+pane above the tiled layout. Drag its top handle to move it and use the bottom-right grip to resize
+it. Toggle the action again to dock it. A window must keep at least one tiled pane.
+
+Fresh installs use the built-in terminal keyboard and keep the Android keyboard hidden. Existing
+installs keep their current setting. Choose **Settings → Keyboard → Input method** to use the
+built-in keyboard, the Android keyboard, or no on-screen keyboard.
 
 See the [Modern terminal guide](Terminal_Modernization.md) for shortcuts, automatic layouts,
 workspace restore, custom bindings, advanced fonts, shell prompt navigation, Kitty protocols, and

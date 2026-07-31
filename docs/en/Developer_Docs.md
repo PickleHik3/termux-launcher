@@ -8,7 +8,7 @@ Termux Launcher is based on [termux-app](https://github.com/termux/termux-app), 
 
 Important local areas:
 
-- `app/src/main/java/com/termux/launcherctl/LauncherCtlApiServer.java`: local OpenAI/Ollama-compatible inference API server; installs the `tai` shell client.
+- `app/src/main/java/com/termux/launcherctl/LauncherCtlApiServer.java`: local OpenAI/Ollama-compatible inference API server and app-launch route; installs the `tai` and launch-only `launcherctl` shell clients.
 - `app/src/main/java/com/termux/launcherctl/LauncherCtlNotificationListener.java`: notification and media cache source for the in-app status bar UI.
 - `app/src/main/java/com/termux/ai/`: TAI settings, model registry, model downloads/imports, and runtime adapters.
 - `resources/bin/tai`: installed TAI shell helper.
@@ -36,6 +36,21 @@ http://127.0.0.1:41237
 ```
 
 The token file contains the bearer token used by `tai` and direct API clients.
+
+### App Launch Route
+
+```text
+POST /v1/apps/launch
+```
+
+The body is `{"query":"..."}`. The query matches the launcher's app catalog by label, package,
+activity, or stable id. A unique best match launches and returns its app record. No match returns
+404 `not_found`; tied best matches return 409 `ambiguous` with up to eight candidates. The route is
+limited to 30 requests per minute.
+
+The installed `launcherctl launch <app name, package, or activity>` client is the only shell command
+for this route. Agent, MCP, notification, media, resource, event, and restart commands are not
+installed. Local AI commands belong to `tai`.
 
 ### TAI Routes
 
