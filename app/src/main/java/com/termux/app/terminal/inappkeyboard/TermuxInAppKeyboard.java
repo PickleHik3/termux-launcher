@@ -15,6 +15,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.shared.view.KeyboardUtils;
 import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalView;
@@ -83,6 +84,7 @@ public final class TermuxInAppKeyboard {
     private float mHeightScale = 1f;
     private float mKeyMarginScale = 1f;
     private float mKeyCornerRadiusDp = -1f;
+    private int mKeyOpacity = TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY;
     private float mPreAdjustHeightScale = 1f;
     private float mPreAdjustKeyMarginScale = 1f;
     private float mPreAdjustKeyCornerRadiusDp = -1f;
@@ -149,6 +151,7 @@ public final class TermuxInAppKeyboard {
         mHeightScale = mPreferences.getInAppKeyboardHeightScale();
         mKeyMarginScale = mPreferences.getInAppKeyboardKeyMarginScale();
         mKeyCornerRadiusDp = mPreferences.getInAppKeyboardKeyCornerRadiusDp();
+        mKeyOpacity = mPreferences.getInAppKeyboardKeyOpacity();
         if (state != null) {
             mSelectedLayoutId = normalizeLayoutId(
                 state.getString(STATE_SELECTED_LAYOUT, LAYOUT_MAIN));
@@ -257,6 +260,7 @@ public final class TermuxInAppKeyboard {
             mHeightScale = mPreferences.getInAppKeyboardHeightScale();
             mKeyMarginScale = mPreferences.getInAppKeyboardKeyMarginScale();
             mKeyCornerRadiusDp = mPreferences.getInAppKeyboardKeyCornerRadiusDp();
+            mKeyOpacity = mPreferences.getInAppKeyboardKeyOpacity();
             mEnabled = true;
             mVisible = true;
             mLastShowReason = ShowReason.FIRST_ENABLE;
@@ -273,6 +277,7 @@ public final class TermuxInAppKeyboard {
                 applyHeightScale(mPreferences.getInAppKeyboardHeightScale());
                 applyKeyMarginScale(mPreferences.getInAppKeyboardKeyMarginScale());
                 applyKeyCornerRadiusDp(mPreferences.getInAppKeyboardKeyCornerRadiusDp());
+                applyKeyOpacity(mPreferences.getInAppKeyboardKeyOpacity());
             }
         }
         recheckLayout();
@@ -371,6 +376,16 @@ public final class TermuxInAppKeyboard {
         applyKeyCornerRadiusDp(radiusDp, true);
     }
 
+    /**
+     * Key-cap opacity preview. Deliberately the cheapest editor control: it repaints only the
+     * keyboard view itself — no geometry sync, no accessory glass re-render.
+     */
+    public void previewSurfaceEditorKeyOpacity(int opacityPercent) {
+        if (!mEnabled || mDestroyed)
+            return;
+        applyKeyOpacity(opacityPercent);
+    }
+
     public void confirmHeightAdjustment() {
         if (!mHeightAdjusting || mDestroyed)
             return;
@@ -422,6 +437,24 @@ public final class TermuxInAppKeyboard {
         if (mKeyboardView != null)
             mKeyboardView.setKeyMarginScale(mKeyMarginScale);
         requestIntrinsicSizeGeometrySync(livePreview);
+    }
+
+    private void applyKeyOpacity(int opacityPercent) {
+        int clamped = TermuxAppSharedPreferences.clampInAppKeyboardKeyOpacity(opacityPercent);
+        if (mKeyOpacity == clamped)
+            return;
+        mKeyOpacity = clamped;
+        if (mKeyboardView != null)
+            mKeyboardView.setKeyOpacity(mKeyOpacity < 0 ? -1f : mKeyOpacity / 100f);
+    }
+
+    /** Configured absolute key opacity, or the theme's current effective one when unset. */
+    public int getEffectiveKeyOpacityPercent() {
+        if (mKeyOpacity >= 0)
+            return mKeyOpacity;
+        if (mKeyboardView != null)
+            return mKeyboardView.getEffectiveKeyFillOpacityPercent();
+        return 100;
     }
 
     private void applyKeyCornerRadiusDp(float radiusDp) {
@@ -681,6 +714,7 @@ public final class TermuxInAppKeyboard {
         mKeyboardView.setHeightScale(mHeightScale);
         mKeyboardView.setKeyMarginScale(mKeyMarginScale);
         mKeyboardView.setKeyCornerRadiusOverride(radiusDpToPx(mKeyCornerRadiusDp));
+        mKeyboardView.setKeyOpacity(mKeyOpacity < 0 ? -1f : mKeyOpacity / 100f);
         KeyboardData data = getSelectedLayoutData();
         if (data != null)
             mKeyboardView.setKeyboard(data);
@@ -815,6 +849,110 @@ public final class TermuxInAppKeyboard {
 
     private KeyboardData getSelectedLayoutData() {
         return getLayoutData(mSelectedLayoutId);
+    }
+
+    /**
+     * Lights the keys bound under the latched Ctrl+Alt(+Shift) prefix directly on the visible
+     * keyboard, each in its legend group's colour: a bound primary key takes the group colour
+     * as its chip tint and border, a key whose corner/edge slot is bound takes a faint tint
+     * with just that slot's label group set alight. Null or empty clears the lighting.
+     *
+     * <p>The overrides ride {@link Keyboard2View#setKeybindHintOverrides}'s transient layer,
+     * so the user's color scheme underneath is never touched and returns untouched on clear.
+     *
+     * @param litTokens binding suffix token (see
+     *        {@link com.termux.app.terminal.TerminalKeyBindingResolver#keyToken}) to colour
+     */
+    public void setKeybindHintHighlights(@Nullable java.util.Map<String, Integer> litTokens) {
+        if (mDestroyed || mKeyboardView == null)
+            return;
+        KeyboardData layout = getSelectedLayoutData();
+        if (litTokens == null || litTokens.isEmpty() || layout == null) {
+            mKeyboardView.setKeybindHintOverrides(null);
+            return;
+        }
+        juloo.keyboard2.Theme.Palette palette = createPalette();
+        java.util.Map<String, Keyboard2View.KeyColorOverride> overrides =
+            new java.util.HashMap<>();
+        for (int rowIndex = 0; rowIndex < layout.rows.size(); rowIndex++) {
+            KeyboardData.Row row = layout.rows.get(rowIndex);
+            for (int keyIndex = 0; keyIndex < row.keys.size(); keyIndex++) {
+                Keyboard2View.KeyColorOverride override =
+                    hintOverrideForKey(row.keys.get(keyIndex), litTokens, palette);
+                if (override != null)
+                    overrides.put(rowIndex + ":" + keyIndex, override);
+            }
+        }
+        mKeyboardView.setKeybindHintOverrides(overrides);
+    }
+
+    @Nullable
+    private static Keyboard2View.KeyColorOverride hintOverrideForKey(
+            KeyboardData.Key key, java.util.Map<String, Integer> litTokens,
+            juloo.keyboard2.Theme.Palette palette) {
+        juloo.keyboard2.KeyValue center = key.getKeyValue(0);
+        String centerToken = center == null ? null : keybindHintToken(center);
+        Integer primary = centerToken == null ? null : litTokens.get(centerToken);
+        if (primary != null) {
+            int glyph = InAppKeyboardPaletteFactory.ensureContrast(0xFF14171A, primary);
+            int slotGlyph = androidx.core.graphics.ColorUtils.setAlphaComponent(glyph, 153);
+            return new Keyboard2View.KeyColorOverride(primary, glyph, slotGlyph, slotGlyph,
+                primary);
+        }
+        Integer slotColor = null;
+        boolean bottomHit = false;
+        boolean otherHit = false;
+        for (int slot = 1; slot < 9; slot++) {
+            juloo.keyboard2.KeyValue value = key.getKeyValue(slot);
+            if (value == null)
+                continue;
+            String token = keybindHintToken(value);
+            Integer color = token == null ? null : litTokens.get(token);
+            if (color == null)
+                continue;
+            slotColor = color;
+            // Sublabel overrides come in two groups: sw/se (bottom) and the rest.
+            if (slot == 3 || slot == 4) bottomHit = true;
+            else otherHit = true;
+        }
+        if (slotColor == null)
+            return null;
+        // The fill override only keeps the hue (the glass chip's own alpha and gradient stay),
+        // so a light blend toward the group colour reads as a faint tint of the cap.
+        int tint = androidx.core.graphics.ColorUtils.blendARGB(
+            palette.keyBackground | 0xFF000000, slotColor | 0xFF000000, 0.35f);
+        return new Keyboard2View.KeyColorOverride(tint, null,
+            otherHit ? slotColor : null, bottomHit ? slotColor : null,
+            androidx.core.graphics.ColorUtils.setAlphaComponent(slotColor, 128));
+    }
+
+    /**
+     * The stroke token a root-keymap binding would use for this key value, mirroring
+     * {@link com.termux.app.terminal.TerminalKeyBindingResolver#keyToken}; null for values a
+     * binding cannot name.
+     */
+    @Nullable
+    private static String keybindHintToken(juloo.keyboard2.KeyValue value) {
+        switch (value.getKind()) {
+            case Char: {
+                char c = Character.toLowerCase(value.getChar());
+                if (c == '-') return "minus";
+                if (c == '=') return "equals";
+                if (c == '+') return "plus";
+                return String.valueOf(c);
+            }
+            case Keyevent:
+                return com.termux.app.terminal.TerminalKeyBindingResolver
+                    .keyToken(value.getKeyevent());
+            case Editing:
+                if (value.getEditing() == juloo.keyboard2.KeyValue.Editing.SPACE_BAR)
+                    return "space";
+                if (value.getEditing() == juloo.keyboard2.KeyValue.Editing.BACKSPACE)
+                    return "backspace";
+                return null;
+            default:
+                return null;
+        }
     }
 
     private KeyboardData getLayoutData(String layoutId) {

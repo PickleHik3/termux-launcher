@@ -256,7 +256,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public int getInAppKeyboardHorizontalInset() {
         return clampSurfaceHorizontalInset(SharedPreferenceUtils.getInt(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET,
-            TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET));
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET));
     }
 
     public void setInAppKeyboardHorizontalInset(int value) {
@@ -811,6 +811,24 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         if (Float.isNaN(value) || Float.isInfinite(value) || value < 0f)
             return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP;
         return Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP, value);
+    }
+
+    public int getInAppKeyboardKeyOpacity() {
+        return clampInAppKeyboardKeyOpacity(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_OPACITY,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY));
+    }
+
+    public void setInAppKeyboardKeyOpacity(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_OPACITY,
+            clampInAppKeyboardKeyOpacity(value), false);
+    }
+
+    /** Negative values collapse to the -1 "theme-defined" sentinel. */
+    public static int clampInAppKeyboardKeyOpacity(int value) {
+        if (value < 0) return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY;
+        return Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_OPACITY, value);
     }
 
     public boolean isSoftKeyboardEnabledOnlyIfNoHardware() {

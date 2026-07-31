@@ -274,12 +274,12 @@ public final class Theme
     public Computed(Theme theme, Config config, float keyWidth,
         KeyboardData layout, float rowHeight)
     {
-      this(theme, config, keyWidth, layout, rowHeight, 1f, -1f);
+      this(theme, config, keyWidth, layout, rowHeight, 1f, -1f, -1f);
     }
 
     public Computed(Theme theme, Config config, float keyWidth,
         KeyboardData layout, float rowHeight, float keyMarginScale,
-        float keyCornerRadiusOverridePx)
+        float keyCornerRadiusOverridePx, float keyOpacityOverride)
     {
       row_height = rowHeight;
       vertical_margin = config.verticalKeyMarginRatio * keyMarginScale * row_height;
@@ -287,15 +287,15 @@ public final class Theme
       margin_top = config.marginTopPx + vertical_margin / 2f;
       margin_left = horizontal_margin / 2f;
       key = new Key(theme, config, false, KeyboardData.Key.Role.Normal,
-          keyCornerRadiusOverridePx);
+          keyCornerRadiusOverridePx, keyOpacityOverride);
       key_action = new Key(theme, config, false, KeyboardData.Key.Role.Action,
-          keyCornerRadiusOverridePx);
+          keyCornerRadiusOverridePx, keyOpacityOverride);
       key_space_bar = new Key(theme, config, false, KeyboardData.Key.Role.Space_bar,
-          keyCornerRadiusOverridePx);
+          keyCornerRadiusOverridePx, keyOpacityOverride);
       key_activated = new Key(theme, config, true, KeyboardData.Key.Role.Normal,
-          keyCornerRadiusOverridePx);
+          keyCornerRadiusOverridePx, keyOpacityOverride);
       key_suggestion = new Key(theme, config, false, KeyboardData.Key.Role.Suggestion,
-          keyCornerRadiusOverridePx);
+          keyCornerRadiusOverridePx, keyOpacityOverride);
       indication_paint = init_label_paint(config.labelFont);
       indication_paint.setColor(theme.subLabelColor);
     }
@@ -329,12 +329,16 @@ public final class Theme
       private final int _fill;
       private final int _grad_top;
       private final int _grad_bottom;
+
+      /** Alpha of this role's resolved fill, 0-255; hosts read it to seed opacity editors. */
+      public int fillAlpha() { return Color.alpha(_fill); }
       private final Matrix _override_gradient_matrix = new Matrix();
       private int _override_gradient_color;
       private LinearGradient _override_gradient;
 
       public Key(Theme theme, Config config, boolean activated,
-          KeyboardData.Key.Role role, float keyCornerRadiusOverridePx)
+          KeyboardData.Key.Role role, float keyCornerRadiusOverridePx,
+          float keyOpacityOverride)
       {
         border_radius = keyCornerRadiusOverridePx >= 0f
             ? keyCornerRadiusOverridePx
@@ -382,7 +386,16 @@ public final class Theme
             ? theme.actionSecondaryLabelColor : theme.secondaryLabelColor;
         greyedLabelColor = actionRole
             ? theme.actionGreyedLabelColor : theme.greyedLabelColor;
-        int fill = withAlpha(bg_color, alpha, theme.opacity);
+        // A host-set absolute opacity replaces the theme/config translucency stack entirely,
+        // so 100% really is opaque even when the theme keys are glass. Pressed (activated)
+        // caps keep their theme look so press feedback stays distinct, and roles the theme
+        // leaves fully transparent (suggestions) stay invisible.
+        int fill;
+        if (keyOpacityOverride >= 0f && !activated && Color.alpha(bg_color) != 0)
+          fill = Color.argb(Math.round(255f * Math.min(1f, keyOpacityOverride)),
+              Color.red(bg_color), Color.green(bg_color), Color.blue(bg_color));
+        else
+          fill = withAlpha(bg_color, alpha, theme.opacity);
         _fill = fill;
         _grad_top = theme.keyGradientTopOverlay;
         _grad_bottom = theme.keyGradientBottomOverlay;

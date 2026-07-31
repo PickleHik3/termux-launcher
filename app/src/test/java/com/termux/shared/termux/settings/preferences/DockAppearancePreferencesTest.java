@@ -101,7 +101,7 @@ public class DockAppearancePreferencesTest {
     public void surfaceEdgeInsetsDefaultToTheCapsuleOuterMargin() {
         assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET,
             preferences.getDockHorizontalInset());
-        assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET,
+        assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET,
             preferences.getInAppKeyboardHorizontalInset());
         assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET,
             preferences.getStatusBarHorizontalInset());

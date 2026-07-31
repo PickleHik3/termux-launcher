@@ -189,11 +189,11 @@ public final class TermuxPreferenceConstants {
 
         /** Independent status-surface glass controls used by the live surface editor. */
         public static final String KEY_STATUS_BAR_BLUR_RADIUS = "status_bar_blur_radius";
-        public static final int DEFAULT_STATUS_BAR_BLUR_RADIUS = 10;
+        public static final int DEFAULT_STATUS_BAR_BLUR_RADIUS = 12;
         public static final String KEY_STATUS_BAR_OPACITY = "status_bar_opacity";
-        public static final int DEFAULT_STATUS_BAR_OPACITY = 50;
+        public static final int DEFAULT_STATUS_BAR_OPACITY = 37;
         public static final String KEY_STATUS_BAR_GRAIN = "status_bar_grain";
-        public static final int DEFAULT_STATUS_BAR_GRAIN = 12;
+        public static final int DEFAULT_STATUS_BAR_GRAIN = 39;
         public static final String KEY_STATUS_BAR_CORNER_RADIUS = "status_bar_corner_radius";
         public static final int DEFAULT_STATUS_BAR_CORNER_RADIUS = -1;
         public static final int MAX_STATUS_BAR_CORNER_RADIUS = 40;
@@ -204,6 +204,8 @@ public final class TermuxPreferenceConstants {
          * shape only honours whatever is configured beyond that baseline.
          */
         public static final int DEFAULT_SURFACE_HORIZONTAL_INSET = 10;
+        /** The keyboard sits slightly further in than the other surfaces; tuned on Pong. */
+        public static final int DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET = 13;
         public static final int MAX_SURFACE_HORIZONTAL_INSET = 48;
         public static final String KEY_DOCK_HORIZONTAL_INSET = "dock_horizontal_inset";
         public static final String KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET =
@@ -383,7 +385,7 @@ public final class TermuxPreferenceConstants {
         public static final float DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.0830541f;
 
         /** Default keyboard height for the Rounded dock, tuned on Pong. */
-        public static final float DEFAULT_ROUNDED_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.1109314f;
+        public static final float DEFAULT_ROUNDED_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.0830541f;
 
         public static final float MIN_IN_APP_KEYBOARD_HEIGHT_SCALE = 0.5f;
 
@@ -396,7 +398,7 @@ public final class TermuxPreferenceConstants {
         public static final float DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 2.96f;
 
         /** Default key spacing for the Rounded dock, tuned on Pong. */
-        public static final float DEFAULT_ROUNDED_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 2.57f;
+        public static final float DEFAULT_ROUNDED_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 2.96f;
 
         public static final float MIN_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 0.0f;
 
@@ -411,11 +413,25 @@ public final class TermuxPreferenceConstants {
         public static final float DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 2.7f;
 
         /** Default key radius for the Rounded dock, tuned on Pong. */
-        public static final float DEFAULT_ROUNDED_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 12.0f;
+        public static final float DEFAULT_ROUNDED_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 12.5f;
 
         public static final float MIN_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 0.0f;
 
         public static final float MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 24.0f;
+
+        /**
+         * Defines the absolute key cap opacity in percent (0 = invisible caps, 100 = fully
+         * opaque), or -1 to keep the keyboard theme's own key translucency. Unlike the theme
+         * value, this is independent of the surface/glass opacity stack.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_KEY_OPACITY =
+            "in_app_keyboard_key_opacity";
+
+        public static final int DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY = -1;
+
+        public static final int MIN_IN_APP_KEYBOARD_KEY_OPACITY = 0;
+
+        public static final int MAX_IN_APP_KEYBOARD_KEY_OPACITY = 100;
 
         /**
          * Defines the key for whether the soft keyboard will be enabled only if no hardware keyboard
@@ -538,7 +554,7 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_TERMINAL_BACKGROUND_OPACITY = "terminal_background_opacity";
 
-        public static final int DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY = 100;
+        public static final int DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY = 47;
 
         /**
          * Defines the key for sessions menu opacity (percentage), where 100 is fully opaque.
@@ -559,7 +575,7 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_APP_BAR_OPACITY = "app_bar_opacity";
 
-        public static final int DEFAULT_VALUE_APP_BAR_OPACITY = 50;
+        public static final int DEFAULT_VALUE_APP_BAR_OPACITY = 46;
 
         /**
          * Defines the key for the dock-glass grain/noise amount (percentage, 0 disables). A subtle
@@ -567,7 +583,7 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_DOCK_GLASS_GRAIN = "dock_glass_grain";
 
-        public static final int DEFAULT_VALUE_DOCK_GLASS_GRAIN = 12;
+        public static final int DEFAULT_VALUE_DOCK_GLASS_GRAIN = 39;
 
         /**
          * Defines whether the terminal's bottom cell remainder is absorbed by the dock glass.
@@ -593,7 +609,7 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_WALLPAPER_ENABLED_TERMINAL_BACKGROUND_OPACITY =
             "wallpaper_enabled_terminal_background_opacity";
 
-        public static final int DEFAULT_VALUE_WALLPAPER_ENABLED_TERMINAL_BACKGROUND_OPACITY = 50;
+        public static final int DEFAULT_VALUE_WALLPAPER_ENABLED_TERMINAL_BACKGROUND_OPACITY = 47;
 
         /**
          * Stores the user's preferred dock opacity while wallpaper mode is enabled so it can be
@@ -602,7 +618,7 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_WALLPAPER_ENABLED_APP_BAR_OPACITY =
             "wallpaper_enabled_app_bar_opacity";
 
-        public static final int DEFAULT_VALUE_WALLPAPER_ENABLED_APP_BAR_OPACITY = 50;
+        public static final int DEFAULT_VALUE_WALLPAPER_ENABLED_APP_BAR_OPACITY = 46;
 
         /**
          * Stores the user's preferred dock blur radius while wallpaper mode is enabled so it can
