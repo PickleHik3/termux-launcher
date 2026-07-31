@@ -97,11 +97,15 @@ Supported OpenAI-style endpoints:
 
 ```text
 GET  /v1/models
+GET  /v1/models/{id}
 POST /v1/chat/completions
+POST /v1/responses
 POST /v1/completions
 POST /v1/embeddings
 POST /v1/audio/speech
 ```
+
+Ollama-compatible endpoints (`/api/version`, `/api/tags`, `/api/show`, `/api/ps`, `/api/chat`, `/api/generate`, `/api/embed`, legacy `/api/embeddings`) are served from the same base address without `/v1`. Ollama registry operations (`pull`, `create`, `push`, `copy`, `delete`) return 501. See [LauncherCtl API](LauncherCtl_API) for the full route tables.
 
 `/v1/audio/speech` returns a clear `unsupported_audio_output` error because the local runners do not currently generate audio output.
 
@@ -137,7 +141,7 @@ qwen2.5-coder-1.5b-instruct-mnn
 
 `gemma-4-e4b-it-litert-lm` is the larger assistant model.
 
-`functiongemma-270m-mobile-actions-litert-lm` is a smaller model intended for mobile action-style tool calls. It is CPU-only. TAI does not automatically execute Android actions from these calls.
+`functiongemma-270m-mobile-actions-litert-lm` is a smaller model intended for tool/function call output. It is CPU-only. TAI returns tool calls for the client to handle; it does not execute Android actions or shell commands itself.
 
 `qwen2.5-coder-1.5b-instruct-mnn` is the default installed MNN code model.
 
@@ -263,11 +267,13 @@ The AI endpoint is bound to localhost:
 
 It is meant for local apps and tools on the same device.
 
-Requests must include the bearer token from:
+Requests must include the bearer token (`Authorization: Bearer <token>` or `X-Api-Key: <token>`) from:
 
 ```sh
 ~/.launcherctl/token
 ```
+
+A **Require API token** setting (default on) under **Settings → Services & permissions → Termux AI** lets you turn token checks off for localhost so local CLI clients need no real key. `GET /` and `OPTIONS` never require auth, and **LAN bind mode always requires the token** regardless of the toggle.
 
 Treat this token like an API key. If it is exposed, recreate it from:
 

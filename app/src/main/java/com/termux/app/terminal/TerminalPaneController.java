@@ -340,7 +340,11 @@ public class TerminalPaneController {
     public void showWindow(Window w) {
         if (w == null) return;
         mActiveWindow = w;
-        if (mMaximizedLeaf != null && findLeafIn(w.root, mMaximizedLeaf.session) == null) {
+        if (LAYOUT_STACK.equals(w.layoutPolicy) && w.active != null) {
+            // Stack lives in the foreground-presentation field, not the tree, so re-entering a
+            // stacked window must re-establish it or the policy silently shows every pane.
+            mMaximizedLeaf = w.active;
+        } else if (mMaximizedLeaf != null && findLeafIn(w.root, mMaximizedLeaf.session) == null) {
             mMaximizedLeaf = null;
         }
         render();

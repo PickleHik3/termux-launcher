@@ -424,12 +424,9 @@
     <string name="onboarding_shell_code">~/setup-shell  # choose tmux, btop, or both</string>
     <string name="onboarding_shell_bullet_1">Start with the launcher first; the shell makeover is optional.</string>
     <string name="onboarding_shell_bullet_2">Use the repo examples as a safe base, then add your own aliases locally.</string>
-    <string name="onboarding_shell_bullet_3">Run launcherctl update-scripts after app updates without replacing your dotfiles.</string>
 
     <string name="onboarding_bridge_eyebrow">SHELL + ANDROID</string>
     <string name="onboarding_bridge_title">Turn launcher actions into commands</string>
-    <string name="onboarding_bridge_body">launcherctl is the authenticated bridge between your shell and Android. Use it directly, bind it to tmux keys, or call it from scripts and agents.</string>
-    <string name="onboarding_bridge_code">launcherctl launch maps</string>
     <string name="onboarding_bridge_bullet_1">Launch apps and inspect CPU, memory, battery, thermal, and storage.</string>
     <string name="onboarding_bridge_bullet_2">Read current media and notifications after granting listener access.</string>
     <string name="onboarding_bridge_bullet_3">Use the local API, agent tools, or MCP bridge for automations.</string>
@@ -550,6 +547,11 @@
                 <string name="termux_top_pane_clock_style_lcd">LCD</string>
                 <string name="termux_top_pane_clock_style_minimal">Minimal</string>
                 <string name="termux_top_pane_clock_style_led">LED matrix</string>
+                <string name="termux_top_pane_clock_style_tape">Tape</string>
+                <string name="termux_top_pane_clock_style_slab">Slab</string>
+                <!-- Toggle-group labels: six faces have to share one row. -->
+                <string name="termux_top_pane_clock_style_minimal_short">Min</string>
+                <string name="termux_top_pane_clock_style_led_short">LED</string>
 
             <!-- Keyboard Category -->
             <string name="termux_keyboard_header">Keyboard</string>
@@ -941,6 +943,9 @@
         <string name="termux_ai_mnn_runtime_pending">MNN runtime is not available in this APK yet.</string>
         <string name="termux_ai_mnn_unsupported_reason_title">Unsupported reason</string>
         <string name="termux_ai_mnn_unsupported_reason_summary">This build does not include the native MNN runtime yet</string>
+        <string name="termux_ai_auth_required_title">Require API token</string>
+        <string name="termux_ai_auth_required_summary_on">Requests must send the bearer token. Recommended.</string>
+        <string name="termux_ai_auth_required_summary_off">Localhost requests are accepted without a token. LAN mode always requires the token.</string>
         <string name="termux_ai_lan_enabled_title">LAN access</string>
         <string name="termux_ai_lan_enabled_summary_off">Localhost only (127.0.0.1)</string>
         <string name="termux_ai_lan_enabled_summary_on">LAN access enabled. Bearer token required for all requests.</string>
@@ -1104,21 +1109,6 @@
                 <string name="termux_app_launcher_reset_usage_ranking_confirm_title">Reset ranking?</string>
                 <string name="termux_app_launcher_reset_usage_ranking_confirm_message">This will clear app usage ranking for A-Z launch suggestions.</string>
                 <string name="termux_app_launcher_reset_usage_ranking_done">Adaptive A-Z ranking reset</string>
-                <string name="launcherctl_mcp_web_header">Agent web search</string>
-                <string name="launcherctl_mcp_web_provider_title">Web search provider</string>
-                <string name="launcherctl_mcp_web_provider_summary">Generate a LauncherCtl MCP preset for grounded web search tools.</string>
-                <string name="launcherctl_mcp_web_provider_off">Off</string>
-                <string name="launcherctl_mcp_web_provider_brave">Brave Search</string>
-                <string name="launcherctl_mcp_web_provider_searxng">SearXNG</string>
-                <string name="launcherctl_mcp_brave_api_key_title">Brave Search API key</string>
-                <string name="launcherctl_mcp_brave_api_key_summary">Stored in app preferences and injected into the MCP server environment.</string>
-                <string name="launcherctl_mcp_searxng_url_title">SearXNG URL</string>
-                <string name="launcherctl_mcp_searxng_url_summary">Your SearXNG instance URL, for example https://search.example.com.</string>
-                <string name="launcherctl_mcp_searxng_api_key_title">SearXNG API key</string>
-                <string name="launcherctl_mcp_searxng_api_key_summary">Optional. Only needed for instances that require an API key.</string>
-                <string name="launcherctl_mcp_secret_set">Configured</string>
-                <string name="launcherctl_mcp_secret_missing">Not configured</string>
-                <string name="launcherctl_mcp_config_written">MCP preset updated</string>
                 
             <!-- Sessions Category -->
             <string name="termux_sessions_header">Termux Sessions Menu</string>

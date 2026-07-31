@@ -626,8 +626,16 @@ public final class TerminalRenderer {
         configureFont(bold, italic, symbolTypeface);
         // Measure the same shaped run that Canvas will draw. Per-code-point measureText() cannot
         // account for ligatures, Indic conjuncts, Arabic joining, or ZWJ emoji continuations.
-        mes = mTextPaint.getTextRunAdvances(text, startCharIndex, runWidthChars,
-            startCharIndex, runWidthChars, false, null, 0);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            mes = mTextPaint.getTextRunAdvances(text, startCharIndex, runWidthChars,
+                startCharIndex, runWidthChars, false, null, 0);
+        } else {
+            // Pre-29 the char[] overload is a non-SDK interface; getRunAdvance (API 23) measures
+            // the same shaped run when no per-glyph advances are needed.
+            mes = mTextPaint.getRunAdvance(text, startCharIndex, startCharIndex + runWidthChars,
+                startCharIndex, startCharIndex + runWidthChars, false,
+                startCharIndex + runWidthChars);
+        }
         if (!(mes > 0f)) mes = runWidthColumns * fontWidth;
         final long resolvedColors = resolveRunColors(textStyle, palette, boldWithBright, reverseVideo);
         int foreColor = (int) (resolvedColors >>> 32);

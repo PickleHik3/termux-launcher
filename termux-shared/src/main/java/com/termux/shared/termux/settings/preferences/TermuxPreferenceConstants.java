@@ -447,6 +447,8 @@ public final class TermuxPreferenceConstants {
         public static final String TOP_PANE_CLOCK_STYLE_LCD = "lcd";
         public static final String TOP_PANE_CLOCK_STYLE_MINIMAL = "minimal";
         public static final String TOP_PANE_CLOCK_STYLE_LED = "led";
+        public static final String TOP_PANE_CLOCK_STYLE_TAPE = "tape";
+        public static final String TOP_PANE_CLOCK_STYLE_SLAB = "slab";
 
         public static final String DEFAULT_TOP_PANE_CLOCK_STYLE = TOP_PANE_CLOCK_STYLE_FLIP;
 

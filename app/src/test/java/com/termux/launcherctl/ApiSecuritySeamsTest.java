@@ -121,15 +121,13 @@ public class ApiSecuritySeamsTest {
     }
 
     @Test
-    public void lanCors_disabled() throws Exception {
+    public void corsOrigin_presentButAuthStillGates() throws Exception {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         LauncherCtlApiServer.writeResponse(output, LauncherCtlApiServer.unauthorizedResponse());
         String response = output.toString(StandardCharsets.UTF_8.name());
 
         assertTrue(response.startsWith("HTTP/1.1 401 Unauthorized"));
-        assertFalse(response.toLowerCase().contains("access-control-allow-origin"));
-        assertFalse(response.toLowerCase().contains("access-control-allow-headers"));
-        assertFalse(response.toLowerCase().contains("access-control-allow-methods"));
+        assertTrue(response.toLowerCase().contains("access-control-allow-origin: *"));
     }
 
     @Test

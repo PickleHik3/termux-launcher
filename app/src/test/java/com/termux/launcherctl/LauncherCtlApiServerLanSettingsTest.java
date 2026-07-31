@@ -71,13 +71,13 @@ public class LauncherCtlApiServerLanSettingsTest {
     }
 
     @Test
-    public void unauthorizedResponse_localhostModeReturns401WithoutCorsHeaders() throws Exception {
-        assertUnauthorizedResponseHasNoCors(TaiSettings.BIND_MODE_LOCALHOST);
+    public void unauthorizedResponse_localhostModeReturns401WithCorsOrigin() throws Exception {
+        assertUnauthorizedResponseHasCorsOrigin(TaiSettings.BIND_MODE_LOCALHOST);
     }
 
     @Test
-    public void unauthorizedResponse_lanModeReturns401WithoutCorsHeaders() throws Exception {
-        assertUnauthorizedResponseHasNoCors(TaiSettings.BIND_MODE_LAN);
+    public void unauthorizedResponse_lanModeReturns401WithCorsOrigin() throws Exception {
+        assertUnauthorizedResponseHasCorsOrigin(TaiSettings.BIND_MODE_LAN);
     }
 
     private static TaiSettings freshSettings() {
@@ -86,7 +86,11 @@ public class LauncherCtlApiServerLanSettingsTest {
         return new TaiSettings(context);
     }
 
-    private static void assertUnauthorizedResponseHasNoCors(String bindMode) throws Exception {
+    /**
+     * Browser OpenAI clients need CORS, so every response carries the allow-origin
+     * header; the bearer token (mandatory on LAN) is the access-control layer.
+     */
+    private static void assertUnauthorizedResponseHasCorsOrigin(String bindMode) throws Exception {
         assertFalse(LauncherCtlApiServer.isAuthorized("1234567890abcdef", null));
         assertTrue(LauncherCtlApiServer.bindAddressForMode(bindMode).length() > 0);
 
@@ -100,8 +104,6 @@ public class LauncherCtlApiServerLanSettingsTest {
         JSONObject json = new JSONObject(body);
         assertEquals("unauthorized", json.getJSONObject("error").getString("code"));
         assertEquals("unauthorized", json.getJSONObject("tai").getString("error"));
-        assertFalse(response.toLowerCase().contains("access-control-allow-origin"));
-        assertFalse(response.toLowerCase().contains("access-control-allow-headers"));
-        assertFalse(response.toLowerCase().contains("access-control-allow-methods"));
+        assertTrue(response.toLowerCase().contains("access-control-allow-origin: *"));
     }
 }

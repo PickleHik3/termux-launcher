@@ -24,11 +24,14 @@ public final class SessionBrowserModel {
     public static final class Window {
         public final int index;
         public final boolean current;
+        /** Index into {@link #panes} of the focused pane; 0 when unknown. */
+        public final int activePane;
         @NonNull public final List<Pane> panes;
 
-        public Window(int index, boolean current, @NonNull List<Pane> panes) {
+        public Window(int index, boolean current, int activePane, @NonNull List<Pane> panes) {
             this.index = index;
             this.current = current;
+            this.activePane = activePane;
             this.panes = Collections.unmodifiableList(new ArrayList<>(panes));
         }
     }

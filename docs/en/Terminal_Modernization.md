@@ -183,57 +183,41 @@ digits, spaces, `_`, `-`, or `.`. Omit the `.json` suffix.
 `replace` validates and creates the replacement terminals before removing the old hierarchy. It is
 still destructive and should only be used after saving anything important.
 
-## Run terminal actions from the shell
+## Terminal actions and the palette
 
-Terminal commands share the LauncherCtl registry used by the palette and agents. Open Termux
-Launcher once, then inspect the live schemas:
+Terminal commands share the LauncherCtl registry used by the command palette, the action sheet, and
+key bindings. Remote execution over HTTP was removed together with the agent endpoints; the local
+API now serves model inference only. Workspace tools (`workspace.save`, `workspace.load`,
+`workspace.list`, `workspace.delete`) and the parameterized pane actions (`pane.layout`,
+`pane.move_to_edge`) remain reachable from custom key bindings.
 
-```sh
-launcherctl status
-launcherctl tools
-```
+## Configuration files that ship with the app
 
-The current `launcherctl` wrapper does not have a generic `execute` subcommand. This helper safely
-calls the authenticated local endpoint and accepts the tool arguments as JSON:
+The launcher installs its own configuration examples, so nothing has to be written from scratch:
 
-```sh
-launcher_tool() {
-    tool=$1
-    args=${2-}
-    [ -n "$args" ] || args='{}'
-    base=$(sed -n '1p' ~/.launcherctl/endpoint) || return
-    token=$(cat ~/.launcherctl/token) || return
-    payload=$(jq -cn --arg tool "$tool" --argjson arguments "$args" \
-        '{tool: $tool, arguments: $arguments, confirm: true}') || return
-    curl -fsS -X POST \
-        -H "Authorization: Bearer $token" \
-        -H 'Content-Type: application/json' \
-        --data "$payload" \
-        "$base/v1/agent/execute"
-}
-```
+| Path | Seeded | Purpose |
+|---|---|---|
+| `~/.termux/termux-launcher-bindings.conf` | On install, only when absent | Bindings, chords, modal keymaps, launching apps from a chord |
+| `~/.termux/fonts.conf` | On install, only when absent | Faces, symbol maps, shaping, features, axes, cell metrics |
+| `~/.termux/keyboard/layout.xml` | Never — copy it yourself | In-app keyboard layout and space-bar swipe slots |
+| `~/.termux/launcher/examples/` | Refreshed at every app start | Pristine copies of all of the above, plus a `README.md` |
 
-Install `jq` and `curl` first if needed: `pkg install jq curl`. Examples:
+The two seeded files arrive with every directive commented out, so a fresh install behaves exactly as
+it did before they existed — uncomment what you want. They are written only when missing, so app
+updates never overwrite your edits. To start over, copy the file back from
+`~/.termux/launcher/examples/`.
+
+The keyboard layout is not seeded, because the moment `~/.termux/keyboard/layout.xml` exists it
+replaces the bundled layout. Opt in explicitly:
 
 ```sh
-launcher_tool pane.layout '{"layout":"grid"}'
-launcher_tool pane.move_to_edge '{"edge":"left"}'
-launcher_tool pane.equalize
-launcher_tool pane.rotate '{"direction":"counterclockwise"}'
-launcher_tool pane.next_layout
-
-launcher_tool workspace.save '{"name":"project","overwrite":true}'
-launcher_tool workspace.list
-launcher_tool workspace.load '{"name":"project","mode":"append"}'
-launcher_tool workspace.delete '{"name":"project"}'
-
-launcher_tool terminal.state
-launcher_tool terminal.state '{"resetPerformance":true}'
+mkdir -p ~/.termux/keyboard
+cp ~/.termux/launcher/examples/keyboard-layout.xml ~/.termux/keyboard/layout.xml
+termux-reload-settings
 ```
 
-The helper passes confirmation for every request. Use only tool names and arguments you have
-reviewed; medium- and high-risk actions include paste, sharing, closing terminals, command-enabled
-workspace loading, and persistent appearance changes. Treat `~/.launcherctl/token` like a password.
+Nothing under `~/.termux/launcher/examples/` is read as configuration; edit the live files instead.
+Files you add there yourself are left alone, but one named like a shipped example is replaced.
 
 ## Customize keyboard bindings
 
@@ -320,8 +304,8 @@ any key slot can carry a launcher action written `tool:<registry id>` — option
 
 Slots are `key1` NW, `key2` NE, `key3` SW, `key4` SE, `key5` W, `key6` E, `key7` N, `key8` S — the
 keyboard's own eight swipe directions, unchanged. A `tool:` key reaches the same dispatcher as a
-keybind, a palette row and `POST /v1/agent/execute`, so every tool in the registry is available on
-every slot with no per-tool code and no separate binding syntax.
+keybind and a palette row, so every tool in the registry is available on every slot with no
+per-tool code and no separate binding syntax.
 
 The shipped defaults are in `inapp-keyboard/src/main/res/xml/bottom_row.xml`; the north swipe takes
 over the keyboard's layout-switch gesture and `switch_forward` is dropped, while plain east/west stay
@@ -545,12 +529,10 @@ telemetry.
 Start a new shell after sourcing the Bash or zsh integration. fish must be version 4 or newer for
 its built-in marks. Existing scrollback created before integration was enabled has no marks.
 
-### LauncherCtl cannot execute an action
+### A palette action is greyed out or does nothing
 
-Open Termux Launcher once, run `launcherctl status`, and verify that
-`~/.launcherctl/endpoint` and `~/.launcherctl/token` exist. Use `launcherctl tools` for the exact
-schema shipped by the installed APK. A `409` response usually means the current state cannot perform
-the action, such as using a pane command in compatibility mode.
+Greyed-out rows show the reason inline (for example split panes disabled or no current session).
+Pane and window commands need split panes enabled; enable them in settings and retry.
 
 ## Current limitations
 

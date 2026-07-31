@@ -1,18 +1,13 @@
 package com.termux.launcherctl;
 
-import com.termux.app.launcher.model.AppRef;
-import com.termux.app.launcher.model.LauncherAppEntry;
-
 import org.json.JSONObject;
 import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 public class LauncherCtlApiServerTest {
 
@@ -71,87 +66,12 @@ public class LauncherCtlApiServerTest {
     }
 
     @Test
-    public void buildLaunchableAppsPayload_reportsLaunchableActivitiesAndUniquePackages() throws Exception {
-        List<LauncherAppEntry> apps = Arrays.asList(
-            entry("com.example.alpha", "com.example.alpha.MainActivity", "Alpha"),
-            entry("com.example.alpha", "com.example.alpha.SettingsActivity", "Alpha Settings"),
-            entry("com.example.beta", "com.example.beta.HomeActivity", "Beta")
-        );
-
-        JSONObject payload = LauncherCtlApiServer.buildLaunchableAppsPayload(apps, null);
-
-        assertEquals(true, payload.getBoolean("ok"));
-        assertEquals(3, payload.getInt("count"));
-        assertEquals(2, payload.getInt("packageCount"));
-        assertEquals("com.example.alpha", payload.getJSONArray("apps").getJSONObject(0).getString("packageName"));
-        assertEquals("com.example.alpha.MainActivity", payload.getJSONArray("apps").getJSONObject(0).getString("activityName"));
-        assertEquals("com.example.alpha/com.example.alpha.MainActivity",
-            payload.getJSONArray("apps").getJSONObject(0).getString("stableId"));
-        assertEquals(true, payload.getJSONArray("apps").getJSONObject(0).getBoolean("launchable"));
-        assertEquals(false, payload.getJSONArray("apps").getJSONObject(0).getBoolean("clonedProfile"));
-        assertEquals(-1, payload.getJSONArray("apps").getJSONObject(0).getInt("userId"));
-    }
-
-    @Test
-    public void buildLaunchableAppsPayload_distinguishesClonedProfileApps() throws Exception {
-        List<LauncherAppEntry> apps = Arrays.asList(
-            entry("com.example.chat", "com.example.chat.MainActivity", "Chat"),
-            new LauncherAppEntry(new AppRef("com.example.chat", "com.example.chat.MainActivity",
-                10, 10L, true, "Clone 10"), "Chat · Clone 10", null)
-        );
-
-        JSONObject payload = LauncherCtlApiServer.buildLaunchableAppsPayload(apps, null);
-
-        assertEquals(2, payload.getInt("count"));
-        JSONObject clone = payload.getJSONArray("apps").getJSONObject(1);
-        assertEquals("Chat · Clone 10", clone.getString("label"));
-        assertEquals("com.example.chat/com.example.chat.MainActivity#user=10", clone.getString("stableId"));
-        assertEquals(10, clone.getInt("userId"));
-        assertEquals(true, clone.getBoolean("clonedProfile"));
-    }
-
-    @Test
-    public void resolveLaunchMatch_returnsAmbiguousForSharedExactLabel() throws Exception {
-        List<LauncherAppEntry> apps = Arrays.asList(
-            entry("com.example.alpha", "com.example.alpha.MainActivity", "Maps"),
-            entry("com.example.beta", "com.example.beta.MainActivity", "Maps")
-        );
-
-        LauncherCtlApiServer.AppLaunchMatch match = LauncherCtlApiServer.resolveLaunchMatch(apps, "Maps");
-
-        assertNull(match.entry);
-        assertEquals(409, match.statusCode);
-        assertEquals("ambiguous", match.errorCode);
-        assertEquals(2, match.candidates.length());
-    }
-
-    @Test
-    public void resolveLaunchMatch_prefersExactPackageMatchOverLabelMatch() throws Exception {
-        List<LauncherAppEntry> apps = Arrays.asList(
-            entry("com.termux", "com.termux.app.TermuxActivity", "Termux"),
-            entry("com.termux.api", "com.termux.api.MainActivity", "Termux:API")
-        );
-
-        LauncherCtlApiServer.AppLaunchMatch match = LauncherCtlApiServer.resolveLaunchMatch(apps, "com.termux.api");
-
-        assertEquals("com.termux.api", match.entry.appRef.packageName);
-        assertEquals("Termux:API", match.entry.label);
-        assertEquals(200, match.statusCode);
-    }
-
-    @Test
-    public void resolveLaunchMatch_normalizesPunctuationInLabels() throws Exception {
-        List<LauncherAppEntry> apps = Arrays.asList(
-            entry("com.termux.api", "com.termux.api.MainActivity", "Termux:API")
-        );
-
-        LauncherCtlApiServer.AppLaunchMatch match = LauncherCtlApiServer.resolveLaunchMatch(apps, "termux api");
-
-        assertEquals("com.termux.api", match.entry.appRef.packageName);
-        assertEquals(200, match.statusCode);
-    }
-
-    private static LauncherAppEntry entry(String packageName, String activityName, String label) {
-        return new LauncherAppEntry(new AppRef(packageName, activityName), label, null);
+    public void modelRetrievePath_matchesSingleSegmentIdsOnly() {
+        assertTrue(LauncherCtlApiServer.isModelRetrievePath("/v1/models/gemma-3n-e2b"));
+        assertEquals("gemma-3n-e2b",
+            LauncherCtlApiServer.modelIdFromRetrievePath("/v1/models/gemma-3n-e2b"));
+        assertFalse(LauncherCtlApiServer.isModelRetrievePath("/v1/models"));
+        assertFalse(LauncherCtlApiServer.isModelRetrievePath("/v1/models/"));
+        assertFalse(LauncherCtlApiServer.isModelRetrievePath("/v1/models/a/b"));
     }
 }

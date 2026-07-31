@@ -23,9 +23,9 @@ import java.util.Map;
  * {@code defaultBindings} declared in {@link LauncherToolRegistry}.
  *
  * <p>This replaces the hard-coded multiplexer {@code switch} and the legacy
- * {@code Ctrl+Alt}+character chain, so a keystroke, a palette entry, and
- * {@code /v1/agent/execute} all name the same action. The registry is the single
- * source of truth for which stroke means what.
+ * {@code Ctrl+Alt}+character chain, so a keystroke and a palette entry name
+ * the same action. The registry is the single source of truth for which stroke
+ * means what.
  *
  * <p>Strokes match on <b>key code</b>, not on the produced character, which keeps
  * binds on physical US key positions and reachable from non-Latin layouts. The

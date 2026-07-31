@@ -830,21 +830,23 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public String getTopPaneClockStyle() {
         String value = SharedPreferenceUtils.getString(mSharedPreferences,
             TERMUX_APP.KEY_TOP_PANE_CLOCK_STYLE, TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_STYLE, true);
-        if (TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD.equals(value)
-            || TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL.equals(value)
-            || TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED.equals(value)) {
-            return value;
-        }
-        return TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP;
+        return normalizeTopPaneClockStyle(value);
     }
 
     public void setTopPaneClockStyle(String value) {
-        String normalized = TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD.equals(value)
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_TOP_PANE_CLOCK_STYLE,
+            normalizeTopPaneClockStyle(value), false);
+    }
+
+    private static String normalizeTopPaneClockStyle(String value) {
+        if (TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD.equals(value)
             || TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL.equals(value)
             || TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED.equals(value)
-            ? value : TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP;
-        SharedPreferenceUtils.setString(mSharedPreferences,
-            TERMUX_APP.KEY_TOP_PANE_CLOCK_STYLE, normalized, false);
+            || TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(value)
+            || TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB.equals(value)) {
+            return value;
+        }
+        return TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP;
     }
 
     public boolean isTopPaneClockAmPmEnabled() {

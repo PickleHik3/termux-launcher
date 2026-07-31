@@ -85,8 +85,9 @@ Before the tmux theme will use wallpaper-derived colors:
   - Open Settings -> Appearance in Termux Launcher.
   - Keep Terminal Material colors on (it is enabled by default).
   - Start Shizuku for launcher resource widgets such as CPU and RAM.
-    In plain Termux without Termux Launcher, the status helper can fall back
-    to rish, but that path is less efficient than launcherctl.
+    The status helper samples /proc/stat and /proc/meminfo directly through
+    a Shizuku rish shell, with a short cache so it does not fork rish on
+    every tmux refresh.
 
 Before the Shizuku btop helper can be installed:
   - Put rish in your PATH and grant it Shizuku access.

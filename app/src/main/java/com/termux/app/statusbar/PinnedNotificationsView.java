@@ -341,19 +341,26 @@ public final class PinnedNotificationsView extends View {
         }
     }
 
-    /** The visual glyphs are 14-20dp; their hit rects grow to 40dp. */
+    /** The visual glyphs are 14-20dp; hit rects grow to 40dp, nearest center wins on overlap. */
     private int hitDismiss(float x, float y) {
         float minimum = dp(40f);
+        int nearest = -1;
+        float nearestDistance = Float.MAX_VALUE;
         for (int i = 0; i < mDismissRects.size(); i++) {
             Rect rect = mDismissRects.get(i);
             float growX = Math.max(0f, (minimum - rect.width()) / 2f);
             float growY = Math.max(0f, (minimum - rect.height()) / 2f);
-            if (x >= rect.left - growX && x <= rect.right + growX
-                && y >= rect.top - growY && y <= rect.bottom + growY) {
-                return i;
+            if (x < rect.left - growX || x > rect.right + growX
+                || y < rect.top - growY || y > rect.bottom + growY) continue;
+            float dx = x - rect.exactCenterX();
+            float dy = y - rect.exactCenterY();
+            float distance = dx * dx + dy * dy;
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearest = i;
             }
         }
-        return -1;
+        return nearest;
     }
 
     private static Typeface mediumTypeface() {

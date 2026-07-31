@@ -440,8 +440,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      * Runs a {@code tool:<id>} key from the in-app keyboard layout.
      *
      * <p>The layout file names the registry tool directly, so a key slot reaches the same
-     * dispatcher a keybind, a palette row and {@code /v1/agent/execute} do — there is no
-     * keyboard-side table of supported actions to extend.
+     * dispatcher a keybind and a palette row do — there is no keyboard-side table of
+     * supported actions to extend.
      */
     public void runLauncherTool(@NonNull String toolId) {
         TerminalActionDispatcher dispatcher = TerminalActionDispatcher.getInstance();

@@ -39,6 +39,7 @@ public final class TaiSettings {
     public static final String KEY_API_PORT = "tai_api_port";
     public static final String KEY_API_TOKEN = "tai_api_token";
     public static final String KEY_API_BIND_MODE = "tai_api_bind_mode";
+    public static final String KEY_API_AUTH_REQUIRED = "tai_api_auth_required";
     public static final String KEY_OPENAI_AUTO_LOAD = "tai_openai_auto_load";
 
     public static final String BIND_MODE_LOCALHOST = "localhost";
@@ -243,6 +244,18 @@ public final class TaiSettings {
         int port = RANDOM_API_PORT_MIN + random.nextInt(RANDOM_API_PORT_RANGE);
         setApiPort(port);
         return port;
+    }
+
+    /**
+     * Whether API requests must carry the bearer token. LAN bind mode always enforces
+     * authentication regardless of this preference; the toggle only affects loopback.
+     */
+    public boolean isApiAuthRequired() {
+        return preferences.getBoolean(KEY_API_AUTH_REQUIRED, true);
+    }
+
+    public void setApiAuthRequired(boolean required) {
+        preferences.edit().putBoolean(KEY_API_AUTH_REQUIRED, required).apply();
     }
 
     @NonNull

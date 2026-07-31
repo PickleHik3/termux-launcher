@@ -52,7 +52,6 @@ import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 import com.termux.ai.TaiSettings;
 import com.termux.launcherctl.LauncherCtlApiServer;
-import com.termux.launcherctl.LauncherCtlMcpPreferences;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -72,10 +71,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
     private static final String MODEL_ROW_PREFIX = "tai_model_row_";
     private static final String IMPORT_BACKEND_LITERT = TaiModelSpec.BACKEND_LITERT_LM;
     private static final String IMPORT_BACKEND_MNN = TaiModelSpec.BACKEND_MNN_LLM;
-    private static final String KEY_MCP_PROVIDER = LauncherCtlMcpPreferences.KEY_WEB_PROVIDER;
-    private static final String KEY_MCP_BRAVE_API_KEY = LauncherCtlMcpPreferences.KEY_BRAVE_API_KEY;
-    private static final String KEY_MCP_SEARXNG_URL = LauncherCtlMcpPreferences.KEY_SEARXNG_URL;
-    private static final String KEY_MCP_SEARXNG_API_KEY = LauncherCtlMcpPreferences.KEY_SEARXNG_API_KEY;
 
     private static final class OverrideSpec {
         final String key;
@@ -177,11 +172,11 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         configureRuntimeControls(context);
         configureOverrides(context);
         configureEndpointPreferences(context);
-        configureMcpWebPreferences(context);
         configureModelManager(context);
         configureHuggingFaceToken();
         configureAdvancedSection(context);
         configureLanToggle(context);
+        configureAuthToggle(context);
     }
 
     @Override
@@ -227,7 +222,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         Context context = getContext();
         if (context != null) {
             refreshTaiPage(context);
-            updateMcpWebPreferences(context);
             handler.postDelayed(refreshRuntimeRunnable, 2000L);
         }
     }
@@ -394,80 +388,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 openParameterScreen(null);
                 return true;
             });
-        }
-    }
-
-    private void configureMcpWebPreferences(@NonNull Context context) {
-        ListPreference provider = findPreference(KEY_MCP_PROVIDER);
-        if (provider != null) {
-            provider.setValue(LauncherCtlMcpPreferences.getWebProvider(context));
-            provider.setSummaryProvider(ListPreference.SimpleSummaryProvider.getInstance());
-            provider.setOnPreferenceChangeListener((preference, newValue) -> {
-                LauncherCtlMcpPreferences.putString(context, KEY_MCP_PROVIDER, String.valueOf(newValue));
-                LauncherCtlMcpPreferences.writePresetConfig(context);
-                updateMcpWebPreferences(context, String.valueOf(newValue));
-                Toast.makeText(context, R.string.launcherctl_mcp_config_written, Toast.LENGTH_SHORT).show();
-                return true;
-            });
-        }
-        configureMcpTextPreference(context, KEY_MCP_BRAVE_API_KEY, true);
-        configureMcpTextPreference(context, KEY_MCP_SEARXNG_URL, false);
-        configureMcpTextPreference(context, KEY_MCP_SEARXNG_API_KEY, true);
-        updateMcpWebPreferences(context);
-    }
-
-    private void configureMcpTextPreference(@NonNull Context context, @NonNull String key, boolean secret) {
-        EditTextPreference preference = findPreference(key);
-        if (preference == null) return;
-        preference.setOnBindEditTextListener(editText ->
-            editText.setText(LauncherCtlMcpPreferences.getSecret(context, key)));
-        preference.setOnPreferenceChangeListener((pref, newValue) -> {
-            LauncherCtlMcpPreferences.putString(context, key, String.valueOf(newValue));
-            LauncherCtlMcpPreferences.writePresetConfig(context);
-            updateMcpTextSummary(context, preference, key, secret);
-            Toast.makeText(context, R.string.launcherctl_mcp_config_written, Toast.LENGTH_SHORT).show();
-            return true;
-        });
-        updateMcpTextSummary(context, preference, key, secret);
-    }
-
-    private void updateMcpWebPreferences(@NonNull Context context) {
-        updateMcpWebPreferences(context, LauncherCtlMcpPreferences.getWebProvider(context));
-    }
-
-    private void updateMcpWebPreferences(@NonNull Context context, @NonNull String provider) {
-        setPreferenceVisible(KEY_MCP_BRAVE_API_KEY, LauncherCtlMcpPreferences.PROVIDER_BRAVE.equals(provider));
-        boolean searxng = LauncherCtlMcpPreferences.PROVIDER_SEARXNG.equals(provider);
-        setPreferenceVisible(KEY_MCP_SEARXNG_URL, searxng);
-        setPreferenceVisible(KEY_MCP_SEARXNG_API_KEY, searxng);
-        updateMcpTextSummary(context, findPreference(KEY_MCP_BRAVE_API_KEY), KEY_MCP_BRAVE_API_KEY, true);
-        updateMcpTextSummary(context, findPreference(KEY_MCP_SEARXNG_URL), KEY_MCP_SEARXNG_URL, false);
-        updateMcpTextSummary(context, findPreference(KEY_MCP_SEARXNG_API_KEY), KEY_MCP_SEARXNG_API_KEY, true);
-    }
-
-    private void setPreferenceVisible(@NonNull String key, boolean visible) {
-        Preference preference = findPreference(key);
-        if (preference != null) {
-            preference.setVisible(visible);
-        }
-    }
-
-    private void updateMcpTextSummary(@NonNull Context context,
-                                      @Nullable Preference preference,
-                                      @NonNull String key,
-                                      boolean secret) {
-        if (preference == null) return;
-        String value = LauncherCtlMcpPreferences.getSecret(context, key);
-        if (secret) {
-            preference.setSummary(value.isEmpty()
-                ? R.string.launcherctl_mcp_secret_missing
-                : R.string.launcherctl_mcp_secret_set);
-        } else if (value.isEmpty()) {
-            if (KEY_MCP_SEARXNG_URL.equals(key)) {
-                preference.setSummary(R.string.launcherctl_mcp_searxng_url_summary);
-            }
-        } else {
-            preference.setSummary(value);
         }
     }
 
@@ -728,6 +648,22 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         if (lanToggle == null) return;
         String bindMode = new TaiSettings(context).getApiBindMode();
         lanToggle.setChecked(TaiSettings.BIND_MODE_LAN.equals(bindMode));
+    }
+
+    private void configureAuthToggle(Context context) {
+        SwitchPreferenceCompat authToggle = findPreference(TaiSettings.KEY_API_AUTH_REQUIRED);
+        if (authToggle == null) return;
+        authToggle.setChecked(new TaiSettings(context).isApiAuthRequired());
+        authToggle.setOnPreferenceChangeListener((preference, newValue) -> {
+            new TaiSettings(context).setApiAuthRequired((Boolean) newValue);
+            try {
+                LauncherCtlApiServer.getInstance().applyEndpointSettings(context);
+                refreshEndpointPreferences(context);
+            } catch (JSONException e) {
+                Toast.makeText(context, R.string.termux_ai_endpoint_update_failed, Toast.LENGTH_LONG).show();
+            }
+            return true;
+        });
     }
 
     private void showLanWarningDialog(Context context, SwitchPreferenceCompat lanToggle) {

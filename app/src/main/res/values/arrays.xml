@@ -43,22 +43,16 @@
         <item>@string/termux_top_pane_clock_style_lcd</item>
         <item>@string/termux_top_pane_clock_style_minimal</item>
         <item>@string/termux_top_pane_clock_style_led</item>
+        <item>@string/termux_top_pane_clock_style_tape</item>
+        <item>@string/termux_top_pane_clock_style_slab</item>
     </string-array>
     <string-array name="termux_top_pane_clock_style_values">
         <item>flip</item>
         <item>lcd</item>
         <item>minimal</item>
         <item>led</item>
-    </string-array>
-    <string-array name="launcherctl_mcp_web_provider_entries">
-        <item>@string/launcherctl_mcp_web_provider_off</item>
-        <item>@string/launcherctl_mcp_web_provider_brave</item>
-        <item>@string/launcherctl_mcp_web_provider_searxng</item>
-    </string-array>
-    <string-array name="launcherctl_mcp_web_provider_values">
-        <item>off</item>
-        <item>brave</item>
-        <item>searxng</item>
+        <item>tape</item>
+        <item>slab</item>
     </string-array>
     <string-array name="termux_ai_model_entries">
         <item>Gemma-4-E2B-it</item>

@@ -36,8 +36,8 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <p>Terminal actions differ from the other tools in {@link LauncherToolRegistry}:
  * they need a foreground Activity and must run on the main thread, while callers
- * ({@code /v1/agent/execute}, the MCP bridge, the CLI) arrive on arbitrary
- * background threads. This class is the single seam between the two.
+ * may arrive on arbitrary background threads. This class is the single seam
+ * between the two.
  *
  * <p>The Activity is held weakly and attached only between
  * {@code onResume} and {@code onStop}. When nothing is attached, callers get a

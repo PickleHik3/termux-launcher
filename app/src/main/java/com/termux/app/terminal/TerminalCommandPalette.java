@@ -32,8 +32,8 @@ import java.util.Map;
  * one place and stays unit-testable without inflating anything.
  *
  * <p>Entries come from {@link LauncherToolRegistry#getUiToolsByCategory()} and run through
- * {@link TerminalActionDispatcher}, so a palette selection, a keystroke, and
- * {@code /v1/agent/execute} share one execution path.
+ * {@link TerminalActionDispatcher}, so a palette selection and a keystroke
+ * share one execution path.
  *
  * <p>Which tools appear, and how:
  *

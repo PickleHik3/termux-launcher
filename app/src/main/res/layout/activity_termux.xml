@@ -113,12 +113,21 @@
                     <!-- Stable modular slot: clocks render only here. A later widget editor can
                          resize/reorder this host without coupling widget code to the pane. The slot
                          owns the clock / media / pinned-notification contention; the pane height
-                         never changes, content compresses instead. -->
+                         never changes, content compresses instead.
+
+                         Elevated above every glass view in this pane (backdrop, blur, surface) so
+                         the clock is excluded from the dock's surface tuning: opacity, grain and
+                         blur are the slab *behind* it and can never be composited over it, whatever
+                         elevation a future glass pass gives those siblings (see the palette-glass
+                         regression where setElevation reordered siblings, not just shadows).
+                         outlineProvider=none keeps the lift from casting a shadow of its own. -->
                     <com.termux.app.statusbar.TopPaneWidgetSlot
                         android:id="@+id/terminal_top_widget_area"
                         android:layout_width="match_parent"
                         android:layout_height="68dp"
                         android:layout_gravity="top"
+                        android:elevation="6dp"
+                        android:outlineProvider="none"
                         android:clipChildren="true"
                         android:clipToPadding="true">
 
@@ -1125,10 +1134,12 @@
                                 android:layout_weight="1"
                                 app:singleSelection="true"
                                 app:selectionRequired="true">
-                                <com.google.android.material.button.MaterialButton android:id="@+id/surface_tuning_status_clock_flip" style="?attr/materialButtonOutlinedStyle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="34dp" android:insetTop="0dp" android:insetBottom="0dp" android:minWidth="0dp" android:minHeight="34dp" android:paddingLeft="2dp" android:paddingRight="2dp" android:text="@string/termux_top_pane_clock_style_flip" android:textSize="9sp" />
-                                <com.google.android.material.button.MaterialButton android:id="@+id/surface_tuning_status_clock_lcd" style="?attr/materialButtonOutlinedStyle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="34dp" android:insetTop="0dp" android:insetBottom="0dp" android:minWidth="0dp" android:minHeight="34dp" android:paddingLeft="2dp" android:paddingRight="2dp" android:text="@string/termux_top_pane_clock_style_lcd" android:textSize="9sp" />
-                                <com.google.android.material.button.MaterialButton android:id="@+id/surface_tuning_status_clock_minimal" style="?attr/materialButtonOutlinedStyle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="34dp" android:insetTop="0dp" android:insetBottom="0dp" android:minWidth="0dp" android:minHeight="34dp" android:paddingLeft="2dp" android:paddingRight="2dp" android:text="@string/termux_top_pane_clock_style_minimal" android:textSize="9sp" />
-                                <com.google.android.material.button.MaterialButton android:id="@+id/surface_tuning_status_clock_led" style="?attr/materialButtonOutlinedStyle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="34dp" android:insetTop="0dp" android:insetBottom="0dp" android:minWidth="0dp" android:minHeight="34dp" android:paddingLeft="2dp" android:paddingRight="2dp" android:text="@string/termux_top_pane_clock_style_led" android:textSize="9sp" />
+                                <com.google.android.material.button.MaterialButton android:id="@+id/surface_tuning_status_clock_flip" style="?attr/materialButtonOutlinedStyle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="34dp" android:insetTop="0dp" android:insetBottom="0dp" android:minWidth="0dp" android:minHeight="34dp" android:paddingLeft="1dp" android:paddingRight="1dp" android:text="@string/termux_top_pane_clock_style_flip" android:textSize="8sp" />
+                                <com.google.android.material.button.MaterialButton android:id="@+id/surface_tuning_status_clock_lcd" style="?attr/materialButtonOutlinedStyle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="34dp" android:insetTop="0dp" android:insetBottom="0dp" android:minWidth="0dp" android:minHeight="34dp" android:paddingLeft="1dp" android:paddingRight="1dp" android:text="@string/termux_top_pane_clock_style_lcd" android:textSize="8sp" />
+                                <com.google.android.material.button.MaterialButton android:id="@+id/surface_tuning_status_clock_minimal" style="?attr/materialButtonOutlinedStyle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="34dp" android:insetTop="0dp" android:insetBottom="0dp" android:minWidth="0dp" android:minHeight="34dp" android:paddingLeft="1dp" android:paddingRight="1dp" android:text="@string/termux_top_pane_clock_style_minimal_short" android:textSize="8sp" />
+                                <com.google.android.material.button.MaterialButton android:id="@+id/surface_tuning_status_clock_led" style="?attr/materialButtonOutlinedStyle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="34dp" android:insetTop="0dp" android:insetBottom="0dp" android:minWidth="0dp" android:minHeight="34dp" android:paddingLeft="1dp" android:paddingRight="1dp" android:text="@string/termux_top_pane_clock_style_led_short" android:textSize="8sp" />
+                                <com.google.android.material.button.MaterialButton android:id="@+id/surface_tuning_status_clock_tape" style="?attr/materialButtonOutlinedStyle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="34dp" android:insetTop="0dp" android:insetBottom="0dp" android:minWidth="0dp" android:minHeight="34dp" android:paddingLeft="1dp" android:paddingRight="1dp" android:text="@string/termux_top_pane_clock_style_tape" android:textSize="8sp" />
+                                <com.google.android.material.button.MaterialButton android:id="@+id/surface_tuning_status_clock_slab" style="?attr/materialButtonOutlinedStyle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="34dp" android:insetTop="0dp" android:insetBottom="0dp" android:minWidth="0dp" android:minHeight="34dp" android:paddingLeft="1dp" android:paddingRight="1dp" android:text="@string/termux_top_pane_clock_style_slab" android:textSize="8sp" />
                             </com.google.android.material.button.MaterialButtonToggleGroup>
                         </LinearLayout>
 

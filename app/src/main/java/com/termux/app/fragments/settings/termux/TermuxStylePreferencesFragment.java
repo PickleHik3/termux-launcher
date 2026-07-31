@@ -32,7 +32,6 @@ import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.settings.properties.TermuxSharedProperties;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
-import com.termux.launcherctl.LauncherCtlMcpPreferences;
 import java.io.File;
 import java.io.BufferedReader;
 import java.io.FileInputStream;
@@ -430,13 +429,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(mContext).invalidate();
                 scheduleTermuxActivityStylingSync(false);
                 break;
-            case LauncherCtlMcpPreferences.KEY_WEB_PROVIDER:
-            case LauncherCtlMcpPreferences.KEY_BRAVE_API_KEY:
-            case LauncherCtlMcpPreferences.KEY_SEARXNG_URL:
-            case LauncherCtlMcpPreferences.KEY_SEARXNG_API_KEY:
-                LauncherCtlMcpPreferences.putString(mContext, key, value);
-                LauncherCtlMcpPreferences.writePresetConfig(mContext);
-                break;
             case "app_launcher_bar_height":
                 mPreferences.setAppLauncherBarHeightScale(
                     TermuxStylePreferencesFragment.barHeightForPreset(
@@ -476,12 +468,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getAppLauncherIconPackPackage();
             case "app_launcher_pinned_icon_pack_package":
                 return mPreferences.getAppLauncherPinnedIconPackPackage();
-            case LauncherCtlMcpPreferences.KEY_BRAVE_API_KEY:
-            case LauncherCtlMcpPreferences.KEY_SEARXNG_URL:
-            case LauncherCtlMcpPreferences.KEY_SEARXNG_API_KEY:
-                return LauncherCtlMcpPreferences.getSecret(mContext, key);
-            case LauncherCtlMcpPreferences.KEY_WEB_PROVIDER:
-                return LauncherCtlMcpPreferences.getWebProvider(mContext);
             case "app_launcher_bar_height":
                 return Float.toString(mPreferences.getAppLauncherBarHeightScale());
             default:

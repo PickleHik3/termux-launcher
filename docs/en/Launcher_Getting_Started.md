@@ -3,7 +3,7 @@
 This page is the main setup guide for Termux Launcher. Start here, then use the smaller reference pages only when you need them:
 
 - [Illustrated web guide](https://picklehik3.github.io/termux-launcher-site/#wiki) for the current live screenshots and recordings.
-- [LauncherCtl](LauncherCtl_API.md) for launching apps and reading launcher data from the shell.
+- [LauncherCtl API](LauncherCtl_API.md) for the local OpenAI/Ollama-compatible AI endpoint and model management.
 - [Termux AI](Termux_AI.md) for the local on-device AI endpoint.
 - [Developer docs](Developer_Docs.md) for advanced API, runtime, helper-script, and security details.
 
@@ -82,30 +82,57 @@ diagnostics.
 
 Live wallpapers can disable dock blur. If you use two rows of Extra Keys, turn on compact dock spacing so the terminal has more room.
 
-## 4. Use LauncherCtl From the Shell
+### Change the terminal font
 
-`launcherctl` is installed by the app when the launcher session starts. It lets shell tools talk to the launcher.
+The simple way is unchanged from Termux: drop a font file at `~/.termux/font.ttf`, add
+`~/.termux/font-italic.ttf` if you want a real italic face, then run:
+
+```sh
+termux-reload-settings
+```
+
+[Termux:Styling](https://github.com/PickleHik3/termux-styling/releases) does the same thing with a
+picker instead of a file copy. Either route is all most setups need.
+
+For separate bold and italic files, Nerd Font icons on selected Unicode ranges, ligature control,
+OpenType features, or variable-font axes, write `~/.termux/fonts.conf` instead:
+
+```sh
+# Installed on first run with every directive commented out. Uncomment what you want:
+nano ~/.termux/fonts.conf
+
+# A pristine copy to compare against or restore from:
+ls ~/.termux/launcher/examples/fonts.conf
+```
+
+While `fonts.conf` has no active directives, `font.ttf` and Termux:Styling keep working exactly as
+before — the file only takes over the faces you actually set. Delete or rename it to go back.
+The [Modern terminal guide](Terminal_Modernization.md) documents every directive.
+
+## 4. Use the Local AI Endpoint From the Shell
+
+The `tai` command is installed by the app when the launcher session starts. It talks to the local OpenAI/Ollama-compatible AI endpoint and manages on-device models.
 
 Try:
 
 ```sh
-launcherctl status
-launcherctl apps
-launcherctl launch whatsapp
+tai status
+tai models
+tai runtime
 ```
 
 Useful commands:
 
 ```sh
-launcherctl resources
-launcherctl media
-launcherctl notifications
-launcherctl restart
-launcherctl update-scripts
-launcherctl token rotate
+tai preflight MODEL_ID
+tai load MODEL_ID
+tai unload
+tai keep-warm MODEL_ID --minutes 30
+tai cancel
+tai doctor
 ```
 
-Media and notification commands need Android notification listener access. For endpoint files, authentication, and scripting examples, see [LauncherCtl](LauncherCtl_API.md).
+For endpoint files, authentication, route tables, and scripting examples, see [LauncherCtl API](LauncherCtl_API.md).
 
 ## 5. Optional Guarded Shell and tmux Setup
 
@@ -154,19 +181,9 @@ The script asks what to install:
 
 The tmux plugin includes an `Alt + e` keybind reference. If you prefer manual setup, inspect the files in [`docs/en/examples`](examples/) and merge the parts you want into your own configuration after making backups.
 
-If you have already completed setup and later update the APK, refresh only the repo-owned helper scripts with:
+If you have already completed setup and later update the APK, re-run `~/setup-tmux-btop` to refresh the repo-owned helper scripts. This keeps your tmux config intact.
 
-```sh
-launcherctl update-scripts
-```
-
-This keeps your tmux config intact.
-
-You can create tmux key bindings to launch Android apps. This example makes `Alt + w` open WhatsApp:
-
-```tmux
-bind -n M-w run-shell 'tmux display-message "Opening WhatsApp"; launcherctl launch whatsapp >/dev/null 2>&1 || tmux display-message "Launch failed: WhatsApp"'
-```
+You can create tmux key bindings to launch Android apps from the Termux shell using Android's `am` command over Shizuku `rish`, or any other launcher mechanism you prefer.
 
 ## 6. Optional Shizuku and rish Setup
 
@@ -217,10 +234,10 @@ chmod +x "$(command -v rish)"
 rish
 ```
 
-Grant the Shizuku permission prompt. After that, check the setup:
+Check the setup:
 
 ```sh
-launcherctl tty-doctor
+rish -c "id"
 ```
 
 Now you can run `~/setup-tmux-btop` again and choose **All** or **btop only**.
@@ -310,19 +327,8 @@ If terminal drawing, input, or colors feel stale:
 termux-reload-settings
 ```
 
-If the launcher bridge is not responding:
+If Shizuku features do not work, confirm Shizuku is running and grant permission to Termux Launcher. Verify `rish` with:
 
 ```sh
-launcherctl status
-launcherctl restart
+rish -c "id"
 ```
-
-If `launcherctl` is missing, restart Termux Launcher. The app installs the command when the launcher activity starts.
-
-If Shizuku features do not work, confirm Shizuku is running, grant permission to Termux Launcher, and run:
-
-```sh
-launcherctl tty-doctor
-```
-
-If media or notification commands return empty data, grant notification listener access to Termux Launcher in Android settings.

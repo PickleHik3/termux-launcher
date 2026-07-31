@@ -1052,7 +1052,10 @@ public final class TerminalView extends View {
     }
 
     private int getRowForY(float y) {
-        return (int) ((y - mRenderer.mFontLineSpacingAndAscent) / mRenderer.mFontLineSpacing);
+        // While a smooth fling/settle holds a fractional offset, drawn content sits that many
+        // pixels above its nominal row position, so screen Y maps back by adding it.
+        return (int) ((y + mScrollOffsetPixels - mRenderer.mFontLineSpacingAndAscent)
+            / mRenderer.mFontLineSpacing);
     }
 
     /**

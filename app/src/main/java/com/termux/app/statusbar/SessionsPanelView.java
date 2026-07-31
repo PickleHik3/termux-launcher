@@ -332,7 +332,8 @@ public final class SessionsPanelView extends LinearLayout {
             @NonNull SessionBrowserModel.Session session) {
         for (SessionBrowserModel.Window window : session.windows) {
             if (!window.current || window.panes.isEmpty()) continue;
-            return window.panes.get(0);
+            int index = Math.max(0, Math.min(window.activePane, window.panes.size() - 1));
+            return window.panes.get(index);
         }
         for (SessionBrowserModel.Window window : session.windows) {
             if (!window.panes.isEmpty()) return window.panes.get(0);

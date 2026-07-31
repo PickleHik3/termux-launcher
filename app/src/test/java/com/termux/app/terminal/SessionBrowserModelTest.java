@@ -16,7 +16,7 @@ public class SessionBrowserModelTest {
         for (int i = 0; i < paneCount; i++) {
             panes.add(new SessionBrowserModel.Pane(cwd, foreground));
         }
-        SessionBrowserModel.Window window = new SessionBrowserModel.Window(0, true, panes);
+        SessionBrowserModel.Window window = new SessionBrowserModel.Window(0, true, 0, panes);
         return new SessionBrowserModel.Session(index, index == 0, name,
             Collections.singletonList(window));
     }
@@ -39,7 +39,7 @@ public class SessionBrowserModelTest {
     @Test
     public void filter_blankPreservesOrderAndPaneCountCoversAllWindows() {
         SessionBrowserModel.Session first = session(3, "one", "/one", "bash", 2);
-        SessionBrowserModel.Window secondWindow = new SessionBrowserModel.Window(1, false,
+        SessionBrowserModel.Window secondWindow = new SessionBrowserModel.Window(1, false, 0,
             Arrays.asList(new SessionBrowserModel.Pane("/two", "git"),
                 new SessionBrowserModel.Pane("/three", "vim")));
         SessionBrowserModel.Session expanded = new SessionBrowserModel.Session(first.index,

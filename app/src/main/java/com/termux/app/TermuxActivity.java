@@ -3953,6 +3953,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         configureExtraKeysDivider(state.appsRowEnabled, state.barAlpha);
         applyDecorNavBarSurfaceState(state);
         applyInAppKeyboardSurfaceState(state);
+        // Wallpaper passthrough feeds every glass surface from the shared pre-blurred wallpaper, so
+        // the live blur views have nothing left to contribute — and each one that keeps capturing
+        // redraws the whole window, terminal text included, on the UI thread.
         updateAccessoryRenderEffectBackdrop(state);
         updateTopPaneWallpaperFrost();
         completePendingInAppKeyboardOpenReveal(state);
@@ -6679,6 +6682,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return R.id.surface_tuning_status_clock_minimal;
         if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED.equals(style))
             return R.id.surface_tuning_status_clock_led;
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(style))
+            return R.id.surface_tuning_status_clock_tape;
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB.equals(style))
+            return R.id.surface_tuning_status_clock_slab;
         return R.id.surface_tuning_status_clock_flip;
     }
 
@@ -6689,6 +6696,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL;
         if (buttonId == R.id.surface_tuning_status_clock_led)
             return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED;
+        if (buttonId == R.id.surface_tuning_status_clock_tape)
+            return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE;
+        if (buttonId == R.id.surface_tuning_status_clock_slab)
+            return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB;
         return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP;
     }
 
@@ -9076,7 +9087,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.terminal.TerminalPaneController.Window window = ws.windows.get(windowIndex);
                 java.util.List<com.termux.app.terminal.SessionBrowserModel.Pane> panes =
                     new java.util.ArrayList<>();
-                for (TerminalSession shell : mPaneController.shellsOf(window)) {
+                java.util.List<TerminalSession> shells = mPaneController.shellsOf(window);
+                TerminalSession activeShell = mPaneController.windowActiveSession(window);
+                int activePane = activeShell == null ? 0 : shells.indexOf(activeShell);
+                if (activePane < 0) activePane = 0;
+                for (TerminalSession shell : shells) {
                     String foreground = null;
                     com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
                         mWindowForegroundResolver == null ? null
@@ -9093,7 +9108,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         shell.getCwd(), foreground));
                 }
                 windows.add(new com.termux.app.terminal.SessionBrowserModel.Window(windowIndex,
-                    windowIndex == ws.current, panes));
+                    windowIndex == ws.current, activePane, panes));
             }
             sessions.add(new com.termux.app.terminal.SessionBrowserModel.Session(sessionIndex,
                 ws == mCurrentWSession, ws.name, windows));
@@ -10396,6 +10411,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Create a shell in {@code cwd} (or the default) via the service; null on failure. */
     @Nullable TerminalSession createShellForCwd(@Nullable String cwd) {
         if (mTermuxService == null) return null;
+        if (mTermuxService.getTermuxSessionsSize()
+                >= com.termux.app.terminal.TermuxTerminalSessionActivityClient.MAX_SESSIONS) {
+            showToast(getString(R.string.title_max_terminals_reached) + " — "
+                + getString(R.string.msg_max_terminals_reached), true);
+            return null;
+        }
         if (cwd == null) cwd = getProperties().getDefaultWorkingDirectory();
         com.termux.shared.termux.shell.command.runner.terminal.TermuxSession created =
             mTermuxService.createTermuxSession(null, null, null, cwd, false, null);
@@ -10857,7 +10878,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         if (forceCatalogRefresh) {
-            LauncherCtlApiServer.getInstance().invalidatePackageCaches();
             mSuggestionBarView.clearAppCache();
             mSuggestionBarView.pruneInvalidIconOverrides();
             mSuggestionBarView.reloadAllApps();

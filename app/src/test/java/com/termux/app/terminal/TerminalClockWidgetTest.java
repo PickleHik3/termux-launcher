@@ -53,7 +53,7 @@ public class TerminalClockWidgetTest {
     }
 
     @Test
-    public void style_acceptsFourVariantsAndFallsBackToFlip() {
+    public void style_acceptsSixVariantsAndFallsBackToFlip() {
         TerminalClockWidget widget = new TerminalClockWidget(
             ApplicationProvider.getApplicationContext(), null);
 
@@ -63,6 +63,10 @@ public class TerminalClockWidgetTest {
         assertEquals("minimal", widget.getStyle());
         widget.setStyle(TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED);
         assertEquals("led", widget.getStyle());
+        widget.setStyle(TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE);
+        assertEquals("tape", widget.getStyle());
+        widget.setStyle(TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB);
+        assertEquals("slab", widget.getStyle());
         widget.setStyle("unknown");
         assertEquals("flip", widget.getStyle());
     }

@@ -14,7 +14,7 @@
 
 Termux Launcher is a terminal-first Android home launcher inspired by [TEL](https://github.com/t-e-l/tel), built on [termux-app](https://github.com/termux/termux-app) and [termux-monet](https://github.com/Termux-Monet/termux-monet).
 
-**[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | [Download builds](https://github.com/PickleHik3/termux-launcher/releases) | [Getting Started](docs/en/Launcher_Getting_Started.md) | [Modern terminal](docs/en/Terminal_Modernization.md) | [LauncherCtl](docs/en/LauncherCtl_API.md) | [LauncherCtl MCP](docs/en/LauncherCtl_MCP.md) | [Termux AI](docs/en/Termux_AI.md) | [Changelog](CHANGELOG.md)
+**[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | [Download builds](https://github.com/PickleHik3/termux-launcher/releases) | [Getting Started](docs/en/Launcher_Getting_Started.md) | [Modern terminal](docs/en/Terminal_Modernization.md) | [Local AI API](docs/en/LauncherCtl_API.md) | [Termux AI](docs/en/Termux_AI.md) | [Changelog](CHANGELOG.md)
 
 > **Two editions are available.** The **`com.termux`** build is the **recommended** version — it stays fully compatible with the upstream Termux package ecosystem. The **`io.vaj.tl`** build installs side-by-side with a stock Termux, but it runs off my own custom APT repository, which I maintain by hand — so it is updated manually and less often. See [Editions](#editions).
 
@@ -35,8 +35,7 @@ All credits go to the amazing developers and contributors of Termux, TEL, and Te
 - Searchable terminal command palette with customizable chords and modal keymaps
 - App dock with terminal app search
 - Android Material theme integration for launcher surfaces and Termux shell theming
-- `launcherctl` shell bridge for launching apps and reading launcher/system data
-- LauncherCtl agent tools, including optional stdio MCP-backed tools from `~/.config/termux-launcher/mcp.json`
+- `tai` shell command and OpenAI/Ollama-compatible localhost API for on-device LLM inference and model management
 - Cloned/work-profile app discovery where Android exposes launcher profiles
 - On-device LLM backends using Google's LiteRT and Alibaba's MNN
 - Optional Shizuku integration for screen lock and privileged status helpers
@@ -79,23 +78,24 @@ See [Getting Started](docs/en/Launcher_Getting_Started.md) for the setup flow.
 
 - [Getting Started](docs/en/Launcher_Getting_Started.md): install, launcher basics, tmux setup, rish setup, Extra Keys, and troubleshooting.
 - [Modern terminal guide](docs/en/Terminal_Modernization.md): panes, windows, sessions, layouts, workspaces, bindings, fonts, protocols, and diagnostics.
-- [LauncherCtl](docs/en/LauncherCtl_API.md): shell commands, endpoint files, API basics, and permissions.
-- [LauncherCtl MCP](docs/en/LauncherCtl_MCP.md): MCP client configs, tool names, and live-verified examples for local agents.
+- [Local AI API](docs/en/LauncherCtl_API.md): OpenAI/Ollama-compatible localhost endpoint, model management, auth, and route tables.
 - [Termux AI](docs/en/Termux_AI.md): local model setup, `tai`, OpenAI-compatible clients, and troubleshooting.
 - [Developer Docs](docs/en/Developer_Docs.md): advanced API routes, runtime notes, helper scripts, and security details.
 
 ## Quick Shell Example
 
-Launch an Android app from the terminal:
+Check the on-device AI runtime from the terminal:
 
 ```sh
-launcherctl launch whatsapp
+tai status
+tai models
 ```
 
-Example tmux binding:
+Point an OpenAI-compatible client at the local endpoint:
 
-```tmux
-bind -n M-w run-shell 'tmux display-message "Opening WhatsApp"; launcherctl launch whatsapp >/dev/null 2>&1 || tmux display-message "Launch failed: WhatsApp"'
+```sh
+export OPENAI_BASE_URL="$(cat ~/.launcherctl/endpoint)/v1"
+export OPENAI_API_KEY="$(cat ~/.launcherctl/token)"
 ```
 
 ## Known Limitations
