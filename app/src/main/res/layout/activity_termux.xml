@@ -1149,15 +1149,6 @@
                             </com.google.android.material.button.MaterialButtonToggleGroup>
                         </LinearLayout>
 
-                        <com.google.android.material.materialswitch.MaterialSwitch
-                            android:id="@+id/surface_tuning_status_normalize_switch"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:minHeight="40dp"
-                            android:text="@string/termux_surface_tuning_normalize"
-                            android:textColor="?attr/termuxColorOnSurface"
-                            android:textSize="12sp" />
-
                         <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
                             <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_dock_tuning_blur" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
                             <SeekBar android:id="@+id/surface_tuning_status_blur_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="30" android:splitTrack="false" />
@@ -1449,8 +1440,20 @@
                         android:layout_width="match_parent"
                         android:layout_height="42dp"
                         android:layout_marginTop="6dp"
-                        android:gravity="center_vertical|end"
+                        android:gravity="center_vertical"
                         android:orientation="horizontal">
+
+                        <!-- Cross-section control, so it lives with the actions rather than in one
+                             section's scroll content. The weight pushes Reset and Done right. -->
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/surface_tuning_status_normalize_switch"
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
+                            android:layout_height="wrap_content"
+                            android:minHeight="36dp"
+                            android:text="@string/termux_surface_tuning_normalize"
+                            android:textColor="?attr/termuxColorOnSurface"
+                            android:textSize="12sp" />
 
                         <TextView
                             android:id="@+id/surface_tuning_reset"

@@ -822,6 +822,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         refreshSuggestionBarIfLauncherCatalogChanged();
         getWindow().getDecorView().post(() -> LauncherCtlApiServer.getInstance().ensureStartedAsync(getApplicationContext()));
         if (mDockTuningMode && mDockTuningRestoreExpandedStatus
+            && !isSurfaceTuningStatusSectionActive()
             && !mPreferences.isTopPaneClockCollapsed()) {
             setTopStatusBarCollapsed(true, false);
         }
@@ -6319,7 +6320,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 blurValue.setText(getString(R.string.termux_dock_tuning_value_dp, progress));
                 if (fromUser) {
                     writeSurfaceBlur(SURFACE_TUNING_TARGET_DOCK, progress);
-                    applyDockTuningPreview(true);
+                    requestDockTuningPreview(TUNING_PREVIEW_BLUR);
                 }
             }
         });
@@ -6328,7 +6329,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 opacityValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
                 if (fromUser) {
                     writeSurfaceOpacity(SURFACE_TUNING_TARGET_DOCK, progress);
-                    applyDockTuningPreview(false);
+                    requestDockTuningPreview(TUNING_PREVIEW_GLASS);
                 }
             }
         });
@@ -6337,7 +6338,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 grainValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
                 if (fromUser) {
                     writeSurfaceGrain(SURFACE_TUNING_TARGET_DOCK, progress);
-                    applyDockTuningPreview(false);
+                    requestDockTuningPreview(TUNING_PREVIEW_GLASS);
                 }
             }
         });
@@ -6346,7 +6347,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 dockRadiusValue.setText(getString(R.string.termux_dock_tuning_value_dp, progress));
                 if (fromUser) {
                     writeSurfaceCornerRadius(SURFACE_TUNING_TARGET_DOCK, progress);
-                    applyDockTuningStructuralPreview();
+                    requestDockTuningPreview(TUNING_PREVIEW_GEOMETRY | TUNING_PREVIEW_SURFACES);
                 }
             }
         });
@@ -6355,7 +6356,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 terminalValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
                 if (fromUser) {
                     mPreferences.setTerminalBackgroundOpacity(progress);
-                    applyDockTuningStructuralPreview();
+                    requestDockTuningPreview(TUNING_PREVIEW_SURFACES);
                 }
             }
         });
@@ -6370,7 +6371,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 sessionsValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
                 if (fromUser) {
                     mPreferences.setSessionsOpacity(progress);
-                    applyDockTuningStructuralPreview();
+                    requestDockTuningPreview(TUNING_PREVIEW_SURFACES);
                 }
             }
         });
@@ -6380,7 +6381,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 sizeValue.setText(dockSizePresetLabel(index));
                 if (fromUser) {
                     mPreferences.setAppLauncherBarHeightScale(DOCK_TUNING_SIZE_PRESETS[index]);
-                    applyDockTuningStructuralPreview();
+                    requestDockTuningPreview(TUNING_PREVIEW_GEOMETRY);
                 }
             }
         });
@@ -6390,7 +6391,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 iconsValue.setText(Integer.toString(count));
                 if (fromUser) {
                     mPreferences.setAppLauncherButtonCount(count);
-                    applyDockTuningStructuralPreview();
+                    requestDockTuningPreview(TUNING_PREVIEW_GEOMETRY);
                 }
             }
         });
@@ -6451,12 +6452,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         });
         bindStatusSeekBar(statusBlur, statusBlurValue, true,
+            TUNING_PREVIEW_BLUR | TUNING_PREVIEW_SURFACES,
             value -> writeSurfaceBlur(SURFACE_TUNING_TARGET_STATUS, value));
         bindStatusSeekBar(statusOpacity, statusOpacityValue, false,
+            TUNING_PREVIEW_SURFACES,
             value -> writeSurfaceOpacity(SURFACE_TUNING_TARGET_STATUS, value));
         bindStatusSeekBar(statusGrain, statusGrainValue, false,
+            TUNING_PREVIEW_SURFACES,
             value -> writeSurfaceGrain(SURFACE_TUNING_TARGET_STATUS, value));
+        // Radius also reshapes the dock capsule when "match all surfaces" is on.
         bindStatusSeekBar(statusRadius, statusRadiusValue, true,
+            TUNING_PREVIEW_SURFACES | TUNING_PREVIEW_GEOMETRY,
             value -> writeSurfaceCornerRadius(SURFACE_TUNING_TARGET_STATUS, value));
         bindSurfaceTuningClockPicker();
         bindSurfaceTuningNormalizeSwitch();
@@ -6610,6 +6616,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void showSurfaceTuningPanel(int checkedId) {
+        // The status section tunes the expanded top pane: show the clock face while it is open so
+        // the sliders preview against it, and give the space back when another section takes over.
+        if (mDockTuningMode)
+            setTopStatusBarCollapsed(checkedId != R.id.surface_tuning_section_status, true);
         View dock = findViewById(R.id.surface_tuning_dock_panel);
         View dockContinuation = findViewById(R.id.surface_tuning_dock_continuation_panel);
         View keyboard = findViewById(R.id.surface_tuning_keyboard_panel);
@@ -6637,14 +6647,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void bindStatusSeekBar(SeekBar seekBar, TextView valueView, boolean dp,
-                                   StatusValueSetter setter) {
+                                   int previewScopes, StatusValueSetter setter) {
         seekBar.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
                 valueView.setText(getString(dp ? R.string.termux_dock_tuning_value_dp
                     : R.string.termux_dock_tuning_value_percent, progress));
                 if (fromUser) {
                     setter.set(progress);
-                    applyDockTuningStructuralPreview();
+                    requestDockTuningPreview(previewScopes);
                 }
             }
         });
@@ -7327,7 +7337,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (scrollChild == null)
             return;
 
-        int topLimit = Math.max(mLastStatusBarInsetTop, Math.round(dpToPx(24))) + Math.round(dpToPx(8));
+        // The card may grow until just under the launcher's own status bar — a 2dp seam, not a
+        // band of empty terminal. Positions are compared in the card parent's coordinate space,
+        // so the window bar (a child of the terminal container) is converted through the window.
+        int statusBottom = Math.max(mLastStatusBarInsetTop, Math.round(dpToPx(24)));
+        View windowBar = findViewById(R.id.terminal_window_bar_host);
+        if (windowBar != null && windowBar.getVisibility() == View.VISIBLE
+            && windowBar.getHeight() > 0 && controls.getParent() instanceof View) {
+            int[] location = new int[2];
+            windowBar.getLocationInWindow(location);
+            int barBottomInWindow = location[1] + windowBar.getHeight();
+            ((View) controls.getParent()).getLocationInWindow(location);
+            statusBottom = Math.max(statusBottom, barBottomInWindow - location[1]);
+        }
+        int topLimit = statusBottom + Math.round(dpToPx(2));
         int cardMarginBottom = Math.round(dpToPx(10));
         int availableCard = (stack.getTop() - cardMarginBottom) - topLimit;
         // Chrome outside the scroll region: card top/bottom padding (10 + 12), Done top margin (6),
@@ -7360,17 +7383,62 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         scheduleAccessoryRenderSync("dock-tuning:preview");
     }
 
+    // Live-preview scopes for the surface editor. Sliders fire onProgressChanged far faster than
+    // a full re-apply fits in a frame, so requests carry only the scopes their control touches and
+    // are coalesced to a single apply per animation frame. GLASS (the accessory re-render in
+    // applyDockTuningPreview) runs on every apply; BLUR additionally throws away the shared
+    // pre-blurred wallpaper bitmap, which is the single most expensive thing a slider can cause —
+    // only radius controls may request it.
+    private static final int TUNING_PREVIEW_GLASS = 1;
+    private static final int TUNING_PREVIEW_BLUR = 1 << 1;
+    private static final int TUNING_PREVIEW_GEOMETRY = 1 << 2;
+    private static final int TUNING_PREVIEW_SURFACES = 1 << 3;
+    private static final int TUNING_PREVIEW_KEYBOARD = 1 << 4;
+    private static final int TUNING_PREVIEW_ALL = TUNING_PREVIEW_GLASS | TUNING_PREVIEW_BLUR
+        | TUNING_PREVIEW_GEOMETRY | TUNING_PREVIEW_SURFACES | TUNING_PREVIEW_KEYBOARD;
+
+    private int mPendingTuningPreviewScopes;
+    private boolean mTuningPreviewScheduled;
+    private final Runnable mTuningPreviewRunnable = this::runPendingTuningPreview;
+
+    private void requestDockTuningPreview(int scopes) {
+        mPendingTuningPreviewScopes |= scopes | TUNING_PREVIEW_GLASS;
+        if (mTuningPreviewScheduled)
+            return;
+        View root = findViewById(R.id.activity_termux_root_view);
+        if (root == null) {
+            runPendingTuningPreview();
+            return;
+        }
+        mTuningPreviewScheduled = true;
+        root.postOnAnimation(mTuningPreviewRunnable);
+    }
+
+    private void runPendingTuningPreview() {
+        mTuningPreviewScheduled = false;
+        int scopes = mPendingTuningPreviewScopes;
+        mPendingTuningPreviewScopes = 0;
+        if (scopes == 0 || mPreferences == null)
+            return;
+        if ((scopes & TUNING_PREVIEW_GEOMETRY) != 0) {
+            updateAppLauncherBarHeight();
+            setTerminalToolbarHeight(true);
+            configureExtraKeysBackground();
+        }
+        if ((scopes & TUNING_PREVIEW_SURFACES) != 0) {
+            applyTerminalSurfaceAppearance();
+            refreshTerminalWindowBar();
+            configureBackgroundBlur(R.id.sessions_backgroundblur, R.id.sessions_background, false,
+                mPreferences.getSessionsOpacity() / 100f, 0);
+        }
+        if ((scopes & TUNING_PREVIEW_KEYBOARD) != 0 && mInAppKeyboard != null)
+            mInAppKeyboard.onPreferencesReloaded();
+        applyDockTuningPreview((scopes & TUNING_PREVIEW_BLUR) != 0);
+    }
+
     /** Broader live re-apply for controls that change dock geometry, terminal, or sessions surfaces. */
     private void applyDockTuningStructuralPreview() {
-        updateAppLauncherBarHeight();
-        applyTerminalSurfaceAppearance();
-        refreshTerminalWindowBar();
-        configureBackgroundBlur(R.id.sessions_backgroundblur, R.id.sessions_background, false,
-            mPreferences.getSessionsOpacity() / 100f, 0);
-        if (mInAppKeyboard != null)
-            mInAppKeyboard.onPreferencesReloaded();
-        applyDockTuningPreview(true);
-        applyAccessoryGeometryIfNeeded(true, "dock-tuning:structural");
+        requestDockTuningPreview(TUNING_PREVIEW_ALL);
     }
 
     private static final float[] DOCK_TUNING_SIZE_PRESETS = {1.72f, 1.95f, 2.18f, 2.45f};
@@ -7422,10 +7490,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void restoreExpandedStatusAfterSurfaceEditor() {
-        if (mDockTuningRestoreExpandedStatus && mPreferences != null
-            && mPreferences.isTopPaneClockCollapsed()) {
+        if (mPreferences == null)
+            return;
+        if (mDockTuningRestoreExpandedStatus && mPreferences.isTopPaneClockCollapsed()) {
             setTopStatusBarCollapsed(false, false);
+        } else if (!mDockTuningRestoreExpandedStatus && !mPreferences.isTopPaneClockCollapsed()) {
+            // Editor closed from the status section: the pane was expanded only for its preview.
+            setTopStatusBarCollapsed(true, false);
         }
+    }
+
+    private boolean isSurfaceTuningStatusSectionActive() {
+        MaterialButtonToggleGroup sectionGroup = findViewById(R.id.surface_tuning_section_group);
+        return sectionGroup != null
+            && sectionGroup.getCheckedButtonId() == R.id.surface_tuning_section_status;
     }
 
     private abstract static class SimpleSeekBarChangeListener
