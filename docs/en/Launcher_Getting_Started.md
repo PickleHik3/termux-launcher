@@ -142,56 +142,46 @@ tai doctor
 
 For endpoint files, authentication, route tables, and scripting examples, see [LauncherCtl API](LauncherCtl_API.md).
 
-## 5. Optional Guarded Shell and tmux Setup
+## 5. Optional Guarded Shell Setup
 
-tmux remains useful when you need Unix processes to survive independently of the Android terminal
-UI. The native workspace feature restores sessions, windows, panes, titles, and CWDs after process
-death, but it does not resurrect foreground programs. My broader shell setup usually includes:
+The repository contains secret-free templates derived from the live development setup: fish with a commented quick-start guide, two Oh My Posh themes driven by wallpaper Material colors, the `~/.termux` terminal configs, and the Maple Mono font family the terminal's ligature support was tuned against. The shell setup includes:
 
 - fish
 - oh-my-posh
-- tmux
 - eza
 - zoxide
-- btop through Shizuku `rish`
+- fzf, yazi, neovim
 
-Terminal Material colors are enabled by default. Leave the toggle on if you want the tmux theme to follow your wallpaper:
+Terminal Material colors are enabled by default. Leave the toggle on if you want the prompt to follow your wallpaper:
 
 ```text
 Long press Terminal -> More -> Appearance -> Terminal Material colors
 ```
 
-The repository contains secret-free templates derived from the live development setup. Use the guarded installer instead of replacing your dotfiles with direct `curl -o` commands:
+Use the guarded installer instead of replacing your dotfiles with direct `curl -o` commands:
 
 ```sh
-curl -fsSLo ~/setup-tmux-btop \
-  "https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-tmux-btop"
-sed -n '1,240p' ~/setup-tmux-btop
-chmod 700 ~/setup-tmux-btop
-~/setup-tmux-btop
+curl -fsSLo ~/setup-launcher \
+  "https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-launcher"
+sed -n '1,260p' ~/setup-launcher
+chmod 700 ~/setup-launcher
+~/setup-launcher
 ```
 
-Reading the downloaded script before running it is a useful shell habit. The installer adds missing packages, but it protects existing work:
+Reading the downloaded script before running it is a useful shell habit. The installer asks what to install:
 
-- existing fish and Oh My Posh configuration files are left in place;
-- only missing Termux Launcher lines are appended to `.tmux.conf`;
-- an existing tmux plugin is fast-forwarded only when its checkout is clean;
-- local plugin edits stop the update instead of being overwritten;
-- the Shizuku `btop` wrapper is installed only when you choose it and `rish` works.
+- **Everything:** packages, fish + Oh My Posh configs, `~/.termux` terminal configs, and Maple Mono.
+- **Packages + shell configs:** fish, prompt themes, and the CLI tools the config uses.
+- **Terminal configs:** `termux.properties` (extra-key row wired to launcher tools) and the optional custom in-app keyboard layout.
+- **Maple Mono fonts:** downloads the variable text faces and the static Nerd Font build from the [maple-font releases](https://github.com/subframe7536/maple-font/releases), places them under `~/.termux/fonts/`, and installs the documented `fonts.conf` that turns on programming ligatures (`->`, `=>`, `!=`) and Nerd Font icons with zero further steps.
 
-The public fish template keeps a `fish_auto_tmux` toggle, loads the `termux-launcher` Oh My Posh theme, and enables eza and zoxide when installed. Private aliases, hostnames, tokens, and API keys from the development phone are intentionally not included.
+Every config file the installer replaces gets a timestamped `.bak` next to it first. Private aliases, hostnames, tokens, and API keys from the development phone are intentionally not included; the fish template documents where to keep such things (`~/.config/fish/secrets.fish`).
 
-The script asks what to install:
+If you prefer manual setup, inspect the files in [`docs/en/examples`](examples/) and merge the parts you want into your own configuration after making backups.
 
-- **All:** Fish + Oh My Posh config, tmux theme, and the optional Shizuku `btop` helper.
-- **tmux only:** theme and status helpers only.
-- **btop only:** only the Shizuku `btop` helper.
+### Deprecated: tmux and btop setup
 
-The tmux plugin includes an `Alt + e` keybind reference. If you prefer manual setup, inspect the files in [`docs/en/examples`](examples/) and merge the parts you want into your own configuration after making backups.
-
-If you have already completed setup and later update the APK, re-run `~/setup-tmux-btop` to refresh the repo-owned helper scripts. This keeps your tmux config intact.
-
-You can create tmux key bindings to launch Android apps from the Termux shell using Android's `am` command over Shizuku `rish`, or any other launcher mechanism you prefer.
+Earlier releases shipped `setup-tmux-btop`, which installed tmux with a Material theme and a Shizuku-backed `btop` helper. The launcher's own windows, panes, workspaces, scratchpad, and status bar have replaced that role, so the script is deprecated. It remains in [`docs/en/examples`](examples/) for existing users, but its fish template is frozen at the tmux-era version and no longer receives updates. tmux itself remains useful when you need Unix processes to survive independently of the Android terminal UI — the native workspace feature restores sessions, windows, panes, titles, and CWDs after process death, but it does not resurrect foreground programs.
 
 ## 6. Optional Shizuku and rish Setup
 

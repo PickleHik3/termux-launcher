@@ -1,4 +1,18 @@
 #!/system/bin/sh
+#
+# DEPRECATED — kept for existing tmux/btop users only.
+#
+# The launcher's own windows, panes, workspaces, scratchpad, and status bar
+# replaced what tmux and btop provided in this setup, and the Shizuku helper
+# is no longer maintained. New installs should use the current installer
+# instead:
+#
+#   curl -fsSLo ~/setup-launcher \
+#     "https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-launcher"
+#   sh ~/setup-launcher
+#
+# This script still works, but its fish config template is frozen at the
+# tmux-era version and will not receive updates.
 
 set -eu
 
