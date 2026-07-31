@@ -1,12 +1,18 @@
 package com.termux.launcherctl;
 
+import com.termux.app.launcher.model.AppRef;
+import com.termux.app.launcher.model.LauncherAppEntry;
+
 import org.json.JSONObject;
 import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class LauncherCtlApiServerTest {
@@ -73,5 +79,50 @@ public class LauncherCtlApiServerTest {
         assertFalse(LauncherCtlApiServer.isModelRetrievePath("/v1/models"));
         assertFalse(LauncherCtlApiServer.isModelRetrievePath("/v1/models/"));
         assertFalse(LauncherCtlApiServer.isModelRetrievePath("/v1/models/a/b"));
+    }
+
+    @Test
+    public void resolveLaunchMatch_returnsAmbiguousForSharedExactLabel() throws Exception {
+        List<LauncherAppEntry> apps = Arrays.asList(
+            entry("com.example.alpha", "com.example.alpha.MainActivity", "Maps"),
+            entry("com.example.beta", "com.example.beta.MainActivity", "Maps")
+        );
+
+        LauncherCtlApiServer.AppLaunchMatch match = LauncherCtlApiServer.resolveLaunchMatch(apps, "Maps");
+
+        assertNull(match.entry);
+        assertEquals(409, match.statusCode);
+        assertEquals("ambiguous", match.errorCode);
+        assertEquals(2, match.candidates.length());
+    }
+
+    @Test
+    public void resolveLaunchMatch_prefersExactPackageMatchOverLabelMatch() throws Exception {
+        List<LauncherAppEntry> apps = Arrays.asList(
+            entry("com.termux", "com.termux.app.TermuxActivity", "Termux"),
+            entry("com.termux.api", "com.termux.api.MainActivity", "Termux:API")
+        );
+
+        LauncherCtlApiServer.AppLaunchMatch match = LauncherCtlApiServer.resolveLaunchMatch(apps, "com.termux.api");
+
+        assertEquals("com.termux.api", match.entry.appRef.packageName);
+        assertEquals("Termux:API", match.entry.label);
+        assertEquals(200, match.statusCode);
+    }
+
+    @Test
+    public void resolveLaunchMatch_normalizesPunctuationInLabels() throws Exception {
+        List<LauncherAppEntry> apps = Arrays.asList(
+            entry("com.termux.api", "com.termux.api.MainActivity", "Termux:API")
+        );
+
+        LauncherCtlApiServer.AppLaunchMatch match = LauncherCtlApiServer.resolveLaunchMatch(apps, "termux api");
+
+        assertEquals("com.termux.api", match.entry.appRef.packageName);
+        assertEquals(200, match.statusCode);
+    }
+
+    private static LauncherAppEntry entry(String packageName, String activityName, String label) {
+        return new LauncherAppEntry(new AppRef(packageName, activityName), label, null);
     }
 }

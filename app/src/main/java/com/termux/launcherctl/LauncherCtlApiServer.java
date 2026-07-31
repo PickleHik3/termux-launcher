@@ -8,6 +8,9 @@ import com.termux.ai.TaiApiCompatibility;
 import com.termux.ai.TaiCliFormatter;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiSettings;
+import com.termux.app.launcher.LauncherAppLauncher;
+import com.termux.app.launcher.data.LauncherAppDataProvider;
+import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
 
@@ -33,9 +36,14 @@ import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
@@ -53,6 +61,7 @@ public class LauncherCtlApiServer {
     private static final String TOKEN_FILE_PATH = LAUNCHERCTL_DIR_PATH + "/token";
     private static final String ENDPOINT_FILE_PATH = LAUNCHERCTL_DIR_PATH + "/endpoint";
     private static final String TAI_BIN_PATH = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/tai";
+    private static final String LAUNCHERCTL_BIN_PATH = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/launcherctl";
     static final String LAN_WARNING = "LAN exposure allows any device on your network to reach this endpoint when the token is known.";
     static final String HEALTH_BODY = "Ollama is running";
 
@@ -343,6 +352,8 @@ public class LauncherCtlApiServer {
                     || "/api/copy".equals(request.path) || "/api/delete".equals(request.path))) {
                 return ollamaJsonResponse(TaiApiCompatibility.ollamaError(501, "unsupported_registry_operation",
                     "Ollama registry operations do not map to LiteRT-LM/MNN packages; use the model import flow in settings."));
+            } else if ("POST".equals(request.method) && "/v1/apps/launch".equals(request.path)) {
+                return jsonResponse(runAppLaunch(context, request.body));
             } else if ("POST".equals(request.method) && "/v1/auth/rotate".equals(request.path)) {
                 return jsonResponse(rotateAuthToken(context, false));
             } else if ("GET".equals(request.method) && "/v1/ai/status".equals(request.path)) {
@@ -466,6 +477,172 @@ public class LauncherCtlApiServer {
         JSONObject response = new JSONObject();
         response.put("embedding", first != null && first.has("embedding") ? first.opt("embedding") : new JSONArray());
         return response;
+    }
+
+    /**
+     * The one non-inference route kept from the pre-strip device bridge: `launcherctl launch`
+     * has years of tmux configs and shell binds behind it, so app launching stays addressable
+     * from the shell while everything else that was agent/MCP-shaped remains gone.
+     */
+    private JSONObject runAppLaunch(Context context, String body) throws JSONException {
+        JSONObject request = body != null && !body.isEmpty() ? new JSONObject(body) : new JSONObject();
+        String query = request.optString("query", "").trim();
+        if (query.isEmpty()) {
+            JSONObject error = jsonError("bad_request", "Missing app query");
+            error.put("_statusCode", 400);
+            return error;
+        }
+
+        List<LauncherAppEntry> apps = LauncherAppDataProvider.getInstance(context).getAllAppsBlocking();
+        AppLaunchMatch match = resolveLaunchMatch(apps, query);
+        if (match.entry == null) {
+            JSONObject error = jsonError(match.errorCode, match.message);
+            error.put("_statusCode", match.statusCode);
+            error.put("query", query);
+            if (match.candidates.length() > 0) {
+                error.put("candidates", match.candidates);
+            }
+            return error;
+        }
+
+        boolean launched = LauncherAppLauncher.launchEntry(context, match.entry);
+        if (!launched) {
+            JSONObject error = jsonError("launch_failed", "Failed to start matched app");
+            error.put("_statusCode", 500);
+            error.put("query", query);
+            error.put("label", match.entry.label);
+            error.put("packageName", match.entry.appRef.packageName);
+            error.put("activityName", match.entry.appRef.activityName);
+            error.put("stableId", match.entry.appRef.stableId());
+            error.put("userId", match.entry.appRef.userId);
+            error.put("clonedProfile", match.entry.appRef.clonedProfile);
+            return error;
+        }
+
+        JSONObject data = new JSONObject();
+        data.put("ok", true);
+        data.put("query", query);
+        data.put("label", match.entry.label);
+        data.put("packageName", match.entry.appRef.packageName);
+        data.put("activityName", match.entry.appRef.activityName);
+        data.put("stableId", match.entry.appRef.stableId());
+        data.put("userId", match.entry.appRef.userId);
+        data.put("clonedProfile", match.entry.appRef.clonedProfile);
+        return data;
+    }
+
+    static AppLaunchMatch resolveLaunchMatch(List<LauncherAppEntry> apps, String query) throws JSONException {
+        String trimmed = query == null ? "" : query.trim();
+        String lowerQuery = trimmed.toLowerCase(Locale.US);
+        String normalizedQuery = normalizeLookupValue(trimmed);
+        if (lowerQuery.isEmpty()) {
+            return AppLaunchMatch.error(400, "bad_request", "Missing app query");
+        }
+
+        List<AppSearchCandidate> matches = new ArrayList<>();
+        for (LauncherAppEntry entry : apps) {
+            int tier = matchTier(entry, lowerQuery, normalizedQuery);
+            if (tier >= 0) {
+                matches.add(new AppSearchCandidate(entry, tier));
+            }
+        }
+
+        if (matches.isEmpty()) {
+            return AppLaunchMatch.error(404, "not_found", "No launcher app matched query");
+        }
+
+        Collections.sort(matches, new Comparator<AppSearchCandidate>() {
+            @Override
+            public int compare(AppSearchCandidate a, AppSearchCandidate b) {
+                if (a.tier != b.tier) return Integer.compare(a.tier, b.tier);
+                int labelCompare = a.entry.label.compareToIgnoreCase(b.entry.label);
+                if (labelCompare != 0) return labelCompare;
+                return a.entry.appRef.packageName.compareToIgnoreCase(b.entry.appRef.packageName);
+            }
+        });
+
+        AppSearchCandidate best = matches.get(0);
+        List<AppSearchCandidate> bestTierMatches = new ArrayList<>();
+        for (AppSearchCandidate candidate : matches) {
+            if (candidate.tier != best.tier) break;
+            bestTierMatches.add(candidate);
+        }
+
+        if (bestTierMatches.size() == 1) {
+            return AppLaunchMatch.success(best.entry);
+        }
+
+        JSONArray candidates = new JSONArray();
+        for (int i = 0; i < bestTierMatches.size() && i < 8; i++) {
+            LauncherAppEntry entry = bestTierMatches.get(i).entry;
+            JSONObject item = new JSONObject();
+            item.put("label", entry.label);
+            item.put("packageName", entry.appRef.packageName);
+            item.put("activityName", entry.appRef.activityName);
+            item.put("stableId", entry.appRef.stableId());
+            item.put("userId", entry.appRef.userId);
+            item.put("clonedProfile", entry.appRef.clonedProfile);
+            candidates.put(item);
+        }
+        return AppLaunchMatch.error(409, "ambiguous", "Multiple launcher apps matched query", candidates);
+    }
+
+    private static int matchTier(LauncherAppEntry entry, String lowerQuery, String normalizedQuery) {
+        String label = entry.label == null ? "" : entry.label;
+        String labelLower = label.toLowerCase(Locale.US);
+        String labelNormalized = normalizeLookupValue(label);
+        String packageName = entry.appRef.packageName.toLowerCase(Locale.US);
+        String activityName = entry.appRef.activityName.toLowerCase(Locale.US);
+        String stableId = entry.appRef.stableId().toLowerCase(Locale.US);
+
+        if (packageName.equals(lowerQuery) || activityName.equals(lowerQuery) || stableId.equals(lowerQuery)) {
+            return 0;
+        }
+        if (labelLower.equals(lowerQuery) || (!normalizedQuery.isEmpty() && labelNormalized.equals(normalizedQuery))) {
+            return 1;
+        }
+        if (packageName.startsWith(lowerQuery) || activityName.startsWith(lowerQuery)) {
+            return 2;
+        }
+        if (labelLower.startsWith(lowerQuery) || (!normalizedQuery.isEmpty() && labelNormalized.startsWith(normalizedQuery))) {
+            return 3;
+        }
+        if (!normalizedQuery.isEmpty()) {
+            String[] words = labelNormalized.split(" ");
+            for (String word : words) {
+                if (word.startsWith(normalizedQuery)) {
+                    return 4;
+                }
+            }
+        }
+        if (packageName.contains(lowerQuery) || activityName.contains(lowerQuery)) {
+            return 5;
+        }
+        if (labelLower.contains(lowerQuery) || (!normalizedQuery.isEmpty() && labelNormalized.contains(normalizedQuery))) {
+            return 6;
+        }
+        return -1;
+    }
+
+    private static String normalizeLookupValue(String value) {
+        if (value == null || value.isEmpty()) return "";
+        StringBuilder normalized = new StringBuilder(value.length());
+        boolean previousWasSpace = true;
+        for (int i = 0; i < value.length(); i++) {
+            char c = Character.toLowerCase(value.charAt(i));
+            if (Character.isLetterOrDigit(c)) {
+                normalized.append(c);
+                previousWasSpace = false;
+            } else if (!previousWasSpace) {
+                normalized.append(' ');
+                previousWasSpace = true;
+            }
+        }
+        int length = normalized.length();
+        if (length > 0 && normalized.charAt(length - 1) == ' ') {
+            normalized.setLength(length - 1);
+        }
+        return normalized.toString();
     }
 
     private JSONObject rotateAuthToken(Context context, boolean includeToken) throws JSONException {
@@ -762,6 +939,7 @@ public class LauncherCtlApiServer {
 
     private void initializeRateLimiters() {
         rateLimiters.clear();
+        rateLimiters.put("POST:/v1/apps/launch", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("POST:/v1/auth/rotate", new SimpleRateLimiter(5, 60_000));
         rateLimiters.put("GET:/v1/ai/status", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/ai/runtime", new SimpleRateLimiter(120, 60_000));
@@ -877,6 +1055,7 @@ public class LauncherCtlApiServer {
         supportedEndpoints.put("/v1/completions");
         supportedEndpoints.put("/v1/embeddings");
         supportedEndpoints.put("/v1/audio/speech");
+        supportedEndpoints.put("/v1/apps/launch");
         supportedEndpoints.put("/api/version");
         supportedEndpoints.put("/api/tags");
         supportedEndpoints.put("/api/show");
@@ -1132,8 +1311,58 @@ public class LauncherCtlApiServer {
             "    ;;\n" +
             "esac\n";
 
+        // launcherctl survives the agent/MCP strip as a launch-only client: `launcherctl launch`
+        // is what old tmux configs and shell binds call, and keeping it working costs one route.
+        String launcherctlScript =
+            "#!/data/data/com.termux/files/usr/bin/sh\n" +
+            "set -eu\n" +
+            "print_help() {\n" +
+            "  cat <<'EOF'\n" +
+            "launcherctl - Termux Launcher shell companion\n" +
+            "\n" +
+            "Usage:\n" +
+            "  launcherctl launch <app name, package, or activity>\n" +
+            "\n" +
+            "Examples:\n" +
+            "  launcherctl launch whatsapp\n" +
+            "  launcherctl launch com.termux.api\n" +
+            "\n" +
+            "The agent, MCP, and device-control commands were removed; app launching is the one\n" +
+            "command kept for tmux configs and shell binds. For local AI, use: tai --help\n" +
+            "EOF\n" +
+            "}\n" +
+            "LAUNCHERCTL_DIR=\"$HOME/.launcherctl\"\n" +
+            "TOKEN_FILE=\"$LAUNCHERCTL_DIR/token\"\n" +
+            "ENDPOINT_FILE=\"$LAUNCHERCTL_DIR/endpoint\"\n" +
+            "cmd=\"${1:-help}\"\n" +
+            "case \"$cmd\" in\n" +
+            "  -h|--help|help)\n" +
+            "    print_help\n" +
+            "    ;;\n" +
+            "  launch)\n" +
+            "    shift || true\n" +
+            "    [ \"$#\" -gt 0 ] || { echo \"usage: launcherctl launch <app name or package>\" >&2; exit 2; }\n" +
+            "    if [ ! -r \"$TOKEN_FILE\" ] || [ ! -r \"$ENDPOINT_FILE\" ]; then\n" +
+            "      echo \"launcherctl: missing $TOKEN_FILE or $ENDPOINT_FILE; start Termux Launcher first\" >&2\n" +
+            "      exit 1\n" +
+            "    fi\n" +
+            "    TOKEN=$(cat \"$TOKEN_FILE\")\n" +
+            "    BASE=$(sed -n '1p' \"$ENDPOINT_FILE\")\n" +
+            "    QUERY=$(printf '%s' \"$*\" | sed 's/\\\\/\\\\\\\\/g; s/\"/\\\\\"/g')\n" +
+            "    curl -fsS --connect-timeout 2 --max-time 10 -X POST \\\n" +
+            "      -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\" \\\n" +
+            "      --data \"{\\\"query\\\":\\\"$QUERY\\\"}\" \"$BASE/v1/apps/launch\"\n" +
+            "    ;;\n" +
+            "  *)\n" +
+            "    echo \"launcherctl: unknown command: $cmd\" >&2\n" +
+            "    echo \"launcherctl now only supports: launch. For local AI use tai.\" >&2\n" +
+            "    exit 2\n" +
+            "    ;;\n" +
+            "esac\n";
+
         try {
             writeExecutableTextFile(TAI_BIN_PATH, taiScript);
+            writeExecutableTextFile(LAUNCHERCTL_BIN_PATH, launcherctlScript);
             deleteLegacyHelperScripts();
         } catch (Exception e) {
             Logger.logErrorExtended(LOG_TAG, "Failed to install TAI cli: " + e.getMessage());
@@ -1142,12 +1371,12 @@ public class LauncherCtlApiServer {
 
     /**
      * Removes helpers shipped by older builds: the @tai alias and the launcherctl agent/MCP
-     * clients whose server-side endpoints no longer exist.
+     * clients whose server-side endpoints no longer exist. launcherctl itself is not on the
+     * list: it is reinstalled above as the launch-only client.
      */
     private void deleteLegacyHelperScripts() {
         String[] legacyPaths = {
             TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/@tai",
-            TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/launcherctl",
             TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/launcherctl-mcp",
             TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/launcher-restart",
         };
@@ -1544,6 +1773,44 @@ public class LauncherCtlApiServer {
             long waitMs = (timestamps.peekFirst() + windowMs) - System.currentTimeMillis();
             if (waitMs <= 0) return 1;
             return (waitMs + 999) / 1000;
+        }
+    }
+
+    private static class AppSearchCandidate {
+        final LauncherAppEntry entry;
+        final int tier;
+
+        AppSearchCandidate(LauncherAppEntry entry, int tier) {
+            this.entry = entry;
+            this.tier = tier;
+        }
+    }
+
+    static class AppLaunchMatch {
+        final int statusCode;
+        final String errorCode;
+        final String message;
+        final LauncherAppEntry entry;
+        final JSONArray candidates;
+
+        AppLaunchMatch(int statusCode, String errorCode, String message, LauncherAppEntry entry, JSONArray candidates) {
+            this.statusCode = statusCode;
+            this.errorCode = errorCode;
+            this.message = message;
+            this.entry = entry;
+            this.candidates = candidates != null ? candidates : new JSONArray();
+        }
+
+        static AppLaunchMatch success(LauncherAppEntry entry) {
+            return new AppLaunchMatch(200, null, null, entry, null);
+        }
+
+        static AppLaunchMatch error(int statusCode, String errorCode, String message) {
+            return new AppLaunchMatch(statusCode, errorCode, message, null, null);
+        }
+
+        static AppLaunchMatch error(int statusCode, String errorCode, String message, JSONArray candidates) {
+            return new AppLaunchMatch(statusCode, errorCode, message, null, candidates);
         }
     }
 }
