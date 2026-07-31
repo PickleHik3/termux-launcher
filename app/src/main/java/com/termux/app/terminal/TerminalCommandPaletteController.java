@@ -73,7 +73,6 @@ public final class TerminalCommandPaletteController
     private static final float MIN_HEIGHT = 120f;
     private static final float MAX_HEIGHT = 296f;
     private static final float RADIUS_SEED = 6f;
-    private static final float RADIUS_OPEN = 10f;
     private static final float SEED_WIDTH = 161f;
     private static final float SEED_HEIGHT = 52f;
     private static final float STRIP_RESERVE = 46f;
@@ -374,7 +373,10 @@ public final class TerminalCommandPaletteController
             lerp(mSeed.top, openTop, p),
             lerp(mSeed.right, openRight, p),
             lerp(mSeed.bottom, mAnchorY, p));
-        mCurrentRadius = dp(lerp(RADIUS_SEED, RADIUS_OPEN, p));
+        // Open radius matches the dock capsule, so the palette reads as the same glass kit.
+        float openRadius = mActivity.resolveDockCapsuleCornerRadiusPx(
+            Math.max(1, Math.round(mHeight.value)));
+        mCurrentRadius = lerp(dp(RADIUS_SEED), openRadius, p);
         // No platform elevation shadow. The caster would be this full-screen glass pane, and the
         // shadow it produced was a flat 8dp band under the bottom edge with square ends that
         // ignored the rounded corners and cut off hard instead of falling off. CommandPaletteView

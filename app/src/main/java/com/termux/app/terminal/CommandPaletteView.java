@@ -129,7 +129,6 @@ public final class CommandPaletteView extends View {
     }
 
     // Geometry, in dp, from the handoff's 412 x 920 dp reference frame.
-    private static final float TITLE_BAR_H = 33f;
     private static final float FILTER_ROW_H = 34f;
     private static final float ARG_ROW_H = 30f;
     private static final float CATEGORY_H = 22f;
@@ -169,7 +168,6 @@ public final class CommandPaletteView extends View {
     private static final float FLING_MIN_KEEP_DP = 24f;
 
     // Type sizes, in dp for a stable ledger grid under any font scale.
-    private static final float SIZE_TITLE = 10f;
     private static final float SIZE_CRUMB = 10.5f;
     private static final float SIZE_META = 10f;
     private static final float SIZE_FILTER = 13f;
@@ -184,7 +182,6 @@ public final class CommandPaletteView extends View {
     private final Paint mFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint mMono = new TextPaint(Paint.ANTI_ALIAS_FLAG);
-    private final TextPaint mMonoBold = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final RectF mRect = new RectF();
     private final RectF mFrame = new RectF();
     private final Path mShadowClip = new Path();
@@ -246,9 +243,7 @@ public final class CommandPaletteView extends View {
         super(context);
         mDensity = context.getResources().getDisplayMetrics().density;
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        Typeface mono = Typeface.MONOSPACE;
-        mMono.setTypeface(mono);
-        mMonoBold.setTypeface(Typeface.create(mono, Typeface.BOLD));
+        mMono.setTypeface(Typeface.MONOSPACE);
         mStroke.setStyle(Paint.Style.STROKE);
         mStroke.setStrokeWidth(HAIRLINE * mDensity);
         setClickable(true);
@@ -397,11 +392,11 @@ public final class CommandPaletteView extends View {
     }
 
     /**
-     * Title bar plus filter row: what the palette is with no rows under it, and so the floor the
-     * height spring collapses to when the query is empty.
+     * The filter row: what the palette is with no rows under it, and so the floor the height
+     * spring collapses to when the query is empty.
      */
     public float chromeHeight() {
-        return dp(TITLE_BAR_H) + dp(FILTER_ROW_H);
+        return dp(FILTER_ROW_H);
     }
 
     private float listContentHeight() {
@@ -513,50 +508,43 @@ public final class CommandPaletteView extends View {
         clipToFrame(canvas);
         int alpha = Math.round(255f * mBodyAlpha);
 
-        float titleBottom = mFrame.top + dp(TITLE_BAR_H);
-        mFill.setColor(withBodyAlpha(ColorUtils.setAlphaComponent(mPrimary, 18), alpha));
-        canvas.drawRect(mFrame.left, mFrame.top, mFrame.right, titleBottom, mFill);
-        drawHairline(canvas, titleBottom, ColorUtils.setAlphaComponent(mPrimary, 56), alpha);
-
-        mMonoBold.setTextSize(dp(SIZE_TITLE));
-        mMonoBold.setLetterSpacing(0.1f);
-        mMonoBold.setColor(withBodyAlpha(mPrimary, alpha));
-        float titleBaseline = baseline(mFrame.top, dp(TITLE_BAR_H), mMonoBold);
-        canvas.drawText("PALETTE", mFrame.left + dp(ROW_PAD_LEFT), titleBaseline, mMonoBold);
-        float crumbStart = mFrame.left + dp(ROW_PAD_LEFT)
-            + mMonoBold.measureText("PALETTE") + dp(6f);
-        mMonoBold.setLetterSpacing(0f);
+        // One surface, no title bar: the filter row is the top edge, with the crumb and result
+        // meta right-aligned inside it instead of on a row of their own.
+        float filterBottom = mFrame.top + dp(FILTER_ROW_H);
+        drawHairline(canvas, filterBottom, ColorUtils.setAlphaComponent(Color.WHITE, 26), alpha);
+        mMono.setTextSize(dp(SIZE_FILTER));
+        mMono.setLetterSpacing(0f);
+        mMono.setColor(withBodyAlpha(mPrimary, alpha));
+        float promptBaseline = baseline(mFrame.top, dp(FILTER_ROW_H), mMono);
+        canvas.drawText("❯", mFrame.left + dp(ROW_PAD_LEFT), promptBaseline, mMono);
+        float queryStart = mFrame.left + dp(ROW_PAD_LEFT) + mMono.measureText("❯ ");
 
         mMono.setTextSize(dp(SIZE_META));
-        mMono.setLetterSpacing(0f);
         mMono.setColor(withBodyAlpha(mMeta, alpha));
         float metaWidth = mMono.measureText(mMetaText);
         canvas.drawText(mMetaText, mFrame.right - dp(ROW_PAD_RIGHT) - metaWidth,
-            titleBaseline, mMono);
+            promptBaseline, mMono);
+        float queryEnd = mFrame.right - dp(ROW_PAD_RIGHT)
+            - (metaWidth > 0f ? metaWidth + dp(8f) : 0f);
 
         if (!mCrumb.isEmpty()) {
             mMono.setTextSize(dp(SIZE_CRUMB));
             mMono.setColor(withBodyAlpha(mOnSurfaceVariant, alpha));
-            float available = mFrame.right - dp(ROW_PAD_RIGHT) - metaWidth - dp(8f) - crumbStart;
-            canvas.drawText(ellipsize(mMono, "/ " + mCrumb, available), crumbStart,
-                titleBaseline, mMono);
+            String crumb = ellipsize(mMono, "/ " + mCrumb, (queryEnd - queryStart) * 0.5f);
+            float crumbWidth = mMono.measureText(crumb);
+            canvas.drawText(crumb, queryEnd - crumbWidth, promptBaseline, mMono);
+            queryEnd -= crumbWidth + dp(8f);
         }
 
-        float filterBottom = titleBottom + dp(FILTER_ROW_H);
-        drawHairline(canvas, filterBottom, ColorUtils.setAlphaComponent(Color.WHITE, 26), alpha);
         mMono.setTextSize(dp(SIZE_FILTER));
-        mMono.setColor(withBodyAlpha(mPrimary, alpha));
-        float promptBaseline = baseline(titleBottom, dp(FILTER_ROW_H), mMono);
-        canvas.drawText("❯", mFrame.left + dp(ROW_PAD_LEFT), promptBaseline, mMono);
-        float queryStart = mFrame.left + dp(ROW_PAD_LEFT) + mMono.measureText("❯ ");
         boolean showPlaceholder = mQuery.isEmpty();
         mMono.setColor(withBodyAlpha(showPlaceholder ? mMeta : mOnSurface, alpha));
         String queryText = showPlaceholder ? mQueryPlaceholder : mQuery;
-        canvas.drawText(ellipsizeStart(mMono, queryText,
-            mFrame.right - dp(ROW_PAD_RIGHT) - queryStart), queryStart, promptBaseline, mMono);
+        canvas.drawText(ellipsizeStart(mMono, queryText, queryEnd - queryStart),
+            queryStart, promptBaseline, mMono);
         if (!showPlaceholder) {
             float caretX = queryStart + Math.min(measureToCursor(mMono, mQuery),
-                mFrame.right - dp(ROW_PAD_RIGHT) - queryStart);
+                queryEnd - queryStart);
             mFill.setColor(withBodyAlpha(mPrimary, alpha));
             canvas.drawRect(caretX + dp(1f), promptBaseline - lineHeightOf(mMono) * 0.78f,
                 caretX + dp(1f) + mDensity, promptBaseline + dp(2f), mFill);
@@ -569,7 +557,7 @@ public final class CommandPaletteView extends View {
     }
 
     private float listTop() {
-        return mFrame.top + dp(TITLE_BAR_H) + dp(FILTER_ROW_H);
+        return mFrame.top + dp(FILTER_ROW_H);
     }
 
     private float listBottom() {

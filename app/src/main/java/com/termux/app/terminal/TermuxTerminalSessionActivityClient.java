@@ -381,8 +381,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (!mActivity.isVisible())
             return;
         // The indicator replaces the old Android toast, so disable-terminal-session-change-toast
-        // must not suppress it.
-        mActivity.showSessionSwitchIndicator(toToastTitle(mActivity.getCurrentSession()));
+        // must not suppress it. A new pane or window inside the current session is not a session
+        // switch though, so those stay silent.
+        TerminalSession current = mActivity.getCurrentSession();
+        if (!mActivity.noteSessionSwitchIndicated(current))
+            return;
+        mActivity.showSessionSwitchIndicator(toToastTitle(current));
     }
 
     public void switchToSession(boolean forward) {
@@ -590,14 +594,21 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         final int indexOfSession = service.getIndexOfSession(session);
         if (indexOfSession < 0)
             return null;
-        StringBuilder toastTitle = new StringBuilder("[" + (indexOfSession + 1) + "]");
-        if (!TextUtils.isEmpty(session.mSessionName)) {
-            toastTitle.append(" ").append(session.mSessionName);
+        // Number by the launcher's tmux-style session, not by raw shell count: every pane and
+        // window is its own service shell, so the service index kept flashing "[3]" for what the
+        // user sees as their second session.
+        int sessionNumber = mActivity.getWindowSessionNumber(session);
+        if (sessionNumber < 1) sessionNumber = indexOfSession + 1;
+        StringBuilder toastTitle = new StringBuilder("[" + sessionNumber + "]");
+        String sessionName = mActivity.getWindowSessionName(session);
+        if (TextUtils.isEmpty(sessionName)) sessionName = session.mSessionName;
+        if (!TextUtils.isEmpty(sessionName)) {
+            toastTitle.append(" ").append(sessionName);
         }
         String title = session.getTitle();
         if (!TextUtils.isEmpty(title)) {
             // Space to "[${NR}] or newline after session name:
-            toastTitle.append(session.mSessionName == null ? " " : "\n");
+            toastTitle.append(TextUtils.isEmpty(sessionName) ? " " : "\n");
             toastTitle.append(title);
         }
         return toastTitle.toString();

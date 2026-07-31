@@ -270,7 +270,7 @@ public final class TerminalSessionBrowser {
             if (window.current) out.append(" •");
             for (SessionBrowserModel.Pane pane : window.panes) {
                 out.append("  ");
-                if (pane.cwd != null) out.append(pane.cwd);
+                if (pane.cwd != null) out.append(SessionBrowserModel.displayCwd(pane.cwd));
                 if (pane.foreground != null) {
                     if (pane.cwd != null) out.append(" · ");
                     out.append(pane.foreground);

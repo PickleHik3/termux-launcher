@@ -183,6 +183,10 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS = -1;
         public static final int MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS = 40;
 
+        /** Section the surface editor last had open ("dock", "keyboard", "status", "other"). */
+        public static final String KEY_SURFACE_TUNING_LAST_SECTION = "surface_tuning_last_section";
+        public static final String DEFAULT_SURFACE_TUNING_LAST_SECTION = "dock";
+
         /** Independent status-surface glass controls used by the live surface editor. */
         public static final String KEY_STATUS_BAR_BLUR_RADIUS = "status_bar_blur_radius";
         public static final int DEFAULT_STATUS_BAR_BLUR_RADIUS = 10;
@@ -318,10 +322,15 @@ public final class TermuxPreferenceConstants {
 
         /**
          * Defines the key for whether the in-app keyboard will be enabled.
+         *
+         * <p>Defaults to enabled: with the system IME as the fresh-install default, first launch
+         * raced the IME's inset animation against the launcher's own keyboard chrome — an extra
+         * band of padding and a flickering terminal until the two settled. The embedded keyboard
+         * suppresses the system IME outright, so a fresh install never enters that race.
          */
         public static final String KEY_IN_APP_KEYBOARD_ENABLED = "in_app_keyboard_enabled";
 
-        public static final boolean DEFAULT_IN_APP_KEYBOARD_ENABLED = false;
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_ENABLED = true;
 
         /**
          * Defines the key for the in-app keyboard color theme.

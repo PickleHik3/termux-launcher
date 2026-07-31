@@ -296,7 +296,7 @@ public final class SessionsPanelView extends LinearLayout {
     private String rowSubtitle(@NonNull SessionBrowserModel.Session session) {
         StringBuilder out = new StringBuilder();
         String cwd = focusedCwd(session);
-        if (cwd != null) out.append(cwd).append(" · ");
+        if (cwd != null) out.append(SessionBrowserModel.displayCwd(cwd)).append(" · ");
         out.append(getResources().getQuantityString(R.plurals.session_browser_window_count,
             session.windows.size(), session.windows.size()));
         out.append(" · ");

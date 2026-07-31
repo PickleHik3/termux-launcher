@@ -154,6 +154,24 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         );
     }
 
+    public String getSurfaceTuningLastSection() {
+        return SharedPreferenceUtils.getString(
+            mSharedPreferences,
+            TERMUX_APP.KEY_SURFACE_TUNING_LAST_SECTION,
+            TERMUX_APP.DEFAULT_SURFACE_TUNING_LAST_SECTION,
+            true
+        );
+    }
+
+    public void setSurfaceTuningLastSection(String value) {
+        SharedPreferenceUtils.setString(
+            mSharedPreferences,
+            TERMUX_APP.KEY_SURFACE_TUNING_LAST_SECTION,
+            value,
+            false
+        );
+    }
+
     public int getAppLauncherDockCornerRadius() {
         int value = SharedPreferenceUtils.getInt(mSharedPreferences,
             TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS,

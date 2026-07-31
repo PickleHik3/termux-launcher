@@ -225,6 +225,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** All sessions shown in the drawer. Each owns one or more windows. */
     private final java.util.List<WSession> mWSessions = new java.util.ArrayList<>();
     @Nullable private WSession mCurrentWSession;
+    /** Session the switch indicator last fired for; compared by identity, never dereferenced. */
+    @Nullable private WSession mLastIndicatedWSession;
     /** Resolves per-pane foreground process / open file for the window pill labels. */
     @Nullable private com.termux.app.statusbar.WindowForegroundResolver mWindowForegroundResolver;
     @Nullable private Runnable mSessionBrowserRefreshCallback;
@@ -2357,7 +2359,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return Math.round(dpToPx(6));
     }
 
-    private float resolveDockCapsuleCornerRadiusPx(int surfaceHeightPx) {
+    /** Also the command palette's open-state radius, so the two glass surfaces read as one kit. */
+    public float resolveDockCapsuleCornerRadiusPx(int surfaceHeightPx) {
         int configuredRadius = mPreferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS
             : mPreferences.getAppLauncherDockCornerRadius();
@@ -6094,7 +6097,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void enterDockTuningMode() {
-        enterDockTuningMode("dock");
+        // No section asked for: reopen where the user last was.
+        enterDockTuningMode(mPreferences == null
+            ? null : mPreferences.getSurfaceTuningLastSection());
     }
 
     private void enterDockTuningMode(@Nullable String initialSection) {
@@ -6236,10 +6241,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int initialSectionId = surfaceTuningSectionId(initialSection);
         sectionGroup.check(initialSectionId);
         showSurfaceTuningPanel(initialSectionId);
+        mPreferences.setSurfaceTuningLastSection(surfaceTuningSectionKey(initialSectionId));
 
         sectionGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
-            if (isChecked)
+            if (isChecked) {
                 showSurfaceTuningPanel(checkedId);
+                mPreferences.setSurfaceTuningLastSection(surfaceTuningSectionKey(checkedId));
+            }
         });
 
         blur.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
@@ -6512,6 +6520,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if ("other".equals(section) || "terminal".equals(section))
             return R.id.surface_tuning_section_other;
         return R.id.surface_tuning_section_dock;
+    }
+
+    private String surfaceTuningSectionKey(int sectionId) {
+        if (sectionId == R.id.surface_tuning_section_keyboard) return "keyboard";
+        if (sectionId == R.id.surface_tuning_section_status) return "status";
+        if (sectionId == R.id.surface_tuning_section_other) return "other";
+        return "dock";
     }
 
     private int editorRadius(int value) {
@@ -9051,6 +9066,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (shell == null || mPaneController == null) return null;
         WSession ws = wsessionOwning(mPaneController.windowOf(shell));
         return ws == null ? WindowSessionName.normalize(shell.mSessionName) : ws.name;
+    }
+
+    /** 1-based number of the tmux-style session containing {@code shell}, or -1 when unowned. */
+    public int getWindowSessionNumber(@Nullable TerminalSession shell) {
+        if (shell == null || mPaneController == null) return -1;
+        WSession ws = wsessionOwning(mPaneController.windowOf(shell));
+        int index = ws == null ? -1 : mWSessions.indexOf(ws);
+        return index < 0 ? -1 : index + 1;
+    }
+
+    /**
+     * Records that the session-switch indicator is about to fire for {@code shell} and answers
+     * whether it should: false while the shell still belongs to the session indicated last time,
+     * so pane and window churn inside one session never reads as a session switch.
+     */
+    public boolean noteSessionSwitchIndicated(@Nullable TerminalSession shell) {
+        if (shell == null || mPaneController == null) return true;
+        WSession ws = wsessionOwning(mPaneController.windowOf(shell));
+        if (ws == null) return true;
+        if (ws == mLastIndicatedWSession) return false;
+        mLastIndicatedWSession = ws;
+        return true;
     }
 
     /** Prefix+R entry point: rename the current tmux-style session, not its focused shell. */

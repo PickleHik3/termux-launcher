@@ -21,6 +21,20 @@ public final class SessionBrowserModel {
         }
     }
 
+    /**
+     * Home-relative display form of a working directory: paths inside the Termux home render as
+     * {@code ~} or {@code ~/sub}, while anything above home — the user walked backward out of it —
+     * keeps its full {@code /data/data/com.termux/...} prefix. Display-only; the model and the
+     * search filter keep the raw path.
+     */
+    @NonNull
+    public static String displayCwd(@NonNull String cwd) {
+        String home = com.termux.shared.termux.TermuxConstants.TERMUX_HOME_DIR_PATH;
+        if (cwd.equals(home)) return "~";
+        if (cwd.startsWith(home + "/")) return "~" + cwd.substring(home.length());
+        return cwd;
+    }
+
     public static final class Window {
         public final int index;
         public final boolean current;
