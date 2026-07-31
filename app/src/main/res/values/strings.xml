@@ -173,7 +173,7 @@
     <string name="settings_edit_pinned_apps_title">Edit pinned apps</string>
     <string name="settings_edit_pinned_apps_summary">Choose apps and drag them to reorder directly.</string>
     <string name="settings_app_browsing_header">App browsing</string>
-    <string name="settings_show_az_index_title">Show A–Z app index</string>
+    <string name="settings_show_az_index_title">Alphabets row</string>
     <string name="settings_show_az_index_summary">Shows an alphabetical index below pinned apps.</string>
     <string name="settings_app_index_haptics_title">Launcher haptics</string>
     <string name="settings_app_index_haptics_summary">Subtle feedback across the app index and dock page changes.</string>
@@ -188,7 +188,7 @@
     <string name="settings_home_behavior_header">Home behavior</string>
     <string name="settings_set_default_launcher_title">Set as default launcher</string>
     <string name="settings_set_default_launcher_summary">Opens Android’s default home app settings.</string>
-    <string name="settings_double_tap_action_title">A–Z index double-tap action</string>
+    <string name="settings_double_tap_action_title">Double tap A–Z Row to lock screen</string>
     <string name="settings_double_tap_action_summary">Choose what happens when the A–Z index is double-tapped.</string>
     <string name="settings_live_preview_title">Live preview</string>
     <string name="settings_preview_surface_description">Surface preview. Open the live editor for full-size editing.</string>
@@ -1003,6 +1003,7 @@
                 <string name="termux_surface_tuning_reset">Reset tab</string>
                 <string name="termux_surface_tuning_keyboard_height">Height</string>
                 <string name="termux_surface_tuning_keyboard_spacing">Spacing</string>
+                <string name="termux_surface_tuning_keyboard_key_opacity">Keys opacity</string>
                 <string name="termux_surface_tuning_edges">Padding</string>
                 <string name="termux_surface_tuning_dock_height_handle">Drag to resize the dock</string>
                 <string name="termux_surface_tuning_keyboard_height_handle">Drag to resize the keyboard</string>
@@ -1246,6 +1247,9 @@
     <string name="tool_pane_rotate">Rotate pane layout</string>
     <string name="tool_pane_next_layout">Next pane layout</string>
     <string name="tool_pane_toggle_float">Float / dock pane</string>
+    <string name="tool_terminal_toggle_scratchpad">Toggle scratchpad</string>
+    <string name="tool_workspace_picker">Load workspace</string>
+    <string name="tool_workspace_save_prompt">Save workspace</string>
     <string name="tool_window_new">New window</string>
     <string name="tool_window_close">Close window</string>
     <string name="tool_window_next">Next window</string>
@@ -1296,6 +1300,16 @@
     <string name="tool_desc_pane_rotate">Rotate this window’s pane layout clockwise.</string>
     <string name="tool_desc_pane_next_layout">Cycle this window to the next automatic pane layout and keep it applied as panes are added or closed.</string>
     <string name="tool_desc_pane_toggle_float">Detach the focused pane into a movable floating window above the tiled panes, or dock a floating pane back into the layout.</string>
+    <string name="tool_desc_terminal_toggle_scratchpad">Show or hide a dedicated floating terminal; its shell keeps running while hidden.</string>
+    <string name="tool_desc_workspace_picker">Pick a saved workspace and load it into the current layout or in place of it.</string>
+    <string name="tool_desc_workspace_save_prompt">Prompt for a name and save the current sessions, windows, and panes.</string>
+    <string name="workspace_picker_title">Load workspace</string>
+    <string name="workspace_picker_empty">No saved workspaces</string>
+    <string name="workspace_picker_mode_message">Load “%1$s” in place of the current workspace, or append its windows to it?</string>
+    <string name="workspace_picker_replace">Replace</string>
+    <string name="workspace_picker_append">Append</string>
+    <string name="workspace_picker_loaded">Workspace “%1$s” loaded</string>
+    <string name="workspace_picker_failed">Could not load workspace: %1$s</string>
     <string name="tool_desc_window_new">Create a new window with a fresh shell in the current session.</string>
     <string name="tool_desc_window_close">Close the current window and every pane in it.</string>
     <string name="tool_desc_window_next">Switch to the next window in the current session.</string>

@@ -770,7 +770,7 @@
             android:paddingStart="14dp"
             android:paddingEnd="14dp"
             android:paddingTop="10dp"
-            android:paddingBottom="10dp"
+            android:paddingBottom="12dp"
             android:visibility="gone" />
 
         <com.google.android.material.card.MaterialCardView
@@ -1118,6 +1118,12 @@
                         </LinearLayout>
 
                         <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
+                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_keyboard_key_opacity" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <SeekBar android:id="@+id/surface_tuning_keyboard_key_opacity_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="100" android:splitTrack="false" />
+                            <TextView android:id="@+id/surface_tuning_keyboard_key_opacity_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
                             <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_edges" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
                             <SeekBar android:id="@+id/surface_tuning_keyboard_inset_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="48" android:splitTrack="false" />
                             <TextView android:id="@+id/surface_tuning_keyboard_inset_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
@@ -1444,16 +1450,29 @@
                         android:orientation="horizontal">
 
                         <!-- Cross-section control, so it lives with the actions rather than in one
-                             section's scroll content. The weight pushes Reset and Done right. -->
-                        <com.google.android.material.materialswitch.MaterialSwitch
-                            android:id="@+id/surface_tuning_status_normalize_switch"
-                            android:layout_width="0dp"
-                            android:layout_weight="1"
+                             section's scroll content. Label and switch sit together; the trailing
+                             spacer pushes Reset and Done right. The scale keeps the M3 switch in
+                             proportion with the popup's compact 12sp rows. -->
+                        <TextView
+                            android:id="@+id/surface_tuning_status_normalize_label"
+                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:minHeight="36dp"
                             android:text="@string/termux_surface_tuning_normalize"
                             android:textColor="?attr/termuxColorOnSurface"
                             android:textSize="12sp" />
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/surface_tuning_status_normalize_switch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="2dp"
+                            android:scaleX="0.75"
+                            android:scaleY="0.75" />
+
+                        <Space
+                            android:layout_width="0dp"
+                            android:layout_height="1dp"
+                            android:layout_weight="1" />
 
                         <TextView
                             android:id="@+id/surface_tuning_reset"

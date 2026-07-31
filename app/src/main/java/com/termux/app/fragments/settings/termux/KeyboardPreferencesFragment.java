@@ -14,6 +14,7 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.preference.ListPreference;
 import androidx.preference.MultiSelectListPreference;
 import androidx.preference.Preference;
@@ -271,7 +272,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             launchFontPicker();
             return;
         }
-        new AlertDialog.Builder(requireActivity())
+        new MaterialAlertDialogBuilder(requireActivity())
             .setTitle(R.string.termux_in_app_keyboard_font_title)
             .setItems(new CharSequence[]{
                 getString(R.string.termux_in_app_keyboard_font_pick),

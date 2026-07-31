@@ -1,6 +1,7 @@
 package com.termux.app.terminal;
 
-import android.app.AlertDialog;
+import androidx.appcompat.app.AlertDialog;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import android.content.Context;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -59,7 +60,7 @@ final class TerminalScrollbackSearchOverlay {
             android.R.layout.simple_list_item_1, new ArrayList<>());
         list.setAdapter(adapter);
         List<TerminalScrollbackSearchModel.Match> matches = new ArrayList<>();
-        AlertDialog dialog = new AlertDialog.Builder(activity)
+        AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
             .setTitle(R.string.terminal_scrollback_search_title)
             .setView(content)
             .setNegativeButton(android.R.string.cancel, null)

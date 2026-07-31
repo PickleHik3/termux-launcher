@@ -22,6 +22,7 @@ import androidx.annotation.Nullable;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.fragment.app.Fragment;
 
 import com.google.android.material.button.MaterialButton;
@@ -190,7 +191,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         MaterialButton reset = new MaterialButton(context, null,
             com.google.android.material.R.attr.materialButtonOutlinedStyle);
         reset.setText(R.string.termux_keyboard_color_scheme_reset);
-        reset.setOnClickListener(view -> new AlertDialog.Builder(requireContext())
+        reset.setOnClickListener(view -> new MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.termux_keyboard_color_scheme_reset_title)
             .setMessage(R.string.termux_keyboard_color_scheme_reset_message)
             .setNegativeButton(android.R.string.cancel, null)
@@ -371,7 +372,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         input.setText(String.format("#%08X", mScheme.getSwatch(index)));
         input.selectAll();
         int horizontal = dp(24);
-        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+        AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.termux_keyboard_color_scheme_hex_title)
             .setView(input, horizontal, 0, horizontal, 0)
             .setNegativeButton(android.R.string.cancel, null)
@@ -468,7 +469,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         dialogContent.addView(galleryLink, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         int horizontal = dp(24);
-        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+        AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.termux_keyboard_color_scheme_tinted_name_title)
             .setMessage(R.string.termux_keyboard_color_scheme_tinted_name_message)
             .setView(dialogContent, horizontal, 0, horizontal, 0)

@@ -1,7 +1,8 @@
 package com.termux.app;
 
 import android.app.Activity;
-import android.app.AlertDialog;
+import androidx.appcompat.app.AlertDialog;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import android.app.ProgressDialog;
 import android.content.Context;
 import android.os.Build;
@@ -255,7 +256,7 @@ final class TermuxInstaller {
         sendBootstrapCrashReportNotification(activity, message);
         activity.runOnUiThread(() -> {
             try {
-                new AlertDialog.Builder(activity).setTitle(R.string.bootstrap_error_title).setMessage(R.string.bootstrap_error_body).setNegativeButton(R.string.bootstrap_error_abort, (dialog, which) -> {
+                new MaterialAlertDialogBuilder(activity).setTitle(R.string.bootstrap_error_title).setMessage(R.string.bootstrap_error_body).setNegativeButton(R.string.bootstrap_error_abort, (dialog, which) -> {
                     dialog.dismiss();
                     activity.finish();
                 }).setPositiveButton(R.string.bootstrap_error_try_again, (dialog, which) -> {

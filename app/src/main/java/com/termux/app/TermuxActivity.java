@@ -584,10 +584,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mLastInAppKeyboardBackdropManagedSource;
     @NonNull private final Rect mLastInAppKeyboardBackdropTargetRect = new Rect();
     @Nullable private Bitmap mInAppKeyboardBackdropBitmap;
-    /** One wallpaper-frame blur shared by dock, keyboard, and gesture-nav crops. */
-    @Nullable private Bitmap mCachedAccessoryWallpaperBlurBitmap;
+    /**
+     * Pre-blurred wallpaper frames shared by dock, keyboard, gesture-nav, and top-pane frost
+     * crops — one frame per requested blur radius, LRU-capped. Surfaces are tuned independently
+     * (dock and status frost carry their own radius sliders); the previous single-slot cache
+     * was invalidated by every radius alternation, re-decoding and re-blurring the wallpaper on
+     * the main thread two or three times on every return home (1-3s of dropped frames).
+     */
+    private static final int MAX_CACHED_WALLPAPER_BLUR_RADII = 3;
+    @NonNull private final java.util.LinkedHashMap<Integer, Bitmap>
+        mCachedAccessoryWallpaperBlurByRadius = new java.util.LinkedHashMap<>(4, 0.75f, true);
     @NonNull private final Rect mCachedAccessoryWallpaperBlurFrameRect = new Rect();
-    private int mCachedAccessoryWallpaperBlurRadiusDp = -1;
     private boolean mCachedAccessoryWallpaperBlurManagedSource;
     private int mCachedAccessoryWallpaperBlurSystemId = -1;
     private long mCachedAccessoryWallpaperBlurManagedLastModified = -1L;
@@ -2304,7 +2311,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int resolveInAppKeyboardHorizontalInsetPx() {
         return resolveSurfaceHorizontalInsetPx(mPreferences == null
-            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET
             : mPreferences.getInAppKeyboardHorizontalInset(), isInAppKeyboardCapsule());
     }
 
@@ -3144,7 +3151,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void recycleSupersededInAppKeyboardBackdrop(@Nullable Bitmap previousBackdrop,
                                                          @Nullable Drawable installedBackground) {
         if (previousBackdrop == null || previousBackdrop == mInAppKeyboardBackdropBitmap
-            || previousBackdrop == mCachedAccessoryWallpaperBlurBitmap
+            || mCachedAccessoryWallpaperBlurByRadius.containsValue(previousBackdrop)
             || previousBackdrop.isRecycled()
             || drawableReferencesBitmap(installedBackground, previousBackdrop)) {
             return;
@@ -3667,15 +3674,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         File managedFile = managedSource ? getManagedWallpaperExactFile() : null;
         long managedLastModified = managedFile != null ? managedFile.lastModified() : -1L;
         long managedLength = managedFile != null ? managedFile.length() : -1L;
-        if (mCachedAccessoryWallpaperBlurBitmap != null
-            && !mCachedAccessoryWallpaperBlurBitmap.isRecycled()
-            && mCachedAccessoryWallpaperBlurRadiusDp == blurRadiusDp
-            && mCachedAccessoryWallpaperBlurManagedSource == managedSource
+        boolean sourceValid = mCachedAccessoryWallpaperBlurManagedSource == managedSource
             && mCachedAccessoryWallpaperBlurSystemId == systemWallpaperId
             && mCachedAccessoryWallpaperBlurManagedLastModified == managedLastModified
             && mCachedAccessoryWallpaperBlurManagedLength == managedLength
-            && mCachedAccessoryWallpaperBlurFrameRect.equals(frameRect)) {
-            return mCachedAccessoryWallpaperBlurBitmap;
+            && mCachedAccessoryWallpaperBlurFrameRect.equals(frameRect);
+        if (sourceValid) {
+            Bitmap cached = mCachedAccessoryWallpaperBlurByRadius.get(blurRadiusDp);
+            if (cached != null && !cached.isRecycled()) {
+                return cached;
+            }
+        } else {
+            // The wallpaper itself changed; every per-radius frame is stale.
+            clearCachedAccessoryWallpaperBlur();
         }
 
         Bitmap wallpaperBitmap = createWallpaperBackdropBitmapForRect(frameRect, wallpaperFrame);
@@ -3690,10 +3701,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (blurredBitmap != wallpaperBitmap) {
             wallpaperBitmap.recycle();
         }
-        clearCachedAccessoryWallpaperBlur();
-        mCachedAccessoryWallpaperBlurBitmap = blurredBitmap;
+        mCachedAccessoryWallpaperBlurByRadius.put(blurRadiusDp, blurredBitmap);
+        while (mCachedAccessoryWallpaperBlurByRadius.size() > MAX_CACHED_WALLPAPER_BLUR_RADII) {
+            java.util.Iterator<Bitmap> eldest =
+                mCachedAccessoryWallpaperBlurByRadius.values().iterator();
+            Bitmap evicted = eldest.next();
+            eldest.remove();
+            if (evicted != null && !evicted.isRecycled()
+                && evicted != mInAppKeyboardBackdropBitmap) {
+                evicted.recycle();
+            }
+        }
         mCachedAccessoryWallpaperBlurFrameRect.set(frameRect);
-        mCachedAccessoryWallpaperBlurRadiusDp = blurRadiusDp;
         mCachedAccessoryWallpaperBlurManagedSource = managedSource;
         mCachedAccessoryWallpaperBlurSystemId = systemWallpaperId;
         mCachedAccessoryWallpaperBlurManagedLastModified = managedLastModified;
@@ -3727,13 +3746,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void clearCachedAccessoryWallpaperBlur() {
-        if (mCachedAccessoryWallpaperBlurBitmap != null
-            && !mCachedAccessoryWallpaperBlurBitmap.isRecycled()) {
-            mCachedAccessoryWallpaperBlurBitmap.recycle();
+        for (Bitmap cached : mCachedAccessoryWallpaperBlurByRadius.values()) {
+            if (cached != null && !cached.isRecycled()
+                && cached != mInAppKeyboardBackdropBitmap) {
+                cached.recycle();
+            }
         }
-        mCachedAccessoryWallpaperBlurBitmap = null;
+        mCachedAccessoryWallpaperBlurByRadius.clear();
         mCachedAccessoryWallpaperBlurFrameRect.setEmpty();
-        mCachedAccessoryWallpaperBlurRadiusDp = -1;
         mCachedAccessoryWallpaperBlurManagedSource = false;
         mCachedAccessoryWallpaperBlurSystemId = -1;
         mCachedAccessoryWallpaperBlurManagedLastModified = -1L;
@@ -5952,7 +5972,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    private float dpToPx(int dp) {
+    private float dpToPx(float dp) {
         return dp * getResources().getDisplayMetrics().density;
     }
 
@@ -6186,6 +6206,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         SeekBar keyboardHeight = findViewById(R.id.surface_tuning_keyboard_height_slider);
         SeekBar keyboardSpacing = findViewById(R.id.surface_tuning_keyboard_spacing_slider);
         SeekBar keyboardRadius = findViewById(R.id.surface_tuning_keyboard_radius_slider);
+        SeekBar keyboardKeyOpacity = findViewById(R.id.surface_tuning_keyboard_key_opacity_slider);
         SeekBar statusBlur = findViewById(R.id.surface_tuning_status_blur_slider);
         SeekBar statusOpacity = findViewById(R.id.surface_tuning_status_opacity_slider);
         SeekBar statusGrain = findViewById(R.id.surface_tuning_status_grain_slider);
@@ -6201,6 +6222,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         TextView keyboardHeightValue = findViewById(R.id.surface_tuning_keyboard_height_value);
         TextView keyboardSpacingValue = findViewById(R.id.surface_tuning_keyboard_spacing_value);
         TextView keyboardRadiusValue = findViewById(R.id.surface_tuning_keyboard_radius_value);
+        TextView keyboardKeyOpacityValue = findViewById(R.id.surface_tuning_keyboard_key_opacity_value);
         TextView statusBlurValue = findViewById(R.id.surface_tuning_status_blur_value);
         TextView statusOpacityValue = findViewById(R.id.surface_tuning_status_opacity_value);
         TextView statusGrainValue = findViewById(R.id.surface_tuning_status_grain_value);
@@ -6213,6 +6235,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || blur == null || opacity == null || grain == null || dockRadius == null
             || terminal == null || sessions == null || size == null || icons == null
             || keyboardHeight == null || keyboardSpacing == null || keyboardRadius == null
+            || keyboardKeyOpacity == null || keyboardKeyOpacityValue == null
             || statusBlur == null || statusOpacity == null || statusGrain == null
             || statusRadius == null
             || blurValue == null || opacityValue == null || grainValue == null
@@ -6246,6 +6269,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final float initialKeyboardHeight = mPreferences.getInAppKeyboardHeightScale();
         final float initialKeyboardSpacing = mPreferences.getInAppKeyboardKeyMarginScale();
         final float initialKeyboardRadius = mPreferences.getInAppKeyboardKeyCornerRadiusDp();
+        // The stored value may be the -1 "theme-defined" sentinel; the slider always shows the
+        // effective percent, while dismiss restores the raw stored value.
+        final int initialKeyboardKeyOpacity = mPreferences.getInAppKeyboardKeyOpacity();
+        final int initialKeyboardKeyOpacityEffective = mInAppKeyboard != null
+            ? mInAppKeyboard.getEffectiveKeyOpacityPercent()
+            : Math.max(0, initialKeyboardKeyOpacity);
         final int initialStatusBlur = mPreferences.getStatusBarBlurRadius();
         final int initialStatusOpacity = mPreferences.getStatusBarOpacity();
         final int initialStatusGrain = mPreferences.getStatusBarGrain();
@@ -6273,6 +6302,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
             TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_MARGIN_SCALE));
         keyboardRadius.setProgress(Math.round(initialKeyboardRadius * 10f));
+        keyboardKeyOpacity.setProgress(initialKeyboardKeyOpacityEffective);
         statusBlur.setProgress(initialStatusBlur);
         statusOpacity.setProgress(initialStatusOpacity);
         statusGrain.setProgress(initialStatusGrain);
@@ -6292,6 +6322,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             keyboardSpacing.getProgress()));
         keyboardRadiusValue.setText(getString(R.string.termux_dock_tuning_value_dp,
             Math.round(initialKeyboardRadius)));
+        keyboardKeyOpacityValue.setText(getString(R.string.termux_dock_tuning_value_percent,
+            initialKeyboardKeyOpacityEffective));
         statusBlurValue.setText(getString(R.string.termux_dock_tuning_value_dp, initialStatusBlur));
         statusOpacityValue.setText(getString(R.string.termux_dock_tuning_value_percent,
             initialStatusOpacity));
@@ -6441,6 +6473,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.setInAppKeyboardKeyCornerRadiusDp(seekBar.getProgress() / 10f);
             }
         });
+        keyboardKeyOpacity.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                keyboardKeyOpacityValue.setText(getString(R.string.termux_dock_tuning_value_percent,
+                    progress));
+                // Scoped preview: repaints only the keyboard view, never the glass pipeline.
+                if (fromUser && mInAppKeyboard != null)
+                    mInAppKeyboard.previewSurfaceEditorKeyOpacity(progress);
+            }
+
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                mPreferences.setInAppKeyboardKeyOpacity(seekBar.getProgress());
+            }
+        });
         styleGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
             if (!isChecked)
                 return;
@@ -6493,11 +6538,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE);
                 mPreferences.setInAppKeyboardKeyCornerRadiusDp(
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP);
+                mPreferences.setInAppKeyboardKeyOpacity(
+                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY);
                 mPreferences.setInAppKeyboardHorizontalInset(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET);
-                if (mInAppKeyboard != null)
+                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET);
+                if (mInAppKeyboard != null) {
                     mInAppKeyboard.previewSurfaceEditorHeightScale(
                         TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE);
+                    mInAppKeyboard.previewSurfaceEditorKeyOpacity(
+                        TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY);
+                }
             } else if (section == R.id.surface_tuning_section_status) {
                 mPreferences.setStatusBarBlurRadius(
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS);
@@ -6535,6 +6585,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
                 TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_MARGIN_SCALE));
             keyboardRadius.setProgress(Math.round(mPreferences.getInAppKeyboardKeyCornerRadiusDp() * 10f));
+            keyboardKeyOpacity.setProgress(mInAppKeyboard != null
+                ? mInAppKeyboard.getEffectiveKeyOpacityPercent()
+                : Math.max(0, mPreferences.getInAppKeyboardKeyOpacity()));
             statusBlur.setProgress(mPreferences.getStatusBarBlurRadius());
             statusOpacity.setProgress(mPreferences.getStatusBarOpacity());
             statusGrain.setProgress(mPreferences.getStatusBarGrain());
@@ -6565,6 +6618,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.setInAppKeyboardHeightScale(initialKeyboardHeight);
                 mPreferences.setInAppKeyboardKeyMarginScale(initialKeyboardSpacing);
                 mPreferences.setInAppKeyboardKeyCornerRadiusDp(initialKeyboardRadius);
+                mPreferences.setInAppKeyboardKeyOpacity(initialKeyboardKeyOpacity);
                 mPreferences.setStatusBarBlurRadius(initialStatusBlur);
                 mPreferences.setStatusBarOpacity(initialStatusOpacity);
                 mPreferences.setStatusBarGrain(initialStatusGrain);
@@ -6572,8 +6626,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.setDockHorizontalInset(initialDockInset);
                 mPreferences.setInAppKeyboardHorizontalInset(initialKeyboardInset);
                 mPreferences.setStatusBarHorizontalInset(initialStatusInset);
-                if (mInAppKeyboard != null)
+                if (mInAppKeyboard != null) {
                     mInAppKeyboard.previewSurfaceEditorHeightScale(initialKeyboardHeight);
+                    mInAppKeyboard.previewSurfaceEditorKeyOpacity(initialKeyboardKeyOpacity);
+                }
                 applyDockTuningStructuralPreview();
                 exitDockTuningMode();
             });
@@ -6802,6 +6858,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             findViewById(R.id.surface_tuning_status_normalize_switch);
         if (normalize == null || mPreferences == null)
             return;
+        View normalizeLabel = findViewById(R.id.surface_tuning_status_normalize_label);
+        if (normalizeLabel != null) normalizeLabel.setOnClickListener(v -> normalize.toggle());
         normalize.setOnCheckedChangeListener(null);
         normalize.setChecked(mPreferences.isSurfaceTuningNormalized());
         normalize.setOnCheckedChangeListener((button, isChecked) -> {
@@ -7183,10 +7241,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     // ------------------------------------------------------------------ keybind hint popup
 
     /**
-     * While Ctrl+Alt (optionally +Shift) is latched on the in-app keyboard, a glass slab flush
-     * against the accessory stack lists every single-key binding reachable from that prefix, in
-     * the dock's material so it reads as part of the keyboard. Any other modifier state removes
-     * it, so it tracks latch, lock and release for free via onKeyboardModifiersChanged.
+     * While Ctrl+Alt (optionally +Shift) is latched on the in-app keyboard, the bound caps
+     * light up in their legend group's colour on the live keyboard itself, and a glass slab
+     * flush against the accessory stack shows a grouped legend of what each lit key does. Any
+     * other modifier state removes both, so they track latch, lock and release for free via
+     * onKeyboardModifiersChanged.
+     *
+     * <p>A prefix change while latched (Shift joining or leaving) never remounts the slab: the
+     * legend re-runs its entry animation, the keyboard re-lights and the letters flip case.
      */
     private void updateKeybindHintPopup(
             @Nullable com.termux.app.terminal.inappkeyboard.TerminalModifiers modifiers) {
@@ -7195,8 +7257,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean show = modifiers != null && modifiers.isCtrl() && modifiers.isAlt()
             && isInAppKeyboardShown();
         Map<String, String> hints = null;
+        boolean shift = show && modifiers.isShift();
+        String prefix = shift ? "ctrl+alt+shift+" : "ctrl+alt+";
         if (show) {
-            String prefix = modifiers.isShift() ? "ctrl+alt+shift+" : "ctrl+alt+";
             hints = com.termux.app.terminal.TerminalKeyBindingResolver.getInstance()
                 .hintsForPrefix(prefix,
                     com.termux.app.terminal.TerminalActionDispatcher.getInstance().actionContext());
@@ -7206,85 +7269,285 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             hideKeybindHintPopup();
             return;
         }
-        populateKeybindHintPopup(popup, hints);
+        boolean visible = popup.getVisibility() == View.VISIBLE;
+        // Modifier callbacks repeat for the same latch state; only content changes repopulate,
+        // so the lighting and entry animations are not restarted every callback.
+        String signature = prefix + '|' + hints;
+        if (visible && signature.equals(popup.getTag())) return;
+        popup.setTag(signature);
+        Map<String, Integer> litTokens = populateKeybindHintPopup(popup, hints, shift);
+        if (mInAppKeyboard != null)
+            mInAppKeyboard.setKeybindHintHighlights(litTokens);
         float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity() / 100f : 0.5f;
         popup.setBackground(buildDockGlassSurface(Math.max(0.85f, barAlpha), 0f, 1f, false));
-        if (popup.getVisibility() != View.VISIBLE) {
-            popup.setAlpha(0f);
+        if (!visible) {
             popup.setVisibility(View.VISIBLE);
-            popup.animate().alpha(1f).setDuration(120L).start();
+            if (isReducedMotionEnabled()) {
+                popup.setAlpha(1f);
+                popup.setTranslationY(0f);
+            } else {
+                popup.setAlpha(0f);
+                popup.setTranslationY(dpToPx(14));
+                popup.animate().alpha(1f).translationY(0f).setDuration(220L)
+                    .setInterpolator(new android.view.animation.PathInterpolator(
+                        0.2f, 0.8f, 0.2f, 1f))
+                    .start();
+            }
+        } else {
+            // A repopulate can land while the hide fade is still running; keep the slab up.
+            popup.animate().cancel();
+            popup.setAlpha(1f);
+            popup.setTranslationY(0f);
         }
     }
 
     private void hideKeybindHintPopup() {
+        if (mInAppKeyboard != null)
+            mInAppKeyboard.setKeybindHintHighlights(null);
         View popup = findViewById(R.id.keybind_hint_popup);
         if (popup == null || popup.getVisibility() != View.VISIBLE) return;
+        popup.setTag(null);
         popup.animate().alpha(0f).setDuration(100L)
             .withEndAction(() -> popup.setVisibility(View.GONE)).start();
     }
 
-    private static final int KEYBIND_HINT_MAX = 12;
+    private static final int KEYBIND_HINT_MAX = 18;
     private static final int KEYBIND_HINT_COLUMNS = 2;
+    private static final long KEYBIND_HINT_LEGEND_BASE_DELAY_MS = 60L;
+    private static final long KEYBIND_HINT_LEGEND_STAGGER_MS = 26L;
 
-    private void populateKeybindHintPopup(@NonNull android.widget.LinearLayout popup,
-                                          @NonNull Map<String, String> hints) {
+    /** One legend line: the keycap text shown, the keyboard tokens it lights, and its label. */
+    private static final class KeybindHintEntry {
+        String cap;
+        final java.util.List<String> tokens = new java.util.ArrayList<>(4);
+        final String label;
+
+        KeybindHintEntry(String cap, String token, String label) {
+            this.cap = cap;
+            this.tokens.add(token);
+            this.label = label;
+        }
+    }
+
+    /** Builds the legend and returns the binding token -> group colour map for the keyboard. */
+    @NonNull
+    private Map<String, Integer> populateKeybindHintPopup(
+            @NonNull android.widget.LinearLayout popup,
+            @NonNull Map<String, String> hints, boolean shift) {
         popup.removeAllViews();
         LauncherToolRegistry registry = LauncherToolRegistry.getInstance();
+        boolean animate = !isReducedMotionEnabled();
         int onSurface = getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
             R.color.termux_on_surface);
-        int onSurfaceVariant = getTermuxThemeColor(
-            com.termux.shared.R.attr.termuxColorOnSurfaceVariant, R.color.termux_on_surface);
-        android.widget.LinearLayout row = null;
+        int glassBase = resolveAccessoryGlassBaseColor();
+        int panesColor = com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory
+            .ensureContrast(getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary,
+                R.color.termux_primary), glassBase);
+        int windowsColor = com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory
+            .ensureContrast(getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSecondary,
+                R.color.termux_secondary), glassBase);
+        int viewColor = com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory
+            .ensureContrast(com.google.android.material.color.MaterialColors.getColor(this,
+                com.google.android.material.R.attr.colorTertiary,
+                androidx.core.graphics.ColorUtils.blendARGB(panesColor, windowsColor, 0.5f)),
+                glassBase);
+
+        // Legend groups in first-appearance order; arrow keys naming the same tool collapse
+        // into one entry ("←↓↑→ Move pane focus") so a directional tool costs one legend row.
+        java.util.LinkedHashMap<String, java.util.List<KeybindHintEntry>> groups =
+            new java.util.LinkedHashMap<>();
+        java.util.Map<String, KeybindHintEntry> arrowEntryByTool = new java.util.HashMap<>();
+        java.util.Map<String, Integer> litTokens = new java.util.LinkedHashMap<>();
         int added = 0;
         for (Map.Entry<String, String> hint : hints.entrySet()) {
             if (added >= KEYBIND_HINT_MAX) break;
-            if (row == null || added % KEYBIND_HINT_COLUMNS == 0) {
+            added++;
+            String token = hint.getKey();
+            String toolName = hint.getValue();
+            String group = keybindHintGroup(toolName);
+            int groupColor = "PANES".equals(group) ? panesColor
+                : "VIEW".equals(group) ? viewColor : windowsColor;
+            litTokens.put(token, groupColor);
+            String arrowGlyph = keybindHintArrowGlyph(token);
+            if (arrowGlyph != null) {
+                KeybindHintEntry merged = arrowEntryByTool.get(toolName);
+                if (merged != null) {
+                    merged.tokens.add(token);
+                    continue;
+                }
+            }
+            String cap = arrowGlyph != null ? arrowGlyph : keybindHintCapText(token, shift);
+            KeybindHintEntry entry = new KeybindHintEntry(cap, token,
+                keybindHintLabel(registry, toolName));
+            if (arrowGlyph != null) arrowEntryByTool.put(toolName, entry);
+            java.util.List<KeybindHintEntry> groupEntries = groups.get(group);
+            if (groupEntries == null) {
+                groupEntries = new java.util.ArrayList<>();
+                groups.put(group, groupEntries);
+            }
+            groupEntries.add(entry);
+        }
+        // A merged arrow entry shows the glyphs of every direction it absorbed, in ←↓↑→ order.
+        for (KeybindHintEntry entry : arrowEntryByTool.values()) {
+            if (entry.tokens.size() > 1) {
+                StringBuilder caps = new StringBuilder();
+                for (String token : new String[] {"left", "down", "up", "right"}) {
+                    if (entry.tokens.contains(token))
+                        caps.append(keybindHintArrowGlyph(token));
+                }
+                entry.cap = caps.toString();
+            }
+        }
+
+        int groupIndex = 0;
+        for (Map.Entry<String, java.util.List<KeybindHintEntry>> group : groups.entrySet()) {
+            int groupColor = "PANES".equals(group.getKey()) ? panesColor
+                : "VIEW".equals(group.getKey()) ? viewColor : windowsColor;
+            View groupView = buildKeybindHintGroup(group.getKey(), group.getValue(), groupColor,
+                onSurface, shift);
+            android.widget.LinearLayout.LayoutParams groupParams =
+                new android.widget.LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            if (groupIndex > 0) groupParams.topMargin = Math.round(dpToPx(6));
+            popup.addView(groupView, groupParams);
+            if (animate) {
+                groupView.setAlpha(0f);
+                groupView.setTranslationY(dpToPx(8));
+                groupView.animate().alpha(1f).translationY(0f).setDuration(280L)
+                    .setStartDelay(KEYBIND_HINT_LEGEND_BASE_DELAY_MS
+                        + groupIndex * KEYBIND_HINT_LEGEND_STAGGER_MS)
+                    .setInterpolator(new android.view.animation.PathInterpolator(
+                        0.2f, 0.8f, 0.2f, 1f))
+                    .start();
+            }
+            groupIndex++;
+        }
+        return litTokens;
+    }
+
+    /** Legend section for a tool name: pane.* / window.* / session.* have their own, rest VIEW. */
+    @NonNull
+    private static String keybindHintGroup(@NonNull String toolName) {
+        if (toolName.startsWith("pane.")) return "PANES";
+        if (toolName.startsWith("window.")) return "WINDOWS";
+        if (toolName.startsWith("session.")) return "SESSION";
+        return "VIEW";
+    }
+
+    @Nullable
+    private static String keybindHintArrowGlyph(@NonNull String token) {
+        switch (token) {
+            case "left": return "←";
+            case "down": return "↓";
+            case "up": return "↑";
+            case "right": return "→";
+            default: return null;
+        }
+    }
+
+    /** Legend keycap text: spelled-out tokens back to their glyph, letters follow the prefix case. */
+    @NonNull
+    private static String keybindHintCapText(@NonNull String token, boolean shift) {
+        switch (token) {
+            case "minus": return "-";
+            case "equals": return "=";
+            case "plus": return "+";
+            default:
+                return shift ? token.toUpperCase(java.util.Locale.ROOT)
+                    : token.toLowerCase(java.util.Locale.ROOT);
+        }
+    }
+
+    @NonNull
+    private View buildKeybindHintGroup(@NonNull String title,
+                                       @NonNull java.util.List<KeybindHintEntry> entries,
+                                       int groupColor, int onSurface, boolean shift) {
+        android.widget.LinearLayout group = new android.widget.LinearLayout(this);
+        group.setOrientation(android.widget.LinearLayout.VERTICAL);
+
+        android.widget.LinearLayout header = new android.widget.LinearLayout(this);
+        header.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+
+        View swatch = new View(this);
+        GradientDrawable swatchShape = new GradientDrawable();
+        swatchShape.setColor(groupColor);
+        swatchShape.setCornerRadius(dpToPx(1));
+        swatch.setBackground(swatchShape);
+        int swatchSize = Math.round(dpToPx(3.5f));
+        android.widget.LinearLayout.LayoutParams swatchParams =
+            new android.widget.LinearLayout.LayoutParams(swatchSize, swatchSize);
+        swatchParams.rightMargin = Math.round(dpToPx(4.5f));
+        header.addView(swatch, swatchParams);
+
+        TextView titleView = new TextView(this);
+        titleView.setText(title);
+        titleView.setTypeface(android.graphics.Typeface.create(
+            android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD));
+        titleView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 6.5f);
+        titleView.setLetterSpacing(0.2f);
+        titleView.setTextColor(groupColor);
+        header.addView(titleView, new android.widget.LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        View rule = new View(this);
+        rule.setBackgroundColor(withAlphaComponent(groupColor, 51));
+        android.widget.LinearLayout.LayoutParams ruleParams =
+            new android.widget.LinearLayout.LayoutParams(0,
+                Math.max(1, Math.round(dpToPx(0.5f))), 1f);
+        ruleParams.leftMargin = Math.round(dpToPx(6));
+        header.addView(rule, ruleParams);
+        group.addView(header, new android.widget.LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        int labelColor = withAlphaComponent(onSurface, 199);
+        android.widget.LinearLayout row = null;
+        for (int i = 0; i < entries.size(); i++) {
+            if (row == null || i % KEYBIND_HINT_COLUMNS == 0) {
                 row = new android.widget.LinearLayout(this);
                 row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-                popup.addView(row, new android.widget.LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                android.widget.LinearLayout.LayoutParams rowParams =
+                    new android.widget.LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                rowParams.topMargin = Math.round(dpToPx(i == 0 ? 6 : 1));
+                group.addView(row, rowParams);
             }
+            KeybindHintEntry entry = entries.get(i);
             android.widget.LinearLayout cell = new android.widget.LinearLayout(this);
             cell.setOrientation(android.widget.LinearLayout.HORIZONTAL);
             cell.setGravity(Gravity.CENTER_VERTICAL);
-            int cellPad = Math.round(dpToPx(3));
-            cell.setPadding(0, cellPad, 0, cellPad);
 
             TextView key = new TextView(this);
-            key.setText(hint.getKey().toUpperCase(java.util.Locale.ROOT));
+            key.setText(entry.cap);
             key.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
-            key.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 11);
-            key.setTextColor(onSurface);
-            key.setGravity(Gravity.CENTER);
-            key.setBackgroundResource(R.drawable.keybind_hint_keycap);
-            int keyPadH = Math.round(dpToPx(7));
-            int keyPadV = Math.round(dpToPx(2));
-            key.setPadding(keyPadH, keyPadV, keyPadH, keyPadV);
-            key.setMinWidth(Math.round(dpToPx(26)));
-            cell.addView(key);
+            key.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 8.5f);
+            key.setTextColor(groupColor);
+            key.setMinWidth(Math.round(dpToPx(22)));
+            cell.addView(key, new android.widget.LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
             TextView label = new TextView(this);
-            label.setText(keybindHintLabel(registry, hint.getValue()));
-            label.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 11.5f);
-            label.setTextColor(onSurfaceVariant);
+            label.setText(entry.label);
+            label.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 10.5f);
+            label.setTextColor(labelColor);
             label.setSingleLine(true);
             label.setEllipsize(android.text.TextUtils.TruncateAt.END);
             android.widget.LinearLayout.LayoutParams labelParams =
                 new android.widget.LinearLayout.LayoutParams(0,
                     ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-            labelParams.leftMargin = Math.round(dpToPx(7));
-            labelParams.rightMargin = Math.round(dpToPx(10));
+            labelParams.leftMargin = Math.round(dpToPx(4.5f));
+            labelParams.rightMargin = i % KEYBIND_HINT_COLUMNS == 0 ? Math.round(dpToPx(8)) : 0;
             cell.addView(label, labelParams);
 
             row.addView(cell, new android.widget.LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            added++;
         }
         // An odd trailing cell still gets its half of the row, keeping columns aligned.
         if (row != null && row.getChildCount() == 1 && KEYBIND_HINT_COLUMNS == 2) {
             View filler = new View(this);
             row.addView(filler, new android.widget.LinearLayout.LayoutParams(0, 1, 1f));
         }
+        return group;
     }
 
     @NonNull
@@ -8961,7 +9224,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void showKillSessionDialog(TerminalSession session) {
         if (session == null)
             return;
-        final AlertDialog.Builder b = new AlertDialog.Builder(this);
+        final MaterialAlertDialogBuilder b = new MaterialAlertDialogBuilder(this);
         b.setIcon(android.R.drawable.ic_dialog_alert);
         b.setMessage(R.string.title_confirm_kill_process);
         b.setPositiveButton(android.R.string.ok, (dialog, id) -> {
@@ -9488,6 +9751,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return new com.termux.app.terminal.TerminalWorkspaceStore().list();
     }
 
+    /** Workspace picker dialog (list + load), the workspace.picker tool's front door. */
+    public void showWorkspacePicker() {
+        com.termux.app.terminal.TerminalSessionBrowser.showWorkspacePicker(this);
+    }
+
+    /** Workspace save-name prompt, the workspace.save_prompt tool's front door. */
+    public void promptSaveWorkspace() {
+        com.termux.app.terminal.TerminalSessionBrowser.promptSaveWorkspace(this);
+    }
+
     public void deleteWorkspace(@NonNull String name)
             throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
         new com.termux.app.terminal.TerminalWorkspaceStore().delete(name);
@@ -9756,6 +10029,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         root.putParcelableArrayList(PANE_STATE_SESSIONS, sessionStates);
         root.putInt(PANE_STATE_CURRENT_SESSION,
             Math.max(0, mCurrentWSession == null ? 0 : mWSessions.indexOf(mCurrentWSession)));
+        mPaneController.saveScratchpadState(root);
         return root;
     }
 
@@ -9763,6 +10037,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Bundle root = mPendingPaneLayoutState;
         mPendingPaneLayoutState = null;
         if (root == null || mTermuxService == null || mPaneController == null) return;
+        mPaneController.restoreScratchpadState(root);
         java.util.Map<String, TerminalSession> sessionsByHandle = new java.util.HashMap<>();
         for (com.termux.shared.termux.shell.command.runner.terminal.TermuxSession termuxSession
                 : mTermuxService.getTermuxSessions()) {
@@ -10223,6 +10498,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mStatsCardView.bind(ensureStatsController().latest());
         ensureStatsController().start(1500L, true);
         setWidgetAccent(anchor, true);
+        mStatusCardHost.setDropEdge(findViewById(R.id.terminal_window_bar_host));
         mStatusCardHost.show(anchor, mStatsCardView, statusCardStyleProvider(), () -> {
             setWidgetAccent(anchor, false);
             if (mStatsController != null
@@ -10254,7 +10530,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSessionsPanelView.setSurfaceStyle(isRoundedDockStyle(),
             resolveStatusBarCapsuleCornerRadiusPx(Math.round(dpToPx(44))));
         mSessionsPanelView.bind(getSessionBrowserSessions());
-        mStatusCardHost.showPanel(anchor, mSessionsPanelView, statusCardStyleProvider(), 320, null);
+        mStatusCardHost.setDropEdge(findViewById(R.id.terminal_window_bar_host));
+        mStatusCardHost.showPanel(anchor, mSessionsPanelView, statusCardStyleProvider(),
+            mSessionsPanelView.desiredWidthDp(), null);
         requestSessionBrowserForegroundRefresh();
     }
 
@@ -10439,6 +10717,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mWeatherCardView.bind(ensureWeatherController().cache());
         ensureWeatherController().refreshIfStale();
         setWidgetAccent(anchor, true);
+        mStatusCardHost.setDropEdge(findViewById(R.id.terminal_window_bar_host));
         mStatusCardHost.show(anchor, mWeatherCardView, statusCardStyleProvider(), 360,
             () -> setWidgetAccent(anchor, false));
     }
@@ -10592,6 +10871,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Create a shell in {@code cwd} (or the default) via the service; null on failure. */
     @Nullable TerminalSession createShellForCwd(@Nullable String cwd) {
+        return createShellForCwd(cwd, null);
+    }
+
+    @Nullable TerminalSession createShellForCwd(@Nullable String cwd, @Nullable String sessionName) {
         if (mTermuxService == null) return null;
         if (mTermuxService.getTermuxSessionsSize()
                 >= com.termux.app.terminal.TermuxTerminalSessionActivityClient.MAX_SESSIONS) {
@@ -10601,8 +10884,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (cwd == null) cwd = getProperties().getDefaultWorkingDirectory();
         com.termux.shared.termux.shell.command.runner.terminal.TermuxSession created =
-            mTermuxService.createTermuxSession(null, null, null, cwd, false, null);
+            mTermuxService.createTermuxSession(null, null, null, cwd, false, sessionName);
         return created == null ? null : created.getTerminalSession();
+    }
+
+    /** Whether any window of any session currently displays this shell as a pane. */
+    private boolean isShellDisplayedInAnyWindow(@NonNull TerminalSession session) {
+        if (mPaneController == null) return false;
+        for (WSession ws : mWSessions) {
+            for (com.termux.app.terminal.TerminalPaneController.Window window : ws.windows) {
+                if (mPaneController.shellsOf(window).contains(session)) return true;
+            }
+        }
+        return false;
     }
 
     /** New window in the current session (Ctrl+Alt+C): a fresh shell as a new pane tree. */
@@ -10715,6 +11009,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final class PaneHost implements com.termux.app.terminal.TerminalPaneController.Host {
         @Override @Nullable public TerminalSession createShell(@Nullable String cwd) {
             return createShellForCwd(cwd);
+        }
+
+        @Override @Nullable public TerminalSession createNamedShell(@NonNull String name,
+                                                                    @Nullable String cwd) {
+            return createShellForCwd(cwd, name);
+        }
+
+        /**
+         * A live shell carrying this session name that no window currently displays. Lets the
+         * scratchpad re-adopt its shell after a hide or an activity restart instead of piling
+         * up fresh ones.
+         */
+        @Override @Nullable public TerminalSession findIdleShellByName(@NonNull String name) {
+            if (mTermuxService == null || mPaneController == null) return null;
+            for (com.termux.shared.termux.shell.command.runner.terminal.TermuxSession termuxSession
+                    : mTermuxService.getTermuxSessions()) {
+                if (!name.equals(termuxSession.getExecutionCommand().shellName)) continue;
+                TerminalSession session = termuxSession.getTerminalSession();
+                if (session != null && !isShellDisplayedInAnyWindow(session)) return session;
+            }
+            return null;
         }
 
         @Override public void configurePaneView(TerminalView view) {

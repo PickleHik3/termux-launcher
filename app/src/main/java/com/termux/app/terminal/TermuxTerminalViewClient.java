@@ -1,7 +1,8 @@
 package com.termux.app.terminal;
 
 import android.annotation.SuppressLint;
-import android.app.AlertDialog;
+import androidx.appcompat.app.AlertDialog;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -1023,7 +1024,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     private void showHyperlinkDialog(String uri) {
         String scheme = Uri.parse(uri).getScheme();
         boolean openable = scheme != null && OPENABLE_HYPERLINK_SCHEMES.contains(scheme.toLowerCase(Locale.ROOT));
-        AlertDialog.Builder builder = new AlertDialog.Builder(mActivity)
+        AlertDialog.Builder builder = new MaterialAlertDialogBuilder(mActivity)
             .setTitle(R.string.title_hyperlink_dialog)
             .setMessage(uri)
             .setNeutralButton(R.string.action_hyperlink_copy, (di, which) ->
@@ -1042,14 +1043,14 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         String text = ShellUtils.getTerminalSessionTranscriptText(session, true, true);
         LinkedHashSet<CharSequence> urlSet = TermuxUrlUtils.extractUrls(text);
         if (urlSet.isEmpty()) {
-            new AlertDialog.Builder(mActivity).setMessage(R.string.title_select_url_none_found).show();
+            new MaterialAlertDialogBuilder(mActivity).setMessage(R.string.title_select_url_none_found).show();
             return;
         }
         final CharSequence[] urls = urlSet.toArray(new CharSequence[0]);
         // Latest first.
         Collections.reverse(Arrays.asList(urls));
         // Click to copy url to clipboard:
-        final AlertDialog dialog = new AlertDialog.Builder(mActivity).setItems(urls, (di, which) -> {
+        final AlertDialog dialog = new MaterialAlertDialogBuilder(mActivity).setItems(urls, (di, which) -> {
             String url = (String) urls[which];
             ShareUtils.copyTextToClipboard(mActivity, url, mActivity.getString(R.string.msg_select_url_copied_to_clipboard));
         }).setTitle(R.string.title_select_url_dialog).create();

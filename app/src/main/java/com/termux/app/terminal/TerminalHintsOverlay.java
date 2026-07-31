@@ -1,6 +1,7 @@
 package com.termux.app.terminal;
 
-import android.app.AlertDialog;
+import androidx.appcompat.app.AlertDialog;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import android.content.DialogInterface;
 import android.view.KeyEvent;
 import android.view.KeyCharacterMap;
@@ -25,7 +26,7 @@ final class TerminalHintsOverlay {
     static void show(@NonNull TermuxActivity activity, @NonNull String transcript) {
         List<TerminalHintsModel.Hint> hints = TerminalHintsModel.extract(transcript);
         if (hints.isEmpty()) {
-            new AlertDialog.Builder(activity).setMessage(R.string.terminal_hints_none).show();
+            new MaterialAlertDialogBuilder(activity).setMessage(R.string.terminal_hints_none).show();
             return;
         }
         List<String> rows = new ArrayList<>(hints.size());
@@ -35,7 +36,7 @@ final class TerminalHintsOverlay {
         }
         ArrayAdapter<String> adapter = new ArrayAdapter<>(activity,
             android.R.layout.simple_list_item_1, rows);
-        AlertDialog dialog = new AlertDialog.Builder(activity)
+        AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
             .setTitle(R.string.terminal_hints_title)
             .setMessage(R.string.terminal_hints_instructions)
             .setAdapter(adapter, null)
