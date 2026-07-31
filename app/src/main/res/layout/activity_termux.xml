@@ -156,6 +156,10 @@
                     <!-- Bottom status row. Order is fixed: sessions indicator, window pills, then
                          the compact CPU/RAM/weather trailing widgets. The reserved rows above stay
                          empty until the next design pass. -->
+                    <!-- Lifted like the widget slot above: the status row's pills and widgets sit
+                         over the pane's glass (backdrop, blur, surface) and must never be
+                         composited into it, whatever elevation a glass pass gives those siblings.
+                         outlineProvider=none keeps the lift from casting a shadow. -->
                     <LinearLayout
                         android:id="@+id/terminal_status_row"
                         android:layout_width="match_parent"
@@ -164,6 +168,8 @@
                         android:layout_marginBottom="4dp"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
+                        android:elevation="6dp"
+                        android:outlineProvider="none"
                         android:clipChildren="false"
                         android:clipToPadding="false">
 

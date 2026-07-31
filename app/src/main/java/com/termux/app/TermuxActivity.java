@@ -1208,6 +1208,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             wallpaperManager.setWallpaperOffsetSteps(1f, 1f);
             wallpaperManager.setWallpaperOffsets(windowToken, 0.5f, 0.5f);
+            // Ask the system to render the wallpaper at true size. Home apps are expected to
+            // drive this; left alone, some OEMs keep the launcher-state "zoom out" at maximum
+            // (~1.10x about the screen center — measured 1.105x on Nothing OS with a grid
+            // wallpaper), and every pre-blurred glass crop then shows content displaced by
+            // ~10% of its distance from the center: a few dp at the dock, worst under the
+            // keyboard. The frost math models an unzoomed wallpaper, so request exactly that.
+            // setWallpaperZoomOut is hidden API; launchers reach it by reflection, and when a
+            // ROM blocks the call nothing changes from today's behavior.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                try {
+                    WallpaperManager.class
+                        .getMethod("setWallpaperZoomOut", IBinder.class, float.class)
+                        .invoke(wallpaperManager, windowToken, 0f);
+                } catch (Throwable t) {
+                    Logger.logVerbose(LOG_TAG, "setWallpaperZoomOut unavailable: " + t);
+                }
+            }
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Failed to apply wallpaper offset fix", e);
         }
@@ -3494,6 +3511,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Matrix shaderMatrix = new Matrix();
             shaderMatrix.setScale(scale, scale);
             shaderMatrix.postTranslate(translateX, translateY);
+            float zoom = systemWallpaperRenderZoom();
+            if (zoom != 1f) {
+                // Same render-zoom compensation as the system-drawable path, in this bitmap's
+                // local coordinates (the target rect's origin is already subtracted above).
+                shaderMatrix.postScale(zoom, zoom,
+                    frameRect.exactCenterX() - targetRect.left,
+                    frameRect.exactCenterY() - targetRect.top);
+            }
 
             BitmapShader shader = new BitmapShader(sourceBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
             shader.setLocalMatrix(shaderMatrix);
@@ -3504,6 +3529,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } finally {
             sourceBitmap.recycle();
         }
+    }
+
+    @Nullable
+    /**
+     * Extra magnification the system applies when it renders the static wallpaper, about the
+     * display center. Measured with a coordinate-grid wallpaper: Nothing OS draws at a fixed
+     * 1.10x regardless of the zoom-out the launcher requests, which displaced every glass crop
+     * by ~10% of its distance from the center (a few dp at the dock, most under the keyboard).
+     * ROMs that honor {@code setWallpaperZoomOut(0)} render at 1.0 and need no compensation.
+     */
+    private float systemWallpaperRenderZoom() {
+        return "nothing".equalsIgnoreCase(Build.MANUFACTURER) ? 1.10f : 1f;
     }
 
     @Nullable
@@ -3544,6 +3581,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int offsetLeft = frameScreenX + Math.round((frameWidth - drawWidth) / 2f);
         int offsetTop = frameScreenY + Math.round((frameHeight - drawHeight) / 2f);
 
+        float zoom = systemWallpaperRenderZoom();
+        if (zoom != 1f) {
+            float centerX = frameRect.exactCenterX();
+            float centerY = frameRect.exactCenterY();
+            offsetLeft = Math.round(zoom * (offsetLeft - centerX) + centerX);
+            offsetTop = Math.round(zoom * (offsetTop - centerY) + centerY);
+            drawWidth = Math.round(drawWidth * zoom);
+            drawHeight = Math.round(drawHeight * zoom);
+        }
+
         Bitmap bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         Drawable drawable = wallpaper.getConstantState() != null
@@ -3566,7 +3613,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return sourceBitmap;
         }
 
-        float downsampleFactor = ACCESSORY_BLUR_DOWNSAMPLE_FACTOR;
+        // Low radii must keep the source crisp: a fixed 4x down/up resample softened the frame far
+        // beyond the requested blur and shifted content by a few pixels, so at 1-5dp the glass read
+        // as showing a different wallpaper than the one right next to it. Use the smallest factor
+        // that keeps the script radius inside RenderScript's 25px cap instead.
+        float downsampleFactor = Math.max(1f, Math.min(ACCESSORY_BLUR_DOWNSAMPLE_FACTOR,
+            (float) Math.ceil(blurRadiusPx / 25f)));
         float scriptRadius = blurRadiusPx / downsampleFactor;
         if (scriptRadius > 25f) {
             downsampleFactor = (float) Math.ceil(blurRadiusPx / 25f);
@@ -4287,13 +4339,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ImageView statusFrost = findViewById(R.id.terminal_status_bar_wallpaper_backdrop);
         ImageView paneFrost = findViewById(R.id.terminal_window_bar_wallpaper_backdrop);
         if (statusFrost == null || paneFrost == null) return;
-        int blurRadiusDp = resolveTopGlassFrostRadiusDp();
-        if (!shouldUseWallpaperPassthroughMode() || blurRadiusDp <= 0 || isRoundedDockStyle()) {
+        // The status surface's own radius, not the dock's: the editor tunes them apart, and the
+        // status slider has to visibly change this pane.
+        int blurRadiusDp = getEffectiveStatusBarBlurRadius();
+        if (!shouldUseWallpaperPassthroughMode() || blurRadiusDp <= 0) {
             clearTopPaneWallpaperFrost();
             return;
         }
-        boolean statusApplied = applyWallpaperFrostCrop(statusFrost,
+        // Rounded style: the pane is a floating capsule already clipped to its outline, so it takes
+        // frost like any surface; the inset band above it shows raw wallpaper by design. This used
+        // to bail out for the whole style, which left the capsule with no blur at all — its live
+        // blur view is as blind to the wallpaper as every other RealtimeBlurView here.
+        boolean capsule = isRoundedDockStyle();
+        boolean statusApplied = !capsule && applyWallpaperFrostCrop(statusFrost,
             findViewById(R.id.terminal_status_bar_background), blurRadiusDp, mLastStatusFrostRect);
+        if (capsule) {
+            statusFrost.setImageDrawable(null);
+            statusFrost.setVisibility(View.GONE);
+            mLastStatusFrostRect.setEmpty();
+        }
         boolean paneApplied = applyWallpaperFrostCrop(paneFrost,
             findViewById(R.id.terminal_window_bar_host), blurRadiusDp, mLastWindowBarFrostRect);
         View statusBlur = findViewById(R.id.terminal_status_bar_glass_blur);
