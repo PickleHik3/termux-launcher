@@ -1,49 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  ~/.termux/keyboard/layout.xml — in-app keyboard layout for Termux Launcher.
+  The layout the in-app keyboard uses when ~/.termux/keyboard/layout.xml is absent.
 
-  THIS FILE IS AN EXAMPLE AND IS NOT LOADED FROM HERE. Copy it into place:
+  Differs from upstream's latn_qwerty_us in three ways that matter for a terminal:
+  - It defines its own bottom row (bottom_row="false"), so the space bar's swipe slots carry
+    launcher actions through tool: keys instead of the generic bundled row.
+  - Fn is a real layer: the modmap maps the top row to F1-F12, the home row to navigation, and
+    n/m to ^C/^D, so a terminal is usable without a hardware keyboard.
+  - Corner symbols favour shell punctuation.
 
-      mkdir -p ~/.termux/keyboard
-      cp ~/.termux/launcher/examples/keyboard-layout.xml ~/.termux/keyboard/layout.xml
-      termux-reload-settings
-
-  The content below is exactly the layout the app already uses by default, so copying it changes
-  nothing until you edit it. That is the point: start from the shipped behaviour and adjust.
-  Delete ~/.termux/keyboard/layout.xml to go back to the bundled default. If the file is missing or
-  invalid the keyboard falls back to the last working layout, then to the bundled one.
-
-  Limit: 512 KiB. Update it atomically — write a temporary file next to it and rename — so a
-  half-written layout is never read.
-
-  KEY SLOTS. Each key holds a centre value plus eight directional values:
-
-       nw    n    ne
-       w     c     e
-       sw    s    se
-
-  The long names key1..key8 are equivalent (key1 NW, key2 NE, key3 SW, key4 SE, key5 W, key6 E,
-  key7 N, key8 S). Values prefixed `loc ` are hidden but still reachable.
-
-  LAUNCHER ACTIONS ON A KEY
-
-      tool:<registry id>              draws a generic glyph
-      tool:<registry id>:<glyph>      draws <glyph>
-
-  A tool: key reaches the same dispatcher as a key binding or a palette row, so every terminal
-  action in the registry is available on any slot. Discover ids in the command palette
-  (Ctrl+Alt+Shift+P). A tool: key carries no arguments, so actions that require one — app.launch in
-  particular — cannot be driven from a key slot; launch apps from a chord in
-  ~/.termux/termux-launcher-bindings.conf instead:
-
-      map ctrl+alt+w app.launch com.whatsapp
-
-  THE FN LAYER. The <modmap> at the bottom is what makes this usable as a terminal keyboard:
-  Fn+q..p give F1-F12, Fn+a/s give Esc/Tab, Fn+d..l give navigation, and Fn+n / Fn+m send ^C / ^D.
-
-  Editing help:
-  - Web editor:  https://unexpected-keyboard-layout-editor.lixquid.com
-  - Layout guide: https://github.com/Julow/Unexpected-Keyboard/blob/master/doc/Custom-layouts.md
+  A user layout at ~/.termux/keyboard/layout.xml replaces this file wholesale. The same content
+  ships as an editable starting point in ~/.termux/launcher/examples/keyboard-layout.xml.
 -->
 <keyboard bottom_row="false" name="QWERTY (Termux Launcher)" script="latin">
   <row>

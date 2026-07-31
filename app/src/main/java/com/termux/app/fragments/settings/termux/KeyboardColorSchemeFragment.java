@@ -132,7 +132,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
             palette = mScheme.applyToPalette(palette);
         mKeyboard = new Keyboard2View(context, config.build(), palette);
         KeyboardData previewLayout = KeyboardData.load(getResources(),
-            juloo.keyboard2.R.xml.latn_qwerty_us);
+            juloo.keyboard2.R.xml.termux_launcher_qwerty);
         if (previewLayout != null) {
             LayoutModifier.LayoutOptions options = new LayoutModifier.LayoutOptions(
                 true, false, true,

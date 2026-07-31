@@ -831,7 +831,7 @@ public final class TermuxInAppKeyboard {
                 if (mMainKeyboardData == null && mLayoutLoader != null)
                     mMainKeyboardData = mLayoutLoader.getLastKnownGood();
                 if (mMainKeyboardData == null)
-                    mMainKeyboardData = loadBundledLayout(juloo.keyboard2.R.xml.latn_qwerty_us);
+                    mMainKeyboardData = loadBundledLayout(juloo.keyboard2.R.xml.termux_launcher_qwerty);
                 return mMainKeyboardData;
         }
     }
