@@ -9144,7 +9144,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         for (com.termux.app.terminal.TerminalPaneController.Window window :
                 new java.util.ArrayList<>(ws.windows)) {
             for (TerminalSession shell : mPaneController.removeWindow(window)) {
-                if (mTermuxService != null) mTermuxService.removeTermuxSession(shell);
+                if (mTermuxService != null) mTermuxService.killTermuxSession(shell);
             }
         }
         mWSessions.remove(ws);
@@ -9347,10 +9347,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             }
         } catch (com.termux.app.terminal.TerminalWorkspace.WorkspaceException e) {
-            for (TerminalSession shell : createdShells) mTermuxService.removeTermuxSession(shell);
+            for (TerminalSession shell : createdShells) mTermuxService.killTermuxSession(shell);
             throw e;
         } catch (RuntimeException e) {
-            for (TerminalSession shell : createdShells) mTermuxService.removeTermuxSession(shell);
+            for (TerminalSession shell : createdShells) mTermuxService.killTermuxSession(shell);
             throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
                 "session_create_failed", "Could not create workspace panes: " + e.getMessage(), e);
         }
@@ -9375,7 +9375,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } catch (RuntimeException e) {
             for (com.termux.app.terminal.TerminalPaneController.Window window : restoredWindows)
                 mPaneController.removeWindow(window);
-            for (TerminalSession shell : createdShells) mTermuxService.removeTermuxSession(shell);
+            for (TerminalSession shell : createdShells) mTermuxService.killTermuxSession(shell);
             throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
                 "invalid_workspace", "Could not rebuild workspace topology: " + e.getMessage(), e);
         }
@@ -9389,7 +9389,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 for (com.termux.app.terminal.TerminalPaneController.Window window :
                         new java.util.ArrayList<>(old.windows)) {
                     for (TerminalSession shell : mPaneController.removeWindow(window))
-                        mTermuxService.removeTermuxSession(shell);
+                        mTermuxService.killTermuxSession(shell);
                 }
             }
             firstRestoredIndex = 0;
@@ -10415,7 +10415,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.activeWindow();
         if (w == null) return;
         for (TerminalSession s : mPaneController.removeWindow(w))
-            if (mTermuxService != null) mTermuxService.removeTermuxSession(s);
+            if (mTermuxService != null) mTermuxService.killTermuxSession(s);
         mCurrentWSession.windows.remove(w);
         if (mCurrentWSession.windows.isEmpty()) {
             mWSessions.remove(mCurrentWSession);
@@ -10450,7 +10450,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         WSession ws = mCurrentWSession;
         for (com.termux.app.terminal.TerminalPaneController.Window w : new java.util.ArrayList<>(ws.windows))
             for (TerminalSession s : mPaneController.removeWindow(w))
-                if (mTermuxService != null) mTermuxService.removeTermuxSession(s);
+                if (mTermuxService != null) mTermuxService.killTermuxSession(s);
         mWSessions.remove(ws);
         mCurrentWSession = null;
         showNextSessionAfterClose();
@@ -10491,7 +10491,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void collapseAllSplits() {
         if (mPaneController == null) return;
         for (TerminalSession sec : mPaneController.collapseAll())
-            if (mTermuxService != null) mTermuxService.removeTermuxSession(sec);
+            if (mTermuxService != null) mTermuxService.killTermuxSession(sec);
         rebuildDrawerSessions();
     }
 
@@ -10520,7 +10520,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void removeShell(TerminalSession session) {
-            if (mTermuxService != null) mTermuxService.removeTermuxSession(session);
+            if (mTermuxService != null) mTermuxService.killTermuxSession(session);
         }
 
         @Override public void onActivePaneChanged() {

@@ -2,7 +2,6 @@ package com.termux.app.terminal;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -43,7 +42,15 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     private final TermuxActivity mActivity;
 
-    public static final int MAX_SESSIONS = 8;
+    /**
+     * Upper bound on live shells, counted across every session, window, and pane.
+     *
+     * <p>Upstream Termux allowed 8 because a session was a whole screen. Here a single session can
+     * hold several windows, each with several panes, so 8 is roughly three windows of work — a
+     * budget a normal split-pane layout exhausts. 32 keeps a bound on runaway shell creation
+     * without treating ordinary use as abuse.
+     */
+    public static final int MAX_SESSIONS = 32;
     private static final long FOREGROUND_REFRESH_DEFER_MS = 120L;
     private static final ExecutorService MATERIAL_COLOR_FILE_EXECUTOR =
         Executors.newSingleThreadExecutor(runnable -> {
@@ -203,7 +210,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             int result = panes.onSessionFinished(finishedSession);
             if (result == com.termux.app.terminal.TerminalPaneController.FINISHED_PANE) {
                 // A pane with siblings closed; its window lives on. Kill the shell, refresh drawer.
-                service.removeTermuxSession(finishedSession);
+                service.killTermuxSession(finishedSession);
                 mActivity.rebuildDrawerSessions();
                 termuxSessionListNotifyUpdated();
                 return;
@@ -211,7 +218,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             if (result == com.termux.app.terminal.TerminalPaneController.FINISHED_WINDOW) {
                 // The window's last pane closed; drop the window from its session (and the session
                 // if that was its last window), then switch to whatever remains.
-                service.removeTermuxSession(finishedSession);
+                service.killTermuxSession(finishedSession);
                 if (window != null) mActivity.onWindowEmptied(window);
                 termuxSessionListNotifyUpdated();
                 return;
@@ -474,7 +481,11 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (service == null)
             return false;
         if (service.getTermuxSessionsSize() >= MAX_SESSIONS) {
-            new AlertDialog.Builder(mActivity).setTitle(R.string.title_max_terminals_reached).setMessage(R.string.msg_max_terminals_reached).setPositiveButton(android.R.string.ok, null).show();
+            // A modal with an OK button interrupts a keyboard-driven flow for something the user
+            // can do nothing about mid-dialog. The window and pane paths already report this as a
+            // toast; match them.
+            mActivity.showToast(mActivity.getString(R.string.title_max_terminals_reached) + " — "
+                + mActivity.getString(R.string.msg_max_terminals_reached), true);
             return false;
         } else {
             if (workingDirectory == null) {
@@ -536,7 +547,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         TermuxService service = mActivity.getTermuxService();
         if (service == null)
             return;
-        int index = service.removeTermuxSession(finishedSession);
+        int index = service.killTermuxSession(finishedSession);
         int size = service.getTermuxSessionsSize();
         if (size == 0) {
             mActivity.finishActivityIfNotFinishing();
