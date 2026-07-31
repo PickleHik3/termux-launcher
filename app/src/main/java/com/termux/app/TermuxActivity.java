@@ -596,6 +596,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mLastTopPaneFrostRadiusDp = -1;
     private final Rect mLastStatusFrostRect = new Rect();
     private final Rect mLastWindowBarFrostRect = new Rect();
+    private final Rect mLastCommandPaletteFrostRect = new Rect();
+    private int mLastCommandPaletteFrostRadiusDp = -1;
     @Nullable private WallpaperManager.OnColorsChangedListener mWallpaperColorsChangedListener;
     private final Handler mAccessoryRenderHandler = new Handler(Looper.getMainLooper());
     private final Runnable mInAppKeyboardPreviewGeometrySyncRunnable = () -> {
@@ -4311,6 +4313,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         mLastStatusFrostRect.setEmpty();
         mLastWindowBarFrostRect.setEmpty();
+        mLastCommandPaletteFrostRect.setEmpty();
         mLastTopPaneFrostRadiusDp = -1;
     }
 
@@ -4369,12 +4372,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         glass.getLocationOnScreen(mTmpViewLocation);
         Rect targetRect = new Rect(mTmpViewLocation[0], mTmpViewLocation[1],
             mTmpViewLocation[0] + glass.getWidth(), mTmpViewLocation[1] + glass.getHeight());
+        // The palette re-applies its frost on every open and on every animated resize. Without the
+        // same guard the top-pane path uses, each of those calls re-cut a full-pane crop.
+        if (!mTopPaneFrostDirty && targetRect.equals(mLastCommandPaletteFrostRect)
+            && mLastCommandPaletteFrostRadiusDp == blurRadiusDp && frost.getDrawable() != null) {
+            frost.setVisibility(View.VISIBLE);
+            return true;
+        }
         Bitmap crop = createCachedAccessoryWallpaperBlurCrop(blurRadiusDp, targetRect, wallpaperFrame);
         if (crop == null) {
             frost.setImageDrawable(null);
             frost.setVisibility(View.GONE);
+            mLastCommandPaletteFrostRect.setEmpty();
             return false;
         }
+        mLastCommandPaletteFrostRect.set(targetRect);
+        mLastCommandPaletteFrostRadiusDp = blurRadiusDp;
         frost.setImageBitmap(crop);
         frost.setColorFilter(glassFrostFilter());
         frost.setVisibility(View.VISIBLE);

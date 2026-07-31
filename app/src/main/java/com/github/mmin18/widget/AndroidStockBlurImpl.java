@@ -39,6 +39,18 @@ public class AndroidStockBlurImpl implements BlurImpl {
         }
 
         mBlurScript.setRadius(radius);
+        // prepare() runs again for every size or radius change, and a resizing surface — the
+        // keyboard sliding in, the dock growing — does that on every animation frame. Allocation
+        // holds native memory that only destroy() returns promptly, so overwriting these fields
+        // without destroying the previous pair leaked a buffer per frame.
+        if (mBlurInput != null) {
+            mBlurInput.destroy();
+            mBlurInput = null;
+        }
+        if (mBlurOutput != null) {
+            mBlurOutput.destroy();
+            mBlurOutput = null;
+        }
         mBlurInput = Allocation.createFromBitmap(mRenderScript, buffer,
             Allocation.MipmapControl.MIPMAP_NONE, Allocation.USAGE_SCRIPT);
         mBlurOutput = Allocation.createTyped(mRenderScript, mBlurInput.getType());
