@@ -27,7 +27,7 @@
     <string name="settings_destination_advanced_diagnostics">Advanced &amp; diagnostics</string>
     <string name="settings_destination_advanced_diagnostics_summary">Logging, tests, diagnostics, terminal internals, and developer tools</string>
     <string name="settings_destination_about_support">About &amp; support</string>
-    <string name="settings_destination_about_support_summary">Quick start, documentation, feedback, source, version, licenses, and donate</string>
+    <string name="settings_destination_about_support_summary">Documentation, feedback, source, version, licenses, and donate</string>
     <string name="settings_terminal_display_header">Terminal display</string>
     <string name="settings_full_screen_title">Full screen</string>
     <string name="settings_adjust_keyboard_title">Adjust for on-screen keyboard</string>
@@ -123,7 +123,6 @@
     <string name="settings_fix_action">Fix</string>
     <string name="settings_permission_allowed_summary">Access is allowed.</string>
     <string name="settings_permission_fix_summary">Action needed · Tap to fix.</string>
-    <string name="settings_quick_start_title">Quick start</string>
     <string name="settings_documentation_title">Documentation</string>
     <string name="settings_documentation_summary">Read launcher and terminal guides.</string>
     <string name="settings_send_feedback_title">Send feedback</string>
@@ -338,114 +337,16 @@
     <string name="settings_root_assistant_header">Assistant</string>
     <string name="settings_root_launcher_header">Launcher</string>
     <string name="settings_root_system_info_header">System &amp; Info</string>
-    <string name="onboarding_settings_title">Quick start tour</string>
-    <string name="onboarding_settings_summary">Learn the launcher surface, search, styling, shell bridge, and optional AI tools</string>
-    <string name="onboarding_activity_title">Quick start</string>
-    <string name="onboarding_brand">TERMUX LAUNCHER</string>
-    <string name="onboarding_skip">Skip</string>
-    <string name="onboarding_back">Back</string>
-    <string name="onboarding_next">Next</string>
-    <string name="onboarding_finish">Start exploring</string>
-    <string name="onboarding_progress">Step %1$d of %2$d</string>
-    <string name="onboarding_capture_number">%1$d / TL</string>
-    <string name="onboarding_choose_home">Choose default Home app</string>
-    <string name="onboarding_read_guide">Read the full guide</string>
-    <string name="onboarding_settings_unavailable">Android could not open that settings page.</string>
-    <string name="onboarding_next_arrow">Next →</string>
-    <string name="onboarding_set_home">Set Termux as home</string>
-    <string name="onboarding_install_starter_profile">Open quick setup</string>
-    <string name="onboarding_explore_first">Explore first</string>
 
-    <string name="onboarding_new_welcome_kicker">Welcome</string>
-    <string name="onboarding_new_welcome_title">A full Termux terminal as your Android home</string>
-    <string name="onboarding_new_welcome_body">Termux reimagined as a home launcher. You get the full Termux terminal and package ecosystem, alongside an app dock, instant search, an on-device AI backend, and enough Material polish to make it feel at home on Android.</string>
-    <string name="onboarding_new_launch_kicker">Launch</string>
-    <string name="onboarding_new_launch_title">Open anything, your way</string>
-    <string name="onboarding_new_launch_body">Tap an app in the dock, or scrub across the A–Z rail to filter. Slide upwards into the results and let go over an app to launch it. From the terminal, type % followed by an app name to search instantly.</string>
-    <string name="onboarding_new_personalise_kicker">Personalise</string>
-    <string name="onboarding_new_personalise_title">Glass that follows your wallpaper</string>
-    <string name="onboarding_new_personalise_body">The terminal, dock, and keyboard share colours from your wallpaper, with a glass finish you can tune to your liking. Adjust the blur, spacing, colours, and icon packs anytime under Settings → Appearance.</string>
-    <string name="onboarding_new_notifications_kicker">Notifications</string>
-    <string name="onboarding_new_notifications_title">Reply to notifications, made easy</string>
-    <string name="onboarding_new_notifications_body">Quickly respond to your messages and alerts by swiping up from a pinned app icon that has a pending notification — without leaving home.</string>
-    <string name="onboarding_new_ready_kicker">You’re set</string>
-    <string name="onboarding_new_ready_title">Set it as home and go</string>
-    <string name="onboarding_new_ready_body">That covers the launcher itself. From here you can shape the shell however you like, or start with the prebuilt profile and tweak it as you go — Fish, tmux, an Oh My Posh prompt, Shizuku system stats, Material theming, extra keys, zoxide, eza, and more.</string>
 
-    <string name="onboarding_chip_full_terminal">full terminal</string>
-    <string name="onboarding_chip_app_dock">app dock</string>
-    <string name="onboarding_chip_ai_backends">LiteRT &amp; MNN backends</string>
-    <string name="onboarding_chip_percent_search">% search</string>
-    <string name="onboarding_chip_az_rail">A–Z rail</string>
-    <string name="onboarding_chip_long_press">long-press to pin</string>
-    <string name="onboarding_chip_material_palette">Material palette</string>
-    <string name="onboarding_chip_glass_blur">glass &amp; blur</string>
-    <string name="onboarding_chip_icon_packs">icon packs</string>
-    <string name="onboarding_chip_swipe_up">swipe up</string>
-    <string name="onboarding_chip_inline_reply">inline reply</string>
-    <string name="onboarding_chip_pinned_apps">pinned apps</string>
 
-    <string name="onboarding_duration_20">▶ 20s tour</string>
-    <string name="onboarding_duration_15">▶ 15s</string>
-    <string name="onboarding_duration_10">▶ 10s</string>
-    <string name="onboarding_media_home">Drop the full-screen recording (1080×2300): launcher home + dock</string>
-    <string name="onboarding_media_search">Drop the full-screen recording (1080×2300): app search + A–Z swipe</string>
-    <string name="onboarding_media_appearance">Drop the full-screen recording (1080×2300): appearance / theming panel</string>
-    <string name="onboarding_media_notifications">Drop the full-screen recording (1080×2300): swipe up from a pinned icon to reply</string>
-    <string name="onboarding_media_ready">Drop the full-screen recording (1080×2300): tmux / Shizuku / on-device AI</string>
 
-    <string name="onboarding_welcome_eyebrow">WELCOME</string>
-    <string name="onboarding_welcome_title">Your terminal is now home</string>
-    <string name="onboarding_welcome_body">Termux Launcher keeps a real shell at the center of Android. Your sessions stay visible while familiar launcher controls sit within thumb reach.</string>
-    <string name="onboarding_welcome_code">HOME = TERMINAL + APPS</string>
-    <string name="onboarding_welcome_bullet_1">The app row keeps favorites one tap away.</string>
-    <string name="onboarding_welcome_bullet_2">The A–Z row reaches every installed app.</string>
-    <string name="onboarding_welcome_bullet_3">The dock and keyboard follow your wallpaper colors.</string>
 
-    <string name="onboarding_search_eyebrow">MOVE FAST</string>
-    <string name="onboarding_search_title">Open anything without leaving the prompt</string>
-    <string name="onboarding_search_body">Use the launcher like a touch UI, or drive it from terminal input. Ranking learns from what you open while pins always stay under your control.</string>
-    <string name="onboarding_search_code">%maps</string>
-    <string name="onboarding_search_bullet_1">Type % before a name to search apps from the terminal.</string>
-    <string name="onboarding_search_bullet_2">Drag across A–Z to filter; swipe up to launch the highlighted app.</string>
-    <string name="onboarding_search_bullet_3">Long-press an icon to pin, move, group, restyle, or inspect it.</string>
 
-    <string name="onboarding_style_eyebrow">MAKE IT YOURS</string>
-    <string name="onboarding_style_title">One Material palette, from prompt to dock</string>
-    <string name="onboarding_style_body">The terminal, dock, keyboard, icons, and tmux helpers can share Android’s wallpaper palette. Tune the glass instead of rebuilding your workspace.</string>
-    <string name="onboarding_style_code">Long-press Terminal  →  More  →  Appearance</string>
-    <string name="onboarding_style_bullet_1">Adjust terminal opacity, dock glass, spacing, and height.</string>
-    <string name="onboarding_style_bullet_2">Use themed, monochrome, or third-party icon packs.</string>
-    <string name="onboarding_style_bullet_3">Enable the in-app keyboard or keep your preferred Android keyboard.</string>
 
-    <string name="onboarding_shell_eyebrow">YOUR WORKSPACE</string>
-    <string name="onboarding_shell_title">Recreate the fish and tmux setup when you want it</string>
-    <string name="onboarding_shell_body">The illustrated guide includes a guided installer for the same secret-free fish, Oh My Posh, tmux, eza, and zoxide foundation used in the live launcher.</string>
-    <string name="onboarding_shell_code">~/setup-shell  # choose tmux, btop, or both</string>
-    <string name="onboarding_shell_bullet_1">Start with the launcher first; the shell makeover is optional.</string>
-    <string name="onboarding_shell_bullet_2">Use the repo examples as a safe base, then add your own aliases locally.</string>
 
-    <string name="onboarding_bridge_eyebrow">SHELL + ANDROID</string>
-    <string name="onboarding_bridge_title">Turn launcher actions into commands</string>
-    <string name="onboarding_bridge_bullet_1">Launch apps and inspect CPU, memory, battery, thermal, and storage.</string>
-    <string name="onboarding_bridge_bullet_2">Read current media and notifications after granting listener access.</string>
-    <string name="onboarding_bridge_bullet_3">Use the local API, agent tools, or MCP bridge for automations.</string>
 
-    <string name="onboarding_optional_eyebrow">OPTIONAL POWER</string>
-    <string name="onboarding_optional_title">Add privileges and local AI only when you need them</string>
-    <string name="onboarding_optional_body">The everyday launcher works without special access. Shizuku and TAI are separate, opt-in layers with visible status and permission boundaries.</string>
-    <string name="onboarding_optional_code">Optional  ·  permission-gated  ·  local-first</string>
-    <string name="onboarding_optional_bullet_1">Shizuku adds lock, privileged shell, and richer system helpers.</string>
-    <string name="onboarding_optional_bullet_2">TAI hosts compatible language and embedding models on device.</string>
-    <string name="onboarding_optional_bullet_3">LauncherCtl exposes confirmation-gated tools to MCP-capable clients.</string>
 
-    <string name="onboarding_ready_eyebrow">READY</string>
-    <string name="onboarding_ready_title">Build the home screen that works like you do</string>
-    <string name="onboarding_ready_body">Start with the terminal and app search. Add tmux, Shizuku, notification access, or local AI later—nothing optional blocks the core launcher.</string>
-    <string name="onboarding_ready_code">Long-press Terminal  →  More  →  Quick start tour</string>
-    <string name="onboarding_ready_bullet_1">Set Termux Launcher as Home when you are comfortable.</string>
-    <string name="onboarding_ready_bullet_2">Open Settings to replay this tour or tune one feature at a time.</string>
-    <string name="onboarding_ready_bullet_3">Use the illustrated guide for recipes from beginner through advanced.</string>
     <string name="termux_preferences_title">Termux</string>
     <string name="termux_preferences_summary">Core terminal, input, and debugging settings</string>
 

@@ -161,14 +161,6 @@
             tools:targetApi="o" />
 
         <activity
-            android:name=".app.activities.OnboardingActivity"
-            android:exported="false"
-            android:label="@string/onboarding_activity_title"
-            android:resizeableActivity="true"
-            android:theme="@style/Theme.TermuxApp.Onboarding"
-            tools:targetApi="o" />
-
-        <activity
             android:name=".app.activities.SettingsActivity"
             android:excludeFromRecents="true"
             android:exported="true"

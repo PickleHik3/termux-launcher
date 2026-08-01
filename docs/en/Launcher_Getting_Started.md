@@ -1,6 +1,6 @@
 # Getting Started
 
-This page is the main setup guide for Termux Launcher. Start here, then use the smaller reference pages only when you need them:
+Main setup guide for Termux Launcher. Reference pages:
 
 - [Illustrated web guide](https://picklehik3.github.io/termux-launcher-site/#wiki) for the current live screenshots and recordings.
 - [LauncherCtl API](LauncherCtl_API.md) for app launch, the local OpenAI/Ollama-compatible AI endpoint, and model management.
@@ -10,26 +10,17 @@ This page is the main setup guide for Termux Launcher. Start here, then use the 
 ## 1. Install Termux Launcher
 
 1. Download the latest APK from [Releases](https://github.com/PickleHik3/termux-launcher/releases).
-2. Pick the package edition that matches what you need:
+2. Pick the package edition:
    - **Standard (`com.termux`)** replaces a regular Termux installation and works with matching `com.termux` add-ons.
    - **VAJ (`io.vaj.tl`)** installs beside regular Termux and needs add-ons built for the same package/signing family.
-3. Open the app normally once and let the Termux bootstrap finish.
-4. Follow the seven-step Quick start tour. It explains the core launcher before the optional shell, Shizuku, and AI layers.
-5. Confirm the terminal, dock, and your must-have apps work. Only then set Termux Launcher as your Home app.
-
-You can do that from Android settings, or from inside Termux Launcher:
+3. Open the app once and let the Termux bootstrap finish.
+4. Set Termux Launcher as your Home app, from Android settings or from inside the launcher:
 
 ```text
-Quick start tour -> Choose default Home app
+Long press Terminal -> More -> Apps Bar -> Home launcher shortcut
 ```
 
-You can replay the tour later from:
-
-```text
-Long press Terminal -> More -> Quick start tour
-```
-
-Existing installations are not interrupted by the automatic tour after an upgrade. If terminal drawing or input becomes slow after an update, run:
+If terminal drawing or input becomes slow after an update, run:
 
 ```sh
 termux-reload-settings
@@ -66,7 +57,6 @@ Long press Terminal -> More
 
 Useful places:
 
-- **Quick start tour:** Replay the beginner walkthrough at any time.
 - **Appearance:** Terminal opacity, blur, dock size, compact dock spacing, monochrome icons, and Terminal Material colors. The surface editor returns to the Dock, Keyboard, Status, or Other section used last.
 - **Apps Bar:** Input split character, app ranking reset, Home launcher shortcut, and lock-screen behavior.
 - **TAI / Termux AI:** Local model downloads, imports, runtime settings, API port, and API token.
@@ -168,7 +158,7 @@ chmod 700 ~/setup-launcher
 ~/setup-launcher
 ```
 
-Reading the downloaded script before running it is a useful shell habit. The installer asks what to install:
+The installer asks what to install:
 
 - **Everything:** packages, fish + Oh My Posh configs, `~/.termux` terminal configs, and Maple Mono.
 - **Packages + shell configs:** fish, prompt themes, and the CLI tools the config uses.

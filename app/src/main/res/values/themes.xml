@@ -15,19 +15,6 @@
     <!-- TermuxApp DayNight NoActionBar theme. -->
     <style name="Theme.TermuxApp.DayNight.NoActionBar" parent="Theme.BaseActivity.DayNight.NoActionBar"/>
 
-    <!-- Full-bleed dark media with a frosted sheet; media placeholders are replaced by clips later. -->
-    <style name="Theme.TermuxApp.Onboarding" parent="Theme.TermuxApp.DayNight.NoActionBar">
-        <item name="android:windowIsTranslucent">false</item>
-        <item name="android:windowBackground">#070D0A</item>
-        <item name="android:windowNoTitle">true</item>
-        <item name="android:backgroundDimEnabled">false</item>
-        <item name="android:windowCloseOnTouchOutside">false</item>
-        <item name="android:windowIsFloating">false</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
-    </style>
-
-
     <!-- TermuxActivity DayNight NoActionBar theme. -->
     <style name="Theme.TermuxActivity.DayNight.NoActionBar" parent="Theme.TermuxApp.DayNight.NoActionBar">
         <item name="android:windowBackground">?attr/termuxColorSurfaceBase</item>

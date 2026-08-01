@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
-    <Preference app:key="quick_start_tour" app:title="@string/settings_quick_start_title" app:summary="@string/onboarding_settings_summary" />
     <Preference app:key="documentation" app:title="@string/settings_documentation_title" app:summary="@string/settings_documentation_summary" />
     <Preference app:key="report_issue" app:title="@string/settings_send_feedback_title" app:summary="@string/report_issue_preference_summary" />
     <Preference app:key="source_code" app:title="@string/settings_source_code_title" app:summary="@string/settings_source_code_summary" />

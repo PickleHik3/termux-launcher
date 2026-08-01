@@ -114,7 +114,6 @@ import com.termux.shared.android.PermissionUtils;
 import com.termux.shared.data.DataUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY;
-import com.termux.app.activities.OnboardingActivity;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.theme.TermuxThemeManager;
 import com.termux.shared.termux.crash.TermuxCrashUtils;
@@ -370,7 +369,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * If service connected before activity became visible and bootstrap/session start should be retried onStart().
      */
     private boolean mPendingBootstrapOnStart = false;
-    private boolean mShouldLaunchOnboardingAfterBootstrap = false;
 
     /**
      * Launch intent captured when bootstrap/session start is deferred to onStart().
@@ -506,7 +504,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final String ARG_TERMINAL_TOOLBAR_TEXT_INPUT = "terminal_toolbar_text_input";
 
     private static final String ARG_ACTIVITY_RECREATED = "activity_recreated";
-    private static final String ARG_SHOULD_LAUNCH_ONBOARDING = "should_launch_onboarding";
     private static final String ARG_PANE_LAYOUT = "pane_layout";
     private static final String PANE_STATE_SESSIONS = "sessions";
     private static final String PANE_STATE_WINDOWS = "windows";
@@ -658,13 +655,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onCreate(Bundle savedInstanceState) {
         Logger.logDebug(LOG_TAG, "onCreate");
         mIsOnResumeAfterOnCreate = true;
-        if (savedInstanceState == null) {
-            mShouldLaunchOnboardingAfterBootstrap = OnboardingActivity.prepareAutomaticLaunch(this);
-        } else {
-            mShouldLaunchOnboardingAfterBootstrap = savedInstanceState.containsKey(
-                ARG_SHOULD_LAUNCH_ONBOARDING)
-                ? savedInstanceState.getBoolean(ARG_SHOULD_LAUNCH_ONBOARDING)
-                : OnboardingActivity.prepareAutomaticLaunch(this);
+        if (savedInstanceState != null) {
             mIsActivityRecreated = savedInstanceState.getBoolean(ARG_ACTIVITY_RECREATED, false);
             mPendingPaneLayoutState = savedInstanceState.getBundle(ARG_PANE_LAYOUT);
         }
@@ -797,8 +788,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             startBootstrapAndSession(pendingIntent);
         }
         maybeRecoverFromEmptySession("onStart");
-        scheduleOnboardingIfReady();
-    
+
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onStart();
         if (mTermuxTerminalViewClient != null)
@@ -4710,8 +4700,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         saveTerminalToolbarTextInput(savedInstanceState);
         if (mInAppKeyboard != null)
             mInAppKeyboard.onSaveInstanceState(savedInstanceState);
-        savedInstanceState.putBoolean(ARG_SHOULD_LAUNCH_ONBOARDING,
-            mShouldLaunchOnboardingAfterBootstrap);
         savedInstanceState.putBoolean(ARG_ACTIVITY_RECREATED, true);
         Bundle paneLayout = savePaneLayoutState();
         if (paneLayout != null) savedInstanceState.putBundle(ARG_PANE_LAYOUT, paneLayout);
@@ -4781,7 +4769,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
         mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
         rebuildDrawerSessions();
-        scheduleOnboardingIfReady();
     }
 
     private void startBootstrapAndSession(@Nullable Intent intent) {
@@ -4803,28 +4790,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
                 mEmptySessionRecoveryInProgress = false;
-                scheduleOnboardingIfReady();
             } catch (WindowManager.BadTokenException e) {
                 // Activity finished - ignore.
                 mEmptySessionRecoveryInProgress = false;
             }
         });
-    }
-
-    private void scheduleOnboardingIfReady() {
-        if (!mShouldLaunchOnboardingAfterBootstrap || !mIsVisible || mTermuxService == null
-            || mTermuxService.isTermuxSessionsEmpty() || isFinishing()) {
-            return;
-        }
-        mShouldLaunchOnboardingAfterBootstrap = false;
-        View content = findViewById(android.R.id.content);
-        if (content != null) {
-            content.postDelayed(() -> {
-                if (!isFinishing() && !isDestroyed()) {
-                    ActivityUtils.startActivity(this, OnboardingActivity.createIntent(this));
-                }
-            }, 350L);
-        }
     }
 
     private void maybeRecoverFromEmptySession(@NonNull String source) {

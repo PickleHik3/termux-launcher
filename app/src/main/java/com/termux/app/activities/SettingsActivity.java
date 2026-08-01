@@ -249,16 +249,6 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             }
         }
 
-        private void configureQuickStartPreference(@NonNull Context context) {
-            Preference quickStartPreference = findPreference("quick_start_tour");
-            if (quickStartPreference != null) {
-                quickStartPreference.setOnPreferenceClickListener(preference -> {
-                    startActivity(OnboardingActivity.createIntent(context));
-                    return true;
-                });
-            }
-        }
-
         private void configureTermuxAPIPreference(@NonNull Context context) {
             Preference termuxAPIPreference = findPreference("termux_api");
             if (termuxAPIPreference != null) {

@@ -9,7 +9,6 @@ import androidx.annotation.NonNull;
 import androidx.preference.Preference;
 
 import com.termux.R;
-import com.termux.app.activities.OnboardingActivity;
 import com.termux.app.models.UserAction;
 import com.termux.shared.activities.ReportActivity;
 import com.termux.shared.android.AndroidUtils;
@@ -32,7 +31,6 @@ public final class AboutSupportPreferencesFragment extends MaterialPreferenceFra
         if (context == null) return;
         setPreferencesFromResource(R.xml.about_support_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
-        click("quick_start_tour", preference -> { startActivity(OnboardingActivity.createIntent(context)); return true; });
         url("documentation", "https://github.com/PickleHik3/termux-launcher/tree/dev/docs");
         url("report_issue", "https://github.com/PickleHik3/termux-launcher/issues");
         url("source_code", "https://github.com/PickleHik3/termux-launcher");
