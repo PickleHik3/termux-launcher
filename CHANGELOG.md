@@ -1,22 +1,22 @@
 # Changelog
 
-## Unreleased
+## 0.2.30
 
 ### Added
 
-- Restored `launcherctl` as a launch-only shell command. `launcherctl launch <app name, package, or activity>` calls the authenticated local `/v1/apps/launch` route. Agent, MCP, notification, media, resource, event, restart, and other device-control commands remain removed. Use `tai` for local AI.
-- Added floating terminal panes. Use **Float / dock pane** in the command palette or press `Ctrl+Alt+F` to detach the focused pane above the tiled layout and dock it again. Floating positions and sizes survive activity recreation and workspace save and restore.
-
-### Changed
-
-- Fresh installs now use the built-in terminal keyboard by default. Existing installs keep their selected input method. **Settings → Keyboard → Input method** still offers the built-in keyboard, Android keyboard, or no on-screen keyboard.
-- Reworked the command palette into one glass rectangle with the search row at the top, right-aligned result count and breadcrumb, and six frequent-action keycaps below. Its corner radius now follows the dock capsule.
-- Shortened Termux-home working directories in the sessions panel and session browser to `~` or `~/subdirectory`. Session-switch chips now use launcher session numbers and appear only for actual session changes.
-- The surface editor now reopens the Dock, Keyboard, Status, or Other section used last.
-
-### Fixed
-
-- Removed the first-launch terminal flicker and extra bottom padding caused by the Android keyboard inset race.
+- **Split panes and windows** — tmux-style recursive split panes and windows in the native terminal, with pane controls in the status bar, a per-window pane-layout policy, and a fork-native sessions panel replacing the drawer.
+- **Floating panes** — detach the focused pane above the tiled layout (`Ctrl+Alt+F` or the command palette), drag it by the top handle, resize from the grip, dock it back.
+- **Workspaces** — durable layout + CWD workspaces with save/picker tools; restores sessions, windows, panes, titles, and working directories after process death.
+- **Scratchpad terminal** — toggleable overlay terminal (``Ctrl+Alt+` ``).
+- **Command palette and unified keybinds** — terminal-ledger palette overlay (long-press → Command palette, or `Ctrl+Alt+Shift+P`), user-configurable key bindings, keybind hints, and a key inspector overlay.
+- **Interactive status bar** — expanded top pane with a clock grid, media widget, and pinned notifications, plus a session-switch indicator.
+- **Kitty graphics protocol** — stored images, placements, crop, z-index, delete forms, and terminal-driven GIF animation.
+- **Font engine** — `~/.termux/fonts.conf` with four-face configuration, variable-font axes, face-scoped OpenType features, explicit symbol font maps, fixed-cell grapheme shaping, and bounded font metrics.
+- **Spacebar swipe gestures and extra-key tools** — swipe bindings on the built-in keyboard's space bar, `tool:` extra keys with key=value arguments, an `app.launch` tool, and app search in the palette.
+- **Bundled QWERTY layout** — the built-in keyboard ships a launcher-tuned QWERTY layout by default, with an absolute key-cap opacity control.
+- **Shipped configs and `setup-launcher`** — example key bindings, `fonts.conf`, and keyboard layout installed to `~/.termux`; a new guarded `setup-launcher` installer for the fish + Oh My Posh + Maple Mono setup.
+- **GPU glass blur** — wallpaper blur runs on the GPU via RenderEffect on Android 12+.
+- **`launcherctl`** — launch-only CLI client for launching apps from the shell.
 
 ## 0.2.29-hotfix.1
 
