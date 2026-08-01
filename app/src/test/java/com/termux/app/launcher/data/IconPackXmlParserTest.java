@@ -1,8 +1,15 @@
 package com.termux.app.launcher.data;
 
+import android.app.Application;
+import android.os.Build;
+
 import com.termux.app.launcher.model.IconPackInfo;
 
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.ConscryptMode;
+import org.robolectric.annotation.Config;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserFactory;
 
@@ -12,6 +19,14 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
+/**
+ * Runs under Robolectric because {@code XmlPullParserFactory} is an android.jar stub on the bare
+ * JVM classpath — {@code newInstance()} throws "not mocked" there. Robolectric supplies a real
+ * pull-parser implementation, which is what the production icon-pack path uses too.
+ */
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
+@ConscryptMode(ConscryptMode.Mode.OFF)
 public class IconPackXmlParserTest {
     @Test
     public void parsesComponentInfoItemsAndCalendarPrefixes() throws Exception {

@@ -1675,7 +1675,7 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    void reload() {
+    public void reload() {
         reloadWithInput("", null);
     }
 
@@ -6212,6 +6212,7 @@ public final class SuggestionBarView extends GridLayout {
         int targetPage = wrapPageIndex(pinnedPageIndex + pageDelta, totalPages);
         if (targetPage == pinnedPageIndex) return;
 
+        performPinnedPageTransitionHaptic(targetPage);
         pageSwitchAnimating = true;
         swipePagePosition = targetPage;
         notifyOverflowPagePositionChanged();
@@ -6227,6 +6228,24 @@ public final class SuggestionBarView extends GridLayout {
             final float travel = Math.max(dp(24), getWidth() * 0.24f);
             runUnifiedAppsBarPageSwitch(direction, travel, duration, updateContent, null);
         }
+    }
+
+    private void performPinnedPageTransitionHaptic(int targetPage) {
+        if (!rowHapticsEnabled)
+            return;
+        performHapticFeedback(pinnedPageTransitionHaptic(
+            isMostUsedDynamicPage(targetPage), Build.VERSION.SDK_INT));
+    }
+
+    static int pinnedPageTransitionHaptic(boolean mostUsedPage, int sdkInt) {
+        if (mostUsedPage) {
+            return sdkInt >= Build.VERSION_CODES.R
+                ? android.view.HapticFeedbackConstants.GESTURE_END
+                : android.view.HapticFeedbackConstants.CONTEXT_CLICK;
+        }
+        return sdkInt >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+            ? android.view.HapticFeedbackConstants.SEGMENT_TICK
+            : android.view.HapticFeedbackConstants.CLOCK_TICK;
     }
 
     private void animateAzPageSwitch(int pageDelta, float velocityPxPerSec) {

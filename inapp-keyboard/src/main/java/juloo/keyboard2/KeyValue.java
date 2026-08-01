@@ -105,6 +105,7 @@ public final class KeyValue implements Comparable<KeyValue>
     Slider, // [_payload] is a [KeyValue.Slider], value is slider repeatition.
     Macro, // [_payload] is a [KeyValue.Macro], value is unused.
     Stateful, // [_payload] is a [KeyValue.Stateful], value is the query.
+    Launcher_tool, // [_payload] is a [KeyValue.LauncherTool], value is unused.
   }
 
   private static final int FLAGS_OFFSET = 20;
@@ -243,6 +244,12 @@ public final class KeyValue implements Comparable<KeyValue>
   public Stateful getStateful()
   {
     return (Stateful)_payload;
+  }
+
+  /** Defined only when [getKind() == Kind.Launcher_tool]. */
+  public LauncherTool getLauncherTool()
+  {
+    return (LauncherTool)_payload;
   }
 
   /* Update the char and the symbol. */
@@ -509,6 +516,15 @@ public final class KeyValue implements Comparable<KeyValue>
     return new KeyValue(new Macro(keys, symbol), Kind.Macro, 0, flags);
   }
 
+  /** A key that runs a launcher tool by its registry id, e.g. [app.command_palette]. */
+  public static KeyValue makeLauncherToolKey(String toolId, String symbol, int flags)
+  {
+    if (symbol.length() > 1)
+      flags |= FLAG_SMALLER_FONT;
+    return new KeyValue(new LauncherTool(toolId, symbol), Kind.Launcher_tool, 0,
+        flags | FLAG_SPECIAL | FLAG_SECONDARY);
+  }
+
   /** Make a modifier key for passing to [KeyModifier]. */
   public static KeyValue makeInternalModifier(Modifier mod)
   {
@@ -520,6 +536,9 @@ public final class KeyValue implements Comparable<KeyValue>
   public static KeyValue getKeyByName(String name)
   {
     KeyValue k = getSpecialKeyByName(name);
+    if (k != null)
+      return k;
+    k = parseLauncherToolKey(name);
     if (k != null)
       return k;
     try
@@ -542,6 +561,33 @@ public final class KeyValue implements Comparable<KeyValue>
   public static final KeyValue CHANGE_METHOD_NEXT = eventKey(0xE009, Event.CHANGE_METHOD_NEXT, FLAG_SMALLER_FONT);
   public static final KeyValue VOICE_TYPING_CHOOSER = eventKey(0xE015, Event.SWITCH_VOICE_TYPING_CHOOSER, FLAG_SMALLER_FONT);
   public static final KeyValue COMPOSE_CANCEL = placeholderKey(0xE01A, Placeholder.COMPOSE_CANCEL, FLAG_SECONDARY);
+
+  /** Prefix marking a layout value as a launcher tool rather than a keyboard key. */
+  public static final String LAUNCHER_TOOL_PREFIX = "tool:";
+
+  /**
+   * Parses [tool:<id>] or [tool:<id>:<symbol>], or returns [null] when [name] is not a tool
+   * value. The id is a launcher registry tool name; the optional symbol is what the key draws,
+   * defaulting to a generic glyph. Tool ids never contain a colon, so the first colon after the
+   * prefix always separates the id from the symbol.
+   *
+   * <p>This is the one seam between the keyboard and the launcher's action registry: every tool
+   * is reachable from any key slot with no per-tool code on either side, which is what lets the
+   * space bar's swipe slots be edited in [~/.termux/keyboard/layout.xml].
+   */
+  public static KeyValue parseLauncherToolKey(String name)
+  {
+    if (name == null || !name.startsWith(LAUNCHER_TOOL_PREFIX))
+      return null;
+    String rest = name.substring(LAUNCHER_TOOL_PREFIX.length());
+    int separator = rest.indexOf(':');
+    String toolId = separator < 0 ? rest : rest.substring(0, separator);
+    if (toolId.isEmpty())
+      return null;
+    String symbol = separator < 0 || separator + 1 >= rest.length()
+      ? "⌘" : rest.substring(separator + 1);
+    return makeLauncherToolKey(toolId, symbol, 0);
+  }
 
   public static KeyValue getSpecialKeyByName(String name)
   {
@@ -886,6 +932,33 @@ public final class KeyValue implements Comparable<KeyValue>
     @Override
     public String describe() { return name(); }
   };
+
+  /** Payload of a [Kind.Launcher_tool] key: the registry id, plus the glyph the key draws. */
+  public static final class LauncherTool
+    implements Comparable<LauncherTool>, Describe
+  {
+    public final String toolId;
+    private final String _symbol;
+
+    public LauncherTool(String toolId_, String symbol_)
+    {
+      toolId = toolId_;
+      _symbol = symbol_;
+    }
+
+    @Override
+    public String toString() { return _symbol; }
+
+    @Override
+    public String describe() { return LAUNCHER_TOOL_PREFIX + toolId; }
+
+    @Override
+    public int compareTo(LauncherTool snd)
+    {
+      int d = toolId.compareTo(snd.toolId);
+      return d != 0 ? d : _symbol.compareTo(snd._symbol);
+    }
+  }
 
   public static final class Macro implements Comparable<Macro>, Describe
   {

@@ -188,6 +188,7 @@ public final class PinnedAppsEditor {
                 if (from < 0 || to < 0 || from >= orderedSelected.size() || to >= orderedSelected.size()) return false;
                 Collections.swap(orderedSelected, from, to);
                 orderAdapter.notifyItemMoved(from, to);
+                persistImmediate();
                 return true;
             }
 
@@ -302,12 +303,12 @@ public final class PinnedAppsEditor {
         folderAction.setBackground(folderActionBg);
         folderAction.setPadding(dp(6), dp(6), dp(6), dp(6));
 
-        Button cancel = ghostButton("Cancel");
+        Button cancel = ghostButton("Close");
         cancel.setOnClickListener(v -> dialog.dismiss());
-        final Button save = ghostButton("Save");
+        final Button save = ghostButton("Done");
 
         final Runnable refreshFolderUi = () -> {
-            save.setText(folderMode[0] ? "Create" : "Save");
+            save.setText(folderMode[0] ? "Create" : "Done");
             folderAction.setAlpha(folderMode[0] ? 1f : 0.6f);
         };
         folderAction.setOnClickListener(v -> {
@@ -390,6 +391,7 @@ public final class PinnedAppsEditor {
             selectedIds.add(stable);
             orderedSelected.add(new PinnedAppItem(entry.appRef.copy()));
         }
+        persistImmediate();
     }
 
     private void removeAt(int pos, @NonNull PinnedOrderAdapter adapter) {
@@ -397,6 +399,13 @@ public final class PinnedAppsEditor {
         orderedSelected.remove(pos);
         if (stable != null) selectedIds.remove(stable);
         adapter.notifyItemRemoved(pos);
+        persistImmediate();
+    }
+
+    private void persistImmediate() {
+        if (folderMode[0]) return;
+        persist();
+        if (onSaved != null) onSaved.run();
     }
 
     private void persist() {

@@ -1,8 +1,5 @@
 set -g fish_greeting ""
 
-# Set to 1 to auto-start or attach tmux when fish opens.
-set -g fish_auto_tmux 0
-
 set -gx TMPDIR "$HOME/.tmp"
 mkdir -p "$TMPDIR"
 
@@ -11,6 +8,8 @@ set -q EDITOR; or set -gx EDITOR nvim
 
 fish_add_path "$HOME/.local/bin" "$HOME/.termux/bin"
 
+# Load wallpaper-generated Material colors when available. The launcher writes
+# them to ~/.termux/material-colors.sh (and .properties as a fallback).
 function __load_termux_material_colors
     set -l shell_colors "$HOME/.termux/material-colors.sh"
     set -l colors "$HOME/.termux/material-colors.properties"
@@ -36,8 +35,8 @@ end
 
 __load_termux_material_colors
 
-# The launcher rewrites its Material exports when light/dark mode or wallpaper
-# colors change. Existing shells should adopt them without being restarted.
+# Theme changes rewrite the Material exports while existing shells keep their
+# old palette. Refresh before each prompt so open shells adopt new colors.
 set -g __termux_material_colors_signature ""
 function __refresh_termux_material_colors --on-event fish_prompt
     set -l colors "$HOME/.termux/material-colors.sh"
@@ -50,13 +49,10 @@ function __refresh_termux_material_colors --on-event fish_prompt
 
     __load_termux_material_colors
     set -g __termux_material_colors_signature "$signature"
-
-    if set -q TMUX
-        set -l tmux_theme "$HOME/.tmux/plugins/termux-launcher-tmux/scripts/material-theme.tmux"
-        test -x "$tmux_theme"; and command "$tmux_theme" >/dev/null 2>&1
-    end
 end
 
+# Fallback palette so the prompt still renders in plain Termux or before the
+# launcher has exported wallpaper colors.
 set -q TERMUX_MATERIAL_ERROR; or set -gx TERMUX_MATERIAL_ERROR "#F2B8B5"
 set -q TERMUX_MATERIAL_ON_PRIMARY; or set -gx TERMUX_MATERIAL_ON_PRIMARY "#003826"
 set -q TERMUX_MATERIAL_ON_SECONDARY; or set -gx TERMUX_MATERIAL_ON_SECONDARY "#1E3529"
@@ -68,16 +64,96 @@ set -q TERMUX_MATERIAL_SURFACE; or set -gx TERMUX_MATERIAL_SURFACE "#0F1512"
 set -q TERMUX_MATERIAL_SURFACE_CONTAINER_HIGHEST; or set -gx TERMUX_MATERIAL_SURFACE_CONTAINER_HIGHEST "#303632"
 set -q TERMUX_MATERIAL_TERTIARY; or set -gx TERMUX_MATERIAL_TERTIARY "#A5CCDF"
 
+# Keep the prompt near the bottom of the screen after clearing.
+function __move_cursor_to_bottom
+    if type -q tput
+        set -l lines (tput lines 2>/dev/null)
+
+        if string match -rq '^[0-9]+$' -- "$lines"; and test "$lines" -gt 1
+            command tput cup (math "$lines - 2") 0 2>/dev/null
+        end
+    end
+end
+
+function clear
+    command clear
+    __move_cursor_to_bottom
+end
+
+# yazi helper: exit yazi into the directory it was viewing.
+function y
+    set -l tmp (mktemp -t "yazi-cwd.XXXXXX")
+
+    command yazi $argv --cwd-file="$tmp"
+
+    if read -l cwd <"$tmp"; and test "$cwd" != "$PWD"; and test -d "$cwd"
+        builtin cd -- "$cwd"
+    end
+
+    rm -f -- "$tmp"
+end
+
+## ---------------------------------------------------------------------------
+## Quick guide: make this config yours
+## ---------------------------------------------------------------------------
+#
+# Abbreviations expand as you type (like typing `cc` + space becoming `clear`).
+# They live in your history as the expanded command, which keeps history
+# useful. Uncomment any of these or add your own:
+#
+#   abbr -a cc clear
+#   abbr -a ee exit
+#   abbr -a cdd 'cd ..'
+#   abbr -a nn nvim
+#   abbr -a mm mkdir
+#   abbr -a py python
+#   abbr -a gitc 'git clone'
+#   abbr -a fishy 'nvim ~/.config/fish/config.fish'    # edit this file
+#   abbr -a termuxy 'nvim ~/.termux/termux.properties' # edit terminal settings
+#   abbr -a rfish 'exec fish'                          # reload this config
+#   abbr -a rr termux-reload-settings                  # reload ~/.termux configs
+#
+# Package-manager shortcuts, guarded so they only exist where pacman does:
+#
+#   if type -q pacman
+#       abbr -a ii 'pacman -S --needed --noconfirm'
+#       abbr -a ss 'pacman -Ss'
+#       abbr -a uu 'pacman -Syu --needed --noconfirm'
+#   end
+#
+# Functions are for anything with logic (see `y` above). Key bindings attach
+# to any function; this one runs it on Alt+G in an interactive shell:
+#
+#   function __git_status
+#       git status
+#       commandline -f repaint
+#   end
+#   bind \eg __git_status
+#
+# Environment variables for tools you install (API keys and the like) belong
+# in a separate un-shared file; source it here if it exists:
+#
+#   test -r ~/.config/fish/secrets.fish; and source ~/.config/fish/secrets.fish
+
 if status is-interactive
-    if test "$fish_auto_tmux" = 1; and type -q tmux; and not set -q TMUX
-        exec tmux new-session -A -s main
+    function fish_greeting
+        command clear
+        __move_cursor_to_bottom
     end
 
+    # Oh My Posh prompt. Keep this after the Material colors are sourced.
+    # Both themes ship with the launcher docs: pure-material (minimal, no
+    # backgrounds) and termux-launcher (full segments).
     if type -q oh-my-posh
-        set -l omp_theme "$HOME/.config/ohmyposh/termux-launcher.omp.json"
-        test -f "$omp_theme"; and oh-my-posh --config "$omp_theme" init fish | source
+        set -l omp_theme "$HOME/.config/ohmyposh/pure-material.omp.json"
+        test -f "$omp_theme"; or set omp_theme "$HOME/.config/ohmyposh/termux-launcher.omp.json"
+
+        if test -f "$omp_theme"
+            oh-my-posh --config "$omp_theme" init fish | source
+        end
     end
 
+    # eza replaces ls-style commands when installed.
     if type -q eza
         function ls
             command eza --group-directories-first --icons=auto $argv
@@ -100,7 +176,19 @@ if status is-interactive
         end
     end
 
+    # zoxide powers cd; the wrapper also lists the destination after moving.
     if type -q zoxide
         zoxide init --cmd cd fish | source
+
+        functions --erase cd
+        function cd --wraps=__zoxide_z
+            __zoxide_z $argv
+            and ls
+        end
+    else
+        function cd --wraps=cd
+            builtin cd $argv
+            and ls
+        end
     end
 end

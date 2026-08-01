@@ -57,6 +57,10 @@ tasks.withType(Test) {
     testLogging {
         events "started", "passed", "skipped", "failed"
     }
+    ["termux.fuzz.seed", "termux.fuzz.cases", "termux.fuzz.maxBytes"].each { propertyName ->
+        String propertyValue = System.getProperty(propertyName)
+        if (propertyValue != null) systemProperty propertyName, propertyValue
+    }
 }
 
 tasks.withType(JavaCompile) {

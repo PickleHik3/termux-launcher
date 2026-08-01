@@ -29,7 +29,7 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
 
     private static final String LOG_TAG = "TermuxTerminalExtraKeys";
 
-    public TermuxTerminalExtraKeys(TermuxActivity activity, @NonNull TerminalView terminalView, TermuxTerminalViewClient termuxTerminalViewClient, TermuxTerminalSessionActivityClient termuxTerminalSessionActivityClient,
+    public TermuxTerminalExtraKeys(TermuxActivity activity, TerminalView terminalView, TermuxTerminalViewClient termuxTerminalViewClient, TermuxTerminalSessionActivityClient termuxTerminalSessionActivityClient,
      int i) {
         super(terminalView);
         mActivity = activity;
@@ -91,8 +91,44 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
             TerminalView terminalView = mTermuxTerminalViewClient.getActivity().getTerminalView();
             if (terminalView != null && terminalView.mEmulator != null)
                 terminalView.mEmulator.toggleAutoScrollDisabled();
+        } else if (key != null && key.startsWith(LAUNCHER_TOOL_KEY_PREFIX)) {
+            runLauncherToolKey(key.substring(LAUNCHER_TOOL_KEY_PREFIX.length()));
         } else {
             super.onTerminalExtraKeyButtonClick(view, key, ctrlDown, altDown, shiftDown, fnDown);
+        }
+    }
+
+    /** Extra-keys entries prefixed with this run a registry tool instead of sending keys. */
+    static final String LAUNCHER_TOOL_KEY_PREFIX = "tool:";
+
+    /**
+     * Runs a registry tool named by an extra key. The spec is
+     * {@code <tool>[:<arg>=<value>[,<arg>=<value>...]]} so parameterized tools work from the
+     * row — e.g. {@code tool:pane.move_to_edge:edge=left}. Failures only log: an extra key
+     * whose tool is momentarily unavailable (no session yet, splits off) should stay silent
+     * like a dead keystroke, not toast.
+     */
+    private void runLauncherToolKey(@NonNull String spec) {
+        String toolName = spec;
+        org.json.JSONObject arguments = new org.json.JSONObject();
+        int colon = spec.indexOf(':');
+        if (colon > 0) {
+            toolName = spec.substring(0, colon);
+            for (String pair : spec.substring(colon + 1).split(",")) {
+                int equals = pair.indexOf('=');
+                if (equals <= 0) continue;
+                try {
+                    arguments.put(pair.substring(0, equals).trim(),
+                        pair.substring(equals + 1).trim());
+                } catch (JSONException ignored) {
+                }
+            }
+        }
+        org.json.JSONObject result = com.termux.app.terminal.TerminalActionDispatcher
+            .getInstance().execute(toolName, arguments);
+        if (!result.optBoolean("ok", false)) {
+            Logger.logWarn(LOG_TAG, "Extra key tool '" + toolName + "' failed: "
+                + result.optString("message", result.toString()));
         }
     }
 }

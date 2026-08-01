@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Key inspector overlay, attached over the terminal rather than shown as a dialog.
+
+  Nothing here may be focusable: the terminal has to keep input focus or there are no
+  key events left to inspect. The close button is clickable but explicitly not focusable
+  for that reason.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="#D9000000"
+    android:descendantFocusability="blocksDescendants"
+    android:focusable="false"
+    android:padding="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/key_inspector_title"
+            android:textColor="#FFFFFFFF"
+            android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+        <TextView
+            android:id="@+id/key_inspector_close"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:clickable="true"
+            android:focusable="false"
+            android:minWidth="48dp"
+            android:minHeight="48dp"
+            android:gravity="center"
+            android:text="@string/key_inspector_close"
+            android:textColor="#FFFFFFFF"
+            android:textAppearance="?attr/textAppearanceLabelLarge" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/key_inspector_output"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:focusable="false"
+        android:fontFamily="monospace"
+        android:textColor="#FFE0E0E0"
+        android:textSize="11sp"
+        android:lineSpacingExtra="1dp" />
+</LinearLayout>

@@ -54,6 +54,14 @@ public final class TaiModelImporter {
     public JSONObject importDocument(@NonNull Uri uri, @Nullable String requestedModelId,
                                      @Nullable String backend,
                                      @Nullable Set<String> declaredCapabilities) throws JSONException {
+        return importDocument(uri, requestedModelId, backend, declaredCapabilities, null);
+    }
+
+    @NonNull
+    public JSONObject importDocument(@NonNull Uri uri, @Nullable String requestedModelId,
+                                     @Nullable String backend,
+                                     @Nullable Set<String> declaredCapabilities,
+                                     @Nullable TaiModelProfile requestedProfile) throws JSONException {
         DocumentMetadata metadata = readMetadata(uri);
         String fileName = sanitizeFileName(metadata.displayName);
         ValidationResult fileValidation = backend == null || backend.trim().isEmpty()
@@ -117,7 +125,7 @@ public final class TaiModelImporter {
                 baseSpec.sizeBytes,
                 baseSpec.sourceCapabilities,
                 false,
-                TaiModelProfile.forModel(baseSpec),
+                requestedProfile == null ? TaiModelProfile.forModel(baseSpec) : requestedProfile,
                 TaiModelSpec.inferBackend(output.getAbsolutePath()),
                 format,
                 null,

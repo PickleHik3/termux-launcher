@@ -7,6 +7,7 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ResolveInfo;
 import android.os.Build;
 import android.os.Looper;
+import android.view.View;
 
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 
@@ -44,6 +45,24 @@ public class SuggestionBarAppDiscoveryTest {
         appDataProvider = LauncherAppDataProvider.getInstance(context);
         appDataProvider.invalidate();
         suggestionBarView.setAppDataProvider(appDataProvider);
+        layOutBar();
+    }
+
+    /**
+     * renderButtons() refuses to render until hasStableRenderBounds() is satisfied, and its
+     * deferred retry is dropped for a view that is not attached to a window. A bare
+     * {@code new SuggestionBarView(...)} therefore renders nothing at all, so every child-count
+     * assertion below needs the bar to be laid out at a realistic dock size first.
+     */
+    private void layOutBar() {
+        int widthPx = 1080;
+        int heightPx = 160;
+        suggestionBarView.measure(
+            View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(heightPx, View.MeasureSpec.EXACTLY));
+        suggestionBarView.layout(0, 0, widthPx, heightPx);
+        assertTrue("suggestion bar must report stable render bounds before rendering",
+            suggestionBarView.isLaidOut() && suggestionBarView.getWidth() == widthPx);
     }
 
     private void awaitCatalogLoad() throws Exception {

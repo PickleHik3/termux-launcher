@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Restored `launcherctl` as a launch-only shell command. `launcherctl launch <app name, package, or activity>` calls the authenticated local `/v1/apps/launch` route. Agent, MCP, notification, media, resource, event, restart, and other device-control commands remain removed. Use `tai` for local AI.
+- Added floating terminal panes. Use **Float / dock pane** in the command palette or press `Ctrl+Alt+F` to detach the focused pane above the tiled layout and dock it again. Floating positions and sizes survive activity recreation and workspace save and restore.
+
+### Changed
+
+- Fresh installs now use the built-in terminal keyboard by default. Existing installs keep their selected input method. **Settings → Keyboard → Input method** still offers the built-in keyboard, Android keyboard, or no on-screen keyboard.
+- Reworked the command palette into one glass rectangle with the search row at the top, right-aligned result count and breadcrumb, and six frequent-action keycaps below. Its corner radius now follows the dock capsule.
+- Shortened Termux-home working directories in the sessions panel and session browser to `~` or `~/subdirectory`. Session-switch chips now use launcher session numbers and appear only for actual session changes.
+- The surface editor now reopens the Dock, Keyboard, Status, or Other section used last.
+
+### Fixed
+
+- Removed the first-launch terminal flicker and extra bottom padding caused by the Android keyboard inset race.
+
 ## 0.2.29-hotfix.1
 
 ### Changed

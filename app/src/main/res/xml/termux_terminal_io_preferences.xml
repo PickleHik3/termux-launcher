@@ -18,4 +18,49 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory
+        app:key="split_panes"
+        app:title="@string/termux_split_panes_header">
+
+        <SwitchPreferenceCompat
+            app:key="compatibility_mode"
+            app:summaryOff="@string/termux_compatibility_mode_off"
+            app:summaryOn="@string/termux_compatibility_mode_on"
+            app:title="@string/termux_compatibility_mode_title" />
+
+        <ListPreference
+            app:key="top_pane_clock_style"
+            app:title="@string/termux_top_pane_clock_style_title"
+            app:summary="@string/termux_top_pane_clock_style_summary"
+            app:entries="@array/termux_top_pane_clock_style_entries"
+            app:entryValues="@array/termux_top_pane_clock_style_values"
+            app:defaultValue="flip"
+            app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreferenceCompat
+            app:key="top_pane_clock_am_pm"
+            app:title="@string/termux_top_pane_clock_am_pm_title"
+            app:summary="@string/termux_top_pane_clock_am_pm_summary"
+            app:defaultValue="false" />
+
+        <SwitchPreferenceCompat
+            app:key="status_widget_cpu"
+            app:title="@string/termux_status_widget_cpu_title"
+            app:summary="@string/termux_status_widget_cpu_summary"
+            app:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            app:key="status_widget_ram"
+            app:title="@string/termux_status_widget_ram_title"
+            app:summary="@string/termux_status_widget_ram_summary"
+            app:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            app:key="status_widget_weather"
+            app:title="@string/termux_status_widget_weather_title"
+            app:summary="@string/termux_status_widget_weather_summary"
+            app:defaultValue="true" />
+
+    </PreferenceCategory>
+
 </PreferenceScreen>

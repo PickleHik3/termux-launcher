@@ -1,17 +1,30 @@
 package com.termux.launcherctl;
 
 import android.content.ComponentName;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.media.MediaMetadata;
 import android.media.session.MediaController;
 import android.media.session.MediaSessionManager;
 import android.media.session.PlaybackState;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.util.Base64;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.termux.app.launcher.notifications.LauncherNotificationBadgeStore;
+import com.termux.app.statusbar.EssentialNotificationRule;
+import com.termux.app.statusbar.EssentialNotificationRules;
+import com.termux.app.statusbar.PinnedNotification;
+import com.termux.app.statusbar.TopPaneFeed;
+import com.termux.app.statusbar.TopPaneMediaState;
+import com.termux.app.statusbar.TopPaneSlotMode;
 import com.termux.shared.logger.Logger;
 
 import org.json.JSONArray;
@@ -20,13 +33,22 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Captures live notification and media-session state for LauncherCtl local API endpoints.
+ * Captures live notification and media-session state for LauncherCtl local API endpoints, and feeds
+ * the top-pane widget slot through {@link TopPaneFeed}. Both the media widget and the pinned
+ * notifications depend on listener access, so they surface only while this service is connected.
  */
-public class LauncherCtlNotificationListener extends NotificationListenerService {
+public class LauncherCtlNotificationListener extends NotificationListenerService
+        implements TopPaneFeed.Controls {
     private static final String LOG_TAG = "LauncherCtlNotifListener";
     private static final String NOTIFICATION_LISTENER_SETTINGS_ACTION =
         "android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS";
@@ -40,13 +62,45 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
     private static volatile JSONObject nowPlaying;
     private static volatile JSONObject nowPlayingArt;
 
+    private final Handler mMainHandler = new Handler(Looper.getMainLooper());
+    private final Map<String, String> mAppLabels = new HashMap<>();
+    /** Insertion-ordered so a fourth match evicts the oldest pin. */
+    private final LinkedHashMap<String, PinnedNotification> mPinned = new LinkedHashMap<>();
+    /** Keys unpinned by hand, so an unpinned but still-posted notification does not come back. */
+    private final Set<String> mUnpinned = new HashSet<>();
+
+    private final MediaSessionManager.OnActiveSessionsChangedListener mSessionsListener =
+        this::attachTopPaneController;
+
+    private final MediaController.Callback mMediaCallback = new MediaController.Callback() {
+        @Override public void onPlaybackStateChanged(@Nullable PlaybackState state) {
+            publishTopPaneMedia();
+        }
+
+        @Override public void onMetadataChanged(@Nullable MediaMetadata metadata) {
+            publishTopPaneMedia();
+        }
+
+        @Override public void onSessionDestroyed() {
+            detachTopPaneController();
+            syncTopPaneMedia();
+        }
+    };
+
+    @Nullable private MediaController mTopPaneController;
+
     @Override
     public void onListenerConnected() {
         activeInstance = this;
         listenerConnected = true;
         Logger.logInfo(LOG_TAG, "Notification listener connected");
+        TopPaneFeed.setControls(this);
+        TopPaneFeed.setListenerConnected(true);
         rebuildNotificationsSnapshot();
         refreshNowPlaying();
+        registerSessionsListener();
+        syncTopPaneMedia();
+        rebuildPinnedNotifications();
     }
 
     @Override
@@ -54,6 +108,12 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         if (activeInstance == this) activeInstance = null;
         listenerConnected = false;
         LauncherNotificationBadgeStore.clear();
+        unregisterSessionsListener();
+        detachTopPaneController();
+        mPinned.clear();
+        mUnpinned.clear();
+        TopPaneFeed.setControls(null);
+        TopPaneFeed.setListenerConnected(false);
         Logger.logWarn(LOG_TAG, "Notification listener disconnected");
     }
 
@@ -63,6 +123,8 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         updateNotification(sbn);
         persistPosted(sbn);
         refreshNowPlaying();
+        rebuildPinnedNotifications();
+        syncTopPaneMedia();
     }
 
     @Override
@@ -71,6 +133,8 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         updateNotification(sbn);
         persistPosted(sbn);
         refreshNowPlaying();
+        rebuildPinnedNotifications();
+        syncTopPaneMedia();
     }
 
     @Override
@@ -78,9 +142,12 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         LauncherNotificationBadgeStore.onNotificationRemoved(sbn);
         if (sbn != null) {
             NOTIFICATIONS.remove(sbn.getKey());
+            mUnpinned.remove(sbn.getKey());
         }
         persistRemoved(sbn);
         refreshNowPlaying();
+        rebuildPinnedNotifications();
+        syncTopPaneMedia();
     }
 
     @Override
@@ -360,6 +427,225 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
             quality -= 10;
         }
         return null;
+    }
+
+    // ---- Top pane widget slot --------------------------------------------
+
+    /** Re-evaluate the pin rules, e.g. after a rule was added or removed through the registry. */
+    public static void requestPinnedRefresh() {
+        LauncherCtlNotificationListener listener = activeInstance;
+        if (listener == null) return;
+        listener.mMainHandler.post(listener::rebuildPinnedNotifications);
+    }
+
+    private void rebuildPinnedNotifications() {
+        List<EssentialNotificationRule> rules = EssentialNotificationRules.load(this);
+        Map<String, PinnedNotification> matched = new LinkedHashMap<>();
+        Set<String> activeKeys = new HashSet<>();
+        StatusBarNotification[] active = null;
+        try {
+            active = getActiveNotifications();
+        } catch (Throwable throwable) {
+            Logger.logWarn(LOG_TAG, "Failed to read active notifications: " + throwable.getMessage());
+        }
+        if (active != null) {
+            List<StatusBarNotification> sorted = new ArrayList<>();
+            for (StatusBarNotification sbn : active) {
+                if (sbn == null || sbn.getNotification() == null) continue;
+                activeKeys.add(sbn.getKey());
+                sorted.add(sbn);
+            }
+            if (!rules.isEmpty()) {
+                sorted.sort(Comparator.comparingLong(StatusBarNotification::getPostTime));
+                for (StatusBarNotification sbn : sorted) {
+                    if (mUnpinned.contains(sbn.getKey())) continue;
+                    PinnedNotification pin = toPinnedNotification(sbn, rules);
+                    if (pin != null) matched.put(pin.key, pin);
+                }
+            }
+        }
+        mUnpinned.retainAll(activeKeys);
+
+        // Keep the order of pins already on screen, then append new matches oldest-first.
+        List<PinnedNotification> ordered = new ArrayList<>();
+        for (String key : mPinned.keySet()) {
+            PinnedNotification pin = matched.remove(key);
+            if (pin != null) ordered.add(pin);
+        }
+        ordered.addAll(matched.values());
+        while (ordered.size() > TopPaneSlotMode.MAX_PINNED) ordered.remove(0);
+
+        mPinned.clear();
+        for (PinnedNotification pin : ordered) mPinned.put(pin.key, pin);
+        TopPaneFeed.setPinned(ordered);
+    }
+
+    @Nullable
+    private PinnedNotification toPinnedNotification(@NonNull StatusBarNotification sbn,
+                                                    @NonNull List<EssentialNotificationRule> rules) {
+        Bundle extras = sbn.getNotification().extras;
+        String title = toStringOrNull(extras, "android.title");
+        String body = toStringOrNull(extras, "android.text");
+        if (body == null || body.isEmpty()) body = toStringOrNull(extras, "android.bigText");
+        EssentialNotificationRule rule =
+            EssentialNotificationRules.firstMatch(rules, sbn.getPackageName(), title, body);
+        if (rule == null) return null;
+        return new PinnedNotification(sbn.getKey(), sbn.getPackageName(), title,
+            appLabel(sbn.getPackageName()), body, rule.id, rule.clearOnDismiss, sbn.getPostTime());
+    }
+
+    private String appLabel(@NonNull String packageName) {
+        String cached = mAppLabels.get(packageName);
+        if (cached != null) return cached;
+        String label = packageName;
+        try {
+            PackageManager manager = getPackageManager();
+            ApplicationInfo info = manager.getApplicationInfo(packageName, 0);
+            CharSequence resolved = manager.getApplicationLabel(info);
+            if (resolved != null && resolved.length() > 0) label = resolved.toString();
+        } catch (Exception ignored) {
+        }
+        mAppLabels.put(packageName, label);
+        return label;
+    }
+
+    private void registerSessionsListener() {
+        try {
+            MediaSessionManager manager =
+                (MediaSessionManager) getSystemService(MEDIA_SESSION_SERVICE);
+            if (manager == null) return;
+            manager.addOnActiveSessionsChangedListener(mSessionsListener,
+                new ComponentName(this, LauncherCtlNotificationListener.class), mMainHandler);
+        } catch (Throwable throwable) {
+            Logger.logWarn(LOG_TAG, "Failed to observe media sessions: " + throwable.getMessage());
+        }
+    }
+
+    private void unregisterSessionsListener() {
+        try {
+            MediaSessionManager manager =
+                (MediaSessionManager) getSystemService(MEDIA_SESSION_SERVICE);
+            if (manager != null) manager.removeOnActiveSessionsChangedListener(mSessionsListener);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void syncTopPaneMedia() {
+        try {
+            MediaSessionManager manager =
+                (MediaSessionManager) getSystemService(MEDIA_SESSION_SERVICE);
+            if (manager == null) return;
+            attachTopPaneController(manager.getActiveSessions(
+                new ComponentName(this, LauncherCtlNotificationListener.class)));
+        } catch (SecurityException e) {
+            Logger.logWarn(LOG_TAG, "Media sessions unavailable without notification listener access");
+        } catch (Throwable throwable) {
+            Logger.logErrorExtended(LOG_TAG, "Failed to sync media sessions: " + throwable.getMessage());
+        }
+    }
+
+    private void attachTopPaneController(@Nullable List<MediaController> controllers) {
+        MediaController selected = selectTopPaneController(controllers);
+        boolean same = selected != null && mTopPaneController != null
+            && mTopPaneController.getSessionToken().equals(selected.getSessionToken());
+        if (!same) {
+            detachTopPaneController();
+            mTopPaneController = selected;
+            if (selected != null) selected.registerCallback(mMediaCallback, mMainHandler);
+        }
+        publishTopPaneMedia();
+    }
+
+    private void detachTopPaneController() {
+        if (mTopPaneController == null) return;
+        try {
+            mTopPaneController.unregisterCallback(mMediaCallback);
+        } catch (Throwable ignored) {
+        }
+        mTopPaneController = null;
+    }
+
+    /** Only playing or paused sessions claim the slot; stopped and released ones release it. */
+    @Nullable
+    private MediaController selectTopPaneController(@Nullable List<MediaController> controllers) {
+        if (controllers == null || controllers.isEmpty()) return null;
+        MediaController paused = null;
+        for (MediaController controller : controllers) {
+            PlaybackState state = controller.getPlaybackState();
+            int value = state == null ? PlaybackState.STATE_NONE : state.getState();
+            if (value == PlaybackState.STATE_PLAYING) return controller;
+            if (paused == null && value == PlaybackState.STATE_PAUSED) paused = controller;
+        }
+        return paused;
+    }
+
+    private void publishTopPaneMedia() {
+        MediaController controller = mTopPaneController;
+        if (controller == null) {
+            TopPaneFeed.setMedia(null);
+            return;
+        }
+        PlaybackState state = controller.getPlaybackState();
+        int value = state == null ? PlaybackState.STATE_NONE : state.getState();
+        if (value != PlaybackState.STATE_PLAYING && value != PlaybackState.STATE_PAUSED) {
+            TopPaneFeed.setMedia(null);
+            return;
+        }
+        MediaMetadata metadata = controller.getMetadata();
+        String title = metadata == null ? null : text(metadata, MediaMetadata.METADATA_KEY_TITLE);
+        String artist = metadata == null ? null : text(metadata, MediaMetadata.METADATA_KEY_ARTIST);
+        long duration = metadata == null ? 0L : metadata.getLong(MediaMetadata.METADATA_KEY_DURATION);
+        Bitmap art = metadata == null ? null : extractAlbumArt(metadata);
+        TopPaneFeed.setMedia(new TopPaneMediaState(controller.getPackageName(), title, artist,
+            appLabel(controller.getPackageName()), art,
+            state == null ? 0L : state.getPosition(), duration,
+            value == PlaybackState.STATE_PLAYING));
+    }
+
+    @Nullable
+    private String text(@NonNull MediaMetadata metadata, @NonNull String key) {
+        CharSequence value = metadata.getText(key);
+        return value == null ? null : value.toString();
+    }
+
+    @Override
+    public boolean skipPrevious() {
+        MediaController controller = mTopPaneController;
+        if (controller == null) return false;
+        controller.getTransportControls().skipToPrevious();
+        return true;
+    }
+
+    @Override
+    public boolean togglePlayPause(boolean play) {
+        MediaController controller = mTopPaneController;
+        if (controller == null) return false;
+        if (play) controller.getTransportControls().play();
+        else controller.getTransportControls().pause();
+        return true;
+    }
+
+    @Override
+    public boolean skipNext() {
+        MediaController controller = mTopPaneController;
+        if (controller == null) return false;
+        controller.getTransportControls().skipToNext();
+        return true;
+    }
+
+    @Override
+    public boolean dismissPinned(@NonNull String key, boolean clear) {
+        mUnpinned.add(key);
+        boolean unpinned = mPinned.remove(key) != null;
+        TopPaneFeed.setPinned(new ArrayList<>(mPinned.values()));
+        if (!clear) return unpinned;
+        try {
+            cancelNotification(key);
+            return true;
+        } catch (Throwable throwable) {
+            Logger.logWarn(LOG_TAG, "Failed to cancel pinned notification: " + throwable.getMessage());
+            return unpinned;
+        }
     }
 
     private String playbackStateName(int state) {

@@ -19,9 +19,6 @@ import android.view.View;
 final class DockPlankController implements Choreographer.FrameCallback {
 
     private static final float MAX_TILT_DEG = 4f;
-    private static final float MIN_DT = 1f / 120f;
-    private static final float MAX_DT = 1f / 30f;
-    private static final float SETTLE_EPSILON = 4e-4f;
 
     private final View mPlank;       // the transformed slab (whole dock stack)
     private final View mSpecular;    // moving specular highlight
@@ -181,10 +178,10 @@ final class DockPlankController implements Choreographer.FrameCallback {
         mFrameScheduled = false;
         // First frame has no prior timestamp; use the minimum stable timestep.
         float dt = mLastFrameTimeNanos == 0L
-            ? MIN_DT
+            ? Spring.MIN_DT
             : (frameTimeNanos - mLastFrameTimeNanos) / 1_000_000_000f;
         mLastFrameTimeNanos = frameTimeNanos;
-        dt = Math.max(MIN_DT, Math.min(MAX_DT, dt));
+        dt = Spring.clampDelta(dt);
         boolean moving = false;
         moving |= mRx.tick(mReducedMotion, dt);
         moving |= mRy.tick(mReducedMotion, dt);
@@ -254,40 +251,5 @@ final class DockPlankController implements Choreographer.FrameCallback {
 
     private static float clamp01(float v) {
         return v < 0f ? 0f : (v > 1f ? 1f : v);
-    }
-
-    /** A single critically-damped spring channel integrated with a fixed timestep. */
-    private static final class Spring {
-        float value;
-        float target;
-        float vel;
-        final float stiffness;
-        final float damping;
-
-        Spring(float init, float stiffness, float damping) {
-            this.value = init;
-            this.target = init;
-            this.stiffness = stiffness;
-            this.damping = damping;
-        }
-
-        void reset(float v) {
-            value = v;
-            target = v;
-            vel = 0f;
-        }
-
-        /** @return true if the spring is still in motion and needs another frame. */
-        boolean tick(boolean reduced, float dt) {
-            if (reduced) {
-                value = target;
-                vel = 0f;
-                return false;
-            }
-            float accel = stiffness * (target - value) - damping * vel;
-            vel += accel * dt;
-            value += vel * dt;
-            return Math.abs(target - value) > SETTLE_EPSILON || Math.abs(vel) > SETTLE_EPSILON;
-        }
     }
 }

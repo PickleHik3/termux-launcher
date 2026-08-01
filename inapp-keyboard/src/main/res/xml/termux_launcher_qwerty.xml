@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The layout the in-app keyboard uses when ~/.termux/keyboard/layout.xml is absent.
+
+  Differs from upstream's latn_qwerty_us in three ways that matter for a terminal:
+  - It defines its own bottom row (bottom_row="false"), so the space bar's swipe slots carry
+    launcher actions through tool: keys instead of the generic bundled row.
+  - Fn is a real layer: the modmap maps the top row to F1-F12, the home row to navigation, and
+    n/m to ^C/^D, so a terminal is usable without a hardware keyboard.
+  - Corner symbols favour shell punctuation.
+
+  A user layout at ~/.termux/keyboard/layout.xml replaces this file wholesale. The same content
+  ships as an editable starting point in ~/.termux/launcher/examples/keyboard-layout.xml.
+-->
+<keyboard bottom_row="false" name="QWERTY (Termux Launcher)" script="latin">
+  <row>
+    <key c="q" ne="1" se="loc esc"/>
+    <key c="w" nw="~" ne="2" sw="\@"/>
+    <key c="e" nw="!" ne="3" sw="\#" se="loc €"/>
+    <key c="r" ne="4" sw="$"/>
+    <key c="t" ne="5" sw="%"/>
+    <key c="y" ne="6" sw="^"/>
+    <key c="u" ne="7" sw="&amp;"/>
+    <key c="i" ne="8" sw="*"/>
+    <key c="o" ne="9" sw="(" se=")"/>
+    <key c="p" ne="0"/>
+  </row>
+  <row>
+    <key shift="0.5" c="a" nw="loc tab" ne="`"/>
+    <key c="s" ne="loc §" sw="loc ß"/>
+    <key c="d"/>
+    <key c="f"/>
+    <key c="g" ne="-" sw="_"/>
+    <key c="h" ne="=" sw="+"/>
+    <key c="j" sw="{" se="}"/>
+    <key c="k" sw="[" se="]"/>
+    <key c="l" ne="|" sw="\\"/>
+  </row>
+  <row>
+    <key width="1.5" c="shift" ne="loc capslock"/>
+    <key c="z"/>
+    <key c="x" ne="loc †"/>
+    <key c="c" ne="&lt;" sw="."/>
+    <key c="v" ne=">" sw=","/>
+    <key c="b" ne="\?" sw="/"/>
+    <key c="n" ne=":" sw=";"/>
+    <key c="m" ne="&quot;" sw="'"/>
+    <key width="1.5" c="backspace" ne="delete"/>
+  </row>
+  <row height="0.95">
+    <key width="1.7" c="ctrl" nw="fn" ne="loc meta" sw="loc switch_clipboard" se="switch_numeric"/>
+    <key width="1.3" c="loc alt" nw="fn" ne="loc change_method" se="config"/>
+    <key width="4.0" c="space" w="cursor_left" e="cursor_right" s="switch_backward"
+         n="tool:app.command_palette:⌘"
+         nw="tool:window.previous:◧" ne="tool:window.next:◨"
+         sw="tool:session.previous:↰" se="tool:session.next:↳"/>
+    <key width="1.3" c="loc compose" nw="loc home" ne="loc page_up" sw="loc end" se="loc page_down" w="left" e="right" n="up" s="down"/>
+    <key width="1.7" c="enter" nw="loc voice_typing"/>
+  </row>
+  <modmap>
+    <fn a="q" b="f1"/>
+    <fn a="w" b="f2"/>
+    <fn a="e" b="f3"/>
+    <fn a="r" b="f4"/>
+    <fn a="t" b="f5"/>
+    <fn a="y" b="f6"/>
+    <fn a="u" b="f7"/>
+    <fn a="i" b="f8"/>
+    <fn a="o" b="f9"/>
+    <fn a="p" b="f10"/>
+    <fn a="a" b="esc"/>
+    <fn a="s" b="tab"/>
+    <fn a="d" b="home"/>
+    <fn a="f" b="up"/>
+    <fn a="g" b="end"/>
+    <fn a="h" b="page_up"/>
+    <fn a="j" b="left"/>
+    <fn a="k" b="down"/>
+    <fn a="l" b="right"/>
+    <fn a="z" b="f11"/>
+    <fn a="x" b="f12"/>
+    <fn a="c" b="insert"/>
+    <fn a="v" b="delete"/>
+    <fn a="b" b="page_down"/>
+    <fn a="n" b="^C:ctrl,c"/>
+    <fn a="m" b="^D:ctrl,d"/>
+  </modmap>
+</keyboard>

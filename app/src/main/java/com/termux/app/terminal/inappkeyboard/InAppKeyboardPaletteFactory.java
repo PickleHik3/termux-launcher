@@ -280,8 +280,13 @@ public final class InAppKeyboardPaletteFactory {
         return opaque(best);
     }
 
+    /**
+     * Lifts a label toward white or black only as far as 4.5:1 against its composited
+     * background needs. Public so surfaces outside the keyboard — the command palette's
+     * glass ledger — hold the same contrast floor as the keycaps do.
+     */
     @ColorInt
-    private static int ensureContrast(@ColorInt int foreground, @ColorInt int background) {
+    public static int ensureContrast(@ColorInt int foreground, @ColorInt int background) {
         foreground = opaque(foreground);
         background = opaque(background);
         if (ColorUtils.calculateContrast(foreground, background) >= MIN_TEXT_CONTRAST)

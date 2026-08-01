@@ -13,6 +13,187 @@
     ]>
 
 <resources>
+    <string name="settings_search_hint">Search settings</string>
+    <string name="settings_destination_appearance">Appearance</string>
+    <string name="settings_destination_appearance_summary">Theme, wallpaper, colors, icons, dock, terminal, sessions, and glass</string>
+    <string name="settings_destination_terminal_status">Terminal &amp; status</string>
+    <string name="settings_destination_terminal_status_summary">Display, panes, clock, CPU, memory, weather, margins, and Recents</string>
+    <string name="settings_destination_keyboard_input">Keyboard &amp; input</string>
+    <string name="settings_destination_keyboard_input_summary">Input method, keyboard appearance, layout, feedback, and test typing</string>
+    <string name="settings_destination_launcher_apps">Launcher &amp; apps</string>
+    <string name="settings_destination_launcher_apps_summary">Pinned apps, A–Z index, notification dots, search, and home behavior</string>
+    <string name="settings_destination_services_permissions">Services &amp; permissions</string>
+    <string name="settings_destination_services_permissions_summary">TAI, Shizuku, Termux:API, files, notifications, and accessibility</string>
+    <string name="settings_destination_advanced_diagnostics">Advanced &amp; diagnostics</string>
+    <string name="settings_destination_advanced_diagnostics_summary">Logging, tests, diagnostics, terminal internals, and developer tools</string>
+    <string name="settings_destination_about_support">About &amp; support</string>
+    <string name="settings_destination_about_support_summary">Documentation, feedback, source, version, licenses, and donate</string>
+    <string name="settings_terminal_display_header">Terminal display</string>
+    <string name="settings_full_screen_title">Full screen</string>
+    <string name="settings_adjust_keyboard_title">Adjust for on-screen keyboard</string>
+    <string name="settings_adjust_keyboard_summary">Keeps terminal content visible above the on-screen keyboard.</string>
+    <string name="settings_show_recents_title">Show in Recents when not the default launcher</string>
+    <string name="settings_show_recents_summary">Keeps the launcher available from the Recents screen when another home app is active.</string>
+    <string name="settings_sessions_panes_header">Sessions and panes</string>
+    <string name="settings_split_pane_controls_title">Split-pane controls</string>
+    <string name="settings_split_pane_controls_summary">Enable window splitting and tmux-style pane shortcuts.</string>
+    <string name="settings_clock_status_header">Clock and status</string>
+    <string name="settings_clock_style_title">Clock style</string>
+    <string name="settings_use_12_hour_title">Use 12-hour time</string>
+    <string name="settings_use_12_hour_summary">Shows time with AM and PM.</string>
+    <string name="settings_status_panel_style_title">Status panel style</string>
+    <string name="settings_cpu_usage_title">CPU usage</string>
+    <string name="settings_memory_usage_title">Memory usage</string>
+    <string name="settings_memory_usage_summary">Shows current memory use in the status row.</string>
+    <string name="settings_weather_title">Weather</string>
+    <string name="settings_weather_summary">Shows current conditions in the status row. Location permission is required.</string>
+    <string name="settings_theme_header">Theme</string>
+    <string name="settings_color_mode_title">Color mode</string>
+    <string name="settings_wallpaper_colors_title">Use wallpaper colors</string>
+    <string name="settings_wallpaper_colors_summary">Builds the launcher palette from the current wallpaper.</string>
+    <string name="settings_wallpaper_title">Wallpaper</string>
+    <string name="settings_icon_appearance_header">Icon appearance</string>
+    <string name="settings_icon_appearance_title">Use monochrome icons</string>
+    <string name="settings_icon_pack_title">Icon pack</string>
+    <string name="settings_pinned_icon_pack_title">Pinned-app icon pack</string>
+    <string name="settings_surfaces_header">Surfaces</string>
+    <string name="settings_customize_dock_title">Customize dock appearance</string>
+    <string name="settings_customize_dock_summary">Choose the shared Default or Rounded shape and tune the dock on the real home screen.</string>
+    <string name="settings_customize_status_title">Customize status appearance</string>
+    <string name="settings_customize_status_summary">Tune status blur, opacity, grain, and radius on the real home screen. Shape follows the shared surface choice.</string>
+    <string name="settings_customize_keyboard_title">Customize keyboard surface</string>
+    <string name="settings_customize_keyboard_summary">Edit keyboard size, spacing, key radius, and colors on the real home screen. Shape follows the shared surface choice.</string>
+    <string name="settings_dock_appearance_title">Dock appearance</string>
+    <string name="settings_dock_appearance_summary">Style, size, apps per page, blur, opacity, grain, and shape with a live launcher preview.</string>
+    <string name="settings_terminal_appearance_title">Terminal appearance</string>
+    <string name="settings_terminal_appearance_summary">Tune the terminal surface while keeping the current palette.</string>
+    <string name="settings_sessions_appearance_title">Sessions surface</string>
+    <string name="settings_sessions_appearance_summary">Tune the sessions menu surface.</string>
+    <string name="settings_glass_effects_title">Glass effects</string>
+    <string name="settings_glass_effects_summary">Tune blur, opacity, and grain with the live launcher preview.</string>
+    <string name="settings_terminal_surface_header">Terminal surface</string>
+    <string name="settings_sessions_surface_header">Sessions menu surface</string>
+    <string name="settings_terminal_opacity_summary">Controls how strongly the terminal surface covers the wallpaper.</string>
+    <string name="settings_sessions_opacity_summary">Controls how strongly the sessions menu covers the wallpaper.</string>
+    <string name="settings_input_method_header">Input method</string>
+    <string name="settings_on_screen_keyboard_title">On-screen keyboard</string>
+    <string name="settings_keyboard_input_built_in">Built-in terminal keyboard</string>
+    <string name="settings_keyboard_input_android">Android keyboard</string>
+    <string name="settings_keyboard_input_none">None</string>
+    <string name="settings_hide_keyboard_hardware_title">Hide the on-screen keyboard</string>
+    <string name="settings_hide_keyboard_hardware_summary">Hides the on-screen keyboard while a hardware keyboard is connected.</string>
+    <string name="settings_test_typing_title">Test typing</string>
+    <string name="settings_test_typing_hint">Type here…</string>
+    <string name="settings_keyboard_colors_title">Keyboard colors</string>
+    <string name="settings_keyboard_colors_summary">Edit keyboard colors with a persistent live preview.</string>
+    <string name="settings_size_shape_title">Size and shape</string>
+    <string name="settings_typeface_title">Typeface</string>
+    <string name="settings_layout_header">Layout</string>
+    <string name="settings_extra_keys_title">Extra keys</string>
+    <string name="settings_extra_keys_summary">Choose keys to add to the built-in keyboard.</string>
+    <string name="settings_layout_documentation_title">Layout documentation</string>
+    <string name="settings_supported_keys_title">Supported key values</string>
+    <string name="settings_feedback_header">Feedback</string>
+    <string name="settings_haptic_feedback_title">Haptic feedback</string>
+    <string name="settings_keypress_sound_title">Keypress sound</string>
+    <string name="settings_keyboard_credits_header">Keyboard credits</string>
+    <string name="settings_connected_services_header">Connected services</string>
+    <string name="settings_tai_service_title">TAI · Termux AI</string>
+    <string name="settings_shizuku_service_title">Shizuku</string>
+    <string name="settings_termux_api_service_title">Termux:API</string>
+    <string name="settings_service_manage_summary">Manage the local AI service and models.</string>
+    <string name="settings_service_connect_manage_summary">Connect or manage privileged access.</string>
+    <string name="settings_service_configure_summary">Configure the installed Termux:API add-on.</string>
+    <string name="settings_termux_api_install_summary">Not installed · Open the install page.</string>
+    <string name="settings_permissions_header">Permissions</string>
+    <string name="settings_files_media_title">Files and media</string>
+    <string name="settings_accessibility_service_title">Accessibility service</string>
+    <string name="settings_app_notifications_title">App notifications</string>
+    <string name="settings_other_permissions_title">Other app permissions</string>
+    <string name="settings_other_permissions_summary">Review all permissions granted to Termux Launcher.</string>
+    <string name="settings_status_running">Running</string>
+    <string name="settings_status_stopped">Stopped</string>
+    <string name="settings_status_not_configured">Not configured</string>
+    <string name="settings_status_connected">Connected</string>
+    <string name="settings_status_permission_required">Permission required</string>
+    <string name="settings_status_unavailable">Unavailable</string>
+    <string name="settings_status_installed">Installed</string>
+    <string name="settings_status_not_installed">Not installed</string>
+    <string name="settings_status_allowed">Allowed</string>
+    <string name="settings_fix_action">Fix</string>
+    <string name="settings_permission_allowed_summary">Access is allowed.</string>
+    <string name="settings_permission_fix_summary">Action needed · Tap to fix.</string>
+    <string name="settings_documentation_title">Documentation</string>
+    <string name="settings_documentation_summary">Read launcher and terminal guides.</string>
+    <string name="settings_send_feedback_title">Send feedback</string>
+    <string name="settings_source_code_title">Source code</string>
+    <string name="settings_source_code_summary">View the project on GitHub.</string>
+    <string name="settings_version_build_title">Version and build</string>
+    <string name="settings_diagnostics_header">Diagnostics</string>
+    <string name="settings_log_terminal_keys_title">Log terminal key events</string>
+    <string name="settings_log_terminal_keys_summary">Includes terminal input events in diagnostic logs.</string>
+    <string name="settings_plugin_error_alerts_title">Plugin error alerts</string>
+    <string name="settings_plugin_error_alerts_summary">Shows a notification when a plugin command fails.</string>
+    <string name="settings_crash_alerts_title">Crash report alerts</string>
+    <string name="settings_crash_alerts_summary">Shows a notification when a crash report is available.</string>
+    <string name="settings_test_backend_title">Test privileged backend</string>
+    <string name="settings_test_backend_summary">Runs a small identity command through the selected privileged backend.</string>
+    <string name="settings_diagnostic_actions_header">Actions</string>
+    <string name="settings_copy_diagnostics_title">Copy diagnostics</string>
+    <string name="settings_copy_diagnostics_summary">Copies app, device, and backend details.</string>
+    <string name="settings_export_logs_title">Export logs</string>
+    <string name="settings_export_logs_summary">Creates a report containing diagnostics and current logcat output.</string>
+    <string name="settings_clear_logs_title">Clear logs</string>
+    <string name="settings_clear_logs_summary">Removes the current logcat buffer.</string>
+    <string name="settings_developer_options_header">Developer options</string>
+    <string name="settings_developer_options_title">Developer options</string>
+    <string name="settings_developer_options_summary">Shows low-level terminal, rendering, backend, and plugin settings.</string>
+    <string name="settings_developer_tools_header">Developer tools</string>
+    <string name="settings_terminal_io_title">Terminal I/O</string>
+    <string name="settings_terminal_io_summary">Inspect low-level input and pane compatibility controls.</string>
+    <string name="settings_terminal_rendering_title">Terminal rendering</string>
+    <string name="settings_terminal_rendering_summary">Inspect low-level view and task behavior.</string>
+    <string name="settings_backend_debugging_title">Backend debugging</string>
+    <string name="settings_backend_debugging_summary">Inspect privileged backend policy and state.</string>
+    <string name="settings_plugin_debugging_title">Plugin debugging</string>
+    <string name="settings_plugin_debugging_summary">Inspect Termux:API plugin debugging controls.</string>
+    <string name="settings_log_level_normal">Normal</string>
+    <string name="settings_default_value">Default</string>
+    <string name="settings_diagnostics_copied">Diagnostics copied</string>
+    <string name="settings_backend_test_passed">Backend test passed</string>
+    <string name="settings_backend_test_failed">Backend test failed</string>
+    <string name="settings_clear_logs_confirm">Clear the current app and system log buffer?</string>
+    <string name="settings_clear_logs_action">Clear</string>
+    <string name="settings_logs_cleared">Logs cleared</string>
+    <string name="settings_clear_logs_failed">Could not clear logs</string>
+    <string name="settings_pinned_apps_header">Pinned apps</string>
+    <string name="settings_show_pinned_apps_title">Show pinned apps row</string>
+    <string name="settings_show_pinned_apps_summary">Shows pinned apps in the launcher dock.</string>
+    <string name="settings_edit_pinned_apps_title">Edit pinned apps</string>
+    <string name="settings_edit_pinned_apps_summary">Choose apps and drag them to reorder directly.</string>
+    <string name="settings_app_browsing_header">App browsing</string>
+    <string name="settings_show_az_index_title">Alphabets row</string>
+    <string name="settings_show_az_index_summary">Shows an alphabetical index below pinned apps.</string>
+    <string name="settings_app_index_haptics_title">Launcher haptics</string>
+    <string name="settings_app_index_haptics_summary">Subtle feedback across the app index and dock page changes.</string>
+    <string name="settings_notification_dots_title">Notification dots</string>
+    <string name="settings_most_used_page_title">Most-used apps page</string>
+    <string name="settings_most_used_page_summary">Adds a page ranked by launcher usage.</string>
+    <string name="settings_launcher_search_header">Search</string>
+    <string name="settings_app_search_prefix_title">App search prefix</string>
+    <string name="settings_app_search_prefix_summary">Type this character in the terminal to start app search.</string>
+    <string name="settings_reset_usage_ranking_title">Reset usage ranking</string>
+    <string name="settings_reset_usage_ranking_summary">Clears learned app-use ranking without changing pinned apps.</string>
+    <string name="settings_home_behavior_header">Home behavior</string>
+    <string name="settings_set_default_launcher_title">Set as default launcher</string>
+    <string name="settings_set_default_launcher_summary">Opens Android’s default home app settings.</string>
+    <string name="settings_double_tap_action_title">Double tap A–Z Row to lock screen</string>
+    <string name="settings_double_tap_action_summary">Choose what happens when the A–Z index is double-tapped.</string>
+    <string name="settings_live_preview_title">Live preview</string>
+    <string name="settings_preview_surface_description">Surface preview. Open the live editor for full-size editing.</string>
+    <string name="settings_open_live_preview">Edit live on Home</string>
+    <string name="settings_sessions_preview_title">Sessions</string>
+    <string name="settings_sessions_preview_actions">Keyboard  ·  New session</string>
 
     <string name="application_name">&TERMUX_APP_NAME;</string>
     <string name="shared_user_label">&TERMUX_APP_NAME; user</string>
@@ -49,6 +230,7 @@
     <string name="msg_max_terminals_reached">Close down existing ones before creating new.</string>
 
     <string name="title_rename_session">Set session name</string>
+    <string name="title_rename_window_session">Set session name (5 characters max)</string>
     <string name="action_rename_session_confirm">Set</string>
     <string name="title_create_named_session">New named session</string>
     <string name="action_create_named_session_confirm">Create</string>
@@ -68,6 +250,11 @@
     <string name="title_select_url_dialog">Click URL to copy or long press to open</string>
     <string name="title_select_url_none_found">No URL found in the terminal.</string>
     <string name="msg_select_url_copied_to_clipboard">URL copied to clipboard</string>
+
+    <!-- OSC 8 hyperlinks -->
+    <string name="title_hyperlink_dialog">Open link?</string>
+    <string name="action_hyperlink_open">Open</string>
+    <string name="action_hyperlink_copy">Copy</string>
 
     <string name="action_share_transcript">Share transcript</string>
     <string name="title_share_transcript">Terminal transcript</string>
@@ -93,7 +280,7 @@
     <string name="wallpaper_target_lock_screen">Lock Screen</string>
     <string name="wallpaper_target_home_and_lock_screen">Home &amp; Lock Screen</string>
     <string name="action_open_settings">Settings</string>
-    <string name="action_glass_lab">Glass Lab</string>
+    <string name="action_glass_lab">Edit surfaces</string>
     <string name="msg_generating_report">Generating Report</string>
     <string name="msg_add_termux_debug_info">Add &TERMUX_APP_NAME; debug info to report?</string>
 
@@ -144,123 +331,22 @@
 
 
     <!-- Termux Settings -->
-    <string name="title_activity_termux_settings">&TERMUX_APP_NAME;</string>
+    <string name="title_activity_termux_settings">Settings</string>
 
     <!-- Termux App Preferences -->
     <string name="settings_root_assistant_header">Assistant</string>
     <string name="settings_root_launcher_header">Launcher</string>
     <string name="settings_root_system_info_header">System &amp; Info</string>
-    <string name="onboarding_settings_title">Quick start tour</string>
-    <string name="onboarding_settings_summary">Learn the launcher surface, search, styling, shell bridge, and optional AI tools</string>
-    <string name="onboarding_activity_title">Quick start</string>
-    <string name="onboarding_brand">TERMUX LAUNCHER</string>
-    <string name="onboarding_skip">Skip</string>
-    <string name="onboarding_back">Back</string>
-    <string name="onboarding_next">Next</string>
-    <string name="onboarding_finish">Start exploring</string>
-    <string name="onboarding_progress">Step %1$d of %2$d</string>
-    <string name="onboarding_capture_number">%1$d / TL</string>
-    <string name="onboarding_choose_home">Choose default Home app</string>
-    <string name="onboarding_read_guide">Read the full guide</string>
-    <string name="onboarding_settings_unavailable">Android could not open that settings page.</string>
-    <string name="onboarding_next_arrow">Next →</string>
-    <string name="onboarding_set_home">Set Termux as home</string>
-    <string name="onboarding_install_starter_profile">Open quick setup</string>
-    <string name="onboarding_explore_first">Explore first</string>
 
-    <string name="onboarding_new_welcome_kicker">Welcome</string>
-    <string name="onboarding_new_welcome_title">A full Termux terminal as your Android home</string>
-    <string name="onboarding_new_welcome_body">Termux reimagined as a home launcher. You get the full Termux terminal and package ecosystem, alongside an app dock, instant search, an on-device AI backend, and enough Material polish to make it feel at home on Android.</string>
-    <string name="onboarding_new_launch_kicker">Launch</string>
-    <string name="onboarding_new_launch_title">Open anything, your way</string>
-    <string name="onboarding_new_launch_body">Tap an app in the dock, or scrub across the A–Z rail to filter. Slide upwards into the results and let go over an app to launch it. From the terminal, type % followed by an app name to search instantly.</string>
-    <string name="onboarding_new_personalise_kicker">Personalise</string>
-    <string name="onboarding_new_personalise_title">Glass that follows your wallpaper</string>
-    <string name="onboarding_new_personalise_body">The terminal, dock, and keyboard share colours from your wallpaper, with a glass finish you can tune to your liking. Adjust the blur, spacing, colours, and icon packs anytime under Settings → Appearance.</string>
-    <string name="onboarding_new_notifications_kicker">Notifications</string>
-    <string name="onboarding_new_notifications_title">Reply to notifications, made easy</string>
-    <string name="onboarding_new_notifications_body">Quickly respond to your messages and alerts by swiping up from a pinned app icon that has a pending notification — without leaving home.</string>
-    <string name="onboarding_new_ready_kicker">You’re set</string>
-    <string name="onboarding_new_ready_title">Set it as home and go</string>
-    <string name="onboarding_new_ready_body">That covers the launcher itself. From here you can shape the shell however you like, or start with the prebuilt profile and tweak it as you go — Fish, tmux, an Oh My Posh prompt, Shizuku system stats, Material theming, extra keys, zoxide, eza, and more.</string>
 
-    <string name="onboarding_chip_full_terminal">full terminal</string>
-    <string name="onboarding_chip_app_dock">app dock</string>
-    <string name="onboarding_chip_ai_backends">LiteRT &amp; MNN backends</string>
-    <string name="onboarding_chip_percent_search">% search</string>
-    <string name="onboarding_chip_az_rail">A–Z rail</string>
-    <string name="onboarding_chip_long_press">long-press to pin</string>
-    <string name="onboarding_chip_material_palette">Material palette</string>
-    <string name="onboarding_chip_glass_blur">glass &amp; blur</string>
-    <string name="onboarding_chip_icon_packs">icon packs</string>
-    <string name="onboarding_chip_swipe_up">swipe up</string>
-    <string name="onboarding_chip_inline_reply">inline reply</string>
-    <string name="onboarding_chip_pinned_apps">pinned apps</string>
 
-    <string name="onboarding_duration_20">▶ 20s tour</string>
-    <string name="onboarding_duration_15">▶ 15s</string>
-    <string name="onboarding_duration_10">▶ 10s</string>
-    <string name="onboarding_media_home">Drop the full-screen recording (1080×2300): launcher home + dock</string>
-    <string name="onboarding_media_search">Drop the full-screen recording (1080×2300): app search + A–Z swipe</string>
-    <string name="onboarding_media_appearance">Drop the full-screen recording (1080×2300): appearance / theming panel</string>
-    <string name="onboarding_media_notifications">Drop the full-screen recording (1080×2300): swipe up from a pinned icon to reply</string>
-    <string name="onboarding_media_ready">Drop the full-screen recording (1080×2300): tmux / Shizuku / on-device AI</string>
 
-    <string name="onboarding_welcome_eyebrow">WELCOME</string>
-    <string name="onboarding_welcome_title">Your terminal is now home</string>
-    <string name="onboarding_welcome_body">Termux Launcher keeps a real shell at the center of Android. Your sessions stay visible while familiar launcher controls sit within thumb reach.</string>
-    <string name="onboarding_welcome_code">HOME = TERMINAL + APPS</string>
-    <string name="onboarding_welcome_bullet_1">The app row keeps favorites one tap away.</string>
-    <string name="onboarding_welcome_bullet_2">The A–Z row reaches every installed app.</string>
-    <string name="onboarding_welcome_bullet_3">The dock and keyboard follow your wallpaper colors.</string>
 
-    <string name="onboarding_search_eyebrow">MOVE FAST</string>
-    <string name="onboarding_search_title">Open anything without leaving the prompt</string>
-    <string name="onboarding_search_body">Use the launcher like a touch UI, or drive it from terminal input. Ranking learns from what you open while pins always stay under your control.</string>
-    <string name="onboarding_search_code">%maps</string>
-    <string name="onboarding_search_bullet_1">Type % before a name to search apps from the terminal.</string>
-    <string name="onboarding_search_bullet_2">Drag across A–Z to filter; swipe up to launch the highlighted app.</string>
-    <string name="onboarding_search_bullet_3">Long-press an icon to pin, move, group, restyle, or inspect it.</string>
 
-    <string name="onboarding_style_eyebrow">MAKE IT YOURS</string>
-    <string name="onboarding_style_title">One Material palette, from prompt to dock</string>
-    <string name="onboarding_style_body">The terminal, dock, keyboard, icons, and tmux helpers can share Android’s wallpaper palette. Tune the glass instead of rebuilding your workspace.</string>
-    <string name="onboarding_style_code">Long-press Terminal  →  More  →  Appearance</string>
-    <string name="onboarding_style_bullet_1">Adjust terminal opacity, dock glass, spacing, and height.</string>
-    <string name="onboarding_style_bullet_2">Use themed, monochrome, or third-party icon packs.</string>
-    <string name="onboarding_style_bullet_3">Enable the in-app keyboard or keep your preferred Android keyboard.</string>
 
-    <string name="onboarding_shell_eyebrow">YOUR WORKSPACE</string>
-    <string name="onboarding_shell_title">Recreate the fish and tmux setup when you want it</string>
-    <string name="onboarding_shell_body">The illustrated guide includes a guided installer for the same secret-free fish, Oh My Posh, tmux, eza, and zoxide foundation used in the live launcher.</string>
-    <string name="onboarding_shell_code">~/setup-shell  # choose tmux, btop, or both</string>
-    <string name="onboarding_shell_bullet_1">Start with the launcher first; the shell makeover is optional.</string>
-    <string name="onboarding_shell_bullet_2">Use the repo examples as a safe base, then add your own aliases locally.</string>
-    <string name="onboarding_shell_bullet_3">Run launcherctl update-scripts after app updates without replacing your dotfiles.</string>
 
-    <string name="onboarding_bridge_eyebrow">SHELL + ANDROID</string>
-    <string name="onboarding_bridge_title">Turn launcher actions into commands</string>
-    <string name="onboarding_bridge_body">launcherctl is the authenticated bridge between your shell and Android. Use it directly, bind it to tmux keys, or call it from scripts and agents.</string>
-    <string name="onboarding_bridge_code">launcherctl launch maps</string>
-    <string name="onboarding_bridge_bullet_1">Launch apps and inspect CPU, memory, battery, thermal, and storage.</string>
-    <string name="onboarding_bridge_bullet_2">Read current media and notifications after granting listener access.</string>
-    <string name="onboarding_bridge_bullet_3">Use the local API, agent tools, or MCP bridge for automations.</string>
 
-    <string name="onboarding_optional_eyebrow">OPTIONAL POWER</string>
-    <string name="onboarding_optional_title">Add privileges and local AI only when you need them</string>
-    <string name="onboarding_optional_body">The everyday launcher works without special access. Shizuku and TAI are separate, opt-in layers with visible status and permission boundaries.</string>
-    <string name="onboarding_optional_code">Optional  ·  permission-gated  ·  local-first</string>
-    <string name="onboarding_optional_bullet_1">Shizuku adds lock, privileged shell, and richer system helpers.</string>
-    <string name="onboarding_optional_bullet_2">TAI hosts compatible language and embedding models on device.</string>
-    <string name="onboarding_optional_bullet_3">LauncherCtl exposes confirmation-gated tools to MCP-capable clients.</string>
 
-    <string name="onboarding_ready_eyebrow">READY</string>
-    <string name="onboarding_ready_title">Build the home screen that works like you do</string>
-    <string name="onboarding_ready_body">Start with the terminal and app search. Add tmux, Shizuku, notification access, or local AI later—nothing optional blocks the core launcher.</string>
-    <string name="onboarding_ready_code">Long-press Terminal  →  More  →  Quick start tour</string>
-    <string name="onboarding_ready_bullet_1">Set Termux Launcher as Home when you are comfortable.</string>
-    <string name="onboarding_ready_bullet_2">Open Settings to replay this tour or tune one feature at a time.</string>
-    <string name="onboarding_ready_bullet_3">Use the illustrated guide for recipes from beginner through advanced.</string>
     <string name="termux_preferences_title">Termux</string>
     <string name="termux_preferences_summary">Core terminal, input, and debugging settings</string>
 
@@ -291,24 +377,24 @@
             <string name="termux_logging_header">Logging</string>
 
                 <!-- Log Level -->
-                <string name="termux_log_level_title">Log Level</string>
+                <string name="termux_log_level_title">Log level</string>
 
-                <!-- Terminal View Key Logging -->
-                <string name="termux_terminal_view_key_logging_enabled_title">Terminal View Key Logging</string>
-                <string name="termux_terminal_view_key_logging_enabled_off">Logs will not have entries for terminal view keys. (Default)</string>
+                <!-- Terminal key-event logging -->
+                <string name="termux_terminal_view_key_logging_enabled_title">Log terminal key events</string>
+                <string name="termux_terminal_view_key_logging_enabled_off">Excludes terminal key events from logs.</string>
                 <string name="termux_terminal_view_key_logging_enabled_on">Logcat logs will have entries for terminal view keys.
                     These are very verbose and should be disabled under normal circumstances or will cause performance issues.</string>
 
                 <!-- Plugin Error Notifications -->
-                <string name="termux_plugin_error_notifications_enabled_title">Plugin Error Notifications</string>
+                <string name="termux_plugin_error_notifications_enabled_title">Plugin error alerts</string>
                 <string name="termux_plugin_error_notifications_enabled_off">Disable flashes and notifications for plugin errors.</string>
-                <string name="termux_plugin_error_notifications_enabled_on">Show flashes and notifications for plugin errors. (Default)</string>
+                <string name="termux_plugin_error_notifications_enabled_on">Shows flashes and notifications for plugin errors.</string>
 
                 <!-- Crash Report Notifications -->
-                <string name="termux_crash_report_notifications_enabled_title">Crash Report Notifications</string>
+                <string name="termux_crash_report_notifications_enabled_title">Crash report alerts</string>
                 <string name="termux_crash_report_notifications_enabled_off">Disable notifications for crash reports.</string>
-                <string name="termux_crash_report_notifications_enabled_on">Show notifications for crash reports. (Default)</string>
-                <string name="termux_privileged_backend_smoke_test_title">Run Privileged Backend Smoke Test</string>
+                <string name="termux_crash_report_notifications_enabled_on">Shows notifications for crash reports.</string>
+                <string name="termux_privileged_backend_smoke_test_title">Test privileged backend</string>
                 <string name="termux_privileged_backend_smoke_test_summary">Logs backend state/reason/type and runs a minimal privileged command test.</string>
 
 
@@ -316,13 +402,65 @@
         <string name="termux_terminal_io_preferences_title">Terminal I/O</string>
         <string name="termux_terminal_io_preferences_summary">Preferences for terminal I/O</string>
 
+            <!-- Split panes Category -->
+            <string name="termux_split_panes_header">Split panes</string>
+                <string name="termux_window_bar_content_description">Terminal windows</string>
+                <string name="termux_window_tab_content_description">Window %1$d of %2$d: %3$s</string>
+                <string name="termux_window_new_content_description">New terminal window</string>
+                <string name="termux_top_pane_clock_content_description">Clock and status panel</string>
+                <string name="termux_top_pane_media_content_description">Media playback controls</string>
+                <string name="termux_top_pane_pinned_notifications_content_description">Pinned notifications</string>
+                <string name="termux_top_pane_notification_access_title">Media and pinned notifications</string>
+                <string name="termux_top_pane_notification_access_summary">Grant notification access so the status bar can show the active media session and rule-matched notifications.</string>
+                <string name="settings_essential_notifications_title">Essential notification rules</string>
+                <string name="settings_essential_notifications_summary">Pin notifications to the top pane when they match an app package and/or keywords.</string>
+                <string name="essential_rules_empty">No rules yet. A rule needs an app package, keywords, or both.</string>
+                <string name="essential_rules_package_hint">App package (e.g. com.whatsapp)</string>
+                <string name="essential_rules_keywords_hint">Keywords in title or text</string>
+                <string name="essential_rules_clear_label">Dismissing the pin also clears the notification</string>
+                <string name="essential_rules_add">Add rule</string>
+                <string name="essential_rules_done">Done</string>
+                <string name="essential_rules_needs_field">Enter an app package, keywords, or both</string>
+                <string name="essential_rules_full">Rule list is full</string>
+                <string name="essential_rules_remove_description">Remove rule</string>
+                <string name="essential_rules_any_package">any app</string>
+                <string name="essential_rules_any_text">any text</string>
+                <string name="termux_sessions_indicator_content_description">Session %1$d of %2$d</string>
+                <string name="termux_named_sessions_indicator_content_description">Session %1$d of %2$d: %3$s</string>
+                <string name="termux_sessions_indicator_empty_content_description">No sessions</string>
+                <string name="termux_status_widget_cpu_content_description">CPU usage</string>
+                <string name="termux_status_widget_ram_content_description">Memory usage</string>
+                <string name="termux_status_widget_weather_content_description">Weather</string>
+                <string name="termux_compatibility_mode_title">Single-pane compatibility mode</string>
+                <string name="termux_compatibility_mode_off">Window/pane splitting and tmux-style keybinds are enabled.</string>
+                <string name="termux_compatibility_mode_on">Disables all window/pane splitting and restores native Termux single-pane behaviour.</string>
+                <string name="termux_top_pane_clock_style_title">Clock style</string>
+                <string name="termux_top_pane_clock_style_summary">Choose the clock widget rendered above the window row.</string>
+                <string name="termux_top_pane_clock_am_pm_title">Use 12-hour time</string>
+                <string name="termux_top_pane_clock_am_pm_summary">Show time using AM/PM instead of 24-hour format.</string>
+                <string name="termux_status_widget_cpu_title">CPU usage</string>
+                <string name="termux_status_widget_cpu_summary">Show CPU usage on the status row. Tap for cores, load and top processes.</string>
+                <string name="termux_status_widget_ram_title">Memory usage</string>
+                <string name="termux_status_widget_ram_summary">Show memory usage on the status row. Tap for the memory breakdown.</string>
+                <string name="termux_status_widget_weather_title">Weather</string>
+                <string name="termux_status_widget_weather_summary">Show weather on the status row. Tap for hourly and weekly forecasts. Needs location permission.</string>
+                <string name="termux_top_pane_clock_style_flip">Flip</string>
+                <string name="termux_top_pane_clock_style_lcd">LCD</string>
+                <string name="termux_top_pane_clock_style_minimal">Minimal</string>
+                <string name="termux_top_pane_clock_style_led">LED matrix</string>
+                <string name="termux_top_pane_clock_style_tape">Tape</string>
+                <string name="termux_top_pane_clock_style_slab">Slab</string>
+                <!-- Toggle-group labels: six faces have to share one row. -->
+                <string name="termux_top_pane_clock_style_minimal_short">Min</string>
+                <string name="termux_top_pane_clock_style_led_short">LED</string>
+
             <!-- Keyboard Category -->
             <string name="termux_keyboard_header">Keyboard</string>
 
                 <!-- Soft Keyboard -->
-                <string name="termux_soft_keyboard_enabled_title">Soft Keyboard Enabled</string>
-                <string name="termux_soft_keyboard_enabled_off">Soft keyboard will be disabled.</string>
-                <string name="termux_soft_keyboard_enabled_on">Soft keyboard will be enabled. (Default)</string>
+                <string name="termux_soft_keyboard_enabled_title">Show Android keyboard</string>
+                <string name="termux_soft_keyboard_enabled_off">Does not open the Android keyboard for terminal text input.</string>
+                <string name="termux_soft_keyboard_enabled_on">Opens the Android keyboard when the terminal receives text input.</string>
 
                 <!-- In-app Keyboard -->
                 <string name="termux_keyboard_preferences_title">Keyboard</string>
@@ -335,14 +473,14 @@
                 <string name="termux_keyboard_credits_summary">Powered by Unexpected Keyboard, an open-source project by Jules Aguillon.</string>
                 <string name="termux_keyboard_credits_github_title">Unexpected Keyboard on GitHub</string>
                 <string name="termux_keyboard_credits_play_title">Unexpected Keyboard on Google Play</string>
-                <string name="termux_in_app_keyboard_enabled_title">Use built-in keyboard</string>
+                <string name="termux_in_app_keyboard_enabled_title">Built-in terminal keyboard</string>
                 <string name="termux_in_app_keyboard_enabled_summary">Type in the terminal with the launcher’s own keyboard instead of the Android keyboard. It stays ready when you switch back from other apps.</string>
                 <string name="termux_in_app_keyboard_theme_title">Theme</string>
                 <string name="termux_in_app_keyboard_theme_system">System</string>
                 <string name="termux_in_app_keyboard_theme_light">Light</string>
                 <string name="termux_in_app_keyboard_theme_dark">Dark</string>
                 <string name="termux_in_app_keyboard_theme_imported">Imported · %1$s</string>
-                <string name="termux_keyboard_color_scheme_title">Keyboard Colors</string>
+                <string name="termux_keyboard_color_scheme_title">Keyboard colors</string>
                 <string name="termux_keyboard_color_scheme_summary">Import a palette or paint individual keys.</string>
                 <string name="termux_keyboard_color_scheme_colors">Colors</string>
                 <string name="termux_keyboard_color_scheme_edit_colors">Edit colors</string>
@@ -403,21 +541,7 @@
                     <item>light</item>
                     <item>dark</item>
                 </string-array>
-                <string name="termux_in_app_keyboard_dock_match_title">Match dock</string>
-                <string name="termux_in_app_keyboard_dock_match_summary">Blend the keyboard with the dock — follow its shape, render on its frosted glass, or both.</string>
-                <string-array name="termux_in_app_keyboard_dock_match_entries">
-                    <item>None</item>
-                    <item>Shape</item>
-                    <item>Glass</item>
-                    <item>Shape + glass</item>
-                </string-array>
-                <string-array name="termux_in_app_keyboard_dock_match_values">
-                    <item>none</item>
-                    <item>shape</item>
-                    <item>glass</item>
-                    <item>both</item>
-                </string-array>
-                <string name="termux_in_app_keyboard_haptics_title">Vibrate on keypress</string>
+                <string name="termux_in_app_keyboard_haptics_title">Haptic feedback</string>
                 <string name="termux_in_app_keyboard_haptics_summary">Gentle haptic tick for every key.</string>
                 <string name="termux_in_app_keyboard_key_sound_title">Keypress sound</string>
                 <string name="termux_in_app_keyboard_key_sound_summary">Uses the system touch-sound volume.</string>
@@ -427,15 +551,13 @@
                 <string name="termux_in_app_keyboard_font_pick">Choose font file…</string>
                 <string name="termux_in_app_keyboard_font_reset">Use system default</string>
                 <string name="termux_in_app_keyboard_font_error">Could not read that file as a font.</string>
-                <string name="termux_in_app_keyboard_extra_keys_title">Add keys to the keyboard</string>
+                <string name="termux_in_app_keyboard_extra_keys_title">Extra keys</string>
                 <string name="termux_in_app_keyboard_extra_keys_summary">Choose extra editing and navigation keys to show on the layout.</string>
 
-                <!-- Soft Keyboard Only If No Hardware-->
-                <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Soft Keyboard Only If No Hardware</string>
-                <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Soft keyboard will be enabled even if
-                    hardware keyboard is connected. (Default)</string>
-                <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">Soft keyboard will be enabled only if
-                    no hardware keyboard is connected.</string>
+                <!-- Hardware keyboard behavior -->
+                <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Hide Android keyboard with hardware keyboard</string>
+                <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Keeps the Android keyboard available with a hardware keyboard.</string>
+                <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">Hides the Android keyboard while a hardware keyboard is connected.</string>
 
 
         <!-- Terminal View Preferences -->
@@ -446,16 +568,14 @@
             <string name="termux_terminal_view_view_header">View</string>
 
                 <!-- Terminal View Margin Adjustment -->
-                <string name="termux_terminal_view_terminal_margin_adjustment_title">Terminal Margin Adjustment</string>
-                <string name="termux_terminal_view_terminal_margin_adjustment_off">Terminal margin adjustment will be disabled.</string>
-                <string name="termux_terminal_view_terminal_margin_adjustment_on">Terminal margin adjustment will be enabled.
-                    It should be enabled to try to fix the issue where soft keyboard covers part of extra keys/terminal view.
-                    If it causes screen flickering on your devices, then disable it. (Default)</string>
+                <string name="termux_terminal_view_terminal_margin_adjustment_title">Adjust for on-screen keyboard</string>
+                <string name="termux_terminal_view_terminal_margin_adjustment_off">Leaves the terminal at its normal size when the keyboard opens.</string>
+                <string name="termux_terminal_view_terminal_margin_adjustment_on">Keeps terminal content visible above the on-screen keyboard.</string>
 
                 <!-- Terminal View Activity Remove Task -->
                 <string name="termux_terminal_view_activity_remove_title">Show in recent apps when not Home app</string>
                 <string name="termux_terminal_view_activity_remove_off">&TERMUX_APP_NAME; will stay hidden from recent apps. Applies when you return to the launcher.</string>
-                <string name="termux_terminal_view_activity_remove_on">&TERMUX_APP_NAME; will appear in recent apps when it is not default Home, and stay hidden when it is default Home. Applies when you return to the launcher. (Default)</string>
+                <string name="termux_terminal_view_activity_remove_on">Shows &TERMUX_APP_NAME; in Recents when another home app is active and hides it when &TERMUX_APP_NAME; is the default launcher.</string>
 
 
         <!-- Termux Style Preferences -->
@@ -625,6 +745,10 @@
         <string name="termux_ai_top_p_title">TopP</string>
         <string name="termux_ai_temperature_title">Temperature</string>
         <string name="termux_ai_accelerator_title">Accelerator</string>
+        <string name="termux_ai_import_accelerators_label">Compatible accelerators</string>
+        <string name="termux_ai_import_gpu_compatible">GPU compatible</string>
+        <string name="termux_ai_import_default_cpu">Default: CPU</string>
+        <string name="termux_ai_import_default_gpu">Default: GPU</string>
         <string name="termux_ai_thinking_title">Thinking</string>
         <string name="termux_ai_speculative_decoding_title">Speculative decoding</string>
         <string name="termux_ai_idle_unload_title">Idle unload</string>
@@ -720,6 +844,9 @@
         <string name="termux_ai_mnn_runtime_pending">MNN runtime is not available in this APK yet.</string>
         <string name="termux_ai_mnn_unsupported_reason_title">Unsupported reason</string>
         <string name="termux_ai_mnn_unsupported_reason_summary">This build does not include the native MNN runtime yet</string>
+        <string name="termux_ai_auth_required_title">Require API token</string>
+        <string name="termux_ai_auth_required_summary_on">Requests must send the bearer token. Recommended.</string>
+        <string name="termux_ai_auth_required_summary_off">Localhost requests are accepted without a token. LAN mode always requires the token.</string>
         <string name="termux_ai_lan_enabled_title">LAN access</string>
         <string name="termux_ai_lan_enabled_summary_off">Localhost only (127.0.0.1)</string>
         <string name="termux_ai_lan_enabled_summary_on">LAN access enabled. Bearer token required for all requests.</string>
@@ -754,7 +881,7 @@
             <!-- Background Category -->
             <string name="termux_background_header">Wallpaper</string>
             <string name="termux_use_system_wallpaper_title">Wallpaper</string>
-            <string name="termux_use_system_wallpaper_summary">Use launcher-managed wallpaper</string>
+            <string name="termux_use_system_wallpaper_summary">Shows the current system wallpaper behind launcher surfaces.</string>
             <string name="termux_fullscreen_title">Fullscreen</string>
             <string name="termux_fullscreen_summary">Hide system bars while using the launcher</string>
                 
@@ -767,26 +894,46 @@
                 <string name="termux_app_bar_opacity_summary">Controls the complete dock material. 0 is transparent; 100 is opaque.</string>
                 <string name="termux_dock_glass_grain_title">Glass grain</string>
                 <string name="termux_dock_glass_grain_summary">Subtle film grain over the dock glass. 0 disables it.</string>
-                <string name="termux_dock_tune_live_title">Glass Labs</string>
-                <string name="termux_dock_tune_live_summary">Tune the terminal, dock and sessions menu.</string>
-                <string name="termux_dock_tuning_title">Appearance</string>
+                <string name="termux_dock_tune_live_title">Surface editor</string>
+                <string name="termux_dock_tune_live_summary">Customize dock, keyboard, status panel, terminal, and sessions live on the home screen.</string>
+                <string name="termux_dock_tuning_title">Surface editor</string>
+                <string name="termux_surface_tuning_dock">Dock</string>
+                <string name="termux_surface_tuning_keyboard">Keyboard</string>
+                <string name="termux_surface_tuning_status">Status</string>
+                <string name="termux_surface_tuning_other">Terminal</string>
+                <string name="termux_surface_tuning_reset">Reset tab</string>
+                <string name="termux_surface_tuning_keyboard_height">Height</string>
+                <string name="termux_surface_tuning_keyboard_spacing">Spacing</string>
+                <string name="termux_surface_tuning_keyboard_key_opacity">Keys opacity</string>
+                <string name="termux_surface_tuning_edges">Padding</string>
+                <string name="termux_surface_tuning_dock_height_handle">Drag to resize the dock</string>
+                <string name="termux_surface_tuning_keyboard_height_handle">Drag to resize the keyboard</string>
                 <string name="termux_dock_tuning_blur">Blur</string>
                 <string name="termux_dock_tuning_opacity">Opacity</string>
                 <string name="termux_dock_tuning_grain">Grain</string>
-                <string name="termux_dock_tuning_style">Style</string>
+                <string name="termux_dock_tuning_corner_radius">Corner radius</string>
+                <string name="termux_dock_tuning_radius">Corner radius</string>
+                <string name="termux_dock_tuning_style">Shape</string>
                 <string name="termux_dock_tuning_size">Size</string>
-                <string name="termux_dock_tuning_icons">Per page</string>
+                <string name="termux_dock_tuning_icons">Apps per page</string>
                 <string name="termux_dock_tuning_terminal">Opacity</string>
+                <string name="termux_dock_tuning_terminal_border">Border</string>
                 <string name="termux_dock_tuning_sessions">Opacity</string>
+                <string name="termux_surface_tuning_normalize">Match all surfaces</string>
+                <string name="termux_surface_tuning_normalize_hint">Blur, opacity, grain, corner radius and padding apply to the dock, keyboard and status bar together.</string>
+                <string name="termux_surface_tuning_clock">Clock</string>
                 <string name="termux_dock_tuning_section_dock">Dock</string>
                 <string name="termux_dock_tuning_section_terminal">Terminal</string>
                 <string name="termux_dock_tuning_section_sessions">Sessions</string>
                 <string name="termux_dock_tuning_done">Done</string>
-                <string name="termux_dock_tuning_cancel">Revert and close</string>
+                <string name="termux_dock_tuning_cancel">Close</string>
+                <string name="termux_dock_tuning_reset">Reset</string>
+                <string name="termux_dock_tuning_reset_done">Dock appearance reset</string>
+                <string name="termux_dock_tuning_undo">Undo</string>
                 <string name="termux_dock_tuning_value_dp">%1$d dp</string>
                 <string name="termux_dock_tuning_value_percent">%1$d%%</string>
-                <string name="termux_app_launcher_row_haptics_title">Row haptics</string>
-                <string name="termux_app_launcher_row_haptics_summary">Subtle ticks while sliding across letters and apps.</string>
+                <string name="termux_app_launcher_row_haptics_title">Launcher haptics</string>
+                <string name="termux_app_launcher_row_haptics_summary">Subtle feedback across letters, apps, and dock pages.</string>
 
             <!-- App Launcher Category -->
             <string name="termux_app_launcher_header">Behavior</string>
@@ -796,9 +943,9 @@
 
                 <string name="termux_app_launcher_button_count_title">Icons per page</string>
                 <string name="termux_app_launcher_button_count_summary">Set the number of icon slots on each dock page.</string>
-                <string name="termux_app_launcher_input_char_title">Input split character</string>
-                <string name="termux_app_launcher_input_char_summary">Character used to start app search when typing in the terminal. Default: %</string>
-                <string name="termux_app_launcher_default_buttons_title">Default apps</string>
+                <string name="termux_app_launcher_input_char_title">App search prefix</string>
+                <string name="termux_app_launcher_input_char_summary">Type this character in the terminal to start app search.</string>
+                <string name="termux_app_launcher_default_buttons_title">Edit pinned apps</string>
                 <string name="termux_app_launcher_default_buttons_summary">Choose and reorder the apps pinned to the dock.</string>
                 <string name="termux_app_launcher_most_used_page_title">Most-used apps page</string>
                 <string name="termux_app_launcher_most_used_page_summary">Add an extra dock page showing your most-used apps.</string>
@@ -808,7 +955,7 @@
                 <string name="termux_app_launcher_icon_pack_summary">Use icons from an installed launcher icon pack.</string>
                 <string name="termux_app_launcher_pinned_icon_pack_title">Pinned icon pack</string>
                 <string name="termux_app_launcher_pinned_icon_pack_summary">Optional override for pinned apps. Otherwise they use the global icon pack.</string>
-                <string name="termux_app_launcher_apps_row_enabled_title">Apps bar</string>
+                <string name="termux_app_launcher_apps_row_enabled_title">Show pinned apps row</string>
                 <string name="termux_app_launcher_apps_row_enabled_summary">Show the app icons row above extra keys.</string>
                 <string name="termux_app_launcher_terminal_swipe_enabled_title">Full-screen lateral swipes</string>
                 <string name="termux_app_launcher_terminal_swipe_enabled_summary">Use left and right terminal flings to page launcher apps, or open and close the sessions drawer.</string>
@@ -821,8 +968,8 @@
                 <string name="termux_app_launcher_notification_access_unavailable">Notification access settings are unavailable on this device.</string>
                 <string name="termux_app_launcher_permissions_title">Permissions</string>
                 <string name="termux_app_launcher_permissions_summary">Review launcher and Termux access.</string>
-                <string name="termux_app_launcher_access_status_on">Enabled</string>
-                <string name="termux_app_launcher_access_status_off">Not enabled</string>
+                <string name="termux_app_launcher_access_status_on">Allowed</string>
+                <string name="termux_app_launcher_access_status_off">Action needed</string>
                 <string name="termux_app_launcher_storage_access_title">Storage access</string>
                 <string name="termux_app_launcher_notification_access_settings_title">Notification access</string>
                 <string name="termux_app_launcher_accessibility_lock_access_title">Accessibility lock</string>
@@ -830,29 +977,28 @@
                 <string name="termux_app_launcher_app_permissions_title">App permissions</string>
                 <string name="termux_app_launcher_app_permissions_summary">Open Android app permission settings.</string>
                 <string name="termux_app_launcher_permission_settings_unavailable">Permission settings are unavailable on this device.</string>
-                <string name="termux_app_launcher_az_row_enabled_title">Alphabets row</string>
+                <string name="termux_app_launcher_az_row_enabled_title">Show A–Z app index</string>
                 <string name="termux_app_launcher_az_row_enabled_summary">Show the alphabet scrubber below the dock.</string>
-                <string name="termux_app_launcher_az_double_tap_lock_title">Double tap alphabets row lockscreen</string>
-                <string name="termux_app_launcher_az_double_tap_lock_summary">Choose what double tapping the alphabets row does.</string>
+                <string name="termux_app_launcher_az_double_tap_lock_title">A–Z index double-tap action</string>
+                <string name="termux_app_launcher_az_double_tap_lock_summary">Choose what double-tapping the A–Z app index does.</string>
                 <string name="termux_app_launcher_az_lock_method_dialog_title">Choose method</string>
                 <string name="termux_app_launcher_az_lock_method_off">Off</string>
                 <string name="termux_app_launcher_az_lock_method_shizuku">Shizuku\nSends a power-button keypress via Shizuku — preserves the system screen-off animation.</string>
                 <string name="termux_app_launcher_az_lock_method_accessibility">Accessibility\nUses the accessibility service to lock — the screen may flicker while turning off.</string>
-                <string name="termux_app_launcher_set_home_title">Set as home launcher</string>
+                <string name="termux_app_launcher_set_home_title">Set as default launcher</string>
                 <string name="termux_app_launcher_set_home_summary">Open Android default home app settings.</string>
                 <string name="termux_app_launcher_set_home_unavailable">Home launcher settings are unavailable on this device.</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_title">Enable accessibility lock</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_message">Enable Termux Launcher Lock Service to lock the screen from the alphabets row.</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_enable">Enable</string>
-                <string name="termux_app_launcher_reset_usage_ranking_title">Reset app order</string>
+                <string name="termux_app_launcher_reset_usage_ranking_title">Reset usage ranking</string>
                 <string name="termux_app_launcher_reset_usage_ranking_summary">Apps are ordered by usage frequency. Tap to reset.</string>
                 <string name="termux_app_launcher_bar_height_title">Dock size</string>
                 <string name="termux_app_launcher_bar_height_summary">Choose the overall dock size.</string>
-                <string name="termux_app_launcher_dock_style_title">Dock style</string>
-                <string name="termux_app_launcher_dock_style_summary">Choose the dock surface shape.</string>
+                <string name="termux_app_launcher_dock_style_title">Surface shape</string>
+                <string name="termux_app_launcher_dock_style_summary">Applies to the dock, keyboard, and status panel.</string>
                 <string name="termux_app_launcher_dock_style_default">Default</string>
-                <string name="termux_app_launcher_dock_style_valarie_capsule">Valarie capsule</string>
-                <string name="termux_app_launcher_dock_style_capsule">Capsule</string>
+                <string name="termux_app_launcher_dock_style_rounded">Rounded</string>
                 <string name="termux_app_launcher_display_app_names_title">Display app names</string>
                 <string name="termux_app_launcher_display_app_names_summary">Show a compact name pill above the focused app while scrubbing the dock.</string>
                 <string name="termux_app_launcher_icon_scale_title">Icon scaling</string>
@@ -865,21 +1011,6 @@
                 <string name="termux_app_launcher_reset_usage_ranking_confirm_title">Reset ranking?</string>
                 <string name="termux_app_launcher_reset_usage_ranking_confirm_message">This will clear app usage ranking for A-Z launch suggestions.</string>
                 <string name="termux_app_launcher_reset_usage_ranking_done">Adaptive A-Z ranking reset</string>
-                <string name="launcherctl_mcp_web_header">Agent web search</string>
-                <string name="launcherctl_mcp_web_provider_title">Web search provider</string>
-                <string name="launcherctl_mcp_web_provider_summary">Generate a LauncherCtl MCP preset for grounded web search tools.</string>
-                <string name="launcherctl_mcp_web_provider_off">Off</string>
-                <string name="launcherctl_mcp_web_provider_brave">Brave Search</string>
-                <string name="launcherctl_mcp_web_provider_searxng">SearXNG</string>
-                <string name="launcherctl_mcp_brave_api_key_title">Brave Search API key</string>
-                <string name="launcherctl_mcp_brave_api_key_summary">Stored in app preferences and injected into the MCP server environment.</string>
-                <string name="launcherctl_mcp_searxng_url_title">SearXNG URL</string>
-                <string name="launcherctl_mcp_searxng_url_summary">Your SearXNG instance URL, for example https://search.example.com.</string>
-                <string name="launcherctl_mcp_searxng_api_key_title">SearXNG API key</string>
-                <string name="launcherctl_mcp_searxng_api_key_summary">Optional. Only needed for instances that require an API key.</string>
-                <string name="launcherctl_mcp_secret_set">Configured</string>
-                <string name="launcherctl_mcp_secret_missing">Not configured</string>
-                <string name="launcherctl_mcp_config_written">MCP preset updated</string>
                 
             <!-- Sessions Category -->
             <string name="termux_sessions_header">Termux Sessions Menu</string>
@@ -899,7 +1030,7 @@
         <string name="termux_background_image_enabled_title">Display background image</string>
         <string name="termux_background_image_enabled_off">Background images are disabled.</string>
         <string name="termux_background_image_enabled_on">Background images are enabled.</string>
-        <string name="termux_terminal_dynamic_colors_title">Material colors</string>
+        <string name="termux_terminal_dynamic_colors_title">Use wallpaper colors</string>
         <string name="termux_terminal_dynamic_colors_summary">Background, text, cursor, and ANSI colors from current palette</string>
         <string name="termux_extrakeys_blur_enabled_title">Extra keys blur</string>
         <string name="termux_extrakeys_blur_enabled_off">Extra keys blur is disabled.</string>
@@ -957,5 +1088,240 @@
     <!-- Report Issue Preference -->
     <string name="report_issue_preference_title">Send feedback</string>
     <string name="report_issue_preference_summary">Report a bug or suggest an idea on GitHub</string>
+
+    <string name="settings_expand_preview">Expand preview</string>
+    <string name="settings_collapse_preview">Collapse preview</string>
+    <string name="settings_keyboard_height_title">Keyboard height</string>
+    <string name="settings_key_spacing_title">Key spacing</string>
+    <string name="settings_corner_radius_title">Corner radius</string>
+    <string name="settings_dock_style_header">Dock</string>
+    <string name="settings_style_title">Style</string>
+    <string name="settings_size_title">Size</string>
+    <string name="settings_reset_title">Reset</string>
+    <string name="settings_dock_reset_summary">Restore dock appearance defaults</string>
+    <string name="settings_dock_reset_done">Dock appearance reset</string>
+    <string name="settings_undo">Undo</string>
+    <string name="settings_manage_action">Manage</string>
+    <string name="settings_connect_action">Connect</string>
+    <string name="settings_configure_action">Configure</string>
+    <string name="settings_install_action">Install</string>
+    <string name="settings_status_available">Available</string>
+    <string name="settings_custom_layout_missing">No custom layout found at ~/.termux/keyboard/layout.xml.</string>
+    <string name="settings_custom_layout_valid">Custom layout is valid and loads automatically.</string>
+    <string name="settings_custom_layout_invalid">Custom layout is invalid. Open Layout documentation for the supported format.</string>
+    <string name="settings_status_action_needed">Action needed</string>
+
+    <!-- Command palette chrome -->
+    <string name="action_command_palette">Command palette</string>
+    <string name="palette_title">Command palette</string>
+    <string name="palette_search_hint">filter actions · sessions · apps</string>
+    <string name="palette_empty">No matching actions</string>
+    <string name="palette_unavailable_splits_disabled">Unavailable: compatibility mode is on</string>
+    <string name="palette_category_session">Session</string>
+    <string name="palette_category_window">Window</string>
+    <string name="palette_category_pane">Pane</string>
+    <string name="palette_category_terminal">Terminal</string>
+    <string name="palette_category_clipboard">Clipboard</string>
+    <string name="palette_category_appearance">Appearance</string>
+    <string name="palette_category_app">App</string>
+    <string name="palette_category_apps">Apps</string>
+    <string name="palette_category_sessions">Sessions</string>
+    <string name="palette_confirm_title">Run %1$s?</string>
+    <string name="palette_confirm_run">Run</string>
+    <string name="palette_action_failed">Could not run %1$s</string>
+    <string name="palette_no_match">NO MATCH — ⏎ RUNS \"%1$s\" IN THE SHELL</string>
+    <string name="palette_argument_notice">TYPE A VALUE FOR %1$s, ⏎ TO APPLY</string>
+    <string name="palette_meta_awaiting_value">awaiting value · esc</string>
+    <string name="palette_meta_idle">type to search · ↓ browse</string>
+    <plurals name="palette_meta_results">
+        <item quantity="one">%1$d result · esc</item>
+        <item quantity="other">%1$d results · esc</item>
+    </plurals>
+
+    <!-- Terminal action titles, shown in the command palette -->
+    <string name="tool_pane_split_vertical">Split pane vertically</string>
+    <string name="tool_pane_split_horizontal">Split pane horizontally</string>
+    <string name="tool_pane_focus_direction">Move pane focus</string>
+    <string name="tool_pane_resize">Resize pane</string>
+    <string name="tool_pane_kill_focused">Kill focused pane</string>
+    <string name="tool_pane_equalize">Equalize pane dividers</string>
+    <string name="tool_pane_rotate">Rotate pane layout</string>
+    <string name="tool_pane_next_layout">Next pane layout</string>
+    <string name="tool_pane_toggle_float">Float / dock pane</string>
+    <string name="tool_terminal_toggle_scratchpad">Toggle scratchpad</string>
+    <string name="tool_workspace_picker">Load workspace</string>
+    <string name="tool_workspace_save_prompt">Save workspace</string>
+    <string name="tool_window_new">New window</string>
+    <string name="tool_window_close">Close window</string>
+    <string name="tool_window_next">Next window</string>
+    <string name="tool_window_previous">Previous window</string>
+    <string name="tool_session_new">New session</string>
+    <string name="tool_session_next">Next session</string>
+    <string name="tool_session_previous">Previous session</string>
+    <string name="tool_session_close_current">Close session</string>
+    <string name="tool_session_browser">Session browser</string>
+    <string name="tool_session_panel">Sessions panel</string>
+    <string name="tool_session_clone_current">Clone session with CWD</string>
+    <string name="tool_terminal_toggle_soft_keyboard">Toggle keyboard</string>
+    <string name="tool_terminal_toggle_toolbar">Toggle dock</string>
+    <string name="tool_terminal_font_size_increase">Increase font size</string>
+    <string name="tool_terminal_font_size_decrease">Decrease font size</string>
+    <string name="tool_terminal_select_url">Select URL</string>
+    <string name="tool_terminal_hints">Hints</string>
+    <string name="tool_terminal_search_scrollback">Search scrollback</string>
+    <string name="tool_terminal_share_transcript">Share transcript</string>
+    <string name="tool_clipboard_paste">Paste</string>
+    <string name="tool_window_select">Switch to window</string>
+    <string name="tool_window_rename">Rename window session</string>
+    <string name="tool_session_rename">Rename session</string>
+    <string name="tool_terminal_reset">Reset terminal</string>
+    <string name="tool_appearance_set_wallpaper">Set wallpaper</string>
+    <string name="tool_appearance_toggle_wallpaper">Toggle wallpaper</string>
+    <string name="tool_appearance_toggle_cursor_trail">Toggle cursor trail</string>
+    <string name="tool_app_key_inspector">Key inspector</string>
+    <string name="tool_terminal_jump_previous_prompt">Jump to previous prompt</string>
+    <string name="tool_terminal_jump_next_prompt">Jump to next prompt</string>
+    <string name="tool_appearance_glass_lab">Edit surfaces</string>
+    <string name="tool_app_open_settings">Open settings</string>
+    <string name="tool_app_open_look_and_feel">Look and feel settings</string>
+    <string name="tool_app_open_apps_bar">Apps bar settings</string>
+    <string name="tool_app_command_palette">Command palette</string>
+    <string name="tool_app_launch">Launch app</string>
+    <string name="tool_app_open_drawer">Open sessions drawer</string>
+    <string name="tool_app_close_drawer">Close sessions drawer</string>
+    <string name="tool_terminal_action_sheet">Terminal actions</string>
+    <string name="tool_session_activate_by_index">Switch to session by number</string>
+    <string name="tool_window_rename_prompt">Rename window session…</string>
+    <string name="tool_session_rename_prompt">Rename session…</string>
+    <!-- Palette subtitles -->
+    <string name="tool_desc_pane_split_vertical">Split the focused pane into two panes side by side.</string>
+    <string name="tool_desc_pane_split_horizontal">Split the focused pane into two stacked panes.</string>
+    <string name="tool_desc_pane_kill_focused">Terminate the shell running in the focused pane.</string>
+    <string name="tool_desc_pane_equalize">Reset every divider in this window to an equal ratio.</string>
+    <string name="tool_desc_pane_rotate">Rotate this window’s pane layout clockwise.</string>
+    <string name="tool_desc_pane_next_layout">Cycle this window to the next automatic pane layout and keep it applied as panes are added or closed.</string>
+    <string name="tool_desc_pane_toggle_float">Detach the focused pane into a movable floating window above the tiled panes, or dock a floating pane back into the layout.</string>
+    <string name="tool_desc_terminal_toggle_scratchpad">Show or hide a dedicated floating terminal; its shell keeps running while hidden.</string>
+    <string name="tool_desc_workspace_picker">Pick a saved workspace and load it into the current layout or in place of it.</string>
+    <string name="tool_desc_workspace_save_prompt">Prompt for a name and save the current sessions, windows, and panes.</string>
+    <string name="workspace_picker_title">Load workspace</string>
+    <string name="workspace_picker_empty">No saved workspaces</string>
+    <string name="workspace_picker_mode_message">Load “%1$s” in place of the current workspace, or append its windows to it?</string>
+    <string name="workspace_picker_replace">Replace</string>
+    <string name="workspace_picker_append">Append</string>
+    <string name="workspace_picker_loaded">Workspace “%1$s” loaded</string>
+    <string name="workspace_picker_failed">Could not load workspace: %1$s</string>
+    <string name="tool_desc_window_new">Create a new window with a fresh shell in the current session.</string>
+    <string name="tool_desc_window_close">Close the current window and every pane in it.</string>
+    <string name="tool_desc_window_next">Switch to the next window in the current session.</string>
+    <string name="tool_desc_window_previous">Switch to the previous window in the current session.</string>
+    <string name="tool_desc_session_new">Create a new terminal session.</string>
+    <string name="tool_desc_session_next">Switch to the next terminal session.</string>
+    <string name="tool_desc_session_previous">Switch to the previous terminal session.</string>
+    <string name="tool_desc_session_close_current">Close the current session, including all of its windows and panes.</string>
+    <string name="tool_desc_session_browser">Search sessions by name, working directory, or foreground process.</string>
+    <string name="tool_desc_session_panel">Drop the sessions list beneath the status row to switch, rename, close, or create sessions.</string>
+    <string name="tool_desc_session_clone_current">Create a fresh shell session in the current working directory.</string>
+    <string name="tool_desc_terminal_reset">Reset the terminal emulator state for the focused shell.</string>
+    <string name="tool_desc_terminal_toggle_soft_keyboard">Show or hide the keyboard.</string>
+    <string name="tool_desc_terminal_toggle_toolbar">Show or hide the dock.</string>
+    <string name="tool_desc_terminal_font_size_increase">Make the terminal text larger.</string>
+    <string name="tool_desc_terminal_font_size_decrease">Make the terminal text smaller.</string>
+    <string name="tool_desc_terminal_select_url">Pick a link from the terminal scrollback.</string>
+    <string name="tool_desc_terminal_hints">Open or copy URLs, paths, hashes, and source line references by keyboard label.</string>
+    <string name="terminal_hints_title">Terminal hints</string>
+    <string name="terminal_hints_instructions">Press a label to open a URL or copy another item. Hold Shift while pressing a label to copy anything.</string>
+    <string name="terminal_hints_none">No URLs, paths, hashes, or line references found.</string>
+    <string name="terminal_hint_copied">Hint copied to clipboard</string>
+    <string name="tool_desc_terminal_search_scrollback">Find text in this pane’s scrollback and jump to a match.</string>
+    <string name="terminal_scrollback_search_title">Search scrollback</string>
+    <string name="terminal_scrollback_search_hint">Search text</string>
+    <string name="terminal_scrollback_search_row">Row %1$s   %2$s</string>
+    <plurals name="terminal_scrollback_search_results">
+        <item quantity="one">1 match</item>
+        <item quantity="other">%1$d matches</item>
+    </plurals>
+    <string name="tool_desc_terminal_share_transcript">Share the terminal transcript with another app.</string>
+    <string name="tool_desc_terminal_action_sheet">Open the terminal action sheet.</string>
+    <string name="tool_desc_clipboard_paste">Paste the clipboard contents into the terminal.</string>
+    <string name="tool_desc_appearance_set_wallpaper">Choose a background image for the terminal.</string>
+    <string name="tool_desc_appearance_toggle_wallpaper">Turn the terminal background wallpaper on or off.</string>
+    <string name="tool_desc_appearance_toggle_cursor_trail">Turn the animated cursor trail on or off.</string>
+    <string name="tool_desc_app_key_inspector">Show what each key sends to the shell, and which binding claimed it.</string>
+
+    <!-- Key inspector overlay -->
+    <string name="key_inspector_title">Key inspector</string>
+    <string name="key_inspector_close">Close</string>
+    <string name="key_inspector_hint">Press keys. Each event shows the Android key, the binding that claimed it, and the bytes sent.</string>
+    <string name="tool_desc_terminal_jump_previous_prompt">Scroll to the previous shell prompt. Needs shell integration.</string>
+    <string name="tool_desc_terminal_jump_next_prompt">Scroll to the next shell prompt. Needs shell integration.</string>
+    <string name="tool_desc_appearance_glass_lab">Tune the dock, keyboard, status bar, and terminal surfaces.</string>
+    <string name="tool_desc_app_open_settings">Open the launcher settings screen.</string>
+    <string name="tool_desc_app_open_look_and_feel">Open the look and feel settings.</string>
+    <string name="tool_desc_app_open_apps_bar">Open the apps bar settings.</string>
+    <string name="tool_desc_app_command_palette">Open the searchable command palette.</string>
+    <string name="tool_desc_app_launch">Launch an installed app by package name or label.</string>
+    <string name="terminal_key_chord_pending">Waiting for key: %1$s  ›  …</string>
+    <string name="terminal_key_mode_active">Key mode: %1$s</string>
+    <plurals name="terminal_binding_config_errors">
+        <item quantity="one">1 binding-file error; defaults kept where possible</item>
+        <item quantity="other">%1$d binding-file errors; defaults kept where possible</item>
+    </plurals>
+    <plurals name="terminal_font_config_errors">
+        <item quantity="one">Ignored %1$d terminal font configuration error; using safe fallbacks</item>
+        <item quantity="other">Ignored %1$d terminal font configuration errors; using safe fallbacks</item>
+    </plurals>
+    <string name="tool_desc_app_open_drawer">Open the sessions drawer.</string>
+    <string name="tool_desc_app_close_drawer">Close the sessions drawer.</string>
+    <string name="tool_desc_window_rename_prompt">Ask for a new name for the current window session.</string>
+    <string name="tool_desc_session_rename_prompt">Ask for a new name for the focused shell session.</string>
+    <string name="tool_terminal_share_selected">Share selected text</string>
+    <string name="tool_clipboard_copy_selected">Copy selected text</string>
+    <string name="tool_desc_terminal_share_selected">Share the selected terminal text with another app.</string>
+    <string name="tool_desc_clipboard_copy_selected">Copy the selected terminal text to the clipboard.</string>
+
+    <!-- Searchable session browser -->
+    <string name="session_browser_title">Sessions</string>
+    <string name="session_browser_search_hint">Search name, CWD, or process</string>
+    <string name="session_browser_empty">No matching sessions</string>
+    <string name="session_browser_new">New</string>
+    <string name="session_browser_clone_current">Clone</string>
+    <string name="session_browser_save_workspace">Save</string>
+    <string name="session_browser_more_actions">More session actions</string>
+    <string name="session_browser_current">Current</string>
+    <string name="session_browser_unnamed">Session %1$d</string>
+    <string name="session_browser_named">Session %1$d · %2$s</string>
+    <plurals name="session_browser_window_count">
+        <item quantity="one">%1$d window</item>
+        <item quantity="other">%1$d windows</item>
+    </plurals>
+    <plurals name="session_browser_pane_count">
+        <item quantity="one">%1$d pane</item>
+        <item quantity="other">%1$d panes</item>
+    </plurals>
+    <string name="session_browser_window">Window %1$d</string>
+    <string name="session_browser_activate">Activate</string>
+    <string name="session_browser_clone">Clone with CWD</string>
+    <string name="session_browser_rename">Rename</string>
+    <string name="session_browser_close">Close</string>
+    <string name="session_browser_close_title">Close %1$s?</string>
+    <plurals name="session_browser_close_message">
+        <item quantity="one">This terminates the pane in the session.</item>
+        <item quantity="other">This terminates all %1$d panes in the session.</item>
+    </plurals>
+    <string name="session_browser_workspace_name">Workspace name</string>
+    <string name="session_browser_workspace_saved">Saved workspace %1$s</string>
+    <string name="session_browser_workspace_overwrite_title">Replace %1$s?</string>
+    <string name="session_browser_workspace_overwrite_message">A workspace with this name already exists.</string>
+    <string name="session_browser_overwrite">Replace</string>
+    <string name="session_browser_action_failed">Could not complete the session action</string>
+
+    <!-- Status-row sessions panel -->
+    <string name="sessions_panel_empty">No sessions</string>
+    <string name="sessions_panel_new">New session</string>
+    <string name="sessions_panel_shell">shell</string>
+    <string name="sessions_panel_close_session">Close session %1$d</string>
+    <string name="palette_unavailable_no_selection">Unavailable: no text selected</string>
+    <string name="palette_unavailable_no_session">Unavailable: no active session</string>
 
 </resources>

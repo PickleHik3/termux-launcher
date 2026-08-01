@@ -1,38 +1,16 @@
 package com.termux.launcherctl;
 
-import android.app.ActivityManager;
 import android.content.Context;
-import android.content.ComponentName;
-import android.content.Intent;
-import android.content.IntentFilter;
-import android.net.Uri;
-import android.content.pm.ActivityInfo;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.Drawable;
-import android.os.BatteryManager;
-import android.os.StatFs;
-import android.os.SystemClock;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
-import com.jakewharton.processphoenix.ProcessPhoenix;
 import com.termux.ai.TaiApiCompatibility;
 import com.termux.ai.TaiCliFormatter;
-import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiSettings;
 import com.termux.app.launcher.LauncherAppLauncher;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.model.LauncherAppEntry;
-import com.termux.app.launcher.notifications.LauncherNotificationAccess;
-import com.termux.privileged.PrivilegedBackendManager;
-import com.termux.privileged.PrivilegedPolicyStore;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
 
@@ -44,7 +22,6 @@ import java.io.BufferedInputStream;
 import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -60,14 +37,11 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.Enumeration;
 import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -77,7 +51,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Local LauncherCtl API server exposed on localhost for shell integrations.
+ * Local OpenAI/Ollama-compatible inference API server exposed on localhost (or optionally LAN)
+ * so any OpenAI-compatible client can talk to models hosted by TAI.
  */
 public class LauncherCtlApiServer {
     private static final String LOG_TAG = "LauncherCtlApiServer";
@@ -85,11 +60,10 @@ public class LauncherCtlApiServer {
     private static final String LAUNCHERCTL_DIR_PATH = TermuxConstants.TERMUX_HOME_DIR_PATH + "/.launcherctl";
     private static final String TOKEN_FILE_PATH = LAUNCHERCTL_DIR_PATH + "/token";
     private static final String ENDPOINT_FILE_PATH = LAUNCHERCTL_DIR_PATH + "/endpoint";
-    private static final String LAUNCHERCTL_BIN_PATH = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/launcherctl";
-    private static final String LAUNCHERCTL_MCP_BIN_PATH = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/launcherctl-mcp";
-    private static final String LAUNCHER_RESTART_BIN_PATH = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/launcher-restart";
     private static final String TAI_BIN_PATH = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/tai";
+    private static final String LAUNCHERCTL_BIN_PATH = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/launcherctl";
     static final String LAN_WARNING = "LAN exposure allows any device on your network to reach this endpoint when the token is known.";
+    static final String HEALTH_BODY = "Ollama is running";
 
     private static final int MAX_REQUEST_LINE_BYTES = 4096;
     private static final int MAX_HEADER_LINE_BYTES = 4096;
@@ -107,15 +81,11 @@ public class LauncherCtlApiServer {
     private volatile boolean running;
     private volatile boolean starting;
     private volatile String token;
+    private volatile boolean authRequired = true;
     private volatile int port;
-    private volatile JSONObject cachedAppsResponse;
     private ServerSocket serverSocket;
     private Thread acceptThread;
-    private long lastCpuTotalTicks = -1L;
-    private long lastCpuIdleTicks = -1L;
-    private long lastCpuSampleMs = 0L;
     private Context appContext;
-    private final Map<String, byte[]> cachedAppIconPngs = new HashMap<>();
 
     private LauncherCtlApiServer() {
     }
@@ -136,21 +106,14 @@ public class LauncherCtlApiServer {
         try {
             initializeRateLimiters();
             appContext = context.getApplicationContext();
-            LauncherCtlMcpBridge.getInstance().setContext(appContext);
-            if (!LauncherCtlMcpPreferences.PROVIDER_OFF.equals(LauncherCtlMcpPreferences.getWebProvider(appContext))) {
-                LauncherCtlMcpPreferences.writePresetConfig(appContext);
-            }
             TaiSettings settings = new TaiSettings(appContext);
             token = settings.getOrCreateApiToken();
             String bindMode = settings.getApiBindMode();
+            authRequired = effectiveAuthRequired(settings);
             serverSocket = createLoopbackServerSocket(settings.getApiPort(), bindMode);
             port = serverSocket.getLocalPort();
             running = true;
-            writeClientConfig();
-            installLauncherCtlCliScript();
-            installLauncherCtlMcpScript();
-            installLauncherRestartScript();
-            installTaiCliScripts();
+            installClientFiles();
             startAcceptLoop(context.getApplicationContext());
             Logger.logInfo(LOG_TAG, "LauncherCtl API listening on " + bindAddressForMode(bindMode) + ":" + port);
         } catch (Exception e) {
@@ -159,6 +122,35 @@ public class LauncherCtlApiServer {
             cleanupSocket();
         } finally {
             starting = false;
+        }
+    }
+
+    /**
+     * LAN bind mode always enforces the bearer token; the auth toggle only opens up loopback.
+     */
+    static boolean effectiveAuthRequired(@NonNull TaiSettings settings) {
+        if (TaiSettings.BIND_MODE_LAN.equals(settings.getApiBindMode())) return true;
+        return settings.isApiAuthRequired();
+    }
+
+    /**
+     * Writes the token/endpoint files and installs the shell helpers under the Termux home.
+     *
+     * None of it is required to serve requests: it is discoverability for a shell that already has
+     * the socket. Letting an unwritable home abort {@link #start(Context)} would close a listener
+     * that had already bound successfully, so every client sees "connection refused" for a reason
+     * that has nothing to do with the socket. Log and keep serving instead.
+     */
+    private void installClientFiles() {
+        try {
+            writeClientConfig();
+        } catch (Exception e) {
+            Logger.logWarn(LOG_TAG, "LauncherCtl API is listening but its client config could not be written: " + e.getMessage());
+        }
+        try {
+            installTaiCliScripts();
+        } catch (Exception e) {
+            Logger.logWarn(LOG_TAG, "LauncherCtl API is listening but its shell helpers could not be installed: " + e.getMessage());
         }
     }
 
@@ -179,9 +171,6 @@ public class LauncherCtlApiServer {
      */
     public synchronized void ensureCliScriptsInstalled() {
         try {
-            installLauncherCtlCliScript();
-            installLauncherCtlMcpScript();
-            installLauncherRestartScript();
             installTaiCliScripts();
         } catch (Throwable t) {
             Logger.logErrorExtended(LOG_TAG, "Failed to ensure launcher CLI scripts are installed: " + t.getMessage());
@@ -236,11 +225,6 @@ public class LauncherCtlApiServer {
         return buildEndpointSettings(resolvedContext, true);
     }
 
-    public synchronized void invalidatePackageCaches() {
-        cachedAppsResponse = null;
-        cachedAppIconPngs.clear();
-    }
-
     private void startAcceptLoop(Context context) {
         acceptThread = new Thread(() -> {
             while (running && serverSocket != null && !serverSocket.isClosed()) {
@@ -276,7 +260,18 @@ public class LauncherCtlApiServer {
                 return;
             }
 
-            if (!isAuthorized(request.headers)) {
+            // CORS preflight and the health probe stay reachable without a token so browser
+            // clients and stock Ollama tooling can discover the server.
+            if ("OPTIONS".equals(request.method)) {
+                writeResponse(output, corsPreflightResponse());
+                return;
+            }
+            if (isHealthPath(request)) {
+                writeResponse(output, healthResponse("HEAD".equals(request.method)));
+                return;
+            }
+
+            if (authRequired && !isAuthorized(request.headers)) {
                 writeResponse(output, request.path.startsWith("/api/")
                     ? ollamaUnauthorizedResponse() : unauthorizedResponse());
                 return;
@@ -299,6 +294,23 @@ public class LauncherCtlApiServer {
         } catch (Exception e) {
             Logger.logErrorExtended(LOG_TAG, "Request handling failed: " + e.getMessage());
         }
+    }
+
+    private static boolean isHealthPath(HttpRequest request) {
+        return ("GET".equals(request.method) || "HEAD".equals(request.method)) && "/".equals(request.path);
+    }
+
+    private static HttpResponse healthResponse(boolean headOnly) {
+        byte[] body = headOnly ? new byte[0] : HEALTH_BODY.getBytes(StandardCharsets.UTF_8);
+        return new HttpResponse(200, "text/plain; charset=utf-8", body, null);
+    }
+
+    private static HttpResponse corsPreflightResponse() {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Access-Control-Allow-Methods", "GET, POST, HEAD, OPTIONS");
+        headers.put("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Api-Key, X-Tai-Output, OpenAI-Beta");
+        headers.put("Access-Control-Max-Age", "86400");
+        return new HttpResponse(200, "text/plain; charset=utf-8", new byte[0], headers);
     }
 
     private HttpResponse routeRequest(Context context, HttpRequest request) {
@@ -333,51 +345,15 @@ public class LauncherCtlApiServer {
                 JSONObject embedRequest = TaiApiCompatibility.ollamaEmbedRequest(request.body);
                 return ollamaJsonResponse(TaiApiCompatibility.ollamaEmbedFromOpenAi(
                     manager.embeddings(embedRequest.toString()), embedRequest.optString("model", "")));
+            } else if ("POST".equals(request.method) && "/api/embeddings".equals(request.path)) {
+                return ollamaJsonResponse(legacyOllamaEmbeddings(context, request.body));
             } else if ("POST".equals(request.method) && ("/api/pull".equals(request.path)
                     || "/api/create".equals(request.path) || "/api/push".equals(request.path)
                     || "/api/copy".equals(request.path) || "/api/delete".equals(request.path))) {
                 return ollamaJsonResponse(TaiApiCompatibility.ollamaError(501, "unsupported_registry_operation",
-                    "Ollama registry operations do not map to LiteRT-LM/MNN packages; use the Termux:GUI model market or import flow."));
-            } else if ("GET".equals(request.method) && "/v1/status".equals(request.path)) {
-                return maybeTextResponse(request, "launcher-status", buildStatus());
-            } else if ("GET".equals(request.method) && "/v1/apps".equals(request.path)) {
-                return jsonResponse(buildApps(context));
-            } else if ("GET".equals(request.method) && isAppIconPath(request.path)) {
-                return buildAppIconResponse(context, extractPackageNameFromIconPath(request.path));
-            } else if ("GET".equals(request.method) && "/v1/system/resources".equals(request.path)) {
-                return jsonResponse(buildSystemResources(context));
-            } else if ("GET".equals(request.method) && "/v1/media/now-playing".equals(request.path)) {
-                return jsonResponse(buildNowPlaying());
-            } else if ("GET".equals(request.method) && "/v1/media/art".equals(request.path)) {
-                return jsonResponse(buildNowPlayingArt());
-            } else if ("GET".equals(request.method) && "/v1/notifications".equals(request.path)) {
-                return jsonResponse(buildNotifications());
-            } else if ("POST".equals(request.method) && "/v1/notifications/recent".equals(request.path)) {
-                return jsonResponse(buildNotificationsRecent(request.body));
-            } else if ("POST".equals(request.method) && "/v1/notifications/since".equals(request.path)) {
-                return jsonResponse(buildNotificationsSince(request.body));
-            } else if ("POST".equals(request.method) && "/v1/notifications/search".equals(request.path)) {
-                return jsonResponse(buildNotificationsSearch(request.body));
-            } else if ("POST".equals(request.method) && "/v1/notifications/stats".equals(request.path)) {
-                return jsonResponse(buildNotificationsStats(request.body));
-            } else if ("GET".equals(request.method) && "/v1/launcher/capabilities".equals(request.path)) {
-                return jsonResponse(buildLauncherCapabilities(context));
-            } else if ("GET".equals(request.method) && "/v1/agent/tools".equals(request.path)) {
-                return jsonResponse(buildAgentTools());
-            } else if ("POST".equals(request.method) && "/v1/agent/route".equals(request.path)) {
-                return jsonResponse(runAgentRoute(context, request.body));
-            } else if ("POST".equals(request.method) && "/v1/agent/execute".equals(request.path)) {
-                return jsonResponse(runAgentExecute(context, request.body));
-            } else if ("GET".equals(request.method) && "/v1/events".equals(request.path)) {
-                return jsonResponse(buildEventsTail("{}"));
-            } else if ("GET".equals(request.method) && "/v1/events/stream".equals(request.path)) {
-                return sseResponse(output -> writeEventsStream(output));
-            } else if ("POST".equals(request.method) && "/v1/events/tail".equals(request.path)) {
-                return jsonResponse(buildEventsTail(request.body));
+                    "Ollama registry operations do not map to LiteRT-LM/MNN packages; use the model import flow in settings."));
             } else if ("POST".equals(request.method) && "/v1/apps/launch".equals(request.path)) {
                 return jsonResponse(runAppLaunch(context, request.body));
-            } else if ("POST".equals(request.method) && "/v1/app/restart".equals(request.path)) {
-                return jsonResponse(runAppRestart(context));
             } else if ("POST".equals(request.method) && "/v1/auth/rotate".equals(request.path)) {
                 return jsonResponse(rotateAuthToken(context, false));
             } else if ("GET".equals(request.method) && "/v1/ai/status".equals(request.path)) {
@@ -415,6 +391,8 @@ public class LauncherCtlApiServer {
                 return maybeTextResponse(request, "cancel", TaiManager.getInstance(context).cancelRuntime());
             } else if ("GET".equals(request.method) && "/v1/models".equals(request.path)) {
                 return jsonResponse(TaiManager.getInstance(context).openAiModels());
+            } else if ("GET".equals(request.method) && isModelRetrievePath(request.path)) {
+                return jsonResponse(retrieveModel(context, modelIdFromRetrievePath(request.path)));
             } else if ("POST".equals(request.method) && "/v1/chat/completions".equals(request.path)) {
                 TaiManager manager = TaiManager.getInstance(context);
                 if (manager.isStreamRequest(request.body)) {
@@ -454,492 +432,58 @@ public class LauncherCtlApiServer {
         }
     }
 
-    private HttpResponse buildAppIconResponse(Context context, String packageName) throws JSONException {
-        if (packageName == null || packageName.trim().isEmpty()) {
-            JSONObject error = jsonError("bad_request", "Missing package name");
-            error.put("_statusCode", 400);
-            return jsonResponse(error);
-        }
+    static boolean isModelRetrievePath(String path) {
+        return path != null && path.startsWith("/v1/models/") && path.length() > "/v1/models/".length()
+            && path.indexOf('/', "/v1/models/".length()) < 0;
+    }
 
-        String normalizedPackageName = packageName.trim();
-        byte[] pngBytes;
-        synchronized (this) {
-            pngBytes = cachedAppIconPngs.get(normalizedPackageName);
-        }
-        if (pngBytes == null || pngBytes.length == 0) {
-            pngBytes = findLauncherIconPng(context, normalizedPackageName);
-            if (pngBytes != null && pngBytes.length > 0) {
-                synchronized (this) {
-                    cachedAppIconPngs.put(normalizedPackageName, pngBytes);
+    static String modelIdFromRetrievePath(String path) {
+        return path.substring("/v1/models/".length());
+    }
+
+    /**
+     * OpenAI GET /v1/models/{id}: filter the list response down to the one model object.
+     */
+    private JSONObject retrieveModel(Context context, String modelId) throws JSONException {
+        JSONObject models = TaiManager.getInstance(context).openAiModels();
+        JSONArray data = models.optJSONArray("data");
+        if (data != null) {
+            for (int i = 0; i < data.length(); i++) {
+                JSONObject model = data.optJSONObject(i);
+                if (model != null && modelId.equals(model.optString("id", ""))) {
+                    return model;
                 }
             }
         }
-        if (pngBytes == null || pngBytes.length == 0) {
-            JSONObject error = jsonError("not_found", "No launcher icon found for package");
-            error.put("_statusCode", 404);
-            error.put("packageName", normalizedPackageName);
-            return jsonResponse(error);
-        }
-
-        Map<String, String> headers = new HashMap<>();
-        headers.put("Cache-Control", "private, max-age=300");
-        headers.put("X-Package-Name", normalizedPackageName);
-        return new HttpResponse(200, "image/png", pngBytes, headers);
+        JSONObject error = jsonError("model_not_found", "Model '" + modelId + "' does not exist");
+        error.put("_statusCode", 404);
+        return error;
     }
 
-    private JSONObject buildStatus() throws JSONException {
-        PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
-        JSONObject data = new JSONObject();
-        data.put("ok", true);
-        data.put("apiVersion", API_VERSION);
-        data.put("backendType", String.valueOf(manager.getBackendType()));
-        data.put("backendState", String.valueOf(manager.getBackendState()));
-        data.put("statusReason", String.valueOf(manager.getStatusReason()));
-        data.put("statusMessage", manager.getStatusMessage());
-        data.put("isPrivilegedAvailable", manager.isPrivilegedAvailable());
-        data.put("notificationListenerConnected", LauncherCtlNotificationListener.isListenerConnected());
-        data.put("notificationListener", buildNotificationListenerStatus());
-        data.put("privilegedPolicy", describePrivilegedPolicy());
-        data.put("endpoint", buildEndpointSettings(appContext, false));
-        return data;
+    /**
+     * Legacy Ollama POST /api/embeddings: {model, prompt} in, {embedding: [...]} out.
+     */
+    private JSONObject legacyOllamaEmbeddings(Context context, String body) throws JSONException {
+        JSONObject request = body == null || body.trim().isEmpty() ? new JSONObject() : new JSONObject(body);
+        JSONObject openAiRequest = new JSONObject();
+        openAiRequest.put("model", request.optString("model", ""));
+        openAiRequest.put("input", request.opt("prompt") == null ? "" : request.opt("prompt"));
+        JSONObject openAiResponse = TaiManager.getInstance(context).embeddings(openAiRequest.toString());
+        if (openAiResponse.has("error")) {
+            return openAiResponse;
+        }
+        JSONArray data = openAiResponse.optJSONArray("data");
+        JSONObject first = data != null && data.length() > 0 ? data.optJSONObject(0) : null;
+        JSONObject response = new JSONObject();
+        response.put("embedding", first != null && first.has("embedding") ? first.opt("embedding") : new JSONArray());
+        return response;
     }
 
-    private JSONObject buildApps(Context context) throws JSONException {
-        JSONObject cached = cachedAppsResponse;
-        if (cached != null) {
-            return new JSONObject(cached.toString());
-        }
-        PackageManager packageManager = context.getPackageManager();
-        List<LauncherAppEntry> apps = LauncherAppDataProvider.getInstance(context).getAllAppsBlocking();
-        JSONObject data = buildLaunchableAppsPayload(apps, packageManager);
-        synchronized (this) {
-            cachedAppsResponse = new JSONObject(data.toString());
-        }
-        return data;
-    }
-
-    static JSONObject buildLaunchableAppsPayload(List<LauncherAppEntry> apps, PackageManager packageManager) throws JSONException {
-        JSONArray payloadApps = new JSONArray();
-        LinkedHashSet<String> uniquePackages = new LinkedHashSet<>();
-        for (LauncherAppEntry entry : apps) {
-            if (entry == null || entry.appRef == null || entry.appRef.packageName == null || entry.appRef.packageName.isEmpty()) {
-                continue;
-            }
-            JSONObject item = new JSONObject();
-            item.put("label", entry.label == null ? entry.appRef.packageName : entry.label);
-            item.put("packageName", entry.appRef.packageName);
-            item.put("activityName", entry.appRef.activityName == null ? "" : entry.appRef.activityName);
-            item.put("stableId", entry.appRef.stableId());
-            item.put("userId", entry.appRef.userId);
-            item.put("userSerialNumber", entry.appRef.userSerialNumber);
-            item.put("clonedProfile", entry.appRef.clonedProfile);
-            if (entry.appRef.profileLabel != null && !entry.appRef.profileLabel.isEmpty()) {
-                item.put("profileLabel", entry.appRef.profileLabel);
-            }
-            item.put("launchable", true);
-            item.put("systemApp", isSystemApp(packageManager, entry.appRef.packageName));
-            payloadApps.put(item);
-            uniquePackages.add(entry.appRef.packageName);
-        }
-
-        JSONObject data = new JSONObject();
-        data.put("ok", true);
-        data.put("count", payloadApps.length());
-        data.put("packageCount", uniquePackages.size());
-        data.put("apps", payloadApps);
-        return data;
-    }
-
-    private JSONObject buildSystemResources(Context context) throws JSONException {
-        JSONObject data = new JSONObject();
-        data.put("ok", true);
-        data.put("apiVersion", API_VERSION);
-        data.put("timestampMs", System.currentTimeMillis());
-        data.put("cpuCores", Runtime.getRuntime().availableProcessors());
-
-        double[] loadAverage = readLoadAverage();
-        if (loadAverage != null) {
-            data.put("loadAvg1m", loadAverage[0]);
-            data.put("loadAvg5m", loadAverage[1]);
-            data.put("loadAvg15m", loadAverage[2]);
-        }
-        double cpuPercent = readCPUPercent(loadAverage, Runtime.getRuntime().availableProcessors());
-        if (cpuPercent >= 0) {
-            data.put("cpuPercent", cpuPercent);
-        }
-
-        Map<String, Long> memInfoKb = readMemInfoKb();
-        if (!memInfoKb.isEmpty()) {
-            long memTotalKb = memInfoKb.get("MemTotal") != null ? memInfoKb.get("MemTotal") : 0L;
-            long memAvailableKb = memInfoKb.get("MemAvailable") != null ? memInfoKb.get("MemAvailable") : 0L;
-            long memFreeKb = memInfoKb.get("MemFree") != null ? memInfoKb.get("MemFree") : 0L;
-            long memUsedKb = memTotalKb > 0 && memAvailableKb > 0 ? (memTotalKb - memAvailableKb) : 0L;
-            data.put("memTotalBytes", memTotalKb * 1024L);
-            data.put("memAvailableBytes", memAvailableKb * 1024L);
-            data.put("memFreeBytes", memFreeKb * 1024L);
-            data.put("memUsedBytes", memUsedKb * 1024L);
-
-            JSONObject memory = new JSONObject();
-            memory.put("totalBytes", memTotalKb * 1024L);
-            memory.put("availableBytes", memAvailableKb * 1024L);
-            memory.put("freeBytes", memFreeKb * 1024L);
-            memory.put("usedBytes", memUsedKb * 1024L);
-            putMemInfoBytes(memory, "buffersBytes", memInfoKb, "Buffers");
-            putMemInfoBytes(memory, "cachedBytes", memInfoKb, "Cached");
-            putMemInfoBytes(memory, "swapCachedBytes", memInfoKb, "SwapCached");
-            putMemInfoBytes(memory, "activeBytes", memInfoKb, "Active");
-            putMemInfoBytes(memory, "inactiveBytes", memInfoKb, "Inactive");
-            putMemInfoBytes(memory, "shmemBytes", memInfoKb, "Shmem");
-            putMemInfoBytes(memory, "slabBytes", memInfoKb, "Slab");
-            putMemInfoBytes(memory, "swapTotalBytes", memInfoKb, "SwapTotal");
-            putMemInfoBytes(memory, "swapFreeBytes", memInfoKb, "SwapFree");
-            data.put("memory", memory);
-        }
-
-        Runtime runtime = Runtime.getRuntime();
-        long javaHeapUsedBytes = runtime.totalMemory() - runtime.freeMemory();
-        data.put("javaHeapUsedBytes", javaHeapUsedBytes);
-        data.put("javaHeapMaxBytes", runtime.maxMemory());
-        data.put("javaHeapFreeBytes", runtime.freeMemory());
-        data.put("javaHeapTotalBytes", runtime.totalMemory());
-
-        JSONObject runtimeInfo = new JSONObject();
-        runtimeInfo.put("availableProcessors", runtime.availableProcessors());
-        runtimeInfo.put("javaHeapUsedBytes", javaHeapUsedBytes);
-        runtimeInfo.put("javaHeapFreeBytes", runtime.freeMemory());
-        runtimeInfo.put("javaHeapTotalBytes", runtime.totalMemory());
-        runtimeInfo.put("javaHeapMaxBytes", runtime.maxMemory());
-        data.put("runtime", runtimeInfo);
-
-        ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-        if (activityManager != null) {
-            ActivityManager.MemoryInfo memoryInfo = new ActivityManager.MemoryInfo();
-            activityManager.getMemoryInfo(memoryInfo);
-            data.put("lowMemory", memoryInfo.lowMemory);
-            data.put("memoryThresholdBytes", memoryInfo.threshold);
-            data.put("memoryClassMb", activityManager.getMemoryClass());
-            data.put("largeMemoryClassMb", activityManager.getLargeMemoryClass());
-        }
-
-        JSONObject uptime = readUptimeInfo();
-        if (uptime.length() > 0) {
-            data.put("uptime", uptime);
-        }
-
-        JSONArray storage = readStorageStats(context);
-        if (storage.length() > 0) {
-            data.put("storage", storage);
-        }
-
-        JSONObject battery = readBatteryInfo(context);
-        if (battery.length() > 0) {
-            data.put("battery", battery);
-        }
-
-        JSONArray network = readNetworkStats();
-        if (network.length() > 0) {
-            data.put("network", network);
-        }
-
-        JSONArray thermal = readThermalZones();
-        if (thermal.length() > 0) {
-            data.put("thermal", thermal);
-        }
-
-        PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
-        data.put("backendType", String.valueOf(manager.getBackendType()));
-        data.put("backendState", String.valueOf(manager.getBackendState()));
-        data.put("statusReason", String.valueOf(manager.getStatusReason()));
-        data.put("statusMessage", manager.getStatusMessage());
-        data.put("isPrivilegedAvailable", manager.isPrivilegedAvailable());
-        data.put("privilegedPolicy", describePrivilegedPolicy());
-        return data;
-    }
-
-    private JSONObject buildNowPlaying() throws JSONException {
-        JSONObject snapshot = LauncherCtlNotificationListener.getNowPlayingSnapshot();
-        snapshot.put("ok", true);
-        return snapshot;
-    }
-
-    private JSONObject buildNowPlayingArt() throws JSONException {
-        JSONObject snapshot = LauncherCtlNotificationListener.getNowPlayingArtSnapshot();
-        snapshot.put("ok", true);
-        return snapshot;
-    }
-
-    private JSONObject buildNotifications() throws JSONException {
-        JSONObject snapshot = LauncherCtlNotificationListener.getNotificationsSnapshot();
-        snapshot.put("ok", true);
-        return snapshot;
-    }
-
-    private JSONObject buildNotificationsRecent(String body) throws JSONException {
-        JSONObject request = parseJsonBody(body);
-        int limit = clampInt(request.optInt("limit", 50), 1, 200);
-        List<LauncherCtlNotificationEvent> events = LauncherCtlNotificationStore.getInstance().queryRecent(limit);
-        return notificationsResponse(events);
-    }
-
-    private JSONObject buildNotificationsSince(String body) throws JSONException {
-        JSONObject request = parseJsonBody(body);
-        if (!request.has("since")) {
-            JSONObject error = jsonError("bad_request", "Missing since timestamp");
-            error.put("_statusCode", 400);
-            return error;
-        }
-        long since = request.optLong("since", 0);
-        int limit = clampInt(request.optInt("limit", 200), 1, 1000);
-        List<LauncherCtlNotificationEvent> events = LauncherCtlNotificationStore.getInstance().querySince(since, limit);
-        return notificationsResponse(events);
-    }
-
-    private JSONObject buildNotificationsSearch(String body) throws JSONException {
-        JSONObject request = parseJsonBody(body);
-        String query = request.optString("query", "").trim();
-        if (query.isEmpty()) {
-            JSONObject error = jsonError("bad_request", "Missing search query");
-            error.put("_statusCode", 400);
-            return error;
-        }
-        int limit = clampInt(request.optInt("limit", 50), 1, 200);
-        List<LauncherCtlNotificationEvent> events = LauncherCtlNotificationStore.getInstance().querySearch(query, limit);
-        return notificationsResponse(events);
-    }
-
-    private JSONObject buildNotificationsStats(String body) throws JSONException {
-        JSONObject request = parseJsonBody(body);
-        Long since = request.has("since") ? request.optLong("since", 0) : null;
-        JSONObject stats = LauncherCtlNotificationStore.getInstance().queryStats(since);
-        stats.put("ok", true);
-        return stats;
-    }
-
-    private JSONObject buildLauncherCapabilities(Context context) throws JSONException {
-        JSONObject data = new JSONObject();
-        data.put("ok", true);
-        data.put("apiVersion", API_VERSION);
-        data.put("timestampMs", System.currentTimeMillis());
-        JSONObject integrations = new JSONObject();
-        integrations.put("openAiCompatible", true);
-        integrations.put("mcpStdio", true);
-        integrations.put("mcpCommand", "launcherctl mcp");
-        integrations.put("cliStateDir", LAUNCHERCTL_DIR_PATH);
-        data.put("integrations", integrations);
-
-        TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(context);
-        data.put("device", device.toJson());
-
-        JSONObject notifications = new JSONObject();
-        boolean listenerConnected = LauncherCtlNotificationListener.isListenerConnected();
-        boolean accessEnabled = LauncherNotificationAccess.isEnabled(context);
-        notifications.put("listenerConnected", listenerConnected);
-        notifications.put("accessEnabled", accessEnabled);
-        notifications.put("settingsAction", LauncherCtlNotificationListener.getListenerSettingsAction());
-        if (!listenerConnected) {
-            notifications.put("hint", LauncherCtlNotificationListener.getListenerHint());
-        }
-        data.put("notifications", notifications);
-
-        JSONObject tai = new JSONObject();
-        try {
-            JSONObject runtimeStatus = TaiManager.getInstance(context).runtimeStatus();
-            tai.put("runtime", runtimeStatus.optJSONObject("runtime"));
-            JSONObject runtimeState = runtimeStatus.optJSONObject("runtime");
-            tai.put("loadedModelId", runtimeState != null && !runtimeState.isNull("loadedModelId")
-                ? runtimeState.optString("loadedModelId", null) : JSONObject.NULL);
-        } catch (Exception e) {
-            tai.put("runtime", JSONObject.NULL);
-            tai.put("loadedModelId", JSONObject.NULL);
-        }
-        data.put("tai", tai);
-
-        LauncherToolRegistry registry = LauncherToolRegistry.getInstance();
-        JSONArray toolNames = new JSONArray();
-        for (LauncherToolRegistry.ToolMetadata tool : registry.getTools()) {
-            toolNames.put(tool.name);
-        }
-        for (LauncherToolRegistry.ToolMetadata tool : LauncherCtlMcpBridge.getInstance().getToolMetadata()) {
-            toolNames.put(tool.name);
-        }
-        data.put("availableTools", toolNames);
-
-        JSONArray warnings = new JSONArray();
-        JSONArray blockingReasons = new JSONArray();
-        if (!accessEnabled) {
-            warnings.put("Notification access is disabled; notification and media tools are unavailable.");
-            blockingReasons.put("notification_access_disabled");
-        }
-        if (!device.liteRtLmAbiSupported || !device.liteRtLmNativeLibrariesAvailable) {
-            warnings.put("LiteRT-LM backend is not available for this device ABI/APK.");
-            blockingReasons.put(device.liteRtLmAbiSupported ? "litert_lm_native_unavailable" : "litert_lm_abi_unsupported");
-        }
-        if (device.mnnUnsupportedReason != null && !device.mnnUnsupportedReason.isEmpty()) {
-            warnings.put(device.mnnUnsupportedReason);
-        }
-        data.put("warnings", warnings);
-        data.put("blockingReasons", blockingReasons);
-
-        writeDebugSnapshot(registry, data);
-        return data;
-    }
-
-    private JSONObject buildAgentTools() throws JSONException {
-        if (appContext != null) {
-            LauncherCtlMcpBridge.getInstance().setContext(appContext);
-        }
-        LauncherToolRegistry registry = LauncherToolRegistry.getInstance();
-        registry.writeDebugToolsJson();
-        List<LauncherToolRegistry.ToolMetadata> tools = new ArrayList<>(registry.getTools());
-        tools.addAll(LauncherCtlMcpBridge.getInstance().getToolMetadata());
-        JSONArray internal = new JSONArray();
-        JSONArray openAi = new JSONArray();
-        for (LauncherToolRegistry.ToolMetadata tool : tools) {
-            internal.put(tool.toInternalJson());
-            openAi.put(tool.toOpenAiTool());
-        }
-        JSONObject data = new JSONObject();
-        data.put("ok", true);
-        data.put("count", tools.size());
-        data.put("tools", internal);
-        data.put("openAiTools", openAi);
-        data.put("mcpConfigPath", LauncherCtlStorage.getMcpConfigJsonFile().getAbsolutePath());
-        try {
-            JSONObject snapshot = new JSONObject(data.toString());
-            snapshot.put("generatedAtMs", System.currentTimeMillis());
-            writeTextFile(LauncherCtlStorage.getToolsJsonFile().getAbsolutePath(), snapshot.toString(2));
-        } catch (Exception ignored) {
-        }
-        return data;
-    }
-
-    private JSONObject runAgentRoute(Context context, String body) throws JSONException {
-        JSONObject result = new LauncherCtlAgentHandler(context, new LauncherToolExecutionHandler(context)).route(body);
-        appendAgentAudit("agent.route", body, result);
-        return result;
-    }
-
-    private JSONObject runAgentExecute(Context context, String body) throws JSONException {
-        LauncherCtlMcpBridge.getInstance().setContext(context);
-        JSONObject result = new LauncherCtlAgentHandler(context, new LauncherToolExecutionHandler(context),
-            LauncherCtlMcpBridge.getInstance()).execute(body);
-        appendAgentAudit("agent.execute", body, result);
-        return result;
-    }
-
-    private JSONObject buildEventsTail(String body) throws JSONException {
-        JSONObject request = parseJsonBody(body);
-        int limit = clampInt(request.optInt("limit", 100), 1, 1000);
-        Long since = request.has("since") ? request.optLong("since", 0) : null;
-        List<JSONObject> events = LauncherCtlEventStore.getInstance().tailEvents(limit, since);
-        JSONObject data = new JSONObject();
-        data.put("ok", true);
-        data.put("count", events.size());
-        data.put("limit", limit);
-        if (since != null) data.put("since", since.longValue());
-        JSONArray array = new JSONArray();
-        for (JSONObject event : events) {
-            array.put(event);
-        }
-        data.put("events", array);
-        return data;
-    }
-
-    private void writeEventsStream(OutputStream output) throws IOException {
-        List<JSONObject> events = LauncherCtlEventStore.getInstance().tailEvents(100, null);
-        for (JSONObject event : events) {
-            writeSseEvent(output, event.toString());
-        }
-        writeSseEvent(output, "[DONE]");
-    }
-
-    private void appendAgentAudit(String type, String requestBody, JSONObject result) {
-        try {
-            JSONObject payload = new JSONObject();
-            payload.put("request", requestBody == null ? "" : requestBody);
-            payload.put("resultOk", result.optBoolean("ok", false));
-            if (result.has("error") && !result.isNull("error")) {
-                payload.put("error", result.optString("error", null));
-            }
-            if (result.has("tool") && !result.isNull("tool")) {
-                payload.put("tool", result.optString("tool", null));
-            } else {
-                String requestTool = agentToolFromRequest(requestBody);
-                if (requestTool != null && !requestTool.isEmpty()) {
-                    payload.put("tool", requestTool);
-                }
-            }
-            LauncherCtlEventStore.getInstance().appendEvent(type, payload);
-            LauncherCtlEventStore.getInstance().appendAgentRun(type, payload);
-        } catch (Exception e) {
-            Logger.logWarn(LOG_TAG, "Failed to append agent audit event: " + e.getMessage());
-        }
-    }
-
-    @Nullable
-    private String agentToolFromRequest(String requestBody) {
-        if (requestBody == null || requestBody.trim().isEmpty()) {
-            return null;
-        }
-        JSONObject request = parseJsonBody(requestBody);
-        String tool = request.optString("tool", "").trim();
-        if (!tool.isEmpty()) return tool;
-        String name = request.optString("name", "").trim();
-        return name.isEmpty() ? null : LauncherToolRegistry.openAiNameToInternalName(name);
-    }
-
-    private void writeDebugSnapshot(LauncherToolRegistry registry, JSONObject capabilities) {
-        try {
-            registry.writeDebugToolsJson();
-            JSONObject payload = new JSONObject();
-            payload.put("generatedAtMs", System.currentTimeMillis());
-            payload.put("capabilities", capabilities);
-            writeTextFile(LauncherCtlStorage.getCapabilitiesJsonFile().getAbsolutePath(), payload.toString(2));
-        } catch (Exception e) {
-            Logger.logWarn(LOG_TAG, "Failed to write capability debug snapshot: " + e.getMessage());
-        }
-    }
-
-    private JSONObject notificationsResponse(List<LauncherCtlNotificationEvent> events) throws JSONException {
-        JSONObject data = new JSONObject();
-        data.put("ok", true);
-        data.put("count", events.size());
-        JSONArray array = new JSONArray();
-        for (LauncherCtlNotificationEvent event : events) {
-            array.put(event.toJson());
-        }
-        data.put("events", array);
-        return data;
-    }
-
-    private JSONObject parseJsonBody(String body) {
-        if (body == null || body.trim().isEmpty()) {
-            return new JSONObject();
-        }
-        try {
-            return new JSONObject(body);
-        } catch (JSONException e) {
-            return new JSONObject();
-        }
-    }
-
-    private int clampInt(int value, int min, int max) {
-        if (value < min) return min;
-        if (value > max) return max;
-        return value;
-    }
-
-    private JSONObject buildNotificationListenerStatus() throws JSONException {
-        JSONObject data = new JSONObject();
-        boolean connected = LauncherCtlNotificationListener.isListenerConnected();
-        data.put("connected", connected);
-        data.put("settingsAction", LauncherCtlNotificationListener.getListenerSettingsAction());
-        if (!connected) {
-            data.put("hint", LauncherCtlNotificationListener.getListenerHint());
-        }
-        return data;
-    }
-
+    /**
+     * The one non-inference route kept from the pre-strip device bridge: `launcherctl launch`
+     * has years of tmux configs and shell binds behind it, so app launching stays addressable
+     * from the shell while everything else that was agent/MCP-shaped remains gone.
+     */
     private JSONObject runAppLaunch(Context context, String body) throws JSONException {
         JSONObject request = body != null && !body.isEmpty() ? new JSONObject(body) : new JSONObject();
         String query = request.optString("query", "").trim();
@@ -987,21 +531,118 @@ public class LauncherCtlApiServer {
         return data;
     }
 
-    private JSONObject runAppRestart(Context context) throws JSONException {
-        Intent restartIntent = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
-        if (restartIntent == null) {
-            JSONObject error = jsonError("restart_unavailable", "No launch intent available for app restart");
-            error.put("_statusCode", 500);
-            return error;
+    static AppLaunchMatch resolveLaunchMatch(List<LauncherAppEntry> apps, String query) throws JSONException {
+        String trimmed = query == null ? "" : query.trim();
+        String lowerQuery = trimmed.toLowerCase(Locale.US);
+        String normalizedQuery = normalizeLookupValue(trimmed);
+        if (lowerQuery.isEmpty()) {
+            return AppLaunchMatch.error(400, "bad_request", "Missing app query");
         }
 
-        restartIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        ProcessPhoenix.triggerRebirth(context, restartIntent);
+        List<AppSearchCandidate> matches = new ArrayList<>();
+        for (LauncherAppEntry entry : apps) {
+            int tier = matchTier(entry, lowerQuery, normalizedQuery);
+            if (tier >= 0) {
+                matches.add(new AppSearchCandidate(entry, tier));
+            }
+        }
 
-        JSONObject data = new JSONObject();
-        data.put("ok", true);
-        data.put("restarting", true);
-        return data;
+        if (matches.isEmpty()) {
+            return AppLaunchMatch.error(404, "not_found", "No launcher app matched query");
+        }
+
+        Collections.sort(matches, new Comparator<AppSearchCandidate>() {
+            @Override
+            public int compare(AppSearchCandidate a, AppSearchCandidate b) {
+                if (a.tier != b.tier) return Integer.compare(a.tier, b.tier);
+                int labelCompare = a.entry.label.compareToIgnoreCase(b.entry.label);
+                if (labelCompare != 0) return labelCompare;
+                return a.entry.appRef.packageName.compareToIgnoreCase(b.entry.appRef.packageName);
+            }
+        });
+
+        AppSearchCandidate best = matches.get(0);
+        List<AppSearchCandidate> bestTierMatches = new ArrayList<>();
+        for (AppSearchCandidate candidate : matches) {
+            if (candidate.tier != best.tier) break;
+            bestTierMatches.add(candidate);
+        }
+
+        if (bestTierMatches.size() == 1) {
+            return AppLaunchMatch.success(best.entry);
+        }
+
+        JSONArray candidates = new JSONArray();
+        for (int i = 0; i < bestTierMatches.size() && i < 8; i++) {
+            LauncherAppEntry entry = bestTierMatches.get(i).entry;
+            JSONObject item = new JSONObject();
+            item.put("label", entry.label);
+            item.put("packageName", entry.appRef.packageName);
+            item.put("activityName", entry.appRef.activityName);
+            item.put("stableId", entry.appRef.stableId());
+            item.put("userId", entry.appRef.userId);
+            item.put("clonedProfile", entry.appRef.clonedProfile);
+            candidates.put(item);
+        }
+        return AppLaunchMatch.error(409, "ambiguous", "Multiple launcher apps matched query", candidates);
+    }
+
+    private static int matchTier(LauncherAppEntry entry, String lowerQuery, String normalizedQuery) {
+        String label = entry.label == null ? "" : entry.label;
+        String labelLower = label.toLowerCase(Locale.US);
+        String labelNormalized = normalizeLookupValue(label);
+        String packageName = entry.appRef.packageName.toLowerCase(Locale.US);
+        String activityName = entry.appRef.activityName.toLowerCase(Locale.US);
+        String stableId = entry.appRef.stableId().toLowerCase(Locale.US);
+
+        if (packageName.equals(lowerQuery) || activityName.equals(lowerQuery) || stableId.equals(lowerQuery)) {
+            return 0;
+        }
+        if (labelLower.equals(lowerQuery) || (!normalizedQuery.isEmpty() && labelNormalized.equals(normalizedQuery))) {
+            return 1;
+        }
+        if (packageName.startsWith(lowerQuery) || activityName.startsWith(lowerQuery)) {
+            return 2;
+        }
+        if (labelLower.startsWith(lowerQuery) || (!normalizedQuery.isEmpty() && labelNormalized.startsWith(normalizedQuery))) {
+            return 3;
+        }
+        if (!normalizedQuery.isEmpty()) {
+            String[] words = labelNormalized.split(" ");
+            for (String word : words) {
+                if (word.startsWith(normalizedQuery)) {
+                    return 4;
+                }
+            }
+        }
+        if (packageName.contains(lowerQuery) || activityName.contains(lowerQuery)) {
+            return 5;
+        }
+        if (labelLower.contains(lowerQuery) || (!normalizedQuery.isEmpty() && labelNormalized.contains(normalizedQuery))) {
+            return 6;
+        }
+        return -1;
+    }
+
+    private static String normalizeLookupValue(String value) {
+        if (value == null || value.isEmpty()) return "";
+        StringBuilder normalized = new StringBuilder(value.length());
+        boolean previousWasSpace = true;
+        for (int i = 0; i < value.length(); i++) {
+            char c = Character.toLowerCase(value.charAt(i));
+            if (Character.isLetterOrDigit(c)) {
+                normalized.append(c);
+                previousWasSpace = false;
+            } else if (!previousWasSpace) {
+                normalized.append(' ');
+                previousWasSpace = true;
+            }
+        }
+        int length = normalized.length();
+        if (length > 0 && normalized.charAt(length - 1) == ' ') {
+            normalized.setLength(length - 1);
+        }
+        return normalized.toString();
     }
 
     private JSONObject rotateAuthToken(Context context, boolean includeToken) throws JSONException {
@@ -1020,29 +661,6 @@ public class LauncherCtlApiServer {
         return data;
     }
 
-    private JSONObject describePrivilegedPolicy() throws JSONException {
-        Context context = appContext;
-        JSONObject info = new JSONObject();
-        if (context == null) {
-            info.put("available", false);
-            return info;
-        }
-
-        info.put("available", true);
-        info.put("masterEnabled", PrivilegedPolicyStore.isMasterEnabled(context));
-        info.put("preferShizuku", PrivilegedPolicyStore.isPreferShizuku(context));
-        info.put("allowShellFallback", PrivilegedPolicyStore.isShellFallbackEnabled(context));
-
-        return info;
-    }
-    private String executePrivileged(String command) {
-        try {
-            return PrivilegedBackendManager.getInstance().executeCommand(command).get(20, TimeUnit.SECONDS);
-        } catch (Exception e) {
-            return "Error: " + e.getMessage();
-        }
-    }
-
     private boolean isAuthorized(Map<String, String> headers) {
         return isAuthorized(token, headers);
     }
@@ -1051,10 +669,17 @@ public class LauncherCtlApiServer {
         if (expectedToken == null || expectedToken.isEmpty()) return false;
         if (headers == null) return false;
         String value = headers.get("authorization");
-        if (value == null) return false;
-        String prefix = "Bearer ";
-        if (!value.startsWith(prefix)) return false;
-        return secureEquals(expectedToken, value.substring(prefix.length()).trim());
+        if (value != null) {
+            String prefix = "Bearer ";
+            if (value.startsWith(prefix)) {
+                return secureEquals(expectedToken, value.substring(prefix.length()).trim());
+            }
+        }
+        String apiKey = headers.get("x-api-key");
+        if (apiKey != null) {
+            return secureEquals(expectedToken, apiKey.trim());
+        }
+        return false;
     }
 
     private boolean allowRequest(HttpRequest request) {
@@ -1063,11 +688,7 @@ public class LauncherCtlApiServer {
     }
 
     private SimpleRateLimiter rateLimiterFor(HttpRequest request) {
-        SimpleRateLimiter limiter = rateLimiters.get(request.method + ":" + request.path);
-        if (limiter == null && "GET".equals(request.method) && isAppIconPath(request.path)) {
-            limiter = rateLimiters.get("GET:/v1/apps/icon/*");
-        }
-        return limiter;
+        return rateLimiters.get(request.method + ":" + request.path);
     }
 
     private static HttpResponse withRateLimitHeaders(HttpResponse response, SimpleRateLimiter limiter, long retryAfterSeconds) {
@@ -1194,6 +815,7 @@ public class LauncherCtlApiServer {
         writer.write("HTTP/1.1 " + response.statusCode + " " + statusMessage(response.statusCode) + "\r\n");
         writer.write("Content-Type: " + response.contentType + "\r\n");
         writer.write("Connection: close\r\n");
+        writer.write("Access-Control-Allow-Origin: *\r\n");
         if (response.bodyWriter == null) {
             writer.write("Content-Length: " + bytes.length + "\r\n");
         }
@@ -1317,26 +939,7 @@ public class LauncherCtlApiServer {
 
     private void initializeRateLimiters() {
         rateLimiters.clear();
-        rateLimiters.put("GET:/v1/status", new SimpleRateLimiter(120, 60_000));
-        rateLimiters.put("GET:/v1/apps", new SimpleRateLimiter(60, 60_000));
-        rateLimiters.put("GET:/v1/apps/icon/*", new SimpleRateLimiter(120, 60_000));
-        rateLimiters.put("GET:/v1/system/resources", new SimpleRateLimiter(120, 60_000));
-        rateLimiters.put("GET:/v1/media/now-playing", new SimpleRateLimiter(120, 60_000));
-        rateLimiters.put("GET:/v1/media/art", new SimpleRateLimiter(60, 60_000));
-        rateLimiters.put("GET:/v1/notifications", new SimpleRateLimiter(120, 60_000));
-        rateLimiters.put("POST:/v1/notifications/recent", new SimpleRateLimiter(120, 60_000));
-        rateLimiters.put("POST:/v1/notifications/since", new SimpleRateLimiter(120, 60_000));
-        rateLimiters.put("POST:/v1/notifications/search", new SimpleRateLimiter(60, 60_000));
-        rateLimiters.put("POST:/v1/notifications/stats", new SimpleRateLimiter(120, 60_000));
-        rateLimiters.put("GET:/v1/launcher/capabilities", new SimpleRateLimiter(60, 60_000));
-        rateLimiters.put("GET:/v1/agent/tools", new SimpleRateLimiter(60, 60_000));
-        rateLimiters.put("POST:/v1/agent/route", new SimpleRateLimiter(60, 60_000));
-        rateLimiters.put("POST:/v1/agent/execute", new SimpleRateLimiter(60, 60_000));
-        rateLimiters.put("GET:/v1/events", new SimpleRateLimiter(120, 60_000));
-        rateLimiters.put("GET:/v1/events/stream", new SimpleRateLimiter(12, 60_000));
-        rateLimiters.put("POST:/v1/events/tail", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/v1/apps/launch", new SimpleRateLimiter(30, 60_000));
-        rateLimiters.put("POST:/v1/app/restart", new SimpleRateLimiter(5, 60_000));
         rateLimiters.put("POST:/v1/auth/rotate", new SimpleRateLimiter(5, 60_000));
         rateLimiters.put("GET:/v1/ai/status", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/ai/runtime", new SimpleRateLimiter(120, 60_000));
@@ -1367,6 +970,7 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/api/chat", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/api/generate", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/api/embed", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("POST:/api/embeddings", new SimpleRateLimiter(60, 60_000));
     }
 
     private void writeClientConfig() throws IOException {
@@ -1430,8 +1034,10 @@ public class LauncherCtlApiServer {
         data.put("bindMode", bindMode);
         data.put("baseUrl", baseUrl);
         data.put("openAiBaseUrl", baseUrl + "/v1");
-        data.put("mcpCommand", "launcherctl mcp");
-        data.put("tokenRequired", true);
+        data.put("ollamaBaseUrl", baseUrl);
+        data.put("authRequired", effectiveAuthRequired(settings));
+        data.put("authRequiredPreference", settings.isApiAuthRequired());
+        data.put("tokenRequired", effectiveAuthRequired(settings));
         if (TaiSettings.BIND_MODE_LAN.equals(bindMode)) {
             data.put("baseUrlLan", lanBaseUrl(activePort));
             data.put("lanWarning", LAN_WARNING);
@@ -1443,11 +1049,13 @@ public class LauncherCtlApiServer {
         data.put("tokenConfigured", TaiSettings.isValidApiToken(settings.getOrCreateApiToken()));
         JSONArray supportedEndpoints = new JSONArray();
         supportedEndpoints.put("/v1/models");
+        supportedEndpoints.put("/v1/models/{id}");
         supportedEndpoints.put("/v1/chat/completions");
         supportedEndpoints.put("/v1/responses");
         supportedEndpoints.put("/v1/completions");
         supportedEndpoints.put("/v1/embeddings");
         supportedEndpoints.put("/v1/audio/speech");
+        supportedEndpoints.put("/v1/apps/launch");
         supportedEndpoints.put("/api/version");
         supportedEndpoints.put("/api/tags");
         supportedEndpoints.put("/api/show");
@@ -1455,13 +1063,7 @@ public class LauncherCtlApiServer {
         supportedEndpoints.put("/api/generate");
         supportedEndpoints.put("/api/ps");
         supportedEndpoints.put("/api/embed");
-        supportedEndpoints.put("/v1/launcher/capabilities");
-        supportedEndpoints.put("/v1/agent/tools");
-        supportedEndpoints.put("/v1/agent/route");
-        supportedEndpoints.put("/v1/agent/execute");
-        supportedEndpoints.put("/v1/events");
-        supportedEndpoints.put("/v1/events/tail");
-        supportedEndpoints.put("/v1/events/stream");
+        supportedEndpoints.put("/api/embeddings");
         data.put("supportedEndpoints", supportedEndpoints);
         data.put("embeddingsNote", "Embeddings support is model-capability dependent; check /v1/models _capabilities for text_embeddings.");
         data.put("audioOutputNote", "Audio output returns an explicit unsupported_audio_output error until a local runner exposes generated audio.");
@@ -1499,322 +1101,6 @@ public class LauncherCtlApiServer {
         } catch (SocketException ignored) {
         }
         return "0.0.0.0";
-    }
-
-    private void installLauncherCtlCliScript() {
-        File loginBinary = new File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/login");
-        if (!loginBinary.exists()) {
-            Logger.logInfo(LOG_TAG, "Skipping LauncherCtl CLI install until bootstrap is initialized.");
-            return;
-        }
-
-        String script =
-            "#!/data/data/com.termux/files/usr/bin/sh\n" +
-            "set -eu\n" +
-            "cmd=\"${1:-status}\"\n" +
-            "update_scripts_help=0\n" +
-            "if [ \"$cmd\" = \"help\" ] && [ \"${2:-}\" = \"update-scripts\" ]; then\n" +
-            "  update_scripts_help=1\n" +
-            "  shift 2 || true\n" +
-            "fi\n" +
-            "if [ \"$cmd\" = \"update-scripts\" ] || [ \"$update_scripts_help\" = \"1\" ]; then\n" +
-            "  [ \"$update_scripts_help\" = \"1\" ] || shift || true\n" +
-            "  command -v curl >/dev/null 2>&1 || { echo \"launcherctl update-scripts: missing required command: curl\" >&2; echo \"install it with: pkg install curl\" >&2; exit 1; }\n" +
-            "  raw_root=\"${TERMUX_LAUNCHER_RAW_ROOT:-https://raw.githubusercontent.com/PickleHik3/termux-launcher/main}\"\n" +
-            "  tmp_dir=\"${TMPDIR:-$HOME/.tmp}/launcherctl-update-scripts.$$\"\n" +
-            "  mkdir -p \"$tmp_dir\" || exit 1\n" +
-            "  trap 'rm -rf \"$tmp_dir\"' EXIT HUP INT TERM\n" +
-            "  curl -fsSL \"$raw_root/resources/bin/launcherctl\" -o \"$tmp_dir/launcherctl\" || exit 1\n" +
-            "  sh -n \"$tmp_dir/launcherctl\" || exit 1\n" +
-            "  if [ \"$update_scripts_help\" = \"1\" ]; then\n" +
-            "    sh \"$tmp_dir/launcherctl\" update-scripts --help \"$@\"\n" +
-            "  else\n" +
-            "    sh \"$tmp_dir/launcherctl\" update-scripts \"$@\"\n" +
-            "  fi\n" +
-            "  exit $?\n" +
-            "fi\n" +
-            "if [ \"$cmd\" = \"mcp\" ]; then\n" +
-            "  shift || true\n" +
-            "  if ! command -v python3 >/dev/null 2>&1; then\n" +
-            "    echo \"launcherctl mcp: missing required command: python3\" >&2\n" +
-            "    echo \"install it with: pkg install python\" >&2\n" +
-            "    exit 1\n" +
-            "  fi\n" +
-            "  if command -v launcherctl-mcp >/dev/null 2>&1; then\n" +
-            "    exec launcherctl-mcp \"$@\"\n" +
-            "  fi\n" +
-            "  echo \"launcherctl mcp: missing launcherctl-mcp helper\" >&2\n" +
-            "  exit 1\n" +
-            "fi\n" +
-            "LAUNCHERCTL_DIR=\"$HOME/.launcherctl\"\n" +
-            "TOKEN_FILE=\"$LAUNCHERCTL_DIR/token\"\n" +
-            "ENDPOINT_FILE=\"$LAUNCHERCTL_DIR/endpoint\"\n" +
-            "if [ ! -r \"$TOKEN_FILE\" ] || [ ! -r \"$ENDPOINT_FILE\" ]; then\n" +
-            "  echo \"launcherctl: missing $TOKEN_FILE or $ENDPOINT_FILE\" >&2\n" +
-            "  exit 1\n" +
-            "fi\n" +
-            "TOKEN=$(cat \"$TOKEN_FILE\")\n" +
-            "BASE=$(sed -n '1p' \"$ENDPOINT_FILE\")\n" +
-            "CURL_COMMON=\"-fsS --connect-timeout 2 --max-time 10\"\n" +
-            "shift || true\n" +
-            "json_escape() { printf '%s' \"$1\" | sed 's/\\\\/\\\\\\\\/g; s/\"/\\\\\"/g'; }\n" +
-            "post_json() {\n" +
-            "  path=\"$1\"\n" +
-            "  data=\"$2\"\n" +
-            "  curl $CURL_COMMON -X POST -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\" --data \"$data\" \"$BASE$path\"\n" +
-            "}\n" +
-            "RISH_DIR=\"$HOME/.rish\"\n" +
-            "RISH_BIN=\"$RISH_DIR/rish\"\n" +
-            "RISH_DEX=\"$RISH_DIR/rish_shizuku.dex\"\n" +
-            "sdk_int() { getprop ro.build.version.sdk 2>/dev/null || echo 0; }\n" +
-            "tty_doctor() {\n" +
-            "  ok=1\n" +
-            "  echo \"LauncherCtl tty-doctor\"\n" +
-            "  echo \"  rish dir: $RISH_DIR\"\n" +
-            "  if [ -x \"$RISH_BIN\" ]; then\n" +
-            "    echo \"  rish: ok ($RISH_BIN)\"\n" +
-            "  else\n" +
-            "    echo \"  rish: missing or not executable ($RISH_BIN)\"\n" +
-            "    ok=0\n" +
-            "  fi\n" +
-            "  if [ -f \"$RISH_DEX\" ]; then\n" +
-            "    echo \"  dex: ok ($RISH_DEX)\"\n" +
-            "  else\n" +
-            "    echo \"  dex: missing ($RISH_DEX)\"\n" +
-            "    ok=0\n" +
-            "  fi\n" +
-            "  sdk=$(sdk_int)\n" +
-            "  if [ \"$sdk\" -ge 34 ] && [ -f \"$RISH_DEX\" ] && [ -w \"$RISH_DEX\" ]; then\n" +
-            "    echo \"  dex perms: not compatible on Android 14+ (dex is writable)\"\n" +
-            "    ok=0\n" +
-            "  fi\n" +
-            "  if [ \"$ok\" -eq 1 ]; then\n" +
-            "    echo \"  status: healthy\"\n" +
-            "    return 0\n" +
-            "  fi\n" +
-            "  cat <<'EOF'\n" +
-            "\n" +
-            "Suggested fix commands:\n" +
-            "  mkdir -p ~/.rish\n" +
-            "  cp ~/files/.rish/rish ~/.rish/\n" +
-            "  cp ~/files/.rish/rish_shizuku.dex ~/.rish/\n" +
-            "  chmod 700 ~/.rish/rish\n" +
-            "  chmod 400 ~/.rish/rish_shizuku.dex\n" +
-            "\n" +
-            "Then run:\n" +
-            "  launcherctl tty-doctor\n" +
-            "EOF\n" +
-            "  return 1\n" +
-            "}\n" +
-            "case \"$cmd\" in\n" +
-            "  status)\n" +
-            "    curl $CURL_COMMON -H \"Authorization: Bearer $TOKEN\" \"$BASE/v1/status\"\n" +
-            "    ;;\n" +
-            "  capabilities)\n" +
-            "    curl $CURL_COMMON -H \"Authorization: Bearer $TOKEN\" \"$BASE/v1/launcher/capabilities\"\n" +
-            "    ;;\n" +
-            "  tools)\n" +
-            "    curl $CURL_COMMON -H \"Authorization: Bearer $TOKEN\" \"$BASE/v1/agent/tools\"\n" +
-            "    ;;\n" +
-            "  apps)\n" +
-            "    curl $CURL_COMMON -H \"Authorization: Bearer $TOKEN\" \"$BASE/v1/apps\"\n" +
-            "    ;;\n" +
-            "  launch)\n" +
-            "    [ \"$#\" -gt 0 ] || { echo \"usage: launcherctl launch <app name or package>\" >&2; exit 2; }\n" +
-            "    CMD_ESCAPED=$(json_escape \"$*\")\n" +
-            "    curl $CURL_COMMON -X POST -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\" \\\n" +
-            "      --data \"{\\\"query\\\":\\\"$CMD_ESCAPED\\\"}\" \"$BASE/v1/apps/launch\"\n" +
-            "    ;;\n" +
-            "  resources)\n" +
-            "    curl $CURL_COMMON -H \"Authorization: Bearer $TOKEN\" \"$BASE/v1/system/resources\"\n" +
-            "    ;;\n" +
-            "  media)\n" +
-            "    curl $CURL_COMMON -H \"Authorization: Bearer $TOKEN\" \"$BASE/v1/media/now-playing\"\n" +
-            "    ;;\n" +
-            "  art)\n" +
-            "    curl $CURL_COMMON -H \"Authorization: Bearer $TOKEN\" \"$BASE/v1/media/art\"\n" +
-            "    ;;\n" +
-            "  notifications)\n" +
-            "    sub=\"${1:-}\"\n" +
-            "    [ -n \"$sub\" ] && shift || true\n" +
-            "    case \"$sub\" in\n" +
-            "      \"\"|active)\n" +
-            "        curl $CURL_COMMON -H \"Authorization: Bearer $TOKEN\" \"$BASE/v1/notifications\"\n" +
-            "        ;;\n" +
-            "      recent)\n" +
-            "        limit=\"${1:-50}\"\n" +
-            "        [ \"$limit\" -ge 1 ] 2>/dev/null || { echo \"usage: launcherctl notifications recent [limit]\" >&2; exit 2; }\n" +
-            "        post_json /v1/notifications/recent \"{\\\"limit\\\":$limit}\"\n" +
-            "        ;;\n" +
-"      since)\n" +
-"        [ \"$#\" -gt 0 ] || { echo \"usage: launcherctl notifications since <epoch-ms> [limit]\" >&2; exit 2; }\n" +
-"        since=\"$1\"; shift || true\n" +
-"        limit=\"${1:-200}\"\n" +
-"        [ \"$since\" -ge 0 ] 2>/dev/null || { echo \"usage: launcherctl notifications since <epoch-ms> [limit]\" >&2; exit 2; }\n" +
-"        [ \"$limit\" -ge 1 ] 2>/dev/null || { echo \"usage: launcherctl notifications since <epoch-ms> [limit]\" >&2; exit 2; }\n" +
-"        post_json /v1/notifications/since \"{\\\"since\\\":$since,\\\"limit\\\":$limit}\"\n" +
-"        ;;\n" +
-            "      search)\n" +
-            "        [ \"$#\" -gt 0 ] || { echo \"usage: launcherctl notifications search <text>\" >&2; exit 2; }\n" +
-            "        query=\"$*\"\n" +
-            "        post_json /v1/notifications/search \"{\\\"query\\\":\\\"$(json_escape \"$query\")\\\"}\"\n" +
-            "        ;;\n" +
-            "      stats)\n" +
-            "        post_json /v1/notifications/stats \"{}\"\n" +
-            "        ;;\n" +
-            "      *)\n" +
-            "        echo \"launcherctl: unknown notifications subcommand: $sub\" >&2\n" +
-            "        echo \"usage: launcherctl notifications {active|recent|since|search|stats}\" >&2\n" +
-            "        exit 2\n" +
-            "        ;;\n" +
-            "    esac\n" +
-            "    ;;\n" +
-            "  agent)\n" +
-            "    dry_run=\"false\"\n" +
-            "    if [ \"$#\" -gt 0 ] && [ \"$1\" = \"--dry-run\" ]; then\n" +
-            "      dry_run=\"true\"\n" +
-            "      shift || true\n" +
-            "    fi\n" +
-            "    [ \"$#\" -gt 0 ] || { echo \"usage: launcherctl agent [--dry-run] <request>\" >&2; exit 2; }\n" +
-            "    REQUEST_ESCAPED=$(json_escape \"$*\")\n" +
-            "    route_json=$(post_json /v1/agent/route \"{\\\"request\\\":\\\"$REQUEST_ESCAPED\\\"}\")\n" +
-            "    printf '%s\\n' \"$route_json\"\n" +
-            "    if [ \"$dry_run\" = \"true\" ]; then\n" +
-            "      exit 0\n" +
-            "    fi\n" +
-            "    if ! command -v jq >/dev/null 2>&1; then\n" +
-            "      echo\n" +
-            "      echo \"launcherctl agent: non-dry-run requires jq to parse route output\" >&2\n" +
-            "      echo \"install it with: pkg install jq\" >&2\n" +
-            "      exit 1\n" +
-            "    fi\n" +
-            "    tool=$(printf '%s' \"$route_json\" | jq -r '.tool // empty')\n" +
-            "    arguments=$(printf '%s' \"$route_json\" | jq -c '.arguments // {}')\n" +
-            "    if [ -z \"$tool\" ]; then\n" +
-            "      echo \"launcherctl agent: route did not return a tool\" >&2\n" +
-            "      exit 1\n" +
-            "    fi\n" +
-            "    echo\n" +
-            "    post_json /v1/agent/execute \"{\\\"tool\\\":\\\"$tool\\\",\\\"arguments\\\":$arguments,\\\"confirm\\\":true}\"\n" +
-            "    ;;\n" +
-            "  mcp)\n" +
-            "    echo \"launcherctl mcp: internal dispatch error\" >&2\n" +
-            "    exit 1\n" +
-            "    ;;\n" +
-            "  events)\n" +
-            "    sub=\"${1:-}\"\n" +
-            "    [ -n \"$sub\" ] && shift || true\n" +
-            "    case \"$sub\" in\n" +
-            "      tail)\n" +
-            "        limit=\"${1:-100}\"\n" +
-            "        [ \"$limit\" -ge 1 ] 2>/dev/null || { echo \"usage: launcherctl events tail [limit]\" >&2; exit 2; }\n" +
-            "        post_json /v1/events/tail \"{\\\"limit\\\":$limit}\"\n" +
-            "        ;;\n" +
-            "      *)\n" +
-            "        echo \"launcherctl: unknown events subcommand: $sub\" >&2\n" +
-            "        echo \"usage: launcherctl events tail\" >&2\n" +
-            "        exit 2\n" +
-            "        ;;\n" +
-            "    esac\n" +
-            "    ;;\n" +
-            "  restart)\n" +
-            "    curl $CURL_COMMON -X POST -H \"Authorization: Bearer $TOKEN\" \"$BASE/v1/app/restart\"\n" +
-            "    ;;\n" +
-            "  update-scripts)\n" +
-            "    echo \"launcherctl update-scripts must be run before API command dispatch\" >&2\n" +
-            "    exit 1\n" +
-            "    ;;\n" +
-            "  tty-doctor)\n" +
-            "    tty_doctor\n" +
-            "    ;;\n" +
-            "  token)\n" +
-            "    sub=\"${1:-}\"; shift || true\n" +
-            "    [ \"$sub\" = \"rotate\" ] || { echo \"usage: launcherctl token rotate\" >&2; exit 2; }\n" +
-            "    curl $CURL_COMMON -X POST -H \"Authorization: Bearer $TOKEN\" \"$BASE/v1/auth/rotate\"\n" +
-            "    ;;\n" +
-            "  *)\n" +
-            "    echo \"usage: launcherctl {status|capabilities|tools|apps|launch|resources|media|art|notifications|notifications recent|notifications since|notifications search|notifications stats|agent|mcp|events tail|restart|update-scripts|tty-doctor|token rotate}\" >&2\n" +
-            "    exit 2\n" +
-            "    ;;\n" +
-            "esac\n";
-
-        try {
-            writeTextFile(LAUNCHERCTL_BIN_PATH, script);
-            File launcherctlBin = new File(LAUNCHERCTL_BIN_PATH);
-            if (launcherctlBin.exists()) {
-                launcherctlBin.setExecutable(true, false);
-                launcherctlBin.setReadable(true, false);
-            }
-        } catch (Exception e) {
-            Logger.logErrorExtended(LOG_TAG, "Failed to install launcherctl cli: " + e.getMessage());
-        }
-    }
-
-    private void installLauncherCtlMcpScript() {
-        File loginBinary = new File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/login");
-        if (!loginBinary.exists()) {
-            Logger.logInfo(LOG_TAG, "Skipping launcherctl-mcp install until bootstrap is initialized.");
-            return;
-        }
-
-        try {
-            installExecutableAsset("launcherctl-mcp", LAUNCHERCTL_MCP_BIN_PATH);
-        } catch (Exception e) {
-            Logger.logErrorExtended(LOG_TAG, "Failed to install launcherctl-mcp: " + e.getMessage());
-        }
-    }
-
-    private void installLauncherRestartScript() {
-        File loginBinary = new File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/login");
-        if (!loginBinary.exists()) {
-            Logger.logInfo(LOG_TAG, "Skipping launcher-restart install until bootstrap is initialized.");
-            return;
-        }
-
-        String script =
-            "#!/data/data/com.termux/files/usr/bin/sh\n" +
-            "set -eu\n" +
-            "\n" +
-            "if [ \"$#\" != \"0\" ]; then\n" +
-            "  echo \"usage: launcher-restart\" >&2\n" +
-            "  exit 2\n" +
-            "fi\n" +
-            "\n" +
-            "# Keep behavior aligned with tel-restart for launcher state cleanup when present.\n" +
-            "if command -v tel-delete-status >/dev/null 2>&1; then\n" +
-            "  tel-delete-status -1 || true\n" +
-            "fi\n" +
-            "\n" +
-            "# Preferred path: authenticated LauncherCtl restart.\n" +
-            "if command -v launcherctl >/dev/null 2>&1; then\n" +
-            "  if launcherctl restart >/dev/null 2>&1; then\n" +
-            "    exit 0\n" +
-            "  fi\n" +
-            "fi\n" +
-            "\n" +
-            "# Fallbacks for older app builds or pre-init LauncherCtl state.\n" +
-            "RESTART_CMD='am start -S -n com.termux/.app.TermuxActivity'\n" +
-            "if $RESTART_CMD >/dev/null 2>&1; then\n" +
-            "  exit 0\n" +
-            "fi\n" +
-            "\n" +
-            "if [ -x \"$HOME/.rish/rish\" ]; then\n" +
-            "  exec \"$HOME/.rish/rish\" -c \"$RESTART_CMD\"\n" +
-            "fi\n" +
-            "\n" +
-            "echo \"launcher-restart: failed (authenticated restart and fallback launch paths failed)\" >&2\n" +
-            "exit 1\n";
-
-        try {
-            writeTextFile(LAUNCHER_RESTART_BIN_PATH, script);
-            File launcherRestartBin = new File(LAUNCHER_RESTART_BIN_PATH);
-            if (launcherRestartBin.exists()) {
-                launcherRestartBin.setExecutable(true, false);
-                launcherRestartBin.setReadable(true, false);
-            }
-        } catch (Exception e) {
-            Logger.logErrorExtended(LOG_TAG, "Failed to install launcher-restart cli: " + e.getMessage());
-        }
     }
 
     private void installTaiCliScripts() {
@@ -1859,14 +1145,16 @@ public class LauncherCtlApiServer {
             "  /v1/completions\n" +
             "  /v1/embeddings\n" +
             "  /v1/audio/speech\n" +
+            "Ollama-compatible endpoints: /api/tags /api/chat /api/generate /api/embed /api/embeddings /api/show /api/ps /api/version\n" +
             "\n" +
             "Point OpenAI-compatible terminal tools at this host, e.g.:\n" +
             "  export OPENAI_BASE_URL=http://127.0.0.1:<port>/v1\n" +
             "  export OPENAI_API_KEY=<your-token>\n" +
             "The actual token is stored at ~/.launcherctl/token (do not echo it into shell history).\n" +
+            "If token authentication is disabled in settings, any placeholder API key works on localhost.\n" +
             "\n" +
             "Security notes:\n" +
-            "  LAN mode (opt-in via settings) exposes the API to your local network. Keep your token secure.\n" +
+            "  LAN mode (opt-in via settings) exposes the API to your local network and always requires the token.\n" +
             "  /v1/embeddings is model-capability dependent. Not all models support embeddings.\n" +
             "  /v1/audio/speech returns unsupported_audio_output until a local runner exposes generated audio.\n" +
             "  Check /v1/models for capability metadata (for example, _backend and _capabilities per model).\n" +
@@ -2015,8 +1303,6 @@ public class LauncherCtlApiServer {
             "    ;;\n" +
             "  doctor)\n" +
             "    get_json /v1/ai/runtime\n" +
-            "    printf '\\n'\n" +
-            "    get_json /v1/status\n" +
             "    ;;\n" +
             "  *)\n" +
             "    echo \"tai: unknown command: $cmd\" >&2\n" +
@@ -2025,18 +1311,80 @@ public class LauncherCtlApiServer {
             "    ;;\n" +
             "esac\n";
 
+        // launcherctl survives the agent/MCP strip as a launch-only client: `launcherctl launch`
+        // is what old tmux configs and shell binds call, and keeping it working costs one route.
+        String launcherctlScript =
+            "#!/data/data/com.termux/files/usr/bin/sh\n" +
+            "set -eu\n" +
+            "print_help() {\n" +
+            "  cat <<'EOF'\n" +
+            "launcherctl - Termux Launcher shell companion\n" +
+            "\n" +
+            "Usage:\n" +
+            "  launcherctl launch <app name, package, or activity>\n" +
+            "\n" +
+            "Examples:\n" +
+            "  launcherctl launch whatsapp\n" +
+            "  launcherctl launch com.termux.api\n" +
+            "\n" +
+            "The agent, MCP, and device-control commands were removed; app launching is the one\n" +
+            "command kept for tmux configs and shell binds. For local AI, use: tai --help\n" +
+            "EOF\n" +
+            "}\n" +
+            "LAUNCHERCTL_DIR=\"$HOME/.launcherctl\"\n" +
+            "TOKEN_FILE=\"$LAUNCHERCTL_DIR/token\"\n" +
+            "ENDPOINT_FILE=\"$LAUNCHERCTL_DIR/endpoint\"\n" +
+            "cmd=\"${1:-help}\"\n" +
+            "case \"$cmd\" in\n" +
+            "  -h|--help|help)\n" +
+            "    print_help\n" +
+            "    ;;\n" +
+            "  launch)\n" +
+            "    shift || true\n" +
+            "    [ \"$#\" -gt 0 ] || { echo \"usage: launcherctl launch <app name or package>\" >&2; exit 2; }\n" +
+            "    if [ ! -r \"$TOKEN_FILE\" ] || [ ! -r \"$ENDPOINT_FILE\" ]; then\n" +
+            "      echo \"launcherctl: missing $TOKEN_FILE or $ENDPOINT_FILE; start Termux Launcher first\" >&2\n" +
+            "      exit 1\n" +
+            "    fi\n" +
+            "    TOKEN=$(cat \"$TOKEN_FILE\")\n" +
+            "    BASE=$(sed -n '1p' \"$ENDPOINT_FILE\")\n" +
+            "    QUERY=$(printf '%s' \"$*\" | sed 's/\\\\/\\\\\\\\/g; s/\"/\\\\\"/g')\n" +
+            "    curl -fsS --connect-timeout 2 --max-time 10 -X POST \\\n" +
+            "      -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\" \\\n" +
+            "      --data \"{\\\"query\\\":\\\"$QUERY\\\"}\" \"$BASE/v1/apps/launch\"\n" +
+            "    ;;\n" +
+            "  *)\n" +
+            "    echo \"launcherctl: unknown command: $cmd\" >&2\n" +
+            "    echo \"launcherctl now only supports: launch. For local AI use tai.\" >&2\n" +
+            "    exit 2\n" +
+            "    ;;\n" +
+            "esac\n";
+
         try {
             writeExecutableTextFile(TAI_BIN_PATH, taiScript);
-            deleteLegacyAtTaiScript();
+            writeExecutableTextFile(LAUNCHERCTL_BIN_PATH, launcherctlScript);
+            deleteLegacyHelperScripts();
         } catch (Exception e) {
             Logger.logErrorExtended(LOG_TAG, "Failed to install TAI cli: " + e.getMessage());
         }
     }
 
-    private void deleteLegacyAtTaiScript() {
-        File file = new File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/@tai");
-        if (file.exists() && !file.delete()) {
-            Logger.logWarn(LOG_TAG, "Failed to remove legacy @tai helper at " + file.getAbsolutePath());
+    /**
+     * Removes helpers shipped by older builds: the @tai alias and the launcherctl agent/MCP
+     * clients whose server-side endpoints no longer exist. launcherctl itself is not on the
+     * list: it is reinstalled above as the launch-only client.
+     */
+    private void deleteLegacyHelperScripts() {
+        String[] legacyPaths = {
+            TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/@tai",
+            TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/launcherctl-mcp",
+            TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/launcher-restart",
+        };
+        for (String path : legacyPaths) {
+            File file = new File(path);
+            if (file.exists() && !file.delete()) {
+                Logger.logWarn(LOG_TAG, "Failed to remove legacy helper at " + file.getAbsolutePath());
+            }
         }
     }
 
@@ -2061,58 +1409,6 @@ public class LauncherCtlApiServer {
         if (file.exists()) {
             file.setExecutable(true, false);
             file.setReadable(true, false);
-        }
-    }
-
-    private void installExecutableAsset(String assetName, String path) throws IOException {
-        Context context = appContext;
-        if (context == null) {
-            throw new IOException("Application context is not available");
-        }
-        try (InputStream input = context.getAssets().open(assetName)) {
-            writeBytesFile(path, readAllBytes(input));
-        }
-        File file = new File(path);
-        if (file.exists()) {
-            file.setExecutable(true, false);
-            file.setReadable(true, false);
-        }
-    }
-
-    private void writeBytesFile(String path, byte[] content) throws IOException {
-        File file = new File(path);
-        File parent = file.getParentFile();
-        if (parent != null && !parent.exists() && !parent.mkdirs()) {
-            throw new IOException("Failed to create dir for " + path);
-        }
-        try (FileOutputStream stream = new FileOutputStream(file, false)) {
-            stream.write(content);
-        }
-        file.setReadable(false, false);
-        file.setWritable(false, false);
-        file.setReadable(true, true);
-        file.setWritable(true, true);
-    }
-
-    private byte[] readAllBytes(InputStream input) throws IOException {
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        byte[] buffer = new byte[8192];
-        int read;
-        while ((read = input.read(buffer)) != -1) {
-            output.write(buffer, 0, read);
-        }
-        return output.toByteArray();
-    }
-
-    private byte[] readAllBytes(File file) throws IOException {
-        try (InputStream stream = new FileInputStream(file)) {
-            ByteArrayOutputStream output = new ByteArrayOutputStream();
-            byte[] buffer = new byte[4096];
-            int read;
-            while ((read = stream.read(buffer)) != -1) {
-                output.write(buffer, 0, read);
-            }
-            return output.toByteArray();
         }
     }
 
@@ -2372,450 +1668,6 @@ public class LauncherCtlApiServer {
             body.getBytes(StandardCharsets.UTF_8), null);
     }
 
-    private boolean isAppIconPath(String path) {
-        if (path == null || path.isEmpty()) return false;
-        if (path.startsWith("/v1/apps/icon/")) {
-            return path.length() > "/v1/apps/icon/".length();
-        }
-        if (!path.startsWith("/v1/apps/") || !path.endsWith("/icon")) {
-            return false;
-        }
-        return path.length() > "/v1/apps/".length() + "/icon".length();
-    }
-
-    private String extractPackageNameFromIconPath(String path) {
-        if (path == null) return "";
-        if (path.startsWith("/v1/apps/icon/")) {
-            return path.substring("/v1/apps/icon/".length());
-        }
-        if (path.startsWith("/v1/apps/") && path.endsWith("/icon")) {
-            return path.substring("/v1/apps/".length(), path.length() - "/icon".length());
-        }
-        return "";
-    }
-
-    private byte[] findLauncherIconPng(Context context, String packageName) {
-        if (context == null || packageName == null || packageName.isEmpty()) {
-            return null;
-        }
-
-        PackageManager packageManager = context.getPackageManager();
-        Intent launcherIntent = new Intent(Intent.ACTION_MAIN, null);
-        launcherIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-        List<ResolveInfo> launchables = packageManager.queryIntentActivities(launcherIntent, 0);
-
-        for (ResolveInfo resolveInfo : launchables) {
-            ActivityInfo activityInfo = resolveInfo.activityInfo;
-            if (activityInfo == null || activityInfo.packageName == null) continue;
-            if (!packageName.equals(activityInfo.packageName)) continue;
-            Drawable icon = activityInfo.loadIcon(packageManager);
-            if (icon == null) continue;
-            return drawableToPngBytes(icon);
-        }
-
-        try {
-            Drawable icon = packageManager.getApplicationIcon(packageName);
-            return drawableToPngBytes(icon);
-        } catch (PackageManager.NameNotFoundException ignored) {
-            return null;
-        }
-    }
-
-    private byte[] drawableToPngBytes(Drawable drawable) {
-        if (drawable == null) return null;
-
-        Bitmap bitmap;
-        if (drawable instanceof BitmapDrawable && ((BitmapDrawable) drawable).getBitmap() != null) {
-            bitmap = ((BitmapDrawable) drawable).getBitmap();
-        } else {
-            int width = Math.max(1, drawable.getIntrinsicWidth());
-            int height = Math.max(1, drawable.getIntrinsicHeight());
-            bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(bitmap);
-            drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
-            drawable.draw(canvas);
-        }
-
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) {
-            return null;
-        }
-        return output.toByteArray();
-    }
-
-    private Map<String, Long> readMemInfoKb() {
-        Map<String, Long> values = new HashMap<>();
-        try {
-            String content = new String(readAllBytes(new File("/proc/meminfo")), StandardCharsets.UTF_8);
-            String[] lines = content.split("\n");
-            for (String line : lines) {
-                int colon = line.indexOf(':');
-                if (colon <= 0) continue;
-                String key = line.substring(0, colon).trim();
-                String valuePart = line.substring(colon + 1).trim();
-                if (valuePart.isEmpty()) continue;
-                String[] parts = valuePart.split("\\s+");
-                if (parts.length == 0) continue;
-                try {
-                    values.put(key, Long.parseLong(parts[0]));
-                } catch (NumberFormatException ignored) {
-                }
-            }
-        } catch (IOException ignored) {
-        }
-        return values;
-    }
-
-    private double[] readLoadAverage() {
-        try {
-            String content = new String(readAllBytes(new File("/proc/loadavg")), StandardCharsets.UTF_8).trim();
-            if (content.isEmpty()) return null;
-            String[] parts = content.split("\\s+");
-            if (parts.length < 3) return null;
-            return new double[] {
-                Double.parseDouble(parts[0]),
-                Double.parseDouble(parts[1]),
-                Double.parseDouble(parts[2]),
-            };
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private double readCPUPercent(double[] loadAverage, int cpuCores) {
-        long[] sample = readProcStatCpuTicks();
-        if (sample != null) {
-            long total = sample[0];
-            long idle = sample[1];
-            long now = System.currentTimeMillis();
-            synchronized (this) {
-                if (lastCpuTotalTicks > 0 && total > lastCpuTotalTicks && now > lastCpuSampleMs) {
-                    long totalDelta = total - lastCpuTotalTicks;
-                    long idleDelta = idle - lastCpuIdleTicks;
-                    if (totalDelta > 0) {
-                        double percent = 100.0 * (1.0 - ((double) idleDelta / (double) totalDelta));
-                        lastCpuTotalTicks = total;
-                        lastCpuIdleTicks = idle;
-                        lastCpuSampleMs = now;
-                        return clampPercent(percent);
-                    }
-                }
-                lastCpuTotalTicks = total;
-                lastCpuIdleTicks = idle;
-                lastCpuSampleMs = now;
-            }
-
-            // First sample has no delta yet. Take a short second sample to compute cpuPercent.
-            try {
-                Thread.sleep(120);
-            } catch (InterruptedException ignored) {
-            }
-            long[] second = readProcStatCpuTicks();
-            if (second != null) {
-                long total2 = second[0];
-                long idle2 = second[1];
-                long totalDelta = total2 - total;
-                long idleDelta = idle2 - idle;
-                if (totalDelta > 0) {
-                    synchronized (this) {
-                        lastCpuTotalTicks = total2;
-                        lastCpuIdleTicks = idle2;
-                        lastCpuSampleMs = System.currentTimeMillis();
-                    }
-                    double percent = 100.0 * (1.0 - ((double) idleDelta / (double) totalDelta));
-                    return clampPercent(percent);
-                }
-            }
-        }
-
-        // Fallback to load average based approximation.
-        if (loadAverage != null && loadAverage.length >= 1 && cpuCores > 0) {
-            return clampPercent((loadAverage[0] / cpuCores) * 100.0);
-        }
-        return -1;
-    }
-
-    private long[] readProcStatCpuTicks() {
-        long[] direct = readProcStatCpuTicksFromContent(readFileAsString("/proc/stat"));
-        if (direct != null) {
-            return direct;
-        }
-
-        // Fallback through privileged backend if direct procfs read is unavailable.
-        String privileged = executePrivileged("cat /proc/stat");
-        return readProcStatCpuTicksFromContent(privileged);
-    }
-
-    private long[] readProcStatCpuTicksFromContent(String content) {
-        if (content == null || content.isEmpty()) return null;
-        try {
-            String[] lines = content.split("\n");
-            for (String line : lines) {
-                if (!line.startsWith("cpu ")) continue;
-                String[] fields = line.trim().split("\\s+");
-                if (fields.length < 5) return null;
-                long total = 0L;
-                for (int i = 1; i < fields.length; i++) {
-                    try {
-                        total += Long.parseLong(fields[i]);
-                    } catch (NumberFormatException ignored) {
-                    }
-                }
-                long idle = Long.parseLong(fields[4]);
-                if (fields.length > 5) {
-                    try {
-                        idle += Long.parseLong(fields[5]); // iowait as idle-like time
-                    } catch (NumberFormatException ignored) {
-                    }
-                }
-                return new long[] {total, idle};
-            }
-        } catch (Exception ignored) {
-        }
-        return null;
-    }
-
-    private String readFileAsString(String path) {
-        try {
-            return new String(readAllBytes(new File(path)), StandardCharsets.UTF_8);
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private JSONObject readUptimeInfo() {
-        JSONObject uptime = new JSONObject();
-        try {
-            uptime.put("processUptimeMs", SystemClock.elapsedRealtime());
-            uptime.put("processUptimeSec", SystemClock.elapsedRealtime() / 1000.0);
-            String content = new String(readAllBytes(new File("/proc/uptime")), StandardCharsets.UTF_8).trim();
-            String[] parts = content.split("\\s+");
-            if (parts.length >= 1) {
-                double uptimeSec = Double.parseDouble(parts[0]);
-                uptime.put("systemUptimeSec", uptimeSec);
-                uptime.put("systemUptimeMs", (long) (uptimeSec * 1000.0));
-            }
-        } catch (Exception ignored) {
-        }
-        return uptime;
-    }
-
-    private JSONArray readStorageStats(Context context) {
-        JSONArray storage = new JSONArray();
-        addStoragePath(storage, "root", "/");
-        addStoragePath(storage, "data", "/data");
-
-        File filesDir = context.getFilesDir();
-        if (filesDir != null) {
-            addStoragePath(storage, "appFiles", filesDir.getAbsolutePath());
-        }
-        File cacheDir = context.getCacheDir();
-        if (cacheDir != null) {
-            addStoragePath(storage, "appCache", cacheDir.getAbsolutePath());
-        }
-        File extDir = context.getExternalFilesDir(null);
-        if (extDir != null) {
-            addStoragePath(storage, "externalFiles", extDir.getAbsolutePath());
-        }
-        addStoragePath(storage, "shared", "/storage/emulated/0");
-        return storage;
-    }
-
-    private void addStoragePath(JSONArray storage, String label, String path) {
-        try {
-            File file = new File(path);
-            if (!file.exists()) return;
-            StatFs statFs = new StatFs(path);
-            long total = statFs.getTotalBytes();
-            long free = statFs.getFreeBytes();
-            long available = statFs.getAvailableBytes();
-            long used = total > free ? (total - free) : 0L;
-            JSONObject item = new JSONObject();
-            item.put("label", label);
-            item.put("path", path);
-            item.put("totalBytes", total);
-            item.put("freeBytes", free);
-            item.put("availableBytes", available);
-            item.put("usedBytes", used);
-            storage.put(item);
-        } catch (Exception ignored) {
-        }
-    }
-
-    private JSONObject readBatteryInfo(Context context) {
-        JSONObject battery = new JSONObject();
-        try {
-            Intent intent = context.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-            if (intent == null) return battery;
-            int level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
-            int scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
-            int status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
-            int health = intent.getIntExtra(BatteryManager.EXTRA_HEALTH, -1);
-            int plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0);
-            int tempTenthsC = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Integer.MIN_VALUE);
-            int voltageMv = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1);
-
-            if (level >= 0 && scale > 0) {
-                battery.put("levelPercent", (level * 100.0) / scale);
-                battery.put("level", level);
-                battery.put("scale", scale);
-            }
-            battery.put("status", batteryStatusToString(status));
-            battery.put("health", batteryHealthToString(health));
-            battery.put("charging", status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL);
-            battery.put("plugged", plugged != 0);
-            battery.put("plugType", batteryPlugToString(plugged));
-            if (tempTenthsC != Integer.MIN_VALUE) {
-                battery.put("temperatureC", tempTenthsC / 10.0);
-            }
-            if (voltageMv >= 0) {
-                battery.put("voltageMv", voltageMv);
-            }
-        } catch (Exception ignored) {
-        }
-        return battery;
-    }
-
-    private JSONArray readNetworkStats() {
-        JSONArray network = new JSONArray();
-        try {
-            String content = new String(readAllBytes(new File("/proc/net/dev")), StandardCharsets.UTF_8);
-            String[] lines = content.split("\n");
-            for (String line : lines) {
-                if (!line.contains(":")) continue;
-                String[] split = line.split(":");
-                if (split.length != 2) continue;
-                String iface = split[0].trim();
-                if (iface.isEmpty()) continue;
-                String[] fields = split[1].trim().split("\\s+");
-                if (fields.length < 16) continue;
-                JSONObject item = new JSONObject();
-                item.put("interface", iface);
-                item.put("rxBytes", parseLongSafe(fields[0]));
-                item.put("rxPackets", parseLongSafe(fields[1]));
-                item.put("rxErrors", parseLongSafe(fields[2]));
-                item.put("rxDropped", parseLongSafe(fields[3]));
-                item.put("txBytes", parseLongSafe(fields[8]));
-                item.put("txPackets", parseLongSafe(fields[9]));
-                item.put("txErrors", parseLongSafe(fields[10]));
-                item.put("txDropped", parseLongSafe(fields[11]));
-                network.put(item);
-            }
-        } catch (Exception ignored) {
-        }
-        return network;
-    }
-
-    private JSONArray readThermalZones() {
-        JSONArray thermal = new JSONArray();
-        try {
-            File root = new File("/sys/class/thermal");
-            File[] zones = root.listFiles((dir, name) -> name != null && name.startsWith("thermal_zone"));
-            if (zones == null || zones.length == 0) return thermal;
-            Arrays.sort(zones, (a, b) -> a.getName().compareTo(b.getName()));
-            int limit = Math.min(zones.length, 24);
-            for (int i = 0; i < limit; i++) {
-                File zone = zones[i];
-                String type = readSingleLine(new File(zone, "type"));
-                String tempRaw = readSingleLine(new File(zone, "temp"));
-                if (tempRaw == null || tempRaw.isEmpty()) continue;
-                long temp = parseLongSafe(tempRaw);
-                // Most Android kernels expose millidegree C.
-                double tempC = temp > 1000 ? (temp / 1000.0) : (double) temp;
-                JSONObject item = new JSONObject();
-                item.put("zone", zone.getName());
-                item.put("type", type == null ? "" : type);
-                item.put("tempC", tempC);
-                thermal.put(item);
-            }
-        } catch (Exception ignored) {
-        }
-        return thermal;
-    }
-
-    private void putMemInfoBytes(JSONObject json, String fieldName, Map<String, Long> memInfoKb, String key) throws JSONException {
-        Long valueKb = memInfoKb.get(key);
-        if (valueKb != null && valueKb >= 0) {
-            json.put(fieldName, valueKb * 1024L);
-        }
-    }
-
-    private String readSingleLine(File file) {
-        try {
-            String text = new String(readAllBytes(file), StandardCharsets.UTF_8);
-            int newline = text.indexOf('\n');
-            if (newline >= 0) {
-                text = text.substring(0, newline);
-            }
-            return text.trim();
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private long parseLongSafe(String value) {
-        try {
-            return Long.parseLong(value.trim());
-        } catch (Exception ignored) {
-            return 0L;
-        }
-    }
-
-    private double clampPercent(double value) {
-        if (value < 0) return 0;
-        if (value > 100) return 100;
-        return value;
-    }
-
-    private String batteryStatusToString(int status) {
-        switch (status) {
-            case BatteryManager.BATTERY_STATUS_CHARGING:
-                return "charging";
-            case BatteryManager.BATTERY_STATUS_DISCHARGING:
-                return "discharging";
-            case BatteryManager.BATTERY_STATUS_FULL:
-                return "full";
-            case BatteryManager.BATTERY_STATUS_NOT_CHARGING:
-                return "not_charging";
-            case BatteryManager.BATTERY_STATUS_UNKNOWN:
-            default:
-                return "unknown";
-        }
-    }
-
-    private String batteryHealthToString(int health) {
-        switch (health) {
-            case BatteryManager.BATTERY_HEALTH_GOOD:
-                return "good";
-            case BatteryManager.BATTERY_HEALTH_OVERHEAT:
-                return "overheat";
-            case BatteryManager.BATTERY_HEALTH_DEAD:
-                return "dead";
-            case BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE:
-                return "over_voltage";
-            case BatteryManager.BATTERY_HEALTH_UNSPECIFIED_FAILURE:
-                return "unspecified_failure";
-            case BatteryManager.BATTERY_HEALTH_COLD:
-                return "cold";
-            case BatteryManager.BATTERY_HEALTH_UNKNOWN:
-            default:
-                return "unknown";
-        }
-    }
-
-    private String batteryPlugToString(int plugged) {
-        switch (plugged) {
-            case BatteryManager.BATTERY_PLUGGED_AC:
-                return "ac";
-            case BatteryManager.BATTERY_PLUGGED_USB:
-                return "usb";
-            case BatteryManager.BATTERY_PLUGGED_WIRELESS:
-                return "wireless";
-            default:
-                return "none";
-        }
-    }
-
     private static boolean secureEquals(String expected, String actual) {
         byte[] e = expected.getBytes(StandardCharsets.UTF_8);
         byte[] a = actual.getBytes(StandardCharsets.UTF_8);
@@ -2825,131 +1677,6 @@ public class LauncherCtlApiServer {
             result |= (e[i] ^ a[i]);
         }
         return result == 0;
-    }
-
-    static AppLaunchMatch resolveLaunchMatch(List<LauncherAppEntry> apps, String query) throws JSONException {
-        String trimmed = query == null ? "" : query.trim();
-        String lowerQuery = trimmed.toLowerCase(Locale.US);
-        String normalizedQuery = normalizeLookupValue(trimmed);
-        if (lowerQuery.isEmpty()) {
-            return AppLaunchMatch.error(400, "bad_request", "Missing app query");
-        }
-
-        List<AppSearchCandidate> matches = new ArrayList<>();
-        for (LauncherAppEntry entry : apps) {
-            int tier = matchTier(entry, lowerQuery, normalizedQuery);
-            if (tier >= 0) {
-                matches.add(new AppSearchCandidate(entry, tier));
-            }
-        }
-
-        if (matches.isEmpty()) {
-            return AppLaunchMatch.error(404, "not_found", "No launcher app matched query");
-        }
-
-        Collections.sort(matches, new Comparator<AppSearchCandidate>() {
-            @Override
-            public int compare(AppSearchCandidate a, AppSearchCandidate b) {
-                if (a.tier != b.tier) return Integer.compare(a.tier, b.tier);
-                int labelCompare = a.entry.label.compareToIgnoreCase(b.entry.label);
-                if (labelCompare != 0) return labelCompare;
-                return a.entry.appRef.packageName.compareToIgnoreCase(b.entry.appRef.packageName);
-            }
-        });
-
-        AppSearchCandidate best = matches.get(0);
-        List<AppSearchCandidate> bestTierMatches = new ArrayList<>();
-        for (AppSearchCandidate candidate : matches) {
-            if (candidate.tier != best.tier) break;
-            bestTierMatches.add(candidate);
-        }
-
-        if (bestTierMatches.size() == 1) {
-            return AppLaunchMatch.success(best.entry);
-        }
-
-        JSONArray candidates = new JSONArray();
-        for (int i = 0; i < bestTierMatches.size() && i < 8; i++) {
-            LauncherAppEntry entry = bestTierMatches.get(i).entry;
-            JSONObject item = new JSONObject();
-            item.put("label", entry.label);
-            item.put("packageName", entry.appRef.packageName);
-            item.put("activityName", entry.appRef.activityName);
-            item.put("stableId", entry.appRef.stableId());
-            item.put("userId", entry.appRef.userId);
-            item.put("clonedProfile", entry.appRef.clonedProfile);
-            candidates.put(item);
-        }
-        return AppLaunchMatch.error(409, "ambiguous", "Multiple launcher apps matched query", candidates);
-    }
-
-    private static int matchTier(LauncherAppEntry entry, String lowerQuery, String normalizedQuery) {
-        String label = entry.label == null ? "" : entry.label;
-        String labelLower = label.toLowerCase(Locale.US);
-        String labelNormalized = normalizeLookupValue(label);
-        String packageName = entry.appRef.packageName.toLowerCase(Locale.US);
-        String activityName = entry.appRef.activityName.toLowerCase(Locale.US);
-        String stableId = entry.appRef.stableId().toLowerCase(Locale.US);
-
-        if (packageName.equals(lowerQuery) || activityName.equals(lowerQuery) || stableId.equals(lowerQuery)) {
-            return 0;
-        }
-        if (labelLower.equals(lowerQuery) || (!normalizedQuery.isEmpty() && labelNormalized.equals(normalizedQuery))) {
-            return 1;
-        }
-        if (packageName.startsWith(lowerQuery) || activityName.startsWith(lowerQuery)) {
-            return 2;
-        }
-        if (labelLower.startsWith(lowerQuery) || (!normalizedQuery.isEmpty() && labelNormalized.startsWith(normalizedQuery))) {
-            return 3;
-        }
-        if (!normalizedQuery.isEmpty()) {
-            String[] words = labelNormalized.split(" ");
-            for (String word : words) {
-                if (word.startsWith(normalizedQuery)) {
-                    return 4;
-                }
-            }
-        }
-        if (packageName.contains(lowerQuery) || activityName.contains(lowerQuery)) {
-            return 5;
-        }
-        if (labelLower.contains(lowerQuery) || (!normalizedQuery.isEmpty() && labelNormalized.contains(normalizedQuery))) {
-            return 6;
-        }
-        return -1;
-    }
-
-    private static String normalizeLookupValue(String value) {
-        if (value == null || value.isEmpty()) return "";
-        StringBuilder normalized = new StringBuilder(value.length());
-        boolean previousWasSpace = true;
-        for (int i = 0; i < value.length(); i++) {
-            char c = Character.toLowerCase(value.charAt(i));
-            if (Character.isLetterOrDigit(c)) {
-                normalized.append(c);
-                previousWasSpace = false;
-            } else if (!previousWasSpace) {
-                normalized.append(' ');
-                previousWasSpace = true;
-            }
-        }
-        int length = normalized.length();
-        if (length > 0 && normalized.charAt(length - 1) == ' ') {
-            normalized.setLength(length - 1);
-        }
-        return normalized.toString();
-    }
-
-    private static boolean isSystemApp(PackageManager packageManager, String packageName) {
-        if (packageManager == null || packageName == null || packageName.isEmpty()) {
-            return false;
-        }
-        try {
-            return (packageManager.getApplicationInfo(packageName, 0).flags & ApplicationInfo.FLAG_SYSTEM) != 0;
-        } catch (PackageManager.NameNotFoundException ignored) {
-            return false;
-        }
     }
 
     private void cleanupSocket() {
@@ -2969,216 +1696,6 @@ public class LauncherCtlApiServer {
             socket.close();
         } catch (IOException ignored) {
         }
-    }
-
-    /**
-     * Executes launcher tools by dispatching to the existing API server helpers.
-     * This is the shared execution handler used by {@link LauncherCtlAgentHandler}.
-     */
-    private class LauncherToolExecutionHandler implements LauncherToolRegistry.ToolExecutionHandler {
-        private final Context context;
-
-        LauncherToolExecutionHandler(Context context) {
-            this.context = context.getApplicationContext();
-        }
-
-        @NonNull
-        @Override
-        public LauncherToolRegistry.ToolExecutionResult execute(
-            @NonNull LauncherToolRegistry.ToolMetadata tool,
-            @NonNull JSONObject arguments
-        ) throws Exception {
-            switch (tool.name) {
-                case LauncherToolRegistry.TOOL_CAPABILITIES_GET:
-                    return wrapExecutionResult(buildLauncherCapabilities(context));
-                case LauncherToolRegistry.TOOL_APPS_SEARCH:
-                    return wrapExecutionResult(buildAppsSearchResponse(arguments));
-                case LauncherToolRegistry.TOOL_APPS_LAUNCH:
-                    return wrapExecutionResult(runAppLaunch(context, arguments.toString()));
-                case LauncherToolRegistry.TOOL_NOTIFICATIONS_RECENT:
-                    return wrapExecutionResult(buildNotificationsRecent(arguments.toString()));
-                case LauncherToolRegistry.TOOL_NOTIFICATIONS_SINCE:
-                    return wrapExecutionResult(buildNotificationsSince(arguments.toString()));
-                case LauncherToolRegistry.TOOL_NOTIFICATIONS_SEARCH:
-                    return wrapExecutionResult(buildNotificationsSearch(arguments.toString()));
-                case LauncherToolRegistry.TOOL_NOTIFICATIONS_STATS:
-                    return wrapExecutionResult(buildNotificationsStats(arguments.toString()));
-                case LauncherToolRegistry.TOOL_MEDIA_NOW_PLAYING:
-                    return wrapExecutionResult(buildNowPlaying());
-                case LauncherToolRegistry.TOOL_SYSTEM_RESOURCES:
-                    return wrapExecutionResult(buildSystemResources(context));
-                case LauncherToolRegistry.TOOL_INTENT_OPEN:
-                    return wrapExecutionResult(runIntentOpen(context, arguments));
-                case LauncherToolRegistry.TOOL_MEMORY_WRITE:
-                    return wrapExecutionResult(runMemoryWrite(arguments));
-                case LauncherToolRegistry.TOOL_MEMORY_SEARCH:
-                    return wrapExecutionResult(runMemorySearch(arguments));
-                case LauncherToolRegistry.TOOL_EVENTS_TAIL:
-                    return wrapExecutionResult(buildEventsTail(arguments.toString()));
-                case LauncherToolRegistry.TOOL_USER_CONFIRM:
-                    return wrapExecutionResult(buildUserConfirm(arguments));
-                default:
-                    return LauncherToolRegistry.ToolExecutionResult.error(501, "not_implemented",
-                        "Tool '" + tool.name + "' is registered but not yet executable");
-            }
-        }
-
-        @NonNull
-        private LauncherToolRegistry.ToolExecutionResult wrapExecutionResult(@Nullable JSONObject result) {
-            if (result == null) {
-                return LauncherToolRegistry.ToolExecutionResult.error(500, "execution_failed", "Tool returned null");
-            }
-            boolean ok = result.optBoolean("ok", false);
-            int statusCode = result.optInt("_statusCode", ok ? 200 : 500);
-            if (ok && statusCode >= 200 && statusCode < 300) {
-                return LauncherToolRegistry.ToolExecutionResult.success(result);
-            }
-            String errorCode = result.optString("error", "execution_failed");
-            String message = result.optString("message", "Tool execution failed");
-            return LauncherToolRegistry.ToolExecutionResult.error(statusCode, errorCode, message);
-        }
-    }
-
-    private JSONObject buildAppsSearchResponse(JSONObject arguments) throws JSONException {
-        String query = arguments.optString("query", "").trim();
-        int limit = clampInt(arguments.optInt("limit", 50), 1, 200);
-        if (query.isEmpty()) {
-            JSONObject error = jsonError("bad_request", "Missing search query");
-            error.put("_statusCode", 400);
-            return error;
-        }
-        List<LauncherAppEntry> apps = LauncherAppDataProvider.getInstance(appContext).getAllAppsBlocking();
-        JSONObject data = new JSONObject();
-        JSONArray results = new JSONArray();
-        String lowerQuery = query.toLowerCase(Locale.US);
-        int count = 0;
-        for (LauncherAppEntry entry : apps) {
-            if (count >= limit) break;
-            String label = entry.label == null ? "" : entry.label.toLowerCase(Locale.US);
-            String pkg = entry.appRef.packageName.toLowerCase(Locale.US);
-            String activity = entry.appRef.activityName == null ? "" : entry.appRef.activityName.toLowerCase(Locale.US);
-            if (label.contains(lowerQuery) || pkg.contains(lowerQuery) || activity.contains(lowerQuery)) {
-                JSONObject item = new JSONObject();
-                item.put("label", entry.label);
-                item.put("packageName", entry.appRef.packageName);
-                item.put("activityName", entry.appRef.activityName == null ? "" : entry.appRef.activityName);
-                item.put("stableId", entry.appRef.stableId());
-                item.put("userId", entry.appRef.userId);
-                item.put("clonedProfile", entry.appRef.clonedProfile);
-                results.put(item);
-                count++;
-            }
-        }
-        data.put("ok", true);
-        data.put("query", query);
-        data.put("count", results.length());
-        data.put("apps", results);
-        return data;
-    }
-
-    private JSONObject runIntentOpen(Context context, JSONObject arguments) throws JSONException {
-        String action = arguments.optString("action", "android.intent.action.VIEW");
-        String data = arguments.optString("data", "").trim();
-        if (data.isEmpty()) {
-            JSONObject error = jsonError("bad_request", "Missing intent data URI");
-            error.put("_statusCode", 400);
-            return error;
-        }
-        Intent intent = new Intent(action, Uri.parse(data));
-        String packageName = arguments.optString("package", "").trim();
-        String component = arguments.optString("component", "").trim();
-        if (!packageName.isEmpty()) {
-            intent.setPackage(packageName);
-        }
-        if (!component.isEmpty()) {
-            ComponentName cn = ComponentName.unflattenFromString(component);
-            if (cn != null) {
-                intent.setComponent(cn);
-            }
-        }
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        JSONObject extras = arguments.optJSONObject("extras");
-        if (extras != null) {
-            Iterator<String> keys = extras.keys();
-            while (keys.hasNext()) {
-                String key = keys.next();
-                Object value = extras.opt(key);
-                if (value instanceof String) {
-                    intent.putExtra(key, (String) value);
-                } else if (value instanceof Boolean) {
-                    intent.putExtra(key, (Boolean) value);
-                } else if (value instanceof Integer) {
-                    intent.putExtra(key, (Integer) value);
-                } else if (value instanceof Long) {
-                    intent.putExtra(key, (Long) value);
-                }
-            }
-        }
-        try {
-            context.startActivity(intent);
-        } catch (android.content.ActivityNotFoundException e) {
-            JSONObject error = jsonError("activity_not_found", "No activity found for intent: " + data);
-            error.put("_statusCode", 404);
-            return error;
-        }
-        JSONObject result = new JSONObject();
-        result.put("ok", true);
-        result.put("action", action);
-        result.put("data", data);
-        return result;
-    }
-
-    private JSONObject runMemoryWrite(JSONObject arguments) throws JSONException {
-        String namespace = arguments.optString("namespace", "agent").trim();
-        String key = arguments.optString("key", "").trim();
-        String value = arguments.optString("value", "");
-        if (namespace.isEmpty() || key.isEmpty()) {
-            JSONObject error = jsonError("bad_request", "Missing namespace or key");
-            error.put("_statusCode", 400);
-            return error;
-        }
-        LauncherCtlMemoryStore.getInstance().write(namespace, key, value);
-        JSONObject result = new JSONObject();
-        result.put("ok", true);
-        result.put("namespace", namespace);
-        result.put("key", key);
-        result.put("value", value);
-        return result;
-    }
-
-    private JSONObject runMemorySearch(JSONObject arguments) throws JSONException {
-        String namespace = arguments.optString("namespace", "agent").trim();
-        String query = arguments.optString("query", "").trim();
-        int limit = clampInt(arguments.optInt("limit", 10), 1, 100);
-        if (namespace.isEmpty() || query.isEmpty()) {
-            JSONObject error = jsonError("bad_request", "Missing namespace or query");
-            error.put("_statusCode", 400);
-            return error;
-        }
-        List<LauncherCtlMemoryStore.MemoryEntry> entries = LauncherCtlMemoryStore.getInstance().search(namespace, query, limit);
-        JSONObject data = new JSONObject();
-        data.put("ok", true);
-        data.put("namespace", namespace);
-        data.put("query", query);
-        data.put("count", entries.size());
-        JSONArray array = new JSONArray();
-        for (LauncherCtlMemoryStore.MemoryEntry entry : entries) {
-            array.put(entry.toJson());
-        }
-        data.put("entries", array);
-        return data;
-    }
-
-    private JSONObject buildUserConfirm(JSONObject arguments) throws JSONException {
-        String message = arguments.optString("message", "Confirm?");
-        String risk = arguments.optString("risk", "medium");
-        JSONObject result = new JSONObject();
-        result.put("ok", true);
-        result.put("confirmed", false);
-        result.put("message", message);
-        result.put("risk", risk);
-        result.put("note", "Confirmation must be obtained by the caller before executing the action");
-        return result;
     }
 
     private static class HttpRequest {

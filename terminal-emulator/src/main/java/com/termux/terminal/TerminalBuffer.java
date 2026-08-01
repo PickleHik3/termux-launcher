@@ -237,6 +237,16 @@ public final class TerminalBuffer {
      * @param cursor     An int[2] containing the (column, row) cursor location.
      */
     public void resize(int newColumns, int newRows, int newTotalRows, int[] cursor, long currentStyle, boolean altScreen) {
+        resize(newColumns, newRows, newTotalRows, cursor, currentStyle, altScreen, false);
+    }
+
+    /**
+     * Resize with an optional bottom anchor. The anchored form exposes transcript rows (or blank
+     * rows when history is exhausted) above the old screen so the cursor retains its distance from
+     * the bottom edge as rows are added.
+     */
+    public void resize(int newColumns, int newRows, int newTotalRows, int[] cursor,
+                       long currentStyle, boolean altScreen, boolean keepCursorAtBottom) {
         // newRows > mTotalRows should not normally happen since mTotalRows is TRANSCRIPT_ROWS (10000):
         if (newColumns == mColumns && newRows <= mTotalRows) {
             // Fast resize where just the rows changed.
@@ -253,12 +263,23 @@ public final class TerminalBuffer {
                     }
                 }
             } else if (shiftDownOfTopRow < 0) {
-                // Negative shift down = expanding. Only move screen up if there is transcript to show:
-                int actualShift = Math.max(shiftDownOfTopRow, -mActiveTranscriptRows);
-                if (shiftDownOfTopRow != actualShift) {
-                    // The new lines revealed by the resizing are not all from the transcript. Blank the below ones.
-                    for (int i = 0; i < actualShift - shiftDownOfTopRow; i++) allocateFullLineIfNecessary((mScreenFirstRow + mScreenRows + i) % mTotalRows).clear(currentStyle);
-                    shiftDownOfTopRow = actualShift;
+                if (keepCursorAtBottom) {
+                    int rowsAdded = -shiftDownOfTopRow;
+                    // Existing transcript fills the first new rows. Any remaining rows are clean
+                    // padding above the old screen rather than below its cursor.
+                    for (int i = mActiveTranscriptRows + 1; i <= rowsAdded; i++) {
+                        int internalRow = (mScreenFirstRow - i) % mTotalRows;
+                        if (internalRow < 0) internalRow += mTotalRows;
+                        allocateFullLineIfNecessary(internalRow).clear(currentStyle);
+                    }
+                } else {
+                    // Negative shift down = expanding. Only move screen up if there is transcript to show:
+                    int actualShift = Math.max(shiftDownOfTopRow, -mActiveTranscriptRows);
+                    if (shiftDownOfTopRow != actualShift) {
+                        // The new lines revealed by the resizing are not all from the transcript. Blank the below ones.
+                        for (int i = 0; i < actualShift - shiftDownOfTopRow; i++) allocateFullLineIfNecessary((mScreenFirstRow + mScreenRows + i) % mTotalRows).clear(currentStyle);
+                        shiftDownOfTopRow = actualShift;
+                    }
                 }
             }
             mScreenFirstRow += shiftDownOfTopRow;
@@ -326,16 +347,26 @@ public final class TerminalBuffer {
                         /* || oldLine.mStyle[i] != currentStyle */
                         lastNonSpaceIndex = i + 1;
                 }
+                // A wrapped old row becomes several new ones; its mark belongs on the first of them.
+                if (oldLine.mShellIntegrationMark != TerminalRow.MARK_NONE)
+                    setShellIntegrationMark(currentOutputExternalRow, oldLine.mShellIntegrationMark);
                 int currentOldCol = 0;
                 long styleAtCol = 0;
+                int decorationAtCol = TextStyle.DECORATION_COLOR_DEFAULT;
+                int hyperlinkAtCol = 0;
                 for (int i = 0; i < lastNonSpaceIndex; i++) {
                     // Note that looping over java character, not cells.
                     char c = oldLine.mText[i];
                     int codePoint = (Character.isHighSurrogate(c)) ? Character.toCodePoint(c, oldLine.mText[++i]) : c;
-                    int displayWidth = WcWidth.width(codePoint);
+                    int displayWidth = oldLine.getDisplayWidthAt(
+                        i - (Character.isSupplementaryCodePoint(codePoint) ? 1 : 0));
+                    if (justToCursor && newCursorPlaced && displayWidth > 0) break;
                     // Use the last style if this is a zero-width character:
-                    if (displayWidth > 0)
+                    if (displayWidth > 0) {
                         styleAtCol = oldLine.getStyle(currentOldCol);
+                        decorationAtCol = oldLine.getDecorationColor(currentOldCol);
+                        hyperlinkAtCol = oldLine.getHyperlinkId(currentOldCol);
+                    }
                     // Line wrap as necessary:
                     if (currentOutputExternalColumn + displayWidth > mColumns) {
                         setLineWrap(currentOutputExternalRow);
@@ -350,7 +381,13 @@ public final class TerminalBuffer {
                     }
                     int offsetDueToCombiningChar = ((displayWidth <= 0 && currentOutputExternalColumn > 0) ? 1 : 0);
                     int outputColumn = currentOutputExternalColumn - offsetDueToCombiningChar;
-                    setChar(outputColumn, currentOutputExternalRow, codePoint, styleAtCol);
+                    if (displayWidth > 0) {
+                        setChar(outputColumn, currentOutputExternalRow, codePoint, styleAtCol,
+                            decorationAtCol, hyperlinkAtCol);
+                    } else {
+                        allocateFullLineIfNecessary(externalToInternalRow(currentOutputExternalRow))
+                            .appendCodePointToCell(outputColumn, codePoint);
+                    }
                     if (displayWidth > 0) {
                         if (oldCursorRow == externalOldRow && oldCursorColumn == currentOldCol) {
                             newCursorColumn = currentOutputExternalColumn;
@@ -359,8 +396,6 @@ public final class TerminalBuffer {
                         }
                         currentOldCol += displayWidth;
                         currentOutputExternalColumn += displayWidth;
-                        if (justToCursor && newCursorPlaced)
-                            break;
                     }
                 }
                 // Old row has been copied. Check if we need to insert newline if old line was not wrapping:
@@ -492,6 +527,10 @@ public final class TerminalBuffer {
             for (int x = 0; x < w; x++) setChar(sx + x, sy + y, val, style);
             if (sx + w == mColumns && val == ' ') {
                 clearLineWrap(sy + y);
+                if (sx == 0) {
+                    // The whole row was blanked, so whatever prompt or output started on it is gone.
+                    setShellIntegrationMark(sy + y, TerminalRow.MARK_NONE);
+                }
             }
         }
     }
@@ -501,10 +540,76 @@ public final class TerminalBuffer {
     }
 
     public void setChar(int column, int row, int codePoint, long style) {
+        setChar(column, row, codePoint, style, TextStyle.DECORATION_COLOR_DEFAULT, 0);
+    }
+
+    public void setChar(int column, int row, int codePoint, long style, int decorationColor, int hyperlinkId) {
         if (row < 0 || row >= mScreenRows || column < 0 || column >= mColumns)
             throw new IllegalArgumentException("TerminalBuffer.setChar(): row=" + row + ", column=" + column + ", mScreenRows=" + mScreenRows + ", mColumns=" + mColumns);
         row = externalToInternalRow(row);
-        allocateFullLineIfNecessary(row).setChar(column, codePoint, style);
+        allocateFullLineIfNecessary(row).setChar(column, codePoint, style, decorationColor, hyperlinkId);
+    }
+
+    /** Attach a code point to the grapheme already stored in a cell without consuming a new cell. */
+    public void appendCodePointToCell(int column, int row, int codePoint) {
+        if (row < 0 || row >= mScreenRows || column < 0 || column >= mColumns)
+            throw new IllegalArgumentException("TerminalBuffer.appendCodePointToCell(): row=" + row
+                + ", column=" + column + ", mScreenRows=" + mScreenRows + ", mColumns=" + mColumns);
+        allocateFullLineIfNecessary(externalToInternalRow(row)).appendCodePointToCell(column, codePoint);
+    }
+
+    public boolean widenCell(int column, int row) {
+        if (row < 0 || row >= mScreenRows || column < 0 || column >= mColumns) return false;
+        return allocateFullLineIfNecessary(externalToInternalRow(row)).widenCell(column);
+    }
+
+    /** The OSC 133 mark of a row, one of the {@code TerminalRow.MARK_*} values. */
+    public byte getShellIntegrationMark(int externalRow) {
+        return allocateFullLineIfNecessary(externalToInternalRow(externalRow)).mShellIntegrationMark;
+    }
+
+    public void setShellIntegrationMark(int externalRow, byte mark) {
+        allocateFullLineIfNecessary(externalToInternalRow(externalRow)).mShellIntegrationMark = mark;
+    }
+
+    /**
+     * Search for the closest row carrying a given mark.
+     *
+     * @param fromRow   the row to search away from, exclusive, in external coordinates.
+     * @param backwards search towards the transcript rather than towards the bottom of the screen.
+     * @return the row found, or {@link Integer#MIN_VALUE} when there is none.
+     */
+    public int findRowWithMark(int fromRow, byte mark, boolean backwards) {
+        int first = -getActiveTranscriptRows();
+        int last = mScreenRows - 1;
+        if (backwards) {
+            for (int row = Math.min(fromRow - 1, last); row >= first; row--) {
+                if (getShellIntegrationMark(row) == mark)
+                    return row;
+            }
+        } else {
+            for (int row = Math.max(fromRow + 1, first); row <= last; row++) {
+                if (getShellIntegrationMark(row) == mark)
+                    return row;
+            }
+        }
+        return Integer.MIN_VALUE;
+    }
+
+    public int getDecorationColorAt(int externalRow, int column) {
+        return allocateFullLineIfNecessary(externalToInternalRow(externalRow)).getDecorationColor(column);
+    }
+
+    public int getHyperlinkIdAt(int externalRow, int column) {
+        return allocateFullLineIfNecessary(externalToInternalRow(externalRow)).getHyperlinkId(column);
+    }
+
+    /** Mark hyperlink ids referenced by the visible screen and active transcript only. */
+    void markUsedHyperlinkIds(boolean[] used) {
+        for (int row = -mActiveTranscriptRows; row < mScreenRows; row++) {
+            TerminalRow line = mLines[externalToInternalRow(row)];
+            if (line != null) line.markUsedHyperlinkIds(used);
+        }
     }
 
     /** used to read aloud the character under the cursor in A11Y */
@@ -543,7 +648,8 @@ public final class TerminalBuffer {
                 } else {
                     effect &= ~bits;
                 }
-                line.mStyle[x] = TextStyle.encode(foreColor, backColor, effect);
+                // Rewrite only the effect, so that the underline style of these cells survives DECCARA.
+                line.mStyle[x] = TextStyle.withColorsAndEffect(currentStyle, foreColor, backColor, effect);
             }
         }
     }
@@ -556,17 +662,19 @@ public final class TerminalBuffer {
             Arrays.fill(mLines, mScreenFirstRow - mActiveTranscriptRows, mScreenFirstRow, null);
         }
         mActiveTranscriptRows = 0;
-        bitmaps.clear();
-        hasBitmaps = false;
+        // Visible bitmap cells still reference their image data after ED 3 clears scrollback.
+        collectUnusedBitmaps();
         terminalSixel = null;
     }
 
     public Bitmap getSixelBitmap(int codePoint, long style) {
-        return bitmaps.get(TextStyle.bitmapNum(style)).bitmap;
+        TerminalBitmap bitmap = bitmaps.get(TextStyle.bitmapNum(style));
+        return bitmap == null ? null : bitmap.bitmap;
     }
 
     public Rect getSixelRect(int codePoint, long style) {
         TerminalBitmap bm = bitmaps.get(TextStyle.bitmapNum(style));
+        if (bm == null) return new Rect();
         int x = TextStyle.bitmapX(style);
         int y = TextStyle.bitmapY(style);
         Rect r = new Rect(x * bm.cellWidth, y * bm.cellHeight, (x + 1) * bm.cellWidth, (y + 1) * bm.cellHeight);
@@ -645,10 +753,111 @@ public final class TerminalBuffer {
         return bitmaps.get(num).cursorDelta;
     }
 
+    /** Add one decoded kitty placement at a screen cell. */
+    public int[] addKittyImage(Bitmap image, long imageId, long placementId, int z, int y, int x,
+                               int cellW, int cellH, int[] transform) {
+        if (image == null || x < 0 || x >= mColumns || y < 0 || y >= mScreenRows)
+            return new int[] { 0, 0 };
+        int num = findFreeBitmap();
+        TerminalBitmap terminalBitmap = new TerminalBitmap(num, image, imageId, placementId, z, y, x,
+            cellW, cellH, transform, this);
+        if (terminalBitmap.bitmap == null)
+            return new int[] { 0, 0 };
+        bitmaps.put(num, terminalBitmap);
+        hasBitmaps = true;
+        bitmapGC(30000);
+        return terminalBitmap.cursorDelta;
+    }
+
+    /**
+     * Whether a kitty placement with the given z may take this cell: an existing placement with a
+     * higher z keeps it, and a negative z never overwrites visible text.
+     */
+    boolean kittyAllowsStamp(int column, int externalRow, int z) {
+        if (externalRow < 0 || externalRow >= mScreenRows || column < 0 || column >= mColumns)
+            return false;
+        TerminalRow line = allocateFullLineIfNecessary(externalToInternalRow(externalRow));
+        long style = line.getStyle(column);
+        if (TextStyle.isBitmap(style)) {
+            TerminalBitmap existing = bitmaps.get(TextStyle.bitmapNum(style));
+            return z >= (existing == null ? 0 : existing.kittyZ);
+        }
+        if (z >= 0) return true;
+        int charIndex = line.findStartOfColumn(column);
+        return charIndex >= line.getSpaceUsed() || line.mText[charIndex] == ' ';
+    }
+
+    /** Collect the live placements of one kitty image, for animation frame re-rendering. */
+    void collectKittyPlacements(long imageId, java.util.List<TerminalBitmap> out) {
+        for (TerminalBitmap bitmap : bitmaps.values()) {
+            if (bitmap.kittyImageId == imageId && bitmap.bitmap != null && bitmap.kittyTransform != null)
+                out.add(bitmap);
+        }
+    }
+
+    /** Bytes currently owned by decoded kitty placements in this buffer. */
+    public long getKittyImageBytes() {
+        long result = 0;
+        for (TerminalBitmap bitmap : bitmaps.values()) {
+            if (bitmap.kittyImageId >= 0 && bitmap.bitmap != null)
+                result += bitmap.bitmap.getAllocationByteCount();
+        }
+        return result;
+    }
+
+    /** Selects kitty placement cells for deletion. Receives the cell's external row (negative in scrollback). */
+    public interface KittyPlacementFilter {
+        boolean matches(TerminalBitmap bitmap, int column, int externalRow);
+    }
+
+    /** Delete kitty placements, either only on-screen or also in scrollback. A negative id matches all images. */
+    public int deleteKittyImages(long imageId, boolean includeScrollback) {
+        return deleteKittyImages((bitmap, column, row) ->
+            imageId < 0 || bitmap.kittyImageId == imageId, includeScrollback);
+    }
+
+    /** Delete every kitty placement cell the filter matches. */
+    public int deleteKittyImages(KittyPlacementFilter filter, boolean includeScrollback) {
+        int deletedCells = 0;
+        int firstRow = includeScrollback ? -getActiveTranscriptRows() : 0;
+        for (int row = firstRow; row < mScreenRows; row++) {
+            TerminalRow line = allocateFullLineIfNecessary(externalToInternalRow(row));
+            boolean changed = false;
+            for (int column = 0; column < mColumns; column++) {
+                long style = line.getStyle(column);
+                if (!TextStyle.isBitmap(style)) continue;
+                TerminalBitmap bitmap = bitmaps.get(TextStyle.bitmapNum(style));
+                if (bitmap != null && bitmap.kittyImageId >= 0 && filter.matches(bitmap, column, row)) {
+                    line.setChar(column, ' ', TextStyle.NORMAL);
+                    deletedCells++;
+                    changed = true;
+                }
+            }
+            if (changed) recomputeBitmapFlag(line);
+        }
+        collectUnusedBitmaps();
+        return deletedCells;
+    }
+
+    private void recomputeBitmapFlag(TerminalRow line) {
+        line.mHasBitmap = false;
+        for (int column = 0; column < mColumns; column++) {
+            if (TextStyle.isBitmap(line.getStyle(column))) {
+                line.mHasBitmap = true;
+                return;
+            }
+        }
+    }
+
     public void bitmapGC(int timeDelta) {
         if (!hasBitmaps || bitmapLastGC + timeDelta > SystemClock.uptimeMillis()) {
             return;
         }
+        collectUnusedBitmaps();
+        bitmapLastGC = SystemClock.uptimeMillis();
+    }
+
+    private void collectUnusedBitmaps() {
         Set<Integer> used = new HashSet<Integer>();
         for (int line = 0; line < mLines.length; line++) {
             if (mLines[line] != null && mLines[line].mHasBitmap) {
@@ -666,6 +875,6 @@ public final class TerminalBuffer {
                 bitmaps.remove(bn);
             }
         }
-        bitmapLastGC = SystemClock.uptimeMillis();
+        hasBitmaps = !bitmaps.isEmpty();
     }
 }

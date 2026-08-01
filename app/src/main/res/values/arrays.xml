@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string-array name="settings_keyboard_input_method_entries">
+        <item>@string/settings_keyboard_input_built_in</item>
+        <item>@string/settings_keyboard_input_android</item>
+        <item>@string/settings_keyboard_input_none</item>
+    </string-array>
+    <string-array name="settings_keyboard_input_method_values">
+        <item>built_in</item>
+        <item>android</item>
+        <item>none</item>
+    </string-array>
     <string-array name="termux_theme_mode_entries">
         <item>@string/termux_theme_mode_system</item>
         <item>@string/termux_theme_mode_light</item>
@@ -22,21 +32,27 @@
     </string-array>
     <string-array name="app_launcher_dock_style_entries">
         <item>@string/termux_app_launcher_dock_style_default</item>
-        <item>@string/termux_app_launcher_dock_style_valarie_capsule</item>
+        <item>@string/termux_app_launcher_dock_style_rounded</item>
     </string-array>
     <string-array name="app_launcher_dock_style_values">
         <item>default</item>
-        <item>valarie_capsule</item>
+        <item>rounded</item>
     </string-array>
-    <string-array name="launcherctl_mcp_web_provider_entries">
-        <item>@string/launcherctl_mcp_web_provider_off</item>
-        <item>@string/launcherctl_mcp_web_provider_brave</item>
-        <item>@string/launcherctl_mcp_web_provider_searxng</item>
+    <string-array name="termux_top_pane_clock_style_entries">
+        <item>@string/termux_top_pane_clock_style_flip</item>
+        <item>@string/termux_top_pane_clock_style_lcd</item>
+        <item>@string/termux_top_pane_clock_style_minimal</item>
+        <item>@string/termux_top_pane_clock_style_led</item>
+        <item>@string/termux_top_pane_clock_style_tape</item>
+        <item>@string/termux_top_pane_clock_style_slab</item>
     </string-array>
-    <string-array name="launcherctl_mcp_web_provider_values">
-        <item>off</item>
-        <item>brave</item>
-        <item>searxng</item>
+    <string-array name="termux_top_pane_clock_style_values">
+        <item>flip</item>
+        <item>lcd</item>
+        <item>minimal</item>
+        <item>led</item>
+        <item>tape</item>
+        <item>slab</item>
     </string-array>
     <string-array name="termux_ai_model_entries">
         <item>Gemma-4-E2B-it</item>

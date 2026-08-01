@@ -63,7 +63,7 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
-                android:text="@string/termux_app_launcher_dock_style_capsule"
+                android:text="@string/termux_app_launcher_dock_style_rounded"
                 android:textSize="13sp"
                 android:textStyle="bold" />
         </LinearLayout>

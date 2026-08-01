@@ -1,4 +1,18 @@
 #!/system/bin/sh
+#
+# DEPRECATED — kept for existing tmux/btop users only.
+#
+# The launcher's own windows, panes, workspaces, scratchpad, and status bar
+# replaced what tmux and btop provided in this setup, and the Shizuku helper
+# is no longer maintained. New installs should use the current installer
+# instead:
+#
+#   curl -fsSLo ~/setup-launcher \
+#     "https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-launcher"
+#   sh ~/setup-launcher
+#
+# This script still works, but its fish config template is frozen at the
+# tmux-era version and will not receive updates.
 
 set -eu
 
@@ -85,8 +99,9 @@ Before the tmux theme will use wallpaper-derived colors:
   - Open Settings -> Appearance in Termux Launcher.
   - Keep Terminal Material colors on (it is enabled by default).
   - Start Shizuku for launcher resource widgets such as CPU and RAM.
-    In plain Termux without Termux Launcher, the status helper can fall back
-    to rish, but that path is less efficient than launcherctl.
+    The status helper samples /proc/stat and /proc/meminfo directly through
+    a Shizuku rish shell, with a short cache so it does not fork rish on
+    every tmux refresh.
 
 Before the Shizuku btop helper can be installed:
   - Put rish in your PATH and grant it Shizuku access.

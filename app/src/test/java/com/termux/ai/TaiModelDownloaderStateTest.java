@@ -38,6 +38,8 @@ public class TaiModelDownloaderStateTest {
     @Before
     public void setUp() {
         context = ApplicationProvider.getApplicationContext();
+        context.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE).edit().clear().commit();
+        context.getSharedPreferences(TaiModelStore.PREFS_NAME, Context.MODE_PRIVATE).edit().clear().commit();
         store = new TaiModelStore(context);
     }
 
@@ -67,6 +69,25 @@ public class TaiModelDownloaderStateTest {
 
         assertFalse(result.getBoolean("ok"));
         assertEquals("insecure_url", result.getString("error"));
+    }
+
+    @Test
+    public void mnnConfigDeclaresVisionAndEagleCapabilities() throws Exception {
+        File directory = new File(context.getCacheDir(), "mnn-capabilities-test");
+        assertTrue(directory.mkdirs() || directory.isDirectory());
+        File config = new File(directory, "config.json");
+        java.nio.file.Files.write(config.toPath(), new JSONObject()
+            .put("mllm", new JSONObject().put("vision_model", "visual.mnn"))
+            .put("speculative_type", "eagle")
+            .toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        LinkedHashSet<String> capabilities = TaiModelStore.mnnPackageCapabilities(config,
+            Collections.singleton(TaiModelSpec.CAPABILITY_TEXT_CHAT));
+
+        assertTrue(capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT));
+        assertTrue(capabilities.contains(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING));
+        config.delete();
+        directory.delete();
     }
 
     @Test
@@ -152,7 +173,7 @@ public class TaiModelDownloaderStateTest {
         assertEquals(TaiModelSpec.BACKEND_LITERT_LM, advertised.backend);
         assertTrue(advertised.capabilities.contains("image_input"));
         assertTrue(advertised.capabilities.contains("audio_input"));
-        assertFalse(advertised.capabilities.contains(TaiModelSpec.CAPABILITY_LLM_THINKING));
+        assertTrue(advertised.capabilities.contains(TaiModelSpec.CAPABILITY_LLM_THINKING));
         assertTrue(advertised.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_LLM_THINKING));
         assertFalse(advertised.sourceCapabilities.contains("stale_false_capability"));
         assertTrue(advertised.builtInCatalogEntry);
@@ -270,7 +291,7 @@ public class TaiModelDownloaderStateTest {
         assertTrue("stale installed metadata must not suppress catalog audio",
             rebuilt.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT));
         assertTrue(rebuilt.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT));
-        assertFalse(rebuilt.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_LLM_THINKING));
+        assertTrue(rebuilt.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_LLM_THINKING));
         assertTrue(rebuilt.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_LLM_THINKING));
         assertEquals(4096, rebuilt.endpointContextWindow);
         assertEquals(32768, rebuilt.sourceContextWindow);

@@ -1,63 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
-<PreferenceScreen
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory
-        app:key="termux_themes"
-        app:title="@string/termux_themes_header">
+    <PreferenceCategory app:title="@string/settings_surfaces_header">
+        <Preference
+            app:key="live_surface_editor"
+            app:icon="@drawable/ic_symbol_palette"
+            app:persistent="false"
+            app:title="@string/termux_dock_tune_live_title"
+            app:summary="@string/termux_dock_tune_live_summary" />
+    </PreferenceCategory>
 
+    <PreferenceCategory app:title="@string/settings_theme_header">
         <ListPreference
             app:key="theme_mode"
-            app:title="@string/termux_theme_mode_title"
+            app:title="@string/settings_color_mode_title"
             app:entries="@array/termux_theme_mode_entries"
             app:entryValues="@array/termux_theme_mode_values"
             app:useSimpleSummaryProvider="true" />
-
-        <SwitchPreferenceCompat
-            app:key="use_system_wallpaper"
-            app:title="@string/termux_use_system_wallpaper_title"
-            app:summary="@string/termux_use_system_wallpaper_summary"
-            android:defaultValue="true" />
-
         <SwitchPreferenceCompat
             app:key="terminal_dynamic_colors_enabled"
-            app:title="@string/termux_terminal_dynamic_colors_title"
-            app:summary="@string/termux_terminal_dynamic_colors_summary"
+            app:title="@string/settings_wallpaper_colors_title"
+            app:summary="@string/settings_wallpaper_colors_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="use_system_wallpaper"
+            app:title="@string/settings_wallpaper_title"
+            app:summary="@string/termux_use_system_wallpaper_summary"
             android:defaultValue="true" />
     </PreferenceCategory>
 
-    <PreferenceCategory
-        app:key="apps_bar_icons"
-        app:title="@string/apps_bar_icons_header">
-
+    <PreferenceCategory app:title="@string/settings_icon_appearance_header">
         <SwitchPreferenceCompat
             app:key="app_launcher_bw_icons"
-            app:title="@string/termux_app_launcher_bw_icons_title"
+            app:title="@string/settings_icon_appearance_title"
             app:summary="@string/termux_app_launcher_bw_icons_summary"
             android:defaultValue="false" />
-
         <Preference
             app:key="app_launcher_icon_pack_package"
-            app:title="@string/termux_app_launcher_icon_pack_title"
+            app:icon="@drawable/ic_symbol_grid_view"
+            app:title="@string/settings_icon_pack_title"
             app:summary="@string/termux_app_launcher_icon_pack_summary" />
-
         <Preference
             app:key="app_launcher_pinned_icon_pack_package"
-            app:title="@string/termux_app_launcher_pinned_icon_pack_title"
+            app:icon="@drawable/ic_symbol_grid_view"
+            app:title="@string/settings_pinned_icon_pack_title"
             app:summary="@string/termux_app_launcher_pinned_icon_pack_summary" />
-
-    </PreferenceCategory>
-
-    <PreferenceCategory
-        app:key="personalization"
-        app:title="@string/personalization_header">
-
-        <Preference
-            app:key="tune_dock_live"
-            app:title="@string/termux_dock_tune_live_title"
-            app:summary="@string/termux_dock_tune_live_summary" />
-
     </PreferenceCategory>
 
 </PreferenceScreen>

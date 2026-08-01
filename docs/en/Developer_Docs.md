@@ -4,14 +4,13 @@ This page keeps the intermediate and high-level details out of the beginner guid
 
 ## Project Shape
 
-Termux Launcher is based on [termux-app](https://github.com/termux/termux-app), with launcher UI, sixel-capable terminal rendering, Material color integration, LauncherCtl, and the local Termux AI runtime added on top.
+Termux Launcher is based on [termux-app](https://github.com/termux/termux-app), with launcher UI, sixel-capable terminal rendering, Material color integration, and the local Termux AI runtime added on top.
 
 Important local areas:
 
-- `app/src/main/java/com/termux/launcherctl/LauncherCtlApiServer.java`: local API server and generated shell clients.
-- `app/src/main/java/com/termux/launcherctl/LauncherCtlNotificationListener.java`: notification and media cache source.
+- `app/src/main/java/com/termux/launcherctl/LauncherCtlApiServer.java`: local OpenAI/Ollama-compatible inference API server and app-launch route; installs the `tai` and launch-only `launcherctl` shell clients.
+- `app/src/main/java/com/termux/launcherctl/LauncherCtlNotificationListener.java`: notification and media cache source for the in-app status bar UI.
 - `app/src/main/java/com/termux/ai/`: TAI settings, model registry, model downloads/imports, and runtime adapters.
-- `resources/bin/launcherctl`: installed LauncherCtl shell helper.
 - `resources/bin/tai`: installed TAI shell helper.
 - `docs/en/examples/`: optional tmux, status, weather, and Shizuku helper scripts.
 
@@ -36,25 +35,22 @@ The endpoint file contains the base URL without `/v1`, for example:
 http://127.0.0.1:41237
 ```
 
-The token file contains the bearer token used by `launcherctl`, `tai`, and direct API clients.
+The token file contains the bearer token used by `tai` and direct API clients.
 
-### Launcher Routes
+### App Launch Route
 
 ```text
-GET  /v1/status
-GET  /v1/apps
 POST /v1/apps/launch
-GET  /v1/system/resources
-GET  /v1/media/now-playing
-GET  /v1/media/art
-GET  /v1/notifications
-POST /v1/app/restart
-POST /v1/auth/rotate
 ```
 
-`/v1/system/resources` returns CPU, memory, runtime heap, uptime, storage, battery, network, thermal, and backend status data. It is designed for periodic dashboard or tmux status polling.
+The body is `{"query":"..."}`. The query matches the launcher's app catalog by label, package,
+activity, or stable id. A unique best match launches and returns its app record. No match returns
+404 `not_found`; tied best matches return 409 `ambiguous` with up to eight candidates. The route is
+limited to 30 requests per minute.
 
-Notification and media routes require notification listener permission and may expose sensitive user content.
+The installed `launcherctl launch <app name, package, or activity>` client is the only shell command
+for this route. Agent, MCP, notification, media, resource, event, and restart commands are not
+installed. Local AI commands belong to `tai`.
 
 ### TAI Routes
 
@@ -75,8 +71,12 @@ POST /v1/ai/models/delete
 POST /v1/ai/models/load
 POST /v1/ai/models/unload
 GET  /v1/models
+GET  /v1/models/{id}
 POST /v1/chat/completions
+POST /v1/responses
 POST /v1/completions
+POST /v1/embeddings
+POST /v1/auth/rotate
 ```
 
 `/v1/chat/completions` and `/v1/completions` support `stream: true` and return `text/event-stream` chunks ending with:
@@ -89,20 +89,19 @@ data: [DONE]
 
 Implemented mitigations:
 
-- bearer token authentication
+- bearer token authentication with an optional-off toggle for localhost
 - constant-time token comparison
 - bounded worker pool
 - HTTP request size limits
 - endpoint rate limiting
-- token rotation
+- token rotation (`POST /v1/auth/rotate`)
 - owner-only sensitive files
 
 Remaining considerations:
 
 - Localhost token auth still depends on local process trust.
 - Apps or processes that can read the same Termux home files can read the token.
-- Notification and media endpoints should be treated as privacy-sensitive.
-- A future Unix-domain socket or endpoint-level permission toggle could tighten local access further.
+- A future Unix-domain socket could tighten local access further.
 
 ## Termux AI Runtime Notes
 
@@ -230,15 +229,9 @@ Scripts:
 - `config.fish` and `termux-launcher.omp.json`: optional fish and Oh My Posh defaults.
 - `tmux.conf` and `material-theme.tmux`: manual tmux examples.
 
-`launcher-system-monitor` prefers `launcherctl resources`. It keeps a `rish` fallback for plain Termux plus Shizuku setups, but that path is less efficient because it starts a Shizuku shell to sample system files.
+`launcher-system-monitor` samples `/proc/stat` and `/proc/meminfo` directly when Shizuku `rish` is available, so it works in plain Termux plus Shizuku setups without any launcher HTTP route. It keeps a short cache file so tmux status bars do not fork a Shizuku shell on every refresh.
 
-Refresh installed helper scripts after an APK or docs update:
-
-```sh
-launcherctl update-scripts
-```
-
-This updates repo-owned helper scripts and leaves `~/.tmux.conf` alone.
+Refresh installed helper scripts after an APK or docs update by re-running the example installer (`setup-tmux-btop`) or re-downloading the script from `docs/en/examples/`. This updates repo-owned helper scripts and leaves `~/.tmux.conf` alone.
 
 ## Shizuku and rish
 
@@ -259,11 +252,13 @@ Expected local setup:
   `io.vaj.tl` for the VAJ edition).
 - Shizuku permission has been granted once.
 
-Diagnostics:
+If `rish` fails to start, the most common cause is a stale or missing `rish_shizuku.dex`, or a mismatched `RISH_APPLICATION_ID` at the bottom of the `rish` script. To fix it:
 
-```sh
-launcherctl tty-doctor
-```
+1. In Shizuku, regenerate the terminal helper files (`rish` and `rish_shizuku.dex`).
+2. Copy both files back into a Termux PATH directory.
+3. Make `rish` executable: `chmod +x "$(command -v rish)"`.
+4. Confirm the bottom of `rish` sets `RISH_APPLICATION_ID` to this app's package name (`com.termux` for the standard edition or `io.vaj.tl` for the VAJ edition).
+5. Run `rish -c "id"` once and grant the Shizuku permission prompt.
 
 `setup-btop-rish` creates:
 

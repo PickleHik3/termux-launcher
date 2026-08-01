@@ -70,6 +70,57 @@ public class TerminalRowTest extends TestCase {
         assertLineStartsWith(' ', DIARESIS_CODEPOINT, DIARESIS_CODEPOINT, ' ');
     }
 
+    public void testPositiveWidthCodePointCanContinueExistingGrapheme() {
+        int woman = 0x1F469;
+        int laptop = 0x1F4BB;
+        row.setChar(0, woman, TextStyle.NORMAL);
+        row.appendCodePointToCell(0, 0x200D);
+        row.appendCodePointToCell(0, laptop);
+
+        assertLineStartsWith(woman, 0x200D, laptop, ' ');
+        assertEquals(0, row.findStartOfColumn(0));
+        assertEquals(0, row.findStartOfColumn(1));
+        assertEquals(5, row.findStartOfColumn(2));
+        assertEquals(2, row.getDisplayWidthAt(0));
+        assertEquals(0, row.getDisplayWidthAt(2));
+        assertEquals(0, row.getDisplayWidthAt(3));
+
+        row.setChar(2, 'X', TextStyle.NORMAL);
+        assertLineStartsWith(woman, 0x200D, laptop, 'X');
+        assertEquals(6, row.findStartOfColumn(3));
+    }
+
+    public void testCopyIntervalPreservesGraphemeContinuationWidths() {
+        int woman = 0x1F469;
+        int laptop = 0x1F4BB;
+        row.setChar(0, woman, TextStyle.NORMAL);
+        row.appendCodePointToCell(0, 0x200D);
+        row.appendCodePointToCell(0, laptop);
+        row.setChar(2, 'X', TextStyle.NORMAL);
+
+        TerminalRow copy = new TerminalRow(COLUMNS, TextStyle.NORMAL);
+        copy.copyInterval(row, 0, 3, 4);
+
+        assertEquals(4, copy.findStartOfColumn(4));
+        assertEquals(4, copy.findStartOfColumn(5));
+        assertEquals(9, copy.findStartOfColumn(6));
+        assertEquals(10, copy.findStartOfColumn(7));
+    }
+
+    public void testRegionalIndicatorClusterCanWidenToTwoCells() {
+        int regionalS = 0x1F1F8;
+        int regionalA = 0x1F1E6;
+        row.setChar(0, regionalS, TextStyle.NORMAL);
+        row.appendCodePointToCell(0, regionalA);
+        assertTrue(row.widenCell(0));
+
+        assertLineStartsWith(regionalS, regionalA, ' ');
+        assertEquals(0, row.findStartOfColumn(1));
+        assertEquals(4, row.findStartOfColumn(2));
+        assertEquals(2, row.getDisplayWidthAt(0));
+        assertFalse(row.widenCell(0));
+    }
+
     public void testStaticConstants() {
         assertEquals(1, Character.charCount(ONE_JAVA_CHAR_DISPLAY_WIDTH_TWO_1));
         assertEquals(1, Character.charCount(ONE_JAVA_CHAR_DISPLAY_WIDTH_TWO_2));

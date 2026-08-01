@@ -1,135 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory
-        app:key="root_assistant"
-        app:title="@string/settings_root_assistant_header">
+    <com.termux.app.fragments.settings.SettingsSearchPreference
+        app:key="settings_search"
+        app:title="@string/settings_search_hint"
+        app:persistent="false" />
 
-        <Preference
-            app:key="termux_ai"
-            app:icon="@drawable/ic_settings_ai"
-            app:title="@string/termux_ai_preferences_title"
-            app:summary="@string/termux_ai_preferences_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.TaiPreferencesFragment"/>
+    <Preference
+        app:key="appearance"
+        app:icon="@drawable/ic_symbol_palette"
+        app:title="@string/settings_destination_appearance"
+        app:summary="@string/settings_destination_appearance_summary"
+        app:fragment="com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment" />
 
-        <com.termux.app.fragments.settings.PillPreference
-            app:key="shizuku"
-            app:icon="@drawable/ic_settings_shield"
-            app:title="@string/termux_privileged_access_preferences_title"
-            app:summary="@string/termux_privileged_access_preferences_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.PrivilegedAccessPreferencesFragment"/>
+    <Preference
+        app:key="terminal_status"
+        app:icon="@drawable/ic_symbol_terminal"
+        app:title="@string/settings_destination_terminal_status"
+        app:summary="@string/settings_destination_terminal_status_summary"
+        app:fragment="com.termux.app.fragments.settings.termux.TerminalStatusPreferencesFragment" />
 
-    </PreferenceCategory>
+    <Preference
+        app:key="keyboard_input"
+        app:icon="@drawable/ic_symbol_keyboard"
+        app:title="@string/settings_destination_keyboard_input"
+        app:summary="@string/settings_destination_keyboard_input_summary"
+        app:fragment="com.termux.app.fragments.settings.termux.KeyboardPreferencesFragment" />
 
-    <PreferenceCategory
-        app:key="root_launcher"
-        app:title="@string/settings_root_launcher_header">
+    <Preference
+        app:key="launcher_apps"
+        app:icon="@drawable/ic_symbol_apps"
+        app:title="@string/settings_destination_launcher_apps"
+        app:summary="@string/settings_destination_launcher_apps_summary"
+        app:fragment="com.termux.app.fragments.settings.termux.LauncherPreferencesFragment" />
 
-        <Preference
-            app:key="termux"
-            app:icon="@drawable/ic_settings_terminal"
-            app:title="@string/termux_preferences_title"
-            app:summary="@string/termux_preferences_summary"
-            app:fragment="com.termux.app.fragments.settings.TermuxPreferencesFragment"/>
+    <Preference
+        app:key="services_permissions"
+        app:icon="@drawable/ic_symbol_admin_panel_settings"
+        app:title="@string/settings_destination_services_permissions"
+        app:summary="@string/settings_destination_services_permissions_summary"
+        app:fragment="com.termux.app.fragments.settings.termux.ServicesPermissionsPreferencesFragment" />
 
-        <Preference
-            app:key="look_and_feel"
-            app:icon="@drawable/ic_settings_palette"
-            app:title="@string/termux_style_preferences_title"
-            app:summary="@string/termux_style_preferences_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment"/>
+    <Preference
+        app:key="advanced_diagnostics"
+        app:icon="@drawable/ic_symbol_bug_report"
+        app:title="@string/settings_destination_advanced_diagnostics"
+        app:summary="@string/settings_destination_advanced_diagnostics_summary"
+        app:fragment="com.termux.app.fragments.settings.termux.AdvancedDiagnosticsPreferencesFragment" />
 
-        <Preference
-            app:key="apps_bar"
-            app:icon="@drawable/ic_settings_grid"
-            app:title="@string/termux_launcher_preferences_title"
-            app:summary="@string/termux_launcher_preferences_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.LauncherPreferencesFragment"/>
-
-        <Preference
-            app:key="keyboard"
-            app:icon="@drawable/ic_settings_keyboard"
-            app:title="@string/termux_keyboard_preferences_title"
-            app:summary="@string/termux_keyboard_preferences_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.KeyboardPreferencesFragment"/>
-
-    </PreferenceCategory>
-
-    <PreferenceCategory
-        app:key="root_system_info"
-        app:title="@string/settings_root_system_info_header">
-
-        <Preference
-            app:key="termux_api"
-            app:icon="@drawable/ic_settings_plug"
-            app:title="@string/termux_api_preferences_title"
-            app:summary="@string/termux_api_preferences_summary"
-            app:isPreferenceVisible="false"
-            app:fragment="com.termux.app.fragments.settings.TermuxAPIPreferencesFragment"/>
-
-        <Preference
-            app:key="termux_float"
-            app:title="@string/termux_float_preferences_title"
-            app:summary="@string/termux_float_preferences_summary"
-            app:isPreferenceVisible="false"
-            app:fragment="com.termux.app.fragments.settings.TermuxFloatPreferencesFragment"/>
-
-        <Preference
-            app:key="termux_tasker"
-            app:title="@string/termux_tasker_preferences_title"
-            app:summary="@string/termux_tasker_preferences_summary"
-            app:isPreferenceVisible="false"
-            app:fragment="com.termux.app.fragments.settings.TermuxTaskerPreferencesFragment"/>
-
-        <Preference
-            app:key="termux_gui"
-            app:title="@string/termux_gui_preferences_title"
-            app:summary="@string/termux_gui_preferences_summary"
-            app:isPreferenceVisible="false"
-            app:fragment="com.termux.app.fragments.settings.TermuxGUIPreferencesFragment"/>
-
-        <Preference
-            app:key="termux_widget"
-            app:title="@string/termux_widget_preferences_title"
-            app:summary="@string/termux_widget_preferences_summary"
-            app:isPreferenceVisible="false"
-            app:fragment="com.termux.app.fragments.settings.TermuxWidgetPreferencesFragment"/>
-
-        <Preference
-            app:key="about"
-            app:icon="@drawable/ic_settings_info"
-            app:title="@string/about_preference_title"
-            app:summary="@string/about_preference_summary"
-            app:persistent="false"/>
-
-        <Preference
-            app:key="open_source_licenses"
-            app:icon="@drawable/ic_settings_info"
-            app:title="@string/open_source_licenses_preference_title"
-            app:summary="@string/open_source_licenses_preference_summary"
-            app:persistent="false"/>
-
-        <Preference
-            app:key="donate"
-            app:icon="@drawable/ic_settings_heart"
-            app:title="@string/donate_preference_title"
-            app:summary="@string/donate_preference_summary"
-            app:persistent="false"
-            app:isPreferenceVisible="false"/>
-
-        <Preference
-            app:key="report_issue"
-            app:icon="@drawable/ic_settings_info"
-            app:title="@string/report_issue_preference_title"
-            app:summary="@string/report_issue_preference_summary"
-            app:persistent="false"/>
-
-        <Preference
-            app:key="quick_start_tour"
-            app:icon="@drawable/ic_settings_shortcut"
-            app:title="@string/onboarding_settings_title"
-            app:summary="@string/onboarding_settings_summary"
-            app:persistent="false"/>
-
-    </PreferenceCategory>
+    <Preference
+        app:key="about_support"
+        app:icon="@drawable/ic_symbol_info"
+        app:title="@string/settings_destination_about_support"
+        app:summary="@string/settings_destination_about_support_summary"
+        app:fragment="com.termux.app.fragments.settings.AboutSupportPreferencesFragment" />
 
 </PreferenceScreen>

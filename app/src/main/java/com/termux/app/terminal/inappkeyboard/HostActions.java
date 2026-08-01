@@ -39,5 +39,19 @@ public interface HostActions {
     /** Reserved for a future app-owned suggestion source. */
     default void onSuggestionEntered(String text) {}
 
+    /**
+     * The keyboard's modifier snapshot changed (latch, lock or release). Drives the keybind
+     * hint popup the host shows while a Ctrl+Alt prefix is held.
+     */
+    default void onKeyboardModifiersChanged(TerminalModifiers modifiers) {}
+
+    /**
+     * A {@code tool:<id>} key fired. The id is a launcher registry tool name, written straight
+     * into the layout file, so exposing a new action on a key needs no code on either side.
+     *
+     * @param toolId registry tool name, e.g. {@code app.command_palette}
+     */
+    default void runLauncherTool(String toolId) {}
+
     void debugLog(String message);
 }

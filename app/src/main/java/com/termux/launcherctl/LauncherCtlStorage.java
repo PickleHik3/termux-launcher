@@ -21,13 +21,6 @@ public final class LauncherCtlStorage {
 
     public static final String DB_FILE_NAME = "launcher.db";
     public static final String NOTIFICATIONS_JSONL_NAME = "notifications.jsonl";
-    public static final String EVENTS_JSONL_NAME = "events.jsonl";
-    public static final String AGENT_RUNS_JSONL_NAME = "agent-runs.jsonl";
-
-    public static final String TOOLS_JSON_NAME = "tools.json";
-    public static final String CAPABILITIES_JSON_NAME = "capabilities.json";
-    public static final String CONFIG_JSON_NAME = "config.json";
-    public static final String MCP_CONFIG_JSON_NAME = "mcp.json";
 
     private static File sTestBaseDir = null;
 
@@ -84,27 +77,4 @@ public final class LauncherCtlStorage {
         return new File(ensureLauncherCtlDir(), NOTIFICATIONS_JSONL_NAME);
     }
 
-    public static File getEventsJsonlFile() {
-        return new File(ensureLauncherCtlDir(), EVENTS_JSONL_NAME);
-    }
-
-    public static File getAgentRunsJsonlFile() {
-        return new File(ensureLauncherCtlDir(), AGENT_RUNS_JSONL_NAME);
-    }
-
-    public static File getToolsJsonFile() {
-        return new File(ensureLauncherCtlDir(), TOOLS_JSON_NAME);
-    }
-
-    public static File getCapabilitiesJsonFile() {
-        return new File(ensureLauncherCtlDir(), CAPABILITIES_JSON_NAME);
-    }
-
-    public static File getConfigJsonFile() {
-        return new File(ensureLauncherCtlDir(), CONFIG_JSON_NAME);
-    }
-
-    public static File getMcpConfigJsonFile() {
-        return new File(new File(new File(getHomeDir(), ".config"), "termux-launcher"), MCP_CONFIG_JSON_NAME);
-    }
 }

@@ -45,6 +45,18 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     private TermuxActivity mActivity;
     private TermuxInAppKeyboard mController;
 
+    @Test
+    public void surfaceEditorKeyboardSlidersNormalizeFullStoredRanges() {
+        assertEquals(0, TermuxActivity.keyboardEditorProgress(0.5f, 0.5f, 1.6f));
+        assertEquals(100, TermuxActivity.keyboardEditorProgress(1.6f, 0.5f, 1.6f));
+        assertEquals(0.5f, TermuxActivity.keyboardEditorValue(0, 0.5f, 1.6f), 0.0001f);
+        assertEquals(1.6f, TermuxActivity.keyboardEditorValue(100, 0.5f, 1.6f), 0.0001f);
+
+        assertEquals(0, TermuxActivity.keyboardEditorProgress(0f, 0f, 8f));
+        assertEquals(100, TermuxActivity.keyboardEditorProgress(8f, 0f, 8f));
+        assertEquals(4f, TermuxActivity.keyboardEditorValue(50, 0f, 8f), 0.0001f);
+    }
+
     @After
     public void tearDown() {
         if (mController != null)
@@ -144,10 +156,10 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         assertFalse(TermuxActivity.shouldShowDecorNavBarSurface(
             false, true, 72, false, true, true));
         // The keyboard's capsule decision is decoupled from the dock style: an edge-to-edge
-        // keyboard under the Valarie dock still owns the gesture-navigation surface.
+        // keyboard under the Rounded dock still owns the gesture-navigation surface.
         assertTrue(TermuxActivity.shouldShowDecorNavBarSurface(
             false, true, 72, false, true, false));
-        // The Valarie dock itself always floats — no continuation surface without a keyboard.
+        // The Rounded dock itself always floats — no continuation surface without a keyboard.
         assertFalse(TermuxActivity.shouldShowDecorNavBarSurface(
             true, false, 72, false, true, false));
     }
@@ -220,8 +232,10 @@ public class TermuxActivityInAppKeyboardGeometryTest {
             R.id.inapp_keyboard_key_corner_radius_slider);
         assertEquals(View.VISIBLE, spacingSlider.getVisibility());
         assertEquals(View.VISIBLE, radiusSlider.getVisibility());
-        assertEquals(100, spacingSlider.getProgress());
-        assertEquals(60, radiusSlider.getProgress());
+        assertEquals(Math.round(preferences.getInAppKeyboardKeyMarginScale() * 100f),
+            spacingSlider.getProgress());
+        assertEquals(Math.round(preferences.getInAppKeyboardKeyCornerRadiusDp() * 10f),
+            radiusSlider.getProgress());
         assertFalse(intent.hasExtra(TermuxActivity.EXTRA_IN_APP_KEYBOARD_HEIGHT_ADJUST));
 
         mController.cancelHeightAdjustment();
@@ -390,6 +404,8 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     @Test
     public void liveHeightPreviewInvalidatesCachedKeyboardAndTerminalGeometry() {
         createActivityHostedController(null);
+        float initialMarginScale = mActivity.getPreferences().getInAppKeyboardKeyMarginScale();
+        float initialRadiusDp = mActivity.getPreferences().getInAppKeyboardKeyCornerRadiusDp();
         layoutActivityRoot();
         ViewGroup root = mActivity.findViewById(R.id.activity_termux_root_relative_layout);
         View accessory = mActivity.findViewById(R.id.accessory_stack_container);
@@ -438,8 +454,9 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         assertEquals(initialHeight, accessory.getLayoutParams().height);
         assertEquals(initialHeight, keyboard.getHeight());
         assertEquals(accessory.getTop(), terminal.getBottom());
-        assertEquals(1f, keyboardView.getKeyMarginScale(), 0.0001f);
-        assertEquals(-1f, keyboardView.getKeyCornerRadiusOverride(), 0.0001f);
+        assertEquals(initialMarginScale, keyboardView.getKeyMarginScale(), 0.0001f);
+        assertEquals(initialRadiusDp * mActivity.getResources().getDisplayMetrics().density,
+            keyboardView.getKeyCornerRadiusOverride(), 0.0001f);
     }
 
     @Test
@@ -481,7 +498,11 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         preferences.setAppLauncherAppsRowEnabled(false);
         preferences.setTerminalFlushDockEnabled(false);
 
-        TerminalView terminalView = mActivity.findViewById(R.id.terminal_view);
+        // Production creates this dynamically through TerminalPaneController during onCreate.
+        FrameLayout paneHost = mActivity.findViewById(R.id.terminal_pane_host);
+        View pane = mActivity.getLayoutInflater().inflate(R.layout.view_terminal_pane, paneHost, false);
+        paneHost.addView(pane);
+        TerminalView terminalView = pane.findViewById(R.id.terminal_view);
         TermuxTerminalSessionActivityClient sessionClient =
             new TermuxTerminalSessionActivityClient(mActivity);
         TermuxTerminalViewClient viewClient =

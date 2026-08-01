@@ -40,8 +40,10 @@ import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import com.termux.terminal.KeyHandler;
+import com.termux.terminal.KittyKeyEncoder;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalSession;
+import com.termux.terminal.TextStyle;
 import com.termux.view.textselection.TextSelectionCursorController;
 
 /**
@@ -66,9 +68,43 @@ public final class TerminalView extends View {
 
     public TerminalRenderer mRenderer;
 
+    /** Draws the streak between the cursor's old and new cell. Purely visual. */
+    private final CursorTrail mCursorTrail = new CursorTrail();
+
+    /** Per-pane timing counters; recording uses only primitive fields and fixed arrays. */
+    private final TerminalRenderMetrics mRenderMetrics = new TerminalRenderMetrics();
+
+    /**
+     * A sink for what key input actually reached the shell, for the app's key inspector.
+     * <p>
+     * The point of reporting it from here is that this is where the encoders are chosen, so a
+     * diagnostic sees what was really written rather than a second guess at it.
+     * </p>
+     */
+    public interface KeyInputProbe {
+
+        /**
+         * @param encoder which encoder produced the bytes: "kitty", "keyhandler" or "text".
+         * @param bytes   what was written to the shell.
+         */
+        void onKeyBytesWritten(String encoder, String bytes);
+    }
+
+    /** Null in normal use; set only while the key inspector is open. */
+    @Nullable
+    private KeyInputProbe mKeyInputProbe;
+
     public TerminalViewClient mClient;
 
     private boolean mUseTransparentFrameClear;
+    /**
+     * A split-pane drag may change this view's Android bounds many times per second. Sending every
+     * intermediate geometry to the PTY generates a SIGWINCH storm and makes interactive shells
+     * repaint their prompt repeatedly. The pane controller pauses those updates for the duration
+     * of the gesture and commits the final rows/columns once the drag is released.
+     */
+    private boolean mTerminalSizeUpdatesPaused;
+    private boolean mTerminalSizeUpdatePending;
     private int mTransparentFrameOverlayColor;
 
     private TextSelectionCursorController mTextSelectionCursorController;
@@ -94,6 +130,15 @@ public final class TerminalView extends View {
 
     float mScaleFactor = 1.f;
 
+    /**
+     * Per-event scale factor deviation from 1 below which {@link #mScaleFactor} is left alone.
+     * A two-finger scroll drag has near-constant span between fingers, but hand tremor still
+     * makes the scale detector report a scale factor that isn't exactly 1 each frame; without
+     * this the jitter is read as a deliberate pinch and changes the font size while scrolling.
+     * A real pinch changes span by much more than this per frame.
+     */
+    private static final float SCALE_JITTER_THRESHOLD = 0.015f;
+
     final GestureAndScaleRecognizer mGestureRecognizer;
 
     /**
@@ -113,6 +158,44 @@ public final class TerminalView extends View {
      */
     float mScrollRemainder;
     float mScrollXRemainder;
+
+    /**
+     * How far into {@link #mTopRow}'s row the transcript is scrolled, in pixels, in [0, line spacing).
+     * The logical scroll position stays row based; this is only applied when drawing, which is what
+     * makes transcript scrolling move per pixel instead of per row.
+     */
+    private float mScrollOffsetPixels;
+
+    private boolean mSmoothFlingActive;
+
+    private boolean mSmoothSettleActive;
+
+    private static final int SCROLL_SETTLE_DURATION_MS = 120;
+
+    /**
+     * Set while a finger drag is being reported to an application which asked for motion reporting,
+     * during which the drag must not also scroll the view.
+     */
+    private boolean mTouchMouseDragActive;
+
+    /**
+     * Set for the remainder of a gesture whose motion was reported as a mouse drag, so that the tap
+     * and fling handling of that same gesture does not add events of its own.
+     */
+    private boolean mTouchMouseDragReported;
+
+    private int mTouchMouseDragLastCol, mTouchMouseDragLastRow;
+
+    /**
+     * Set from a long press until the following move either commits to a mouse drag (past touch
+     * slop) or the finger lifts without having moved, in which case local text selection starts
+     * instead - see {@link #handleTouchMouseDrag(MotionEvent)}.
+     */
+    private boolean mTouchMouseDragArmed;
+
+    private MotionEvent mTouchMouseDragArmEvent;
+
+    private final int mTouchSlopSquared;
 
     /**
      * If non-zero, this is the last unicode code point received if that was a combining character.
@@ -184,6 +267,12 @@ public final class TerminalView extends View {
             public boolean onUp(MotionEvent event) {
                 mScrollRemainder = 0.0f;
                 mScrollXRemainder = 0.0f;
+                if (mScroller.isFinished())
+                    settleScrollOffset();
+                if (mTouchMouseDragReported) {
+                    scrolledWithFinger = false;
+                    return true;
+                }
                 if (mEmulator != null && mEmulator.isMouseTrackingActive() && !event.isFromSource(InputDevice.SOURCE_MOUSE) && !isSelectingText() && !scrolledWithFinger) {
                     // Quick event processing when mouse tracking is active - do not wait for check of double tapping
                     // for zooming.
@@ -212,6 +301,8 @@ public final class TerminalView extends View {
             public boolean onScroll(MotionEvent e, float distanceX, float distanceY) {
                 if (mEmulator == null)
                     return true;
+                if (mTouchMouseDragActive)
+                    return true;
                 if (mEmulator.isMouseTrackingActive() && e.isFromSource(InputDevice.SOURCE_MOUSE)) {
                     // If moving with mouse pointer while pressing button, report that instead of scroll.
                     // This means that we never report moving with button press-events for touch input,
@@ -220,11 +311,17 @@ public final class TerminalView extends View {
                     sendMouseEventCode(e, TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, true);
                 } else {
                     scrolledWithFinger = true;
-                    distanceY += mScrollRemainder;
-                    int deltaRows = (int) (distanceY / mRenderer.mFontLineSpacing);
-                    mScrollRemainder = distanceY - deltaRows * mRenderer.mFontLineSpacing;
-                    doScroll(e, deltaRows);
-                    
+                    if (isSmoothScrollAllowed()) {
+                        abortSmoothScroll();
+                        setScrollPixelPosition(getScrollPixelPosition() + distanceY);
+                        invalidate();
+                    } else {
+                        distanceY += mScrollRemainder;
+                        int deltaRows = (int) (distanceY / mRenderer.mFontLineSpacing);
+                        mScrollRemainder = distanceY - deltaRows * mRenderer.mFontLineSpacing;
+                        doScroll(e, deltaRows);
+                    }
+
                     distanceX += mScrollXRemainder;
                     int deltaCols = (int) (distanceX / mRenderer.mFontWidth);
                     mScrollXRemainder = distanceX - deltaCols * mRenderer.mFontWidth;
@@ -238,6 +335,8 @@ public final class TerminalView extends View {
             public boolean onScale(float focusX, float focusY, float scale) {
                 if (mEmulator == null || isSelectingText())
                     return true;
+                if (Math.abs(scale - 1f) < SCALE_JITTER_THRESHOLD)
+                    return true;
                 mScaleFactor *= scale;
                 mScaleFactor = mClient.onScale(mScaleFactor);
                 return true;
@@ -247,10 +346,19 @@ public final class TerminalView extends View {
             public boolean onFling(final MotionEvent e2, float velocityX, float velocityY) {
                 if (mEmulator == null)
                     return true;
+                if (mTouchMouseDragReported)
+                    return true;
                 // Do not start scrolling until last fling has been taken care of:
                 if (!mScroller.isFinished())
                     return true;
                 final boolean mouseTrackingAtStartOfFling = mEmulator.isMouseTrackingActive();
+                if (isSmoothScrollAllowed()) {
+                    mSmoothFlingActive = true;
+                    mScroller.fling(0, Math.round(getScrollPixelPosition()), 0, -(int) velocityY, 0, 0,
+                        getScrollPixelMinimum(), 0);
+                    postOnAnimation(mSmoothScrollRunnable);
+                    return true;
+                }
                 float SCALE = 0.25f;
                 if (mouseTrackingAtStartOfFling) {
                     mScroller.fling(0, 0, 0, -(int) (velocityY * SCALE), 0, 0, -mEmulator.mRows / 2, mEmulator.mRows / 2);
@@ -258,7 +366,7 @@ public final class TerminalView extends View {
                 	//this doesn't fling in less
                     mScroller.fling(0, mTopRow, 0, -(int) (velocityY * SCALE), 0, 0, -mEmulator.getScreen().getActiveTranscriptRows(), 0);
                 }
-                post(new Runnable() {
+                postOnAnimation(new Runnable() {
 
                     private int mLastY = 0;
 
@@ -276,7 +384,7 @@ public final class TerminalView extends View {
                         doScroll(e2, diff);
                         mLastY = newY;
                         if (more)
-                            post(this);
+                            postOnAnimation(this);
                     }
                 });
                 return true;
@@ -305,13 +413,19 @@ public final class TerminalView extends View {
                     return;
                 if (mClient.onLongPress(event))
                     return;
-                if (!isSelectingText()) {
-                    performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                if (isSelectingText())
+                    return;
+                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                if (isTouchMouseDragReportingEnabled()) {
+                    armTouchMouseDragFromLongPress(event);
+                } else {
                     startTextSelectionMode(event);
                 }
             }
         });
         mScroller = new Scroller(context);
+        int touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        mTouchSlopSquared = touchSlop * touchSlop;
         AccessibilityManager am = (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
         mAccessibilityEnabled = am.isEnabled();
 
@@ -349,6 +463,8 @@ public final class TerminalView extends View {
         mTermSession = session;
         mEmulator = null;
         mCombiningAccent = 0;
+        // A different session's cursor is somewhere else entirely; do not streak across the switch.
+        mCursorTrail.reset();
         updateSize();
         // Wait with enabling the scrollbar until we have a terminal to get scroll position from.
         setVerticalScrollBarEnabled(true);
@@ -502,35 +618,27 @@ public final class TerminalView extends View {
         if (mEmulator == null)
             return;
         int rowsInHistory = mEmulator.getScreen().getActiveTranscriptRows();
-        if (mTopRow < -rowsInHistory)
+        if (mTopRow < -rowsInHistory) {
             mTopRow = -rowsInHistory;
-        if (isSelectingText() || mEmulator.isAutoScrollDisabled()) {
-            // Do not scroll when selecting text.
+            clearScrollOffset();
+        }
+        if (isSelectingText() || mEmulator.isAutoScrollDisabled() || mTopRow < 0) {
+            // Do not scroll when selecting text or when the user has scrolled up in the
+            // transcript: keep the viewport pinned to the same content while output arrives.
+            // The user gets back to following the output by scrolling to the bottom or by
+            // typing (see snapToBottomForInput()).
             int rowShift = mEmulator.getScrollCounter();
             if (-mTopRow + rowShift > rowsInHistory) {
-                // .. unless we're hitting the end of history transcript, in which
-                // case we abort text selection and scroll to end.
+                // .. unless we're hitting the end of the history transcript, in which
+                // case we abort text selection and stay pinned at the oldest line.
                 if (isSelectingText())
                     stopTextSelectionMode();
-                if (mEmulator.isAutoScrollDisabled()) {
-                    mTopRow = -rowsInHistory;
-                    skipScrolling = true;
-                }
+                mTopRow = -rowsInHistory;
+                clearScrollOffset();
             } else {
-                skipScrolling = true;
                 mTopRow -= rowShift;
                 decrementYTextSelectionCursors(rowShift);
             }
-        }
-        if (!skipScrolling && mTopRow != 0) {
-            // Scroll down if not already there.
-            if (mTopRow < -3) {
-                // Awaken scroll bars only if scrolling a noticeable amount
-                // - we do not want visible scroll bars during normal typing
-                // of one row at a time.
-                awakenScrollBars();
-            }
-            mTopRow = 0;
         }
         mEmulator.clearScrollCounter();
         invalidate();
@@ -703,14 +811,75 @@ public final class TerminalView extends View {
      * @param textSize the new font size, in density-independent pixels.
      */
     public void setTextSize(int textSize) {
-        mRenderer = new TerminalRenderer(textSize, mRenderer == null ? Typeface.MONOSPACE : mRenderer.mTypeface, mRenderer == null ? Typeface.MONOSPACE : mRenderer.mItalicTypeface);
+        mRenderer = mRenderer == null
+            ? new TerminalRenderer(textSize, Typeface.MONOSPACE, null, null, null)
+            : new TerminalRenderer(textSize, mRenderer.mTypeface, mRenderer.mBoldTypeface,
+                mRenderer.mItalicTypeface, mRenderer.mBoldItalicTypeface, mRenderer.mSymbolMaps,
+                mRenderer.mLigaturePolicy, mRenderer.mFontFeatures, mRenderer.mFontVariations,
+                mRenderer.mFontMetricsAdjustments);
         updateSize();
     }
 
     public void setTypeface(Typeface newTypeface, Typeface newItalicTypeface) {
-        mRenderer = new TerminalRenderer(mRenderer.mTextSize, newTypeface, newItalicTypeface);
+        setTypeface(newTypeface, null, newItalicTypeface, null);
+    }
+
+    /** Apply independent regular, bold, italic and bold-italic terminal faces. */
+    public void setTypeface(Typeface regular, Typeface bold, Typeface italic,
+                            Typeface boldItalic) {
+        setTypeface(regular, bold, italic, boldItalic, null);
+    }
+
+    /** Apply the primary faces and repeatable explicit symbol-font ranges atomically. */
+    public void setTypeface(Typeface regular, Typeface bold, Typeface italic,
+                            Typeface boldItalic, TerminalRenderer.SymbolMap[] symbolMaps) {
+        setTypeface(regular, bold, italic, boldItalic, symbolMaps,
+            TerminalRenderer.LigaturePolicy.NEVER);
+    }
+
+    /** Apply all font sources and shaping policy as one renderer replacement. */
+    public void setTypeface(Typeface regular, Typeface bold, Typeface italic,
+                            Typeface boldItalic, TerminalRenderer.SymbolMap[] symbolMaps,
+                            TerminalRenderer.LigaturePolicy ligaturePolicy) {
+        setTypeface(regular, bold, italic, boldItalic, symbolMaps, ligaturePolicy,
+            TerminalRenderer.FontFeatures.NONE);
+    }
+
+    /** Apply all font sources and shaping settings as one renderer replacement. */
+    public void setTypeface(Typeface regular, Typeface bold, Typeface italic,
+                            Typeface boldItalic, TerminalRenderer.SymbolMap[] symbolMaps,
+                            TerminalRenderer.LigaturePolicy ligaturePolicy,
+                            TerminalRenderer.FontFeatures fontFeatures) {
+        setTypeface(regular, bold, italic, boldItalic, symbolMaps, ligaturePolicy, fontFeatures,
+            TerminalRenderer.FontVariations.NONE);
+    }
+
+    /** Apply all font sources and per-run shaping settings as one renderer replacement. */
+    public void setTypeface(Typeface regular, Typeface bold, Typeface italic,
+                            Typeface boldItalic, TerminalRenderer.SymbolMap[] symbolMaps,
+                            TerminalRenderer.LigaturePolicy ligaturePolicy,
+                            TerminalRenderer.FontFeatures fontFeatures,
+                            TerminalRenderer.FontVariations fontVariations) {
+        setTypeface(regular, bold, italic, boldItalic, symbolMaps, ligaturePolicy, fontFeatures,
+            fontVariations, TerminalRenderer.FontMetricsAdjustments.NONE);
+    }
+
+    /** Apply all font sources, shaping settings, and bounded metrics atomically. */
+    public void setTypeface(Typeface regular, Typeface bold, Typeface italic,
+                            Typeface boldItalic, TerminalRenderer.SymbolMap[] symbolMaps,
+                            TerminalRenderer.LigaturePolicy ligaturePolicy,
+                            TerminalRenderer.FontFeatures fontFeatures,
+                            TerminalRenderer.FontVariations fontVariations,
+                            TerminalRenderer.FontMetricsAdjustments fontMetricsAdjustments) {
+        mRenderer = new TerminalRenderer(mRenderer.mTextSize, regular, bold, italic, boldItalic,
+            symbolMaps, ligaturePolicy, fontFeatures, fontVariations, fontMetricsAdjustments);
         updateSize();
         invalidate();
+    }
+
+    /** Whether a renderer/font has been set (safe to call {@link #setTypeface}). */
+    public boolean isFontInitialized() {
+        return mRenderer != null;
     }
 
     @Override
@@ -859,12 +1028,23 @@ public final class TerminalView extends View {
      * @return Array with the column and row.
      */
     public int[] getColumnAndRow(MotionEvent event, boolean relativeToScroll) {
-        int column = (int) ((event.getX() - getHorizontalContentOffset()) / mRenderer.mFontWidth);
-        int row = (int) ((event.getY() - mRenderer.mFontLineSpacingAndAscent) / mRenderer.mFontLineSpacing);
+        int column = getColumnForX(event.getX());
+        int row = getRowForY(event.getY());
         if (relativeToScroll) {
             row += mTopRow;
         }
         return new int[] { column, row };
+    }
+
+    private int getColumnForX(float x) {
+        return (int) ((x - getHorizontalContentOffset()) / mRenderer.mFontWidth);
+    }
+
+    private int getRowForY(float y) {
+        // While a smooth fling/settle holds a fractional offset, drawn content sits that many
+        // pixels above its nominal row position, so screen Y maps back by adding it.
+        return (int) ((y + mScrollOffsetPixels - mRenderer.mFontLineSpacingAndAscent)
+            / mRenderer.mFontLineSpacing);
     }
 
     /**
@@ -929,6 +1109,234 @@ public final class TerminalView extends View {
     }
 
     /**
+     * Whether transcript scrolling may move by pixels rather than by whole rows. The alternate
+     * screen and mouse tracking translate a scroll into keys and wheel events, which have no
+     * fractional part, and selection coordinates are row based.
+     */
+    private boolean isSmoothScrollAllowed() {
+        return mEmulator != null && mRenderer != null && !mEmulator.isAlternateBufferActive()
+            && !mEmulator.isMouseTrackingActive() && !isSelectingText();
+    }
+
+    private float getScrollPixelPosition() {
+        return mTopRow * (float) mRenderer.mFontLineSpacing + mScrollOffsetPixels;
+    }
+
+    private int getScrollPixelMinimum() {
+        return -mEmulator.getScreen().getActiveTranscriptRows() * mRenderer.mFontLineSpacing;
+    }
+
+    /**
+     * Move the transcript to a pixel position, clamped to the transcript, splitting it into the
+     * row the view starts at and the pixel offset into that row.
+     */
+    private void setScrollPixelPosition(float position) {
+        final int lineSpacing = mRenderer.mFontLineSpacing;
+        position = Math.max(getScrollPixelMinimum(), Math.min(0f, position));
+        int newTopRow = (int) Math.floor(position / lineSpacing);
+        float offset = position - newTopRow * (float) lineSpacing;
+        if (offset >= lineSpacing) {
+            newTopRow++;
+            offset = 0f;
+        }
+        mTopRow = newTopRow;
+        mScrollOffsetPixels = offset;
+        if (!awakenScrollBars())
+            invalidate();
+    }
+
+    /**
+     * Scroll to the bottom of the transcript on user-initiated input, so typed characters are
+     * visible even when the user had scrolled up (matching desktop terminals' scroll-on-keystroke).
+     */
+    private void snapToBottomForInput() {
+        if (mTopRow != 0) {
+            mTopRow = 0;
+            clearScrollOffset();
+            invalidate();
+        }
+    }
+
+    /** Drop any fractional offset, for the cases where the row position is set from elsewhere. */
+    private void clearScrollOffset() {
+        abortSmoothScroll();
+        if (mScrollOffsetPixels != 0f) {
+            mScrollOffsetPixels = 0f;
+            invalidate();
+        }
+    }
+
+    private void abortSmoothScroll() {
+        if (mSmoothFlingActive || mSmoothSettleActive) {
+            mSmoothFlingActive = false;
+            mSmoothSettleActive = false;
+            mScroller.abortAnimation();
+        }
+    }
+
+    /**
+     * Animate a resting fractional offset back onto a row boundary, so that everything working in
+     * row coordinates - selection, taps, accessibility - agrees with what is drawn.
+     */
+    private void settleScrollOffset() {
+        if (mRenderer == null || mEmulator == null || mScrollOffsetPixels == 0f)
+            return;
+        final int lineSpacing = mRenderer.mFontLineSpacing;
+        int from = Math.round(getScrollPixelPosition());
+        int to = Math.round(from / (float) lineSpacing) * lineSpacing;
+        to = Math.max(getScrollPixelMinimum(), Math.min(0, to));
+        if (from == to) {
+            mScrollOffsetPixels = 0f;
+            invalidate();
+            return;
+        }
+        mSmoothSettleActive = true;
+        mScroller.startScroll(0, from, 0, to - from, SCROLL_SETTLE_DURATION_MS);
+        postOnAnimation(mSmoothScrollRunnable);
+    }
+
+    private final Runnable mSmoothScrollRunnable = new Runnable() {
+
+        @Override
+        public void run() {
+            if (!mSmoothFlingActive && !mSmoothSettleActive)
+                return;
+            if (!isSmoothScrollAllowed()) {
+                abortSmoothScroll();
+                mScrollOffsetPixels = 0f;
+                invalidate();
+                return;
+            }
+            boolean more = mScroller.computeScrollOffset();
+            setScrollPixelPosition(mScroller.getCurrY());
+            if (more) {
+                postOnAnimation(this);
+                return;
+            }
+            boolean wasFling = mSmoothFlingActive;
+            mSmoothFlingActive = false;
+            mSmoothSettleActive = false;
+            if (wasFling) {
+                settleScrollOffset();
+            } else {
+                mScrollOffsetPixels = 0f;
+                invalidate();
+            }
+        }
+    };
+
+    /**
+     * Whether a finger drag should be reported to the application as a mouse drag, which is the
+     * case when it asked for motion while a button is held down.
+     */
+    private boolean isTouchMouseDragReportingEnabled() {
+        return mEmulator != null && mRenderer != null && mEmulator.isMouseTrackingMotionActive();
+    }
+
+    private void sendMouseEventAt(int button, int column, int row, boolean pressed) {
+        mEmulator.sendMouseEvent(button, column + 1, row + 1, pressed);
+    }
+
+    /**
+     * Arm a possible mouse drag from a long press, without reporting anything yet: a long press
+     * alone - held then released without moving - is still local text selection (so its floating
+     * toolbar, e.g. copy, stays reachable), same as when no application asked for motion reporting.
+     * Only once the finger actually moves past touch slop does {@link #handleTouchMouseDrag} commit
+     * to reporting a mouse drag, at which point local selection is no longer offered for this
+     * gesture. Gating on a long press at all - rather than on slop and a short timeout - means an
+     * ordinary fast drag, one or two finger, never gets reported as a click in the first place, so
+     * it is free to scroll.
+     */
+    private void armTouchMouseDragFromLongPress(MotionEvent event) {
+        mTouchMouseDragArmed = true;
+        mTouchMouseDragArmEvent = MotionEvent.obtain(event);
+        mTouchMouseDragLastCol = getColumnForX(event.getX());
+        mTouchMouseDragLastRow = getRowForY(event.getY());
+    }
+
+    private void clearArmedTouchMouseDrag() {
+        mTouchMouseDragArmed = false;
+        if (mTouchMouseDragArmEvent != null) {
+            mTouchMouseDragArmEvent.recycle();
+            mTouchMouseDragArmEvent = null;
+        }
+    }
+
+    /**
+     * Continue a mouse drag armed by {@link #armTouchMouseDragFromLongPress(MotionEvent)}: once
+     * past touch slop, send the deferred press and a motion event per cell entered, then the
+     * eventual release. A finger lifted while still only armed - never having moved past slop -
+     * falls back to starting local text selection at the long press instead.
+     */
+    private void handleTouchMouseDrag(MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_MOVE:
+                if (mTouchMouseDragArmed && !mTouchMouseDragActive) {
+                    if (event.getPointerCount() != 1) {
+                        clearArmedTouchMouseDrag();
+                        break;
+                    }
+                    float dx = event.getX() - mTouchMouseDragArmEvent.getX();
+                    float dy = event.getY() - mTouchMouseDragArmEvent.getY();
+                    if (dx * dx + dy * dy <= mTouchSlopSquared)
+                        break;
+                    clearArmedTouchMouseDrag();
+                    mTouchMouseDragActive = true;
+                    mTouchMouseDragReported = true;
+                    // Distinct from the long press's own haptic, so committing to a reported drag -
+                    // as opposed to the finger lifting straight into local text selection - is felt.
+                    performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                    sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseDragLastCol, mTouchMouseDragLastRow, true);
+                }
+                if (!mTouchMouseDragActive)
+                    break;
+                if (event.getPointerCount() != 1) {
+                    releaseTouchMouseDrag();
+                    break;
+                }
+                int column = getColumnForX(event.getX());
+                int row = getRowForY(event.getY());
+                if (column != mTouchMouseDragLastCol || row != mTouchMouseDragLastRow) {
+                    mTouchMouseDragLastCol = column;
+                    mTouchMouseDragLastRow = row;
+                    sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, column, row, true);
+                }
+                break;
+            case MotionEvent.ACTION_POINTER_DOWN:
+                if (mTouchMouseDragArmed && !mTouchMouseDragActive) {
+                    // A second finger joining before any movement was decided reads as a scroll,
+                    // not a selection - drop the arm rather than falling back to local selection.
+                    clearArmedTouchMouseDrag();
+                    break;
+                }
+                releaseTouchMouseDrag();
+                break;
+            case MotionEvent.ACTION_UP:
+                if (mTouchMouseDragArmed && !mTouchMouseDragActive) {
+                    MotionEvent armEvent = mTouchMouseDragArmEvent;
+                    mTouchMouseDragArmEvent = null;
+                    mTouchMouseDragArmed = false;
+                    startTextSelectionMode(armEvent);
+                    armEvent.recycle();
+                    break;
+                }
+                releaseTouchMouseDrag();
+                break;
+            case MotionEvent.ACTION_CANCEL:
+                clearArmedTouchMouseDrag();
+                releaseTouchMouseDrag();
+                break;
+        }
+    }
+
+    private void releaseTouchMouseDrag() {
+        if (!mTouchMouseDragActive)
+            return;
+        mTouchMouseDragActive = false;
+        sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseDragLastCol, mTouchMouseDragLastRow, false);
+    }
+
+    /**
      * Overriding {@link View#onGenericMotionEvent(MotionEvent)}.
      */
     @Override
@@ -949,6 +1357,11 @@ public final class TerminalView extends View {
         if (mEmulator == null)
             return true;
         final int action = event.getAction();
+        if (action == MotionEvent.ACTION_DOWN) {
+            mTouchMouseDragActive = false;
+            mTouchMouseDragReported = false;
+            clearArmedTouchMouseDrag();
+        }
         if (isSelectingText()) {
             updateFloatingToolbarVisibility(event);
             mGestureRecognizer.onTouchEvent(event);
@@ -971,6 +1384,8 @@ public final class TerminalView extends View {
                         break;
                 }
             }
+        } else if (isTouchMouseDragReportingEnabled()) {
+            handleTouchMouseDrag(event);
         }
         mGestureRecognizer.onTouchEvent(event);
         return true;
@@ -983,7 +1398,10 @@ public final class TerminalView extends View {
             ClipData.Item clipItem = clipData.getItemAt(0);
             if (clipItem != null) {
                 CharSequence text = clipItem.coerceToText(getContext());
-                if (!TextUtils.isEmpty(text)) mEmulator.paste(text.toString());
+                if (!TextUtils.isEmpty(text)) {
+                    snapToBottomForInput();
+                    mEmulator.paste(text.toString());
+                }
             }
         }
     }
@@ -1146,6 +1564,11 @@ public final class TerminalView extends View {
         } else if (keyCode == KeyEvent.KEYCODE_LANGUAGE_SWITCH) {
             return super.onKeyDown(keyCode, event);
         }
+        // The kitty keyboard protocol, when the program on this session asked for it. It runs after the
+        // client's own bindings so app shortcuts keep winning, and before the legacy encoders so that
+        // the program gets the unambiguous form it requested.
+        if (handleKittyKeyEvent(keyCode, event, event.getRepeatCount() > 0 ? KittyKeyEncoder.EVENT_REPEAT : KittyKeyEncoder.EVENT_PRESS))
+            return true;
         final int metaState = event.getMetaState();
         final boolean controlDown = event.isCtrlPressed() || mClient.readControlKey();
         final boolean leftAltDown = (metaState & KeyEvent.META_ALT_LEFT_ON) != 0 || mClient.readAltKey();
@@ -1268,8 +1691,12 @@ public final class TerminalView extends View {
                         break;
                 }
             }
+            snapToBottomForInput();
             // If left alt, send escape before the code point to make e.g. Alt+B and Alt+F work in readline:
             mTermSession.writeCodePoint(altDown, codePoint);
+            if (mKeyInputProbe != null) {
+                probeKeyBytes("text", (altDown ? "\033" : "") + new String(Character.toChars(codePoint)));
+            }
         }
     }
 
@@ -1286,7 +1713,9 @@ public final class TerminalView extends View {
         String code = KeyHandler.getCode(keyCode, keyMod, term.isCursorKeysApplicationMode(), term.isKeypadApplicationMode());
         if (code == null)
             return false;
+        snapToBottomForInput();
         mTermSession.write(code);
+        probeKeyBytes("keyhandler", code);
         return true;
     }
 
@@ -1330,6 +1759,55 @@ public final class TerminalView extends View {
             // Let system key events through.
             return super.onKeyUp(keyCode, event);
         }
+        // Only the kitty keyboard protocol has any use for a release event; legacy encoding has none.
+        handleKittyKeyEvent(keyCode, event, KittyKeyEncoder.EVENT_RELEASE);
+        return true;
+    }
+
+    /**
+     * Encode a key event with the kitty keyboard protocol, if the program on this session has turned it
+     * on for the current screen.
+     *
+     * @return true when the event was dealt with, either by writing bytes or by deliberately producing
+     *         none. False means the caller should carry on with legacy encoding.
+     */
+    private boolean handleKittyKeyEvent(int keyCode, KeyEvent event, int eventType) {
+        if (mEmulator == null || mTermSession == null)
+            return false;
+        final int flags = mEmulator.getKeyboardFlags();
+        if (flags == 0)
+            return false;
+        int unshifted = event.getUnicodeChar(0);
+        if ((unshifted & KeyCharacterMap.COMBINING_ACCENT) != 0) {
+            // A dead key. Composition happens in the legacy path, which owns mCombiningAccent.
+            return false;
+        }
+        int modifiers = 0;
+        if (event.isCtrlPressed() || mClient.readControlKey())
+            modifiers |= KittyKeyEncoder.MOD_CTRL;
+        if (event.isAltPressed() || mClient.readAltKey())
+            modifiers |= KittyKeyEncoder.MOD_ALT;
+        if (event.isShiftPressed() || mClient.readShiftKey())
+            modifiers |= KittyKeyEncoder.MOD_SHIFT;
+        // Android's META is the Windows/Command key, which the protocol calls super.
+        if (event.isMetaPressed())
+            modifiers |= KittyKeyEncoder.MOD_SUPER;
+        if (event.isCapsLockOn())
+            modifiers |= KittyKeyEncoder.MOD_CAPS_LOCK;
+        if (event.isNumLockOn())
+            modifiers |= KittyKeyEncoder.MOD_NUM_LOCK;
+        int shifted = event.getUnicodeChar(KeyEvent.META_SHIFT_ON) & ~KeyCharacterMap.COMBINING_ACCENT;
+        int text = event.getUnicodeChar(event.getMetaState() & ~KeyEvent.META_CTRL_MASK) & ~KeyCharacterMap.COMBINING_ACCENT;
+        String encoded = KittyKeyEncoder.encode(keyCode, unshifted, shifted, text, modifiers, eventType, flags);
+        if (encoded == null)
+            return false;
+        if (!encoded.isEmpty()) {
+            if (TERMINAL_VIEW_KEY_LOGGING_ENABLED)
+                mClient.logInfo(LOG_TAG, "kitty keyboard flags=" + flags + " sent " + encoded.substring(1));
+            mEmulator.setCursorBlinkState(true);
+            mTermSession.write(encoded);
+            probeKeyBytes("kitty", encoded);
+        }
         return true;
     }
 
@@ -1346,24 +1824,66 @@ public final class TerminalView extends View {
      * Check if the terminal size in rows and columns should be updated.
      */
     public void updateSize() {
+        updateSize(false);
+    }
+
+    private void updateSize(boolean keepCursorAtBottom) {
+        if (mTerminalSizeUpdatesPaused) {
+            mTerminalSizeUpdatePending = true;
+            invalidate();
+            return;
+        }
         int viewWidth = getWidth();
         int viewHeight = getHeight();
-        if (viewWidth == 0 || viewHeight == 0 || mTermSession == null)
+        // mRenderer may be null if the view is laid out before its font/text size is set
+        // (e.g. a split pane made visible before setTextSize()). Nothing to size yet.
+        if (viewWidth == 0 || viewHeight == 0 || mTermSession == null || mRenderer == null)
             return;
         // Set to 80 and 24 if you want to enable vttest.
         int newColumns = Math.max(4, (int) (viewWidth / mRenderer.mFontWidth));
         int newRows = Math.max(4, (viewHeight - mRenderer.mFontLineSpacingAndAscent) / mRenderer.mFontLineSpacing);
         if (mEmulator == null || (newColumns != mEmulator.mColumns || newRows != mEmulator.mRows)) {
-            mTermSession.updateSize(newColumns, newRows, (int) mRenderer.getFontWidth(), mRenderer.getFontLineSpacing());
+            mTermSession.updateSize(newColumns, newRows, (int) mRenderer.getFontWidth(),
+                mRenderer.getFontLineSpacing(), keepCursorAtBottom);
             mEmulator = mTermSession.getEmulator();
             mClient.onEmulatorSet();
             // Update mTerminalCursorBlinkerRunnable inner class mEmulator on session change
             if (mTerminalCursorBlinkerRunnable != null)
                 mTerminalCursorBlinkerRunnable.setEmulator(mEmulator);
             mTopRow = 0;
+            clearScrollOffset();
             scrollTo(0, 0);
+            // Reflow moved every cell, so the remembered cursor cell no longer means anything.
+            mCursorTrail.reset();
             invalidate();
         }
+    }
+
+    /** Coalesce transient layout changes without forwarding every one to the attached PTY. */
+    public void setTerminalSizeUpdatesPaused(boolean paused) {
+        setTerminalSizeUpdatesPaused(paused, false);
+    }
+
+    /** Resume a coalesced resize with optional bottom anchoring after the final layout pass. */
+    public void setTerminalSizeUpdatesPaused(boolean paused,
+                                             boolean keepCursorAtBottomOnResume) {
+        if (mTerminalSizeUpdatesPaused == paused) return;
+        mTerminalSizeUpdatesPaused = paused;
+        if (!paused && mTerminalSizeUpdatePending) {
+            mTerminalSizeUpdatePending = false;
+            // Run after the final split layout pass so only the settled geometry reaches the PTY.
+            post(() -> updateSize(keepCursorAtBottomOnResume));
+        }
+    }
+
+    /** Current rendered character-cell width, or zero until a renderer has been configured. */
+    public float getTerminalCellWidthPixels() {
+        return mRenderer == null ? 0f : mRenderer.getFontWidth();
+    }
+
+    /** Current rendered character-cell line height, or zero until a renderer is configured. */
+    public float getTerminalCellHeightPixels() {
+        return mRenderer == null ? 0f : mRenderer.getFontLineSpacing();
     }
 
     @Override
@@ -1371,15 +1891,68 @@ public final class TerminalView extends View {
         if (mEmulator == null) {
             canvas.drawColor(0XFF000000);
         } else {
+            long drawStartNanos = SystemClock.elapsedRealtimeNanos();
             // render the terminal view and highlight any selected text
             int[] sel = mDefaultSelectors;
             if (mTextSelectionCursorController != null) {
                 mTextSelectionCursorController.getSelectors(sel);
             }
-            mRenderer.render(mEmulator, canvas, mTopRow, sel[0], sel[1], sel[2], sel[3], mUseTransparentFrameClear, mTransparentFrameOverlayColor, getHorizontalContentOffset());
+            final float scrollOffset = mScrollOffsetPixels;
+            if (scrollOffset != 0f) {
+                canvas.save();
+                canvas.translate(0f, -scrollOffset);
+            }
+            mRenderer.render(mEmulator, canvas, mTopRow, sel[0], sel[1], sel[2], sel[3], mUseTransparentFrameClear, mTransparentFrameOverlayColor, getHorizontalContentOffset(), scrollOffset != 0f ? 1 : 0);
+            if (mCursorTrail.isEnabled() && !isSelectingText()) {
+                boolean needsAnotherFrame = mCursorTrail.draw(canvas, mEmulator.getCursorCol(), mEmulator.getCursorRow(), mTopRow,
+                    mRenderer.mFontWidth, mRenderer.mFontLineSpacing, getHorizontalContentOffset(), mRenderer.mFontLineSpacingAndAscent,
+                    mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR], mEmulator.isCursorEnabled());
+                if (needsAnotherFrame)
+                    postInvalidateOnAnimation();
+            }
+            if (scrollOffset != 0f)
+                canvas.restore();
             // render the text selection handles
             renderTextSelection();
+            long drawEndNanos = SystemClock.elapsedRealtimeNanos();
+            android.view.Display display = getDisplay();
+            float refreshRate = display == null ? 60f : display.getRefreshRate();
+            long frameBudgetNanos = refreshRate > 0f
+                ? (long) (1_000_000_000d / refreshRate) : 16_666_667L;
+            mRenderMetrics.recordDraw(drawStartNanos, drawEndNanos, frameBudgetNanos);
         }
+    }
+
+    /** Snapshot of this pane's renderer counters. Percentiles allocate only when queried. */
+    public TerminalRenderMetrics.Snapshot getRenderMetricsSnapshot() {
+        return mRenderMetrics.snapshot();
+    }
+
+    /** Starts a fresh benchmark window for this pane. */
+    public void resetRenderMetrics() {
+        mRenderMetrics.reset();
+    }
+
+    /** Install or remove the key input diagnostic sink. */
+    public void setKeyInputProbe(@Nullable KeyInputProbe probe) {
+        mKeyInputProbe = probe;
+    }
+
+    private void probeKeyBytes(String encoder, String bytes) {
+        KeyInputProbe probe = mKeyInputProbe;
+        if (probe != null)
+            probe.onKeyBytesWritten(encoder, bytes);
+    }
+
+    /**
+     * Whether the cursor animates between cells. Off by policy - power save, or the user's preference -
+     * rather than by the view's own judgement.
+     */
+    public void setCursorTrailEnabled(boolean enabled) {
+        if (mCursorTrail.isEnabled() == enabled)
+            return;
+        mCursorTrail.setEnabled(enabled);
+        invalidate();
     }
 
     public void setUseTransparentFrameClear(boolean useTransparentFrameClear) {
@@ -1436,6 +2009,50 @@ public final class TerminalView extends View {
 
     public void setTopRow(int mTopRow) {
         this.mTopRow = mTopRow;
+        clearScrollOffset();
+    }
+
+    /** Jump to a row from the screen buffer's external coordinate system. */
+    public boolean jumpToBufferRow(int row) {
+        if (mEmulator == null) return false;
+        int lowest = -mEmulator.getScreen().getActiveTranscriptRows();
+        int newTopRow = Math.max(lowest, Math.min(0, row));
+        if (newTopRow == mTopRow) return false;
+        mTopRow = newTopRow;
+        clearScrollOffset();
+        mCursorTrail.reset();
+        if (isSelectingText()) stopTextSelectionMode();
+        invalidate();
+        return true;
+    }
+
+    /**
+     * Scroll so that the closest shell prompt above or below the top of the view is the first row shown.
+     * Needs the shell to emit OSC 133 marks; without them there is nothing to jump to.
+     *
+     * @return true if the view moved.
+     */
+    public boolean jumpToPrompt(boolean backwards) {
+        if (mEmulator == null)
+            return false;
+        int row = mEmulator.findPromptRow(mTopRow, backwards);
+        if (row == Integer.MIN_VALUE)
+            return false;
+        int lowest = -mEmulator.getScreen().getActiveTranscriptRows();
+        int newTopRow = Math.max(lowest, Math.min(0, row));
+        if (newTopRow == mTopRow) {
+            // The prompt is already on screen: the view cannot scroll past its last row, so there is
+            // nothing to move and reporting success would be a lie.
+            return false;
+        }
+        mTopRow = newTopRow;
+        clearScrollOffset();
+        // A jump is a discontinuity, so do not streak the cursor across it.
+        mCursorTrail.reset();
+        if (isSelectingText())
+            stopTextSelectionMode();
+        invalidate();
+        return true;
     }
 
     /**
@@ -1774,6 +2391,8 @@ public final class TerminalView extends View {
         if (!requestFocus()) {
             return;
         }
+        // Selection works in row coordinates, so it may not be started while a row is half scrolled.
+        clearScrollOffset();
         showTextSelectionCursors(event);
         mClient.copyModeChanged(isSelectingText());
         invalidate();
@@ -1783,6 +2402,7 @@ public final class TerminalView extends View {
     public void selectAllText() {
         if (mEmulator == null || !requestFocus())
             return;
+        clearScrollOffset();
         getTextSelectionCursorController().selectAll();
         mClient.copyModeChanged(isSelectingText());
         invalidate();

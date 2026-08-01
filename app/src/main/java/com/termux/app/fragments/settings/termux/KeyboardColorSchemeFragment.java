@@ -22,6 +22,7 @@ import androidx.annotation.Nullable;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.fragment.app.Fragment;
 
 import com.google.android.material.button.MaterialButton;
@@ -127,15 +128,12 @@ public class KeyboardColorSchemeFragment extends Fragment {
         config.hapticEnabled = false;
         config.keySoundEnabled = false;
         String theme = mPreferences.getInAppKeyboardTheme();
-        String dockMatch = mPreferences.getInAppKeyboardDockMatch();
-        Theme.Palette palette = "glass".equals(dockMatch) || "both".equals(dockMatch)
-            ? InAppKeyboardPaletteFactory.createGlass(context, theme)
-            : InAppKeyboardPaletteFactory.create(context, theme);
+        Theme.Palette palette = InAppKeyboardPaletteFactory.createGlass(context, theme);
         if (mScheme.shouldApplyImportedPalette(theme))
             palette = mScheme.applyToPalette(palette);
         mKeyboard = new Keyboard2View(context, config.build(), palette);
         KeyboardData previewLayout = KeyboardData.load(getResources(),
-            juloo.keyboard2.R.xml.latn_qwerty_us);
+            juloo.keyboard2.R.xml.termux_launcher_qwerty);
         if (previewLayout != null) {
             LayoutModifier.LayoutOptions options = new LayoutModifier.LayoutOptions(
                 true, false, true,
@@ -193,7 +191,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         MaterialButton reset = new MaterialButton(context, null,
             com.google.android.material.R.attr.materialButtonOutlinedStyle);
         reset.setText(R.string.termux_keyboard_color_scheme_reset);
-        reset.setOnClickListener(view -> new AlertDialog.Builder(requireContext())
+        reset.setOnClickListener(view -> new MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.termux_keyboard_color_scheme_reset_title)
             .setMessage(R.string.termux_keyboard_color_scheme_reset_message)
             .setNegativeButton(android.R.string.cancel, null)
@@ -374,7 +372,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         input.setText(String.format("#%08X", mScheme.getSwatch(index)));
         input.selectAll();
         int horizontal = dp(24);
-        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+        AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.termux_keyboard_color_scheme_hex_title)
             .setView(input, horizontal, 0, horizontal, 0)
             .setNegativeButton(android.R.string.cancel, null)
@@ -413,10 +411,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
     private void persistAndRender() {
         mPreferences.setInAppKeyboardColorScheme(mScheme.toJson());
         String theme = mPreferences.getInAppKeyboardTheme();
-        String dockMatch = mPreferences.getInAppKeyboardDockMatch();
-        Theme.Palette palette = "glass".equals(dockMatch) || "both".equals(dockMatch)
-            ? InAppKeyboardPaletteFactory.createGlass(requireContext(), theme)
-            : InAppKeyboardPaletteFactory.create(requireContext(), theme);
+        Theme.Palette palette = InAppKeyboardPaletteFactory.createGlass(requireContext(), theme);
         if (mScheme.shouldApplyImportedPalette(theme))
             palette = mScheme.applyToPalette(palette);
         mKeyboard.setPalette(palette);
@@ -474,7 +469,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         dialogContent.addView(galleryLink, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         int horizontal = dp(24);
-        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+        AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.termux_keyboard_color_scheme_tinted_name_title)
             .setMessage(R.string.termux_keyboard_color_scheme_tinted_name_message)
             .setView(dialogContent, horizontal, 0, horizontal, 0)

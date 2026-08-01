@@ -43,6 +43,7 @@ public class TaiRegressionTest {
     public void setUp() throws Exception {
         context = ApplicationProvider.getApplicationContext();
         context.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE).edit().clear().commit();
+        context.getSharedPreferences(TaiModelStore.PREFS_NAME, Context.MODE_PRIVATE).edit().clear().commit();
         Field instance = TaiManager.class.getDeclaredField("instance");
         instance.setAccessible(true);
         instance.set(null, null);

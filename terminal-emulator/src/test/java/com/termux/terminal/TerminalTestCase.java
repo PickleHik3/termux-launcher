@@ -57,6 +57,27 @@ public abstract class TerminalTestCase extends TestCase {
 		public void onColorsChanged() {
 			colorsChanged++;
 		}
+
+        /**
+         * Off-thread work posted back by the decode worker is queued instead of running inline: the
+         * default would run it on the worker thread, racing the test thread's own emulator access.
+         * Tests that need the posted work run {@link #drainTerminalUpdates()} explicitly.
+         */
+        @Override
+        public synchronized void postTerminalUpdate(Runnable update) {
+            pendingTerminalUpdates.add(update);
+        }
+
+        public void drainTerminalUpdates() {
+            List<Runnable> pending;
+            synchronized (this) {
+                pending = new ArrayList<>(pendingTerminalUpdates);
+                pendingTerminalUpdates.clear();
+            }
+            for (Runnable update : pending) update.run();
+        }
+
+        private final List<Runnable> pendingTerminalUpdates = new ArrayList<>();
 	}
 
 	public TerminalEmulator mTerminal;

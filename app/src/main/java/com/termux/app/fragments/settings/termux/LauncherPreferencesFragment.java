@@ -51,6 +51,15 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         SettingsLayoutUtils.applyScreenLayout(this);
         configurePermissionActions(context);
         updatePermissionSummaries(context);
+        Preference customizeDock = findPreference("customize_dock_surface");
+        if (customizeDock != null) customizeDock.setOnPreferenceClickListener(preference -> {
+            Intent intent = new Intent(context, TermuxActivity.class);
+            intent.putExtra(TermuxActivity.EXTRA_DOCK_TUNING, true);
+            intent.putExtra(TermuxActivity.EXTRA_DOCK_TUNING_SECTION, "dock");
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(intent);
+            return true;
+        });
 
         SwitchPreferenceCompat appsRowPreference = findPreference("app_launcher_apps_row_enabled");
         SwitchPreferenceCompat azRowPreference = findPreference("app_launcher_az_row_enabled");
@@ -135,7 +144,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         Context context = getContext();
         if (context == null) return;
         if (getActivity() != null) {
-            getActivity().setTitle(R.string.termux_launcher_preferences_title);
+            getActivity().setTitle(R.string.settings_destination_launcher_apps);
         }
         updatePermissionSummaries(context);
         SwitchPreferenceCompat notificationDotsPreference = findPreference("app_launcher_notification_dots");
