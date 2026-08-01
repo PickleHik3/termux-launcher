@@ -7,6 +7,9 @@ import android.view.InputDevice;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalView;
 
@@ -37,8 +40,9 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
     private TerminalModifiers mModifiers = TerminalModifiers.NONE;
     private MacroTask mMacroTask;
     private boolean mLoggedSelectionSlider;
+    private KeyValueInterceptor mInterceptor;
 
-    public TerminalKeyEventHandler(TerminalView terminalView,
+    public TerminalKeyEventHandler(Supplier<TerminalView> terminalView,
                                    Supplier<TerminalSession> currentSession,
                                    HostActions hostActions,
                                    Handler mainHandler) {
@@ -71,11 +75,30 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
     @Override
     public void mods_changed(Pointers.Modifiers modifiers) {
         mModifiers = TerminalModifiers.from(modifiers);
+        mHostActions.onKeyboardModifiersChanged(mModifiers);
     }
 
     @Override
     public void suggestion_entered(String text) {
         mHostActions.onSuggestionEntered(text);
+    }
+
+    /**
+     * Claims resolved key values before they reach the terminal.
+     *
+     * <p>This is how an in-activity overlay — the command palette — types from the in-app
+     * keyboard without the system IME: the keyboard's own pipeline stays intact and the
+     * overlay only decides, per value, whether the terminal ever sees it.
+     */
+    public interface KeyValueInterceptor {
+
+        /** @return true when the value was consumed and must not reach the terminal. */
+        boolean interceptKeyValue(@NonNull KeyValue value, boolean ctrl, boolean alt, boolean shift);
+    }
+
+    /** Installs the overlay interceptor, or clears it with {@code null}. */
+    public void setKeyValueInterceptor(@Nullable KeyValueInterceptor interceptor) {
+        mInterceptor = interceptor;
     }
 
     /** Cancel asynchronous macro output, for hide, detach, layout, or session lifecycle changes. */
@@ -92,6 +115,7 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
     public void resetInputState() {
         cancelPendingMacros();
         mModifiers = TerminalModifiers.NONE;
+        mHostActions.onKeyboardModifiersChanged(mModifiers);
         mHostActions.setComposePending(false);
     }
 
@@ -100,6 +124,10 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
     }
 
     private void dispatch(KeyValue value, TerminalModifiers modifiers) {
+        KeyValueInterceptor interceptor = mInterceptor;
+        if (interceptor != null && interceptor.interceptKeyValue(value,
+            modifiers.isCtrl(), modifiers.isAlt(), modifiers.isShift()))
+            return;
         switch (value.getKind()) {
             case Char:
                 inputCodePoint(value.getChar(), modifiers);
@@ -132,6 +160,9 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
                 break;
             case Macro:
                 startMacro(value.getMacro());
+                break;
+            case Launcher_tool:
+                mHostActions.runLauncherTool(value.getLauncherTool().toolId);
                 break;
             case Stateful:
                 break;
@@ -318,6 +349,7 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
             case Keyevent:
             case Editing:
             case Event:
+            case Launcher_tool:
                 return true;
             default:
                 return false;
@@ -341,23 +373,29 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
 
     private static final class ViewTerminalSink implements TerminalSink {
 
-        private final TerminalView mTerminalView;
+        // Resolved dynamically so in-app keyboard input follows the focused split pane.
+        private final Supplier<TerminalView> mTerminalView;
         private final Supplier<TerminalSession> mCurrentSession;
 
-        private ViewTerminalSink(TerminalView terminalView, Supplier<TerminalSession> currentSession) {
+        private ViewTerminalSink(Supplier<TerminalView> terminalView, Supplier<TerminalSession> currentSession) {
             mTerminalView = Objects.requireNonNull(terminalView, "terminalView");
             mCurrentSession = Objects.requireNonNull(currentSession, "currentSession");
         }
 
         @Override
         public void inputCodePoint(int eventSource, int codePoint, boolean ctrl, boolean alt) {
-            mTerminalView.inputCodePoint(eventSource, codePoint, ctrl, alt);
+            TerminalView view = mTerminalView.get();
+            if (view != null)
+                view.inputCodePoint(eventSource, codePoint, ctrl, alt);
         }
 
         @Override
         public void dispatchKeyEvent(int keyCode, KeyEvent down, KeyEvent up) {
-            mTerminalView.onKeyDown(keyCode, down);
-            mTerminalView.onKeyUp(keyCode, up);
+            TerminalView view = mTerminalView.get();
+            if (view == null)
+                return;
+            view.onKeyDown(keyCode, down);
+            view.onKeyUp(keyCode, up);
         }
 
         @Override
@@ -369,12 +407,15 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
 
         @Override
         public boolean isSelectingText() {
-            return mTerminalView.isSelectingText();
+            TerminalView view = mTerminalView.get();
+            return view != null && view.isSelectingText();
         }
 
         @Override
         public void stopTextSelectionMode() {
-            mTerminalView.stopTextSelectionMode();
+            TerminalView view = mTerminalView.get();
+            if (view != null)
+                view.stopTextSelectionMode();
         }
 
         @Override

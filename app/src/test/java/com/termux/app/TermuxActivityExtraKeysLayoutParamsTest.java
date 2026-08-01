@@ -43,8 +43,16 @@ public class TermuxActivityExtraKeysLayoutParamsTest {
         ViewGroup.LayoutParams backgroundLpBefore = extraKeysBackground.getLayoutParams();
         ViewGroup.LayoutParams backgroundBlurLpBefore = extraKeysBackgroundBlur.getLayoutParams();
 
-        assertTrue(backgroundLpBefore instanceof RelativeLayout.LayoutParams);
-        assertTrue(backgroundBlurLpBefore instanceof RelativeLayout.LayoutParams);
+        assertNotNull(backgroundLpBefore);
+        assertNotNull(backgroundBlurLpBefore);
+
+        // The point of this test is that the height update mutates the existing params in place
+        // instead of swapping in a fresh generic instance, which would silently drop whatever
+        // parent-specific positioning the accessory stack relies on. Pin the concrete type these
+        // views actually have rather than naming a parent, so relocating the views in the layout
+        // does not turn into a false failure here.
+        Class<?> backgroundLpClass = backgroundLpBefore.getClass();
+        Class<?> backgroundBlurLpClass = backgroundBlurLpBefore.getClass();
 
         int expectedHeight = 123;
 
@@ -58,8 +66,8 @@ public class TermuxActivityExtraKeysLayoutParamsTest {
         ViewGroup.LayoutParams backgroundLpAfter = extraKeysBackground.getLayoutParams();
         ViewGroup.LayoutParams backgroundBlurLpAfter = extraKeysBackgroundBlur.getLayoutParams();
 
-        assertEquals(RelativeLayout.LayoutParams.class, backgroundLpAfter.getClass());
-        assertEquals(RelativeLayout.LayoutParams.class, backgroundBlurLpAfter.getClass());
+        assertEquals(backgroundLpClass, backgroundLpAfter.getClass());
+        assertEquals(backgroundBlurLpClass, backgroundBlurLpAfter.getClass());
         assertEquals(expectedHeight, backgroundLpAfter.height);
         assertEquals(expectedHeight, backgroundBlurLpAfter.height);
         assertSame(backgroundLpBefore, backgroundLpAfter);

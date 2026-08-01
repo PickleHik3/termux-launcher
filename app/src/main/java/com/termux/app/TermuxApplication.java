@@ -69,6 +69,8 @@ public class TermuxApplication extends Application {
         TermuxShellEnvironment.init(this);
         if (isTermuxFilesDirectoryAccessible) {
             TermuxShellEnvironment.writeEnvironmentToFile(this);
+            TermuxShellIntegrationInstaller.ensureInstalled(this);
+            TermuxLauncherConfigInstaller.ensureInstalled(this);
         }
     }
 

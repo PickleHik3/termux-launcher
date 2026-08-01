@@ -1,12 +1,17 @@
 package com.termux.app.terminal;
 
 import android.annotation.SuppressLint;
-import android.app.AlertDialog;
+import androidx.appcompat.app.AlertDialog;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.media.AudioManager;
+import android.net.Uri;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.PowerManager;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.InputDevice;
@@ -37,7 +42,12 @@ import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ToggleReason;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.data.DataUtils;
+import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.logger.Logger;
+
+import org.json.JSONObject;
+
+import juloo.keyboard2.KeyValue;
 import com.termux.shared.markdown.MarkdownUtils;
 import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.termux.data.TermuxUrlUtils;
@@ -50,9 +60,13 @@ import com.termux.view.TerminalView;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Iterator;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import androidx.annotation.NonNull;
@@ -91,6 +105,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     private static final long KEYBOARD_STANDARD_RETRY_DELAY_MS = 300L;
     /** Second retry for devices whose resumed window becomes IME-ready later. */
     private static final long KEYBOARD_RESUME_SECOND_RETRY_DELAY_MS = 320L;
+    /** Matches kitty's default multi-key mapping timeout. */
+    private static final long KEY_CHORD_TIMEOUT_MS = 2_000L;
     private static final ExecutorService REPORT_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "termux-report-builder");
         thread.setDaemon(true);
@@ -98,11 +114,16 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     });
     private SuggestionBarCallback mSuggestionBarCallback;
     private final View.OnFocusChangeListener mTerminalFocusChangeListener;
+    private final Handler mKeyChordHandler = new Handler(Looper.getMainLooper());
+    private final TerminalKeyChordOverlay mKeyChordOverlay;
+    private final Runnable mKeyChordTimeout = this::cancelPendingKeyChord;
+    private final Runnable mKeyModeTimeout = this::expireKeyMode;
 
     public TermuxTerminalViewClient(TermuxActivity activity, TermuxTerminalSessionActivityClient termuxTerminalSessionActivityClient) {
         this.mActivity = activity;
         this.mTermuxTerminalSessionActivityClient = termuxTerminalSessionActivityClient;
         this.mTerminalFocusChangeListener = this::onTerminalFocusChanged;
+        this.mKeyChordOverlay = new TerminalKeyChordOverlay(activity);
     }
 
     public TermuxActivity getActivity() {
@@ -122,9 +143,33 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      */
     public void onCreate() {
         onReloadProperties();
-        mActivity.getTerminalView().setTextSize(mActivity.getPreferences().getFontSize());
+        // Panes are created lazily by TerminalPaneController (each configured in PaneHost), so
+        // there may be no active pane yet at activity onCreate. Guard the initial font/keep-on setup.
+        TerminalView view = mActivity.getTerminalView();
+        if (view != null)
+            view.setTextSize(mActivity.getPreferences().getFontSize());
         mActivity.requestTerminalFlushDockGeometryUpdate();
-        mActivity.getTerminalView().setKeepScreenOn(mActivity.getPreferences().shouldKeepScreenOn());
+        if (view != null) {
+            view.setKeepScreenOn(mActivity.getPreferences().shouldKeepScreenOn());
+            applyCursorTrailPolicy(view);
+        }
+    }
+
+    /**
+     * Decide whether a terminal view animates its cursor. The view itself has no opinion: the
+     * preference and the device's power state are policy, and both are re-read on resume because the
+     * user can change either while the activity is stopped.
+     */
+    public void applyCursorTrailPolicy(TerminalView view) {
+        if (view == null)
+            return;
+        boolean enabled = mActivity.getPreferences().isTerminalCursorTrailEnabled();
+        if (enabled) {
+            PowerManager powerManager = (PowerManager) mActivity.getSystemService(Context.POWER_SERVICE);
+            if (powerManager != null && powerManager.isPowerSaveMode())
+                enabled = false;
+        }
+        view.setCursorTrailEnabled(enabled);
     }
 
     /**
@@ -145,6 +190,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      */
     public void onResume() {
         setSoftKeyboardState(true, mActivity.isActivityRecreated());
+        applyCursorTrailPolicy(mActivity.getTerminalView());
         mTerminalCursorBlinkerStateAlreadySet = false;
         if (mActivity.getTerminalView().mEmulator != null) {
             // Start terminal cursor blinking if enabled
@@ -165,6 +211,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (mShowSoftKeyboardRunnable != null) {
             mActivity.getTerminalView().removeCallbacks(mShowSoftKeyboardRunnable);
         }
+        cancelPendingKeyChord();
+        TerminalKeyBindingResolver.getInstance().clearModes();
+        mKeyChordHandler.removeCallbacks(mKeyModeTimeout);
     }
 
     /**
@@ -172,6 +221,16 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      */
     public void onReloadProperties() {
         setSessionShortcuts();
+        cancelPendingKeyChord();
+        mKeyChordHandler.removeCallbacks(mKeyModeTimeout);
+        TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.reloadUserBindings();
+        if (!resolver.getConfigErrors().isEmpty()) {
+            for (String error : resolver.getConfigErrors())
+                Logger.logError(LOG_TAG, "Binding config: " + error);
+            mActivity.showToast(mActivity.getResources().getQuantityString(
+                R.plurals.terminal_binding_config_errors, resolver.getConfigErrors().size(),
+                resolver.getConfigErrors().size()), true);
+        }
     }
 
     /**
@@ -215,6 +274,14 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     @Override
     public void onSingleTapUp(MotionEvent e) {
         TerminalEmulator term = mActivity.getCurrentSession().getEmulator();
+        int[] tappedColumnAndRow = mActivity.getTerminalView().getColumnAndRow(e, true);
+        String hyperlink = term.getHyperlinkUriAt(tappedColumnAndRow[1], tappedColumnAndRow[0]);
+        if (hyperlink != null) {
+            // An OSC 8 link was tapped. Confirm before acting on it: unlike the URL regex below, the
+            // target is chosen by the application and need not resemble the text that was tapped.
+            showHyperlinkDialog(hyperlink);
+            return;
+        }
         if (mActivity.getProperties().shouldOpenTerminalTranscriptURLOnClick()) {
             int[] columnAndRow = mActivity.getTerminalView().getColumnAndRow(e, true);
             String wordAtTap = term.getScreen().getWordAtLocation(columnAndRow[0], columnAndRow[1]);
@@ -267,6 +334,13 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     @SuppressLint("RtlHardcoded")
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent e, TerminalSession currentSession) {
+        TerminalKeyInspector inspector = TerminalKeyInspector.active();
+        if (inspector != null)
+            inspector.recordEvent(e, true);
+        // The palette overlay claims typing before the terminal writes it, the same point the
+        // in-app keyboard's interceptor sits at. Checked first so nothing else can consume esc.
+        if (mActivity.handleCommandPaletteKey(keyCode, e))
+            return true;
         if (mActivity.handleTerminalAppSearchKey(keyCode))
             return true;
         if (mSuggestionBarCallback != null && mActivity.shouldProcessSuggestionBarKeyEvent(keyCode)) {
@@ -286,53 +360,209 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (keyCode == KeyEvent.KEYCODE_ENTER && !currentSession.isRunning()) {
             mTermuxTerminalSessionActivityClient.removeFinishedSession(currentSession);
             return true;
-        } else if (!mActivity.getProperties().areHardwareKeyboardShortcutsDisabled() && e.isCtrlPressed() && e.isAltPressed()) {
-            // Get the unmodified code point:
-            int unicodeChar = e.getUnicodeChar(0);
-            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || unicodeChar == 'n') /* next */
-            {
-                mTermuxTerminalSessionActivityClient.switchToSession(true);
-            } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP || unicodeChar == 'p') /* previous */
-            {
-                mTermuxTerminalSessionActivityClient.switchToSession(false);
-            } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                mActivity.getDrawer().openDrawer(Gravity.LEFT);
-            } else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                mActivity.getDrawer().closeDrawers();
-            } else if (unicodeChar == 'k') /* keyboard */
-            {
-                onToggleSoftKeyboardRequest();
-            } else if (unicodeChar == 'm') /* menu */
-            {
-                mActivity.getTerminalView().showContextMenu();
-            } else if (unicodeChar == 'r') /* rename */
-            {
-                mTermuxTerminalSessionActivityClient.renameSession(currentSession);
-            } else if (unicodeChar == 'c') /* create */
-            {
-                mTermuxTerminalSessionActivityClient.addNewSession(false, null);
-            } else if (unicodeChar == 'u') /* urls */
-            {
-                showUrlSelection();
-            } else if (unicodeChar == 'v') {
-                doPaste();
-            } else if (unicodeChar == '+' || e.getUnicodeChar(KeyEvent.META_SHIFT_ON) == '+') {
-                // We also check for the shifted char here since shift may be required to produce '+',
-                // see https://github.com/termux/termux-api/issues/2
-                changeFontSize(true);
-            } else if (unicodeChar == '-') {
-                changeFontSize(false);
-            } else if (unicodeChar >= '1' && unicodeChar <= '9') {
-                int index = unicodeChar - '1';
-                mTermuxTerminalSessionActivityClient.switchToSession(index);
-            }
+        }
+        return handleRegistryKeybinds(e);
+    }
+
+    /**
+     * Resolves a {@code Ctrl+Alt(+Shift)} stroke through the registry and runs the
+     * matching action.
+     *
+     * <p>This replaced two separate chains: the multiplexer {@code switch} and the
+     * legacy {@code Ctrl+Alt}+character sequence. Both are now expressed as
+     * {@code defaultBindings} in {@link LauncherToolRegistry}, with
+     * {@link LauncherToolRegistry.BindingCondition} covering the strokes that meant
+     * different things depending on whether split panes were on.
+     *
+     * <p>Two behaviors are preserved on purpose:
+     *
+     * <ul>
+     *   <li>Every {@code Ctrl+Alt} combination is swallowed while hardware
+     *       shortcuts are enabled, matched or not, exactly as the legacy chain did.
+     *       Letting unmatched combinations through to the shell would be a
+     *       user-visible change.
+     *   <li>Pane focus and resize still report whether they consumed the stroke, so
+     *       an unconsumed arrow is not silently eaten.
+     * </ul>
+     *
+     * <p>One intentional change: matching is now on key code rather than
+     * {@code getUnicodeChar}, so the binds keep working on non-Latin layouts where
+     * the legacy chain quietly did nothing.
+     */
+    private boolean handleRegistryKeybinds(KeyEvent e) {
+        TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
+        if (mActivity.getProperties().areHardwareKeyboardShortcutsDisabled()) {
+            if (resolver.cancelPendingSequence()) clearPendingKeyChordUi();
+            return false;
+        }
+
+        TerminalActionDispatcher dispatcher = TerminalActionDispatcher.getInstance();
+        TerminalKeyBindingResolver.Step step = resolver.advance(e, dispatcher.actionContext());
+        if (step.kind == TerminalKeyBindingResolver.Step.Kind.NONE) {
+            // Preserve the historical Termux contract: unmatched Ctrl+Alt strokes
+            // are swallowed while hardware shortcuts are enabled.
+            return e.isAltPressed() && e.isCtrlPressed();
+        }
+        if (step.kind == TerminalKeyBindingResolver.Step.Kind.PASSTHROUGH)
+            return false;
+        if (step.kind == TerminalKeyBindingResolver.Step.Kind.IGNORED) {
+            refreshKeyModeUi(resolver);
             return true;
         }
-        return false;
+        if (step.kind == TerminalKeyBindingResolver.Step.Kind.PENDING) {
+            mKeyChordHandler.removeCallbacks(mKeyChordTimeout);
+            mKeyChordHandler.postDelayed(mKeyChordTimeout, KEY_CHORD_TIMEOUT_MS);
+            mKeyChordOverlay.show(step.pendingSequence);
+            return true;
+        }
+        clearPendingKeyChordUi();
+        if (step.kind == TerminalKeyBindingResolver.Step.Kind.CANCELLED) {
+            mActivity.getWindow().getDecorView().playSoundEffect(
+                android.view.SoundEffectConstants.CLICK);
+            refreshKeyModeUi(resolver);
+            return true;
+        }
+
+        TerminalKeyBindingResolver.Match match = step.match;
+        if (match == null) return true;
+        TerminalKeyInspector inspector = TerminalKeyInspector.active();
+        if (inspector != null)
+            inspector.recordBinding(match == null ? null : match.stroke, match == null ? null : match.toolName);
+        if (match == null)
+            return true; // unbound Ctrl+Alt stroke: swallowed, as before
+
+        boolean handled = runMatch(resolver, dispatcher, match);
+        resolver.afterMatch(match);
+        refreshKeyModeUi(resolver);
+        return handled;
+    }
+
+    /**
+     * Runs a {@code tool:<id>} key from the in-app keyboard layout.
+     *
+     * <p>The layout file names the registry tool directly, so a key slot reaches the same
+     * dispatcher a keybind and a palette row do — there is no keyboard-side table of
+     * supported actions to extend.
+     */
+    public void runLauncherTool(@NonNull String toolId) {
+        TerminalActionDispatcher dispatcher = TerminalActionDispatcher.getInstance();
+        TerminalKeyInspector inspector = TerminalKeyInspector.active();
+        if (inspector != null)
+            inspector.recordBinding(KeyValue.LAUNCHER_TOOL_PREFIX + toolId, toolId);
+        JSONObject result = dispatcher.execute(toolId, new JSONObject());
+        if (!result.optBoolean("ok", false))
+            Logger.logWarn(LOG_TAG, "Keyboard tool " + toolId + " failed: "
+                + result.optString("message"));
+    }
+
+    /** Runs every action of a resolved binding, in the order the config declared them. */
+    private boolean runMatch(@NonNull TerminalKeyBindingResolver resolver,
+                             @NonNull TerminalActionDispatcher dispatcher,
+                             @NonNull TerminalKeyBindingResolver.Match match) {
+        boolean handled = false;
+        for (TerminalBindingConfig.Action action : match.actions) {
+            if (action.type == TerminalBindingConfig.ActionType.PUSH_MODE) {
+                handled |= resolver.pushMode(action.value);
+                continue;
+            }
+            if (action.type == TerminalBindingConfig.ActionType.POP_MODE) {
+                handled |= resolver.popMode();
+                continue;
+            }
+            if (action.type == TerminalBindingConfig.ActionType.SEND_TEXT) {
+                TerminalSession session = mActivity.getCurrentSession();
+                if (session == null) {
+                    Logger.logWarn(LOG_TAG, "Binding " + match.stroke + " cannot send text: no session");
+                } else {
+                    session.write(action.value);
+                }
+                handled = true;
+                continue;
+            }
+            if (action.type == TerminalBindingConfig.ActionType.SEND_KEY) {
+                TerminalSession session = mActivity.getCurrentSession();
+                String encoded = session == null ? null
+                    : TerminalBindingKeyEncoder.encode(action.value, session.getEmulator());
+                if (encoded == null) {
+                    Logger.logWarn(LOG_TAG, "Binding " + match.stroke
+                        + " cannot encode send-key " + action.value);
+                } else {
+                    session.write(encoded);
+                }
+                handled = true;
+                continue;
+            }
+
+            JSONObject arguments = mergeArguments(action.arguments, match.arguments);
+            JSONObject result = dispatcher.execute(action.value, arguments);
+            if (!result.optBoolean("ok", false)) {
+                Logger.logWarn(LOG_TAG, "Binding " + match.stroke + " -> " + action.value
+                    + " failed: " + result.optString("message"));
+                handled = true;
+                continue;
+            }
+            handled |= result.optBoolean("handled", true);
+        }
+        return handled;
+    }
+
+    /** Arguments the stroke implies, overridden by the ones the config spelled out. */
+    @NonNull
+    private static JSONObject mergeArguments(@NonNull JSONObject configured,
+                                             @NonNull JSONObject derived) {
+        JSONObject result = new JSONObject();
+        copyJson(derived, result);
+        copyJson(configured, result);
+        return result;
+    }
+
+    private static void copyJson(@NonNull JSONObject source, @NonNull JSONObject target) {
+        Iterator<String> keys = source.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            try {
+                target.put(key, source.get(key));
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private void cancelPendingKeyChord() {
+        TerminalKeyBindingResolver.getInstance().cancelPendingSequence();
+        clearPendingKeyChordUi();
+    }
+
+    private void clearPendingKeyChordUi() {
+        mKeyChordHandler.removeCallbacks(mKeyChordTimeout);
+        mKeyChordOverlay.hide();
+    }
+
+    private void refreshKeyModeUi(@NonNull TerminalKeyBindingResolver resolver) {
+        mKeyChordHandler.removeCallbacks(mKeyModeTimeout);
+        String mode = resolver.getCurrentMode();
+        if (mode.isEmpty()) {
+            mKeyChordOverlay.hide();
+            return;
+        }
+        mKeyChordOverlay.showMode(mode);
+        long timeout = resolver.getCurrentModeTimeoutMillis();
+        if (timeout > 0) mKeyChordHandler.postDelayed(mKeyModeTimeout, timeout);
+    }
+
+    private void expireKeyMode() {
+        TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
+        resolver.popCurrentModeOnTimeout();
+        refreshKeyModeUi(resolver);
     }
 
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent e) {
+        TerminalKeyInspector inspector = TerminalKeyInspector.active();
+        if (inspector != null)
+            inspector.recordEvent(e, false);
+        // Swallow the release of a stroke the palette consumed on the way down.
+        if (mActivity.isCommandPaletteOpen())
+            return true;
         // If emulator is not set, like if bootstrap installation failed and user dismissed the error
         // dialog, then just exit the activity, otherwise they will be stuck in a broken state.
         if (keyCode == KeyEvent.KEYCODE_BACK && mActivity.getTerminalView().mEmulator == null) {
@@ -525,7 +755,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                                 mTermuxTerminalSessionActivityClient.switchToSession(false);
                                 return true;
                             case TermuxPropertyConstants.ACTION_SHORTCUT_RENAME_SESSION:
-                                mTermuxTerminalSessionActivityClient.renameSession(mActivity.getCurrentSession());
+                                if (mActivity.isSplitPanesEnabled())
+                                    mActivity.renameCurrentWindowSession();
+                                else
+                                    mTermuxTerminalSessionActivityClient.renameSession(
+                                        mActivity.getCurrentSession());
                                 return true;
                         }
                     }
@@ -775,6 +1009,33 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         ShareUtils.shareText(mActivity, mActivity.getString(R.string.title_share_selected_text), selectedText, mActivity.getString(R.string.title_share_selected_text_with));
     }
 
+    /**
+     * The URI schemes an OSC 8 hyperlink may be handed to another app with. Anything else - and in
+     * particular {@code file:}, which either leaks an app private path or throws
+     * {@code FileUriExposedException} - can only be copied to the clipboard.
+     */
+    private static final Set<String> OPENABLE_HYPERLINK_SCHEMES = new HashSet<>(Arrays.asList(
+        "http", "https", "mailto", "tel", "sms", "geo", "ftp", "ftps"));
+
+    /**
+     * Ask what to do with a tapped OSC 8 hyperlink, showing its full target so that a link whose text
+     * and destination disagree is visible as such before anything is opened.
+     */
+    private void showHyperlinkDialog(String uri) {
+        String scheme = Uri.parse(uri).getScheme();
+        boolean openable = scheme != null && OPENABLE_HYPERLINK_SCHEMES.contains(scheme.toLowerCase(Locale.ROOT));
+        AlertDialog.Builder builder = new MaterialAlertDialogBuilder(mActivity)
+            .setTitle(R.string.title_hyperlink_dialog)
+            .setMessage(uri)
+            .setNeutralButton(R.string.action_hyperlink_copy, (di, which) ->
+                ShareUtils.copyTextToClipboard(mActivity, uri, mActivity.getString(R.string.msg_select_url_copied_to_clipboard)))
+            .setNegativeButton(android.R.string.cancel, null);
+        if (openable) {
+            builder.setPositiveButton(R.string.action_hyperlink_open, (di, which) -> ShareUtils.openUrl(mActivity, uri));
+        }
+        builder.show();
+    }
+
     public void showUrlSelection() {
         TerminalSession session = mActivity.getCurrentSession();
         if (session == null)
@@ -782,14 +1043,14 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         String text = ShellUtils.getTerminalSessionTranscriptText(session, true, true);
         LinkedHashSet<CharSequence> urlSet = TermuxUrlUtils.extractUrls(text);
         if (urlSet.isEmpty()) {
-            new AlertDialog.Builder(mActivity).setMessage(R.string.title_select_url_none_found).show();
+            new MaterialAlertDialogBuilder(mActivity).setMessage(R.string.title_select_url_none_found).show();
             return;
         }
         final CharSequence[] urls = urlSet.toArray(new CharSequence[0]);
         // Latest first.
         Collections.reverse(Arrays.asList(urls));
         // Click to copy url to clipboard:
-        final AlertDialog dialog = new AlertDialog.Builder(mActivity).setItems(urls, (di, which) -> {
+        final AlertDialog dialog = new MaterialAlertDialogBuilder(mActivity).setItems(urls, (di, which) -> {
             String url = (String) urls[which];
             ShareUtils.copyTextToClipboard(mActivity, url, mActivity.getString(R.string.msg_select_url_copied_to_clipboard));
         }).setTitle(R.string.title_select_url_dialog).create();
@@ -805,6 +1066,19 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             });
         });
         dialog.show();
+    }
+
+    /** Show the keyboard-addressable URL/path/hash/line-reference hint picker. */
+    public void showHintsOverlay() {
+        TerminalSession session = mActivity.getCurrentSession();
+        if (session == null) return;
+        String text = ShellUtils.getTerminalSessionTranscriptText(session, true, true);
+        TerminalHintsOverlay.show(mActivity, text == null ? "" : text);
+    }
+
+    public void showScrollbackSearch() {
+        TerminalView view = mActivity.getTerminalView();
+        if (view != null) TerminalScrollbackSearchOverlay.show(mActivity, view);
     }
 
     public void reportIssueFromTranscript() {

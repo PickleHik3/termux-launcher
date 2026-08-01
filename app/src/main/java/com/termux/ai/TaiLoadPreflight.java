@@ -15,6 +15,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.ArrayList;
+import java.util.List;
 
 public final class TaiLoadPreflight {
     private static final long BYTES_PER_GIB = 1024L * 1024L * 1024L;
@@ -57,14 +59,36 @@ public final class TaiLoadPreflight {
         String requested = requestedAccelerator(options);
         if (requested != null) return requested;
         if (TaiModelSpec.BACKEND_MNN_LLM.equals(model.backend)) return "cpu";
-        if (profile.supports("gpu")
-            && device.supportsAccelerator("gpu")
-            && TaiRuntimeHistory.hasSuccessfulGpu(context, model, device)) {
-            return "gpu";
-        }
-        if (profile.supports("cpu") && device.supportsAccelerator("cpu")) return "cpu";
-        if (profile.supports("gpu") && device.supportsAccelerator("gpu")) return "gpu";
+        List<String> ordered = autoAccelerators(context, model, device, profile);
+        if (!ordered.isEmpty()) return ordered.get(0);
         return "none";
+    }
+
+    /**
+     * Returns the model-declared accelerator order, demoting only accelerators with a recorded
+     * failure on this exact model/device. A new GPU is therefore tried on its first automatic load,
+     * matching Gallery's ordered accelerator configuration instead of requiring a circular
+     * "successful GPU history" prerequisite.
+     */
+    @NonNull
+    static List<String> autoAccelerators(
+        @NonNull Context context,
+        @NonNull TaiModelSpec model,
+        @NonNull TaiDeviceCapabilities device,
+        @NonNull TaiModelProfile profile
+    ) {
+        ArrayList<String> preferred = new ArrayList<>();
+        ArrayList<String> failed = new ArrayList<>();
+        for (String accelerator : profile.compatibleAccelerators) {
+            if (!device.supportsAccelerator(accelerator)) continue;
+            if (TaiRuntimeHistory.failedEntry(context, model, device, accelerator) == null) {
+                preferred.add(accelerator);
+            } else {
+                failed.add(accelerator);
+            }
+        }
+        preferred.addAll(failed);
+        return preferred;
     }
 
     @Nullable
@@ -293,19 +317,7 @@ public final class TaiLoadPreflight {
                     "The model profile does not support " + effectiveAccelerator + ".");
                 if (!deviceSupports) block("accelerator_not_supported_by_device",
                     effectiveAccelerator.toUpperCase(Locale.ROOT) + " is disabled or unsupported on this device.");
-                if ("gpu".equals(effectiveAccelerator) && !TaiRuntimeHistory.hasSuccessfulGpu(context, model, device)) {
-                    warning("gpu_not_known_good",
-                        "GPU has not completed a successful load for this model/device yet. Test GPU explicitly before making it default.");
-                }
                 return;
-            }
-
-            if ("gpu".equals(effectiveAccelerator) && !TaiRuntimeHistory.hasSuccessfulGpu(context, model, device)) {
-                block("gpu_requires_explicit_opt_in",
-                    "Auto-load will not try GPU on this model/device until GPU succeeds once through an explicit load.");
-            } else if ("cpu".equals(effectiveAccelerator) && profile.supports("gpu")) {
-                warning("auto_gpu_not_known_good",
-                    "Auto selected CPU because GPU has not been proven stable for this model/device.");
             }
             check("accelerator_policy", !blocked,
                 "Accelerator policy selected " + effectiveAccelerator + ".",

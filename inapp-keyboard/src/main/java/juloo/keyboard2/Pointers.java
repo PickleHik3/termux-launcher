@@ -24,6 +24,13 @@ public final class Pointers implements Handler.Callback
   public static final int FLAG_P_CLEAR_LATCHED = (1 << 6);
   /** Can't be locked, even when long pressing. */
   public static final int FLAG_P_CANT_LOCK = (1 << 7);
+  /**
+   * The swipe settled on a key that must fire exactly once, so the rest of the pointer's travel
+   * is ignored. A launcher action typically opens an overlay that then owns the keyboard, and a
+   * long or sloppy swipe crossing further direction boundaries would otherwise keep selecting and
+   * firing values into whatever just appeared.
+   */
+  public static final int FLAG_P_GESTURE_LOCKED = (1 << 8);
 
   private Handler _longpress_handler;
   private ArrayList<Pointer> _ptrs = new ArrayList<Pointer>();
@@ -259,6 +266,7 @@ public final class Pointers implements Handler.Callback
     return k.keys[DIRECTION_TO_INDEX[direction]];
   }
 
+
   /**
    * Get the key nearest to [direction] that is not key0. Take care
    * of applying [_handler.modifyKey] to the selected key in the same
@@ -296,6 +304,8 @@ public final class Pointers implements Handler.Callback
     Pointer ptr = getPtr(pointerId);
     if (ptr == null)
       return;
+    if (ptr.hasFlagsAny(FLAG_P_GESTURE_LOCKED))
+      return;
     if (ptr.hasFlagsAny(FLAG_P_SLIDING))
     {
       ptr.sliding.onTouchMove(ptr, x, y);
@@ -330,7 +340,6 @@ public final class Pointers implements Handler.Callback
       int direction = ((int)(a * 8 / Math.PI) + 12) % 16;
       if (ptr.gesture == null)
       { // Gesture starts
-
         ptr.gesture = new Gesture(direction, _config.circleSensitivity);
         KeyValue new_value = getNearestKeyAtDirection(ptr, direction);
         if (new_value != null)
@@ -338,6 +347,8 @@ public final class Pointers implements Handler.Callback
 
           ptr.value = new_value;
           ptr.flags = pointer_flags_of_kv(new_value);
+          if (new_value.getKind() == KeyValue.Kind.Launcher_tool)
+            ptr.flags |= FLAG_P_GESTURE_LOCKED;
           // Start sliding mode
           if (new_value.getKind() == KeyValue.Kind.Slider)
             startSliding(ptr, x, y, dx, dy, new_value);

@@ -121,15 +121,13 @@ public class ApiSecuritySeamsTest {
     }
 
     @Test
-    public void lanCors_disabled() throws Exception {
+    public void corsOrigin_presentButAuthStillGates() throws Exception {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         LauncherCtlApiServer.writeResponse(output, LauncherCtlApiServer.unauthorizedResponse());
         String response = output.toString(StandardCharsets.UTF_8.name());
 
         assertTrue(response.startsWith("HTTP/1.1 401 Unauthorized"));
-        assertFalse(response.toLowerCase().contains("access-control-allow-origin"));
-        assertFalse(response.toLowerCase().contains("access-control-allow-headers"));
-        assertFalse(response.toLowerCase().contains("access-control-allow-methods"));
+        assertTrue(response.toLowerCase().contains("access-control-allow-origin: *"));
     }
 
     @Test
@@ -141,6 +139,11 @@ public class ApiSecuritySeamsTest {
             .put("path", tempFile.getAbsolutePath())
             .put("modelId", "litert-embed-model")
             .toString());
+
+        // Without an in-process runtime, TaiManager.embeddings() delegates to the separate runtime
+        // process before it ever reaches the capability check, and a unit test has no such process
+        // (503). Inject the fake so this test exercises the capability seam it is named for.
+        injectFakeRuntime(manager);
 
         HttpURLConnection conn = post("/v1/embeddings", new JSONObject()
             .put("model", "litert-embed-model")
@@ -190,7 +193,9 @@ public class ApiSecuritySeamsTest {
 
         FakeMultiBackendRuntime fake = injectFakeRuntime(manager);
         fake.addEmbeddingsCapableModel("embed-capable-mnn");
-        manager.loadModel(new JSONObject().put("model", "embed-capable-mnn").toString());
+        // Embedding-only models are served on demand, never loaded into the generation runtime.
+        JSONObject load = manager.loadModel(new JSONObject().put("model", "embed-capable-mnn").toString());
+        assertEquals("embedding_model_not_loadable", load.optString("error"));
 
         HttpURLConnection conn = post("/v1/embeddings", new JSONObject()
             .put("model", "embed-capable-mnn")
@@ -266,18 +271,11 @@ public class ApiSecuritySeamsTest {
             return loadedModels.contains(modelId);
         }
 
+        // No "model not loaded" gate: TaiManager.loadModel() rejects embedding-only models
+        // ("embedding_model_not_loadable") because they are served on demand, so such a model is
+        // never in loadedModels and gating on it could only ever fail.
         @Override
         public JSONObject embed(String modelId, String input) throws org.json.JSONException {
-            if (!loadedModels.contains(modelId)) {
-                JSONObject error = new JSONObject();
-                error.put("message", "Model not loaded.");
-                error.put("type", "invalid_request_error");
-                error.put("code", "model_not_loaded");
-                JSONObject response = new JSONObject();
-                response.put("error", error);
-                response.put("_statusCode", 409);
-                return response;
-            }
             if (!embeddingsCapableModels.contains(modelId)) {
                 JSONObject error = new JSONObject();
                 error.put("message", "Embeddings are not supported for model '" + modelId + "'.");

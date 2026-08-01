@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~/.termux/keyboard/layout.xml — in-app keyboard layout for Termux Launcher.
+
+  THIS FILE IS AN EXAMPLE AND IS NOT LOADED FROM HERE. Copy it into place:
+
+      mkdir -p ~/.termux/keyboard
+      cp ~/.termux/launcher/examples/keyboard-layout.xml ~/.termux/keyboard/layout.xml
+      termux-reload-settings
+
+  The content below is exactly the layout the app already uses by default, so copying it changes
+  nothing until you edit it. That is the point: start from the shipped behaviour and adjust.
+  Delete ~/.termux/keyboard/layout.xml to go back to the bundled default. If the file is missing or
+  invalid the keyboard falls back to the last working layout, then to the bundled one.
+
+  Limit: 512 KiB. Update it atomically — write a temporary file next to it and rename — so a
+  half-written layout is never read.
+
+  KEY SLOTS. Each key holds a centre value plus eight directional values:
+
+       nw    n    ne
+       w     c     e
+       sw    s    se
+
+  The long names key1..key8 are equivalent (key1 NW, key2 NE, key3 SW, key4 SE, key5 W, key6 E,
+  key7 N, key8 S). Values prefixed `loc ` are hidden but still reachable.
+
+  LAUNCHER ACTIONS ON A KEY
+
+      tool:<registry id>              draws a generic glyph
+      tool:<registry id>:<glyph>      draws <glyph>
+
+  A tool: key reaches the same dispatcher as a key binding or a palette row, so every terminal
+  action in the registry is available on any slot. Discover ids in the command palette
+  (Ctrl+Alt+Shift+P). A tool: key carries no arguments, so actions that require one — app.launch in
+  particular — cannot be driven from a key slot; launch apps from a chord in
+  ~/.termux/termux-launcher-bindings.conf instead:
+
+      map ctrl+alt+w app.launch com.whatsapp
+
+  THE FN LAYER. The <modmap> at the bottom is what makes this usable as a terminal keyboard:
+  Fn+q..p give F1-F12, Fn+a/s give Esc/Tab, Fn+d..l give navigation, and Fn+n / Fn+m send ^C / ^D.
+
+  Editing help:
+  - Web editor:  https://unexpected-keyboard-layout-editor.lixquid.com
+  - Layout guide: https://github.com/Julow/Unexpected-Keyboard/blob/master/doc/Custom-layouts.md
+-->
+<keyboard bottom_row="false" name="QWERTY (Termux Launcher)" script="latin">
+  <row>
+    <key c="q" ne="1" se="loc esc"/>
+    <key c="w" nw="~" ne="2" sw="\@"/>
+    <key c="e" nw="!" ne="3" sw="\#" se="loc €"/>
+    <key c="r" ne="4" sw="$"/>
+    <key c="t" ne="5" sw="%"/>
+    <key c="y" ne="6" sw="^"/>
+    <key c="u" ne="7" sw="&amp;"/>
+    <key c="i" ne="8" sw="*"/>
+    <key c="o" ne="9" sw="(" se=")"/>
+    <key c="p" ne="0"/>
+  </row>
+  <row>
+    <key shift="0.5" c="a" nw="loc tab" ne="`"/>
+    <key c="s" ne="loc §" sw="loc ß"/>
+    <key c="d"/>
+    <key c="f"/>
+    <key c="g" ne="-" sw="_"/>
+    <key c="h" ne="=" sw="+"/>
+    <key c="j" sw="{" se="}"/>
+    <key c="k" sw="[" se="]"/>
+    <key c="l" ne="|" sw="\\"/>
+  </row>
+  <row>
+    <key width="1.5" c="shift" ne="loc capslock"/>
+    <key c="z"/>
+    <key c="x" ne="loc †"/>
+    <key c="c" ne="&lt;" sw="."/>
+    <key c="v" ne=">" sw=","/>
+    <key c="b" ne="\?" sw="/"/>
+    <key c="n" ne=":" sw=";"/>
+    <key c="m" ne="&quot;" sw="'"/>
+    <key width="1.5" c="backspace" ne="delete"/>
+  </row>
+  <row height="0.95">
+    <key width="1.7" c="ctrl" nw="fn" ne="loc meta" sw="loc switch_clipboard" se="switch_numeric"/>
+    <key width="1.3" c="loc alt" nw="fn" ne="loc change_method" se="config"/>
+    <key width="4.0" c="space" w="cursor_left" e="cursor_right" s="switch_backward"
+         n="tool:app.command_palette:⌘"
+         nw="tool:window.previous:◧" ne="tool:window.next:◨"
+         sw="tool:session.previous:↰" se="tool:session.next:↳"/>
+    <key width="1.3" c="loc compose" nw="loc home" ne="loc page_up" sw="loc end" se="loc page_down" w="left" e="right" n="up" s="down"/>
+    <key width="1.7" c="enter" nw="loc voice_typing"/>
+  </row>
+  <modmap>
+    <fn a="q" b="f1"/>
+    <fn a="w" b="f2"/>
+    <fn a="e" b="f3"/>
+    <fn a="r" b="f4"/>
+    <fn a="t" b="f5"/>
+    <fn a="y" b="f6"/>
+    <fn a="u" b="f7"/>
+    <fn a="i" b="f8"/>
+    <fn a="o" b="f9"/>
+    <fn a="p" b="f10"/>
+    <fn a="a" b="esc"/>
+    <fn a="s" b="tab"/>
+    <fn a="d" b="home"/>
+    <fn a="f" b="up"/>
+    <fn a="g" b="end"/>
+    <fn a="h" b="page_up"/>
+    <fn a="j" b="left"/>
+    <fn a="k" b="down"/>
+    <fn a="l" b="right"/>
+    <fn a="z" b="f11"/>
+    <fn a="x" b="f12"/>
+    <fn a="c" b="insert"/>
+    <fn a="v" b="delete"/>
+    <fn a="b" b="page_down"/>
+    <fn a="n" b="^C:ctrl,c"/>
+    <fn a="m" b="^D:ctrl,d"/>
+  </modmap>
+</keyboard>

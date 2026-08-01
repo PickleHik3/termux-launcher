@@ -154,6 +154,165 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         );
     }
 
+    public String getSurfaceTuningLastSection() {
+        return SharedPreferenceUtils.getString(
+            mSharedPreferences,
+            TERMUX_APP.KEY_SURFACE_TUNING_LAST_SECTION,
+            TERMUX_APP.DEFAULT_SURFACE_TUNING_LAST_SECTION,
+            true
+        );
+    }
+
+    public void setSurfaceTuningLastSection(String value) {
+        SharedPreferenceUtils.setString(
+            mSharedPreferences,
+            TERMUX_APP.KEY_SURFACE_TUNING_LAST_SECTION,
+            value,
+            false
+        );
+    }
+
+    public int getAppLauncherDockCornerRadius() {
+        int value = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS);
+        if (value < 0) return TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS;
+        return Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS, value);
+    }
+
+    public void setAppLauncherDockCornerRadius(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS,
+            value < 0 ? TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS
+                : Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS, value),
+            false);
+    }
+
+    public int getStatusBarBlurRadius() {
+        int fallback = mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS)
+            ? TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS : getExtraKeysBlurRadius();
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, fallback), 0, 30);
+    }
+
+    public void setStatusBarBlurRadius(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS,
+            DataUtils.clamp(value, 0, 30), false);
+    }
+
+    public int getStatusBarOpacity() {
+        int fallback = mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_OPACITY)
+            ? TERMUX_APP.DEFAULT_STATUS_BAR_OPACITY : getAppBarOpacity();
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_OPACITY, fallback), 0, 100);
+    }
+
+    public void setStatusBarOpacity(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_OPACITY,
+            DataUtils.clamp(value, 0, 100), false);
+    }
+
+    public int getStatusBarGrain() {
+        int fallback = mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_GRAIN)
+            ? TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN : getDockGlassGrain();
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_GRAIN, fallback), 0, 100);
+    }
+
+    public void setStatusBarGrain(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_GRAIN,
+            DataUtils.clamp(value, 0, 100), false);
+    }
+
+    public int getStatusBarCornerRadius() {
+        int fallback = mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS)
+            ? TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS : getAppLauncherDockCornerRadius();
+        int value = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS, fallback);
+        return value < 0 ? TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS
+            : Math.min(TERMUX_APP.MAX_STATUS_BAR_CORNER_RADIUS, value);
+    }
+
+    public void setStatusBarCornerRadius(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS,
+            value < 0 ? TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS
+                : Math.min(TERMUX_APP.MAX_STATUS_BAR_CORNER_RADIUS, value), false);
+    }
+
+    public static int clampSurfaceHorizontalInset(int value) {
+        return DataUtils.clamp(value, 0, TERMUX_APP.MAX_SURFACE_HORIZONTAL_INSET);
+    }
+
+    public int getDockHorizontalInset() {
+        return clampSurfaceHorizontalInset(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET, TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET));
+    }
+
+    public void setDockHorizontalInset(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET,
+            clampSurfaceHorizontalInset(value), false);
+    }
+
+    public int getInAppKeyboardHorizontalInset() {
+        return clampSurfaceHorizontalInset(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET));
+    }
+
+    public void setInAppKeyboardHorizontalInset(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET,
+            clampSurfaceHorizontalInset(value), false);
+    }
+
+    public int getStatusBarHorizontalInset() {
+        return clampSurfaceHorizontalInset(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET,
+            TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET));
+    }
+
+    public void setStatusBarHorizontalInset(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET,
+            clampSurfaceHorizontalInset(value), false);
+    }
+
+    public boolean isStatusWidgetCpuEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_CPU, TERMUX_APP.DEFAULT_STATUS_WIDGET_CPU);
+    }
+
+    public void setStatusWidgetCpuEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_CPU, value, false);
+    }
+
+    public boolean isStatusWidgetRamEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_RAM, TERMUX_APP.DEFAULT_STATUS_WIDGET_RAM);
+    }
+
+    public void setStatusWidgetRamEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_RAM, value, false);
+    }
+
+    public boolean isStatusWidgetWeatherEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_WEATHER, TERMUX_APP.DEFAULT_STATUS_WIDGET_WEATHER);
+    }
+
+    public void setStatusWidgetWeatherEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_WEATHER, value, false);
+    }
+
+    public boolean isTerminalCursorTrailEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL, TERMUX_APP.DEFAULT_TERMINAL_CURSOR_TRAIL);
+    }
+
+    public void setTerminalCursorTrailEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL, value, false);
+    }
+
     public boolean isAppLauncherDisplayAppNamesEnabled() {
         // App names are always shown; no longer user-configurable.
         return true;
@@ -333,8 +492,9 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             return TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_STYLE;
         }
         switch (value) {
-            case TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_VALARIE_CAPSULE:
-                return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_VALARIE_CAPSULE;
+            case TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_LEGACY_VALARIE_CAPSULE:
+            case TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED:
+                return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED;
             case TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_DEFAULT:
             default:
                 return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_DEFAULT;
@@ -463,39 +623,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             case "light":
             case "dark":
             case "custom":
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    /** Dock-match mode: {@code none}, {@code shape}, {@code glass}, or {@code both}. */
-    public String getInAppKeyboardDockMatch() {
-        String value = SharedPreferenceUtils.getString(
-            mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_DOCK_MATCH,
-            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_DOCK_MATCH,
-            true
-        );
-        if (isValidInAppKeyboardDockMatch(value))
-            return value;
-        return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_DOCK_MATCH;
-    }
-
-    public void setInAppKeyboardDockMatch(String value) {
-        if (!isValidInAppKeyboardDockMatch(value))
-            value = TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_DOCK_MATCH;
-        SharedPreferenceUtils.setString(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_DOCK_MATCH, value, false);
-    }
-
-    private static boolean isValidInAppKeyboardDockMatch(String value) {
-        if (value == null) return false;
-        switch (value) {
-            case "none":
-            case "shape":
-            case "glass":
-            case "both":
                 return true;
             default:
                 return false;
@@ -651,26 +778,26 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return clampInAppKeyboardKeyCornerRadiusDp(value);
     }
 
-    private boolean usesValarieInAppKeyboardDefaults() {
-        return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_VALARIE_CAPSULE.equals(
+    private boolean usesRoundedInAppKeyboardDefaults() {
+        return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED.equals(
             getAppLauncherDockStyle());
     }
 
     private float getDefaultInAppKeyboardHeightScale() {
-        return usesValarieInAppKeyboardDefaults()
-            ? TERMUX_APP.DEFAULT_VALARIE_IN_APP_KEYBOARD_HEIGHT_SCALE
+        return usesRoundedInAppKeyboardDefaults()
+            ? TERMUX_APP.DEFAULT_ROUNDED_IN_APP_KEYBOARD_HEIGHT_SCALE
             : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE;
     }
 
     private float getDefaultInAppKeyboardKeyMarginScale() {
-        return usesValarieInAppKeyboardDefaults()
-            ? TERMUX_APP.DEFAULT_VALARIE_IN_APP_KEYBOARD_KEY_MARGIN_SCALE
+        return usesRoundedInAppKeyboardDefaults()
+            ? TERMUX_APP.DEFAULT_ROUNDED_IN_APP_KEYBOARD_KEY_MARGIN_SCALE
             : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE;
     }
 
     private float getDefaultInAppKeyboardKeyCornerRadiusDp() {
-        return usesValarieInAppKeyboardDefaults()
-            ? TERMUX_APP.DEFAULT_VALARIE_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP
+        return usesRoundedInAppKeyboardDefaults()
+            ? TERMUX_APP.DEFAULT_ROUNDED_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP
             : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP;
     }
 
@@ -684,6 +811,24 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         if (Float.isNaN(value) || Float.isInfinite(value) || value < 0f)
             return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP;
         return Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP, value);
+    }
+
+    public int getInAppKeyboardKeyOpacity() {
+        return clampInAppKeyboardKeyOpacity(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_OPACITY,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY));
+    }
+
+    public void setInAppKeyboardKeyOpacity(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_OPACITY,
+            clampInAppKeyboardKeyOpacity(value), false);
+    }
+
+    /** Negative values collapse to the -1 "theme-defined" sentinel. */
+    public static int clampInAppKeyboardKeyOpacity(int value) {
+        if (value < 0) return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY;
+        return Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_OPACITY, value);
     }
 
     public boolean isSoftKeyboardEnabledOnlyIfNoHardware() {
@@ -708,6 +853,70 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setKeepScreenOn(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_KEEP_SCREEN_ON, value, false);
+    }
+
+    public boolean isCompatibilityModeEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_COMPATIBILITY_MODE, TERMUX_APP.DEFAULT_VALUE_COMPATIBILITY_MODE);
+    }
+
+    public void setCompatibilityModeEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_COMPATIBILITY_MODE, value, false);
+    }
+
+    public String getTopPaneClockStyle() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_TOP_PANE_CLOCK_STYLE, TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_STYLE, true);
+        return normalizeTopPaneClockStyle(value);
+    }
+
+    public void setTopPaneClockStyle(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_TOP_PANE_CLOCK_STYLE,
+            normalizeTopPaneClockStyle(value), false);
+    }
+
+    private static String normalizeTopPaneClockStyle(String value) {
+        if (TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD.equals(value)
+            || TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL.equals(value)
+            || TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED.equals(value)
+            || TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(value)
+            || TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB.equals(value)) {
+            return value;
+        }
+        return TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP;
+    }
+
+    public boolean isTopPaneClockAmPmEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TOP_PANE_CLOCK_AM_PM, TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_AM_PM);
+    }
+
+    public void setTopPaneClockAmPmEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TOP_PANE_CLOCK_AM_PM, value, false);
+    }
+
+    public boolean isTopPaneClockCollapsed() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TOP_PANE_CLOCK_COLLAPSED,
+            TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_COLLAPSED);
+    }
+
+    public void setTopPaneClockCollapsed(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TOP_PANE_CLOCK_COLLAPSED, value, false);
+    }
+
+    public String getEssentialNotificationRules() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_ESSENTIAL_NOTIFICATION_RULES,
+            TERMUX_APP.DEFAULT_ESSENTIAL_NOTIFICATION_RULES, true);
+    }
+
+    public void setEssentialNotificationRules(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_ESSENTIAL_NOTIFICATION_RULES,
+            value == null || value.isEmpty()
+                ? TERMUX_APP.DEFAULT_ESSENTIAL_NOTIFICATION_RULES : value, true);
     }
 
     public static int[] getDefaultFontSizes(Context context) {
@@ -874,6 +1083,28 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setTerminalFlushDockEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_FLUSH_DOCK, value, false);
+    }
+
+    public boolean isTerminalBorderEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED,
+            TERMUX_APP.DEFAULT_VALUE_TERMINAL_BORDER_ENABLED);
+    }
+
+    public void setTerminalBorderEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED, value, false);
+    }
+
+    /**
+     * Whether the surface editor's glass controls write to every surface at once, so the dock,
+     * the in-app keyboard and the status bar stay one material instead of three.
+     */
+    public boolean isSurfaceTuningNormalized() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_SURFACE_TUNING_NORMALIZED,
+            TERMUX_APP.DEFAULT_VALUE_SURFACE_TUNING_NORMALIZED);
+    }
+
+    public void setSurfaceTuningNormalized(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_SURFACE_TUNING_NORMALIZED, value, false);
     }
 
     public int getAppBarOpacity() {

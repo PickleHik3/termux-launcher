@@ -21,6 +21,7 @@
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
@@ -157,14 +158,6 @@
             android:label="@string/application_name"
             android:parentActivityName="com.termux.app.TermuxActivity"
             android:resizeableActivity="true"
-            tools:targetApi="o" />
-
-        <activity
-            android:name=".app.activities.OnboardingActivity"
-            android:exported="false"
-            android:label="@string/onboarding_activity_title"
-            android:resizeableActivity="true"
-            android:theme="@style/Theme.TermuxApp.Onboarding"
             tools:targetApi="o" />
 
         <activity

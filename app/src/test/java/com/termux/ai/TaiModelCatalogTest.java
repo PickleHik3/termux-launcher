@@ -46,7 +46,7 @@ public class TaiModelCatalogTest {
         assertTrue(recommended.displayCapabilityTags.contains("Vision"));
         assertTrue(recommended.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT));
         assertTrue(recommended.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT));
-        assertFalse(recommended.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_LLM_THINKING));
+        assertTrue(recommended.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_LLM_THINKING));
         assertTrue(recommended.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_LLM_THINKING));
         assertEquals(4096, recommended.endpointContextWindow);
         assertEquals(32768, recommended.sourceContextWindow);
@@ -82,7 +82,7 @@ public class TaiModelCatalogTest {
         assertTrue(e4b.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TOOL_USE));
         assertTrue(e4b.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_CODE));
         assertTrue(e4b.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING));
-        assertFalse(e4b.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_LLM_THINKING));
+        assertTrue(e4b.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_LLM_THINKING));
 
         assertNotNull(mobileActions);
         assertEquals("Mobile actions tool-call model", mobileActions.roleHint);

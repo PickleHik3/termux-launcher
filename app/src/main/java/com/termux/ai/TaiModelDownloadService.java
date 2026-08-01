@@ -43,6 +43,7 @@ public final class TaiModelDownloadService extends Service {
     public static final String EXTRA_RECOMMENDED_RAM_GB = "recommended_ram_gb";
     public static final String EXTRA_SHA256 = "sha256";
     public static final String EXTRA_EXPECTED_SIZE_BYTES = "expected_size_bytes";
+    public static final String EXTRA_RUNTIME_PROFILE = "runtime_profile";
 
     private static final String CHANNEL_ID = "termux_ai_model_downloads";
     private static final int NOTIFICATION_ID = 24100;
@@ -108,6 +109,14 @@ public final class TaiModelDownloadService extends Service {
         TaiModelStore store = new TaiModelStore(this);
         TaiModelDownloader downloader = new TaiModelDownloader(this, store);
         try {
+            TaiModelProfile runtimeProfile = null;
+            String rawProfile = intent.getStringExtra(EXTRA_RUNTIME_PROFILE);
+            if (rawProfile != null && !rawProfile.trim().isEmpty()) {
+                try {
+                    runtimeProfile = TaiModelProfile.fromJson(new JSONObject(rawProfile));
+                } catch (Exception ignored) {
+                }
+            }
             downloader.runDownload(
                 transferId,
                 modelId,
@@ -125,6 +134,7 @@ public final class TaiModelDownloadService extends Service {
                 valueOrEmpty(intent.getStringExtra(EXTRA_SHA256)),
                 intent.getLongExtra(EXTRA_EXPECTED_SIZE_BYTES, 0L),
                 intent.getStringExtra(EXTRA_AUTH_TOKEN),
+                runtimeProfile,
                 this::updateProgressNotification
             );
         } finally {

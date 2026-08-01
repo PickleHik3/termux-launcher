@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/settings_terminal_display_header">
+        <Preference
+            app:key="customize_status_surface"
+            app:icon="@drawable/ic_symbol_palette"
+            app:persistent="false"
+            app:title="@string/settings_customize_status_title"
+            app:summary="@string/settings_customize_status_summary" />
+        <SwitchPreferenceCompat
+            app:key="fullscreen"
+            app:title="@string/settings_full_screen_title"
+            app:summary="@string/termux_fullscreen_summary"
+            android:defaultValue="false" />
+        <SwitchPreferenceCompat
+            app:key="terminal_margin_adjustment"
+            app:title="@string/settings_adjust_keyboard_title"
+            app:summary="@string/settings_adjust_keyboard_summary" />
+        <SwitchPreferenceCompat
+            app:key="show_in_recents_when_not_default"
+            app:title="@string/settings_show_recents_title"
+            app:summary="@string/settings_show_recents_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_sessions_panes_header">
+        <SwitchPreferenceCompat
+            app:key="split_pane_controls"
+            app:title="@string/settings_split_pane_controls_title"
+            app:summary="@string/settings_split_pane_controls_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_clock_status_header">
+        <ListPreference
+            app:key="top_pane_clock_style"
+            app:title="@string/settings_clock_style_title"
+            app:entries="@array/termux_top_pane_clock_style_entries"
+            app:entryValues="@array/termux_top_pane_clock_style_values"
+            app:defaultValue="flip"
+            app:useSimpleSummaryProvider="true" />
+        <SwitchPreferenceCompat
+            app:key="top_pane_clock_am_pm"
+            app:title="@string/settings_use_12_hour_title"
+            app:summary="@string/settings_use_12_hour_summary"
+            app:defaultValue="false" />
+        <SwitchPreferenceCompat
+            app:key="status_widget_cpu"
+            app:title="@string/settings_cpu_usage_title"
+            app:summary="@string/termux_status_widget_cpu_summary"
+            app:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="status_widget_ram"
+            app:title="@string/settings_memory_usage_title"
+            app:summary="@string/settings_memory_usage_summary"
+            app:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="status_widget_weather"
+            app:title="@string/settings_weather_title"
+            app:summary="@string/settings_weather_summary"
+            app:defaultValue="true" />
+        <Preference
+            app:key="top_pane_notification_access"
+            app:persistent="false"
+            app:title="@string/termux_top_pane_notification_access_title"
+            app:summary="@string/termux_top_pane_notification_access_summary" />
+        <Preference
+            app:key="essential_notification_rules_manage"
+            app:persistent="false"
+            app:title="@string/settings_essential_notifications_title"
+            app:summary="@string/settings_essential_notifications_summary" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

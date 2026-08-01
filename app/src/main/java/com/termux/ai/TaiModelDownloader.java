@@ -62,9 +62,22 @@ public final class TaiModelDownloader {
         @NonNull LinkedHashSet<String> capabilities,
         @Nullable String authToken
     ) throws JSONException {
+        return startDownload(modelId, url, displayName, license, capabilities, authToken, null);
+    }
+
+    @NonNull
+    public JSONObject startDownload(
+        @NonNull String modelId,
+        @NonNull String url,
+        @NonNull String displayName,
+        @NonNull String license,
+        @NonNull LinkedHashSet<String> capabilities,
+        @Nullable String authToken,
+        @Nullable TaiModelProfile runtimeProfile
+    ) throws JSONException {
         return startDownload(modelId, url, displayName, license, capabilities,
             TaiModelSpec.inferBackend(url), TaiModelSpec.inferFormat(url), "", "", 4096, 0,
-            "", 0L, authToken);
+            "", 0L, authToken, runtimeProfile);
     }
 
     @NonNull
@@ -72,7 +85,7 @@ public final class TaiModelDownloader {
                                            @Nullable String authToken) throws JSONException {
         return startDownload(entry.modelId, entry.downloadUrl, entry.displayName, entry.license,
             entry.sourceCapabilities, entry.backend, entry.format, entry.architecture, entry.quantization,
-            entry.endpointContextWindow, entry.recommendedRamGb, entry.sha256, entry.sizeBytes, authToken);
+            entry.endpointContextWindow, entry.recommendedRamGb, entry.sha256, entry.sizeBytes, authToken, null);
     }
 
     @NonNull
@@ -81,7 +94,8 @@ public final class TaiModelDownloader {
         @NonNull String license, @NonNull LinkedHashSet<String> capabilities,
         @NonNull String backend, @NonNull String format, @Nullable String architecture,
         @Nullable String quantization, int contextWindow, int recommendedRamGb,
-        @Nullable String expectedSha256, long expectedSizeBytes, @Nullable String authToken
+        @Nullable String expectedSha256, long expectedSizeBytes, @Nullable String authToken,
+        @Nullable TaiModelProfile runtimeProfile
     ) throws JSONException {
         String safeModelId = sanitize(modelId);
         if (safeModelId.isEmpty()) return error(400, "bad_request", "Missing model id");
@@ -108,6 +122,9 @@ public final class TaiModelDownloader {
         intent.putExtra(TaiModelDownloadService.EXTRA_CAPABILITIES, capabilities.toArray(new String[0]));
         intent.putExtra(TaiModelDownloadService.EXTRA_AUTH_TOKEN, authToken == null ? "" : authToken);
         intent.putExtra(TaiModelDownloadService.EXTRA_EXPECTED_SIZE_BYTES, expectedSizeBytes);
+        if (runtimeProfile != null) {
+            intent.putExtra(TaiModelDownloadService.EXTRA_RUNTIME_PROFILE, runtimeProfile.toJson().toString());
+        }
         putRuntimeMetadata(intent, backend, format, architecture, quantization, contextWindow,
             recommendedRamGb, expectedSha256);
         startService(intent);
@@ -132,6 +149,31 @@ public final class TaiModelDownloader {
         String expectedSha256,
         long expectedSizeBytes,
         @Nullable String authToken,
+        @Nullable ProgressCallback callback
+    ) {
+        runDownload(transferId, modelId, url, output, displayName, license, capabilities, backend,
+            format, architecture, quantization, contextWindow, recommendedRamGb, expectedSha256,
+            expectedSizeBytes, authToken, null, callback);
+    }
+
+    public void runDownload(
+        String transferId,
+        String modelId,
+        String url,
+        File output,
+        String displayName,
+        String license,
+        LinkedHashSet<String> capabilities,
+        String backend,
+        String format,
+        String architecture,
+        String quantization,
+        int contextWindow,
+        int recommendedRamGb,
+        String expectedSha256,
+        long expectedSizeBytes,
+        @Nullable String authToken,
+        @Nullable TaiModelProfile runtimeProfile,
         @Nullable ProgressCallback callback
     ) {
         long bytesRead = 0L;
@@ -236,6 +278,8 @@ public final class TaiModelDownloader {
                         TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName), callback);
                 }
 
+                LinkedHashSet<String> packageCapabilities =
+                    TaiModelStore.mnnPackageCapabilities(output, capabilities);
                 TaiModelSpec spec = new TaiModelSpec(
                     modelId,
                     displayName.isEmpty() ? modelId : displayName,
@@ -244,7 +288,7 @@ public final class TaiModelDownloader {
                     output.getAbsolutePath(),
                     license.isEmpty() ? "User accepted provider terms externally" : license,
                     currentBytes,
-                    capabilities,
+                    packageCapabilities,
                     false,
                     null,
                     TaiModelSpec.BACKEND_MNN_LLM,
@@ -282,7 +326,7 @@ public final class TaiModelDownloader {
                 installedBytes,
                 capabilities,
                 false,
-                null,
+                runtimeProfile,
                 backend.isEmpty() ? TaiModelSpec.inferBackend(output.getAbsolutePath()) : backend,
                 format.isEmpty() ? TaiModelSpec.inferFormat(output.getAbsolutePath()) : format,
                 emptyToNull(architecture), emptyToNull(quantization), contextWindow,

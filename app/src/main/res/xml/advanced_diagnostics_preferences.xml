@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+    <PreferenceCategory app:title="@string/settings_diagnostics_header">
+        <ListPreference app:key="log_level" app:title="@string/termux_log_level_title" />
+        <SwitchPreferenceCompat app:key="terminal_view_key_logging_enabled"
+            app:title="@string/settings_log_terminal_keys_title" app:summary="@string/settings_log_terminal_keys_summary" />
+        <SwitchPreferenceCompat app:key="plugin_error_notifications_enabled"
+            app:title="@string/settings_plugin_error_alerts_title" app:summary="@string/settings_plugin_error_alerts_summary" />
+        <SwitchPreferenceCompat app:key="crash_report_notifications_enabled"
+            app:title="@string/settings_crash_alerts_title" app:summary="@string/settings_crash_alerts_summary" />
+        <Preference app:key="privileged_backend_smoke_test"
+            app:title="@string/settings_test_backend_title" app:summary="@string/settings_test_backend_summary" />
+    </PreferenceCategory>
+    <PreferenceCategory app:title="@string/settings_diagnostic_actions_header">
+        <Preference app:key="copy_diagnostics" app:title="@string/settings_copy_diagnostics_title" app:summary="@string/settings_copy_diagnostics_summary" />
+        <Preference app:key="export_logs" app:title="@string/settings_export_logs_title" app:summary="@string/settings_export_logs_summary" />
+        <Preference app:key="clear_logs" app:title="@string/settings_clear_logs_title" app:summary="@string/settings_clear_logs_summary" />
+    </PreferenceCategory>
+    <PreferenceCategory app:title="@string/settings_developer_options_header">
+        <SwitchPreferenceCompat app:key="developer_options_enabled"
+            app:title="@string/settings_developer_options_title" app:summary="@string/settings_developer_options_summary" />
+    </PreferenceCategory>
+    <PreferenceCategory app:key="developer_tools" app:title="@string/settings_developer_tools_header">
+        <Preference app:title="@string/settings_terminal_io_title" app:summary="@string/settings_terminal_io_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.TerminalIOPreferencesFragment" />
+        <Preference app:title="@string/settings_terminal_rendering_title" app:summary="@string/settings_terminal_rendering_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.TerminalViewPreferencesFragment" />
+        <Preference app:title="@string/settings_backend_debugging_title" app:summary="@string/settings_backend_debugging_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.PrivilegedAccessPreferencesFragment" />
+        <Preference app:title="@string/settings_plugin_debugging_title" app:summary="@string/settings_plugin_debugging_summary"
+            app:fragment="com.termux.app.fragments.settings.termux_api.DebuggingPreferencesFragment" />
+    </PreferenceCategory>
+</PreferenceScreen>

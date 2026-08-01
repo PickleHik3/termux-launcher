@@ -646,12 +646,44 @@ void logd(String l){
     }
 
     /**
-     * Remove a TermuxSession.
+     * Remove a TermuxSession that has already exited.
+     *
+     * <p>{@link TermuxSession#finish()} deliberately ignores a session whose process is still
+     * running, so this only completes bookkeeping for a shell that finished on its own. Use
+     * {@link #killTermuxSession(TerminalSession)} to close a live one.
      */
     public synchronized int removeTermuxSession(TerminalSession sessionToRemove) {
         int index = getIndexOfSession(sessionToRemove);
         if (index >= 0)
             mShellManager.mTermuxSessions.get(index).finish();
+        return index;
+    }
+
+    /**
+     * Close a session whether or not its shell is still running, and drop it from the list now.
+     *
+     * <p>Closing a pane, window, or session from the UI has to work on live shells, and
+     * {@link #removeTermuxSession(TerminalSession)} cannot do that: {@code finish()} returns early
+     * while the process runs, leaving the shell alive and its entry in the list. Every such close
+     * then leaked one terminal against the {@code MAX_SESSIONS} budget until the app was killed.
+     *
+     * <p>Removal is synchronous rather than left to the {@link #onTermuxSessionExited} callback,
+     * so the freed slot is visible to the very next create call. The later callback for the same
+     * session is harmless — the list removal is idempotent.
+     */
+    public synchronized int killTermuxSession(TerminalSession sessionToKill) {
+        int index = getIndexOfSession(sessionToKill);
+        if (index < 0)
+            return -1;
+        TermuxSession termuxSession = mShellManager.mTermuxSessions.get(index);
+        // Completes an already-exited session; a no-op while the shell is running.
+        termuxSession.finish();
+        // SIGKILLs a running shell; a no-op once the command has executed.
+        termuxSession.killIfExecuting(this, false);
+        mShellManager.mTermuxSessions.remove(termuxSession);
+        if (mTermuxTerminalSessionActivityClient != null)
+            mTermuxTerminalSessionActivityClient.termuxSessionListNotifyUpdated();
+        updateNotification();
         return index;
     }
 

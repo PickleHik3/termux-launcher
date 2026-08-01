@@ -21,6 +21,7 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -51,7 +52,6 @@ import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 import com.termux.ai.TaiSettings;
 import com.termux.launcherctl.LauncherCtlApiServer;
-import com.termux.launcherctl.LauncherCtlMcpPreferences;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -71,10 +71,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
     private static final String MODEL_ROW_PREFIX = "tai_model_row_";
     private static final String IMPORT_BACKEND_LITERT = TaiModelSpec.BACKEND_LITERT_LM;
     private static final String IMPORT_BACKEND_MNN = TaiModelSpec.BACKEND_MNN_LLM;
-    private static final String KEY_MCP_PROVIDER = LauncherCtlMcpPreferences.KEY_WEB_PROVIDER;
-    private static final String KEY_MCP_BRAVE_API_KEY = LauncherCtlMcpPreferences.KEY_BRAVE_API_KEY;
-    private static final String KEY_MCP_SEARXNG_URL = LauncherCtlMcpPreferences.KEY_SEARXNG_URL;
-    private static final String KEY_MCP_SEARXNG_API_KEY = LauncherCtlMcpPreferences.KEY_SEARXNG_API_KEY;
 
     private static final class OverrideSpec {
         final String key;
@@ -101,6 +97,14 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         TaiModelImporter.DocumentMetadata documentMetadata;
         // Modalities the user ticked at import time; survives the file-picker round-trip.
         final java.util.LinkedHashSet<String> capabilities = new java.util.LinkedHashSet<>();
+        // Ordered like Gallery model configs: the first compatible accelerator is the default.
+        final java.util.LinkedHashSet<String> compatibleAccelerators = new java.util.LinkedHashSet<>();
+        String defaultAccelerator = "cpu";
+        boolean acceleratorSelectionExplicit;
+
+        ImportDraft() {
+            compatibleAccelerators.add("cpu");
+        }
     }
 
     private static final OverrideSpec[] OVERRIDE_SPECS = {
@@ -168,11 +172,11 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         configureRuntimeControls(context);
         configureOverrides(context);
         configureEndpointPreferences(context);
-        configureMcpWebPreferences(context);
         configureModelManager(context);
         configureHuggingFaceToken();
         configureAdvancedSection(context);
         configureLanToggle(context);
+        configureAuthToggle(context);
     }
 
     @Override
@@ -218,7 +222,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         Context context = getContext();
         if (context != null) {
             refreshTaiPage(context);
-            updateMcpWebPreferences(context);
             handler.postDelayed(refreshRuntimeRunnable, 2000L);
         }
     }
@@ -385,80 +388,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 openParameterScreen(null);
                 return true;
             });
-        }
-    }
-
-    private void configureMcpWebPreferences(@NonNull Context context) {
-        ListPreference provider = findPreference(KEY_MCP_PROVIDER);
-        if (provider != null) {
-            provider.setValue(LauncherCtlMcpPreferences.getWebProvider(context));
-            provider.setSummaryProvider(ListPreference.SimpleSummaryProvider.getInstance());
-            provider.setOnPreferenceChangeListener((preference, newValue) -> {
-                LauncherCtlMcpPreferences.putString(context, KEY_MCP_PROVIDER, String.valueOf(newValue));
-                LauncherCtlMcpPreferences.writePresetConfig(context);
-                updateMcpWebPreferences(context, String.valueOf(newValue));
-                Toast.makeText(context, R.string.launcherctl_mcp_config_written, Toast.LENGTH_SHORT).show();
-                return true;
-            });
-        }
-        configureMcpTextPreference(context, KEY_MCP_BRAVE_API_KEY, true);
-        configureMcpTextPreference(context, KEY_MCP_SEARXNG_URL, false);
-        configureMcpTextPreference(context, KEY_MCP_SEARXNG_API_KEY, true);
-        updateMcpWebPreferences(context);
-    }
-
-    private void configureMcpTextPreference(@NonNull Context context, @NonNull String key, boolean secret) {
-        EditTextPreference preference = findPreference(key);
-        if (preference == null) return;
-        preference.setOnBindEditTextListener(editText ->
-            editText.setText(LauncherCtlMcpPreferences.getSecret(context, key)));
-        preference.setOnPreferenceChangeListener((pref, newValue) -> {
-            LauncherCtlMcpPreferences.putString(context, key, String.valueOf(newValue));
-            LauncherCtlMcpPreferences.writePresetConfig(context);
-            updateMcpTextSummary(context, preference, key, secret);
-            Toast.makeText(context, R.string.launcherctl_mcp_config_written, Toast.LENGTH_SHORT).show();
-            return true;
-        });
-        updateMcpTextSummary(context, preference, key, secret);
-    }
-
-    private void updateMcpWebPreferences(@NonNull Context context) {
-        updateMcpWebPreferences(context, LauncherCtlMcpPreferences.getWebProvider(context));
-    }
-
-    private void updateMcpWebPreferences(@NonNull Context context, @NonNull String provider) {
-        setPreferenceVisible(KEY_MCP_BRAVE_API_KEY, LauncherCtlMcpPreferences.PROVIDER_BRAVE.equals(provider));
-        boolean searxng = LauncherCtlMcpPreferences.PROVIDER_SEARXNG.equals(provider);
-        setPreferenceVisible(KEY_MCP_SEARXNG_URL, searxng);
-        setPreferenceVisible(KEY_MCP_SEARXNG_API_KEY, searxng);
-        updateMcpTextSummary(context, findPreference(KEY_MCP_BRAVE_API_KEY), KEY_MCP_BRAVE_API_KEY, true);
-        updateMcpTextSummary(context, findPreference(KEY_MCP_SEARXNG_URL), KEY_MCP_SEARXNG_URL, false);
-        updateMcpTextSummary(context, findPreference(KEY_MCP_SEARXNG_API_KEY), KEY_MCP_SEARXNG_API_KEY, true);
-    }
-
-    private void setPreferenceVisible(@NonNull String key, boolean visible) {
-        Preference preference = findPreference(key);
-        if (preference != null) {
-            preference.setVisible(visible);
-        }
-    }
-
-    private void updateMcpTextSummary(@NonNull Context context,
-                                      @Nullable Preference preference,
-                                      @NonNull String key,
-                                      boolean secret) {
-        if (preference == null) return;
-        String value = LauncherCtlMcpPreferences.getSecret(context, key);
-        if (secret) {
-            preference.setSummary(value.isEmpty()
-                ? R.string.launcherctl_mcp_secret_missing
-                : R.string.launcherctl_mcp_secret_set);
-        } else if (value.isEmpty()) {
-            if (KEY_MCP_SEARXNG_URL.equals(key)) {
-                preference.setSummary(R.string.launcherctl_mcp_searxng_url_summary);
-            }
-        } else {
-            preference.setSummary(value);
         }
     }
 
@@ -719,6 +648,22 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         if (lanToggle == null) return;
         String bindMode = new TaiSettings(context).getApiBindMode();
         lanToggle.setChecked(TaiSettings.BIND_MODE_LAN.equals(bindMode));
+    }
+
+    private void configureAuthToggle(Context context) {
+        SwitchPreferenceCompat authToggle = findPreference(TaiSettings.KEY_API_AUTH_REQUIRED);
+        if (authToggle == null) return;
+        authToggle.setChecked(new TaiSettings(context).isApiAuthRequired());
+        authToggle.setOnPreferenceChangeListener((preference, newValue) -> {
+            new TaiSettings(context).setApiAuthRequired((Boolean) newValue);
+            try {
+                LauncherCtlApiServer.getInstance().applyEndpointSettings(context);
+                refreshEndpointPreferences(context);
+            } catch (JSONException e) {
+                Toast.makeText(context, R.string.termux_ai_endpoint_update_failed, Toast.LENGTH_LONG).show();
+            }
+            return true;
+        });
     }
 
     private void showLanWarningDialog(Context context, SwitchPreferenceCompat lanToggle) {
@@ -1721,6 +1666,9 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 TaiModelImporter.stripModelExtension(metadata.displayName));
         }
         fillGuessedImportCapabilities(draft.capabilities, metadata.displayName);
+        if (!draft.acceleratorSelectionExplicit) {
+            fillGuessedImportAccelerators(draft, metadata.displayName);
+        }
         pendingImportDraft = draft;
         showImportFlowDialog(context, draft);
     }
@@ -1788,6 +1736,41 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         layout.addView(reasoning);
         layout.addView(multilingual);
 
+        layout.addView(importDialogLabel(context, R.string.termux_ai_import_accelerators_label, 8));
+        CheckBox gpuCompatible = new CheckBox(context);
+        gpuCompatible.setText(R.string.termux_ai_import_gpu_compatible);
+        gpuCompatible.setChecked(draft.compatibleAccelerators.contains("gpu"));
+        layout.addView(gpuCompatible);
+        Spinner defaultAccelerator = new Spinner(context);
+        android.widget.ArrayAdapter<CharSequence> acceleratorAdapter = new android.widget.ArrayAdapter<>(
+            context, android.R.layout.simple_spinner_item,
+            new CharSequence[]{getString(R.string.termux_ai_import_default_cpu),
+                getString(R.string.termux_ai_import_default_gpu)});
+        acceleratorAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        defaultAccelerator.setAdapter(acceleratorAdapter);
+        defaultAccelerator.setSelection("gpu".equals(draft.defaultAccelerator) ? 1 : 0);
+        layout.addView(defaultAccelerator);
+        gpuCompatible.setOnTouchListener((view, event) -> {
+            draft.acceleratorSelectionExplicit = true;
+            return false;
+        });
+        defaultAccelerator.setOnTouchListener((view, event) -> {
+            draft.acceleratorSelectionExplicit = true;
+            return false;
+        });
+        gpuCompatible.setOnCheckedChangeListener((button, checked) -> {
+            if (!checked && defaultAccelerator.getSelectedItemPosition() == 1) {
+                defaultAccelerator.setSelection(0);
+            }
+        });
+        defaultAccelerator.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view,
+                                                  int position, long id) {
+                if (position == 1) gpuCompatible.setChecked(true);
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+        });
+
         boolean rawTflite = draft.documentMetadata != null
             && draft.documentMetadata.displayName.toLowerCase(Locale.ROOT).endsWith(".tflite");
         if (rawTflite) {
@@ -1815,6 +1798,11 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 code.setChecked(guessed.contains(TaiModelSpec.CAPABILITY_CODE));
                 reasoning.setChecked(guessed.contains("reasoning"));
                 multilingual.setChecked(guessed.contains("multilingual"));
+                if (!draft.acceleratorSelectionExplicit) {
+                    fillGuessedImportAccelerators(draft, s == null ? "" : s.toString());
+                    gpuCompatible.setChecked(draft.compatibleAccelerators.contains("gpu"));
+                    defaultAccelerator.setSelection("gpu".equals(draft.defaultAccelerator) ? 1 : 0);
+                }
             }
             @Override public void afterTextChanged(android.text.Editable s) {}
         });
@@ -1856,6 +1844,15 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             if (code.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_CODE);
             if (reasoning.isChecked()) draft.capabilities.add("reasoning");
             if (multilingual.isChecked()) draft.capabilities.add("multilingual");
+            if (isQwenThinkingImport(draft)) {
+                draft.capabilities.add("reasoning");
+                draft.capabilities.add(TaiModelSpec.CAPABILITY_LLM_THINKING);
+            }
+            draft.compatibleAccelerators.clear();
+            draft.defaultAccelerator = defaultAccelerator.getSelectedItemPosition() == 1 ? "gpu" : "cpu";
+            draft.compatibleAccelerators.add(draft.defaultAccelerator);
+            if (gpuCompatible.isChecked()) draft.compatibleAccelerators.add("gpu");
+            draft.compatibleAccelerators.add("cpu");
         };
 
         androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(context)
@@ -1936,7 +1933,47 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         }
         if (value.contains("coder") || value.contains("code-")) capabilities.add(TaiModelSpec.CAPABILITY_CODE);
         if (value.contains("deepseek-r1") || value.contains("reasoning")) capabilities.add("reasoning");
+        if (value.contains("qwen3") && value.contains("thinking")) {
+            capabilities.add("reasoning");
+            capabilities.add(TaiModelSpec.CAPABILITY_LLM_THINKING);
+        }
         if (value.contains("qwen") || value.contains("multilingual")) capabilities.add("multilingual");
+    }
+
+    private void fillGuessedImportAccelerators(@NonNull ImportDraft draft, @Nullable String source) {
+        String value = source == null ? "" : source.toLowerCase(Locale.ROOT);
+        boolean mnn = value.contains("-mnn") || value.contains("_mnn") || value.endsWith("config.json");
+        boolean knownGpu = !mnn && ((value.contains("qwen3") && value.contains("thinking"))
+            || value.contains("gemma-4-e2b") || value.contains("gemma-4-e4b")
+            || value.contains("deepseek-r1-distill-qwen-1.5b")
+            || value.contains("qwen2.5-1.5b-instruct"));
+        draft.compatibleAccelerators.clear();
+        draft.defaultAccelerator = knownGpu ? "gpu" : "cpu";
+        draft.compatibleAccelerators.add(draft.defaultAccelerator);
+        if (knownGpu) draft.compatibleAccelerators.add("cpu");
+    }
+
+    private boolean isQwenThinkingImport(@NonNull ImportDraft draft) {
+        String identity = (draft.modelId + " " + draft.hfUrl + " "
+            + (draft.documentMetadata == null ? "" : draft.documentMetadata.displayName))
+            .toLowerCase(Locale.ROOT);
+        return identity.contains("qwen3") && identity.contains("thinking");
+    }
+
+    @NonNull
+    private TaiModelProfile importRuntimeProfile(@NonNull ImportDraft draft) {
+        ArrayList<String> accelerators = new ArrayList<>(draft.compatibleAccelerators);
+        TaiModelProfile defaults = new TaiModelProfile(java.util.Collections.singletonList("cpu"),
+            1024, 64, 0.95d, 1.0d, null, "edge-gallery-import-default");
+        if (isQwenThinkingImport(draft)) {
+            defaults = new TaiModelProfile(java.util.Arrays.asList("gpu", "cpu"), 2048, 64,
+                0.95d, 1.0d, 3, TaiModelProfile.SOURCE_LITERT_COMMUNITY,
+                TaiModelProfile.THINKING_ALWAYS, "<think>", "</think>");
+        }
+        return new TaiModelProfile(accelerators, defaults.defaultMaxTokens, defaults.defaultTopK,
+            defaults.defaultTopP, defaults.defaultTemperature, defaults.minDeviceMemoryInGb,
+            "import-dialog-selection", defaults.thinkingMode, defaults.thinkingChannelStart,
+            defaults.thinkingChannelEnd);
     }
 
     private CharSequence importSelectionText(Context context, ImportDraft draft) {
@@ -1996,7 +2033,8 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             Toast.makeText(context, validation.message, Toast.LENGTH_LONG).show();
             return false;
         }
-        importModelDocument(context, draft.documentUri, draft.modelId, IMPORT_BACKEND_LITERT, draft.capabilities);
+        importModelDocument(context, draft.documentUri, draft.modelId, IMPORT_BACKEND_LITERT,
+            draft.capabilities, importRuntimeProfile(draft));
         pendingImportDraft = null;
         return true;
     }
@@ -2020,6 +2058,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 JSONArray capabilities = new JSONArray();
                 for (String capability : draft.capabilities) capabilities.put(capability);
                 request.put("capabilities", capabilities);
+                request.put("runtimeProfile", importRuntimeProfile(draft).toJson());
                 if (draft.hfToken != null && !draft.hfToken.trim().isEmpty()) {
                     request.put("huggingFaceToken", draft.hfToken.trim());
                 }
@@ -2059,7 +2098,8 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
     }
 
     private void importModelDocument(Context context, Uri uri, String modelId, String backend,
-                                     java.util.Set<String> capabilities) {
+                                     java.util.Set<String> capabilities,
+                                     TaiModelProfile runtimeProfile) {
         Context appContext = context.getApplicationContext();
         Preference importPreference = findPreference("tai_model_import");
         if (importPreference != null) {
@@ -2070,7 +2110,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             JSONObject result = null;
             try {
                 result = new TaiModelImporter(appContext, new TaiModelStore(appContext))
-                    .importDocument(uri, modelId, backend, capabilities);
+                    .importDocument(uri, modelId, backend, capabilities, runtimeProfile);
             } catch (JSONException | RuntimeException ignored) {
             }
             JSONObject finalResult = result;

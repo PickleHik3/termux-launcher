@@ -170,9 +170,61 @@ public final class TermuxPreferenceConstants {
 
         public static final String APP_LAUNCHER_DOCK_STYLE_DEFAULT = "default";
 
-        public static final String APP_LAUNCHER_DOCK_STYLE_VALARIE_CAPSULE = "valarie_capsule";
+        public static final String APP_LAUNCHER_DOCK_STYLE_ROUNDED = "rounded";
+
+        /** Pre-unification persisted value. Read for migration, but never write it again. */
+        public static final String APP_LAUNCHER_DOCK_STYLE_LEGACY_VALARIE_CAPSULE = "valarie_capsule";
 
         public static final String DEFAULT_APP_LAUNCHER_DOCK_STYLE = APP_LAUNCHER_DOCK_STYLE_DEFAULT;
+
+        /** Custom capsule corner radius in dp, or -1 to follow the selected dock style. */
+        public static final String KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS =
+            "app_launcher_dock_corner_radius";
+        public static final int DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS = -1;
+        public static final int MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS = 40;
+
+        /** Section the surface editor last had open ("dock", "keyboard", "status", "other"). */
+        public static final String KEY_SURFACE_TUNING_LAST_SECTION = "surface_tuning_last_section";
+        public static final String DEFAULT_SURFACE_TUNING_LAST_SECTION = "dock";
+
+        /** Independent status-surface glass controls used by the live surface editor. */
+        public static final String KEY_STATUS_BAR_BLUR_RADIUS = "status_bar_blur_radius";
+        public static final int DEFAULT_STATUS_BAR_BLUR_RADIUS = 12;
+        public static final String KEY_STATUS_BAR_OPACITY = "status_bar_opacity";
+        public static final int DEFAULT_STATUS_BAR_OPACITY = 37;
+        public static final String KEY_STATUS_BAR_GRAIN = "status_bar_grain";
+        public static final int DEFAULT_STATUS_BAR_GRAIN = 39;
+        public static final String KEY_STATUS_BAR_CORNER_RADIUS = "status_bar_corner_radius";
+        public static final int DEFAULT_STATUS_BAR_CORNER_RADIUS = -1;
+        public static final int MAX_STATUS_BAR_CORNER_RADIUS = 40;
+
+        /**
+         * Symmetric left/right inset in dp between a surface and the physical screen edges. The
+         * default matches the floating capsule's redline outer margin; the edge-to-edge default
+         * shape only honours whatever is configured beyond that baseline.
+         */
+        public static final int DEFAULT_SURFACE_HORIZONTAL_INSET = 10;
+        /** The keyboard sits slightly further in than the other surfaces; tuned on Pong. */
+        public static final int DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET = 13;
+        public static final int MAX_SURFACE_HORIZONTAL_INSET = 48;
+        public static final String KEY_DOCK_HORIZONTAL_INSET = "dock_horizontal_inset";
+        public static final String KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET =
+            "in_app_keyboard_horizontal_inset";
+        public static final String KEY_STATUS_BAR_HORIZONTAL_INSET = "status_bar_horizontal_inset";
+
+        /** Optional trailing system widgets on the status row. */
+        public static final String KEY_STATUS_WIDGET_CPU = "status_widget_cpu";
+        public static final boolean DEFAULT_STATUS_WIDGET_CPU = true;
+
+        public static final String KEY_STATUS_WIDGET_RAM = "status_widget_ram";
+        public static final boolean DEFAULT_STATUS_WIDGET_RAM = true;
+
+        public static final String KEY_STATUS_WIDGET_WEATHER = "status_widget_weather";
+        public static final boolean DEFAULT_STATUS_WIDGET_WEATHER = true;
+
+        /** Animate the terminal cursor between its old and new cell instead of jumping. */
+        public static final String KEY_TERMINAL_CURSOR_TRAIL = "terminal_cursor_trail";
+        public static final boolean DEFAULT_TERMINAL_CURSOR_TRAIL = true;
 
         /**
          * Defines the key for showing focused app names while scrubbing the dock.
@@ -272,10 +324,15 @@ public final class TermuxPreferenceConstants {
 
         /**
          * Defines the key for whether the in-app keyboard will be enabled.
+         *
+         * <p>Defaults to enabled: with the system IME as the fresh-install default, first launch
+         * raced the IME's inset animation against the launcher's own keyboard chrome — an extra
+         * band of padding and a flickering terminal until the two settled. The embedded keyboard
+         * suppresses the system IME outright, so a fresh install never enters that race.
          */
         public static final String KEY_IN_APP_KEYBOARD_ENABLED = "in_app_keyboard_enabled";
 
-        public static final boolean DEFAULT_IN_APP_KEYBOARD_ENABLED = false;
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_ENABLED = true;
 
         /**
          * Defines the key for the in-app keyboard color theme.
@@ -289,15 +346,6 @@ public final class TermuxPreferenceConstants {
             "in_app_keyboard_color_scheme";
 
         public static final String DEFAULT_IN_APP_KEYBOARD_COLOR_SCHEME = "";
-
-        /**
-         * Defines the key for how the in-app keyboard matches the launcher dock:
-         * {@code none}, {@code shape} (capsule geometry follows the dock style),
-         * {@code glass} (the theme is rendered on the dock's glass surface), or {@code both}.
-         */
-        public static final String KEY_IN_APP_KEYBOARD_DOCK_MATCH = "in_app_keyboard_dock_match";
-
-        public static final String DEFAULT_IN_APP_KEYBOARD_DOCK_MATCH = "both";
 
         /** Defines the key for whether keypresses trigger haptic feedback. */
         public static final String KEY_IN_APP_KEYBOARD_HAPTICS_ENABLED =
@@ -336,8 +384,8 @@ public final class TermuxPreferenceConstants {
         // exact confirmed value; spacing and radius below are discrete slider steps.
         public static final float DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.0830541f;
 
-        /** Default keyboard height for the Valarie capsule dock, tuned on Pong. */
-        public static final float DEFAULT_VALARIE_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.1109314f;
+        /** Default keyboard height for the Rounded dock, tuned on Pong. */
+        public static final float DEFAULT_ROUNDED_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.0830541f;
 
         public static final float MIN_IN_APP_KEYBOARD_HEIGHT_SCALE = 0.5f;
 
@@ -349,8 +397,8 @@ public final class TermuxPreferenceConstants {
 
         public static final float DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 2.96f;
 
-        /** Default key spacing for the Valarie capsule dock, tuned on Pong. */
-        public static final float DEFAULT_VALARIE_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 2.57f;
+        /** Default key spacing for the Rounded dock, tuned on Pong. */
+        public static final float DEFAULT_ROUNDED_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 2.96f;
 
         public static final float MIN_IN_APP_KEYBOARD_KEY_MARGIN_SCALE = 0.0f;
 
@@ -364,12 +412,26 @@ public final class TermuxPreferenceConstants {
 
         public static final float DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 2.7f;
 
-        /** Default key radius for the Valarie capsule dock, tuned on Pong. */
-        public static final float DEFAULT_VALARIE_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 12.0f;
+        /** Default key radius for the Rounded dock, tuned on Pong. */
+        public static final float DEFAULT_ROUNDED_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 12.5f;
 
         public static final float MIN_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 0.0f;
 
         public static final float MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 24.0f;
+
+        /**
+         * Defines the absolute key cap opacity in percent (0 = invisible caps, 100 = fully
+         * opaque), or -1 to keep the keyboard theme's own key translucency. Unlike the theme
+         * value, this is independent of the surface/glass opacity stack.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_KEY_OPACITY =
+            "in_app_keyboard_key_opacity";
+
+        public static final int DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY = -1;
+
+        public static final int MIN_IN_APP_KEYBOARD_KEY_OPACITY = 0;
+
+        public static final int MAX_IN_APP_KEYBOARD_KEY_OPACITY = 100;
 
         /**
          * Defines the key for whether the soft keyboard will be enabled only if no hardware keyboard
@@ -393,6 +455,42 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_KEEP_SCREEN_ON = "screen_always_on";
 
         public static final boolean DEFAULT_VALUE_KEEP_SCREEN_ON = false;
+
+        /**
+         * Defines the key for "compatibility mode": when enabled, all custom window/pane
+         * splitting behaviour and tmux-style keybinds are disabled and native Termux
+         * single-pane behaviour is used.
+         */
+        public static final String KEY_COMPATIBILITY_MODE = "compatibility_mode";
+
+        public static final boolean DEFAULT_VALUE_COMPATIBILITY_MODE = false;
+
+        /** Clock renderer shown in the modular widget slot above the terminal window row. */
+        public static final String KEY_TOP_PANE_CLOCK_STYLE = "top_pane_clock_style";
+
+        public static final String TOP_PANE_CLOCK_STYLE_FLIP = "flip";
+        public static final String TOP_PANE_CLOCK_STYLE_LCD = "lcd";
+        public static final String TOP_PANE_CLOCK_STYLE_MINIMAL = "minimal";
+        public static final String TOP_PANE_CLOCK_STYLE_LED = "led";
+        public static final String TOP_PANE_CLOCK_STYLE_TAPE = "tape";
+        public static final String TOP_PANE_CLOCK_STYLE_SLAB = "slab";
+
+        public static final String DEFAULT_TOP_PANE_CLOCK_STYLE = TOP_PANE_CLOCK_STYLE_FLIP;
+
+        /** Use a 12-hour top-pane clock and append the AM/PM period. */
+        public static final String KEY_TOP_PANE_CLOCK_AM_PM = "top_pane_clock_am_pm";
+        public static final boolean DEFAULT_TOP_PANE_CLOCK_AM_PM = false;
+
+        /** Persist the user-controlled compact single-row status-bar state. */
+        public static final String KEY_TOP_PANE_CLOCK_COLLAPSED = "top_pane_clock_collapsed";
+        public static final boolean DEFAULT_TOP_PANE_CLOCK_COLLAPSED = false;
+
+        /**
+         * Rules that pin a notification into the top-pane widget slot, stored as a JSON array of
+         * {@code {id, package, match, clear}}. Empty leaves the feature idle.
+         */
+        public static final String KEY_ESSENTIAL_NOTIFICATION_RULES = "essential_notification_rules";
+        public static final String DEFAULT_ESSENTIAL_NOTIFICATION_RULES = "[]";
 
         /**
          * Defines the key for font size of termux terminal view.
@@ -456,7 +554,7 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_TERMINAL_BACKGROUND_OPACITY = "terminal_background_opacity";
 
-        public static final int DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY = 100;
+        public static final int DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY = 47;
 
         /**
          * Defines the key for sessions menu opacity (percentage), where 100 is fully opaque.
@@ -477,7 +575,7 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_APP_BAR_OPACITY = "app_bar_opacity";
 
-        public static final int DEFAULT_VALUE_APP_BAR_OPACITY = 50;
+        public static final int DEFAULT_VALUE_APP_BAR_OPACITY = 46;
 
         /**
          * Defines the key for the dock-glass grain/noise amount (percentage, 0 disables). A subtle
@@ -485,7 +583,7 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_DOCK_GLASS_GRAIN = "dock_glass_grain";
 
-        public static final int DEFAULT_VALUE_DOCK_GLASS_GRAIN = 12;
+        public static final int DEFAULT_VALUE_DOCK_GLASS_GRAIN = 39;
 
         /**
          * Defines whether the terminal's bottom cell remainder is absorbed by the dock glass.
@@ -495,13 +593,23 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_TERMINAL_FLUSH_DOCK = false;
 
         /**
+         * Defines whether a thin outline border is drawn around the terminal surface.
+         */
+        public static final String KEY_TERMINAL_BORDER_ENABLED = "terminal_border_enabled";
+        /** Whether the surface editor writes its glass controls to every surface at once. */
+        public static final String KEY_SURFACE_TUNING_NORMALIZED = "surface_tuning_normalized";
+
+        public static final boolean DEFAULT_VALUE_TERMINAL_BORDER_ENABLED = false;
+        public static final boolean DEFAULT_VALUE_SURFACE_TUNING_NORMALIZED = false;
+
+        /**
          * Stores the user's preferred terminal opacity while wallpaper mode is enabled so it can
          * be restored after temporarily disabling wallpaper.
          */
         public static final String KEY_WALLPAPER_ENABLED_TERMINAL_BACKGROUND_OPACITY =
             "wallpaper_enabled_terminal_background_opacity";
 
-        public static final int DEFAULT_VALUE_WALLPAPER_ENABLED_TERMINAL_BACKGROUND_OPACITY = 50;
+        public static final int DEFAULT_VALUE_WALLPAPER_ENABLED_TERMINAL_BACKGROUND_OPACITY = 47;
 
         /**
          * Stores the user's preferred dock opacity while wallpaper mode is enabled so it can be
@@ -510,7 +618,7 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_WALLPAPER_ENABLED_APP_BAR_OPACITY =
             "wallpaper_enabled_app_bar_opacity";
 
-        public static final int DEFAULT_VALUE_WALLPAPER_ENABLED_APP_BAR_OPACITY = 50;
+        public static final int DEFAULT_VALUE_WALLPAPER_ENABLED_APP_BAR_OPACITY = 46;
 
         /**
          * Stores the user's preferred dock blur radius while wallpaper mode is enabled so it can

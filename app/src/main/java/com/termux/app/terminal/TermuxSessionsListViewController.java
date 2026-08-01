@@ -51,7 +51,7 @@ public class TermuxSessionsListViewController extends ArrayAdapter<TermuxSession
             sessionTitleView.setText("null session");
             return sessionRowView;
         }
-        String name = sessionAtRow.mSessionName;
+        String name = mActivity.getWindowSessionName(sessionAtRow);
         String sessionTitle = sessionAtRow.getTitle();
         String numberPart = "[" + (position + 1) + "] ";
         String sessionNamePart = (TextUtils.isEmpty(name) ? "" : name);
@@ -87,7 +87,10 @@ public class TermuxSessionsListViewController extends ArrayAdapter<TermuxSession
     @Override
     public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id) {
         final TermuxSession selectedSession = getItem(position);
-        mActivity.getTermuxTerminalSessionClient().renameSession(selectedSession.getTerminalSession());
+        if (mActivity.isSplitPanesEnabled())
+            mActivity.renameWindowSession(selectedSession.getTerminalSession());
+        else
+            mActivity.getTermuxTerminalSessionClient().renameSession(selectedSession.getTerminalSession());
         return true;
     }
 }

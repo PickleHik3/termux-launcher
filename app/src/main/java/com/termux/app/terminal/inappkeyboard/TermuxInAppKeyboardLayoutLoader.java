@@ -154,7 +154,7 @@ public final class TermuxInAppKeyboardLayoutLoader {
 
     private KeyboardData loadBundled() {
         KeyboardData bundled = KeyboardData.load(
-            mResources, juloo.keyboard2.R.xml.latn_qwerty_us);
+            mResources, juloo.keyboard2.R.xml.termux_launcher_qwerty);
         if (bundled == null)
             throw new IllegalStateException("Bundled QWERTY layout could not be parsed");
         return LayoutModifier.modify(bundled, mLayoutOptions, mResources);

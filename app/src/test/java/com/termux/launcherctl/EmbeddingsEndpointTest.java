@@ -105,7 +105,7 @@ public class EmbeddingsEndpointTest {
             .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
             .toString());
         fakeRuntime.addEmbeddingsCapableModel("embed-mnn");
-        manager.loadModel(new JSONObject().put("model", "embed-mnn").toString());
+        assertEmbeddingModelIsNotLoadable("embed-mnn");
 
         HttpURLConnection conn = post("/v1/embeddings", new JSONObject()
             .put("model", "embed-mnn")
@@ -132,7 +132,7 @@ public class EmbeddingsEndpointTest {
             .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
             .toString());
         fakeRuntime.addEmbeddingsCapableModel("embed-array-mnn");
-        manager.loadModel(new JSONObject().put("model", "embed-array-mnn").toString());
+        assertEmbeddingModelIsNotLoadable("embed-array-mnn");
 
         HttpURLConnection conn = post("/v1/embeddings", new JSONObject()
             .put("model", "embed-array-mnn")
@@ -216,7 +216,7 @@ public class EmbeddingsEndpointTest {
         HttpURLConnection conn = post("/v1/chat/completions", new JSONObject()
             .put("model", "nonexistent")
             .put("messages", new JSONArray().put(new JSONObject().put("role", "user").put("content", "hi"))));
-        assertTrue(conn.getResponseCode() != 404);
+        assertRouteExists(conn);
     }
 
     @Test
@@ -224,7 +224,33 @@ public class EmbeddingsEndpointTest {
         HttpURLConnection conn = post("/v1/completions", new JSONObject()
             .put("model", "nonexistent")
             .put("prompt", "hi"));
-        assertTrue(conn.getResponseCode() != 404);
+        assertRouteExists(conn);
+    }
+
+    /**
+     * An unknown model is a legitimate 404 ("model_not_found"), so a bare {@code != 404} check
+     * cannot tell a live route from a missing one. The router's own miss is {@code "not_found"} with
+     * message "Unknown endpoint"; anything else means the handler ran, which is what these assert.
+     */
+    private void assertRouteExists(HttpURLConnection conn) throws Exception {
+        int code = conn.getResponseCode();
+        if (code != 404) return;
+        JSONObject response = new JSONObject(readBody(conn));
+        String errorCode = response.optJSONObject("error") != null
+            ? response.getJSONObject("error").optString("code")
+            : response.optString("error");
+        assertFalse("route is not registered on the server: " + response,
+            "not_found".equals(errorCode));
+    }
+
+    /**
+     * Embedding-only models are served on demand and are explicitly not loadable into the
+     * generation runtime, so the tests above must not try to "load" one first.
+     */
+    private void assertEmbeddingModelIsNotLoadable(String modelId) throws Exception {
+        JSONObject result = manager.loadModel(new JSONObject().put("model", modelId).toString());
+        assertEquals("embedding_model_not_loadable", result.optString("error"));
+        assertEquals(400, result.optInt("_statusCode"));
     }
 
     private HttpURLConnection post(String path, JSONObject body) throws Exception {
@@ -289,17 +315,10 @@ public class EmbeddingsEndpointTest {
             return embeddingResponse(spec.id, inputs, dimensions > 0 ? dimensions : 768);
         }
 
+        // No "model not loaded" gate here on purpose: TaiManager.loadModel() rejects embedding-only
+        // models outright ("embedding_model_not_loadable") because they are served on demand, so an
+        // embedding model is never in loadedModels and gating on it could only ever fail.
         private JSONObject embeddingResponse(String modelId, List<String> inputs, int dimensions) throws org.json.JSONException {
-            if (!loadedModels.contains(modelId)) {
-                JSONObject error = new JSONObject();
-                error.put("message", "Model not loaded.");
-                error.put("type", "invalid_request_error");
-                error.put("code", "model_not_loaded");
-                JSONObject response = new JSONObject();
-                response.put("error", error);
-                response.put("_statusCode", 409);
-                return response;
-            }
             if (!embeddingsCapableModels.contains(modelId)) {
                 JSONObject error = new JSONObject();
                 error.put("message", "Embeddings are not supported for model '" + modelId + "'.");

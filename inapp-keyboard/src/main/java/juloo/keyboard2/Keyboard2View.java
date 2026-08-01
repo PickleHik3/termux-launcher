@@ -8,9 +8,11 @@ import android.graphics.Canvas;
 import android.media.AudioManager;
 import android.view.KeyEvent;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.SweepGradient;
 import android.os.Build;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -49,6 +51,8 @@ public class Keyboard2View extends View
 
   /** Host-owned radius override in px, or -1 to use Config/palette geometry. */
   private float _keyCornerRadiusOverridePx = -1f;
+  /** Absolute key cap background opacity (0..1), or -1 to keep the theme's translucency. */
+  private float _keyOpacity = -1f;
 
   /** Stable host content height used as the fractional keyboard-height cap reference. */
   private int _heightCapReferencePx;
@@ -65,9 +69,15 @@ public class Keyboard2View extends View
   private final Paint _overrideBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _overrideBorderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private SparseArray<KeyColorOverride> _keyColorOverrides = new SparseArray<>();
+  /** Transient keybind-hint lighting; sits above the color-scheme overrides. */
+  private SparseArray<KeyColorOverride> _hintColorOverrides = new SparseArray<>();
+  private ValueAnimator _hintBreathAnimator;
+  /** 0..1 sine wave driving the hint lighting's slow breathing. */
+  private float _hintBreathWave;
   private OnKeyPaintListener _keyPaintListener;
   private String _lastPaintedKeyId;
   private float _launchWaveDensity;
+  private final int[] _spaceBarLocation = new int[2];
   private final Paint _trailPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _fxFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _fxStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -249,6 +259,121 @@ public class Keyboard2View extends View
     invalidate();
   }
 
+  /**
+   * Transient lighting for the keybind hint popup: while a modifier prefix is latched, the
+   * bound caps take these colors on the live keyboard itself. Sits above (and never touches)
+   * the user's color-scheme overrides; null or empty clears it wholesale. While set, the lit
+   * fills and borders breathe slowly — a gentle brightness swell driven by one animator.
+   */
+  public void setKeybindHintOverrides(Map<String, KeyColorOverride> overrides)
+  {
+    requireMainThread();
+    _hintColorOverrides.clear();
+    if (overrides != null) {
+      for (Map.Entry<String, KeyColorOverride> e : overrides.entrySet()) {
+        int id = parseKeyId(e.getKey());
+        if (id >= 0)
+          _hintColorOverrides.put(id, e.getValue());
+      }
+    }
+    updateHintBreathAnimator();
+    invalidate();
+  }
+
+  /** Period of one full breath of the hint lighting. Deliberately slow and shallow. */
+  private static final long HINT_BREATH_PERIOD_MS = 3800L;
+  /** How far a lit color sinks toward black at the bottom of a breath. */
+  private static final float HINT_BREATH_DEPTH = 0.18f;
+
+  private void updateHintBreathAnimator()
+  {
+    boolean want = _hintColorOverrides.size() > 0 && isAttachedToWindow()
+      && ValueAnimator.areAnimatorsEnabled();
+    if (!want)
+    {
+      if (_hintBreathAnimator != null)
+      {
+        _hintBreathAnimator.cancel();
+        _hintBreathAnimator = null;
+      }
+      _hintBreathWave = 0f;
+      return;
+    }
+    if (_hintBreathAnimator != null)
+      return;
+    ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+    animator.setDuration(HINT_BREATH_PERIOD_MS);
+    animator.setRepeatCount(ValueAnimator.INFINITE);
+    animator.setInterpolator(null); // linear phase; the sine below shapes the ease
+    animator.addUpdateListener(a -> {
+      float phase = (Float) a.getAnimatedValue();
+      _hintBreathWave = 0.5f - 0.5f * (float) Math.cos(2.0 * Math.PI * phase);
+      invalidate();
+    });
+    animator.start();
+    _hintBreathAnimator = animator;
+  }
+
+  @Override
+  protected void onAttachedToWindow()
+  {
+    super.onAttachedToWindow();
+    updateHintBreathAnimator();
+  }
+
+  /** A lit hint color at the current point of the breath. */
+  private int hintBreathe(int color)
+  {
+    if (_hintBreathAnimator == null)
+      return color;
+    float keep = 1f - HINT_BREATH_DEPTH * _hintBreathWave;
+    return Color.argb(Color.alpha(color), Math.round(Color.red(color) * keep),
+        Math.round(Color.green(color) * keep), Math.round(Color.blue(color) * keep));
+  }
+
+  /** TRACE loop: how long one light takes to travel a latched cap's border. */
+  private static final long HINT_TRACE_PERIOD_MS = 2400L;
+  private static final long HINT_TRACE_STAGGER_MS = 200L;
+
+  private SweepGradient _hintTraceGradient;
+  private int _hintTraceColor;
+  private final Matrix _hintTraceMatrix = new Matrix();
+  private final Paint _hintTracePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+  private final RectF _hintTraceRect = new RectF();
+
+  /**
+   * While the keybind hint lighting is up, a light travels the border of each latched modifier
+   * cap — the prefix indicator. One rotating sweep gradient serves every cap; the shared breath
+   * animator's frame ticks drive the rotation, so this adds no animator of its own.
+   */
+  private void drawHintTrace(Canvas canvas, float x, float y, float keyW, float keyH,
+      Theme.Computed.Key tc, int traceIndex)
+  {
+    int light = _theme.activatedColor;
+    if (_hintTraceGradient == null || _hintTraceColor != light)
+    {
+      _hintTraceColor = light;
+      _hintTraceGradient = new SweepGradient(0f, 0f,
+          new int[] {0, 0, withAlpha(light, 230), 0}, new float[] {0f, 0.72f, 0.9f, 1f});
+    }
+    float phase = ((SystemClock.uptimeMillis() + HINT_TRACE_PERIOD_MS
+        - traceIndex * HINT_TRACE_STAGGER_MS) % HINT_TRACE_PERIOD_MS)
+        / (float) HINT_TRACE_PERIOD_MS;
+    float cx = x + keyW / 2f;
+    float cy = y + keyH / 2f;
+    _hintTraceMatrix.setRotate(phase * 360f);
+    _hintTraceMatrix.postTranslate(cx, cy);
+    _hintTraceGradient.setLocalMatrix(_hintTraceMatrix);
+    float strokeWidth = Math.max(tc.border_width * 1.5f, 2f);
+    float padding = Math.max(tc.border_width, strokeWidth) / 2f;
+    _hintTraceRect.set(x + padding, y + padding, x + keyW - padding, y + keyH - padding);
+    _hintTracePaint.setStyle(Paint.Style.STROKE);
+    _hintTracePaint.setStrokeWidth(strokeWidth);
+    _hintTracePaint.setShader(_hintTraceGradient);
+    canvas.drawRoundRect(_hintTraceRect, tc.border_radius, tc.border_radius, _hintTracePaint);
+    _hintTracePaint.setShader(null);
+  }
+
   private static int keyId(int rowIndex, int keyIndex)
   {
     return (rowIndex << 16) | (keyIndex & 0xFFFF);
@@ -349,6 +474,40 @@ public class Keyboard2View extends View
     return _keyCornerRadiusOverridePx;
   }
 
+  /**
+   * Sets the key caps' absolute background opacity (0..1); -1 restores the theme's own
+   * translucency. Labels, borders, and the keyboard surface behind the caps are untouched.
+   * Recomputes only the theme paints — no geometry or renderer changes.
+   */
+  public void setKeyOpacity(float opacity)
+  {
+    requireMainThread();
+    if (Float.isNaN(opacity) || Float.isInfinite(opacity) || opacity > 1f
+        || (opacity < 0f && Float.compare(opacity, -1f) != 0))
+      throw new IllegalArgumentException("opacity must be within 0..1, or -1");
+    if (Float.compare(_keyOpacity, opacity) == 0)
+      return;
+    _keyOpacity = opacity;
+    _tc = null;
+    requestLayout();
+    invalidate();
+  }
+
+  public float getKeyOpacity()
+  {
+    return _keyOpacity;
+  }
+
+  /** The normal key role's current effective fill alpha as 0-100, for seeding editors. */
+  public int getEffectiveKeyFillOpacityPercent()
+  {
+    if (_keyOpacity >= 0f)
+      return Math.round(_keyOpacity * 100f);
+    if (_tc != null)
+      return Math.round(_tc.key.fillAlpha() / 255f * 100f);
+    return 100;
+  }
+
   public float getEffectiveKeyCornerRadiusPx()
   {
     if (_keyCornerRadiusOverridePx >= 0f)
@@ -390,6 +549,56 @@ public class Keyboard2View extends View
     _shift_key = _keyboard.findKeyWithValue(KeyValue.SHIFT);
     _compose_key = _keyboard.findKeyWithValue(KeyValue.COMPOSE);
     resetInputStateInternal(true);
+  }
+
+  /**
+   * On-screen bounds of the space bar in the rendered layout. The host uses this as the
+   * origin rect for surfaces that grow out of the space bar; the geometry mirrors
+   * {@link #onDraw} exactly so the seed lands on the drawn cap, not on its cell.
+   *
+   * @return false when the layout has no space bar or has not been measured yet
+   */
+  public boolean getSpaceBarRectOnScreen(Rect out)
+  {
+    if (_keyboard == null || _tc == null)
+      return false;
+    getLocationOnScreen(_spaceBarLocation);
+    float y = getPaddingTop() + _tc.margin_top;
+    for (KeyboardData.Row row : _keyboard.rows)
+    {
+      y += row.shift * _tc.row_height;
+      float x = _marginLeft + _tc.margin_left;
+      float keyH = row.height * _tc.row_height - _tc.vertical_margin;
+      for (KeyboardData.Key k : row.keys)
+      {
+        x += k.shift * _keyWidth;
+        float keyW = _keyWidth * k.width - _tc.horizontal_margin;
+        if (isSpaceBar(k))
+        {
+          out.set(Math.round(_spaceBarLocation[0] + x),
+              Math.round(_spaceBarLocation[1] + y),
+              Math.round(_spaceBarLocation[0] + x + keyW),
+              Math.round(_spaceBarLocation[1] + y + keyH));
+          return true;
+        }
+        x += _keyWidth * k.width;
+      }
+      y += row.height * _tc.row_height;
+    }
+    return false;
+  }
+
+  /**
+   * Space bar identity, matching {@code Pointers.swipeKeyName}: the role attribute, or the
+   * center value for user layout files that predate it.
+   */
+  private static boolean isSpaceBar(KeyboardData.Key key)
+  {
+    if (key.role == KeyboardData.Key.Role.Space_bar)
+      return true;
+    KeyValue center = key.keys[0];
+    return center != null && center.getKind() == KeyValue.Kind.Editing
+      && center.getEditing() == KeyValue.Editing.SPACE_BAR;
   }
 
   /** @deprecated Use [resetInputState()]. */
@@ -785,7 +994,7 @@ public class Keyboard2View extends View
     }
 
     _tc = new Theme.Computed(_theme, _config, _keyWidth, _keyboard, rowHeight,
-        _keyMarginScale, _keyCornerRadiusOverridePx);
+        _keyMarginScale, _keyCornerRadiusOverridePx, _keyOpacity);
     // Compute the size of labels based on the width or the height of keys. The
     // margin around keys is taken into account. Keys normal aspect ratio is
     // assumed to be 3/2 for a 10 columns layout. It's generally more, the
@@ -823,6 +1032,7 @@ public class Keyboard2View extends View
     pruneReleasedTouchFx(now);
     _launchWaveDensity = getResources().getDisplayMetrics().density;
     boolean animateNextFrame = false;
+    int hintTraceIndex = 0;
     float y = getPaddingTop() + _tc.margin_top;
     for (int rowIndex = 0; rowIndex < _keyboard.rows.size(); rowIndex++)
     {
@@ -833,7 +1043,10 @@ public class Keyboard2View extends View
       for (int keyIndex = 0; keyIndex < row.keys.size(); keyIndex++)
       {
         KeyboardData.Key k = row.keys.get(keyIndex);
-        KeyColorOverride colorOverride = _keyColorOverrides.get(keyId(rowIndex, keyIndex));
+        int keyIdValue = keyId(rowIndex, keyIndex);
+        KeyColorOverride hintOverride = _hintColorOverrides.get(keyIdValue);
+        KeyColorOverride colorOverride =
+            hintOverride != null ? hintOverride : _keyColorOverrides.get(keyIdValue);
         x += k.shift * _keyWidth;
         float keyW = _keyWidth * k.width - _tc.horizontal_margin;
         boolean isKeyDown = _pointers.isKeyDown(k);
@@ -858,9 +1071,24 @@ public class Keyboard2View extends View
             default:
             case Normal: tc_key = _tc.key; break;
           }
-        drawKeyFrame(canvas, x, y, keyW, keyH, tc_key,
-            isKeyDown || colorOverride == null ? null : colorOverride.keyBackground,
-            isKeyDown || colorOverride == null ? null : colorOverride.borderColor);
+        Integer frameBackground =
+            isKeyDown || colorOverride == null ? null : colorOverride.keyBackground;
+        Integer frameBorder =
+            isKeyDown || colorOverride == null ? null : colorOverride.borderColor;
+        if (hintOverride != null)
+        {
+          // Only the hint lighting breathes; color-scheme overrides stay steady.
+          if (frameBackground != null)
+            frameBackground = hintBreathe(frameBackground);
+          if (frameBorder != null)
+            frameBorder = hintBreathe(frameBorder);
+        }
+        drawKeyFrame(canvas, x, y, keyW, keyH, tc_key, frameBackground, frameBorder);
+        // The latched Ctrl/Alt/Shift caps are the hint popup's prefix indicator; trace them
+        // while the hint lighting is up. Latched modifiers render as key-down.
+        if (_hintColorOverrides.size() > 0 && _hintBreathAnimator != null && isKeyDown
+            && k.keys[0] != null && k.keys[0].getKind() == KeyValue.Kind.Modifier)
+          drawHintTrace(canvas, x, y, keyW, keyH, tc_key, hintTraceIndex++);
         if (launchStrength > 0f)
         {
           _launchWavePaint.setColor(withAlpha(_launchWaveColor,
@@ -1048,6 +1276,12 @@ public class Keyboard2View extends View
     cancelLaunchWaveAnimator();
     _launchWaveProgress = -1f;
     _launchWaveOpacity = 0f;
+    if (_hintBreathAnimator != null)
+    {
+      _hintBreathAnimator.cancel();
+      _hintBreathAnimator = null;
+      _hintBreathWave = 0f;
+    }
     resetInputStateInternal(true);
     requestDisallowIntercept(false);
     super.onDetachedFromWindow();

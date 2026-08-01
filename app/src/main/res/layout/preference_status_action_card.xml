@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:layout_marginStart="16dp" android:layout_marginTop="5dp"
+    android:layout_marginEnd="16dp" android:layout_marginBottom="5dp"
+    android:foreground="?attr/selectableItemBackground" app:cardBackgroundColor="?attr/termuxColorSurfacePanelHigh"
+    app:cardCornerRadius="18dp" app:cardElevation="0dp" app:strokeColor="?attr/termuxColorOutlineVariant"
+    app:strokeWidth="1dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:gravity="center_vertical" android:minHeight="88dp" android:orientation="horizontal"
+        android:paddingStart="16dp" android:paddingTop="12dp" android:paddingEnd="10dp" android:paddingBottom="12dp">
+        <ImageView android:id="@android:id/icon" android:layout_width="24dp" android:layout_height="24dp"
+            android:layout_marginEnd="14dp" android:importantForAccessibility="no" />
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView android:id="@android:id/title" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium" android:textColor="?attr/termuxColorOnSurface" android:textSize="16sp" />
+            <TextView android:id="@+id/settings_status_text" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="3dp" android:textSize="13sp" />
+            <TextView android:id="@android:id/summary" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="2dp" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="12sp" />
+        </LinearLayout>
+        <ImageView android:id="@+id/settings_status_icon" android:layout_width="22dp" android:layout_height="22dp"
+            android:layout_marginStart="8dp" android:importantForAccessibility="no" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/settings_status_action"
+            style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content"
+            android:layout_height="48dp" android:layout_marginStart="2dp" android:minWidth="56dp"
+            android:textAllCaps="false" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

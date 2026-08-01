@@ -1,0 +1,126 @@
+package com.termux.terminal;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+
+/**
+ * The OSC 8 hyperlink pool of one terminal session.
+ * <p>
+ * Cells do not store their target URI - a cell stores a small id into this pool, so that a link
+ * spanning many cells costs one string. Two cells belong to the same logical link when they carry
+ * the same id, which is what lets an application underline or activate a whole link at once.
+ * </p>
+ * <p>
+ * Escape sequences are untrusted input, so the pool is bounded in both entry count and URI length.
+ * When it is full the emulator may perform one bounded sweep of its live rows and return unreachable
+ * ids to this pool. If all ids remain referenced, new links render as ordinary text instead of
+ * pushing the session towards an out of memory kill.
+ * </p>
+ *
+ * @see <a href="https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda">the OSC 8 specification</a>
+ */
+public final class TerminalHyperlinks {
+
+    /** The id of a cell that is not part of any hyperlink. */
+    public static final int NO_LINK = 0;
+
+    /** Beyond this many distinct links in one session, further links are not interned. */
+    static final int MAX_LINKS = 4096;
+
+    /** Longer targets are rejected. Chosen as the shortest URL length limit in common browsers. */
+    static final int MAX_URI_LENGTH = 2083;
+
+    /** Maps {@code id + NUL + uri} to the interned link id. */
+    private final HashMap<String, Integer> mIdsByKey = new HashMap<>();
+
+    /** Interned URIs, indexed by link id. Index 0 is unused so that 0 can mean {@link #NO_LINK}. */
+    private final List<String> mUris = new ArrayList<>();
+
+    /** Interning keys by id, retained so a saturation sweep can remove dead map entries directly. */
+    private final List<String> mKeys = new ArrayList<>();
+
+    /** Ids proven unreachable by a saturation sweep and therefore safe to issue again. */
+    private final ArrayDeque<Integer> mFreeIds = new ArrayDeque<>();
+
+    private int mSize;
+
+    public TerminalHyperlinks() {
+        mUris.add(null);
+        mKeys.add(null);
+    }
+
+    /**
+     * Intern a link, returning its id, or {@link #NO_LINK} if it cannot be stored.
+     *
+     * @param id  the OSC 8 {@code id=} parameter, or an empty string when the application gave none.
+     *            Two cells with the same non-empty id and the same URI are one link.
+     * @param uri the link target.
+     */
+    public int intern(String id, String uri) {
+        if (uri == null || uri.isEmpty() || uri.length() > MAX_URI_LENGTH)
+            return NO_LINK;
+        String key = id + "\u0000" + uri;
+        Integer existing = mIdsByKey.get(key);
+        if (existing != null)
+            return existing;
+        if (mSize >= MAX_LINKS)
+            return NO_LINK;
+        int linkId;
+        if (mFreeIds.isEmpty()) {
+            linkId = mUris.size();
+            mUris.add(uri);
+            mKeys.add(key);
+        } else {
+            linkId = mFreeIds.removeLast();
+            mUris.set(linkId, uri);
+            mKeys.set(linkId, key);
+        }
+        mIdsByKey.put(key, linkId);
+        mSize++;
+        return linkId;
+    }
+
+    /** The target of a link id, or null for {@link #NO_LINK} and for ids this pool never issued. */
+    public String getUri(int linkId) {
+        if (linkId <= NO_LINK || linkId >= mUris.size())
+            return null;
+        return mUris.get(linkId);
+    }
+
+    public void clear() {
+        mIdsByKey.clear();
+        mUris.clear();
+        mKeys.clear();
+        mFreeIds.clear();
+        mUris.add(null);
+        mKeys.add(null);
+        mSize = 0;
+    }
+
+    boolean isFull() {
+        return mSize >= MAX_LINKS;
+    }
+
+    /** Release ids that a complete main+alternate live-buffer scan did not mark as referenced. */
+    int reclaimUnused(boolean[] used) {
+        int reclaimed = 0;
+        for (int linkId = 1; linkId < mUris.size(); linkId++) {
+            if (mUris.get(linkId) == null || (linkId < used.length && used[linkId]))
+                continue;
+            mIdsByKey.remove(mKeys.get(linkId));
+            mUris.set(linkId, null);
+            mKeys.set(linkId, null);
+            mFreeIds.addLast(linkId);
+            mSize--;
+            reclaimed++;
+        }
+        return reclaimed;
+    }
+
+    /** The number of interned links. */
+    public int size() {
+        return mSize;
+    }
+}

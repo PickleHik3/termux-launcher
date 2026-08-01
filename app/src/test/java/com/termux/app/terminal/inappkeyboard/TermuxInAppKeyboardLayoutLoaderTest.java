@@ -56,7 +56,7 @@ public class TermuxInAppKeyboardLayoutLoaderTest {
         mLoader.recheck(delivered::add);
 
         assertEquals(1, delivered.size());
-        assertEquals("QWERTY (US)", delivered.get(0).name);
+        assertEquals("QWERTY (Termux Launcher)", delivered.get(0).name);
         assertEquals(4, delivered.get(0).rows.size());
         assertTrue(mErrors.isEmpty());
     }
@@ -77,7 +77,7 @@ public class TermuxInAppKeyboardLayoutLoaderTest {
         mLoader.recheck(delivered::add);
 
         assertEquals(1, delivered.size());
-        assertEquals("QWERTY (US)", delivered.get(0).name);
+        assertEquals("QWERTY (Termux Launcher)", delivered.get(0).name);
         assertEquals(1, mErrors.size());
         assertTrue(mErrors.get(0).contains("exceeds"));
     }

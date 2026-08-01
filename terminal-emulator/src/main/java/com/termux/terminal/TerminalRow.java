@@ -44,6 +44,8 @@ public final class TerminalRow {
      * The text filling this terminal row.
      */
     public char[] mText;
+    /** Display width at each code-point start; -1 marks a low surrogate. */
+    private byte[] mCharWidths;
     /** The number of java chars used in {@link #mText}. */
     private short mSpaceUsed;
 
@@ -67,14 +69,92 @@ public final class TerminalRow {
      */
     public boolean mHasBitmap;
 
+    /** This row carries no OSC 133 shell integration mark. */
+    public static final byte MARK_NONE = 0;
+
+    /** OSC 133;A - the shell's prompt starts on this row. */
+    public static final byte MARK_PROMPT_START = 1;
+
+    /** OSC 133;B - the prompt ends and what the user types starts on this row. */
+    public static final byte MARK_COMMAND_START = 2;
+
+    /** OSC 133;C - the command was submitted and its output starts on this row. */
+    public static final byte MARK_OUTPUT_START = 3;
+
+    /**
+     * The OSC 133 mark of this row, one of the {@code MARK_*} values. Marks live on the row rather than
+     * in a separate list so that they follow it through the circular buffer for free.
+     */
+    public byte mShellIntegrationMark;
+
+    /**
+     * The underline decoration color of each cell, or null while every cell in this row uses
+     * {@link TextStyle#DECORATION_COLOR_DEFAULT}. A 24 bit color does not fit in the packed style
+     * long, so it lives here and is allocated only for the rows that actually carry one.
+     */
+    private int[] mDecorationColors;
+
+    /**
+     * The OSC 8 hyperlink id of each cell, or null while no cell in this row is part of a hyperlink.
+     * Ids are indices into the emulator's link pool; 0 means "no link".
+     */
+    private int[] mHyperlinkIds;
+
     /**
      * Construct a blank row (containing only whitespace, ' ') with a specified style.
      */
     public TerminalRow(int columns, long style) {
         mColumns = columns;
         mText = new char[(int) (SPARE_CAPACITY_FACTOR * columns)];
+        mCharWidths = new byte[mText.length];
         mStyle = new long[columns];
         clear(style);
+    }
+
+    /** If any cell in this row has a non-default underline decoration color. Performance only. */
+    public boolean hasDecorationColors() {
+        return mDecorationColors != null;
+    }
+
+    /** If any cell in this row is part of an OSC 8 hyperlink. Performance only. */
+    public boolean hasHyperlinks() {
+        return mHyperlinkIds != null;
+    }
+
+    public int getDecorationColor(int column) {
+        return (mDecorationColors == null) ? TextStyle.DECORATION_COLOR_DEFAULT : mDecorationColors[column];
+    }
+
+    public int getHyperlinkId(int column) {
+        return (mHyperlinkIds == null) ? 0 : mHyperlinkIds[column];
+    }
+
+    /** Mark every pool id referenced by this row without allocating a side table. */
+    void markUsedHyperlinkIds(boolean[] used) {
+        if (mHyperlinkIds == null) return;
+        for (int hyperlinkId : mHyperlinkIds) {
+            if (hyperlinkId > TerminalHyperlinks.NO_LINK && hyperlinkId < used.length)
+                used[hyperlinkId] = true;
+        }
+    }
+
+    private void setDecorationColor(int column, int color) {
+        if (mDecorationColors == null) {
+            if (color == TextStyle.DECORATION_COLOR_DEFAULT)
+                return;
+            mDecorationColors = new int[mColumns];
+            Arrays.fill(mDecorationColors, TextStyle.DECORATION_COLOR_DEFAULT);
+        }
+        mDecorationColors[column] = color;
+    }
+
+    private void setHyperlinkId(int column, int hyperlinkId) {
+        if (mHyperlinkIds == null) {
+            if (hyperlinkId == 0)
+                return;
+            mHyperlinkIds = new int[mColumns];
+        }
+        mHyperlinkIds[column] = hyperlinkId;
     }
 
     /**
@@ -86,27 +166,37 @@ public final class TerminalRow {
         final int x2 = line.findStartOfColumn(sourceX2);
         boolean startingFromSecondHalfOfWideChar = (sourceX1 > 0 && line.wideDisplayCharacterStartingAt(sourceX1 - 1));
         final char[] sourceChars = (this == line) ? Arrays.copyOf(line.mText, line.mText.length) : line.mText;
+        final byte[] sourceWidths = (this == line)
+            ? Arrays.copyOf(line.mCharWidths, line.mCharWidths.length) : line.mCharWidths;
         int latestNonCombiningWidth = 0;
         for (int i = x1; i < x2; i++) {
+            int codePointStart = i;
             char sourceChar = sourceChars[i];
             int codePoint = Character.isHighSurrogate(sourceChar) ? Character.toCodePoint(sourceChar, sourceChars[++i]) : sourceChar;
+            int w = sourceWidths[codePointStart];
             if (startingFromSecondHalfOfWideChar) {
                 // Just treat copying second half of wide char as copying whitespace.
                 codePoint = ' ';
+                w = 1;
                 startingFromSecondHalfOfWideChar = false;
             }
-            int w = WcWidth.width(codePoint);
             if (w > 0) {
                 destinationX += latestNonCombiningWidth;
                 sourceX1 += latestNonCombiningWidth;
                 latestNonCombiningWidth = w;
             }
-            setChar(destinationX, codePoint, line.getStyle(sourceX1));
+            setChar(destinationX, codePoint, line.getStyle(sourceX1), line.getDecorationColor(sourceX1),
+                line.getHyperlinkId(sourceX1), w, true);
         }
     }
 
     public int getSpaceUsed() {
         return mSpaceUsed;
+    }
+
+    /** Return the stored terminal-cell width of the code point starting at {@code charIndex}. */
+    public int getDisplayWidthAt(int charIndex) {
+        return mCharWidths[charIndex];
     }
 
     /**
@@ -125,23 +215,14 @@ public final class TerminalRow {
             boolean isHigh = Character.isHighSurrogate(c);
             int codePoint = isHigh ? Character.toCodePoint(c, mText[newCharIndex++]) : c;
             // 1, 2
-            int wcwidth = WcWidth.width(codePoint);
+            int wcwidth = mCharWidths[currentCharIndex];
             if (wcwidth > 0) {
                 currentColumn += wcwidth;
                 if (currentColumn == column) {
                     while (newCharIndex < mSpaceUsed) {
                         // Skip combining chars.
-                        if (Character.isHighSurrogate(mText[newCharIndex])) {
-                            if (WcWidth.width(Character.toCodePoint(mText[newCharIndex], mText[newCharIndex + 1])) <= 0) {
-                                newCharIndex += 2;
-                            } else {
-                                break;
-                            }
-                        } else if (WcWidth.width(mText[newCharIndex]) <= 0) {
-                            newCharIndex++;
-                        } else {
-                            break;
-                        }
+                        if (mCharWidths[newCharIndex] > 0) break;
+                        newCharIndex += Character.isHighSurrogate(mText[newCharIndex]) ? 2 : 1;
                     }
                     return newCharIndex;
                 } else if (currentColumn > column) {
@@ -157,7 +238,7 @@ public final class TerminalRow {
         for (int currentCharIndex = 0, currentColumn = 0; currentCharIndex < mSpaceUsed; ) {
             char c = mText[currentCharIndex++];
             int codePoint = Character.isHighSurrogate(c) ? Character.toCodePoint(c, mText[currentCharIndex++]) : c;
-            int wcwidth = WcWidth.width(codePoint);
+            int wcwidth = mCharWidths[currentCharIndex - Character.charCount(codePoint)];
             if (wcwidth > 0) {
                 if (currentColumn == column && wcwidth == 2)
                     return true;
@@ -171,27 +252,71 @@ public final class TerminalRow {
 
     public void clear(long style) {
         Arrays.fill(mText, ' ');
+        Arrays.fill(mCharWidths, (byte) 1);
         Arrays.fill(mStyle, style);
         mSpaceUsed = (short) mColumns;
         mHasNonOneWidthOrSurrogateChars = false;
         mHasBitmap = false;
+        // Erasing a row drops its links and decoration colors, as they belong to the erased text.
+        mDecorationColors = null;
+        mHyperlinkIds = null;
+        mShellIntegrationMark = MARK_NONE;
+    }
+
+    public void setChar(int columnToSet, int codePoint, long style) {
+        setChar(columnToSet, codePoint, style, TextStyle.DECORATION_COLOR_DEFAULT, 0);
     }
 
     // https://github.com/steven676/Android-Terminal-Emulator/commit/9a47042620bec87617f0b4f5d50568535668fe26
-    public void setChar(int columnToSet, int codePoint, long style) {
+    public void setChar(int columnToSet, int codePoint, long style, int decorationColor, int hyperlinkId) {
+        setChar(columnToSet, codePoint, style, decorationColor, hyperlinkId,
+            WcWidth.width(codePoint), true);
+    }
+
+    /** Attach a code point to the existing grapheme without consuming another terminal cell. */
+    public void appendCodePointToCell(int column, int codePoint) {
+        setChar(column, codePoint, 0, TextStyle.DECORATION_COLOR_DEFAULT, 0, 0, false);
+    }
+
+    /** Promote a one-cell grapheme to two cells, overwriting the following cell safely. */
+    public boolean widenCell(int column) {
+        int start = findStartOfColumn(column);
+        if (mCharWidths[start] != 1 || column >= mColumns - 1) return false;
+        if (wideDisplayCharacterStartingAt(column + 1))
+            setChar(column + 1, ' ', mStyle[column + 1]);
+        int nextStart = findStartOfColumn(column + 1);
+        int nextEnd = findStartOfColumn(column + 2);
+        int removed = nextEnd - nextStart;
+        System.arraycopy(mText, nextEnd, mText, nextStart, mSpaceUsed - nextEnd);
+        System.arraycopy(mCharWidths, nextEnd, mCharWidths, nextStart, mSpaceUsed - nextEnd);
+        mSpaceUsed -= removed;
+        mCharWidths[start] = 2;
+        mStyle[column + 1] = mStyle[column];
+        setDecorationColor(column + 1, getDecorationColor(column));
+        setHyperlinkId(column + 1, getHyperlinkId(column));
+        mHasNonOneWidthOrSurrogateChars = true;
+        return true;
+    }
+
+    private void setChar(int columnToSet, int codePoint, long style, int decorationColor,
+                         int hyperlinkId, int newCodePointDisplayWidth, boolean updateCellMetadata) {
         if (columnToSet < 0 || columnToSet >= mStyle.length)
             throw new IllegalArgumentException("TerminalRow.setChar(): columnToSet=" + columnToSet + ", codePoint=" + codePoint + ", style=" + style);
-        mStyle[columnToSet] = style;
-        if (!mHasBitmap && TextStyle.isBitmap(style)) {
-            mHasBitmap = true;
+        if (updateCellMetadata) {
+            mStyle[columnToSet] = style;
+            setDecorationColor(columnToSet, decorationColor);
+            setHyperlinkId(columnToSet, hyperlinkId);
+            if (!mHasBitmap && TextStyle.isBitmap(style)) {
+                mHasBitmap = true;
+            }
         }
-        final int newCodePointDisplayWidth = WcWidth.width(codePoint);
         // Fast path when we don't have any chars with width != 1
         if (!mHasNonOneWidthOrSurrogateChars) {
             if (codePoint >= Character.MIN_SUPPLEMENTARY_CODE_POINT || newCodePointDisplayWidth != 1) {
                 mHasNonOneWidthOrSurrogateChars = true;
             } else {
                 mText[columnToSet] = (char) codePoint;
+                mCharWidths[columnToSet] = 1;
                 return;
             }
         }
@@ -212,7 +337,7 @@ public final class TerminalRow {
         }
         char[] text = mText;
         final int oldStartOfColumnIndex = findStartOfColumn(columnToSet);
-        final int oldCodePointDisplayWidth = WcWidth.width(text, oldStartOfColumnIndex);
+        final int oldCodePointDisplayWidth = mCharWidths[oldStartOfColumnIndex];
         // Get the number of elements in the mText array this column uses now
         int oldCharactersUsedForColumn;
         if (columnToSet + oldCodePointDisplayWidth < mColumns) {
@@ -225,7 +350,8 @@ public final class TerminalRow {
 
         // If MAX_COMBINING_CHARACTERS_PER_COLUMN already exist in column, then ignore adding additional combining characters.
         if (newIsCombining) {
-            int combiningCharsCount = WcWidth.zeroWidthCharsCount(mText, oldStartOfColumnIndex, oldStartOfColumnIndex + oldCharactersUsedForColumn);
+            int combiningCharsCount = zeroWidthCodePointsCount(oldStartOfColumnIndex,
+                oldStartOfColumnIndex + oldCharactersUsedForColumn);
             if (combiningCharsCount >= MAX_COMBINING_CHARACTERS_PER_COLUMN)
                 return;
         }
@@ -247,31 +373,51 @@ public final class TerminalRow {
             if (mSpaceUsed + javaCharDifference > text.length) {
                 // We need to grow the array
                 char[] newText = new char[text.length + mColumns];
+                byte[] newWidths = new byte[newText.length];
                 System.arraycopy(text, 0, newText, 0, oldNextColumnIndex);
                 System.arraycopy(text, oldNextColumnIndex, newText, newNextColumnIndex, oldCharactersAfterColumn);
+                System.arraycopy(mCharWidths, 0, newWidths, 0, oldNextColumnIndex);
+                System.arraycopy(mCharWidths, oldNextColumnIndex, newWidths, newNextColumnIndex,
+                    oldCharactersAfterColumn);
                 mText = text = newText;
+                mCharWidths = newWidths;
             } else {
                 System.arraycopy(text, oldNextColumnIndex, text, newNextColumnIndex, oldCharactersAfterColumn);
+                System.arraycopy(mCharWidths, oldNextColumnIndex, mCharWidths, newNextColumnIndex,
+                    oldCharactersAfterColumn);
             }
         } else if (javaCharDifference < 0) {
             // Shift the rest of the line left.
             System.arraycopy(text, oldNextColumnIndex, text, newNextColumnIndex, mSpaceUsed - oldNextColumnIndex);
+            System.arraycopy(mCharWidths, oldNextColumnIndex, mCharWidths, newNextColumnIndex,
+                mSpaceUsed - oldNextColumnIndex);
         }
         mSpaceUsed += javaCharDifference;
         // Store char. A combining character is stored at the end of the existing contents so that it modifies them:
         //noinspection ResultOfMethodCallIgnored - since we already now how many java chars is used.
-        Character.toChars(codePoint, text, oldStartOfColumnIndex + (newIsCombining ? oldCharactersUsedForColumn : 0));
+        int storedAt = oldStartOfColumnIndex + (newIsCombining ? oldCharactersUsedForColumn : 0);
+        Character.toChars(codePoint, text, storedAt);
+        mCharWidths[storedAt] = (byte) newCodePointDisplayWidth;
+        if (Character.isSupplementaryCodePoint(codePoint)) mCharWidths[storedAt + 1] = -1;
         if (oldCodePointDisplayWidth == 2 && newCodePointDisplayWidth == 1) {
             // Replace second half of wide char with a space. Which mean that we actually add a ' ' java character.
             if (mSpaceUsed + 1 > text.length) {
                 char[] newText = new char[text.length + mColumns];
+                byte[] newWidths = new byte[newText.length];
                 System.arraycopy(text, 0, newText, 0, newNextColumnIndex);
                 System.arraycopy(text, newNextColumnIndex, newText, newNextColumnIndex + 1, mSpaceUsed - newNextColumnIndex);
+                System.arraycopy(mCharWidths, 0, newWidths, 0, newNextColumnIndex);
+                System.arraycopy(mCharWidths, newNextColumnIndex, newWidths, newNextColumnIndex + 1,
+                    mSpaceUsed - newNextColumnIndex);
                 mText = text = newText;
+                mCharWidths = newWidths;
             } else {
                 System.arraycopy(text, newNextColumnIndex, text, newNextColumnIndex + 1, mSpaceUsed - newNextColumnIndex);
+                System.arraycopy(mCharWidths, newNextColumnIndex, mCharWidths, newNextColumnIndex + 1,
+                    mSpaceUsed - newNextColumnIndex);
             }
             text[newNextColumnIndex] = ' ';
+            mCharWidths[newNextColumnIndex] = 1;
             ++mSpaceUsed;
         } else if (oldCodePointDisplayWidth == 1 && newCodePointDisplayWidth == 2) {
             if (columnToSet == mColumns - 1) {
@@ -286,9 +432,20 @@ public final class TerminalRow {
                 int nextLen = newNextNextColumnIndex - newNextColumnIndex;
                 // Shift the array leftwards.
                 System.arraycopy(text, newNextNextColumnIndex, text, newNextColumnIndex, mSpaceUsed - newNextNextColumnIndex);
+                System.arraycopy(mCharWidths, newNextNextColumnIndex, mCharWidths, newNextColumnIndex,
+                    mSpaceUsed - newNextNextColumnIndex);
                 mSpaceUsed -= nextLen;
             }
         }
+    }
+
+    private int zeroWidthCodePointsCount(int start, int end) {
+        int count = 0;
+        for (int i = start; i < end; ) {
+            if (mCharWidths[i] == 0) count++;
+            i += Character.isHighSurrogate(mText[i]) ? 2 : 1;
+        }
+        return count;
     }
 
     boolean isBlank() {

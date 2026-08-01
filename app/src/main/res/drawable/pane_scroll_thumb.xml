@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Very thin, rounded pane scrollbar thumb. Uses the theme scrollbar tone. Fades in on scroll
+     and back out (fadeScrollbars), so it only shows while there is scrollback and the user scrolls. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="?attr/termuxColorScrollbar" />
+    <corners android:radius="10dp" />
+    <size android:width="2dp" />
+</shape>

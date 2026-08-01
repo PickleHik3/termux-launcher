@@ -2,7 +2,7 @@
 
 Termux AI (TAI) lets supported Android devices run language models locally. Your prompts and model output stay on the device unless you deliberately use a network service or expose the API to your local network.
 
-TAI is the model host. You can chat with it through an OpenAI- or Ollama-compatible app such as Codex, OpenCode, Crush, or AIChat. Android actions are provided separately through LauncherCtl and MCP.
+TAI is the model host. You can chat with it through an OpenAI- or Ollama-compatible app such as Codex, OpenCode, Crush, or AIChat. TAI does not control Android apps or the device. The same local server has one separate app-launch route used by `launcherctl launch`; agent, MCP, and other device-control routes are not present.
 
 ## Quick start
 
@@ -80,15 +80,7 @@ Choose the ID matching the input you intend to send. Only one mode is loaded at 
 
 ### FunctionGemma and phone actions
 
-FunctionGemma is an optional catalog model. It can return structured tool calls when a client sends compatible tool definitions, but it does not execute those calls and it does not run beside another model.
-
-For phone-control tools in Codex, OpenCode, Crush, or another agent app, use the LauncherCtl MCP server instead:
-
-```sh
-launcherctl mcp
-```
-
-MCP keeps model generation and Android permissions separate. The client can show or request confirmation before performing sensitive actions. See [LauncherCtl MCP](LauncherCtl_MCP.md).
+FunctionGemma is an optional catalog model. It can return structured tool calls when a client sends compatible tool definitions, but it does not execute those calls and it does not run beside another model. Executing any returned tool call is the client's responsibility; TAI itself does not perform Android actions.
 
 ## Connect an AI app
 
@@ -101,25 +93,11 @@ TAI stores its current local address and secret token in:
 
 The address normally looks like `http://127.0.0.1:54298`. OpenAI-compatible clients usually need `/v1` appended to it.
 
-Generate a starter configuration with:
+Read the token and endpoint at call time rather than copying the secret into configuration files:
 
 ```sh
-launcherctl client-config codex
-launcherctl client-config opencode
-launcherctl client-config crush
-launcherctl client-config aichat
-launcherctl client-config ollama
-```
-
-Regenerate the configuration after installing or removing models. The OpenCode output includes
-each model's real input/output limits, media support, and whether automatic tool calls are safe.
-Models with short contexts or prompt-only tool emulation remain available for ordinary text chat,
-but OpenCode will not attach its large tool catalogue to those models.
-
-The generated examples refer to the `LAUNCHERCTL_TOKEN` environment variable instead of copying the secret into configuration files. Load it for the current shell with:
-
-```sh
-export LAUNCHERCTL_TOKEN="$(cat ~/.launcherctl/token)"
+export OPENAI_BASE_URL="$(cat ~/.launcherctl/endpoint)/v1"
+export OPENAI_API_KEY="$(cat ~/.launcherctl/token)"
 ```
 
 Use `/v1/responses` for current Codex-compatible Responses clients. Use `/v1/chat/completions` for OpenAI-compatible chat clients. Ollama-compatible clients use the same base address without adding `/v1`.
@@ -133,6 +111,7 @@ You do not need these routes for normal use, but they help when configuring anot
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/v1/models` | List installed, loadable models and capabilities |
+| GET | `/v1/models/{id}` | Return one model object |
 | POST | `/v1/responses` | Responses API text, image/audio input, streaming, and function calls |
 | POST | `/v1/chat/completions` | Chat Completions text, streaming, media, and tools |
 | POST | `/v1/completions` | Legacy text completions |
@@ -152,8 +131,10 @@ OpenAI streaming uses server-sent events and ends with `data: [DONE]`.
 | POST | `/api/generate` | Prompt-style generation |
 | GET | `/api/ps` | Show the loaded model |
 | POST | `/api/embed` | Create embeddings when supported |
+| POST | `/api/embeddings` | Legacy alias: `{model, prompt}` in, `{embedding: [...]}` out |
+| POST | `/api/pull` `/api/create` `/api/push` `/api/copy` `/api/delete` | Return 501 (not emulated) |
 
-Ollama streaming uses newline-delimited JSON. Ollama registry operations such as `pull`, `push`, `create`, and `copy` are not emulated. Install models from the TAI catalog or import flow instead.
+Ollama streaming uses newline-delimited JSON. Ollama registry operations (`pull`, `push`, `create`, `copy`, `delete`) are not emulated. Install models from the TAI catalog or import flow instead.
 
 ### Model management
 
@@ -170,9 +151,18 @@ Ollama streaming uses newline-delimited JSON. Ollama registry operations such as
 | POST | `/v1/ai/models/import` | Register a supported local package |
 | POST | `/v1/ai/models/download-catalog` | Download a catalog model |
 | GET | `/v1/ai/models/downloads` | Show download progress/history |
+| POST | `/v1/ai/models/download` | Download a model from a URL |
+| POST | `/v1/ai/models/downloads/cancel` | Cancel an active download |
 | POST | `/v1/ai/models/delete` | Delete an installed user model |
+| POST | `/v1/ai/models/load` | Load a model into the registry slot |
+| POST | `/v1/ai/models/unload` | Unload a model from the registry slot |
+| POST | `/v1/auth/rotate` | Rotate the API token |
 
-All routes require the bearer token. Keep localhost mode enabled unless you deliberately need LAN access. Anyone who can reach a LAN-exposed endpoint and knows its token can submit model requests.
+### Auth
+
+Routes require the bearer token (sent as `Authorization: Bearer <token>` or `X-Api-Key: <token>`). A new **Require API token** setting (default on) under **Settings → Services & permissions → Termux AI** lets you turn token checks off for localhost so local CLI clients need no real key — any placeholder works. `GET /` and `OPTIONS` never require auth. **LAN bind mode always requires the token** regardless of the toggle.
+
+Keep localhost mode enabled unless you deliberately need LAN access. Anyone who can reach a LAN-exposed endpoint and knows its token can submit model requests.
 
 ## Useful `tai` commands
 
@@ -242,9 +232,9 @@ Common problems:
 - **Model not loaded:** enable OpenAI auto-load or run `tai load MODEL_ID`.
 - **Not enough memory:** close other apps, choose CPU, or use a smaller model.
 - **GPU load crashes:** retry with `tai load MODEL_ID --cpu`.
-- **401 Unauthorized:** refresh your client with the current value from `~/.launcherctl/token`.
-- **Connection refused:** reopen Termux Launcher, check `~/.launcherctl/endpoint`, and run `launcherctl status`.
-- **Tools are ignored:** confirm the selected model advertises `tool_use`, or connect LauncherCtl through MCP.
+- **401 Unauthorized:** refresh your client with the current value from `~/.launcherctl/token`, or turn off **Require API token** for localhost use.
+- **Connection refused:** reopen Termux Launcher, check `~/.launcherctl/endpoint`, and run `tai status`.
+- **Tools are ignored:** confirm the selected model advertises `tool_use`.
 - **Image or audio rejected:** use the model's `-vision` or `-audio` ID from `/v1/models`.
 
 For advanced backend and model-package details, see [Termux AI backends](Termux_AI_Backends.md).

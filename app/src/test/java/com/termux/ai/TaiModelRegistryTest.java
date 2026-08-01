@@ -31,7 +31,7 @@ public class TaiModelRegistryTest {
         assertTrue(capabilities.toString().contains("image_input"));
         assertTrue(json.getJSONArray("endpointCapabilities").toString().contains("image_input"));
         assertTrue(json.getJSONArray("sourceCapabilities").toString().contains("llm_thinking"));
-        assertTrue(!capabilities.toString().contains("llm_thinking"));
+        assertTrue(capabilities.toString().contains("llm_thinking"));
         assertEquals(4096, json.getInt("endpointContextWindow"));
         assertEquals(32768, json.getInt("sourceContextWindow"));
         assertEquals(4000, json.getInt("defaultMaxOutputTokens"));
@@ -116,6 +116,42 @@ public class TaiModelRegistryTest {
 
         assertEquals(java.util.Collections.singletonList("cpu"),
             TaiModelProfile.forModel(roundTrip).compatibleAccelerators);
+    }
+
+    @Test
+    public void qwen3ThinkingProfile_matchesProviderGpuAndThinkingDefaults() throws Exception {
+        TaiModelSpec imported = new TaiModelSpec(
+            "Qwen3-4B-Thinking-2507", "Qwen3 Thinking", "chat", "imported",
+            "/models/Qwen3-4B-Thinking-2507/model.litertlm", "provider", 1L,
+            java.util.Collections.singleton(TaiModelSpec.CAPABILITY_TEXT_CHAT), false);
+
+        TaiModelProfile profile = TaiModelProfile.forModel(imported);
+
+        assertEquals(java.util.Arrays.asList("gpu", "cpu"), profile.compatibleAccelerators);
+        assertEquals(2048, profile.defaultMaxTokens);
+        assertEquals(TaiModelProfile.THINKING_ALWAYS, profile.thinkingMode);
+        assertEquals("<think>", profile.thinkingChannelStart);
+        assertEquals("</think>", profile.thinkingChannelEnd);
+    }
+
+    @Test
+    public void profileRequestWithNullableFallbackMemory_doesNotUnboxNull() throws Exception {
+        TaiModelProfile fallback = new TaiModelProfile(java.util.Collections.singletonList("cpu"),
+            1024, 64, 0.95d, 1.0d, null, "test");
+
+        TaiModelProfile parsed = TaiModelProfile.fromRequest(new JSONObject(), fallback);
+
+        assertEquals(null, parsed.minDeviceMemoryInGb);
+    }
+
+    @Test
+    public void liteRtThinkingRequest_usesNativeExtraContextAndChannel() {
+        TaiModelProfile always = TaiModelProfile.qwen3Thinking2507Profile();
+
+        java.util.Map<String, Object> extra = LiteRtTaiRuntime.thinkingExtraContext(null, always);
+
+        assertEquals("true", extra.get("enable_thinking"));
+        assertEquals(1, LiteRtTaiRuntime.thinkingChannels(always).size());
     }
 
     @Test

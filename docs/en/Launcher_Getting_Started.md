@@ -1,35 +1,26 @@
 # Getting Started
 
-This page is the main setup guide for Termux Launcher. Start here, then use the smaller reference pages only when you need them:
+Main setup guide for Termux Launcher. Reference pages:
 
 - [Illustrated web guide](https://picklehik3.github.io/termux-launcher-site/#wiki) for the current live screenshots and recordings.
-- [LauncherCtl](LauncherCtl_API.md) for launching apps and reading launcher data from the shell.
+- [LauncherCtl API](LauncherCtl_API.md) for app launch, the local OpenAI/Ollama-compatible AI endpoint, and model management.
 - [Termux AI](Termux_AI.md) for the local on-device AI endpoint.
 - [Developer docs](Developer_Docs.md) for advanced API, runtime, helper-script, and security details.
 
 ## 1. Install Termux Launcher
 
 1. Download the latest APK from [Releases](https://github.com/PickleHik3/termux-launcher/releases).
-2. Pick the package edition that matches what you need:
+2. Pick the package edition:
    - **Standard (`com.termux`)** replaces a regular Termux installation and works with matching `com.termux` add-ons.
    - **VAJ (`io.vaj.tl`)** installs beside regular Termux and needs add-ons built for the same package/signing family.
-3. Open the app normally once and let the Termux bootstrap finish.
-4. Follow the seven-step Quick start tour. It explains the core launcher before the optional shell, Shizuku, and AI layers.
-5. Confirm the terminal, dock, and your must-have apps work. Only then set Termux Launcher as your Home app.
-
-You can do that from Android settings, or from inside Termux Launcher:
+3. Open the app once and let the Termux bootstrap finish.
+4. Set Termux Launcher as your Home app, from Android settings or from inside the launcher:
 
 ```text
-Quick start tour -> Choose default Home app
+Long press Terminal -> More -> Apps Bar -> Home launcher shortcut
 ```
 
-You can replay the tour later from:
-
-```text
-Long press Terminal -> More -> Quick start tour
-```
-
-Existing installations are not interrupted by the automatic tour after an upgrade. If terminal drawing or input becomes slow after an update, run:
+If terminal drawing or input becomes slow after an update, run:
 
 ```sh
 termux-reload-settings
@@ -66,96 +57,121 @@ Long press Terminal -> More
 
 Useful places:
 
-- **Quick start tour:** Replay the beginner walkthrough at any time.
-- **Appearance:** Terminal opacity, blur, dock size, compact dock spacing, monochrome icons, and Terminal Material colors.
+- **Appearance:** Terminal opacity, blur, dock size, compact dock spacing, monochrome icons, and Terminal Material colors. The surface editor returns to the Dock, Keyboard, Status, or Other section used last.
 - **Apps Bar:** Input split character, app ranking reset, Home launcher shortcut, and lock-screen behavior.
 - **TAI / Termux AI:** Local model downloads, imports, runtime settings, API port, and API token.
 
+The terminal also has a native command palette, recursive split panes, windows, a session browser,
+and durable layout/CWD workspaces. Long-press the terminal and choose **Command palette**, or press
+`Ctrl+Alt+Shift+P` on a hardware keyboard. Split panes are enabled by default; traditional
+single-pane behavior is available at **Settings → Termux → Terminal IO → Split panes**.
+
+Press `Ctrl+Alt+F`, or choose **Float / dock pane** in the command palette, to detach the focused
+pane above the tiled layout. Drag its top handle to move it and use the bottom-right grip to resize
+it. Toggle the action again to dock it. A window must keep at least one tiled pane.
+
+Fresh installs use the built-in terminal keyboard and keep the Android keyboard hidden. Existing
+installs keep their current setting. Choose **Settings → Keyboard → Input method** to use the
+built-in keyboard, the Android keyboard, or no on-screen keyboard.
+
+See the [Modern terminal guide](Terminal_Modernization.md) for shortcuts, automatic layouts,
+workspace restore, custom bindings, advanced fonts, shell prompt navigation, Kitty protocols, and
+diagnostics.
+
 Live wallpapers can disable dock blur. If you use two rows of Extra Keys, turn on compact dock spacing so the terminal has more room.
 
-## 4. Use LauncherCtl From the Shell
+### Change the terminal font
 
-`launcherctl` is installed by the app when the launcher session starts. It lets shell tools talk to the launcher.
+The simple way is unchanged from Termux: drop a font file at `~/.termux/font.ttf`, add
+`~/.termux/font-italic.ttf` if you want a real italic face, then run:
+
+```sh
+termux-reload-settings
+```
+
+[Termux:Styling](https://github.com/PickleHik3/termux-styling/releases) does the same thing with a
+picker instead of a file copy. Either route is all most setups need.
+
+For separate bold and italic files, Nerd Font icons on selected Unicode ranges, ligature control,
+OpenType features, or variable-font axes, write `~/.termux/fonts.conf` instead:
+
+```sh
+# Installed on first run with every directive commented out. Uncomment what you want:
+nano ~/.termux/fonts.conf
+
+# A pristine copy to compare against or restore from:
+ls ~/.termux/launcher/examples/fonts.conf
+```
+
+While `fonts.conf` has no active directives, `font.ttf` and Termux:Styling keep working exactly as
+before — the file only takes over the faces you actually set. Delete or rename it to go back.
+The [Modern terminal guide](Terminal_Modernization.md) documents every directive.
+
+## 4. Use the Local AI Endpoint From the Shell
+
+The `tai` command is installed by the app when the launcher session starts. It talks to the local OpenAI/Ollama-compatible AI endpoint and manages on-device models.
 
 Try:
 
 ```sh
-launcherctl status
-launcherctl apps
-launcherctl launch whatsapp
+tai status
+tai models
+tai runtime
 ```
 
 Useful commands:
 
 ```sh
-launcherctl resources
-launcherctl media
-launcherctl notifications
-launcherctl restart
-launcherctl update-scripts
-launcherctl token rotate
+tai preflight MODEL_ID
+tai load MODEL_ID
+tai unload
+tai keep-warm MODEL_ID --minutes 30
+tai cancel
+tai doctor
 ```
 
-Media and notification commands need Android notification listener access. For endpoint files, authentication, and scripting examples, see [LauncherCtl](LauncherCtl_API.md).
+For endpoint files, authentication, route tables, and scripting examples, see [LauncherCtl API](LauncherCtl_API.md).
 
-## 5. Optional Guarded Shell and tmux Setup
+## 5. Optional Guarded Shell Setup
 
-tmux is recommended if you want a persistent terminal workspace. My broader shell setup usually includes:
+The repository contains secret-free templates derived from the live development setup: fish with a commented quick-start guide, two Oh My Posh themes driven by wallpaper Material colors, the `~/.termux` terminal configs, and the Maple Mono font family the terminal's ligature support was tuned against. The shell setup includes:
 
 - fish
 - oh-my-posh
-- tmux
 - eza
 - zoxide
-- btop through Shizuku `rish`
+- fzf, yazi, neovim
 
-Terminal Material colors are enabled by default. Leave the toggle on if you want the tmux theme to follow your wallpaper:
+Terminal Material colors are enabled by default. Leave the toggle on if you want the prompt to follow your wallpaper:
 
 ```text
 Long press Terminal -> More -> Appearance -> Terminal Material colors
 ```
 
-The repository contains secret-free templates derived from the live development setup. Use the guarded installer instead of replacing your dotfiles with direct `curl -o` commands:
+Use the guarded installer instead of replacing your dotfiles with direct `curl -o` commands:
 
 ```sh
-curl -fsSLo ~/setup-tmux-btop \
-  "https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-tmux-btop"
-sed -n '1,240p' ~/setup-tmux-btop
-chmod 700 ~/setup-tmux-btop
-~/setup-tmux-btop
+curl -fsSLo ~/setup-launcher \
+  "https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-launcher"
+sed -n '1,260p' ~/setup-launcher
+chmod 700 ~/setup-launcher
+~/setup-launcher
 ```
 
-Reading the downloaded script before running it is a useful shell habit. The installer adds missing packages, but it protects existing work:
+The installer asks what to install:
 
-- existing fish and Oh My Posh configuration files are left in place;
-- only missing Termux Launcher lines are appended to `.tmux.conf`;
-- an existing tmux plugin is fast-forwarded only when its checkout is clean;
-- local plugin edits stop the update instead of being overwritten;
-- the Shizuku `btop` wrapper is installed only when you choose it and `rish` works.
+- **Everything:** packages, fish + Oh My Posh configs, `~/.termux` terminal configs, and Maple Mono.
+- **Packages + shell configs:** fish, prompt themes, and the CLI tools the config uses.
+- **Terminal configs:** `termux.properties` (extra-key row wired to launcher tools) and the optional custom in-app keyboard layout.
+- **Maple Mono fonts:** downloads the variable text faces and the static Nerd Font build from the [maple-font releases](https://github.com/subframe7536/maple-font/releases), places them under `~/.termux/fonts/`, and installs the documented `fonts.conf` that turns on programming ligatures (`->`, `=>`, `!=`) and Nerd Font icons with zero further steps.
 
-The public fish template keeps a `fish_auto_tmux` toggle, loads the `termux-launcher` Oh My Posh theme, and enables eza and zoxide when installed. Private aliases, hostnames, tokens, and API keys from the development phone are intentionally not included.
+Every config file the installer replaces gets a timestamped `.bak` next to it first. Private aliases, hostnames, tokens, and API keys from the development phone are intentionally not included; the fish template documents where to keep such things (`~/.config/fish/secrets.fish`).
 
-The script asks what to install:
+If you prefer manual setup, inspect the files in [`docs/en/examples`](examples/) and merge the parts you want into your own configuration after making backups.
 
-- **All:** Fish + Oh My Posh config, tmux theme, and the optional Shizuku `btop` helper.
-- **tmux only:** theme and status helpers only.
-- **btop only:** only the Shizuku `btop` helper.
+### Deprecated: tmux and btop setup
 
-The tmux plugin includes an `Alt + e` keybind reference. If you prefer manual setup, inspect the files in [`docs/en/examples`](examples/) and merge the parts you want into your own configuration after making backups.
-
-If you have already completed setup and later update the APK, refresh only the repo-owned helper scripts with:
-
-```sh
-launcherctl update-scripts
-```
-
-This keeps your tmux config intact.
-
-You can create tmux key bindings to launch Android apps. This example makes `Alt + w` open WhatsApp:
-
-```tmux
-bind -n M-w run-shell 'tmux display-message "Opening WhatsApp"; launcherctl launch whatsapp >/dev/null 2>&1 || tmux display-message "Launch failed: WhatsApp"'
-```
+Earlier releases shipped `setup-tmux-btop`, which installed tmux with a Material theme and a Shizuku-backed `btop` helper. The launcher's own windows, panes, workspaces, scratchpad, and status bar have replaced that role, so the script is deprecated. It remains in [`docs/en/examples`](examples/) for existing users, but its fish template is frozen at the tmux-era version and no longer receives updates. tmux itself remains useful when you need Unix processes to survive independently of the Android terminal UI — the native workspace feature restores sessions, windows, panes, titles, and CWDs after process death, but it does not resurrect foreground programs.
 
 ## 6. Optional Shizuku and rish Setup
 
@@ -206,10 +222,10 @@ chmod +x "$(command -v rish)"
 rish
 ```
 
-Grant the Shizuku permission prompt. After that, check the setup:
+Check the setup:
 
 ```sh
-launcherctl tty-doctor
+rish -c "id"
 ```
 
 Now you can run `~/setup-tmux-btop` again and choose **All** or **btop only**.
@@ -299,19 +315,8 @@ If terminal drawing, input, or colors feel stale:
 termux-reload-settings
 ```
 
-If the launcher bridge is not responding:
+If Shizuku features do not work, confirm Shizuku is running and grant permission to Termux Launcher. Verify `rish` with:
 
 ```sh
-launcherctl status
-launcherctl restart
+rish -c "id"
 ```
-
-If `launcherctl` is missing, restart Termux Launcher. The app installs the command when the launcher activity starts.
-
-If Shizuku features do not work, confirm Shizuku is running, grant permission to Termux Launcher, and run:
-
-```sh
-launcherctl tty-doctor
-```
-
-If media or notification commands return empty data, grant notification listener access to Termux Launcher in Android settings.

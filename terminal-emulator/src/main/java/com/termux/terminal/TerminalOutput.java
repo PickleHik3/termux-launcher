@@ -43,4 +43,21 @@ public abstract class TerminalOutput {
     public abstract void onBell();
 
     public abstract void onColorsChanged();
+
+    /**
+     * Return work produced off-thread to the terminal's serialized update thread. Test outputs that do not own a
+     * looper may use this default; a live {@link TerminalSession} overrides it and posts to its main-thread handler.
+     */
+    public void postTerminalUpdate(Runnable update) {
+        update.run();
+    }
+
+    /**
+     * Run work on the terminal's serialized update thread after a delay, used to drive
+     * terminal-side kitty graphics animation. The default drops the request — an environment
+     * without a looper has no way to wait, and running it synchronously would spin the animation
+     * scheduler — so tests drive frame advancement explicitly instead.
+     */
+    public void postTerminalUpdateDelayed(Runnable update, long delayMillis) {
+    }
 }

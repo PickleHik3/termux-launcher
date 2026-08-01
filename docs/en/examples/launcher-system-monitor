@@ -2,7 +2,6 @@
 
 set -u
 
-CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/launcher-system-monitor.json"
 RISH_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/launcher-system-monitor-rish"
 RISH_CPU_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/launcher-system-monitor-rish-cpu"
 MAX_AGE="${LAUNCHER_MONITOR_MAX_AGE:-4}"
@@ -21,23 +20,6 @@ cache_is_fresh() {
     [ -r "$cache_file" ] || return 1
     age=$(( $(now) - $(mtime "$cache_file") ))
     [ "$age" -ge 0 ] && [ "$age" -le "$MAX_AGE" ]
-}
-
-refresh_launcher_cache() {
-    command -v launcherctl >/dev/null 2>&1 || return 1
-    command -v jq >/dev/null 2>&1 || return 1
-
-    tmp="${CACHE}.$$"
-    if launcherctl resources > "$tmp" 2>/dev/null && jq -e '.ok == true' "$tmp" >/dev/null 2>&1; then
-        mv "$tmp" "$CACHE"
-        return 0
-    fi
-    rm -f "$tmp"
-    return 1
-}
-
-ensure_launcher_cache() {
-    cache_is_fresh "$CACHE" || refresh_launcher_cache
 }
 
 round_percent() {
@@ -60,31 +42,6 @@ percent_from_delta() {
             if (percent > 100) percent = 100
                 printf "%.0f\n", percent
             }'
-}
-
-launcher_cpu_percent() {
-    ensure_launcher_cache || [ -r "$CACHE" ] || return 1
-    raw="$(jq -r '.cpuPercent // empty' "$CACHE" 2>/dev/null || true)"
-    [ -n "$raw" ] || return 1
-    round_percent "$raw"
-}
-
-launcher_ram_percent() {
-    ensure_launcher_cache || [ -r "$CACHE" ] || return 1
-    jq -r '
-      def pct($used; $total):
-        if ($total // 0) > 0 then (($used / $total) * 100 | round) else empty end;
-      pct(.memUsedBytes; .memTotalBytes)
-    ' "$CACHE" 2>/dev/null
-}
-
-launcher_mem_available_gb() {
-    ensure_launcher_cache || [ -r "$CACHE" ] || return 1
-    jq -r '
-      if (.memAvailableBytes // 0) > 0 then
-        (.memAvailableBytes / 1073741824 | floor)
-      else empty end
-    ' "$CACHE" 2>/dev/null
 }
 
 resolve_rish() {
@@ -232,15 +189,15 @@ rish_mem_available_gb() {
 }
 
 cpu_percent() {
-    launcher_cpu_percent 2>/dev/null || rish_cpu_percent 2>/dev/null
+    rish_cpu_percent 2>/dev/null
 }
 
 ram_percent() {
-    launcher_ram_percent 2>/dev/null || rish_ram_percent 2>/dev/null
+    rish_ram_percent 2>/dev/null
 }
 
 mem_available_gb() {
-    launcher_mem_available_gb 2>/dev/null || rish_mem_available_gb 2>/dev/null
+    rish_mem_available_gb 2>/dev/null
 }
 
 format_percent() {
@@ -286,11 +243,6 @@ detailed_segment() {
 }
 
 json_output() {
-    if ensure_launcher_cache && [ -r "$CACHE" ]; then
-        cat "$CACHE"
-        return 0
-    fi
-
     ensure_rish_cache || return 1
     cpu="$(rish_value cpu 2>/dev/null || true)"
     ram="$(rish_value ram 2>/dev/null || true)"

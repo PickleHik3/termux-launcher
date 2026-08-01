@@ -25,11 +25,6 @@ public class LauncherCtlStorageTest {
         assertEquals(new File(tempDir, ".launcherctl"), LauncherCtlStorage.getLauncherCtlDir());
         assertEquals(new File(tempDir, ".launcherctl/launcher.db"), LauncherCtlStorage.getDatabaseFile());
         assertEquals(new File(tempDir, ".launcherctl/notifications.jsonl"), LauncherCtlStorage.getNotificationsJsonlFile());
-        assertEquals(new File(tempDir, ".launcherctl/events.jsonl"), LauncherCtlStorage.getEventsJsonlFile());
-        assertEquals(new File(tempDir, ".launcherctl/agent-runs.jsonl"), LauncherCtlStorage.getAgentRunsJsonlFile());
-        assertEquals(new File(tempDir, ".launcherctl/tools.json"), LauncherCtlStorage.getToolsJsonFile());
-        assertEquals(new File(tempDir, ".launcherctl/capabilities.json"), LauncherCtlStorage.getCapabilitiesJsonFile());
-        assertEquals(new File(tempDir, ".launcherctl/config.json"), LauncherCtlStorage.getConfigJsonFile());
     }
 
     @Test

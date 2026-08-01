@@ -110,18 +110,18 @@ public class TermuxInAppKeyboardHeightPreferenceTest {
     }
 
     @Test
-    public void valarieStyleUsesItsGeometryPresetWhenValuesAreUnset() {
+    public void roundedStyleUsesItsGeometryPresetWhenValuesAreUnset() {
         mPreferences.setAppLauncherDockStyle(
-            TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_VALARIE_CAPSULE);
+            TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED);
 
         assertEquals(
-            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALARIE_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_ROUNDED_IN_APP_KEYBOARD_HEIGHT_SCALE,
             mPreferences.getInAppKeyboardHeightScale(), 0.0001f);
         assertEquals(
-            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALARIE_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_ROUNDED_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
             mPreferences.getInAppKeyboardKeyMarginScale(), 0.0001f);
         assertEquals(
-            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALARIE_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_ROUNDED_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP,
             mPreferences.getInAppKeyboardKeyCornerRadiusDp(), 0.0001f);
     }
 
@@ -131,7 +131,7 @@ public class TermuxInAppKeyboardHeightPreferenceTest {
         mPreferences.setInAppKeyboardKeyMarginScale(4f);
         mPreferences.setInAppKeyboardKeyCornerRadiusDp(8f);
         mPreferences.setAppLauncherDockStyle(
-            TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_VALARIE_CAPSULE);
+            TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED);
 
         assertEquals(1.25f, mPreferences.getInAppKeyboardHeightScale(), 0.0001f);
         assertEquals(4f, mPreferences.getInAppKeyboardKeyMarginScale(), 0.0001f);

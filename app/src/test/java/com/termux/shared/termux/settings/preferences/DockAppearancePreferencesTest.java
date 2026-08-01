@@ -19,11 +19,12 @@ import static org.junit.Assert.assertEquals;
 public class DockAppearancePreferencesTest {
 
     private TermuxAppSharedPreferences preferences;
+    private SharedPreferences store;
 
     @Before
     public void setUp() {
         Context context = RuntimeEnvironment.getApplication().getApplicationContext();
-        SharedPreferences store = context.getSharedPreferences(
+        store = context.getSharedPreferences(
             "dock-appearance-preferences-test", Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
@@ -55,4 +56,86 @@ public class DockAppearancePreferencesTest {
         preferences.setAppLauncherBarHeightScale(4f);
         assertEquals(3f, preferences.getAppLauncherBarHeightScale(), 0f);
     }
+
+    @Test
+    public void cornerRadiusSupportsStyleDefaultAndSliderBounds() {
+        assertEquals(-1, preferences.getAppLauncherDockCornerRadius());
+
+        preferences.setAppLauncherDockCornerRadius(-4);
+        assertEquals(-1, preferences.getAppLauncherDockCornerRadius());
+
+        preferences.setAppLauncherDockCornerRadius(18);
+        assertEquals(18, preferences.getAppLauncherDockCornerRadius());
+
+        preferences.setAppLauncherDockCornerRadius(41);
+        assertEquals(40, preferences.getAppLauncherDockCornerRadius());
+    }
+
+    @Test
+    public void statusAppearanceInitiallyInheritsExistingDockMaterial() {
+        preferences.setExtraKeysBlurRadius(17);
+        preferences.setAppBarOpacity(63);
+        preferences.setDockGlassGrain(21);
+        preferences.setAppLauncherDockCornerRadius(19);
+
+        assertEquals(17, preferences.getStatusBarBlurRadius());
+        assertEquals(63, preferences.getStatusBarOpacity());
+        assertEquals(21, preferences.getStatusBarGrain());
+        assertEquals(19, preferences.getStatusBarCornerRadius());
+    }
+
+    @Test
+    public void statusAppearanceUsesEditorBoundsOnceCustomized() {
+        preferences.setStatusBarBlurRadius(99);
+        preferences.setStatusBarOpacity(-1);
+        preferences.setStatusBarGrain(101);
+        preferences.setStatusBarCornerRadius(44);
+
+        assertEquals(30, preferences.getStatusBarBlurRadius());
+        assertEquals(0, preferences.getStatusBarOpacity());
+        assertEquals(100, preferences.getStatusBarGrain());
+        assertEquals(40, preferences.getStatusBarCornerRadius());
+    }
+
+    @Test
+    public void surfaceEdgeInsetsDefaultToTheCapsuleOuterMargin() {
+        assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET,
+            preferences.getDockHorizontalInset());
+        assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET,
+            preferences.getInAppKeyboardHorizontalInset());
+        assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET,
+            preferences.getStatusBarHorizontalInset());
+    }
+
+    @Test
+    public void surfaceEdgeInsetsAreIndependentAndClampedToTheirSliderBounds() {
+        preferences.setDockHorizontalInset(-3);
+        preferences.setInAppKeyboardHorizontalInset(96);
+        preferences.setStatusBarHorizontalInset(24);
+
+        assertEquals(0, preferences.getDockHorizontalInset());
+        assertEquals(TermuxPreferenceConstants.TERMUX_APP.MAX_SURFACE_HORIZONTAL_INSET,
+            preferences.getInAppKeyboardHorizontalInset());
+        assertEquals(24, preferences.getStatusBarHorizontalInset());
+    }
+
+    @Test
+    public void surfaceShapeUsesOneCanonicalPreference() {
+        preferences.setAppLauncherDockStyle(
+            TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED);
+        preferences.setAppLauncherDockStyle(
+            TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_DEFAULT);
+        assertEquals(TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_DEFAULT,
+            preferences.getAppLauncherDockStyle());
+    }
+
+    @Test
+    public void legacyValarieCapsuleMigratesToRoundedShape() {
+        store.edit().putString(TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE,
+            "valarie_capsule").commit();
+
+        assertEquals(TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED,
+            preferences.getAppLauncherDockStyle());
+    }
+
 }

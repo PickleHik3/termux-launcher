@@ -318,6 +318,7 @@ public final class TaiModelSpec {
             addIfPresent(endpoint, source, "multilingual", false);
             addIfPresent(endpoint, source, "reasoning", false);
             addIfPresent(endpoint, source, CAPABILITY_TOOL_USE, false);
+            addIfPresent(endpoint, source, CAPABILITY_SPECULATIVE_DECODING, false);
             return endpoint;
         }
 
@@ -343,6 +344,7 @@ public final class TaiModelSpec {
         addIfPresent(endpoint, source, CAPABILITY_CODE, false);
         addIfPresent(endpoint, source, "multilingual", false);
         addIfPresent(endpoint, source, "reasoning", false);
+        addIfPresent(endpoint, source, CAPABILITY_LLM_THINKING, false);
         if (source.contains(CAPABILITY_SPECULATIVE_DECODING) && liteRtPackageHasSpeculativeDecoding(localPath)) {
             endpoint.add(CAPABILITY_SPECULATIVE_DECODING);
         }
@@ -378,6 +380,7 @@ public final class TaiModelSpec {
             return 4000;
         }
         if (BACKEND_MNN_LLM.equals(backend)) return 1024;
+        if (normalizedId.contains("qwen34bthinking2507")) return 2048;
         if (normalizedId.contains("qwen") || normalizedId.contains("deepseek")) return 4096;
         return 1024;
     }

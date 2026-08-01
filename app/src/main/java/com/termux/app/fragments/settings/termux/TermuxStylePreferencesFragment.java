@@ -32,7 +32,6 @@ import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.settings.properties.TermuxSharedProperties;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
-import com.termux.launcherctl.LauncherCtlMcpPreferences;
 import java.io.File;
 import java.io.BufferedReader;
 import java.io.FileInputStream;
@@ -59,8 +58,17 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         setPreferencesFromResource(R.xml.termux_style_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
         LauncherIconPackPreferenceController.configure(this, context);
+        Preference surfaceEditor = findPreference("live_surface_editor");
+        if (surfaceEditor != null) {
+            surfaceEditor.setOnPreferenceClickListener(preference -> {
+                Intent intent = new Intent(context, TermuxActivity.class);
+                intent.putExtra(TermuxActivity.EXTRA_DOCK_TUNING, true);
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                startActivity(intent);
+                return true;
+            });
+        }
         configureDockPreferencePresentation();
-        configureLiveDockTuningAction();
         updateDockBlurAvailability();
     }
 
@@ -68,7 +76,7 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
     public void onResume() {
         super.onResume();
         if (getActivity() != null) {
-            getActivity().setTitle(R.string.termux_style_preferences_title);
+            getActivity().setTitle(R.string.settings_destination_appearance);
         }
         Context context = getContext();
         if (context != null) {
@@ -119,23 +127,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
                 return true;
             });
         }
-    }
-
-    private void configureLiveDockTuningAction() {
-        Preference tuningPreference = findPreference("tune_dock_live");
-        if (tuningPreference == null)
-            return;
-        tuningPreference.setOnPreferenceClickListener(preference -> {
-            Activity activity = getActivity();
-            if (activity == null)
-                return false;
-            Intent intent = new Intent(activity, TermuxActivity.class)
-                .putExtra(TermuxActivity.EXTRA_DOCK_TUNING, true)
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            activity.startActivity(intent);
-            activity.finish();
-            return true;
-        });
     }
 
     private void updateBarHeightSummary(@NonNull SeekBarPreference preference, int value) {
@@ -246,6 +237,9 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherBwIconsEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
+            case "show_in_recents_when_not_default":
+                mPreferences.setRemoveTaskOnActivityFinishEnabled(!value);
+                break;
             case "app_launcher_apps_row_enabled":
                 mPreferences.setAppLauncherAppsRowEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -296,6 +290,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isTerminalDynamicColorsEnabled();
             case "app_launcher_bw_icons":
                 return mPreferences.isAppLauncherBwIconsEnabled();
+            case "show_in_recents_when_not_default":
+                return !mPreferences.isRemoveTaskOnActivityFinishEnabled();
             case "app_launcher_apps_row_enabled":
                 return mPreferences.isAppLauncherAppsRowEnabled();
             case "app_launcher_display_app_names":
@@ -351,6 +347,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherBarHeightScale(TermuxStylePreferencesFragment.barHeightForPreset(value));
                 scheduleTermuxActivityStylingSync(false);
                 break;
+            case "app_launcher_dock_corner_radius":
+                mPreferences.setAppLauncherDockCornerRadius(value);
+                scheduleTermuxActivityStylingSync(false);
+                break;
             default:
                 break;
         }
@@ -380,6 +380,9 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                     mPreferences.getAppLauncherBarHeightScale(),
                     TermuxStylePreferencesFragment.APP_LAUNCHER_BAR_HEIGHT_PRESETS
                 );
+            case "app_launcher_dock_corner_radius":
+                int radius = mPreferences.getAppLauncherDockCornerRadius();
+                return radius < 0 ? 28 : radius;
             default:
                 return defValue;
         }
@@ -426,13 +429,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(mContext).invalidate();
                 scheduleTermuxActivityStylingSync(false);
                 break;
-            case LauncherCtlMcpPreferences.KEY_WEB_PROVIDER:
-            case LauncherCtlMcpPreferences.KEY_BRAVE_API_KEY:
-            case LauncherCtlMcpPreferences.KEY_SEARXNG_URL:
-            case LauncherCtlMcpPreferences.KEY_SEARXNG_API_KEY:
-                LauncherCtlMcpPreferences.putString(mContext, key, value);
-                LauncherCtlMcpPreferences.writePresetConfig(mContext);
-                break;
             case "app_launcher_bar_height":
                 mPreferences.setAppLauncherBarHeightScale(
                     TermuxStylePreferencesFragment.barHeightForPreset(
@@ -472,12 +468,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getAppLauncherIconPackPackage();
             case "app_launcher_pinned_icon_pack_package":
                 return mPreferences.getAppLauncherPinnedIconPackPackage();
-            case LauncherCtlMcpPreferences.KEY_BRAVE_API_KEY:
-            case LauncherCtlMcpPreferences.KEY_SEARXNG_URL:
-            case LauncherCtlMcpPreferences.KEY_SEARXNG_API_KEY:
-                return LauncherCtlMcpPreferences.getSecret(mContext, key);
-            case LauncherCtlMcpPreferences.KEY_WEB_PROVIDER:
-                return LauncherCtlMcpPreferences.getWebProvider(mContext);
             case "app_launcher_bar_height":
                 return Float.toString(mPreferences.getAppLauncherBarHeightScale());
             default:

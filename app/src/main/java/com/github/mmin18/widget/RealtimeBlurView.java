@@ -13,6 +13,9 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.RenderEffect;
+import android.graphics.Shader;
+import android.os.Build;
 import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.View;
@@ -28,6 +31,17 @@ public class RealtimeBlurView extends View {
 
     private static int RENDERING_COUNT;
     private static int BLUR_IMPL;
+
+    /**
+     * Whether the GPU can blur this view's own content, making the software pass unnecessary.
+     *
+     * <p>The software path captures the decor view into a bitmap and runs ScriptIntrinsicBlur over
+     * it on the UI thread. RenderScript was deprecated at API 31 and its GPU backends are gone on
+     * current devices, so that intrinsic executes on the CPU. From API 31 the same capture is drawn
+     * unblurred and {@link RenderEffect} blurs the view during compositing instead, which is what
+     * the platform accelerates. The RenderScript path stays for API 26-30.
+     */
+    private static final boolean BLUR_ON_GPU = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S;
     private static final StopException STOP_EXCEPTION = new StopException();
 
     private float mDownsampleFactor;
@@ -45,6 +59,8 @@ public class RealtimeBlurView extends View {
     private final Paint mBitmapPaint;
     private final Rect mRectSrc = new Rect();
     private final Rect mRectDst = new Rect();
+
+    private float mAppliedEffectRadius = -1f;
 
     private View mDecorView;
     private boolean mDifferentRoot;
@@ -79,6 +95,9 @@ public class RealtimeBlurView extends View {
     }
 
     protected BlurImpl getBlurImpl() {
+        // Never spin up a RenderScript context on devices that blur on the GPU: creating one costs
+        // a driver handle and an Allocation pair for a pass that never runs.
+        if (BLUR_ON_GPU) return new EmptyBlurImpl();
         if (BLUR_IMPL == 0) {
             try {
                 AndroidStockBlurImpl impl = new AndroidStockBlurImpl();
@@ -136,6 +155,7 @@ public class RealtimeBlurView extends View {
 
     protected void release() {
         releaseBitmap();
+        clearRenderEffect();
         mBlurImpl.release();
     }
 
@@ -164,9 +184,10 @@ public class RealtimeBlurView extends View {
 
         boolean dirty = mDirty;
 
-        if (mBlurringCanvas == null || mBlurredBitmap == null
-            || mBlurredBitmap.getWidth() != scaledWidth
-            || mBlurredBitmap.getHeight() != scaledHeight) {
+        Bitmap sizeReference = BLUR_ON_GPU ? mBitmapToBlur : mBlurredBitmap;
+        if (mBlurringCanvas == null || sizeReference == null
+            || sizeReference.getWidth() != scaledWidth
+            || sizeReference.getHeight() != scaledHeight) {
             dirty = true;
             releaseBitmap();
 
@@ -176,8 +197,10 @@ public class RealtimeBlurView extends View {
                 if (mBitmapToBlur == null) return false;
                 mBlurringCanvas = new Canvas(mBitmapToBlur);
 
-                mBlurredBitmap = Bitmap.createBitmap(scaledWidth, scaledHeight, Bitmap.Config.ARGB_8888);
-                if (mBlurredBitmap == null) return false;
+                if (!BLUR_ON_GPU) {
+                    mBlurredBitmap = Bitmap.createBitmap(scaledWidth, scaledHeight, Bitmap.Config.ARGB_8888);
+                    if (mBlurredBitmap == null) return false;
+                }
 
                 success = true;
             } catch (OutOfMemoryError ignored) {
@@ -187,6 +210,12 @@ public class RealtimeBlurView extends View {
                     return false;
                 }
             }
+        }
+
+        if (BLUR_ON_GPU) {
+            applyRenderEffect(radius * downsampleFactor);
+            mDirty = false;
+            return true;
         }
 
         if (dirty) {
@@ -201,17 +230,38 @@ public class RealtimeBlurView extends View {
     }
 
     protected void blur(Bitmap bitmapToBlur, Bitmap blurredBitmap) {
+        if (BLUR_ON_GPU) return; // The capture is drawn as-is; RenderEffect blurs it.
         mBlurImpl.blur(bitmapToBlur, blurredBitmap);
+    }
+
+    /**
+     * Keeps the view's blur effect in step with the requested radius.
+     *
+     * <p>The radius is in view pixels because the effect runs on this view's rendered output, after
+     * the downsampled capture has been scaled back up to full size.
+     */
+    private void applyRenderEffect(float radiusPx) {
+        if (!BLUR_ON_GPU) return;
+        float radius = Math.max(0.1f, radiusPx);
+        if (mAppliedEffectRadius == radius) return;
+        setRenderEffect(RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP));
+        mAppliedEffectRadius = radius;
+    }
+
+    private void clearRenderEffect() {
+        if (!BLUR_ON_GPU || mAppliedEffectRadius < 0f) return;
+        setRenderEffect(null);
+        mAppliedEffectRadius = -1f;
     }
 
     private final ViewTreeObserver.OnPreDrawListener mPreDrawListener = new ViewTreeObserver.OnPreDrawListener() {
         @Override
         public boolean onPreDraw() {
             int[] locations = new int[2];
-            Bitmap oldBmp = mBlurredBitmap;
+            Bitmap oldBmp = BLUR_ON_GPU ? mBitmapToBlur : mBlurredBitmap;
             View decor = mDecorView;
             if (decor != null && isShown() && prepare()) {
-                boolean redrawBitmap = mBlurredBitmap != oldBmp;
+                boolean redrawBitmap = (BLUR_ON_GPU ? mBitmapToBlur : mBlurredBitmap) != oldBmp;
 
                 decor.getLocationOnScreen(locations);
                 int x = -locations[0];
@@ -302,7 +352,7 @@ public class RealtimeBlurView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        drawBlurredBitmap(canvas, mBlurredBitmap, mOverlayColor);
+        drawBlurredBitmap(canvas, BLUR_ON_GPU ? mBitmapToBlur : mBlurredBitmap, mOverlayColor);
     }
 
     protected void drawBlurredBitmap(Canvas canvas, Bitmap blurredBitmap, int overlayColor) {

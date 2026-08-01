@@ -1,0 +1,262 @@
+#!/system/bin/sh
+# setup-launcher — Termux Launcher shell environment installer.
+#
+# Installs the current, secret-free templates derived from the live
+# development setup: fish + Oh My Posh with wallpaper Material colors,
+# zoxide/eza/fzf, the launcher terminal configs in ~/.termux, and (optionally)
+# the Maple Mono font family the terminal's ligature support was tuned
+# against.
+#
+# tmux, btop, and Shizuku are no longer part of this setup. The old installer
+# that handled them is kept as docs/en/examples/setup-tmux-btop for existing
+# users, but it is deprecated: the launcher's own windows, panes, workspaces,
+# and status bar replace what tmux and btop provided here.
+#
+# Existing files are never overwritten silently — every replaced config gets a
+# timestamped .bak alongside it.
+
+set -eu
+
+RAW_BASE="${TERMUX_LAUNCHER_RAW_BASE:-https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples}"
+MAPLE_BASE="${MAPLE_FONT_BASE:-https://github.com/subframe7536/maple-font/releases/latest/download}"
+
+FISH_CONFIG="${FISH_CONFIG:-$HOME/.config/fish/config.fish}"
+OMP_DIR="${OMP_DIR:-$HOME/.config/ohmyposh}"
+TERMUX_DIR="$HOME/.termux"
+FONTS_DIR="$TERMUX_DIR/fonts"
+
+log() { printf '%s\n' "$*"; }
+warn() { printf 'setup-launcher: %s\n' "$*" >&2; }
+fail() { warn "$*"; exit 1; }
+
+require_cmd() {
+    command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"
+}
+
+# ----------------------------------------------------------------------------
+# Helpers
+# ----------------------------------------------------------------------------
+
+timestamp() { date +%Y%m%d-%H%M%S; }
+
+backup_existing() {
+    target="$1"
+    if [ -e "$target" ]; then
+        backup="$target.bak-$(timestamp)"
+        cp -a "$target" "$backup"
+        log "  existing $(basename "$target") backed up to $(basename "$backup")"
+    fi
+}
+
+# fetch <relative-name> <destination>
+fetch() {
+    name="$1"
+    dest="$2"
+    dest_dir=$(dirname "$dest")
+    mkdir -p "$dest_dir"
+    tmp="$dest_dir/.$(basename "$dest").download"
+    if curl -fsSL -o "$tmp" "$RAW_BASE/$name"; then
+        backup_existing "$dest"
+        mv "$tmp" "$dest"
+        log "  installed $dest"
+    else
+        rm -f "$tmp"
+        fail "download failed: $RAW_BASE/$name"
+    fi
+}
+
+ask_yn() {
+    prompt="$1"
+    default="${2:-y}"
+    printf '%s [%s] ' "$prompt" "$([ "$default" = y ] && echo Y/n || echo y/N)"
+    read -r answer || answer=""
+    [ -n "$answer" ] || answer="$default"
+    case "$answer" in
+        y|Y|yes|YES) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# ----------------------------------------------------------------------------
+# Packages
+# ----------------------------------------------------------------------------
+
+install_packages() {
+    log ""
+    log "== Packages =="
+    # Everything the shipped configs actually use, and nothing else:
+    #   fish + oh-my-posh   the shell and prompt
+    #   zoxide, eza, fzf    cd/ls/history upgrades wired into config.fish
+    #   yazi                the `y` file-manager helper
+    #   neovim              default $EDITOR in the config
+    #   git, curl, unzip    used by this script and the prompt's git segment
+    packages="fish oh-my-posh zoxide eza fzf yazi neovim git curl unzip"
+
+    if command -v pacman >/dev/null 2>&1; then
+        log "Using pacman."
+        # shellcheck disable=SC2086
+        pacman -S --needed --noconfirm $packages || warn "some packages failed to install"
+    elif command -v pkg >/dev/null 2>&1; then
+        log "Using pkg."
+        # shellcheck disable=SC2086
+        pkg install -y $packages || warn "some packages failed to install"
+    else
+        fail "no supported package manager found (pkg or pacman)"
+    fi
+}
+
+# ----------------------------------------------------------------------------
+# Shell configs
+# ----------------------------------------------------------------------------
+
+install_shell_configs() {
+    log ""
+    log "== Fish + Oh My Posh configs =="
+    fetch config.fish "$FISH_CONFIG"
+    fetch pure-material.omp.json "$OMP_DIR/pure-material.omp.json"
+    fetch termux-launcher.omp.json "$OMP_DIR/termux-launcher.omp.json"
+
+    if command -v fish >/dev/null 2>&1; then
+        if command -v chsh >/dev/null 2>&1 && ask_yn "Make fish the default shell?"; then
+            chsh -s fish || warn "chsh failed; run 'chsh -s fish' manually"
+        fi
+    else
+        warn "fish is not installed; the config will wait for it"
+    fi
+}
+
+# ----------------------------------------------------------------------------
+# Terminal configs (~/.termux)
+# ----------------------------------------------------------------------------
+
+install_terminal_configs() {
+    log ""
+    log "== Terminal configs (~/.termux) =="
+
+    if ask_yn "Install termux.properties (extra keys with launcher tools, escape back key, underline cursor)?"; then
+        fetch termux.properties "$TERMUX_DIR/termux.properties"
+    fi
+
+    if ask_yn "Install the custom in-app keyboard layout (fn layer, swipe tools on space)?" n; then
+        fetch keyboard-layout.xml "$TERMUX_DIR/keyboard/layout.xml"
+    fi
+
+    log "Key bindings: the app refreshes a pristine, fully commented"
+    log "termux-launcher-bindings.conf example at every start under"
+    log "~/.termux/launcher/examples/ — copy it to ~/.termux to customize."
+
+    if command -v termux-reload-settings >/dev/null 2>&1; then
+        termux-reload-settings || true
+    fi
+}
+
+# ----------------------------------------------------------------------------
+# Maple Mono fonts
+# ----------------------------------------------------------------------------
+
+install_maple_fonts() {
+    log ""
+    log "== Maple Mono fonts =="
+    log "Downloads the variable text faces plus the static Nerd Font build"
+    log "from $MAPLE_BASE"
+    log "and wires them up through ~/.termux/fonts.conf, enabling the"
+    log "terminal's programming ligatures (->, =>, !=, ...) and NF icons."
+
+    require_cmd unzip
+    mkdir -p "$FONTS_DIR"
+    workdir=$(mktemp -d "${TMPDIR:-$HOME/.tmp}/maple-font.XXXXXX")
+    trap 'rm -rf "$workdir"' EXIT
+
+    log "Downloading MapleMono-Variable.zip ..."
+    curl -fsSL -o "$workdir/variable.zip" "$MAPLE_BASE/MapleMono-Variable.zip" \
+        || fail "font download failed"
+    log "Downloading MapleMono-NF.zip ..."
+    curl -fsSL -o "$workdir/nf.zip" "$MAPLE_BASE/MapleMono-NF.zip" \
+        || fail "font download failed"
+
+    unzip -o -q "$workdir/variable.zip" -d "$workdir/variable"
+    unzip -o -q "$workdir/nf.zip" -d "$workdir/nf"
+
+    for font in 'MapleMono[wght].ttf' 'MapleMono-Italic[wght].ttf'; do
+        [ -f "$workdir/variable/$font" ] || fail "missing $font in MapleMono-Variable.zip"
+        cp "$workdir/variable/$font" "$FONTS_DIR/$font"
+    done
+    for font in MapleMono-NF-Regular.ttf MapleMono-NF-Bold.ttf \
+                MapleMono-NF-Italic.ttf MapleMono-NF-BoldItalic.ttf; do
+        [ -f "$workdir/nf/$font" ] || fail "missing $font in MapleMono-NF.zip"
+        cp "$workdir/nf/$font" "$FONTS_DIR/$font"
+    done
+    log "  fonts placed in $FONTS_DIR"
+
+    # Legacy single-font path, used when fonts.conf is absent and by plain
+    # Termux: the static NF regular/italic pair.
+    backup_existing "$TERMUX_DIR/font.ttf"
+    cp "$FONTS_DIR/MapleMono-NF-Regular.ttf" "$TERMUX_DIR/font.ttf"
+    backup_existing "$TERMUX_DIR/font-italic.ttf"
+    cp "$FONTS_DIR/MapleMono-NF-Italic.ttf" "$TERMUX_DIR/font-italic.ttf"
+
+    fetch fonts.conf "$TERMUX_DIR/fonts.conf"
+
+    if command -v termux-reload-settings >/dev/null 2>&1; then
+        termux-reload-settings || true
+    fi
+    log "Maple Mono active. Weight, ligature policy, and alternate glyphs are"
+    log "all tunable in ~/.termux/fonts.conf (documented inline)."
+}
+
+# ----------------------------------------------------------------------------
+# Menu
+# ----------------------------------------------------------------------------
+
+welcome() {
+    cat <<'EOF'
+Termux Launcher setup
+=====================
+
+  1) Everything below
+  2) Packages + fish/Oh My Posh shell configs
+  3) Terminal configs (~/.termux: properties, keyboard layout)
+  4) Maple Mono fonts (ligatures + Nerd Font icons)
+  q) Quit
+
+Every existing config gets a timestamped .bak before being replaced.
+EOF
+}
+
+main() {
+    require_cmd curl
+    welcome
+    printf 'Choice [1]: '
+    read -r choice || choice=1
+    [ -n "$choice" ] || choice=1
+
+    case "$choice" in
+        1)
+            install_packages
+            install_shell_configs
+            install_terminal_configs
+            install_maple_fonts
+            ;;
+        2)
+            install_packages
+            install_shell_configs
+            ;;
+        3)
+            install_terminal_configs
+            ;;
+        4)
+            install_maple_fonts
+            ;;
+        q|Q)
+            exit 0
+            ;;
+        *)
+            fail "unknown choice: $choice"
+            ;;
+    esac
+
+    log ""
+    log "Done. Open a new session (or run 'exec fish') to pick everything up."
+}
+
+main "$@"

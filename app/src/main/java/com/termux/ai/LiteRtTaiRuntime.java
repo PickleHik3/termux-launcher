@@ -7,6 +7,7 @@ import androidx.annotation.Nullable;
 import com.google.ai.edge.litertlm.Backend;
 import com.google.ai.edge.litertlm.BenchmarkInfo;
 import com.google.ai.edge.litertlm.Capabilities;
+import com.google.ai.edge.litertlm.Channel;
 import com.google.ai.edge.litertlm.Content;
 import com.google.ai.edge.litertlm.Contents;
 import com.google.ai.edge.litertlm.Conversation;
@@ -25,8 +26,11 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.util.Collections;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -44,7 +48,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     private static final double DEFAULT_TEMPERATURE = 1.0d;
     private static final int DEFAULT_KEEP_WARM_MINUTES = 30;
     private static final String AUTO_GPU_REASON =
-        "Auto selected GPU because this model/device has a successful GPU load history.";
+        "Auto selected the model profile's preferred GPU backend.";
     private static final String AUTO_MODEL_CPU_REASON =
         "Auto selected CPU because the model's Edge Gallery compatibility profile requires CPU.";
 
@@ -299,6 +303,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
 
         CountDownLatch done = new CountDownLatch(1);
         StringBuilder responseBuilder = new StringBuilder();
+        StringBuilder thinkingBuilder = new StringBuilder();
         JSONArray toolCalls = new JSONArray();
         AtomicReference<Throwable> errorRef = new AtomicReference<>();
         AtomicBoolean lengthLimited = new AtomicBoolean(false);
@@ -321,8 +326,15 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                     @Override
                     public void onMessage(@NonNull Message message) {
                         String text = textFromMessage(message);
+                        String thinking = message.getChannels().get("thought");
                         synchronized (responseBuilder) {
                             responseBuilder.append(text);
+                        }
+                        if (thinking != null && !thinking.isEmpty()) {
+                            synchronized (thinkingBuilder) {
+                                thinkingBuilder.append(thinking);
+                            }
+                            if (callback != null) callback.onThinkingToken(thinking);
                         }
                         if (callback != null) callback.onToken(text);
                         JSONArray messageToolCalls = new JSONArray();
@@ -380,7 +392,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                         if (callback != null) callback.onError(throwable);
                         done.countDown();
                     }
-                }, Collections.emptyMap());
+                }, thinkingExtraContext(options, loadedProfile));
             done.await();
             try {
                 BenchmarkInfo benchmark = activeConversation.getBenchmarkInfo();
@@ -430,6 +442,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         data.put("generationId", generationId);
         data.put("mode", mode);
         data.put("response", responseBuilder.toString());
+        data.put("reasoning_content", thinkingBuilder.toString());
         data.put("toolCalls", toolCalls);
         data.put("finishReason", callbackCancelled.get() ? "stop" : (lengthLimited.get()
             ? "length" : (toolCalls.length() > 0 ? "tool_calls" : "stop")));
@@ -851,14 +864,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         @NonNull TaiDeviceCapabilities deviceCapabilities,
         @NonNull TaiModelProfile profile
     ) {
-        if (profile.supports("gpu") && deviceCapabilities.supportsAccelerator("gpu")
-            && TaiRuntimeHistory.hasSuccessfulGpu(appContext, modelSpec, deviceCapabilities)) {
-            return deviceCapabilities.compatibleAccelerators(profile);
-        }
-        if (profile.supports("cpu") && deviceCapabilities.supportsAccelerator("cpu")) {
-            return Collections.singletonList("cpu");
-        }
-        return Collections.emptyList();
+        return TaiLoadPreflight.autoAccelerators(appContext, modelSpec, deviceCapabilities, profile);
     }
 
     @NonNull
@@ -898,9 +904,36 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             request.tools,
             samplerConfig,
             false,
-            null,
+            thinkingChannels(profile),
             Collections.emptyMap()
         );
+    }
+
+    @NonNull
+    static Map<String, Object> thinkingExtraContext(
+        @NonNull TaiRuntimeOptions options,
+        @Nullable TaiModelProfile profile
+    ) {
+        if (profile == null || TaiModelProfile.THINKING_NONE.equals(profile.thinkingMode)) {
+            return Collections.emptyMap();
+        }
+        HashMap<String, Object> context = new HashMap<>();
+        if (TaiModelProfile.THINKING_ALWAYS.equals(profile.thinkingMode)) {
+            context.put("enable_thinking", "true");
+        } else if (options.thinkingEnabled != null) {
+            context.put("enable_thinking", options.thinkingEnabled.toString());
+        }
+        return context;
+    }
+
+    @Nullable
+    static List<Channel> thinkingChannels(@Nullable TaiModelProfile profile) {
+        if (profile == null || profile.thinkingChannelStart == null || profile.thinkingChannelEnd == null) {
+            return null;
+        }
+        ArrayList<Channel> channels = new ArrayList<>();
+        channels.add(new Channel("thought", profile.thinkingChannelStart, profile.thinkingChannelEnd));
+        return channels;
     }
 
     private void appendToolCalls(@NonNull JSONArray output, @NonNull List<ToolCall> calls, @NonNull String generationId) {

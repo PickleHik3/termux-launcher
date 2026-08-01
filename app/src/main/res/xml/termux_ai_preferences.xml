@@ -52,44 +52,17 @@
             app:summary="@string/termux_ai_endpoint_notice_summary"
             app:persistent="false"/>
         <androidx.preference.SwitchPreferenceCompat
+            app:key="tai_api_auth_required"
+            app:title="@string/termux_ai_auth_required_title"
+            app:summaryOff="@string/termux_ai_auth_required_summary_off"
+            app:summaryOn="@string/termux_ai_auth_required_summary_on"
+            app:defaultValue="true"/>
+        <androidx.preference.SwitchPreferenceCompat
             app:key="tai_lan_enabled"
             app:title="@string/termux_ai_lan_enabled_title"
             app:summaryOff="@string/termux_ai_lan_enabled_summary_off"
             app:summaryOn="@string/termux_ai_lan_enabled_summary_on"
             app:defaultValue="false"/>
-    </PreferenceCategory>
-
-    <PreferenceCategory
-        app:key="launcherctl_mcp_web"
-        app:title="@string/launcherctl_mcp_web_header">
-
-        <androidx.preference.ListPreference
-            app:key="launcherctl_mcp_web_provider"
-            app:title="@string/launcherctl_mcp_web_provider_title"
-            app:summary="@string/launcherctl_mcp_web_provider_summary"
-            app:dialogTitle="@string/launcherctl_mcp_web_provider_title"
-            app:defaultValue="off"
-            app:entries="@array/launcherctl_mcp_web_provider_entries"
-            app:entryValues="@array/launcherctl_mcp_web_provider_values" />
-
-        <androidx.preference.EditTextPreference
-            app:key="launcherctl_mcp_brave_api_key"
-            app:title="@string/launcherctl_mcp_brave_api_key_title"
-            app:summary="@string/launcherctl_mcp_brave_api_key_summary"
-            android:inputType="textPassword" />
-
-        <androidx.preference.EditTextPreference
-            app:key="launcherctl_mcp_searxng_url"
-            app:title="@string/launcherctl_mcp_searxng_url_title"
-            app:summary="@string/launcherctl_mcp_searxng_url_summary"
-            android:inputType="textUri" />
-
-        <androidx.preference.EditTextPreference
-            app:key="launcherctl_mcp_searxng_api_key"
-            app:title="@string/launcherctl_mcp_searxng_api_key_title"
-            app:summary="@string/launcherctl_mcp_searxng_api_key_summary"
-            android:inputType="textPassword" />
-
     </PreferenceCategory>
 
     <PreferenceCategory
