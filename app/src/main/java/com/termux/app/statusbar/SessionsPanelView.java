@@ -256,6 +256,24 @@ public final class SessionsPanelView extends LinearLayout {
         textParams.gravity = Gravity.CENTER_VERTICAL;
         row.addView(text, textParams);
 
+        // Rename sits inboard of close so the destructive action keeps the outer edge, where a
+        // mis-aimed tap is least likely to land on it.
+        AppCompatImageButton rename = new AppCompatImageButton(context);
+        rename.setImageResource(R.drawable.ic_sessions_panel_rename);
+        ImageViewCompat.setImageTintList(rename, ColorStateList.valueOf(
+            ColorUtils.setAlphaComponent(mOnSurfaceVariant, 168)));
+        rename.setScaleType(ImageView.ScaleType.CENTER);
+        rename.setBackground(null);
+        rename.setPadding(0, 0, 0, 0);
+        rename.setContentDescription(getResources().getString(
+            R.string.sessions_panel_rename_session, session.index + 1));
+        rename.setOnClickListener(v -> {
+            if (mListener != null) mListener.onSessionRenameRequested(session.index);
+        });
+        LayoutParams renameParams = new LayoutParams(dp(28), dp(28));
+        renameParams.gravity = Gravity.CENTER_VERTICAL;
+        row.addView(rename, renameParams);
+
         AppCompatImageButton close = new AppCompatImageButton(context);
         close.setImageResource(R.drawable.ic_sessions_panel_close);
         ImageViewCompat.setImageTintList(close, ColorStateList.valueOf(

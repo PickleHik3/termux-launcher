@@ -1321,6 +1321,7 @@
     <string name="sessions_panel_new">New session</string>
     <string name="sessions_panel_shell">shell</string>
     <string name="sessions_panel_close_session">Close session %1$d</string>
+    <string name="sessions_panel_rename_session">Rename session %1$d</string>
     <string name="palette_unavailable_no_selection">Unavailable: no text selected</string>
     <string name="palette_unavailable_no_session">Unavailable: no active session</string>
 
