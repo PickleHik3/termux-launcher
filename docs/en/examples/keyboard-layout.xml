@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  Full Termux Launcher layout guide:
+  https://picklehik3.github.io/termux-launcher-site/#wiki/keyboard-layout
+
+  Launcher action ids and arguments:
+  https://picklehik3.github.io/termux-launcher-site/#wiki/action-reference
+-->
 <keyboard bottom_row="false" name="QWERTY (cstm)" script="latin">
   <row>
     <key c="q" ne="1" se="loc esc"/>

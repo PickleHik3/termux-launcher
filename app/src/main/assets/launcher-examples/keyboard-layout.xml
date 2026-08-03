@@ -42,6 +42,8 @@
   Fn+q..p give F1-F12, Fn+a/s give Esc/Tab, Fn+d..l give navigation, and Fn+n / Fn+m send ^C / ^D.
 
   Editing help:
+  - Launcher guide: https://picklehik3.github.io/termux-launcher-site/#wiki/keyboard-layout
+  - Action ids:     https://picklehik3.github.io/termux-launcher-site/#wiki/action-reference
   - Web editor:  https://unexpected-keyboard-layout-editor.lixquid.com
   - Layout guide: https://github.com/Julow/Unexpected-Keyboard/blob/master/doc/Custom-layouts.md
 -->
