@@ -1027,7 +1027,14 @@ public class TerminalPaneController {
     // ------------------------------------------------------------------ scratchpad
 
     /** Session name that marks the scratchpad shell; it survives hides and activity restarts. */
-    public static final String SCRATCHPAD_SESSION_NAME = "scratchpad";
+    public static final String SCRATCHPAD_SESSION_NAME = "scratch";
+
+    /**
+     * What the scratchpad shell was called before the name was shortened to fit
+     * {@link WindowSessionName#MAX_CODE_POINTS}. Existing shells keep this name for the life of
+     * the process, so every recognition path has to accept both spellings.
+     */
+    public static final String LEGACY_SCRATCHPAD_SESSION_NAME = "scratchpad";
 
     /** toggleScratchpad outcomes. */
     public static final int SCRATCHPAD_TOGGLE_NONE = 0;
@@ -1066,6 +1073,10 @@ public class TerminalPaneController {
             return SCRATCHPAD_TOGGLE_HIDDEN;
         }
         TerminalSession session = mHost.findIdleShellByName(SCRATCHPAD_SESSION_NAME);
+        // A scratchpad created before the rename still answers to the old name; re-adopt it
+        // instead of creating a second one alongside it.
+        if (session == null)
+            session = mHost.findIdleShellByName(LEGACY_SCRATCHPAD_SESSION_NAME);
         if (session == null)
             session = mHost.createNamedShell(SCRATCHPAD_SESSION_NAME, mHost.defaultCwd());
         if (session == null) return SCRATCHPAD_TOGGLE_NONE;
@@ -1114,10 +1125,24 @@ public class TerminalPaneController {
         mScratchpadFrac = new RectF(left, top, left + width, top + height);
     }
 
+    /** True for either spelling of the scratchpad shell's name. */
+    public static boolean isScratchpadShellName(@Nullable String sessionName) {
+        return SCRATCHPAD_SESSION_NAME.equals(sessionName)
+            || LEGACY_SCRATCHPAD_SESSION_NAME.equals(sessionName);
+    }
+
+    /**
+     * Whether a shell with this name should be adopted as a top-level window session. The
+     * scratchpad is a floating leaf that follows the user across windows; adopting it mints a
+     * bogus session row in the sessions panel and the drawer.
+     */
+    public static boolean shouldAdoptAsWindowSession(@Nullable String sessionName) {
+        return !isScratchpadShellName(sessionName);
+    }
+
     /** True when {@code leaf} hosts the dedicated scratchpad shell. */
     private static boolean isScratchpadLeaf(@NonNull Leaf leaf) {
-        return leaf.session != null
-            && SCRATCHPAD_SESSION_NAME.equals(leaf.session.mSessionName);
+        return leaf.session != null && isScratchpadShellName(leaf.session.mSessionName);
     }
 
     @Nullable

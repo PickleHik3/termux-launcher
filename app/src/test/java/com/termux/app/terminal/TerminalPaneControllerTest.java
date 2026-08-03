@@ -560,6 +560,28 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
+    public void isScratchpadShellName_acceptsBothSpellingsAndNothingElse() {
+        assertTrue(TerminalPaneController.isScratchpadShellName(
+            TerminalPaneController.SCRATCHPAD_SESSION_NAME));
+        assertTrue(TerminalPaneController.isScratchpadShellName(
+            TerminalPaneController.LEGACY_SCRATCHPAD_SESSION_NAME));
+        assertFalse(TerminalPaneController.isScratchpadShellName(null));
+        assertFalse(TerminalPaneController.isScratchpadShellName(""));
+        // The old five-character truncation of "scratchpad" is a real user-visible name now.
+        assertFalse(TerminalPaneController.isScratchpadShellName("scrat"));
+    }
+
+    @Test
+    public void shouldAdoptAsWindowSession_rejectsEveryScratchpadSpelling() {
+        assertFalse(TerminalPaneController.shouldAdoptAsWindowSession(
+            TerminalPaneController.SCRATCHPAD_SESSION_NAME));
+        assertFalse(TerminalPaneController.shouldAdoptAsWindowSession(
+            TerminalPaneController.LEGACY_SCRATCHPAD_SESSION_NAME));
+        assertTrue(TerminalPaneController.shouldAdoptAsWindowSession("work"));
+        assertTrue(TerminalPaneController.shouldAdoptAsWindowSession(null));
+    }
+
+    @Test
     public void moveToEdge_rejectsSinglePaneWithoutChangingIt() {
         TerminalPaneController controller = newController();
         TerminalSession only = terminal();

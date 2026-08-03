@@ -696,10 +696,10 @@ public final class LauncherToolRegistry {
             CATEGORY_WINDOW, R.string.tool_window_select, 0, null, REQUIRES_SPLITS);
         addUi(map, TOOL_WINDOW_RENAME,
             "Rename the current tmux-style session that holds the windows. Names are"
-                + " capped at 5 characters; an empty name clears the label.",
+                + " capped at 8 characters; an empty name clears the label.",
             schemaObject()
                 .withString("name",
-                    "New name, capped at 5 characters. Empty clears the label.", true)
+                    "New name, capped at 8 characters. Empty clears the label.", true)
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_WINDOW, R.string.tool_window_rename, 0, null, REQUIRES_SPLITS);

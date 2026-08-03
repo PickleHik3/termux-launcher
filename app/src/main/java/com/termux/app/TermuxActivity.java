@@ -9968,6 +9968,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTermuxService == null || mPaneController == null) return;
         for (com.termux.shared.termux.shell.command.runner.terminal.TermuxSession ts : mTermuxService.getTermuxSessions()) {
             TerminalSession shell = ts.getTerminalSession();
+            if (!com.termux.app.terminal.TerminalPaneController
+                .shouldAdoptAsWindowSession(shell == null ? null : shell.mSessionName)) continue;
             if (mPaneController.windowOf(shell) == null) {
                 com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.newWindow(shell);
                 WSession ws = new WSession();
@@ -10739,6 +10741,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         TerminalSession previousFocused = getCurrentSession();
         com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.windowOf(session);
         if (w == null) {
+            // A scratchpad shell that isn't in any tree is hidden, not new: it belongs to
+            // toggleScratchpad as a float, so minting a window session for it here would add a
+            // bogus row to the sessions panel.
+            if (!com.termux.app.terminal.TerminalPaneController
+                .shouldAdoptAsWindowSession(session.mSessionName)) return false;
             // New shell -> its own session with one window.
             w = mPaneController.newWindow(session);
             WSession ws = new WSession();
