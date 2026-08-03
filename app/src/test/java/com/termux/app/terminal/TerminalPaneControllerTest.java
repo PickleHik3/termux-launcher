@@ -29,6 +29,7 @@ import org.robolectric.RuntimeEnvironment;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
@@ -608,6 +609,64 @@ public class TerminalPaneControllerTest {
             TerminalPaneController.LEGACY_SCRATCHPAD_SESSION_NAME));
         assertTrue(TerminalPaneController.shouldAdoptAsWindowSession("work"));
         assertTrue(TerminalPaneController.shouldAdoptAsWindowSession(null));
+    }
+
+    @Test
+    public void tiledPaneCount_ignoresFloatsAndTheScratchpad() {
+        android.provider.Settings.Global.putFloat(
+            RuntimeEnvironment.getApplication().getContentResolver(),
+            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 0f);
+        TerminalPaneController controller = newScratchpadController();
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        assertEquals(1, controller.tiledPaneCount());
+
+        assertEquals(TerminalPaneController.SCRATCHPAD_TOGGLE_SHOWN, controller.toggleScratchpad());
+
+        // The float is on screen and counted as a pane view, but it is not a tiled pane: the frame
+        // line's owner must not change, or the pane behind it reflows its PTY.
+        assertEquals(2, controller.getVisiblePaneViews().size());
+        assertEquals(1, controller.tiledPaneCount());
+
+        assertEquals(TerminalPaneController.SCRATCHPAD_TOGGLE_HIDDEN, controller.toggleScratchpad());
+        assertEquals(1, controller.tiledPaneCount());
+    }
+
+    @Test
+    public void tiledPaneCount_isNeverZeroAndFollowsTheTree() {
+        // max(1, ...) covers the window with no tiled root at all, which dropping the last tiled
+        // shell while a float survives can produce.
+        assertEquals(1, newController().tiledPaneCount());
+        assertEquals(4, fourPaneFixture().controller.tiledPaneCount());
+    }
+
+    @Test
+    public void scratchpadShow_keepsTheTiledPaneViewsAttached() {
+        // The visible jump: a full render detached and re-attached the tiled TerminalView, whose
+        // onSizeChanged reflows the emulator and resets the scroll offset.
+        android.provider.Settings.Global.putFloat(
+            RuntimeEnvironment.getApplication().getContentResolver(),
+            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 0f);
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        TerminalPaneController controller = newScratchpadController(host);
+        host.layout(0, 0, 1080, 2000);
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        TerminalView tiled = controller.getVisiblePaneViews().get(0);
+        android.view.ViewParent tiledParent = tiled.getParent();
+        int childrenBefore = host.getChildCount();
+
+        assertEquals(TerminalPaneController.SCRATCHPAD_TOGGLE_SHOWN, controller.toggleScratchpad());
+
+        assertSame(tiled, controller.getVisiblePaneViews().get(0));
+        assertSame(tiledParent, tiled.getParent());
+        assertEquals(childrenBefore + 1, host.getChildCount());
+
+        assertEquals(TerminalPaneController.SCRATCHPAD_TOGGLE_HIDDEN, controller.toggleScratchpad());
+
+        assertSame(tiled, controller.getVisiblePaneViews().get(0));
+        assertSame(tiledParent, tiled.getParent());
+        assertEquals(childrenBefore, host.getChildCount());
     }
 
     @Test

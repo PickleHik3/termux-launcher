@@ -1041,11 +1041,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int TERMINAL_BORDER_VERTICAL_INSET_DP = 5;
 
     /**
-     * Panes on screen in the active window. A maximized pane counts as one, which is the point:
+     * Tiled panes in the active window. A maximized pane counts as one, which is the point:
      * temporarily maximizing is visually a lone pane and should get the terminal border back.
+     *
+     * <p>Floats are deliberately excluded. This count decides whether the terminal border or the
+     * per-pane borders own the frame line, and that flips paneInsetPx — which resizes the tiled
+     * TerminalView and so reflows its PTY and resets its scroll position. A float is drawn over the
+     * terminal and owns its own border; it must not make the pane underneath it reflow.
      */
     private int visiblePaneCount() {
-        return mPaneController == null ? 1 : mPaneController.getVisiblePaneViews().size();
+        return mPaneController == null ? 1 : mPaneController.tiledPaneCount();
     }
 
     private void applyTerminalBorderAppearance() {

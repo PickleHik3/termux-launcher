@@ -557,6 +557,24 @@ public class TerminalPaneController {
         return out;
     }
 
+    /**
+     * Leaves of the active window's tiled tree, floats excluded; a maximized pane counts as one.
+     *
+     * <p>Deliberately separate from {@link #getVisiblePaneViews()}, which fans font, size and
+     * keyboard changes out and must include floats. This is the count that decides who owns the
+     * frame line, and a float must not change that: flipping the pane inset resizes the tiled
+     * TerminalView, which reflows its PTY and resets the scroll position — the visible jump when the
+     * scratchpad appears.
+     *
+     * <p>Never less than one, which covers the float-only window (root == null) that dropping the
+     * last tiled shell can produce.
+     */
+    public int tiledPaneCount() {
+        if (mActiveWindow == null) return 1;
+        if (mMaximizedLeaf != null) return 1;
+        return Math.max(1, leavesOf(mActiveWindow.root).size());
+    }
+
     /** Re-measure every visible pane once layout settles. Returning from another app can leave the
      *  panes measured against a stale (tiny) host size; posting updateSize after the next layout
      *  pass recomputes rows/cols against the restored full size. */
@@ -1095,11 +1113,14 @@ public class TerminalPaneController {
         leaf.floatFrac = mScratchpadFrac != null ? new RectF(mScratchpadFrac)
             : new RectF(SCRATCHPAD_LEFT_FRAC, SCRATCHPAD_TOP_FRAC,
                 SCRATCHPAD_RIGHT_FRAC, SCRATCHPAD_BOTTOM_FRAC);
+        // Captured before clearing it: un-maximizing genuinely restructures the surface, so that
+        // case still needs a full render.
+        boolean wasMaximized = mMaximizedLeaf != null;
         mMaximizedLeaf = null;
         window.floating.add(leaf);
         window.active = leaf;
         mPendingFloatEntryLeaf = leaf;
-        render();
+        if (wasMaximized || !addFloatOnly(leaf)) render();
         mHost.onActivePaneChanged();
         mHost.onTreesChanged();
         return SCRATCHPAD_TOGGLE_SHOWN;
@@ -1175,12 +1196,17 @@ public class TerminalPaneController {
         Runnable remove = () -> {
             if (mHidingScratchpadLeaf == leaf) mHidingScratchpadLeaf = null;
             if (!window.floating.remove(leaf)) return;
-            removeFloatContainer(leaf);
             if (window.active == leaf)
                 window.active = window.root != null ? firstLeaf(window.root) : null;
             if (window == mActiveWindow) {
-                render();
+                // removeFloatOnly drops the container itself; only the fallback needs to be told.
+                if (!removeFloatOnly(leaf)) {
+                    removeFloatContainer(leaf);
+                    render();
+                }
                 mHost.onActivePaneChanged();
+            } else {
+                removeFloatContainer(leaf);
             }
             mHost.onTreesChanged();
         };
@@ -1475,17 +1501,46 @@ public class TerminalPaneController {
         // Floats are added last so they sit above both the tree and the interaction overlay;
         // list order is z-order. A maximized pane owns the whole surface, floats included.
         if (mMaximizedLeaf == null) {
-            for (Leaf leaf : mActiveWindow.floating) {
-                FloatingPaneContainer container = new FloatingPaneContainer(leaf);
-                mFloatContainers.put(leaf, container);
-                mHostView.addView(container, new FrameLayout.LayoutParams(0, 0));
-                applyFloatBounds(leaf, container);
-                maybeAnimateFloatEntry(leaf, container);
-            }
+            for (Leaf leaf : mActiveWindow.floating) attachFloatContainer(leaf);
         }
         updateActiveBorders();
         focusActiveView();
         mHost.onPanesRendered();
+    }
+
+    /** Build, place and (if pending) animate one float's container. One path, two callers. */
+    private void attachFloatContainer(@NonNull Leaf leaf) {
+        FloatingPaneContainer container = new FloatingPaneContainer(leaf);
+        mFloatContainers.put(leaf, container);
+        mHostView.addView(container, new FrameLayout.LayoutParams(0, 0));
+        applyFloatBounds(leaf, container);
+        maybeAnimateFloatEntry(leaf, container);
+    }
+
+    /**
+     * Add one float without rebuilding the tiled tree, so the pane behind it is never detached and
+     * re-attached. Falls back to {@link #render()} whenever the cheap path does not apply.
+     *
+     * <p>Skipping {@code mHost.onPanesRendered()} is safe: that callback only re-applies the terminal
+     * border appearance, and a float no longer changes who owns the frame line.
+     */
+    private boolean addFloatOnly(@NonNull Leaf leaf) {
+        if (mActiveWindow == null || mActiveWindow.root == null || mMaximizedLeaf != null
+            || mHostView.getChildCount() == 0) return false;
+        attachFloatContainer(leaf);
+        updateActiveBorders();
+        focusActiveView();
+        return true;
+    }
+
+    /** Counterpart of {@link #addFloatOnly}: drop one float's container and nothing else. */
+    private boolean removeFloatOnly(@NonNull Leaf leaf) {
+        if (mActiveWindow == null || mActiveWindow.root == null || mMaximizedLeaf != null
+            || mHostView.getChildCount() == 0) return false;
+        removeFloatContainer(leaf);
+        updateActiveBorders();
+        focusActiveView();
+        return true;
     }
 
     private View buildView(Node node) {
@@ -1546,12 +1601,20 @@ public class TerminalPaneController {
 
     private void updateActiveBorders() {
         List<TerminalView> views = getVisiblePaneViews();
-        boolean split = views.size() > 1;
+        // Tiled panes, not every pane: a float always carries its own focus-keyed border, and a lone
+        // tiled pane keeps the terminal border as its frame. So showing the scratchpad no longer
+        // paints and unpaints a border on the pane behind it.
+        boolean split = tiledPaneCount() > 1;
         TerminalSession activeSession = getActiveSession();
+        java.util.Set<TerminalSession> floatingSessions = new java.util.HashSet<>();
+        if (mActiveWindow != null) {
+            for (Leaf leaf : mActiveWindow.floating) floatingSessions.add(leaf.session);
+        }
         for (TerminalView v : views) {
             FrameLayout frame = mPaneFrames.get(v.getCurrentSession());
             if (frame == null) continue;
-            if (!split && mMaximizedLeaf == null) { frame.setForeground(null); continue; }
+            boolean floating = floatingSessions.contains(v.getCurrentSession());
+            if (!split && mMaximizedLeaf == null && !floating) { frame.setForeground(null); continue; }
             boolean isActive = v.getCurrentSession() == activeSession;
             // Same Material primary hue for every pane, but the focused pane's border is at full
             // strength while the rest are dimmed — an unambiguous, theme-proof focus cue.
