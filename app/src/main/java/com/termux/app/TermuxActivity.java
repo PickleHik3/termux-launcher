@@ -350,6 +350,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * The last toast shown, used cancel current toast before showing new in {@link #showToast(String, boolean)}.
      */
     Toast mLastToast;
+
+    /** Which shells have produced output recently; drives the "working" indication. */
+    private final com.termux.app.statusbar.ShellActivityTracker mShellActivityTracker =
+        new com.termux.app.statusbar.ShellActivityTracker();
+    /**
+     * Deliberately its own handler rather than mWindowLabelHandler: scheduleWindowLabelPoll calls
+     * removeCallbacksAndMessages(null) on that one, which would drop a pending activity refresh and
+     * leave the coalescing flag stuck true.
+     */
+    private final android.os.Handler mShellActivityHandler =
+        new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable mShellActivityRefresh = this::refreshShellActivityIndication;
+    private final Runnable mShellActivityDecay = this::refreshShellActivityIndication;
+    private boolean mShellActivityRefreshPending;
+    /** Output arrives far faster than a status row can usefully redraw. */
+    private static final long SHELL_ACTIVITY_REFRESH_MS = 150L;
+
     @Nullable private AlertDialog mTerminalActionDialog;
     @Nullable private com.termux.app.terminal.SessionSwitchIndicatorView mSessionSwitchIndicator;
     @Nullable private com.termux.app.terminal.TerminalCommandPaletteController mCommandPalette;
@@ -10312,21 +10329,124 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mWSessions.size(), sessionIndex);
         }
 
+        java.util.List<Integer> foregroundPids = syncWindowBarItems(bar);
+        scheduleWindowLabelPoll(foregroundPids);
+        updateStatusWidgets();
+    }
+
+    /**
+     * Push the current window list — labels, selection and working state — into {@code bar}, and
+     * return the pane pids for the foreground resolver. Split out of
+     * {@link #refreshTerminalWindowBar()} so the shell-activity refresh can update the pills without
+     * redoing the bar's glass, blur and palette work several times a second.
+     */
+    @NonNull
+    private java.util.List<Integer> syncWindowBarItems(
+            @NonNull com.termux.app.terminal.TerminalWindowBar bar) {
         java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
             new java.util.ArrayList<>();
         java.util.List<Integer> foregroundPids = new java.util.ArrayList<>();
         int selected = -1;
         if (mCurrentWSession != null && mPaneController != null) {
+            long now = android.os.SystemClock.uptimeMillis();
             selected = Math.max(0, Math.min(mCurrentWSession.current,
                 mCurrentWSession.windows.size() - 1));
             for (int i = 0; i < mCurrentWSession.windows.size(); i++) {
-                TerminalSession session = mPaneController.windowActiveSession(mCurrentWSession.windows.get(i));
-                items.add(buildWindowItem(session, i, foregroundPids));
+                com.termux.app.terminal.TerminalPaneController.Window window =
+                    mCurrentWSession.windows.get(i);
+                TerminalSession session = mPaneController.windowActiveSession(window);
+                items.add(buildWindowItem(session, i, foregroundPids)
+                    .withBusy(isWindowWorking(window, now)));
             }
         }
         bar.setWindows(items, selected);
-        scheduleWindowLabelPoll(foregroundPids);
-        updateStatusWidgets();
+        return foregroundPids;
+    }
+
+    /**
+     * Whether any shell in {@code window} is working: output within the decay window, unioned with
+     * the privileged resolver's "not idle" when it happens to have data.
+     *
+     * <p>The union is what covers the one case output activity misses — a foreground process that
+     * runs silently, like {@code sleep 300} or an idle vim. Unprivileged, such a process shows as
+     * not working; that is the honest limitation of an output-only signal.
+     */
+    private boolean isWindowWorking(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window, long nowMs) {
+        if (mPaneController == null) return false;
+        for (TerminalSession shell : mPaneController.shellsOf(window)) {
+            int pid = shell.getPid();
+            if (pid <= 0) continue;
+            if (mShellActivityTracker.isActive(pid, nowMs)) return true;
+            com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+                mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(pid);
+            if (info != null && !info.idle) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Record output from {@code session} and schedule one coalesced refresh of the working
+     * indication.
+     *
+     * <p>This is tmux's monitor-activity: {@code onTextChanged} already fires on every screen
+     * update, so no privileged backend and no procfs polling is involved.
+     *
+     * <p>Deliberately not on mWindowLabelHandler despite being the same kind of work:
+     * scheduleWindowLabelPoll calls removeCallbacksAndMessages(null) on that handler, which would
+     * drop a pending refresh and leave the coalescing flag stuck.
+     */
+    public void noteShellActivity(@Nullable TerminalSession session) {
+        if (session == null || !isSplitPanesEnabled()) return;
+        int pid = session.getPid();
+        if (pid <= 0) return;
+        long now = android.os.SystemClock.uptimeMillis();
+        mShellActivityTracker.noteActivity(pid, now);
+        mShellActivityTracker.pruneBefore(now - 4 * com.termux.app.statusbar.ShellActivityTracker.DECAY_MS);
+        if (mShellActivityRefreshPending) return;
+        mShellActivityRefreshPending = true;
+        mShellActivityHandler.postDelayed(mShellActivityRefresh, SHELL_ACTIVITY_REFRESH_MS);
+    }
+
+    private void refreshShellActivityIndication() {
+        mShellActivityRefreshPending = false;
+        com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
+        if (bar != null && isSplitPanesEnabled()) syncWindowBarItems(bar);
+        updateShellActivityIndicator();
+        scheduleShellActivityDecay();
+    }
+
+    /**
+     * One refresh at the moment the soonest still-active shell stops counting as working, instead of
+     * polling for the whole time nothing is happening.
+     */
+    private void scheduleShellActivityDecay() {
+        mShellActivityHandler.removeCallbacks(mShellActivityDecay);
+        long now = android.os.SystemClock.uptimeMillis();
+        long expiry = mShellActivityTracker.nextExpiryMs(now);
+        if (expiry < 0L) return;
+        mShellActivityHandler.postDelayed(mShellActivityDecay, Math.max(50L, expiry - now) + 20L);
+    }
+
+    /** Scoped to the current session's windows: the status row describes the session on screen. */
+    private void updateShellActivityIndicator() {
+        com.termux.app.statusbar.ShellActivityIndicatorView indicator =
+            findViewById(R.id.terminal_status_activity);
+        if (indicator == null) return;
+        boolean busy = false;
+        if (mCurrentWSession != null && mPaneController != null) {
+            long now = android.os.SystemClock.uptimeMillis();
+            for (com.termux.app.terminal.TerminalPaneController.Window window
+                    : mCurrentWSession.windows) {
+                if (isWindowWorking(window, now)) {
+                    busy = true;
+                    break;
+                }
+            }
+        }
+        indicator.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.TERTIARY);
+        indicator.refreshAppearance();
+        indicator.setBusy(busy);
     }
 
     @Nullable
@@ -10422,6 +10542,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 weather.setOnClickListener(v -> toggleWeatherCard(v));
             }
         }
+        updateShellActivityIndicator();
+
         androidx.appcompat.widget.AppCompatImageButton settings =
             findViewById(R.id.terminal_status_settings);
         if (settings != null) {

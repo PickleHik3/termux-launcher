@@ -412,6 +412,8 @@
             <string name="termux_split_panes_header">Split panes</string>
                 <string name="termux_window_bar_content_description">Terminal windows</string>
                 <string name="termux_window_tab_content_description">Window %1$d of %2$d: %3$s</string>
+                <string name="termux_window_tab_busy_content_description">working</string>
+                <string name="termux_status_activity_content_description">A shell is working</string>
                 <string name="termux_window_new_content_description">New terminal window</string>
                 <string name="termux_top_pane_clock_content_description">Clock and status panel</string>
                 <string name="termux_top_pane_media_content_description">Media playback controls</string>

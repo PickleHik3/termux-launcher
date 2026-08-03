@@ -154,6 +154,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     public void onTextChanged(@NonNull TerminalSession changedSession) {
         if (!mActivity.isVisible())
             return;
+        // Every screen update is output activity — this is tmux's monitor-activity. Noted above the
+        // early return below: windows other than the active one have no TerminalView, so their
+        // activity would otherwise never register.
+        mActivity.noteShellActivity(changedSession);
         // Split-pane: redraw whichever pane is showing the changed session (may be the
         // non-active pane). Coalesce per-session so two live panes never drop each other's frames.
         if (mActivity.getTerminalViewForSession(changedSession) == null)

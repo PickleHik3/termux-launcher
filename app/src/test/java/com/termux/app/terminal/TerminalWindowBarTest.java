@@ -122,6 +122,86 @@ public class TerminalWindowBarTest {
         assertEquals(320L, TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS);
     }
 
+    @Test
+    public void busyOnlyChange_reachesTheStripWithoutReinflatingThePills() {
+        // The early return bails when the labels and the selection are unchanged, and a busy-only
+        // flip changes neither — so without sameBusy in the guard this state would be dropped. The
+        // pill views still have to be reused, or starting a command would rebuild the row.
+        TerminalWindowBar bar = attachedBar();
+        java.util.List<TerminalWindowBar.WindowItem> idle = Arrays.asList(
+            new TerminalWindowBar.WindowItem("home", "home"),
+            new TerminalWindowBar.WindowItem("work", "work"));
+        bar.setWindows(idle, 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        android.view.View first = tabs.getChildAt(0);
+        assertFalse(bar.isBusyAnimationRunning());
+
+        bar.setWindows(Arrays.asList(idle.get(0).withBusy(true), idle.get(1)), 0);
+
+        assertSame(first, tabs.getChildAt(0));
+        assertTrue(bar.isBusyAnimationRunning());
+        assertTrue(tabs.getChildAt(0).getContentDescription().toString().contains("working"));
+        // The reuse path has to refresh descriptions too, or the second pill keeps a stale one.
+        assertFalse(tabs.getChildAt(1).getContentDescription().toString().contains("working"));
+    }
+
+    @Test
+    public void busyGoingIdleStopsTheAnimation() {
+        TerminalWindowBar bar = attachedBar();
+        TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("home", "home");
+        bar.setWindows(Arrays.asList(item.withBusy(true)), 0);
+        assertTrue(bar.isBusyAnimationRunning());
+
+        bar.setWindows(Arrays.asList(item), 0);
+
+        assertFalse(bar.isBusyAnimationRunning());
+    }
+
+    @Test
+    public void detachStopsTheAnimation() {
+        // Otherwise a backgrounded activity keeps waking the Choreographer for an invisible sweep.
+        android.widget.FrameLayout host = attachedHost();
+        TerminalWindowBar bar = (TerminalWindowBar) host.getChildAt(0);
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("home", "home", true)), 0);
+        assertTrue(bar.isBusyAnimationRunning());
+
+        host.removeView(bar);
+
+        assertFalse(bar.isBusyAnimationRunning());
+    }
+
+    @Test
+    public void withBusy_leavesTheLabelsAlone() {
+        TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("home", "in home");
+
+        TerminalWindowBar.WindowItem busy = item.withBusy(true);
+
+        assertEquals(item.label, busy.label);
+        assertEquals(item.spokenLabel, busy.spokenLabel);
+        assertTrue(busy.busy);
+        assertFalse(item.busy);
+        // Same flag, same instance: nothing to copy.
+        assertSame(busy, busy.withBusy(true));
+    }
+
+    /**
+     * A bar inside a real attached window, because the busy animator refuses to run while detached
+     * or in an invisible window — the whole point of those guards.
+     */
+    private static TerminalWindowBar attachedBar() {
+        return (TerminalWindowBar) attachedHost().getChildAt(0);
+    }
+
+    private static android.widget.FrameLayout attachedHost() {
+        android.app.Activity activity = org.robolectric.Robolectric
+            .buildActivity(android.app.Activity.class).setup().get();
+        android.widget.FrameLayout host = new android.widget.FrameLayout(activity);
+        host.addView(new TerminalWindowBar(activity, null));
+        activity.setContentView(host);
+        return host;
+    }
+
     private static int exact(int size) {
         return android.view.View.MeasureSpec.makeMeasureSpec(
             size, android.view.View.MeasureSpec.EXACTLY);

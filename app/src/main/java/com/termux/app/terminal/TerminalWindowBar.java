@@ -33,6 +33,7 @@ import androidx.core.widget.ImageViewCompat;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.statusbar.ShellActivityPulse;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.terminal.TerminalSession;
 
@@ -59,10 +60,27 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     public static final class WindowItem {
         @NonNull public final String label;
         @NonNull public final String spokenLabel;
+        /** Whether a shell in this window is producing output right now. */
+        public final boolean busy;
 
         public WindowItem(@NonNull String label, @NonNull String spokenLabel) {
+            this(label, spokenLabel, false);
+        }
+
+        public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy) {
             this.label = label;
             this.spokenLabel = spokenLabel;
+            this.busy = busy;
+        }
+
+        /**
+         * A copy carrying {@code busy}. A copy method rather than another constructor argument on
+         * every factory, so itemFor / itemForResolved / truncateFile and their tests stay as they
+         * are.
+         */
+        @NonNull
+        public WindowItem withBusy(boolean busy) {
+            return busy == this.busy ? this : new WindowItem(label, spokenLabel, busy);
         }
     }
 
@@ -82,6 +100,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private int mSelectedFillColor;
     private int mSelectedStrokeColor;
     @Nullable private ValueAnimator mSelectionAnimator;
+    @Nullable private ValueAnimator mBusyAnimator;
+    /**
+     * Window visibility as last reported, rather than read from getWindowVisibility(): the framework
+     * dispatches this during attach, and reading it keeps the animator honest without depending on
+     * a ViewRootImpl the view may not have yet.
+     */
+    private boolean mWindowVisible = true;
+    private boolean mAttached;
 
     public TerminalWindowBar(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -123,14 +149,21 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     public void setWindows(@NonNull List<WindowItem> items, int selectedIndex) {
         boolean typefaceChanged = reloadTerminalTypeface();
-        if (!typefaceChanged && selectedIndex == mSelectedIndex && sameItems(mItems, items)) return;
+        // sameBusy has to be part of the guard: a busy-only flip changes neither the labels nor the
+        // selection, so without it the new state would be silently dropped here.
+        if (!typefaceChanged && selectedIndex == mSelectedIndex && sameItems(mItems, items)
+            && sameBusy(mItems, items)) return;
         int previousSelected = mSelectedIndex;
+        // sameItems deliberately still compares labels only, so starting a command keeps
+        // canReuseTabs true: re-inflating the pill row would also kill the selection slide.
         boolean canReuseTabs = !typefaceChanged && sameItems(mItems, items)
             && mTabs.getChildCount() == items.size() + 1;
         mSelectedIndex = selectedIndex;
         mItems = new ArrayList<>(items);
         updatePalette();
         if (canReuseTabs) {
+            pushBusyStates();
+            applyTabContentDescriptions();
             if (previousSelected >= 0 && previousSelected != selectedIndex) {
                 animateSelectionSlide(previousSelected, selectedIndex);
             } else {
@@ -149,8 +182,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             WindowItem item = items.get(i);
             boolean selected = i == selectedIndex;
             TextView tab = createTab(item.label, selected);
-            tab.setContentDescription(getResources().getString(
-                R.string.termux_window_tab_content_description, i + 1, items.size(), item.spokenLabel));
             tab.setOnClickListener(v -> {
                 if (mSelectionListener != null) mSelectionListener.onWindowSelected(index);
             });
@@ -161,9 +192,93 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         }
         addCreateButton(items.isEmpty());
         mTabs.setWindowCount(items.size());
+        pushBusyStates();
+        applyTabContentDescriptions();
         mTabs.snapSelection(selectedIndex);
         applyStableTabSelection();
         scrollSelectedIntoView(selectedIndex);
+    }
+
+    /**
+     * Called from both setWindows branches. Missing the reuse branch would leave a stale description
+     * on every pill whose label happened not to change.
+     */
+    private void applyTabContentDescriptions() {
+        for (int i = 0; i < mItems.size() && i < mTabs.getChildCount(); i++) {
+            WindowItem item = mItems.get(i);
+            // spokenLabel is never modified: the busy state is a separate sentence, so a screen
+            // reader announcing the window does not have to re-read a changed name.
+            String description = getResources().getString(
+                R.string.termux_window_tab_content_description, i + 1, mItems.size(),
+                item.spokenLabel);
+            if (item.busy) description += " · "
+                + getResources().getString(R.string.termux_window_tab_busy_content_description);
+            mTabs.getChildAt(i).setContentDescription(description);
+        }
+    }
+
+    private void pushBusyStates() {
+        boolean[] busy = new boolean[mItems.size()];
+        for (int i = 0; i < mItems.size(); i++) busy[i] = mItems.get(i).busy;
+        mTabs.setBusyStates(busy);
+        updateBusyAnimator();
+    }
+
+    /**
+     * One animator for the whole bar, driving the strip rather than a view per pill: setWindows's
+     * mTabs.removeAllViews() then has nothing to clean up, and every underline stays in phase.
+     *
+     * <p>Deliberately not folded into mSelectionAnimator. Both only mutate strip fields and
+     * invalidate, so they compose; sharing one animator would stall the activity indication for the
+     * length of every window switch.
+     */
+    private void updateBusyAnimator() {
+        boolean wanted = mTabs.hasBusyWindow() && mAttached && mWindowVisible;
+        if (!wanted) {
+            if (mBusyAnimator != null) {
+                mBusyAnimator.cancel();
+                mBusyAnimator = null;
+                mTabs.invalidate();
+            }
+            return;
+        }
+        if (mBusyAnimator != null) return;
+        mBusyAnimator = ValueAnimator.ofFloat(0f, 1f);
+        mBusyAnimator.setDuration(ShellActivityPulse.CYCLE_MS);
+        mBusyAnimator.setRepeatCount(ValueAnimator.INFINITE);
+        mBusyAnimator.setInterpolator(new android.view.animation.LinearInterpolator());
+        mBusyAnimator.addUpdateListener(animation -> mTabs.invalidate());
+        mBusyAnimator.start();
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        mAttached = true;
+        updateBusyAnimator();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        mAttached = false;
+        if (mBusyAnimator != null) {
+            mBusyAnimator.cancel();
+            mBusyAnimator = null;
+        }
+        super.onDetachedFromWindow();
+    }
+
+    @Override
+    protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        mWindowVisible = visibility == VISIBLE;
+        updateBusyAnimator();
+    }
+
+    /** For tests: whether the busy underline is animating right now. */
+    @androidx.annotation.VisibleForTesting
+    public boolean isBusyAnimationRunning() {
+        return mBusyAnimator != null && mBusyAnimator.isStarted();
     }
 
     private TextView createTab(String label, boolean selected) {
@@ -338,6 +453,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mSelectedStrokeColor = ColorUtils.setAlphaComponent(primary, 112);
         mTabs.setHighlightStyle(mSelectedFillColor, mSelectedStrokeColor,
             mCapsuleSurface ? mStatusBarRadiusPx : 0f, dp(1));
+        // Tertiary, like the row's other "something is happening" accents, and not fully opaque:
+        // the underline is a hint, not a reading.
+        mTabs.setBusyColor(ColorUtils.setAlphaComponent(MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorTertiary, primary), 210));
     }
 
     private void applyTabSurfaceStyle() {
@@ -367,19 +486,48 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     /** Draws one selected surface beneath the pills so it can travel without moving their labels. */
     private static final class SelectionStrip extends LinearLayout {
 
+        /** Underline geometry, in dp. Sized to live entirely in the pill's bottom clearance. */
+        private static final float BUSY_UNDERLINE_HEIGHT_DP = 1.5f;
+        private static final float BUSY_UNDERLINE_BOTTOM_INSET_DP = 2.5f;
+
         private final Paint mFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint mBusyPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF mAnimatedHighlight = new RectF();
+        private final RectF mBusyRect = new RectF();
         private int mWindowCount;
         private int mSelection = -1;
         private boolean mHasAnimatedHighlight;
         private float mCornerRadius;
+        /** Busy flag per window, held on the strip so removeAllViews has nothing to clean up. */
+        @NonNull private boolean[] mBusy = new boolean[0];
+        private long mBusyStartMs;
 
         SelectionStrip(@NonNull Context context) {
             super(context);
             setWillNotDraw(false);
             mFillPaint.setStyle(Paint.Style.FILL);
             mStrokePaint.setStyle(Paint.Style.STROKE);
+            mBusyPaint.setStyle(Paint.Style.FILL);
+        }
+
+        void setBusyStates(@NonNull boolean[] busy) {
+            mBusy = busy;
+            invalidate();
+        }
+
+        boolean isBusy(int index) {
+            return index >= 0 && index < mBusy.length && mBusy[index];
+        }
+
+        boolean hasBusyWindow() {
+            for (boolean busy : mBusy) if (busy) return true;
+            return false;
+        }
+
+        void setBusyColor(int color) {
+            mBusyPaint.setColor(color);
+            invalidate();
         }
 
         void setWindowCount(int windowCount) {
@@ -439,6 +587,40 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 canvas.drawRoundRect(bounds, mCornerRadius, mCornerRadius, mStrokePaint);
             }
             super.dispatchDraw(canvas);
+            drawBusyUnderlines(canvas);
+        }
+
+        /**
+         * A sweeping underline along the bottom of each working window's pill, drawn after the
+         * children so it sits over the chip background rather than under it.
+         *
+         * <p>A travelling underline rather than a corner dot: at this size a dot would have to sit on
+         * top of the Nerd Font glyph, while the underline lives entirely inside the pill's ~3dp
+         * bottom clearance and can never collide with it.
+         */
+        private void drawBusyUnderlines(@NonNull Canvas canvas) {
+            if (!hasBusyWindow()) return;
+            float density = getResources().getDisplayMetrics().density;
+            float height = BUSY_UNDERLINE_HEIGHT_DP * density;
+            float bottomInset = BUSY_UNDERLINE_BOTTOM_INSET_DP * density;
+            float phase = ShellActivityPulse.phase(busyElapsedMs());
+            float startFraction = ShellActivityPulse.sweepStartFraction(phase);
+            for (int i = 0; i < mBusy.length && i < getChildCount(); i++) {
+                if (!mBusy[i]) continue;
+                View child = getChildAt(i);
+                if (child.getWidth() <= 0 || child.getHeight() <= 0) continue;
+                float sweepWidth = child.getWidth() * ShellActivityPulse.SWEEP_WIDTH_FRACTION;
+                float left = child.getLeft() + child.getWidth() * startFraction;
+                float bottom = child.getBottom() - bottomInset;
+                mBusyRect.set(left, bottom - height, left + sweepWidth, bottom);
+                canvas.drawRoundRect(mBusyRect, height / 2f, height / 2f, mBusyPaint);
+            }
+        }
+
+        private long busyElapsedMs() {
+            long now = android.os.SystemClock.uptimeMillis();
+            if (mBusyStartMs == 0L) mBusyStartMs = now;
+            return now - mBusyStartMs;
         }
     }
 
@@ -452,6 +634,16 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         } catch (Exception ignored) {
             mTerminalTypeface = Typeface.MONOSPACE;
             mTerminalTypefaceModified = 0L;
+        }
+        return true;
+    }
+
+    /** Busy flags only; kept out of sameItems so a flip does not re-inflate the pill row. */
+    private static boolean sameBusy(@NonNull List<WindowItem> left,
+                                    @NonNull List<WindowItem> right) {
+        if (left.size() != right.size()) return false;
+        for (int i = 0; i < left.size(); i++) {
+            if (left.get(i).busy != right.get(i).busy) return false;
         }
         return true;
     }
