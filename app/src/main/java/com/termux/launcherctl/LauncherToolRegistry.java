@@ -374,6 +374,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_WINDOW_SELECT = "window.select";
     public static final String TOOL_WINDOW_RENAME = "window.rename";
     public static final String TOOL_SESSION_RENAME = "session.rename";
+    public static final String TOOL_SESSION_RENAME_AT_INDEX = "session.rename_at_index";
     public static final String TOOL_TERMINAL_RESET = "terminal.reset";
     public static final String TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT = "terminal.jump_previous_prompt";
     public static final String TOOL_TERMINAL_JUMP_NEXT_PROMPT = "terminal.jump_next_prompt";
@@ -711,6 +712,23 @@ public final class LauncherToolRegistry {
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_SESSION, R.string.tool_session_rename, 0, null, REQUIRES_SESSION);
+        // A separate tool rather than an optional index on session.rename, because it renames a
+        // different object: the tmux-style session that owns the windows — what the palette's and
+        // the panel's session rows display — whereas session.rename renames the focused shell,
+        // which has its own naming rules and no cap.
+        //
+        // index is declared before name so a positional invocation
+        // (`map … session.rename_at_index 1 work`) fills them in the order a reader expects.
+        addUi(map, TOOL_SESSION_RENAME_AT_INDEX,
+            "Rename a tmux-style session by its zero-based index. Names are capped at 8"
+                + " characters; an empty name clears the label.",
+            schemaObject()
+                .withInteger("index", "Zero-based session index", 0, 64, 0, true)
+                .withString("name",
+                    "New name, capped at 8 characters. Empty clears the label.", true)
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_SESSION, R.string.tool_session_rename_at_index, 0, null, REQUIRES_SESSION);
         // Reset clears the emulator state and scrollback; the shell survives.
         // The space bar's north swipe opens this, but that lives in the keyboard layout file
         // as a tool: key rather than in a binding here — see bottom_row.xml.

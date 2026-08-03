@@ -1126,6 +1126,8 @@
     <string name="palette_category_app">App</string>
     <string name="palette_category_apps">Apps</string>
     <string name="palette_category_sessions">Sessions</string>
+    <string name="palette_session_rename">Rename %1$s</string>
+    <string name="palette_session_rename_hint">Type a new name, up to 8 characters</string>
     <string name="palette_confirm_title">Run %1$s?</string>
     <string name="palette_confirm_run">Run</string>
     <string name="palette_action_failed">Could not run %1$s</string>
@@ -1174,6 +1176,7 @@
     <string name="tool_window_select">Switch to window</string>
     <string name="tool_window_rename">Rename window session</string>
     <string name="tool_session_rename">Rename session</string>
+    <string name="tool_session_rename_at_index">Rename session by index</string>
     <string name="tool_terminal_reset">Reset terminal</string>
     <string name="tool_appearance_set_wallpaper">Set wallpaper</string>
     <string name="tool_appearance_toggle_wallpaper">Toggle wallpaper</string>

@@ -9581,7 +9581,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (index < 0 || index >= mWSessions.size()) return false;
         mWSessions.get(index).name = WindowSessionName.normalize(name);
         rebuildDrawerSessions();
+        refreshSessionsPanel();
         return true;
+    }
+
+    /**
+     * The label a browser-indexed session actually kept. WindowSessionName caps it, so what was
+     * asked for and what was stored can differ; callers that report back read this.
+     */
+    @Nullable
+    public String getBrowserSessionName(int index) {
+        if (index < 0 || index >= mWSessions.size()) return null;
+        return mWSessions.get(index).name;
     }
 
     /** Close any browser-selected session, without first activating it. */

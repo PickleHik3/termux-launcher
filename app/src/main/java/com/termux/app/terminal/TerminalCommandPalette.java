@@ -141,14 +141,17 @@ public final class TerminalCommandPalette {
     }
 
     /**
-     * One row per live session, activating it by index. Uses the session browser's projection
+     * Two rows per live session: activate it, and rename it. Uses the session browser's projection
      * so the palette and the sessions panel always agree on what exists.
+     *
+     * <p>Doubling the section is deliberate. At one to four sessions it costs nothing, and it is
+     * what makes "rename session 2" findable by typing — which is the palette's whole point.
      */
     @NonNull
     static List<CommandPaletteFilter.Entry> buildSessionEntries(@NonNull TermuxActivity activity) {
         List<SessionBrowserModel.Session> sessions = activity.getSessionBrowserSessions();
         if (sessions.isEmpty()) return Collections.emptyList();
-        List<CommandPaletteFilter.Entry> entries = new ArrayList<>(sessions.size());
+        List<CommandPaletteFilter.Entry> entries = new ArrayList<>(sessions.size() * 2);
         for (SessionBrowserModel.Session session : sessions) {
             JSONObject arguments = new JSONObject();
             try {
@@ -172,8 +175,43 @@ public final class TerminalCommandPalette {
                 false,
                 LauncherToolRegistry.ToolRisk.LOW,
                 arguments));
+            entries.add(renameSessionEntry(session.index,
+                activity.getString(R.string.palette_session_rename, title),
+                activity.getString(R.string.palette_session_rename_hint)));
         }
         return entries;
+    }
+
+    /**
+     * The rename row for one session: {@code index} is supplied by the row, {@code name} is the
+     * argument the palette prompts for. Two required arguments are not a problem here —
+     * {@link #promptableArgument} is only consulted for tool projections in {@link #buildEntries},
+     * while a hand-built row sets {@code argumentName} directly and the controller's
+     * {@code withArgument} merges the typed value into the arguments the row already carries.
+     *
+     * <p>Pure and static so the row shape is testable without an activity.
+     */
+    @NonNull
+    static CommandPaletteFilter.Entry renameSessionEntry(int index, @NonNull String title,
+                                                         @NonNull String subtitle) {
+        JSONObject arguments = new JSONObject();
+        try {
+            arguments.put("index", index);
+        } catch (JSONException ignored) {
+        }
+        return new CommandPaletteFilter.Entry(
+            LauncherToolRegistry.TOOL_SESSION_RENAME_AT_INDEX,
+            title,
+            subtitle,
+            CATEGORY_SESSIONS,
+            Collections.<String>emptyList(),
+            true,
+            null,
+            false,
+            LauncherToolRegistry.ToolRisk.LOW,
+            arguments,
+            "name",
+            null);
     }
 
     /**

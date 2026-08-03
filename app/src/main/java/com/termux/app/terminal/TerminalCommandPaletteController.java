@@ -898,8 +898,13 @@ public final class TerminalCommandPaletteController
         return pending.argumentName;
     }
 
+    /**
+     * The typed value merged into whatever arguments the row already carries — which is what lets a
+     * per-session rename row supply its own index and still be prompted for a name. Package-private
+     * for the test that pins exactly that.
+     */
     @NonNull
-    private static CommandPaletteFilter.Entry withArgument(
+    static CommandPaletteFilter.Entry withArgument(
         @NonNull CommandPaletteFilter.Entry entry, @NonNull String value) {
         JSONObject arguments = new JSONObject();
         try {

@@ -57,7 +57,27 @@ public class LauncherToolRegistryTest {
             assertNotNull(name, tool.category);
             assertTrue(name, tool.hasUiMetadata());
         }
-        assertEquals(57, registry.getUiTools().size());
+        assertEquals(58, registry.getUiTools().size());
+    }
+
+    @Test
+    public void sessionRenameAtIndex_requiresIndexBeforeNameAndClaimsNoStroke() {
+        LauncherToolRegistry.ToolMetadata tool = registry.getTool("session.rename_at_index");
+        assertNotNull(tool);
+
+        // Positional invocation fills required arguments in order, so `session.rename_at_index 1
+        // work` has to mean session 1 named "work" and not the reverse.
+        JSONArray required = tool.schema.optJSONArray("required");
+        assertNotNull(required);
+        assertEquals(2, required.length());
+        assertEquals("index", required.optString(0));
+        assertEquals("name", required.optString(1));
+
+        // No default binding: renaming an arbitrary session is a palette action, and Ctrl+Alt+R is
+        // already split between the two rename prompts.
+        assertTrue(tool.defaultBindings.isEmpty());
+        assertEquals(LauncherToolRegistry.ToolExecutor.TERMINAL, tool.executor);
+        assertTrue(tool.hasUiMetadata());
     }
 
     @Test

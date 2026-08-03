@@ -96,6 +96,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_WINDOW_SELECT = "window.select";
     public static final String TOOL_WINDOW_RENAME = "window.rename";
     public static final String TOOL_SESSION_RENAME = "session.rename";
+    public static final String TOOL_SESSION_RENAME_AT_INDEX = "session.rename_at_index";
     public static final String TOOL_TERMINAL_RESET = "terminal.reset";
     public static final String TOOL_APPEARANCE_SET_WALLPAPER = "appearance.set_wallpaper";
     public static final String TOOL_APPEARANCE_TOGGLE_WALLPAPER = "appearance.toggle_wallpaper";
@@ -201,6 +202,7 @@ public final class TerminalActionDispatcher {
             case TOOL_WINDOW_SELECT:
             case TOOL_WINDOW_RENAME:
             case TOOL_SESSION_RENAME:
+            case TOOL_SESSION_RENAME_AT_INDEX:
             case TOOL_TERMINAL_RESET:
             case TOOL_APPEARANCE_SET_WALLPAPER:
             case TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT:
@@ -667,6 +669,24 @@ public final class TerminalActionDispatcher {
                     String sessionName = arguments.optString("name", "").trim();
                     if (!renameClient.renameCurrentSessionTo(sessionName)) return noSession(toolName);
                     return ok().put("name", sessionName.isEmpty() ? JSONObject.NULL : sessionName);
+                }
+
+                case TOOL_SESSION_RENAME_AT_INDEX: {
+                    if (!arguments.has("index")) return error(400, "bad_request", "Missing 'index'");
+                    // An explicit empty name clears the label; only an absent key is an error.
+                    if (!arguments.has("name")) return error(400, "bad_request", "Missing 'name'");
+                    int sessionIndex = arguments.optInt("index", -1);
+                    // Deliberately the browser index, not the drawer index: rebuildDrawerSessions
+                    // skips window-less sessions, so the two can diverge.
+                    if (!activity.renameBrowserSession(sessionIndex,
+                            arguments.optString("name", ""))) {
+                        return error(400, "bad_request", "No session at index " + sessionIndex);
+                    }
+                    // Report the stored name: WindowSessionName caps it, so what was asked for
+                    // and what was kept can differ.
+                    String storedName = activity.getBrowserSessionName(sessionIndex);
+                    return ok().put("index", sessionIndex)
+                        .put("name", storedName == null ? JSONObject.NULL : storedName);
                 }
 
                 case TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD:
