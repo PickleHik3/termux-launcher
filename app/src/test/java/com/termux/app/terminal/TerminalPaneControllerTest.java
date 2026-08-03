@@ -560,6 +560,18 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
+    public void pillBackdrop_isDrawnOnlyForTheExpandedActionStrip() {
+        // A collapsed pill drew an opaque 48x18dp slab of surface panel across the top of the
+        // float, which read as a black border. The grip alone is the affordance there.
+        assertEquals(0, TerminalPaneController.pillBackdropAlpha(false, true));
+        assertEquals(0, TerminalPaneController.pillBackdropAlpha(false, false));
+        assertTrue(TerminalPaneController.pillBackdropAlpha(true, true) > 0);
+        assertTrue(TerminalPaneController.pillBackdropAlpha(true, false) > 0);
+        assertTrue(TerminalPaneController.pillBackdropAlpha(true, true)
+            >= TerminalPaneController.pillBackdropAlpha(true, false));
+    }
+
+    @Test
     public void isScratchpadShellName_acceptsBothSpellingsAndNothingElse() {
         assertTrue(TerminalPaneController.isScratchpadShellName(
             TerminalPaneController.SCRATCHPAD_SESSION_NAME));

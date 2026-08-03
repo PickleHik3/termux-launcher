@@ -2468,18 +2468,34 @@ public class TerminalPaneController {
             int primary = MaterialColors.getColor(getContext(),
                 com.termux.shared.R.attr.termuxColorPrimary,
                 ContextCompat.getColor(getContext(), R.color.termux_primary));
-            int panel = MaterialColors.getColor(getContext(),
-                com.termux.shared.R.attr.termuxColorSurfacePanel,
-                ContextCompat.getColor(getContext(), R.color.termux_surface_panel));
+            // One step lighter than the float's own slab, so the action strip reads as chrome
+            // sitting on the float rather than as a hole punched through it.
+            int panelHigh = MaterialColors.getColor(getContext(),
+                com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+                ContextCompat.getColor(getContext(), R.color.termux_surface_panel_high));
+            int outlineVariant = MaterialColors.getColor(getContext(),
+                com.termux.shared.R.attr.termuxColorOutlineVariant,
+                ContextCompat.getColor(getContext(), R.color.termux_outline_variant));
             boolean active = mActiveWindow != null && mActiveWindow.active == mLeaf;
             RectF pill = pillRect();
             float radius = pill.height() / 2f;
-            mChromePaint.setStyle(Paint.Style.FILL);
-            mChromePaint.setColor(panel);
-            canvas.drawRoundRect(pill, radius, radius, mChromePaint);
+            int backdropAlpha = pillBackdropAlpha(mPillExpanded, active);
+            if (backdropAlpha > 0) {
+                mChromePaint.setStyle(Paint.Style.FILL);
+                mChromePaint.setColor(ColorUtils.setAlphaComponent(panelHigh, backdropAlpha));
+                canvas.drawRoundRect(pill, radius, radius, mChromePaint);
+                mChromePaint.setStyle(Paint.Style.STROKE);
+                mChromePaint.setStrokeWidth(Math.max(1f, dp(1f)));
+                mChromePaint.setColor(ColorUtils.setAlphaComponent(outlineVariant, 0x66));
+                canvas.drawRoundRect(pill, radius, radius, mChromePaint);
+            }
             int chromeAlpha = active ? 200 : 90;
+            mChromePaint.setStyle(Paint.Style.FILL);
             if (!mPillExpanded) {
-                mChromePaint.setColor(ColorUtils.setAlphaComponent(primary, chromeAlpha));
+                // With no slab behind it the grip is the whole affordance, so an inactive float's
+                // grip needs a higher floor than the resize chevrons to read on busy output.
+                mChromePaint.setColor(ColorUtils.setAlphaComponent(primary,
+                    Math.max(chromeAlpha, 120)));
                 canvas.drawRoundRect(new RectF(pill.centerX() - dp(14),
                     pill.centerY() - dp(1.8f), pill.centerX() + dp(14),
                     pill.centerY() + dp(1.8f)), dp(1.8f), dp(1.8f), mChromePaint);
@@ -2526,6 +2542,17 @@ public class TerminalPaneController {
             canvas.drawLine(right - dp(5), bottom, right, bottom - dp(5), mChromePaint);
             mChromePaint.setStrokeCap(Paint.Cap.BUTT);
         }
+    }
+
+    /**
+     * Alpha of the slab drawn behind the floating pane's grab pill. Zero while collapsed: there is
+     * nothing to read against but the grip itself, and a filled capsule at that size looks like a
+     * black border across the top of the float. Expanded, the close and dock glyphs do need a
+     * surface, and an inactive float's is a touch more transparent so focus stays legible.
+     */
+    static int pillBackdropAlpha(boolean expanded, boolean activeFloat) {
+        if (!expanded) return 0;
+        return activeFloat ? 0xF0 : 0xD0;
     }
 
     // --- Tree helpers ---
