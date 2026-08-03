@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Bind a key to an app from the palette** — long-press an app row (or `Ctrl+Alt+Enter` on the focused one) and press a combination; it is written to `~/.termux/termux-launcher-bindings.conf` with your comments and ordering preserved, and takes effect immediately. App rows also show the chord already bound to them, and are searchable by it.
+- **Rename any session from the palette** — a Rename row per session, so renaming a session other than the current one needs neither the browser nor the panel (`session.rename_at_index`).
+- **Working indication** — a sweeping underline on the pill of each window whose shell is producing output, plus three pulsing dots in the status row for the current session. Unprivileged, a silent foreground process (`sleep 300`, an idle editor) reads as not working.
+- **Settings cog in the status row**, opening Terminal & status settings directly.
+- **Rename and close buttons on sessions-panel rows** — the long press still works, but it was the only way to know it was possible.
+
+### Changed
+
+- Session names are capped at 8 characters instead of 5, and the scratchpad shell is named `scratch`; an existing scratchpad is re-adopted rather than duplicated.
+- The transient notice chip moved to the top-right, is quieter, and now carries every terminal notice — window positions, "no session to split", the max-terminals refusal — which were previously stock toasts. Creating a pane reports the new pane count.
+
+### Fixed
+
+- **Closing a pane no longer leaves its background jobs running.** Teardown hangs up the shell's whole process group and escalates to a kill only if the leader is still alive, so `sleep 300 &` dies with the pane it was started from. `nohup` and `setsid` still detach, as intended.
+- **The scratchpad no longer shrinks every time the keyboard opens and closes**, and no longer paints under the dock.
+- **Showing or hiding a float no longer reflows the terminal behind it** — the frame-line owner, and so the pane inset, no longer depends on whether a float is present, and floats are attached without rebuilding the tiled tree.
+- **The CPU card keeps working.** A failed privileged read no longer wipes the process list, a wedged command no longer stops sampling for good, output is drained concurrently so a large process list cannot deadlock the read, sampling resumes after leaving the app, and a stale sample is labelled rather than blanked.
+- **Swipe-to-reply opens the newest reply-capable notification** instead of only firing when an app had exactly one, and an incoming notification no longer throws away a half-typed reply.
+- The command palette's focus highlight and bottom fade stay inside its rounded corners, and its accent rim is no longer painted over.
+- The floating pane's grab pill no longer draws a near-black slab across the top of the float.
+- The sessions pop-down accounts for its own row chrome, and only autoscrolls a title that overflows by a readable amount.
+
 ## 0.2.30
 
 ### Added

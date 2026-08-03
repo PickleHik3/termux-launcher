@@ -49,7 +49,7 @@ The palette is the complete argument-free UI surface:
 |---|---|
 | Pane | Split horizontally/vertically, float or dock, cycle automatic layouts, equalize, rotate, terminate focused pane |
 | Window | Create, close, next, previous, and rename |
-| Session | Create, browse, clone with CWD, next, previous, close, and rename |
+| Session | Create, browse, clone with CWD, next, previous, close, rename, and rename any session by index |
 | Terminal | Keyboard/toolbar toggles, font size, URL picker, hints, scrollback search, prompt navigation, sharing, and reset |
 | Clipboard | Paste and copy selected text |
 | Appearance | Wallpaper picker/toggle, cursor-trail toggle, and Glass Lab |
@@ -164,12 +164,31 @@ their panes and windows. It appears only when the active launcher session change
 or window in the current session does not show it.
 
 The buttons at the top create a session, clone the current session, or save the whole terminal as a
-workspace. Each session row's overflow menu can activate, clone with CWD, rename, or close it.
+workspace. Each session row's overflow menu can activate, clone with CWD, rename, or close it. Rows
+in the pop-down sessions panel carry explicit rename and close buttons; a long press still renames.
+
+The palette lists a **Rename** row per session as well, so renaming a session other than the current
+one needs neither the browser nor the panel. Its tool id is `session.rename_at_index`, which takes a
+zero-based index and a name — note that this renames the tmux-style session that owns the windows,
+while `session.rename` renames the focused shell.
+
+Session names are capped at 8 characters, since they are displayed in the status row's session chip.
 
 Cloning intentionally starts a fresh shell at the selected pane's CWD. It does not copy the running
 process, shell environment changes, scrollback, windows, or pane layout. Closing a session terminates
 all shells it owns; closing the last session creates a fresh shell so the app is never left without
 a terminal.
+
+## Seeing which shell is working
+
+A window whose shell is producing output shows a sweeping underline on its pill, and the status row
+shows three pulsing dots while any window of the current session is working. Both read the same clock,
+so they move together, and both stop within about a second of the output stopping.
+
+The signal is terminal output, which is what tmux's `monitor-activity` watches. With a privileged
+backend available it is unioned with "the pane has a foreground process", which catches a command
+that runs silently. Without one, a silent foreground process — `sleep 300`, an idle editor — reads as
+not working.
 
 ## Save and restore workspaces
 
@@ -310,6 +329,22 @@ map ctrl+alt+shift+m app.launch Maps
 
 Installed apps also appear in the command palette under **Apps**: the most-used ones with no query,
 and the full ranked match list while filtering. Selecting a row runs `app.launch`.
+
+An app row shows the chord already bound to it, so the palette doubles as the list of what is bound —
+and because the shortcut column is searchable, typing `ctrl+alt+w` finds the row it launches.
+
+You do not have to edit the file to bind one. **Long-press an app row** (or press `Ctrl+Alt+Enter` on
+the focused one) and the palette waits for a key combination: `⏎` saves, `⌫` clears, `Esc` cancels.
+The binding is written to `~/.termux/termux-launcher-bindings.conf` under a managed header, with your
+comments, blank lines and ordering preserved, and takes effect immediately.
+
+Three details are worth knowing:
+
+- A bare key is refused. Binding plain `w` would swallow typing that character, so the overlay
+  requires Ctrl, Alt, or Shift.
+- `⏎`, `Esc` and `⌫` are the overlay's own keys and cannot be captured. Bind those in the file.
+- If the combination is already bound, the overlay names what holds it and saves anyway — mentioning
+  a sequence replaces the defaults for it, which is what the file has always meant.
 
 ### Actions on in-app keyboard keys
 
