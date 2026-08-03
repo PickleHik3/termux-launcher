@@ -1322,6 +1322,7 @@
     <string name="sessions_panel_shell">shell</string>
     <string name="sessions_panel_close_session">Close session %1$d</string>
     <string name="sessions_panel_rename_session">Rename session %1$d</string>
+    <string name="termux_status_settings_content_description">Terminal and status settings</string>
     <string name="palette_unavailable_no_selection">Unavailable: no text selected</string>
     <string name="palette_unavailable_no_session">Unavailable: no active session</string>
 

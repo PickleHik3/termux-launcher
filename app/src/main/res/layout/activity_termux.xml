@@ -237,6 +237,20 @@
                                 android:layout_marginStart="3dp"
                                 android:visibility="gone"
                                 android:contentDescription="@string/termux_status_widget_weather_content_description" />
+
+                            <!-- No dot separator before this: dots punctuate readings, and this is
+                                 an action. match_parent + center keeps the glyph optically centred
+                                 as the row breathes between its collapsed and expanded heights,
+                                 without participating in applyInteractiveStatusRowGeometry(). -->
+                            <androidx.appcompat.widget.AppCompatImageButton
+                                android:id="@+id/terminal_status_settings"
+                                android:layout_width="18dp"
+                                android:layout_height="match_parent"
+                                android:layout_marginStart="4dp"
+                                android:background="@null"
+                                android:scaleType="center"
+                                android:src="@drawable/ic_status_bar_settings"
+                                android:contentDescription="@string/termux_status_settings_content_description" />
                         </LinearLayout>
                     </LinearLayout>
 

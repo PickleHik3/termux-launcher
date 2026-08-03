@@ -8970,6 +8970,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 R.string.termux_style_preferences_title));
     }
 
+    /** Destination of the status row's cog: the page that owns everything the row displays. */
+    private void openTerminalStatusSettings() {
+        ActivityUtils.startActivity(this,
+            SettingsActivity.createFragmentIntent(this,
+                com.termux.app.fragments.settings.termux.TerminalStatusPreferencesFragment.class,
+                R.string.settings_destination_terminal_status));
+    }
+
     private void openAppsBarSettings() {
         ActivityUtils.startActivity(this,
             SettingsActivity.createFragmentIntent(this,
@@ -10406,6 +10414,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 weather.setOnClickListener(v -> toggleWeatherCard(v));
             }
         }
+        androidx.appcompat.widget.AppCompatImageButton settings =
+            findViewById(R.id.terminal_status_settings);
+        if (settings != null) {
+            // Always visible while the status row is: applyTopStatusBarInteractiveHeight() only
+            // fades terminal_top_widget_area, so the row itself is opaque in both swipe states and
+            // collapsed is the default. Deliberately quieter than the accent-tinted readings
+            // beside it — it is chrome, not a value. Re-tinted every pass so theme changes take.
+            androidx.core.widget.ImageViewCompat.setImageTintList(settings,
+                android.content.res.ColorStateList.valueOf(
+                    androidx.core.graphics.ColorUtils.setAlphaComponent(
+                        com.google.android.material.color.MaterialColors.getColor(this,
+                            com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+                            androidx.core.content.ContextCompat.getColor(this,
+                                R.color.termux_on_surface_variant)), 152)));
+            if (settings.getTag() == null) {
+                settings.setTag("wired");
+                settings.setOnClickListener(v -> openTerminalStatusSettings());
+            }
+        }
+
         if (cpuRamDot != null) {
             boolean show = cpuOn && (ramOn || weatherOn);
             cpuRamDot.setVisibility(show ? View.VISIBLE : View.GONE);
