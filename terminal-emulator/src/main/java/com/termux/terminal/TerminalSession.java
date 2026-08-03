@@ -280,15 +280,34 @@ public final class TerminalSession extends TerminalOutput {
     }
 
     /**
-     * Finish this terminal session by sending SIGKILL to the shell.
+     * Finish this terminal session by hanging up the shell's whole process group, then killing it if
+     * it is still there.
+     *
+     * <p>Signalling the group rather than the single pid is what stops a pane's background jobs
+     * outliving it: the native child setsid()s before opening the slave pty, so its pid is its own
+     * group leader and every descendant inherits the group. All six kill sites funnel through here
+     * and every one of them wants group semantics — including TermuxSession.killIfExecuting, whose
+     * background RunCommand shells are setsid'd the same way — so no call site changes.
+     *
+     * <p>Safe from MSG_PROCESS_EXITED, the UI and TermuxService alike: the escalation is posted to
+     * the main looper, and mShellPid is set to -1 by cleanupResources on that same thread.
      */
     public void finishIfRunning() {
-        if (isRunning()) {
-            try {
-                Os.kill(mShellPid, OsConstants.SIGKILL);
-            } catch (ErrnoException e) {
-                Logger.logWarn(mClient, LOG_TAG, "Failed sending SIGKILL: " + e.getMessage());
-            }
+        if (!isRunning()) return;
+        ShellTerminator.terminate(mShellPid, OsConstants.SIGHUP, OsConstants.SIGKILL,
+            this::sendSignal, mMainThreadHandler::postDelayed, () -> mShellPid);
+    }
+
+    private boolean sendSignal(int pid, int signal) {
+        try {
+            // A negative pid is plain POSIX kill(2), which bionic passes straight through, so the
+            // process-group form needs no JNI of its own.
+            Os.kill(pid, signal);
+            return true;
+        } catch (ErrnoException e) {
+            Logger.logWarn(mClient, LOG_TAG,
+                "Failed sending signal " + signal + " to " + pid + ": " + e.getMessage());
+            return false;
         }
     }
 
