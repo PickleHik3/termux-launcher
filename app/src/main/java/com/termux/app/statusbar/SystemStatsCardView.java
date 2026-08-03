@@ -107,7 +107,12 @@ public final class SystemStatsCardView extends LinearLayout {
     public void bind(@NonNull SystemStatsController.Stats stats) {
         String load = stats.load1 >= 0 ? String.format(Locale.ROOT, "  load %.2f", stats.load1) : "";
         String cpuPct = stats.cpuPercent >= 0 ? stats.cpuPercent + "%" : "--";
-        mCpuHeader.setText(String.format(Locale.ROOT, "CPU  %s  ·  %d cores%s", cpuPct, stats.cores, load));
+        // Say the values are old rather than blank them: a blank reading is indistinguishable from
+        // a reading of zero, and the last good numbers are still worth showing.
+        String staleness = stats.stale ? "  ·  stale" : "";
+        mCpuHeader.setText(String.format(Locale.ROOT, "CPU  %s  ·  %d cores%s%s",
+            cpuPct, stats.cores, load, staleness));
+        mCpuHeader.setAlpha(stats.stale ? 0.7f : 1f);
 
         mCoreColumn.removeAllViews();
         if (stats.corePercent.length > 0) {
@@ -164,6 +169,8 @@ public final class SystemStatsCardView extends LinearLayout {
         }
 
         if (stats.top.isEmpty()) {
+            // Only ever hidden because nothing has been sampled yet; a failed read now keeps the
+            // previous list, so this no longer flickers the section away mid-session.
             mTopHeader.setVisibility(GONE);
             mProcessScroll.setVisibility(GONE);
         } else {

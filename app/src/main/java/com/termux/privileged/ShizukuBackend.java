@@ -114,7 +114,7 @@ public class ShizukuBackend implements PrivilegedBackend {
                 cleanup();
                 return false;
             }
-        });
+        }, PrivilegedExecutors.commands());
     }
     
     @Override
@@ -213,7 +213,7 @@ public class ShizukuBackend implements PrivilegedBackend {
                 Log.e(TAG, "Failed to get installed packages", e);
                 return List.of();
             }
-        });
+        }, PrivilegedExecutors.commands());
     }
     
     @Override
@@ -246,7 +246,7 @@ public class ShizukuBackend implements PrivilegedBackend {
                 Log.e(TAG, "Failed to install package: " + apkPath, e);
                 return false;
             }
-        });
+        }, PrivilegedExecutors.commands());
     }
     
     @Override
@@ -279,7 +279,7 @@ public class ShizukuBackend implements PrivilegedBackend {
                 Log.e(TAG, "Failed to uninstall package: " + packageName, e);
                 return false;
             }
-        });
+        }, PrivilegedExecutors.commands());
     }
     
     @Override
@@ -313,7 +313,7 @@ public class ShizukuBackend implements PrivilegedBackend {
                 Log.e(TAG, "Failed to set component enabled: " + componentName, e);
                 return false;
             }
-        });
+        }, PrivilegedExecutors.commands());
     }
     
     @Override
@@ -335,7 +335,7 @@ public class ShizukuBackend implements PrivilegedBackend {
                 Log.e(TAG, "Failed to execute command: " + command, e);
                 return "Error: " + e.getMessage();
             }
-        });
+        }, PrivilegedExecutors.commands());
     }
     
     @Override

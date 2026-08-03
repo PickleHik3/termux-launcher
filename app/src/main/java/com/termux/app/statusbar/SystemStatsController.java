@@ -4,6 +4,8 @@ import android.app.ActivityManager;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -62,11 +64,19 @@ public final class SystemStatsController {
         public long memTotalKb, memUsedKb, memAvailKb, memFreeKb, buffersKb, cachedKb;
         public long swapTotalKb, swapFreeKb;
         @NonNull public List<Proc> top = new ArrayList<>();
+        /**
+         * True when the most recent sample failed or timed out, so the values on screen are the last
+         * good ones. Surfaced rather than hidden: blanking a reading is indistinguishable from a
+         * reading of zero.
+         */
+        public boolean stale;
     }
 
     public interface Listener {
         void onStatsUpdated(@NonNull Stats stats);
     }
+
+    private static final String LOG_TAG = "SystemStatsController";
 
     private static final String M_STAT = "@@STAT";
     private static final String M_MEM = "@@MEM";
@@ -83,6 +93,13 @@ public final class SystemStatsController {
     private long mIntervalMs = 4000L;
     private boolean mWantTop;
     private volatile boolean mInFlight;
+    /** When the in-flight request was started, for the watchdog. Main thread only. */
+    private long mInFlightStartedAtMs;
+    /**
+     * Bumped whenever a request is abandoned, so a late reply from a wedged command cannot corrupt
+     * the CPU delta afterwards. Written and read on the main thread only.
+     */
+    private int mSampleGeneration;
 
     // Previous CPU tick totals per line ("cpu", "cpu0", ...) for delta-based utilisation.
     @Nullable private long[] mPrevTotal;
@@ -109,8 +126,11 @@ public final class SystemStatsController {
     public void start(long intervalMs, boolean wantTop) {
         mIntervalMs = Math.max(1000L, intervalMs);
         mWantTop = wantTop;
-        if (mRunning) return;
         mRunning = true;
+        // Re-post rather than return early when already running: retuning has to take effect now.
+        // Opening the card drops the interval from 4s to 1.5s, and waiting out the old delay first
+        // made the card sit empty for seconds.
+        mMainHandler.removeCallbacks(mTick);
         mMainHandler.post(mTick);
     }
 
@@ -131,25 +151,57 @@ public final class SystemStatsController {
     private void sampleOnce() {
         // Memory: always available and cheap.
         readActivityManagerMemory();
-        if (mInFlight) {
+        long now = SystemClock.uptimeMillis();
+        if (!shouldStartSample(mInFlight, now, mInFlightStartedAtMs, sampleTimeoutMs())) {
             publish();
             return;
+        }
+        if (mInFlight) {
+            // The previous request is past its deadline. Abandon it — a new generation means its
+            // reply, if it ever arrives, is ignored rather than folded into the CPU delta.
+            mSampleGeneration++;
+            mLatest.stale = true;
         }
         PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
         if (manager.isPrivilegedAvailable()) {
             mInFlight = true;
+            mInFlightStartedAtMs = now;
             final boolean wantTop = mWantTop;
+            final int generation = mSampleGeneration;
             manager.executeCommand(buildCommand(wantTop)).whenComplete((output, error) -> {
-                if (error == null && output != null) parsePrivileged(output, wantTop);
                 mMainHandler.post(() -> {
+                    if (generation != mSampleGeneration) return;   // abandoned; do not corrupt state
                     mInFlight = false;
+                    if (error != null || output == null) {
+                        mLatest.stale = true;
+                        Log.w(LOG_TAG, "Privileged stats read failed", error);
+                    } else {
+                        mLatest.stale = !parsePrivileged(output, wantTop);
+                    }
                     publish();
                 });
             });
         } else {
             readDirectFallback();
+            mLatest.stale = false;
             publish();
         }
+    }
+
+    /**
+     * Whether a new sample may start. A request that has outlived its deadline is treated as gone:
+     * without this a single wedged privileged command left {@code mInFlight} true forever and the
+     * card simply stopped updating.
+     */
+    static boolean shouldStartSample(boolean inFlight, long nowMs, long startedAtMs,
+                                     long timeoutMs) {
+        if (!inFlight) return true;
+        return nowMs - startedAtMs >= timeoutMs;
+    }
+
+    private long sampleTimeoutMs() {
+        // Three intervals, floored: long enough that a slow-but-working device is not cut off.
+        return Math.max(6000L, mIntervalMs * 3);
     }
 
     private void publish() {
@@ -173,7 +225,12 @@ public final class SystemStatsController {
         return sb.toString();
     }
 
-    private void parsePrivileged(@NonNull String output, boolean wantTop) {
+    /**
+     * @return true when the output actually contained something. Backends report failure as an
+     *     "Error: ..." string, which parses to zero sections; treating that as a successful sample
+     *     is how one failed read used to wipe good values.
+     */
+    private boolean parsePrivileged(@NonNull String output, boolean wantTop) {
         String section = "";
         List<String> statLines = new ArrayList<>();
         List<String> memLines = new ArrayList<>();
@@ -203,6 +260,13 @@ public final class SystemStatsController {
         if (wantTop) {
             parseProcessRows(psLines, topLines);
         }
+        boolean parsedAnything = !statLines.isEmpty() || !memLines.isEmpty() || loadLine != null
+            || !topLines.isEmpty() || !psLines.isEmpty();
+        if (!parsedAnything) {
+            Log.w(LOG_TAG, "Privileged stats read produced nothing: "
+                + output.substring(0, Math.min(120, output.length())));
+        }
+        return parsedAnything;
     }
 
     private void parseCpu(@NonNull List<String> lines) {
@@ -275,6 +339,10 @@ public final class SystemStatsController {
      */
     private void parseProcessRows(@NonNull List<String> psLines,
                                   @NonNull List<String> topLines) {
+        // Never wipe good data. Backends report failure as an "Error: ..." string, so a failed read
+        // arrives here as two empty lists — and the tail of this method assigns mLatest.top
+        // unconditionally, which is what made the whole process list disappear.
+        if (psLines.isEmpty() && topLines.isEmpty()) return;
         List<Proc> sampledCpu = parseTopRows(topLines);
         Map<Integer, ProcessIdentity> identities = parseProcessIdentities(psLines);
         Set<Integer> seen = new HashSet<>();
@@ -318,7 +386,17 @@ public final class SystemStatsController {
         }
         seen.addAll(selected.keySet());
         mSmoothedProcessCpu.keySet().retainAll(seen);
-        mLatest.top = new ArrayList<>(selected.values());
+        mLatest.top = mergeProcessRows(mLatest.top, selected.values());
+    }
+
+    /**
+     * The list to show: the freshly selected rows, or the previous ones when this sample produced
+     * nothing. Static and Android-free so the "keep what we had" rule is unit-testable.
+     */
+    @NonNull
+    static List<Proc> mergeProcessRows(@NonNull List<Proc> previous,
+                                       @NonNull java.util.Collection<Proc> selected) {
+        return selected.isEmpty() ? previous : new ArrayList<>(selected);
     }
 
     private static final class ProcessIdentity {
@@ -415,7 +493,9 @@ public final class SystemStatsController {
             if (mLatest.memTotalKb > 0 && mLatest.memAvailKb > 0) {
                 mLatest.memUsedKb = Math.max(0, mLatest.memTotalKb - mLatest.memAvailKb);
             }
-        } catch (Exception ignored) { }
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "ActivityManager memory read failed: " + e);
+        }
     }
 
     private void readDirectFallback() {
@@ -435,7 +515,9 @@ public final class SystemStatsController {
         try (BufferedReader r = new BufferedReader(new FileReader(path))) {
             String line;
             while ((line = r.readLine()) != null) out.add(line);
-        } catch (Exception ignored) { }
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "Cannot read " + path + ": " + e);
+        }
         return out;
     }
 

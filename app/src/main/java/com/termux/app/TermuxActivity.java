@@ -824,6 +824,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncTerminalWallpaperRenderingMode();
         applySeamlessStatusBackgroundModeIfNeeded();
         applyTerminalSurfaceAppearance();
+        // onStop() stops the stats sampler, and the only thing that starts it is
+        // updateStatusWidgets(), reached solely from refreshTerminalWindowBar()'s tail — which
+        // neither onStart nor onResume calls. Without this the CPU and memory readings never
+        // resumed after leaving the app and coming back.
+        updateStatusWidgets();
         syncRecentsVisibilityPolicy();
         configureBackgroundBlur(R.id.sessions_backgroundblur, R.id.sessions_background, false, mPreferences.getSessionsOpacity() / 100f, 0);
         restartAccessoryBlurHeartbeat();
@@ -10294,6 +10299,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         host.setVisibility(visible ? View.VISIBLE : View.GONE);
         if (!visible) {
             applyTerminalSurfaceAppearance();
+            // Idempotence: the widgets live inside the GONE host here, so nothing is shown either
+            // way — but updateStatusWidgets also owns starting and stopping the sampler, and
+            // skipping it would make that depend on which mode the user happens to be in.
+            updateStatusWidgets();
             return;
         }
 
