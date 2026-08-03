@@ -486,10 +486,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             return false;
         if (service.getTermuxSessionsSize() >= MAX_SESSIONS) {
             // A modal with an OK button interrupts a keyboard-driven flow for something the user
-            // can do nothing about mid-dialog. The window and pane paths already report this as a
-            // toast; match them.
-            mActivity.showToast(mActivity.getString(R.string.title_max_terminals_reached) + " — "
-                + mActivity.getString(R.string.msg_max_terminals_reached), true);
+            // can do nothing about mid-dialog. The window and pane paths report this on the notice
+            // chip; match them. This branch returns before createShellForCwd, so the same event
+            // never produces two presentations.
+            mActivity.showSessionSwitchIndicator(
+                mActivity.getString(R.string.title_max_terminals_reached) + " — "
+                    + mActivity.getString(R.string.msg_max_terminals_reached));
             return false;
         } else {
             if (workingDirectory == null) {

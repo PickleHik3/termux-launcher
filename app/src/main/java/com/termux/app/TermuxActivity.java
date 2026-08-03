@@ -9173,11 +9173,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mSessionSwitchIndicator = new com.termux.app.terminal.SessionSwitchIndicatorView(this);
         }
         if (mSessionSwitchIndicator.getParent() == null) {
-            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-            params.topMargin = Math.round(dpToPx(8));
-            host.addView(mSessionSwitchIndicator, params);
+            host.addView(mSessionSwitchIndicator,
+                com.termux.app.terminal.SessionSwitchIndicatorView.buildHostLayoutParams(this));
         }
         return mSessionSwitchIndicator;
     }
@@ -10826,10 +10823,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void splitCurrentPane(int orientation) {
         if (!isSplitPanesEnabled() || mPaneController == null) return;
         if (mTermuxService == null || mPaneController.getActiveSession() == null) {
-            showToast("No session to split", true);
+            showSessionSwitchIndicator(getString(R.string.msg_no_session_to_split));
             return;
         }
-        mPaneController.split(orientation);
+        // Successful pane creation says so too: with the notice chip carrying the refusals, silence
+        // on success would be the only unlabelled outcome.
+        if (mPaneController.split(orientation)) {
+            int panes = mPaneController.getVisiblePaneViews().size();
+            showSessionSwitchIndicator(getResources().getQuantityString(
+                R.plurals.msg_pane_count, panes, panes));
+        }
     }
 
     /** Move focus to the pane in the given arrow direction (Ctrl+Alt+arrow). No-op if none. */
@@ -10894,8 +10897,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTermuxService == null) return null;
         if (mTermuxService.getTermuxSessionsSize()
                 >= com.termux.app.terminal.TermuxTerminalSessionActivityClient.MAX_SESSIONS) {
-            showToast(getString(R.string.title_max_terminals_reached) + " — "
-                + getString(R.string.msg_max_terminals_reached), true);
+            showSessionSwitchIndicator(getString(R.string.title_max_terminals_reached) + " — "
+                + getString(R.string.msg_max_terminals_reached));
             return null;
         }
         if (cwd == null) cwd = getProperties().getDefaultWorkingDirectory();
@@ -10930,7 +10933,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mCurrentWSession.current = mCurrentWSession.windows.size() - 1;
         mPaneController.showWindow(w);
         animateTerminalWindowArrival(1);
-        showToast("Window " + (mCurrentWSession.current + 1) + "/" + mCurrentWSession.windows.size(), true);
+        showSessionSwitchIndicator(getString(R.string.msg_window_position,
+            mCurrentWSession.current + 1, mCurrentWSession.windows.size()));
         rebuildDrawerSessions();
     }
 
@@ -10961,7 +10965,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (n < 2) return;
         int target = ((mCurrentWSession.current + (forward ? 1 : -1)) % n + n) % n;
         showWindowFromBar(target);
-        showToast("Window " + (target + 1) + "/" + n, true);
+        showSessionSwitchIndicator(getString(R.string.msg_window_position, target + 1, n));
     }
 
     /** Close the whole current session (Ctrl+Alt+Shift+X): all its windows + panes. */

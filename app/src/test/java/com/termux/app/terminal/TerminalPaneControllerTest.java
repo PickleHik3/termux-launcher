@@ -560,6 +560,18 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
+    public void split_reportsWhetherAPaneWasActuallyAdded() {
+        // The caller announces the new pane count on the notice chip, so it needs to know.
+        TerminalPaneController idle = newController();
+        assertFalse(idle.split(LinearLayout.HORIZONTAL));
+
+        PaneFixture fixture = splittableFourPaneFixture();
+        int before = fixture.controller.shellsOf(fixture.window).size();
+        assertTrue(fixture.controller.split(LinearLayout.HORIZONTAL));
+        assertEquals(before + 1, fixture.controller.shellsOf(fixture.window).size());
+    }
+
+    @Test
     public void pillBackdrop_isDrawnOnlyForTheExpandedActionStrip() {
         // A collapsed pill drew an opaque 48x18dp slab of surface panel across the top of the
         // float, which read as a black border. The grip alone is the affordance there.

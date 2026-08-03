@@ -616,9 +616,13 @@ public class TerminalPaneController {
 
     // --- Pane operations (act on the active window) ---
 
-    /** Split the focused pane; new shell fills the new leaf. orientation = LinearLayout.*. */
-    public void split(int orientation) {
-        if (mActiveWindow == null || mActiveWindow.active == null) return;
+    /**
+     * Split the focused pane; new shell fills the new leaf. orientation = LinearLayout.*.
+     *
+     * @return true when a pane was actually added, so the caller can say so.
+     */
+    public boolean split(int orientation) {
+        if (mActiveWindow == null || mActiveWindow.active == null) return false;
         mMaximizedLeaf = null;
         Leaf oldLeaf = mActiveWindow.active;
         // A floating pane shares no divider, so splitting while one is focused splits the tiled
@@ -626,7 +630,7 @@ public class TerminalPaneController {
         if (mActiveWindow.floating.contains(oldLeaf)) oldLeaf = firstLeaf(mActiveWindow.root);
         String cwd = oldLeaf.session.getCwd();
         TerminalSession newSession = mHost.createShell(cwd != null ? cwd : mHost.defaultCwd());
-        if (newSession == null) return;
+        if (newSession == null) return false;
 
         Leaf newLeaf = new Leaf(newSession);
         Split split = new Split();
@@ -657,6 +661,7 @@ public class TerminalPaneController {
         }, 250);
         mHost.onActivePaneChanged();
         mHost.onTreesChanged();
+        return true;
     }
 
     /** Drop a finished shell's pane. Returns one of FINISHED_*. */

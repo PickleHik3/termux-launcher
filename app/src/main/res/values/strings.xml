@@ -265,6 +265,12 @@
     <string name="title_share_selected_text_with">Send selected text to:</string>
 
     <string name="action_reset_terminal">Reset</string>
+    <string name="msg_no_session_to_split">No session to split</string>
+    <string name="msg_window_position">Window %1$d/%2$d</string>
+    <plurals name="msg_pane_count">
+        <item quantity="one">%d pane</item>
+        <item quantity="other">%d panes</item>
+    </plurals>
     <string name="msg_terminal_reset">Terminal reset</string>
 
     <string name="action_kill_process">Kill process (%d)</string>
