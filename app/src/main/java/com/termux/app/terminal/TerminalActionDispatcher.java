@@ -893,7 +893,19 @@ public final class TerminalActionDispatcher {
     @Nullable
     private static LauncherAppEntry resolveApp(@NonNull TermuxActivity activity,
                                                @NonNull String query) {
-        LauncherAppDataProvider provider = LauncherAppDataProvider.getInstance(activity);
+        return resolveApp(LauncherAppDataProvider.getInstance(activity), query, true);
+    }
+
+    /**
+     * As above, against a caller-supplied provider. The palette resolves the chords it advertises
+     * through this same method — resolution has to be identical, or a row could promise a stroke
+     * that launches a different app — but passes {@code allowBlocking = false}, because the palette
+     * must never block the main thread on a PackageManager sweep.
+     */
+    @Nullable
+    static LauncherAppEntry resolveApp(@NonNull LauncherAppDataProvider provider,
+                                       @NonNull String query, boolean allowBlocking) {
+        if (!provider.hasLoadedApps() && !allowBlocking) return null;
         List<LauncherAppEntry> apps = provider.hasLoadedApps()
             ? provider.getAllApps()
             : provider.getAllAppsBlocking();

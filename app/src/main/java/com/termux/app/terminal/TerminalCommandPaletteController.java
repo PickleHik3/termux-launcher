@@ -151,6 +151,12 @@ public final class TerminalCommandPaletteController
      * Rebuilt with the rows so a stale icon can never outlive the app row it belonged to.
      */
     private final Map<String, Drawable> mRowIcons = new HashMap<>();
+    /**
+     * Stable id to the chord bound to that app. Built once per show() and again when a cold app
+     * cache lands or a capture writes a new binding — never per keystroke, since resolving it walks
+     * every binding in the config.
+     */
+    @NonNull private Map<String, String> mAppShortcuts = java.util.Collections.emptyMap();
 
     private Mode mMode = Mode.LIST;
     private String mQuery = "";
@@ -205,6 +211,7 @@ public final class TerminalCommandPaletteController
         mFocus = 0;
         mListRevealed = false;
         mOpen = true;
+        mAppShortcuts = TerminalCommandPalette.buildAppShortcuts(mAppProvider);
 
         mView.refreshPalette();
         mView.setConfirmation(null, 0f, 0f);
@@ -216,6 +223,8 @@ public final class TerminalCommandPaletteController
         // the load lands.
         if (!mAppProvider.hasLoadedApps())
             mAppProvider.warmAsync(() -> {
+                // The chords could not resolve against a cold cache, so rebuild the index too.
+                mAppShortcuts = TerminalCommandPalette.buildAppShortcuts(mAppProvider);
                 if (mOpen && mMode == Mode.LIST) rebuildRows();
             });
 
@@ -504,8 +513,8 @@ public final class TerminalCommandPaletteController
         if (!mListRevealed && mQuery.trim().isEmpty()) return;
         List<CommandPaletteFilter.Entry> ranked =
             new ArrayList<>(CommandPaletteFilter.filterAndRank(mEntries, mQuery));
-        ranked.addAll(TerminalCommandPalette.buildAppEntries(mAppProvider, mAppUsageStats, mQuery,
-            mRowIcons));
+        ranked.addAll(TerminalCommandPalette.buildAppEntries(mActivity, mAppProvider,
+            mAppUsageStats, mQuery, mAppShortcuts, mRowIcons));
         if (ranked.isEmpty()) {
             rows.add(CommandPaletteView.Row.notice(
                 mActivity.getString(R.string.palette_no_match, upper(mQuery))));

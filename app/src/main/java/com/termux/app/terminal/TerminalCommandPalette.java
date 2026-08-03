@@ -219,26 +219,20 @@ public final class TerminalCommandPalette {
      * the palette must never block the main thread on a PackageManager sweep.
      * Without a query the rows are usage-ranked, so the apps actually used land on
      * top; with one, the launcher's own fuzzy ranking decides.
+     *
+     * <p>{@code shortcuts} maps stable id to the chord already bound to that app, so a row can show
+     * what will launch it — and, because {@code score()} matches an entry's bindings, so the row is
+     * findable by typing its chord. Additionally fills {@code iconsOut} with the artwork for the
+     * rows it returns, keyed by {@link CommandPaletteFilter.Entry#iconKey}; only these rows carry
+     * icons, so the map stays as short as the Apps section rather than the whole installed set.
      */
     @NonNull
     static List<CommandPaletteFilter.Entry> buildAppEntries(
-        @NonNull LauncherAppDataProvider provider,
-        @NonNull LauncherUsageStatsStore usageStats,
-        @NonNull String query
-    ) {
-        return buildAppEntries(provider, usageStats, query, null);
-    }
-
-    /**
-     * As above, and additionally fills {@code iconsOut} with the artwork for the rows it returns,
-     * keyed by {@link CommandPaletteFilter.Entry#iconKey}. Only these rows carry icons, so the
-     * map stays as short as the Apps section rather than the whole installed set.
-     */
-    @NonNull
-    static List<CommandPaletteFilter.Entry> buildAppEntries(
+        @NonNull Context context,
         @NonNull LauncherAppDataProvider provider,
         @NonNull LauncherUsageStatsStore usageStats,
         @NonNull String query,
+        @NonNull Map<String, String> shortcuts,
         @Nullable Map<String, Drawable> iconsOut
     ) {
         List<LauncherAppEntry> apps = provider.getAllApps();
@@ -261,12 +255,16 @@ public final class TerminalCommandPalette {
             } catch (JSONException ignored) {
             }
             if (iconsOut != null && app.icon != null) iconsOut.put(stableId, app.icon);
+            String stroke = shortcuts.get(stableId);
             entries.add(new CommandPaletteFilter.Entry(
                 LauncherToolRegistry.TOOL_APP_LAUNCH,
                 app.label,
-                app.appRef.packageName,
+                // The subtitle doubles as the only place the palette says a row is bindable;
+                // drawRow renders the description on the focused row alone, so this costs no rows.
+                context.getString(R.string.palette_app_row_subtitle, app.appRef.packageName),
                 LauncherToolRegistry.CATEGORY_APPS,
-                Collections.<String>emptyList(),
+                stroke == null ? Collections.<String>emptyList()
+                    : Collections.singletonList(stroke),
                 true,
                 null,
                 false,
@@ -277,6 +275,25 @@ public final class TerminalCommandPalette {
                 stableId));
         }
         return entries;
+    }
+
+    /**
+     * Stable id to chord, for every {@code app.launch} binding in the config that resolves against
+     * the provider's warm cache. Resolution goes through the dispatcher's own resolveApp so a row
+     * cannot advertise a stroke that launches a different app; nothing here blocks on a
+     * PackageManager sweep, so a cold cache simply yields no chords until it warms.
+     */
+    @NonNull
+    static Map<String, String> buildAppShortcuts(@NonNull LauncherAppDataProvider provider) {
+        if (!provider.hasLoadedApps()) return Collections.emptyMap();
+        Map<String, String> argumentToStroke = TerminalKeyBindingResolver.getInstance()
+            .getArgumentStrokesForTool(LauncherToolRegistry.TOOL_APP_LAUNCH, "query",
+                TerminalActionDispatcher.getInstance().actionContext());
+        if (argumentToStroke.isEmpty()) return Collections.emptyMap();
+        return CommandPaletteAppShortcuts.index(argumentToStroke, query -> {
+            LauncherAppEntry app = TerminalActionDispatcher.resolveApp(provider, query, false);
+            return app == null ? null : app.appRef.stableId();
+        });
     }
 
     static boolean hasRequiredArguments(@NonNull LauncherToolRegistry.ToolMetadata tool) {

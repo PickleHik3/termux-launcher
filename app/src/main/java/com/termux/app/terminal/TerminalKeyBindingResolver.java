@@ -382,6 +382,32 @@ public final class TerminalKeyBindingResolver {
         return result;
     }
 
+    /**
+     * Strokes bound to {@code toolName}, keyed by the value each one passes for
+     * {@code argumentName}. {@link #getStrokesForTool} cannot answer this: one tool backs many
+     * rows — every app row runs {@code app.launch} — and only the argument tells them apart, so a
+     * row that advertised the tool's first stroke could promise a chord that launches a different
+     * app. The first stroke wins per value, matching what the rest of the palette shows.
+     */
+    @NonNull
+    public Map<String, String> getArgumentStrokesForTool(
+            @NonNull String toolName, @NonNull String argumentName,
+            @NonNull LauncherToolRegistry.ActionContext context) {
+        Map<String, String> result = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, List<Claim>> entry : bindings.entrySet()) {
+            Claim claim = firstHolding(entry.getValue(), context);
+            if (claim == null) continue;
+            for (TerminalBindingConfig.Action action : claim.actions) {
+                if (action.type != TerminalBindingConfig.ActionType.TOOL
+                    || !toolName.equals(action.value)) continue;
+                String value = action.arguments.optString(argumentName, "");
+                if (value.isEmpty() || result.containsKey(value)) continue;
+                result.put(value, entry.getKey());
+            }
+        }
+        return result;
+    }
+
     /** Whether a multi-stroke binding is currently waiting for another key. */
     public synchronized boolean hasPendingSequence() {
         return !pendingStrokes.isEmpty();
