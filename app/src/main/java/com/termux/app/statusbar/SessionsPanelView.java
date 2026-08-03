@@ -62,6 +62,9 @@ public final class SessionsPanelView extends LinearLayout {
     private boolean mCapsuleSurface;
     private float mStatusBarRadiusPx;
     @NonNull private List<SessionBrowserModel.Session> mSessions = new ArrayList<>();
+    /** Recomputed by every rebuild; never null so a width query before the first bind is safe. */
+    @NonNull private SessionsPanelMetrics.Layout mLayout =
+        new SessionsPanelMetrics.Layout(SessionsPanelMetrics.MIN_WIDTH_DP, 0f);
 
     public SessionsPanelView(@NonNull Context context) {
         super(context);
@@ -134,28 +137,47 @@ public final class SessionsPanelView extends LinearLayout {
 
     /**
      * Popup width that fits the widest row, so short session names get a compact panel instead
-     * of the old fixed 320dp. Titles longer than the cap truncate (the current row's marquees).
-     * Includes the card host's own 10dp-per-side container padding.
+     * of the old fixed 320dp. Recomputed by every {@link #rebuild()}; the panel's own call site
+     * binds before it asks.
      */
     public int desiredWidthDp() {
+        return mLayout.widthDp;
+    }
+
+    /**
+     * Everything in a row that is not the text block: the index pill and its margin, the rename
+     * and close buttons, the row's own padding, and the card host's 10dp-per-side container
+     * padding. Single source of truth — the width calculation and the marquee decision both read
+     * it, so adding a row button can no longer silently shrink the title without widening the
+     * panel.
+     */
+    private float chromePx() {
+        return dp(22 + 7 + 28 + 32 + 4 + 4 + 20);
+    }
+
+    private float measureWidestTextPx() {
+        float widest = 0f;
+        for (SessionBrowserModel.Session session : mSessions) {
+            widest = Math.max(widest, measureTitlePx(session));
+            widest = Math.max(widest, measureSubtitlePx(session));
+        }
+        return widest;
+    }
+
+    private float measureTitlePx(@NonNull SessionBrowserModel.Session session) {
+        return measureTextPx(rowTitle(session), 13f);
+    }
+
+    private float measureSubtitlePx(@NonNull SessionBrowserModel.Session session) {
+        return measureTextPx(rowSubtitle(session), 10.5f);
+    }
+
+    private float measureTextPx(@NonNull String text, float sp) {
         android.text.TextPaint paint = new android.text.TextPaint(
             android.text.TextPaint.ANTI_ALIAS_FLAG);
         paint.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        float density = getResources().getDisplayMetrics().density;
-        float scaledDensity = getResources().getDisplayMetrics().scaledDensity;
-        float widest = 0f;
-        for (SessionBrowserModel.Session session : mSessions) {
-            paint.setTextSize(13f * scaledDensity);
-            widest = Math.max(widest, paint.measureText(rowTitle(session)));
-            paint.setTextSize(10.5f * scaledDensity);
-            widest = Math.max(widest, paint.measureText(rowSubtitle(session)));
-        }
-        widest = Math.min(widest, dp(190));
-        // Row chrome around the text block: index pill + its margin, close button, row padding,
-        // and the host container's padding.
-        float chrome = dp(22 + 7 + 32 + 4 + 4 + 20);
-        int desired = Math.round((widest + chrome) / density);
-        return Math.max(200, Math.min(320, desired));
+        paint.setTextSize(sp * getResources().getDisplayMetrics().scaledDensity);
+        return paint.measureText(text);
     }
 
     private LinearLayout buildHeader(@NonNull Context context) {
@@ -188,6 +210,9 @@ public final class SessionsPanelView extends LinearLayout {
     }
 
     private void rebuild() {
+        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+        mLayout = SessionsPanelMetrics.calculate(measureWidestTextPx(), chromePx(),
+            Math.min(metrics.widthPixels, metrics.heightPixels), metrics.density);
         mRows.removeAllViews();
         for (SessionBrowserModel.Session session : mSessions) {
             LayoutParams params = new LayoutParams(LayoutParams.MATCH_PARENT,
@@ -235,9 +260,12 @@ public final class SessionsPanelView extends LinearLayout {
         TextView title = label(13f, session.current
             ? mOnSurface : ColorUtils.setAlphaComponent(mOnSurfaceVariant, 214));
         title.setText(rowTitle(session));
-        if (session.current) {
+        if (session.current && SessionsPanelMetrics.shouldMarquee(measureTitlePx(session),
+                mLayout.availableTitlePx, dp(SessionsPanelMetrics.MARQUEE_MIN_OVERFLOW_DP))) {
             // The current row's long title autoscrolls instead of dying on an ellipsis; marquee
-            // only runs on a selected view, and only this row gets selection.
+            // only runs on a selected view, and only this row gets selection. Titles that overflow
+            // by a character or two are excluded: their tail scrolls out and restarts inside the
+            // stock marquee delay, which reads as a twitch rather than as motion.
             title.setEllipsize(TextUtils.TruncateAt.MARQUEE);
             title.setMarqueeRepeatLimit(-1);
             title.setHorizontalFadingEdgeEnabled(true);

@@ -2,8 +2,10 @@ package com.termux.app.statusbar;
 
 import android.app.Application;
 import android.os.Build;
+import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.TextView;
 
 import androidx.test.core.app.ApplicationProvider;
 
@@ -59,6 +61,47 @@ public class SessionsPanelViewTest {
             assertNotNull(buttonWith(view, "Rename session " + (index + 1)));
             assertNotNull(buttonWith(view, "Close session " + (index + 1)));
         }
+    }
+
+    @Test
+    public void currentRowTitle_marqueesOnlyWhenItOverflowsByAReadableAmount() {
+        StringBuilder tooLong = new StringBuilder();
+        for (int i = 0; i < 200; i++) tooLong.append("session ");
+
+        SessionsPanelView overflowing = panel(new RecordingListener(),
+            named(0, true, tooLong.toString()));
+        assertEquals(TextUtils.TruncateAt.MARQUEE, currentTitle(overflowing).getEllipsize());
+
+        SessionsPanelView fitting = panel(new RecordingListener(), named(0, true, "hi"));
+        assertEquals(TextUtils.TruncateAt.END, currentTitle(fitting).getEllipsize());
+    }
+
+    @Test
+    public void nonCurrentRowsNeverMarquee() {
+        StringBuilder tooLong = new StringBuilder();
+        for (int i = 0; i < 200; i++) tooLong.append("session ");
+
+        SessionsPanelView view = panel(new RecordingListener(),
+            named(0, false, tooLong.toString()), named(1, true, "now"));
+
+        assertEquals(TextUtils.TruncateAt.END, titleOfRow(view, 0).getEllipsize());
+    }
+
+    /** The bound row's title: first child of the row's vertical text block. */
+    private static TextView currentTitle(SessionsPanelView view) {
+        return titleOfRow(view, 0);
+    }
+
+    private static TextView titleOfRow(SessionsPanelView view, int rowIndex) {
+        ViewGroup rows = (ViewGroup) ((ViewGroup) view.getChildAt(2)).getChildAt(0);
+        ViewGroup row = (ViewGroup) rows.getChildAt(rowIndex);
+        return (TextView) ((ViewGroup) row.getChildAt(1)).getChildAt(0);
+    }
+
+    private static SessionBrowserModel.Session named(int index, boolean current, String name) {
+        return new SessionBrowserModel.Session(index, current, name,
+            Collections.singletonList(new SessionBrowserModel.Window(0, true, 0,
+                Collections.singletonList(new SessionBrowserModel.Pane("/home", "bash")))));
     }
 
     private static SessionsPanelView panel(SessionsPanelView.Listener listener,
