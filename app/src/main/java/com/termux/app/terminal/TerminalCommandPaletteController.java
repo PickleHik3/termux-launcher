@@ -93,7 +93,7 @@ public final class TerminalCommandPaletteController
     private static final float STRIP_FADE_START = 0.50f;
     private static final float STRIP_FADE_END = 0.92f;
 
-    private enum Mode { LIST, ARGUMENT, CHOICES }
+    private enum Mode { LIST, ARGUMENT, CHOICES, CAPTURE }
 
     /** Fallback strip when nothing has been run yet, per the handoff's default six. */
     private static final String[][] DEFAULT_KEYCAPS = {
@@ -159,6 +159,14 @@ public final class TerminalCommandPaletteController
     @NonNull private Map<String, String> mAppShortcuts = java.util.Collections.emptyMap();
 
     private Mode mMode = Mode.LIST;
+    /**
+     * The stroke captured so far in {@link Mode#CAPTURE}, or empty while waiting for a key.
+     * Deliberately not mQuery: backspace clears it whole rather than a character at a time, and it
+     * must never be filtered against anything.
+     */
+    @NonNull private String mCaptureStroke = "";
+    /** Tool already holding the captured stroke, shown as a warning rather than a refusal. */
+    @Nullable private String mCaptureConflict;
     private String mQuery = "";
     /** Caret position inside {@link #mQuery}, clamped to [0, length]. */
     private int mQueryCursor;
@@ -208,6 +216,8 @@ public final class TerminalCommandPaletteController
         mQueryCursor = 0;
         mCrumb = "";
         mPendingEntry = null;
+        mCaptureStroke = "";
+        mCaptureConflict = null;
         mFocus = 0;
         mListRevealed = false;
         mOpen = true;
@@ -250,6 +260,8 @@ public final class TerminalCommandPaletteController
         mMode = Mode.LIST;
         mQuery = "";
         mQueryCursor = 0;
+        mCaptureStroke = "";
+        mCaptureConflict = null;
         mPendingEntry = null;
         mCrumb = "";
         mActivity.setCommandPaletteInterceptorActive(false);
@@ -260,6 +272,9 @@ public final class TerminalCommandPaletteController
     /** Drops the overlay without animating, for pause, configuration change and destroy. */
     public void dismissImmediately() {
         mOpen = false;
+        mMode = Mode.LIST;
+        mCaptureStroke = "";
+        mCaptureConflict = null;
         mHandler.removeCallbacks(mClearConfirmation);
         mActivity.setCommandPaletteInterceptorActive(false);
         mProgress.reset(0f);
@@ -475,6 +490,12 @@ public final class TerminalCommandPaletteController
                     .getString(R.string.palette_argument_notice, upper(mCrumb))));
                 mRowEntries.add(null);
                 break;
+            case CAPTURE:
+                rows.add(CommandPaletteView.Row.notice(mCaptureConflict == null
+                    ? mActivity.getString(R.string.palette_capture_notice, mCrumb)
+                    : mActivity.getString(R.string.palette_capture_conflict, mCaptureConflict)));
+                mRowEntries.add(null);
+                break;
             case CHOICES:
                 buildChoiceRows(rows);
                 break;
@@ -555,6 +576,8 @@ public final class TerminalCommandPaletteController
 
     @NonNull
     private String headerMeta() {
+        if (mMode == Mode.CAPTURE)
+            return mActivity.getString(R.string.palette_meta_awaiting_key);
         if (mMode == Mode.ARGUMENT)
             return mActivity.getString(R.string.palette_meta_awaiting_value);
         // Nothing typed and nothing revealed: a "0 results" count would read as a failed search
@@ -664,6 +687,7 @@ public final class TerminalCommandPaletteController
     public boolean interceptKeyValue(@NonNull KeyValue value, boolean ctrl, boolean alt,
                                      boolean shift) {
         if (!mOpen) return false;
+        if (mMode == Mode.CAPTURE) return interceptCaptureKeyValue(value, ctrl, alt, shift);
         switch (value.getKind()) {
             case Char:
                 if (!ctrl && !alt) appendText(String.valueOf(value.getChar()));
@@ -705,6 +729,16 @@ public final class TerminalCommandPaletteController
     public boolean handleHardwareKey(int keyCode, @NonNull KeyEvent event) {
         if (!mOpen) return false;
         if (event.getAction() != KeyEvent.ACTION_DOWN) return true;
+        // Capture routes first, before handleKeyCode's Esc -> collapse(): in CAPTURE, Esc backs out
+        // to the list rather than closing the palette, and routing first is also what guarantees
+        // Esc, Enter and Backspace can never be captured as the bound key.
+        if (mMode == Mode.CAPTURE) return handleCaptureKey(keyCode, event);
+        // Ctrl/Alt+⏎ on the focused app row starts a capture; ⏎ alone stays "launch".
+        if ((keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER)
+            && (event.isCtrlPressed() || event.isAltPressed())) {
+            beginCaptureFocused();
+            return true;
+        }
         if (handleKeyCode(keyCode)) return true;
         if (event.isCtrlPressed() || event.isAltPressed()) return true;
         int unicode = event.getUnicodeChar();
@@ -782,6 +816,8 @@ public final class TerminalCommandPaletteController
         mPendingEntry = null;
         mQuery = "";
         mQueryCursor = 0;
+        mCaptureStroke = "";
+        mCaptureConflict = null;
         mFocus = 0;
         // Backing out of a submenu lands on the list that was there, not on a bare box.
         mListRevealed = true;
@@ -789,7 +825,195 @@ public final class TerminalCommandPaletteController
         rebuildRows();
     }
 
+    // ------------------------------------------------------------------ key capture
+
+    /** Head of the argument row while capturing, in place of the default "arg ❯". */
+    private static final String CAPTURE_PROMPT = "key ❯";
+
+    /**
+     * Starts capturing a key for an app row. Guarded on the Apps category: nothing else has a
+     * per-row argument the binding file can address, and binding a tool row would duplicate what
+     * the config file already does better.
+     */
+    private void beginCapture(@NonNull CommandPaletteFilter.Entry entry) {
+        if (!LauncherToolRegistry.CATEGORY_APPS.equals(entry.category)
+            || entry.arguments == null) return;
+        mMode = Mode.CAPTURE;
+        mPendingEntry = entry;
+        mCrumb = entry.title;
+        mQuery = "";
+        mQueryCursor = 0;
+        mCaptureStroke = "";
+        mCaptureConflict = null;
+        mFocus = -1;
+        applyCaptureRow();
+        rebuildRows();
+        playTick();
+    }
+
+    /** Capture the focused row, if it is one that can be bound. */
+    private void beginCaptureFocused() {
+        if (mMode != Mode.LIST || mFocus < 0 || mFocus >= mRowEntries.size()) return;
+        CommandPaletteFilter.Entry entry = mRowEntries.get(mFocus);
+        if (entry != null) beginCapture(entry);
+    }
+
+    private void applyCaptureRow() {
+        if (mView == null) return;
+        mView.setQuery("", "");
+        mView.setArgumentMode(true,
+            mActivity.getString(R.string.palette_capture_placeholder), mCaptureStroke,
+            CAPTURE_PROMPT);
+    }
+
+    /** Hardware strokes while capturing. Every branch returns true: nothing may reach the shell. */
+    private boolean handleCaptureKey(int keyCode, @NonNull KeyEvent event) {
+        return handleCaptureKeyCode(keyCode, event.isCtrlPressed(), event.isAltPressed(),
+            event.isShiftPressed());
+    }
+
+    /**
+     * The in-app keyboard while capturing. It carries the modifier flags itself, which is what lets
+     * the overlay work on a phone with no physical keyboard — hardware-only capture would be dead UI
+     * on most devices.
+     */
+    private boolean interceptCaptureKeyValue(@NonNull KeyValue value, boolean ctrl, boolean alt,
+                                            boolean shift) {
+        switch (value.getKind()) {
+            case Char:
+                noteCapturedStroke(CommandPaletteCaptureModel.strokeForChar(
+                    value.getChar(), ctrl, alt, shift));
+                return true;
+            case Editing:
+                switch (value.getEditing()) {
+                    case SPACE_BAR:
+                        noteCapturedStroke(CommandPaletteCaptureModel.strokeForChar(
+                            ' ', ctrl, alt, shift));
+                        break;
+                    case BACKSPACE:
+                        clearCapture();
+                        break;
+                    default:
+                        break;
+                }
+                return true;
+            case Keyevent:
+                return handleCaptureKeyCode(value.getKeyevent(), ctrl, alt, shift);
+            case Event:
+                if (value.getEvent() == KeyValue.Event.ACTION) commitCapture();
+                return true;
+            default:
+                // Swallowed, like every other unhandled value while the palette owns the keyboard.
+                return true;
+        }
+    }
+
+    /**
+     * ⏎ saves, ⌫ clears, Esc backs out to the list. Documented consequence: enter, escape and
+     * backspace cannot themselves be bound from the overlay — the conf file stays the escape hatch
+     * for those.
+     */
+    private boolean handleCaptureKeyCode(int keyCode, boolean ctrl, boolean alt, boolean shift) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_ESCAPE:
+            case KeyEvent.KEYCODE_BACK:
+                popMode();
+                return true;
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                commitCapture();
+                return true;
+            case KeyEvent.KEYCODE_DEL:
+                clearCapture();
+                return true;
+            default:
+                noteCapturedStroke(
+                    CommandPaletteCaptureModel.strokeFor(keyCode, ctrl, alt, shift));
+                return true;
+        }
+    }
+
+    private void clearCapture() {
+        mCaptureStroke = "";
+        mCaptureConflict = null;
+        applyCaptureRow();
+        rebuildRows();
+    }
+
+    /** A modifier-only press or an unmappable key code arrives as null and simply does nothing. */
+    private void noteCapturedStroke(@Nullable String stroke) {
+        if (stroke == null || stroke.isEmpty()) return;
+        mCaptureStroke = stroke;
+        mCaptureConflict = conflictFor(stroke);
+        applyCaptureRow();
+        rebuildRows();
+        playTick();
+    }
+
+    /**
+     * The tool already holding {@code stroke}, or null. Shown as a warning, never as a refusal:
+     * "mentioning a sequence replaces the defaults for it" is the documented file semantics, so
+     * blocking the save here would contradict the config model.
+     */
+    @Nullable
+    private String conflictFor(@NonNull String stroke) {
+        List<TerminalKeyBindingResolver.Claim> claims =
+            TerminalKeyBindingResolver.getInstance().getBindings().get(stroke);
+        if (claims == null) return null;
+        for (TerminalKeyBindingResolver.Claim claim : claims) {
+            if (!"unmap".equals(claim.toolName)) return claim.toolName;
+        }
+        return null;
+    }
+
+    private void commitCapture() {
+        CommandPaletteFilter.Entry pending = mPendingEntry;
+        if (pending == null) {
+            popMode();
+            return;
+        }
+        if (!CommandPaletteCaptureModel.isBindable(mCaptureStroke)) {
+            Toast.makeText(mActivity, R.string.palette_capture_needs_modifier,
+                Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String stableId = pending.arguments == null ? "" : pending.arguments.optString("query", "");
+        if (stableId.isEmpty()) {
+            popMode();
+            return;
+        }
+        String error = TerminalBindingConfigWriter.bindAppLaunch(mCaptureStroke,
+            CommandPaletteAppShortcuts.bindingArgumentFor(stableId,
+                defaultStableIdForPackage(stableId)));
+        if (error != null) {
+            Logger.logWarn(LOG_TAG, "Could not write binding: " + error);
+            Toast.makeText(mActivity, mActivity.getString(R.string.palette_capture_failed, error),
+                Toast.LENGTH_SHORT).show();
+            return;
+        }
+        mAppShortcuts = TerminalCommandPalette.buildAppShortcuts(mAppProvider);
+        String saved = mActivity.getString(R.string.palette_capture_saved,
+            CommandPaletteFilter.compactStroke(mCaptureStroke), pending.title);
+        playTick();
+        collapse();
+        showConfirmation(saved);
+    }
+
+    /** Stable id of this package's default launch target, for choosing what to write. */
+    @Nullable
+    private String defaultStableIdForPackage(@NonNull String stableId) {
+        String packageName = CommandPaletteAppShortcuts.packageOf(stableId);
+        if (packageName.isEmpty()) return null;
+        com.termux.app.launcher.model.LauncherAppEntry app =
+            mAppProvider.findDefaultByPackage(packageName);
+        return app == null ? null : app.appRef.stableId();
+    }
+
     private void commit() {
+        if (mMode == Mode.CAPTURE) {
+            commitCapture();
+            return;
+        }
         if (mMode == Mode.ARGUMENT) {
             CommandPaletteFilter.Entry pending = mPendingEntry;
             if (pending != null) runEntry(withArgument(pending, mQuery));
@@ -941,6 +1165,15 @@ public final class TerminalCommandPaletteController
         if (entry == null) return;
         mFocus = index;
         activate(entry);
+    }
+
+    @Override
+    public void onRowLongPressed(int index) {
+        if (index < 0 || index >= mRowEntries.size()) return;
+        CommandPaletteFilter.Entry entry = mRowEntries.get(index);
+        if (entry == null) return;
+        mFocus = index;
+        beginCapture(entry);
     }
 
     @Override

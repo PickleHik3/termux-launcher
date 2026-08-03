@@ -61,6 +61,9 @@ public final class CommandPaletteView extends View {
         /** A tap landed on the keycap at {@code index} in the frequent-action strip. */
         void onKeycapTapped(int index);
 
+        /** A long press landed on the row at {@code index}: the secondary action for that row. */
+        void onRowLongPressed(int index);
+
         /** A tap landed outside the palette and its strip. */
         void onOutsideTapped();
     }
@@ -148,6 +151,8 @@ public final class CommandPaletteView extends View {
     private static final float CAP_PAD_V = 6f;
     private static final float CAP_RADIUS = 6f;
     private static final float HAIRLINE = 1f;
+    /** Head of the argument row when the caller does not supply one of its own. */
+    private static final String DEFAULT_ARGUMENT_PROMPT = "arg ❯";
     private static final float SPECULAR_RADIUS = 320f;
 
     // Drop shadow, drawn here rather than taken from View elevation: the caster would have to be
@@ -230,6 +235,8 @@ public final class CommandPaletteView extends View {
     private int mQueryCursor = Integer.MAX_VALUE;
     private boolean mArgumentMode;
     private String mArgumentPlaceholder = "";
+    /** Prompt drawn at the head of the argument row; capture mode replaces the default. */
+    @NonNull private String mArgumentPrompt = DEFAULT_ARGUMENT_PROMPT;
     private String mArgumentValue = "";
     @Nullable private String mConfirmationText;
     private float mConfirmationLeft;
@@ -240,6 +247,10 @@ public final class CommandPaletteView extends View {
     /** True while the offset is the finger's rather than the focused row's. */
     private boolean mUserScrolled;
     private boolean mDragging;
+    /** Pending long-press callback, or null when none is armed. */
+    @Nullable private Runnable mLongPress;
+    /** Set once a long press has acted, so the following UP does not also tap the row. */
+    private boolean mLongPressFired;
     private float mDownX;
     private float mDownY;
     private float mLastTouchY;
@@ -368,6 +379,13 @@ public final class CommandPaletteView extends View {
      */
     public void setArgumentMode(boolean argumentMode, @NonNull String placeholder,
                                 @NonNull String value) {
+        setArgumentMode(argumentMode, placeholder, value, DEFAULT_ARGUMENT_PROMPT);
+    }
+
+    /** As above, with a prompt of its own: capture mode reads "key ❯" rather than "arg ❯". */
+    public void setArgumentMode(boolean argumentMode, @NonNull String placeholder,
+                                @NonNull String value, @NonNull String prompt) {
+        mArgumentPrompt = prompt;
         mArgumentMode = argumentMode;
         mArgumentPlaceholder = placeholder;
         mArgumentValue = value;
@@ -747,8 +765,8 @@ public final class CommandPaletteView extends View {
         mMono.setLetterSpacing(0f);
         float argBaseline = baseline(top, dp(ARG_ROW_H), mMono);
         mMono.setColor(withBodyAlpha(mPrimary, alpha));
-        canvas.drawText("arg ❯", mFrame.left + dp(ROW_PAD_LEFT), argBaseline, mMono);
-        float valueStart = mFrame.left + dp(ROW_PAD_LEFT) + mMono.measureText("arg ❯ ");
+        canvas.drawText(mArgumentPrompt, mFrame.left + dp(ROW_PAD_LEFT), argBaseline, mMono);
+        float valueStart = mFrame.left + dp(ROW_PAD_LEFT) + mMono.measureText(mArgumentPrompt + " ");
         boolean empty = mArgumentValue.isEmpty();
         mMono.setColor(withBodyAlpha(empty ? mMeta : mOnSurface, alpha));
         float enterWidth = mMono.measureText("⏎") + dp(8f);
@@ -865,10 +883,13 @@ public final class CommandPaletteView extends View {
                 if (mVelocity != null) mVelocity.clear();
                 else mVelocity = VelocityTracker.obtain();
                 mVelocity.addMovement(event);
+                mLongPressFired = false;
+                scheduleLongPress(mDownX, mDownY);
                 return true;
             case MotionEvent.ACTION_MOVE: {
                 if (mVelocity != null) mVelocity.addMovement(event);
                 float y = event.getY();
+                if (Math.abs(y - mDownY) > mTouchSlop) cancelPendingLongPress();
                 if (!mDragging && Math.abs(y - mDownY) > mTouchSlop
                     && maxScroll() > 0f && inList(mDownX, mDownY))
                     mDragging = true;
@@ -879,20 +900,48 @@ public final class CommandPaletteView extends View {
                 return true;
             }
             case MotionEvent.ACTION_UP:
+                cancelPendingLongPress();
                 if (mDragging) {
                     startFling();
                     return true;
                 }
                 releaseVelocity();
-                handleTap(event.getX(), event.getY());
+                // The long press already acted; releasing must not also launch the row.
+                if (!mLongPressFired) handleTap(event.getX(), event.getY());
+                mLongPressFired = false;
                 return true;
             case MotionEvent.ACTION_CANCEL:
+                cancelPendingLongPress();
+                mLongPressFired = false;
                 mDragging = false;
                 releaseVelocity();
                 return true;
             default:
                 return true;
         }
+    }
+
+    /**
+     * Long press on a row is the palette's one secondary gesture. Posted rather than measured on UP
+     * so it fires while the finger is still down, and cancelled by a drag, an UP or a CANCEL so a
+     * scroll never turns into one.
+     */
+    private void scheduleLongPress(float x, float y) {
+        cancelPendingLongPress();
+        if (!inList(x, y)) return;
+        final int index = rowIndexAt(y);
+        if (index < 0 || !mRows.get(index).isSelectable()) return;
+        mLongPress = () -> {
+            mLongPress = null;
+            mLongPressFired = true;
+            if (mCallbacks != null) mCallbacks.onRowLongPressed(index);
+        };
+        postDelayed(mLongPress, ViewConfiguration.getLongPressTimeout());
+    }
+
+    private void cancelPendingLongPress() {
+        if (mLongPress != null) removeCallbacks(mLongPress);
+        mLongPress = null;
     }
 
     /** Whether the palette owns this point, or it belongs to whatever is underneath. */
@@ -923,16 +972,20 @@ public final class CommandPaletteView extends View {
             mCallbacks.onOutsideTapped();
             return;
         }
-        if (y < listTop() || y > listBottom()) return;
+        int index = rowIndexAt(y);
+        if (index >= 0 && mRows.get(index).isSelectable()) mCallbacks.onRowTapped(index);
+    }
+
+    /** Row under {@code y} in the scrolled list, or -1 when the point is outside it. */
+    private int rowIndexAt(float y) {
+        if (y < listTop() || y > listBottom()) return -1;
         float rowY = listTop() - mScrollOffset;
         for (int i = 0; i < mRows.size(); i++) {
             float height = rowHeight(i);
-            if (y >= rowY && y < rowY + height) {
-                if (mRows.get(i).isSelectable()) mCallbacks.onRowTapped(i);
-                return;
-            }
+            if (y >= rowY && y < rowY + height) return i;
             rowY += height;
         }
+        return -1;
     }
 
     /** @return true when the offset actually moved, so a fling knows it has not hit an edge. */

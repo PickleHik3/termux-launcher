@@ -1127,6 +1127,13 @@
     <string name="palette_category_apps">Apps</string>
     <string name="palette_category_sessions">Sessions</string>
     <string name="palette_app_row_subtitle">%1$s · hold to bind a key</string>
+    <string name="palette_capture_notice">Press a key combination for %1$s · ⏎ save · ⌫ clear · esc cancel</string>
+    <string name="palette_capture_placeholder">waiting for a key</string>
+    <string name="palette_capture_conflict">Already bound to %1$s · saving replaces it</string>
+    <string name="palette_capture_needs_modifier">Add Ctrl, Alt or Shift — a bare key would swallow typing</string>
+    <string name="palette_capture_saved">%1$s bound to %2$s</string>
+    <string name="palette_capture_failed">Could not save the binding: %1$s</string>
+    <string name="palette_meta_awaiting_key">awaiting key</string>
     <string name="palette_session_rename">Rename %1$s</string>
     <string name="palette_session_rename_hint">Type a new name, up to 8 characters</string>
     <string name="palette_confirm_title">Run %1$s?</string>
