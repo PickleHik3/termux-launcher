@@ -186,6 +186,14 @@ public final class CommandPaletteView extends View {
     private final RectF mFrame = new RectF();
     private final Path mShadowClip = new Path();
     /**
+     * The rounded frame as a clip path. Every body and list fill is a square-cornered drawRect, so
+     * clipping them to a plain rect let anything flush with the frame's bottom paint into the
+     * corner arcs the surface's drawRoundRect leaves empty. Cached because it is rebuilt only when
+     * the animated frame moves, not once per fill.
+     */
+    private final Path mFramePath = new Path();
+    private boolean mFramePathDirty = true;
+    /**
      * Region the overlay is modal over. The view fills the activity so the sprout can start at
      * the space bar, but only this rectangle may swallow touches — everything below it is the
      * in-app keyboard, and taps there have to reach the keys or the palette could never be typed
@@ -295,6 +303,7 @@ public final class CommandPaletteView extends View {
                          float stripOffsetPx, float progress) {
         mFrame.set(frame);
         mRadius = radius;
+        mFramePathDirty = true;
         mBodyAlpha = clamp01(bodyAlpha);
         mStripAlpha = clamp01(stripAlpha);
         mStripOffset = stripOffsetPx;
@@ -430,6 +439,7 @@ public final class CommandPaletteView extends View {
 
         drawSurface(canvas);
         if (mBodyAlpha > 0.004f) drawBody(canvas);
+        drawRim(canvas);
         if (mStripAlpha > 0.004f) drawStrip(canvas);
         if (mConfirmationText != null) drawConfirmation(canvas);
     }
@@ -465,8 +475,15 @@ public final class CommandPaletteView extends View {
         canvas.drawRect(mFrame, mFill);
         mFill.setShader(null);
         canvas.restoreToCount(save);
+    }
 
-        // Accent-tinted rim: the palette rim is primary, unlike the keycaps' white hairline.
+    /**
+     * Accent-tinted rim: the palette rim is primary, unlike the keycaps' white hairline. Drawn
+     * after the body, not as part of the surface — the rim belongs to the surface, so it has to
+     * survive the body's fills. Stroked before them, the bottom fade and the last row's focus wash
+     * painted over its bottom segment, which is what made the edge read as a band rather than a rim.
+     */
+    private void drawRim(@NonNull Canvas canvas) {
         mStroke.setColor(ColorUtils.setAlphaComponent(mPrimary, 150));
         float inset = mStroke.getStrokeWidth() / 2f;
         mRect.set(mFrame.left + inset, mFrame.top + inset,
@@ -475,7 +492,24 @@ public final class CommandPaletteView extends View {
     }
 
     private void clipToFrame(@NonNull Canvas canvas) {
-        canvas.clipRect(mFrame);
+        canvas.clipPath(framePath());
+    }
+
+    /**
+     * minSdk is 26 and Canvas has no clipRoundRect, so clipPath is the only option. A
+     * uniform-radius addRoundRect is recognised by Skia as an rrect and clipped analytically, so
+     * this costs about what the existing clipOutPath in the shadow pass does. Hardware rrect clips
+     * are not always antialiased, which can leave the focus wash's corner marginally jaggy —
+     * invisible at its alpha of 28.
+     */
+    @NonNull
+    private Path framePath() {
+        if (mFramePathDirty) {
+            mFramePath.rewind();
+            mFramePath.addRoundRect(mFrame, mRadius, mRadius, Path.Direction.CW);
+            mFramePathDirty = false;
+        }
+        return mFramePath;
     }
 
     /**

@@ -291,8 +291,13 @@ public final class TerminalCommandPaletteController
         mHost.addView(mView, new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         // Stay above the backdrop pane in z. Without this the whole ledger — surface tint and
-        // text — renders UNDER the translucent pane and reads muted and fuzzy. No outline on this
-        // view, so the elevation casts no shadow of its own.
+        // text — renders UNDER the translucent pane and reads muted and fuzzy.
+        //
+        // The null outline provider is what keeps that elevation from casting a shadow. Today it
+        // would be empty by accident — the default BACKGROUND provider over a view with no
+        // background — so say it out loud: a future setBackground(...) would silently start casting
+        // the square band applyFrame() already documents fighting.
+        mView.setOutlineProvider(null);
         mView.setElevation(dp(1f));
         return true;
     }
