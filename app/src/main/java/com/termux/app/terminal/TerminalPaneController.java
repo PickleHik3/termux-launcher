@@ -161,6 +161,12 @@ public class TerminalPaneController {
          * the pane proportionally where the user left it.
          */
         @Nullable RectF floatFrac;
+        /**
+         * What {@link #floatFrac} was clamped to for the host size it was last laid out against —
+         * a projection onto the current host, not user intent. Transient: never saved or restored,
+         * because remembering a shape the user did not ask for is the ratchet this replaced.
+         */
+        @Nullable transient RectF appliedFloatFrac;
         Leaf(TerminalSession session) { this.session = session; }
     }
 
@@ -1267,9 +1273,16 @@ public class TerminalPaneController {
     }
 
     /**
-     * Clamp fractional float bounds against a host size: no smaller than the minimum pane size,
-     * no larger than the host, and always leaving at least {@code minVisiblePx} of the drag
-     * handle row on screen so a float can never be pushed somewhere it cannot be grabbed from.
+     * Clamp fractional float bounds against a host size: no smaller than the minimum pane size, no
+     * larger than the host, horizontal overhang allowed as long as {@code minVisiblePx} of the drag
+     * handle stays reachable, and the whole float kept above the host's bottom edge.
+     *
+     * <p>The vertical rule is stricter than the horizontal one on purpose. Sideways, part of the
+     * handle row remains grabbable however far the float hangs off, because the handle spans the
+     * float's full width. Downward there is nothing to grab, and the float would paint into the dock
+     * band: {@code applyTerminalBorderAppearance} clears clipToOutline the moment a second pane
+     * appears — which is exactly what showing the scratchpad does — so an overflowing bottom is
+     * visible rather than clipped.
      */
     @NonNull
     static RectF clampFloatFractions(@NonNull RectF candidate, float hostWidth, float hostHeight,
@@ -1278,10 +1291,11 @@ public class TerminalPaneController {
         float width = Math.min(1f, Math.max(Math.min(minWidthPx / hostWidth, 1f), candidate.width()));
         float height = Math.min(1f, Math.max(Math.min(minHeightPx / hostHeight, 1f), candidate.height()));
         float minVisibleX = Math.min(minVisiblePx / hostWidth, width);
-        float minVisibleY = Math.min(minVisiblePx / hostHeight, height);
         float left = Math.max(minVisibleX - width, Math.min(1f - minVisibleX, candidate.left));
-        // The handle is the top edge, so the top may never leave the host upward at all.
-        float top = Math.max(0f, Math.min(1f - minVisibleY, candidate.top));
+        // The handle is the top edge, so the top may never leave the host upward at all — and
+        // bottom <= 1 keeps the float clear of the dock, whether the host shrank under it or the
+        // user dragged it down by hand.
+        float top = Math.max(0f, Math.min(1f - height, candidate.top));
         return new RectF(left, top, left + width, top + height);
     }
 
@@ -1293,7 +1307,10 @@ public class TerminalPaneController {
         if (hostWidth > 0f && hostHeight > 0f) {
             frac = clampFloatFractions(frac, hostWidth, hostHeight,
                 dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP), dp(FLOAT_MIN_VISIBLE_DP));
-            leaf.floatFrac = frac;
+            // Deliberately NOT written back into leaf.floatFrac. The clamp is a projection of the
+            // user's shape onto the current host, not new intent from the user — writing it back is
+            // what ratcheted the scratchpad smaller every time the keyboard opened and closed.
+            leaf.appliedFloatFrac = new RectF(frac);
         }
         FrameLayout.LayoutParams params = container.getLayoutParams() instanceof FrameLayout.LayoutParams
             ? (FrameLayout.LayoutParams) container.getLayoutParams()
@@ -2383,7 +2400,11 @@ public class TerminalPaneController {
             mDownRawX = event.getRawX();
             mDownRawY = event.getRawY();
             mDragMoved = false;
-            mDownFrac = mLeaf.floatFrac != null ? new RectF(mLeaf.floatFrac) : defaultFloatFrac(0);
+            // Seed from what is on screen when the float is currently clamped, so a drag that
+            // starts while the host is short does not teleport back to the remembered shape. The
+            // MOVE branch still writes floatFrac: a deliberate gesture IS new intent.
+            RectF seed = mLeaf.appliedFloatFrac != null ? mLeaf.appliedFloatFrac : mLeaf.floatFrac;
+            mDownFrac = seed != null ? new RectF(seed) : defaultFloatFrac(0);
             if (mDragMode == DRAG_RESIZE) setSizeUpdatesPaused(true);
             getParent().requestDisallowInterceptTouchEvent(true);
         }

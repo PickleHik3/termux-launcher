@@ -9,6 +9,8 @@ import android.view.LayoutInflater;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
+import androidx.annotation.NonNull;
+
 import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalView;
 
@@ -374,11 +376,14 @@ public class TerminalPaneControllerTest {
         assertEquals(.2f, grown.left, .001f);
         assertEquals(.2f, grown.top, .001f);
 
-        // Dragged far past the bottom-right: at least 48px of the handle row stays on screen.
+        // Dragged far past the bottom-right: at least 48px of the handle row stays on screen
+        // sideways, while the bottom edge is pulled fully back inside the host — below it there is
+        // no handle to grab and the overflow would paint into the dock band.
         RectF offBottomRight = TerminalPaneController.clampFloatFractions(
             new RectF(2f, 2f, 2.5f, 2.5f), 1000f, 800f, 120f, 90f, 48f);
         assertEquals(1f - 48f / 1000f, offBottomRight.left, .001f);
-        assertEquals(1f - 48f / 800f, offBottomRight.top, .001f);
+        assertEquals(1f - offBottomRight.height(), offBottomRight.top, .001f);
+        assertEquals(1f, offBottomRight.bottom, .001f);
 
         // Past the top-left: the top edge carries the handle, so it may never leave upward.
         RectF offTopLeft = TerminalPaneController.clampFloatFractions(
@@ -606,6 +611,84 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
+    public void clampFloatFractions_neverLetsAFloatHangBelowTheHost() {
+        // Sideways overhang stays intentional: the handle spans the float's full width, so part of
+        // it is always grabbable. Downward there is nothing to grab, and the overflow paints into
+        // the dock band.
+        RectF clamped = TerminalPaneController.clampFloatFractions(
+            new RectF(0.1f, 0.8f, 0.7f, 1.4f), 1080f, 2000f, 200f, 180f, 40f);
+        assertTrue("bottom " + clamped.bottom, clamped.bottom <= 1.0001f);
+        assertEquals(0.6f, clamped.width(), .001f);
+
+        // A host shorter than the minimum float height: the minimum wins, and the float is pinned
+        // to the top rather than allowed to run off the bottom.
+        RectF tiny = TerminalPaneController.clampFloatFractions(
+            new RectF(0.1f, 0.5f, 0.7f, 0.9f), 1080f, 100f, 200f, 180f, 40f);
+        assertEquals(0f, tiny.top, .001f);
+        assertEquals(1f, tiny.height(), .001f);
+
+        // Horizontal overhang is still permitted.
+        RectF sideways = TerminalPaneController.clampFloatFractions(
+            new RectF(0.7f, 0.1f, 1.5f, 0.5f), 1080f, 2000f, 200f, 180f, 40f);
+        assertTrue("right " + sideways.right, sideways.right > 1f);
+    }
+
+    @Test
+    public void clampFloatFractions_isIdempotent() {
+        // Any future ratchet shows up here: clamping a clamped rect must not move it again.
+        RectF[] candidates = {
+            new RectF(0.1f, 0.8f, 0.7f, 1.4f),
+            new RectF(-0.4f, -0.2f, 0.3f, 0.4f),
+            new RectF(0.9f, 0.05f, 1.8f, 0.3f),
+            new RectF(0.2f, 0.2f, 0.25f, 0.25f),
+        };
+        for (RectF candidate : candidates) {
+            RectF once = TerminalPaneController.clampFloatFractions(
+                candidate, 1080f, 2000f, 200f, 180f, 40f);
+            RectF twice = TerminalPaneController.clampFloatFractions(
+                once, 1080f, 2000f, 200f, 180f, 40f);
+            assertEquals("left " + candidate, once.left, twice.left, .0001f);
+            assertEquals("top " + candidate, once.top, twice.top, .0001f);
+            assertEquals("right " + candidate, once.right, twice.right, .0001f);
+            assertEquals("bottom " + candidate, once.bottom, twice.bottom, .0001f);
+        }
+    }
+
+    @Test
+    public void scratchpadBounds_survivesAKeyboardShrinkAndRegrow() {
+        // The regression test for the ratchet: applyFloatBounds used to write its clamp result back
+        // into floatFrac, so every keyboard open/close shrank the remembered shape a little more.
+        android.provider.Settings.Global.putFloat(
+            RuntimeEnvironment.getApplication().getContentResolver(),
+            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 0f);
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        TerminalPaneController controller = newScratchpadController(host);
+        host.layout(0, 0, 1080, 2000);
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        assertEquals(TerminalPaneController.SCRATCHPAD_TOGGLE_SHOWN, controller.toggleScratchpad());
+
+        RectF shaped = new RectF(0.07f, 0.06f, 0.93f, 0.72f);
+        TerminalPaneController.Leaf leaf = window.floating.get(0);
+        leaf.floatFrac = new RectF(shaped);
+
+        // Keyboard up, then down. Robolectric dispatches the real OnLayoutChangeListener.
+        host.layout(0, 0, 1080, 700);
+        host.layout(0, 0, 1080, 2000);
+
+        assertEquals(shaped.left, leaf.floatFrac.left, .001f);
+        assertEquals(shaped.top, leaf.floatFrac.top, .001f);
+        assertEquals(shaped.right, leaf.floatFrac.right, .001f);
+        assertEquals(shaped.bottom, leaf.floatFrac.bottom, .001f);
+        assertTrue(leaf.floatFrac.bottom <= 1.0001f);
+
+        // And the shape persists across a hide and re-show.
+        assertEquals(TerminalPaneController.SCRATCHPAD_TOGGLE_HIDDEN, controller.toggleScratchpad());
+        assertEquals(TerminalPaneController.SCRATCHPAD_TOGGLE_SHOWN, controller.toggleScratchpad());
+        assertEquals(shaped, window.floating.get(0).floatFrac);
+    }
+
+    @Test
     public void moveToEdge_rejectsSinglePaneWithoutChangingIt() {
         TerminalPaneController controller = newController();
         TerminalSession only = terminal();
@@ -708,6 +791,11 @@ public class TerminalPaneControllerTest {
 
     /** Controller whose host can create named shells, so the scratchpad toggle actually runs. */
     private static TerminalPaneController newScratchpadController() {
+        return newScratchpadController(new FrameLayout(RuntimeEnvironment.getApplication()));
+    }
+
+    /** As above, against a caller-owned host so a test can drive its layout size. */
+    private static TerminalPaneController newScratchpadController(@NonNull FrameLayout hostView) {
         Context context = RuntimeEnvironment.getApplication();
         return new TerminalPaneController(new TerminalPaneController.Host() {
             @Override public TerminalSession createShell(String cwd) { return terminal(); }
@@ -721,7 +809,7 @@ public class TerminalPaneControllerTest {
             @Override public void onActivePaneChanged() {}
             @Override public void onTreesChanged() {}
             @Override public String defaultCwd() { return "/"; }
-        }, new FrameLayout(context), LayoutInflater.from(context));
+        }, hostView, LayoutInflater.from(context));
     }
 
     private static TerminalSession terminal() {
