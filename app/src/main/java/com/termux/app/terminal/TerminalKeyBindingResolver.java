@@ -663,8 +663,27 @@ public final class TerminalKeyBindingResolver {
         }
     }
 
+    /**
+     * The stroke token a printable character would carry, so a soft key that only knows the
+     * character it types can still be matched against a binding. Public because the in-app
+     * keyboard uses it for both jobs it has here: lighting the caps a prefix binds, and turning a
+     * pressed cap into the key event the resolver reads.
+     */
+    @NonNull
+    public static String tokenForChar(char c) {
+        char lower = Character.toLowerCase(c);
+        switch (lower) {
+            // Spelled out for the same reason keyToken spells them out.
+            case '-': return "minus";
+            case '=': return "equals";
+            case '+': return "plus";
+            case ' ': return "space";
+            default: return String.valueOf(lower);
+        }
+    }
+
     @Nullable
-    static Integer keyCodeForToken(@NonNull String token) {
+    public static Integer keyCodeForToken(@NonNull String token) {
         for (int keyCode = KeyEvent.KEYCODE_A; keyCode <= KeyEvent.KEYCODE_Z; keyCode++)
             if (token.equals(keyToken(keyCode))) return keyCode;
         for (int keyCode = KeyEvent.KEYCODE_0; keyCode <= KeyEvent.KEYCODE_9; keyCode++)
@@ -685,16 +704,22 @@ public final class TerminalKeyBindingResolver {
     }
 
     /**
-     * Canonicalizes a declared binding string so {@code Ctrl+Alt+V} and
-     * {@code ctrl+alt+v} are the same stroke, and modifiers always appear in
-     * ctrl, alt, shift order.
+     * Canonicalizes a declared binding string: modifier names are case-insensitive and always
+     * appear in ctrl, alt, shift order, while <b>an upper-case letter is itself the Shift
+     * modifier</b> — {@code Ctrl+Alt+R} is {@code ctrl+alt+shift+r} and {@code Ctrl+Alt+r} is
+     * {@code ctrl+alt+r}, two different strokes that can hold two different actions.
+     *
+     * <p>Case used to be discarded wholesale, which made those two lines the same binding and left
+     * a config file no way to say "the shifted one" other than spelling {@code shift+} out. Only a
+     * single-character key is read this way; multi-character tokens ({@code Left}, {@code PageUp})
+     * have no shifted spelling and keep folding to lower case.
      */
     @NonNull
     static String normalizeStrokeSpec(@NonNull String spec) {
         boolean ctrl = false, alt = false, shift = false;
         String key = "";
-        for (String part : spec.toLowerCase(Locale.US).trim().split("\\+")) {
-            switch (part) {
+        for (String part : spec.trim().split("\\+")) {
+            switch (part.toLowerCase(Locale.US)) {
                 case "ctrl": case "control": ctrl = true; break;
                 case "alt": alt = true; break;
                 case "shift": shift = true; break;
@@ -702,6 +727,8 @@ public final class TerminalKeyBindingResolver {
                 default: key = part;
             }
         }
+        if (key.length() == 1 && Character.isUpperCase(key.charAt(0))) shift = true;
+        key = key.toLowerCase(Locale.US);
         StringBuilder normalized = new StringBuilder();
         if (ctrl) normalized.append("ctrl+");
         if (alt) normalized.append("alt+");

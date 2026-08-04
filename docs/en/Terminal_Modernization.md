@@ -70,25 +70,26 @@ produced by the current keyboard layout.
 
 | Shortcut | Split panes enabled | Compatibility mode |
 |---|---|---|
-| `Ctrl+Alt+V` | Split vertically (side by side) | Paste |
-| `Ctrl+Alt+H` | Split horizontally (stacked) | Sent to the shell if unclaimed |
+| `Ctrl+Alt+v` | Split vertically (side by side) | Paste |
+| `Ctrl+Alt+h` | Split horizontally (stacked) | Sent to the shell if unclaimed |
 | `Ctrl+Alt+Arrow` | Focus the pane in that direction | Left/right opens or closes the session drawer; up/down changes session |
 | `Ctrl+Alt+Shift+Arrow` | Resize the focused pane | Sent to the shell if unclaimed |
-| `Ctrl+Alt+C` | New window | New session |
-| `Ctrl+Alt+X` | Close current window, after confirmation | Sent to the shell if unclaimed |
+| `Ctrl+Alt+c` | New window | New session |
+| `Ctrl+Alt+x` | Close current window, after confirmation | Sent to the shell if unclaimed |
 | `Ctrl+Alt+[` / `Ctrl+Alt+]` | Previous/next window | Sent to the shell if unclaimed |
-| `Ctrl+Alt+L` | Next automatic pane layout | Sent to the shell if unclaimed |
-| `Ctrl+Alt+F` | Float or dock the focused pane | Sent to the shell if unclaimed |
-| `Ctrl+Alt+R` | Rename current window | Rename current session |
+| `Ctrl+Alt+l` | Next automatic pane layout | Sent to the shell if unclaimed |
+| `Ctrl+Alt+f` | Float or dock the focused pane | Sent to the shell if unclaimed |
+| `Ctrl+Alt+r` | Rename current window | Rename current session |
+| `Ctrl+Alt+R` (shifted) | Rename current session | Rename current session |
 | `Ctrl+Alt+Shift+C` | New session | New session |
 | `Ctrl+Alt+Shift+X` | Close current session, after confirmation | Sent to the shell if unclaimed |
-| `Ctrl+Alt+N` / `Ctrl+Alt+P` | Next/previous session | Next/previous session |
+| `Ctrl+Alt+n` / `Ctrl+Alt+p` | Next/previous session | Next/previous session |
 | `Ctrl+Alt+1` … `Ctrl+Alt+9` | Activate that drawer session | Activate that drawer session |
-| `Ctrl+Alt+K` | Toggle soft keyboard | Toggle soft keyboard |
+| `Ctrl+Alt+k` | Toggle soft keyboard | Toggle soft keyboard |
 | `Ctrl+Alt++` / `Ctrl+Alt+-` | Increase/decrease font size | Increase/decrease font size |
-| `Ctrl+Alt+M` | Open terminal action sheet | Open terminal action sheet |
-| `Ctrl+Alt+U` | Open terminal hints | Open terminal hints |
-| `Ctrl+Alt+S` | Search scrollback | Search scrollback |
+| `Ctrl+Alt+m` | Open terminal action sheet | Open terminal action sheet |
+| `Ctrl+Alt+u` | Open terminal hints | Open terminal hints |
+| `Ctrl+Alt+s` | Search scrollback | Search scrollback |
 
 “Vertical split” means a vertical dividing line and therefore creates side-by-side panes.
 
@@ -98,7 +99,7 @@ Use the default shortcuts or search the command palette for pane and window acti
 a fresh shell in the focused pane's working directory. Each pane retains its process, scrollback,
 selection, and terminal state while you focus another pane or window.
 
-Use **Float / dock pane**, `pane.toggle_float`, or `Ctrl+Alt+F` to detach the focused tiled pane
+Use **Float / dock pane**, `pane.toggle_float`, or `Ctrl+Alt+f` to detach the focused tiled pane
 above the tree. Drag the slim top handle to move it and the bottom-right grip to resize it. Terminal
 content keeps its normal touch behavior; long-press and drag inside it still reports a mouse drag to
 the running program. Toggle the action again to dock the pane back into the tiled tree. The last
@@ -124,7 +125,7 @@ The following layouts act on the current window without restarting any shell:
 | `horizontal` | Put every pane side by side at equal width |
 | `vertical` | Put every pane in one top-to-bottom column at equal height |
 
-`Ctrl+Alt+L`, **Next pane layout** in the palette, and `pane.next_layout` all cycle the window
+`Ctrl+Alt+l`, **Next pane layout** in the palette, and `pane.next_layout` all cycle the window
 through `grid`, `tall`, `fat`, `horizontal`, `vertical`, and `stack`, in that order. A window with no
 layout applied yet jumps to `grid`, so a single press never hides panes behind `stack`.
 
@@ -141,7 +142,7 @@ Hand-shaping the window drops the retained layout and returns it to manual contr
 it would mean your next split silently discarded that shaping. Rotating, moving a pane to an edge,
 and dragging or key-resizing a divider all release it. Equalizing does not, since resetting ratios is
 consistent with the layout still being in charge. Applying any layout again, including through
-`Ctrl+Alt+L`, puts the window back under management.
+`Ctrl+Alt+l`, puts the window back under management.
 
 Layout changes preserve pane order and focus. `stack` is temporary: saving a workspace stores the
 underlying pane tree, not the maximized presentation. Workspace *files* do not yet record the
@@ -270,7 +271,14 @@ termux-reload-settings
 ```
 
 Mentioning a root sequence with `map` or `unmap` replaces every built-in mapping for that exact
-sequence. Key names are case-insensitive and `>` separates strokes in a chord.
+sequence. Modifier names and multi-character key names are case-insensitive, but an upper-case
+letter is itself Shift — `Ctrl+Alt+R` is the stroke `ctrl+alt+shift+r` and `Ctrl+Alt+r` is
+`ctrl+alt+r`, two bindings that can hold two actions. `>` separates strokes in a chord.
+
+Whatever this file binds is what the app shows: the command palette's shortcut column, the keybind
+hint legend, and the caps that light up on the in-app keyboard while `Ctrl+Alt` is latched all read
+the same resolved bindings, each coloured by its action's group (panes, windows, session,
+workspace, terminal, clipboard, appearance, app).
 
 ```text
 # Run registry actions.
@@ -688,11 +696,11 @@ safe fallback. Keep font files owner-writable only and obtain them from a source
 
 ### Hints and search
 
-Press `Ctrl+Alt+U` for keyboard-labelled hints extracted from visible transcript content. Hints
+Press `Ctrl+Alt+u` for keyboard-labelled hints extracted from visible transcript content. Hints
 recognize URLs, absolute and relative paths, hashes, and `path:line[:column]` locations. Press a
 label to open a URL or copy another hint; hold Shift while choosing a URL to copy it instead.
 
-Press `Ctrl+Alt+S` to search the focused terminal's history and screen case-insensitively, then
+Press `Ctrl+Alt+s` to search the focused terminal's history and screen case-insensitively, then
 choose a result to scroll directly to its emulator row.
 
 ### Safe hyperlinks

@@ -7344,7 +7344,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .withEndAction(() -> popup.setVisibility(View.GONE)).start();
     }
 
-    private static final int KEYBIND_HINT_MAX = 18;
+    /**
+     * Cap on legend rows, not on lit keys. Every bound key under the latched prefix lights up
+     * whatever this is: the 18-row cap used to end the loop that also built the lighting map, so
+     * the strokes registered last — Ctrl+Alt+R among them, behind the nine session-index digits —
+     * were neither listed nor lit. Runs collapse to one row each, which is what makes the cap
+     * comfortable rather than tight.
+     */
+    private static final int KEYBIND_HINT_MAX = 24;
     private static final int KEYBIND_HINT_COLUMNS = 2;
     private static final long KEYBIND_HINT_LEGEND_BASE_DELAY_MS = 60L;
     private static final long KEYBIND_HINT_LEGEND_STAGGER_MS = 26L;
@@ -7373,46 +7380,52 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int onSurface = getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
             R.color.termux_on_surface);
         int glassBase = resolveAccessoryGlassBaseColor();
-        int panesColor = com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory
-            .ensureContrast(getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary,
-                R.color.termux_primary), glassBase);
-        int windowsColor = com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory
-            .ensureContrast(getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSecondary,
-                R.color.termux_secondary), glassBase);
-        int viewColor = com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory
-            .ensureContrast(com.google.android.material.color.MaterialColors.getColor(this,
-                com.google.android.material.R.attr.colorTertiary,
-                androidx.core.graphics.ColorUtils.blendARGB(panesColor, windowsColor, 0.5f)),
-                glassBase);
+        int primary = getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary,
+            R.color.termux_primary);
+        java.util.EnumMap<com.termux.app.terminal.KeybindGroupPalette.Group, Integer> groupColors =
+            new java.util.EnumMap<>(com.termux.app.terminal.KeybindGroupPalette.Group.class);
 
-        // Legend groups in first-appearance order; arrow keys naming the same tool collapse
-        // into one entry ("←↓↑→ Move pane focus") so a directional tool costs one legend row.
-        java.util.LinkedHashMap<String, java.util.List<KeybindHintEntry>> groups =
-            new java.util.LinkedHashMap<>();
-        java.util.Map<String, KeybindHintEntry> arrowEntryByTool = new java.util.HashMap<>();
+        // Legend groups in KeybindGroupPalette order, so the same action always lands in the same
+        // section with the same colour. Keys of one tool that form a run — the arrows, the session
+        // digits — collapse into one entry ("←↓↑→ Move pane focus", "1-9 Switch to session") so a
+        // whole row of keys costs one legend row.
+        java.util.EnumMap<com.termux.app.terminal.KeybindGroupPalette.Group,
+            java.util.List<KeybindHintEntry>> groups =
+            new java.util.EnumMap<>(com.termux.app.terminal.KeybindGroupPalette.Group.class);
+        java.util.Map<String, KeybindHintEntry> runEntryByTool = new java.util.HashMap<>();
+        java.util.List<KeybindHintEntry> runEntries = new java.util.ArrayList<>();
         java.util.Map<String, Integer> litTokens = new java.util.LinkedHashMap<>();
         int added = 0;
         for (Map.Entry<String, String> hint : hints.entrySet()) {
-            if (added >= KEYBIND_HINT_MAX) break;
-            added++;
             String token = hint.getKey();
             String toolName = hint.getValue();
-            String group = keybindHintGroup(toolName);
-            int groupColor = "PANES".equals(group) ? panesColor
-                : "VIEW".equals(group) ? viewColor : windowsColor;
+            com.termux.app.terminal.KeybindGroupPalette.Group group =
+                com.termux.app.terminal.KeybindGroupPalette.groupFor(toolName);
+            Integer groupColor = groupColors.get(group);
+            if (groupColor == null) {
+                groupColor = com.termux.app.terminal.KeybindGroupPalette
+                    .colorFor(group, primary, glassBase);
+                groupColors.put(group, groupColor);
+            }
+            // Lighting is never truncated: a bound cap that lights but has no legend row still
+            // tells the truth, a legend row for a dark cap would not.
             litTokens.put(token, groupColor);
-            String arrowGlyph = keybindHintArrowGlyph(token);
-            if (arrowGlyph != null) {
-                KeybindHintEntry merged = arrowEntryByTool.get(toolName);
+            boolean run = keybindHintRunToken(token);
+            if (run) {
+                KeybindHintEntry merged = runEntryByTool.get(toolName);
                 if (merged != null) {
                     merged.tokens.add(token);
                     continue;
                 }
             }
-            String cap = arrowGlyph != null ? arrowGlyph : keybindHintCapText(token, shift);
-            KeybindHintEntry entry = new KeybindHintEntry(cap, token,
-                keybindHintLabel(registry, toolName));
-            if (arrowGlyph != null) arrowEntryByTool.put(toolName, entry);
+            if (added >= KEYBIND_HINT_MAX) continue;
+            added++;
+            KeybindHintEntry entry = new KeybindHintEntry(
+                keybindHintCapText(token, shift), token, keybindHintLabel(registry, toolName));
+            if (run) {
+                runEntryByTool.put(toolName, entry);
+                runEntries.add(entry);
+            }
             java.util.List<KeybindHintEntry> groupEntries = groups.get(group);
             if (groupEntries == null) {
                 groupEntries = new java.util.ArrayList<>();
@@ -7420,24 +7433,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             groupEntries.add(entry);
         }
-        // A merged arrow entry shows the glyphs of every direction it absorbed, in ←↓↑→ order.
-        for (KeybindHintEntry entry : arrowEntryByTool.values()) {
-            if (entry.tokens.size() > 1) {
-                StringBuilder caps = new StringBuilder();
-                for (String token : new String[] {"left", "down", "up", "right"}) {
-                    if (entry.tokens.contains(token))
-                        caps.append(keybindHintArrowGlyph(token));
-                }
-                entry.cap = caps.toString();
-            }
+        // A merged entry shows every key it absorbed: arrows as glyphs in ←↓↑→ order, digits as
+        // the range they span.
+        for (KeybindHintEntry entry : runEntries) {
+            if (entry.tokens.size() > 1) entry.cap = keybindHintRunCap(entry.tokens);
         }
 
         int groupIndex = 0;
-        for (Map.Entry<String, java.util.List<KeybindHintEntry>> group : groups.entrySet()) {
-            int groupColor = "PANES".equals(group.getKey()) ? panesColor
-                : "VIEW".equals(group.getKey()) ? viewColor : windowsColor;
-            View groupView = buildKeybindHintGroup(group.getKey(), group.getValue(), groupColor,
-                onSurface, shift);
+        for (Map.Entry<com.termux.app.terminal.KeybindGroupPalette.Group,
+                java.util.List<KeybindHintEntry>> group : groups.entrySet()) {
+            int groupColor = groupColors.get(group.getKey());
+            View groupView = buildKeybindHintGroup(group.getKey().title(), group.getValue(),
+                groupColor, onSurface);
             android.widget.LinearLayout.LayoutParams groupParams =
                 new android.widget.LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -7458,13 +7465,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return litTokens;
     }
 
-    /** Legend section for a tool name: pane.* / window.* / session.* have their own, rest VIEW. */
+    /**
+     * Whether this key is part of a run one tool claims across several keys — the four arrows, the
+     * nine session digits. Such keys share a legend row instead of each taking one.
+     */
+    private static boolean keybindHintRunToken(@NonNull String token) {
+        if (keybindHintArrowGlyph(token) != null) return true;
+        return token.length() == 1 && token.charAt(0) >= '0' && token.charAt(0) <= '9';
+    }
+
+    /** Keycap text for a merged run: {@code ←↓↑→} for arrows, {@code 1-9} for a digit span. */
     @NonNull
-    private static String keybindHintGroup(@NonNull String toolName) {
-        if (toolName.startsWith("pane.")) return "PANES";
-        if (toolName.startsWith("window.")) return "WINDOWS";
-        if (toolName.startsWith("session.")) return "SESSION";
-        return "VIEW";
+    private static String keybindHintRunCap(@NonNull java.util.List<String> tokens) {
+        StringBuilder cap = new StringBuilder();
+        for (String token : new String[] {"left", "down", "up", "right"}) {
+            if (tokens.contains(token)) cap.append(keybindHintArrowGlyph(token));
+        }
+        java.util.List<String> digits = new java.util.ArrayList<>(tokens.size());
+        for (String token : tokens) {
+            if (keybindHintArrowGlyph(token) == null) digits.add(token);
+        }
+        java.util.Collections.sort(digits);
+        if (digits.size() >= 3) {
+            // Contiguity is not checked: a gap in the middle of nine index binds is not worth
+            // spelling out on a cap this small, and the labels name the action either way.
+            cap.append(digits.get(0)).append('-').append(digits.get(digits.size() - 1));
+        } else {
+            for (int i = 0; i < digits.size(); i++) {
+                if (i > 0) cap.append(' ');
+                cap.append(digits.get(i));
+            }
+        }
+        return cap.toString();
     }
 
     @Nullable
@@ -7481,10 +7513,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Legend keycap text: spelled-out tokens back to their glyph, letters follow the prefix case. */
     @NonNull
     private static String keybindHintCapText(@NonNull String token, boolean shift) {
+        String arrow = keybindHintArrowGlyph(token);
+        if (arrow != null) return arrow;
         switch (token) {
             case "minus": return "-";
             case "equals": return "=";
             case "plus": return "+";
+            // Named keys as their glyph: a legend cap column is 22dp wide, which "backspace"
+            // spelled out overruns before the label it belongs to has started.
+            case "space": return "␣";
+            case "tab": return "⇥";
+            case "enter": return "⏎";
+            case "backspace": return "⌫";
+            case "delete": return "⌦";
+            case "escape": return "esc";
+            case "pageup": return "⇞";
+            case "pagedown": return "⇟";
             default:
                 return shift ? token.toUpperCase(java.util.Locale.ROOT)
                     : token.toLowerCase(java.util.Locale.ROOT);
@@ -7494,7 +7538,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private View buildKeybindHintGroup(@NonNull String title,
                                        @NonNull java.util.List<KeybindHintEntry> entries,
-                                       int groupColor, int onSurface, boolean shift) {
+                                       int groupColor, int onSurface) {
         android.widget.LinearLayout group = new android.widget.LinearLayout(this);
         group.setOrientation(android.widget.LinearLayout.VERTICAL);
 

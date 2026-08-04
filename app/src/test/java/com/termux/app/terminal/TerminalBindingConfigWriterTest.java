@@ -72,13 +72,28 @@ public class TerminalBindingConfigWriterTest {
 
     @Test
     public void oneSequenceIsOneSequenceHoweverItIsSpelled() {
-        List<String> original = Collections.singletonList("map   Ctrl+Alt+W   app.launch com.old");
+        List<String> original = Collections.singletonList("map   CTRL+Alt+w   app.launch com.old");
 
         TerminalBindingConfigWriter.Edit edit = bind(original, "ctrl+alt+w");
 
         assertTrue(edit.error, edit.ok());
         assertTrue(edit.replaced);
         assertEquals(1, edit.lines.size());
+    }
+
+    @Test
+    public void aShiftedLetterIsADifferentSequenceFromTheUnshiftedOne() {
+        // Case on the key is Shift, so this line is ctrl+alt+shift+w and must be left alone when
+        // ctrl+alt+w is rebound — the edit appends instead of overwriting someone else's binding.
+        List<String> original = Collections.singletonList("map Ctrl+Alt+W app.launch com.old");
+
+        TerminalBindingConfigWriter.Edit edit = bind(original, "ctrl+alt+w");
+
+        assertTrue(edit.error, edit.ok());
+        assertFalse(edit.replaced);
+        assertEquals("map Ctrl+Alt+W app.launch com.old", edit.lines.get(0));
+        assertEquals("map ctrl+alt+w app.launch org.mozilla.firefox",
+            edit.lines.get(edit.lines.size() - 1));
     }
 
     @Test
@@ -136,7 +151,9 @@ public class TerminalBindingConfigWriterTest {
         assertFalse(edit.replaced);
         assertEquals("map ctrl+alt+w app.launch org.mozilla.firefox",
             edit.lines.get(edit.lines.size() - 1));
-        assertTrue(TerminalBindingConfigWriter.isUnmapOf("unmap Ctrl+Alt+W", "ctrl+alt+w"));
+        assertTrue(TerminalBindingConfigWriter.isUnmapOf("unmap CTRL+Alt+w", "ctrl+alt+w"));
+        // An upper-case key letter is Shift, so this unmap is of a different sequence.
+        assertFalse(TerminalBindingConfigWriter.isUnmapOf("unmap Ctrl+Alt+W", "ctrl+alt+w"));
         assertFalse(TerminalBindingConfigWriter.isUnmapOf("unmap --mode foo ctrl+alt+w",
             "ctrl+alt+w"));
     }
@@ -197,7 +214,7 @@ public class TerminalBindingConfigWriterTest {
             "map ctrl+alt+j pane.focus_direction direction=down");
 
         TerminalBindingConfigWriter.Edit edit =
-            TerminalBindingConfigWriter.removeMapping(original, "Ctrl+Alt+W");
+            TerminalBindingConfigWriter.removeMapping(original, "CTRL+Alt+w");
 
         assertTrue(edit.ok());
         assertTrue(edit.replaced);

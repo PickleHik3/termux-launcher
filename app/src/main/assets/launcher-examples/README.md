@@ -10,12 +10,32 @@ replaced without warning.
 | Live path | Seeded on install | What it configures |
 |---|---|---|
 | `~/.termux/termux-launcher-bindings.conf` | yes, if absent | Key bindings, chords, modal keymaps, launching Android apps from a chord |
-| `~/.termux/fonts.conf` | yes, if absent | Terminal faces, symbol maps, ligatures, OpenType features, variable axes, cell metrics |
+| `~/.termux/fonts.conf` | yes, if absent | Terminal faces, symbol maps, fallback chain, ligatures, OpenType features, variable axes, box drawing, cell metrics |
 | `~/.termux/keyboard/layout.xml` | no — copy it yourself | In-app keyboard layout, including the space bar's swipe slots |
 
 The two seeded files arrive with every directive commented out, so a fresh
 install behaves exactly as it did before they existed. Uncomment what you want.
 They are written only when missing, so your edits survive app updates.
+
+## Fonts: three tiers
+
+You do not have to write `fonts.conf` at all. Settings > Appearance > Terminal
+fonts lists seven families — a star marks the suggested one — and installing any
+of them writes the faces plus Nerd Font icons and
+`~/.termux/fonts.d/10-launcher.conf` itself. It never touches `~/.termux/font.ttf`
+or `font-italic.ttf`, so a pick there changes the terminal only.
+
+Precedence, from strongest to weakest:
+
+1. `~/.termux/fonts.conf` — yours, read last, therefore final
+2. `~/.termux/fonts.d/*.conf` — read first, in filename order; `10-launcher.conf`
+   is the app-managed one
+3. `~/.termux/font.ttf` and `font-italic.ttf` — the native Termux contract, also
+   what Termux:Styling writes
+
+So the picker and a hand-written `fonts.conf` can coexist: set only the
+directives you care about here and the fragment supplies the rest. Errors from a
+drop-in are prefixed `fonts.d/<file>: ` in the log and toast.
 
 `layout.xml` is deliberately not seeded: as soon as that file exists it replaces
 the bundled keyboard layout, so creating it should be your decision.
@@ -53,6 +73,10 @@ In `~/.termux/termux-launcher-bindings.conf`:
 package match wins; otherwise the launcher's fuzzy ranking picks the best match.
 Prefer `Ctrl+Alt` or a two-stroke chord over a bare `Alt+<letter>`, which many
 shells and editors expect to receive as an Escape prefix.
+
+An upper-case letter in a sequence is Shift, so `Ctrl+Alt+R` and `Ctrl+Alt+r`
+are two different bindings (`ctrl+alt+shift+r` and `ctrl+alt+r`). Modifier names
+and multi-character key names stay case-insensitive.
 
 Swipe slots on the in-app keyboard cannot launch apps: a `tool:` key carries no
 arguments. Use a chord.

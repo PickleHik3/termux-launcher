@@ -188,6 +188,16 @@ public class CommandPaletteFilterTest {
     }
 
     @Test
+    public void compactStroke_printsAShiftedLetterAsThatLetterInUpperCase() {
+        // The same shorthand the config file accepts for it, so a row and a `map` line read alike.
+        assertEquals("C-A-R", CommandPaletteFilter.compactStroke("ctrl+alt+shift+r"));
+        assertEquals("C-A-r", CommandPaletteFilter.compactStroke("ctrl+alt+r"));
+        // A named key has no shifted spelling, so shift keeps its own segment.
+        assertEquals("C-A-S-left", CommandPaletteFilter.compactStroke("ctrl+alt+shift+left"));
+        assertEquals("C-A-space>p", CommandPaletteFilter.compactStroke("ctrl+alt+space>p"));
+    }
+
+    @Test
     public void resultsAreImmutable() {
         List<CommandPaletteFilter.Entry> result = CommandPaletteFilter.filterAndRank(sample(), "close");
         try {

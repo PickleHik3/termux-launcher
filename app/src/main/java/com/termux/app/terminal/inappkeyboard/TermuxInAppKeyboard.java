@@ -984,13 +984,9 @@ public final class TermuxInAppKeyboard {
     @Nullable
     private static String keybindHintToken(juloo.keyboard2.KeyValue value) {
         switch (value.getKind()) {
-            case Char: {
-                char c = Character.toLowerCase(value.getChar());
-                if (c == '-') return "minus";
-                if (c == '=') return "equals";
-                if (c == '+') return "plus";
-                return String.valueOf(c);
-            }
+            case Char:
+                return com.termux.app.terminal.TerminalKeyBindingResolver
+                    .tokenForChar(value.getChar());
             case Keyevent:
                 return com.termux.app.terminal.TerminalKeyBindingResolver
                     .keyToken(value.getKeyevent());

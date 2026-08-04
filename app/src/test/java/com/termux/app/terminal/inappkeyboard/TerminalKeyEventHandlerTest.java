@@ -71,11 +71,13 @@ public class TerminalKeyEventHandlerTest {
         Pointers.Modifiers modifiers = mods(KeyValue.Modifier.CTRL, KeyValue.Modifier.ALT,
             KeyValue.Modifier.SHIFT, KeyValue.Modifier.META);
 
-        mHandler.key_up(KeyValue.makeCharKey('a'), modifiers);
+        // Ctrl alone is still terminal input, so the code-point path keeps its two-flag contract.
+        mHandler.key_up(KeyValue.makeCharKey('a'), mods(KeyValue.Modifier.CTRL,
+            KeyValue.Modifier.SHIFT, KeyValue.Modifier.META));
         CodePointCall charCall = mTerminal.codePointCalls.get(0);
         assertEquals(TerminalView.KEY_EVENT_SOURCE_VIRTUAL_KEYBOARD, charCall.eventSource);
         assertTrue(charCall.ctrl);
-        assertTrue(charCall.alt);
+        assertFalse(charCall.alt);
 
         mHandler.key_up(KeyValue.keyeventKey("tab", KeyEvent.KEYCODE_TAB, 0), modifiers);
         KeyCall keyCall = mTerminal.keyCalls.get(0);
@@ -87,6 +89,33 @@ public class TerminalKeyEventHandlerTest {
         assertTrue(keyCall.down.isMetaPressed());
         assertTrue(keyCall.down.isFromSource(InputDevice.SOURCE_KEYBOARD));
         assertEquals(android.view.KeyCharacterMap.VIRTUAL_KEYBOARD, keyCall.down.getDeviceId());
+    }
+
+    @Test
+    public void aCharUnderLatchedCtrlAltBecomesAKeyEventForTheBindingResolver() {
+        // The hint overlay lights these caps in their action's colour, so pressing one has to reach
+        // the same resolver a hardware Ctrl+Alt+R does instead of writing bytes to the shell.
+        Pointers.Modifiers modifiers = mods(KeyValue.Modifier.CTRL, KeyValue.Modifier.ALT,
+            KeyValue.Modifier.SHIFT);
+
+        mHandler.key_up(KeyValue.makeCharKey('R'), modifiers);
+
+        assertTrue(mTerminal.codePointCalls.isEmpty());
+        KeyCall keyCall = mTerminal.keyCalls.get(0);
+        assertEquals(KeyEvent.KEYCODE_R, keyCall.down.getKeyCode());
+        assertTrue(keyCall.down.isCtrlPressed());
+        assertTrue(keyCall.down.isAltPressed());
+        assertTrue(keyCall.down.isShiftPressed());
+    }
+
+    @Test
+    public void aCharWithNoKeyCodeUnderCtrlAltStillReachesTheShell() {
+        // Nothing binds a character the key-code table cannot name, so it must not be swallowed.
+        mHandler.key_up(KeyValue.makeCharKey('é'),
+            mods(KeyValue.Modifier.CTRL, KeyValue.Modifier.ALT));
+
+        assertTrue(mTerminal.keyCalls.isEmpty());
+        assertEquals((int) 'é', mTerminal.codePointCalls.get(0).codePoint);
     }
 
     @Test

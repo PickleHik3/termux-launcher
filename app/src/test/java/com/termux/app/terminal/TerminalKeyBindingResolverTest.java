@@ -415,11 +415,24 @@ public class TerminalKeyBindingResolverTest {
     }
 
     @Test
-    public void strokeSpecNormalization_isCaseAndOrderInsensitive() {
-        assertEquals("ctrl+alt+v", TerminalKeyBindingResolver.normalizeStrokeSpec("Ctrl+Alt+V"));
+    public void strokeSpecNormalization_isModifierCaseAndOrderInsensitive() {
+        assertEquals("ctrl+alt+v", TerminalKeyBindingResolver.normalizeStrokeSpec("CTRL+Alt+v"));
         assertEquals("ctrl+alt+v", TerminalKeyBindingResolver.normalizeStrokeSpec("alt+ctrl+v"));
         assertEquals("ctrl+alt+shift+left", TerminalKeyBindingResolver.normalizeStrokeSpec("SHIFT+ALT+CTRL+left"));
         assertEquals("ctrl+alt+]", TerminalKeyBindingResolver.normalizeStrokeSpec("Control+Alt+]"));
+        // A multi-character key name has no shifted spelling, so case there is still just case.
+        assertEquals("ctrl+alt+pageup",
+            TerminalKeyBindingResolver.normalizeStrokeSpec("Ctrl+Alt+PageUp"));
+    }
+
+    @Test
+    public void strokeSpecNormalization_readsAnUpperCaseLetterAsShift() {
+        // What makes `map Ctrl+Alt+R` and `map Ctrl+Alt+r` two bindings a config file can tell
+        // apart, the way it already could with an explicit shift+.
+        assertEquals("ctrl+alt+shift+r", TerminalKeyBindingResolver.normalizeStrokeSpec("Ctrl+Alt+R"));
+        assertEquals("ctrl+alt+r", TerminalKeyBindingResolver.normalizeStrokeSpec("Ctrl+Alt+r"));
+        assertEquals("ctrl+alt+shift+r",
+            TerminalKeyBindingResolver.normalizeStrokeSpec("ctrl+alt+shift+R"));
     }
 
     @Test

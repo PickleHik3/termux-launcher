@@ -783,6 +783,11 @@ public final class LauncherToolRegistry {
                 "ctrl+alt+6", "ctrl+alt+7", "ctrl+alt+8", "ctrl+alt+9"));
         // Prompt variants exist because Ctrl+Alt+R has always opened a dialog. The
         // argument-taking window.rename / session.rename remain the remote path.
+        //
+        // Case is the split: Ctrl+Alt+r renames the window, Ctrl+Alt+R (shifted) renames the shell
+        // session, whatever the layout — so both renames are always reachable and the shifted one
+        // is not a synonym of the other. Ctrl+Alt+r keeps naming the session with splits off, where
+        // there is no window to rename and the stroke would otherwise be dead.
         addUi(map, TOOL_WINDOW_RENAME_PROMPT,
             "Ask for a new name for the current window session.",
             schemaEmpty(),
@@ -795,7 +800,8 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_SESSION, R.string.tool_session_rename_prompt, R.string.tool_desc_session_rename_prompt,
-            Collections.singletonList(Binding.of("ctrl+alt+r", BindingCondition.SPLITS_OFF)),
+            Arrays.asList(Binding.of("ctrl+alt+shift+r"),
+                Binding.of("ctrl+alt+r", BindingCondition.SPLITS_OFF)),
             REQUIRES_SESSION);
 
         // Selection-dependent actions. Availability tracks the live selection, so
