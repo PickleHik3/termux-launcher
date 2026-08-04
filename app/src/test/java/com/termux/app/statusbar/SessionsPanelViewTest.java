@@ -1,5 +1,6 @@
 package com.termux.app.statusbar;
 
+import android.app.Activity;
 import android.app.Application;
 import android.os.Build;
 import android.view.MotionEvent;
@@ -13,6 +14,7 @@ import com.termux.app.terminal.SessionBrowserModel;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
@@ -96,10 +98,17 @@ public class SessionsPanelViewTest {
         return (ViewGroup) ((ViewGroup) view.getChildAt(2)).getChildAt(0);
     }
 
+    /**
+     * Attached on purpose. Expanding a session and finishing a deferred structural rebuild both go
+     * through {@link View#post}, and a detached view only queues those actions — it runs them when it
+     * is attached. Building the panel loose made every one of these tests assert against a tree that
+     * had not been rebuilt yet.
+     */
     private static SessionsPanelView panel(SessionsPanelView.Listener listener,
                                            SessionBrowserModel.Session... sessions) {
         SessionsPanelView view = new SessionsPanelView(ApplicationProvider.getApplicationContext());
         view.setListener(listener);
+        Robolectric.buildActivity(Activity.class).setup().get().setContentView(view);
         view.bind(Arrays.asList(sessions));
         return view;
     }

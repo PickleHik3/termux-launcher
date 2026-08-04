@@ -41,11 +41,20 @@ public class MaterialTerminalColorSchemeTest {
         }
     }
 
+    /**
+     * The cheap background helper and the full palette have to agree — the overlay reads one and the
+     * terminal reads the other, and a drift between them shows up as a terminal surface that is a
+     * slightly different colour from the terminal's own background.
+     */
     @Test
-    public void effectiveOpacityOnlyRaisesStoredValue() {
-        int effective = MaterialTerminalColorScheme.effectiveOpacityPercent(
-            ApplicationProvider.getApplicationContext(), 12, TerminalContrastLevel.HARDER);
-        assertTrue(effective >= 12 && effective <= 100);
+    public void theBackgroundHelperMatchesTheFullPaletteAtEveryLevel() {
+        for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+            Properties palette = MaterialTerminalColorScheme.create(
+                ApplicationProvider.getApplicationContext(), level);
+            assertEquals("level " + level.value, color(palette, "background"),
+                MaterialTerminalColorScheme.backgroundColor(
+                    ApplicationProvider.getApplicationContext(), level) | 0xFF000000);
+        }
     }
 
     private static int color(Properties properties, String key) {

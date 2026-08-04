@@ -115,20 +115,7 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
             return;
         }
         String label = contrast.getEntry() == null ? "Default" : contrast.getEntry().toString();
-        Context context = getContext();
-        TermuxAppSharedPreferences preferences = context == null ? null
-            : TermuxAppSharedPreferences.build(context, false);
-        int stored = preferences == null ? 100 : preferences.getTerminalBackgroundOpacity();
-        int effective = stored;
-        if (context != null && preferences != null) {
-            effective = com.termux.app.terminal.MaterialTerminalColorScheme.effectiveOpacityPercent(
-                context, stored,
-                com.termux.shared.termux.settings.preferences.TerminalContrastLevel.from(
-                    contrast.getValue() == null ? "default" : contrast.getValue()));
-        }
-        contrast.setSummary(effective > stored
-            ? getString(R.string.settings_terminal_contrast_summary_raised, label, effective, stored)
-            : getString(R.string.settings_terminal_contrast_summary, label));
+        contrast.setSummary(getString(R.string.settings_terminal_contrast_summary, label));
     }
 
     private void updateDockBlurAvailability() {

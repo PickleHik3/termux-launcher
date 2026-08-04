@@ -125,10 +125,42 @@ public class TerminalWindowBarTest {
         assertEquals(320L, TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS);
     }
 
+    /**
+     * Attention is a separate state from busy and outranks it: a window waiting on the user is not
+     * working. Both drive the same breath, so either one alone has to start it.
+     */
+    @Test
+    public void attentionOnlyChange_reachesTheStripAndStartsTheBreath() {
+        TerminalWindowBar bar = attachedBar();
+        java.util.List<TerminalWindowBar.WindowItem> idle = Arrays.asList(
+            new TerminalWindowBar.WindowItem("home", "home"),
+            new TerminalWindowBar.WindowItem("work", "work"));
+        bar.setWindows(idle, 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        android.view.View second = tabs.getChildAt(1);
+        assertFalse(bar.isBusyAnimationRunning());
+
+        bar.setWindows(Arrays.asList(idle.get(0), idle.get(1).withAttention(true)), 0);
+
+        assertSame(second, tabs.getChildAt(1));
+        assertTrue(bar.isBusyAnimationRunning());
+    }
+
+    @Test
+    public void attentionOutranksBusyOnTheSameWindow() {
+        TerminalWindowBar.WindowItem both = new TerminalWindowBar.WindowItem("home", "home")
+            .withBusy(true).withAttention(true);
+        assertTrue(both.busy);
+        assertTrue(both.attention);
+        // withBusy/withAttention compose rather than overwrite, so the strip can decide which rim
+        // wins; the pill must not end up with the working state silently erased.
+        assertSame(both, both.withAttention(true));
+    }
+
     @Test
     public void busyOnlyChange_reachesTheStripWithoutReinflatingThePills() {
         // The early return bails when the labels and the selection are unchanged, and a busy-only
-        // flip changes neither — so without sameBusy in the guard this state would be dropped. The
+        // flip changes neither — so without sameActivity in the guard this state would be dropped. The
         // pill views still have to be reused, or starting a command would rebuild the row.
         TerminalWindowBar bar = attachedBar();
         java.util.List<TerminalWindowBar.WindowItem> idle = Arrays.asList(

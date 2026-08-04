@@ -64,7 +64,7 @@ public final class MaterialTerminalColorScheme {
             R.color.termux_on_surface_variant);
 
         boolean dark = perceivedBrightness(background) < 128;
-        background = surfaceTone(background, dark, level);
+        background = surfaceTone(background, level);
 
         foreground = contrastTone(foreground, background, level.foregroundRatio);
         primary = contrastTone(primary, background, level.cursorRatio);
@@ -101,8 +101,15 @@ public final class MaterialTerminalColorScheme {
         return props;
     }
 
+    /**
+     * Role properties around an already-built terminal palette.
+     *
+     * <p>The palette is passed in rather than rebuilt so the exported files describe exactly the colours
+     * the terminal was given, and so the caller pays for one HCT search instead of two.
+     */
     @NonNull
-    public static Properties createMaterialRoleProperties(@NonNull Context context) {
+    public static Properties createMaterialRoleProperties(@NonNull Context context,
+                                                          @NonNull Properties terminalProps) {
         Properties props = new Properties();
 
         putMaterialColor(props, "primary", context, com.google.android.material.R.attr.colorPrimary,
@@ -136,7 +143,6 @@ public final class MaterialTerminalColorScheme {
         putMaterialColor(props, "outline_variant", context, com.google.android.material.R.attr.colorOutlineVariant,
             R.color.termux_outline_variant);
 
-        Properties terminalProps = create(context);
         props.setProperty("contrast_level", terminalProps.getProperty("contrast_level",
             TerminalContrastLevel.DEFAULT.value));
         for (String key : terminalProps.stringPropertyNames()) {
@@ -146,8 +152,12 @@ public final class MaterialTerminalColorScheme {
         return props;
     }
 
-    public static void writeMaterialColorFiles(@NonNull Context context) {
-        Properties props = createMaterialRoleProperties(context);
+    /**
+     * Write the exported palette files. Takes the finished properties rather than a {@link Context}
+     * because this runs on a writer thread: resolving theme attributes and reading resources off the
+     * main thread is not safe, so all of that has to have happened before the hand-off.
+     */
+    public static void writeMaterialColorFiles(@NonNull Properties props) {
         writeFile(MATERIAL_COLORS_PROPERTIES_PATH, toPropertiesText(props));
         writeFile(MATERIAL_COLORS_SHELL_PATH, toShellExports(props));
     }
@@ -170,45 +180,6 @@ public final class MaterialTerminalColorScheme {
         result = 31 * result + (preferences == null ? TerminalContrastLevel.DEFAULT.ordinal()
             : preferences.getTerminalContrastLevel().ordinal());
         return result;
-    }
-
-    /**
-     * Effective wallpaper-mode surface opacity. The stored slider value is never changed; rendering
-     * raises it just enough for every generated glyph class over black and white wallpaper extrema.
-     */
-    public static int effectiveOpacityPercent(@NonNull Context context, int storedPercent,
-                                              @NonNull TerminalContrastLevel level) {
-        Properties palette = create(context, level);
-        int surface = Color.parseColor(palette.getProperty("background"));
-        int foreground = Color.parseColor(palette.getProperty("foreground"));
-        int cursor = Color.parseColor(palette.getProperty("cursor"));
-        int floor = 100;
-        for (int alpha = 0; alpha <= 100; alpha++) {
-            if (!meetsOverWallpaper(surface, foreground, level.foregroundRatio, alpha)) continue;
-            if (!meetsOverWallpaper(surface, cursor, level.cursorRatio, alpha)) continue;
-            boolean ansiOk = true;
-            for (int i = 0; i < 16; i++) {
-                int ansi = Color.parseColor(palette.getProperty("color" + i));
-                if (!meetsOverWallpaper(surface, ansi, level.ansiRatio, alpha)) {
-                    ansiOk = false;
-                    break;
-                }
-            }
-            if (ansiOk) {
-                floor = alpha;
-                break;
-            }
-        }
-        return Math.max(Math.max(0, Math.min(100, storedPercent)), floor);
-    }
-
-    private static boolean meetsOverWallpaper(@ColorInt int surface, @ColorInt int glyph,
-                                              double ratio, int alphaPercent) {
-        double amount = alphaPercent / 100d;
-        int overBlack = composite(surface, Color.BLACK, amount);
-        int overWhite = composite(surface, Color.WHITE, amount);
-        return contrastRatio(glyph, overBlack) + 0.0001d >= ratio
-            && contrastRatio(glyph, overWhite) + 0.0001d >= ratio;
     }
 
     /** WCAG relative-luminance contrast ratio. */
@@ -238,9 +209,24 @@ public final class MaterialTerminalColorScheme {
         return best;
     }
 
+    /**
+     * The generated terminal background alone.
+     *
+     * <p>Split out because the surface colour is all the wallpaper-mode overlay needs, and reading it
+     * off a full {@link #create} was costing a 101-tone HCT contrast search for the foreground, the
+     * cursor and all sixteen ANSI colours — around 700µs on a desktop JVM, several milliseconds on a
+     * phone — every time the terminal surface was restyled.
+     */
     @ColorInt
-    private static int surfaceTone(@ColorInt int color, boolean dark,
-                                   @NonNull TerminalContrastLevel level) {
+    public static int backgroundColor(@NonNull Context context,
+                                      @NonNull TerminalContrastLevel level) {
+        return surfaceTone(materialColor(context, com.google.android.material.R.attr.colorSurface,
+            R.color.termux_surface_base), level);
+    }
+
+    @ColorInt
+    private static int surfaceTone(@ColorInt int color, @NonNull TerminalContrastLevel level) {
+        boolean dark = perceivedBrightness(color) < 128;
         Hct source = Hct.fromInt(color);
         double tone;
         switch (level) {
@@ -260,15 +246,6 @@ public final class MaterialTerminalColorScheme {
     private static double linear(double channel) {
         return channel <= 0.04045d ? channel / 12.92d
             : Math.pow((channel + 0.055d) / 1.055d, 2.4d);
-    }
-
-    @ColorInt
-    private static int composite(@ColorInt int foreground, @ColorInt int background, double amount) {
-        double a = Math.max(0d, Math.min(1d, amount));
-        return Color.rgb(
-            (int) Math.round(Color.red(foreground) * a + Color.red(background) * (1d - a)),
-            (int) Math.round(Color.green(foreground) * a + Color.green(background) * (1d - a)),
-            (int) Math.round(Color.blue(foreground) * a + Color.blue(background) * (1d - a)));
     }
 
     @ColorInt

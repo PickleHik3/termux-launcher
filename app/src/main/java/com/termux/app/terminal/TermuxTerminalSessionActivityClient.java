@@ -190,12 +190,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     public void onTitleChanged(@NonNull TerminalSession updatedSession) {
         if (!mActivity.isVisible())
             return;
-        if (updatedSession != mActivity.getCurrentSession()) {
-            // Only show an indicator for other sessions than the current one, since the user
-            // probably consciously caused the title change to change in the current session
-            // and don't want an annoying notice for that.
-            mActivity.showSessionSwitchIndicator(toToastTitle(updatedSession));
-        }
+        // Deliberately no corner notice here. A title changes whenever a command starts, finishes, or
+        // reports progress, which made the notice fire several times a second for one background job.
+        // A window of this session says so on its own pill; another session's job gets a standing row
+        // in the corner stack. Neither needs a transient copy of the same news.
         mActivity.syncBackgroundProcessStack();
         termuxSessionListNotifyUpdated();
     }
@@ -241,6 +239,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             if (isPluginExecutionCommandWithPendingResult)
                 Logger.logVerbose(LOG_TAG, "The \"" + finishedSession.mSessionName + "\" session will be force finished automatically since result in pending.");
         }
+        mActivity.clearShellAttention(finishedSession.getPid());
         if (mActivity.isVisible() && finishedSession != mActivity.getCurrentSession()) {
             // Show indicator for non-current sessions that exit.
             // Verify that session was not removed before we got told about it finishing:
@@ -280,6 +279,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     @Override
     public void onBell(@NonNull TerminalSession session) {
+        // Marked before the visibility and behaviour gates: the pill is not a sound, and a bell that
+        // rang while the launcher was in the background is exactly the one the user needs to find.
+        mActivity.noteShellAttention(session);
         if (!mActivity.isVisible())
             return;
         switch(mActivity.getProperties().getBellBehaviour()) {
@@ -628,9 +630,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             if (mActivity.getPreferences() != null && mActivity.getPreferences().isTerminalDynamicColorsEnabled()) {
                 props = MaterialTerminalColorScheme.create(mActivity);
                 mLastMaterialTerminalPaletteSignature = MaterialTerminalColorScheme.signature(mActivity);
+                // Built here, on the main thread, and handed over as finished values: the writer thread
+                // must not touch the theme or resources, and this way the files describe the same
+                // palette the terminal just took.
+                final Properties exported =
+                    MaterialTerminalColorScheme.createMaterialRoleProperties(mActivity, props);
                 MATERIAL_COLOR_FILE_EXECUTOR.execute(() -> {
                     try {
-                        MaterialTerminalColorScheme.writeMaterialColorFiles(mActivity);
+                        MaterialTerminalColorScheme.writeMaterialColorFiles(exported);
                     } catch (Exception e) {
                         Logger.logStackTraceWithMessage(LOG_TAG,
                             "Error writing material color files", e);

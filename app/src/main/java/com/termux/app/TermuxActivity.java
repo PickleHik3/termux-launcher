@@ -404,6 +404,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final com.termux.app.statusbar.BackgroundProcessModel mBackgroundProcessModel =
         new com.termux.app.statusbar.BackgroundProcessModel();
     @Nullable private com.termux.app.statusbar.BackgroundProcessStackView mBackgroundProcessStack;
+    private final Handler mBackgroundProcessHandler = new Handler(Looper.getMainLooper());
+    /** Height the transient notice chip is occupying above the stack; 0 when it is not showing. */
+    private int mNoticeOccupancyPx;
+    /**
+     * Shells that rang while the user was elsewhere, so their window pill can say so. Kept by pid
+     * rather than by session object: the flag has to survive the pane tree being rearranged under it.
+     */
+    private final java.util.Set<Integer> mAttentionShellPids = new java.util.HashSet<>();
+    private final Runnable mBackgroundProcessResync = this::syncBackgroundProcessStack;
     @Nullable private com.termux.app.terminal.TerminalCommandPaletteController mCommandPalette;
 
     /**
@@ -2044,14 +2053,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int resolveTerminalOverlayBaseColor() {
         if (mPreferences != null && mPreferences.isTerminalDynamicColorsEnabled()) {
-            String generated = com.termux.app.terminal.MaterialTerminalColorScheme.create(
-                this, mPreferences.getTerminalContrastLevel()).getProperty("background");
-            if (generated != null) {
-                try {
-                    return Color.parseColor(generated);
-                } catch (IllegalArgumentException ignored) {
-                }
-            }
+            return com.termux.app.terminal.MaterialTerminalColorScheme.backgroundColor(
+                this, mPreferences.getTerminalContrastLevel());
         }
         if (isNightThemeActive()) {
             return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
@@ -2063,12 +2066,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int baseColor = shouldUseWallpaperPassthroughMode()
             ? resolveTerminalOverlayBaseColor()
             : getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
+        // The opacity slider is the user's contract: in wallpaper mode this colour is painted on the
+        // full-screen root, so raising it for glyph contrast hides the wallpaper everywhere at once.
+        // Generated palettes always contain mid-tone greys (color0/color8), which cannot meet a
+        // contrast target over both a dark and a light wallpaper at any alpha below 255 — so any
+        // "raise until every glyph is legible over any wallpaper" floor is pinned at fully opaque.
         int opacity = mPreferences != null ? mPreferences.getTerminalBackgroundOpacity() : 100;
-        if (mPreferences != null && mPreferences.isTerminalDynamicColorsEnabled()
-            && shouldUseWallpaperPassthroughMode()) {
-            opacity = com.termux.app.terminal.MaterialTerminalColorScheme.effectiveOpacityPercent(
-                this, opacity, mPreferences.getTerminalContrastLevel());
-        }
         int alpha = Math.round(resolveOpacityAlpha(opacity) * 255f);
         return (alpha << 24) | (baseColor & 0x00FFFFFF);
     }
@@ -4718,6 +4721,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         stopAzEdgePagingLoop();
         cancelAzOverflowRefresh();
         mWindowLabelHandler.removeCallbacksAndMessages(null);
+        mBackgroundProcessHandler.removeCallbacks(mBackgroundProcessResync);
         mStatusCardHost.dismiss();
         if (mStatsController != null) mStatsController.stop();
         // Sampling stops here, so the smoothed history stops meaning anything. Dropped now rather
@@ -6281,6 +6285,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         SeekBar terminal = findViewById(R.id.dock_tuning_terminal_slider);
         com.google.android.material.materialswitch.MaterialSwitch terminalBorder =
             findViewById(R.id.dock_tuning_terminal_border_switch);
+        MaterialButtonToggleGroup terminalContrast =
+            findViewById(R.id.dock_tuning_terminal_contrast_group);
+        TextView terminalContrastHint = findViewById(R.id.dock_tuning_terminal_contrast_hint);
         SeekBar sessions = findViewById(R.id.dock_tuning_sessions_slider);
         SeekBar size = findViewById(R.id.dock_tuning_size_slider);
         SeekBar icons = findViewById(R.id.dock_tuning_icons_slider);
@@ -6342,6 +6349,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final int initialDockRadius = mPreferences.getAppLauncherDockCornerRadius();
         final int initialTerminal = mPreferences.getTerminalBackgroundOpacity();
         final boolean initialTerminalBorder = mPreferences.isTerminalBorderEnabled();
+        final String initialTerminalContrast = mPreferences.getTerminalContrastLevel().value;
         final int initialSessions = mPreferences.getSessionsOpacity();
         final float initialBarHeight = mPreferences.getAppLauncherBarHeightScale();
         final int initialSizeIndex = nearestDockSizePresetIndex(initialBarHeight);
@@ -6373,6 +6381,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             terminalBorder.setOnCheckedChangeListener(null);
             terminalBorder.setChecked(mPreferences.isTerminalBorderEnabled());
         }
+        syncTerminalContrastGroup(terminalContrast, terminalContrastHint);
         sessions.setProgress(initialSessions);
         size.setProgress(initialSizeIndex);
         icons.setProgress(Math.max(1, Math.min(20, initialButtonCount)));
@@ -6477,6 +6486,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             terminalBorder.setOnCheckedChangeListener((button, isChecked) -> {
                 mPreferences.setTerminalBorderEnabled(isChecked);
                 applyDockTuningStructuralPreview();
+            });
+        }
+        if (terminalContrast != null) {
+            terminalContrast.clearOnButtonCheckedListeners();
+            terminalContrast.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+                if (!isChecked) return;
+                String level = terminalContrastLevelForButton(checkedId);
+                if (level.equals(mPreferences.getTerminalContrastLevel().value)) return;
+                mPreferences.setTerminalContrastLevel(level);
+                applyTerminalContrastChange();
             });
         }
         sessions.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
@@ -6647,6 +6666,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_SESSIONS_OPACITY);
                 mPreferences.setTerminalBorderEnabled(
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERMINAL_BORDER_ENABLED);
+                mPreferences.setTerminalContrastLevel(
+                    com.termux.shared.termux.settings.preferences.TerminalContrastLevel
+                        .DEFAULT.value);
+                applyTerminalContrastChange();
             }
             blur.setProgress(mPreferences.getExtraKeysBlurRadius());
             opacity.setProgress(mPreferences.getAppBarOpacity());
@@ -6676,6 +6699,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             terminal.setProgress(mPreferences.getTerminalBackgroundOpacity());
             if (terminalBorder != null)
                 terminalBorder.setChecked(mPreferences.isTerminalBorderEnabled());
+            syncTerminalContrastGroup(terminalContrast, terminalContrastHint);
             sessions.setProgress(mPreferences.getSessionsOpacity());
             syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_DOCK);
             syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_KEYBOARD);
@@ -6692,6 +6716,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.setAppLauncherDockCornerRadius(initialDockRadius);
                 mPreferences.setTerminalBackgroundOpacity(initialTerminal);
                 mPreferences.setTerminalBorderEnabled(initialTerminalBorder);
+                if (!initialTerminalContrast.equals(
+                        mPreferences.getTerminalContrastLevel().value)) {
+                    mPreferences.setTerminalContrastLevel(initialTerminalContrast);
+                    applyTerminalContrastChange();
+                }
                 mPreferences.setSessionsOpacity(initialSessions);
                 mPreferences.setAppLauncherBarHeightScale(initialBarHeight);
                 mPreferences.setAppLauncherButtonCount(initialButtonCount);
@@ -7827,6 +7856,55 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Broader live re-apply for controls that change dock geometry, terminal, or sessions surfaces. */
     private void applyDockTuningStructuralPreview() {
         requestDockTuningPreview(TUNING_PREVIEW_ALL);
+    }
+
+    @NonNull
+    private static String terminalContrastLevelForButton(int checkedId) {
+        com.termux.shared.termux.settings.preferences.TerminalContrastLevel level;
+        if (checkedId == R.id.dock_tuning_terminal_contrast_softer) {
+            level = com.termux.shared.termux.settings.preferences.TerminalContrastLevel.SOFTER;
+        } else if (checkedId == R.id.dock_tuning_terminal_contrast_harder) {
+            level = com.termux.shared.termux.settings.preferences.TerminalContrastLevel.HARDER;
+        } else {
+            level = com.termux.shared.termux.settings.preferences.TerminalContrastLevel.DEFAULT;
+        }
+        return level.value;
+    }
+
+    private static int terminalContrastButtonForLevel(
+            @NonNull com.termux.shared.termux.settings.preferences.TerminalContrastLevel level) {
+        switch (level) {
+            case SOFTER: return R.id.dock_tuning_terminal_contrast_softer;
+            case HARDER: return R.id.dock_tuning_terminal_contrast_harder;
+            default: return R.id.dock_tuning_terminal_contrast_default;
+        }
+    }
+
+    /**
+     * Selects the stored level without firing the listener, and disables the row when the palette it
+     * grades is not in use: contrast targets the generated wallpaper palette, so with wallpaper colours
+     * off there is nothing for it to act on. The hint says so rather than leaving a dead control.
+     */
+    private void syncTerminalContrastGroup(@Nullable MaterialButtonToggleGroup group,
+                                           @Nullable TextView hint) {
+        if (mPreferences == null || group == null) return;
+        boolean available = mPreferences.isTerminalDynamicColorsEnabled();
+        // No listener juggling: the reset button calls this too, and clearing here would leave the row
+        // dead afterwards. The listener is a no-op when the level it reads back is already stored.
+        group.check(terminalContrastButtonForLevel(mPreferences.getTerminalContrastLevel()));
+        for (int i = 0; i < group.getChildCount(); i++) group.getChildAt(i).setEnabled(available);
+        if (hint != null) hint.setVisibility(available ? View.GONE : View.VISIBLE);
+    }
+
+    /**
+     * Regenerate the terminal palette and restyle the surfaces that read it. Both halves are needed:
+     * the sessions take their colours from the generated palette, while the wallpaper-mode overlay
+     * takes only its background tone, and a contrast change moves both.
+     */
+    private void applyTerminalContrastChange() {
+        if (mTermuxTerminalSessionActivityClient != null)
+            mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColors(true);
+        applyTerminalSurfaceAppearance();
     }
 
     private static final float[] DOCK_TUNING_SIZE_PRESETS = {1.72f, 1.95f, 2.18f, 2.45f};
@@ -9366,6 +9444,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return null;
         if (mSessionSwitchIndicator == null) {
             mSessionSwitchIndicator = new com.termux.app.terminal.SessionSwitchIndicatorView(this);
+            // Both chips share the corner, so the notice owns the top slot and the background stack
+            // follows it down and back up — one column, never a reserved gap.
+            mSessionSwitchIndicator.setOccupancyListener(height -> {
+                mNoticeOccupancyPx = height;
+                if (mBackgroundProcessStack != null)
+                    mBackgroundProcessStack.setNoticeOccupancyPx(height);
+            });
         }
         if (mSessionSwitchIndicator.getParent() == null) {
             host.addView(mSessionSwitchIndicator,
@@ -9383,6 +9468,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mBackgroundProcessStack.getParent() == null) {
             host.addView(mBackgroundProcessStack,
                 com.termux.app.statusbar.BackgroundProcessStackView.buildHostLayoutParams(this));
+            // The notice can already be up when the first background command appears.
+            mBackgroundProcessStack.setNoticeOccupancyPx(mNoticeOccupancyPx);
         }
         return mBackgroundProcessStack;
     }
@@ -10663,8 +10750,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.terminal.TerminalPaneController.Window window =
                     mCurrentWSession.windows.get(i);
                 TerminalSession session = mPaneController.windowActiveSession(window);
+                // Looking at the window is the acknowledgement: whatever it wanted, the user is here.
+                if (i == selected) clearWindowAttention(window);
                 items.add(buildWindowItem(session, i, foregroundPids)
-                    .withBusy(isWindowWorking(window, now)));
+                    .withBusy(isWindowWorking(window, now))
+                    .withAttention(isWindowAwaitingUser(window)));
             }
         }
         bar.setWindows(items, selected);
@@ -10704,18 +10794,64 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         boolean running = emulator == null || !emulator.hasShellIntegration()
                             || emulator.isShellIntegrationCommandRunning();
                         snapshots.add(new com.termux.app.statusbar.BackgroundProcessModel.Snapshot(
-                            shellPid, info.foregroundPid, info.processName, shell.getTitle(), running));
+                            session.id, shellPid, info.foregroundPid, info.processName,
+                            shell.getTitle(), running));
                     }
                 }
             }
         }
-        mBackgroundProcessModel.update(snapshots, android.os.SystemClock.elapsedRealtime());
-        TerminalSession focused = getCurrentSession();
+        long now = android.os.SystemClock.elapsedRealtime();
+        mBackgroundProcessModel.update(snapshots, now);
+        // Session, not pane: moving between the windows of one session leaves their pills on screen,
+        // and the pills already carry the working and waiting states. Only leaving the session hides
+        // them, which is the case this corner covers.
+        long focusedSessionId = mCurrentWSession == null ? -1L : mCurrentWSession.id;
         java.util.List<com.termux.app.statusbar.BackgroundProcessModel.Entry> visible =
-            mBackgroundProcessModel.visibleEntries(focused == null ? -1 : focused.getPid());
+            mBackgroundProcessModel.visibleEntries(focusedSessionId, now);
+        long untilNext = mBackgroundProcessModel.msUntilNextVisible(focusedSessionId, now);
+        mBackgroundProcessHandler.removeCallbacks(mBackgroundProcessResync);
+        if (untilNext >= 0L)
+            mBackgroundProcessHandler.postDelayed(mBackgroundProcessResync, untilNext);
         if (mBackgroundProcessStack == null && visible.isEmpty()) return;
         com.termux.app.statusbar.BackgroundProcessStackView stack = obtainBackgroundProcessStack();
         if (stack != null) stack.bind(visible);
+    }
+
+    /**
+     * Record that {@code session} asked for the user. The terminal bell is the signal: it is what
+     * shells, editors, and agent CLIs already ring when a command finishes or a prompt needs an
+     * answer, so no cooperation from the program is required.
+     *
+     * <p>A bell from the window the user is already in is not news, and is dropped.
+     */
+    public void noteShellAttention(@NonNull TerminalSession session) {
+        int pid = session.getPid();
+        if (pid < 1 || mPaneController == null) return;
+        if (mCurrentWSession != null
+            && mPaneController.shellsOf(mCurrentWSession.currentWindow()).contains(session)) return;
+        if (!mAttentionShellPids.add(pid)) return;
+        refreshTerminalWindowBar();
+    }
+
+    public void clearShellAttention(int shellPid) {
+        if (mAttentionShellPids.remove(shellPid)) refreshTerminalWindowBar();
+    }
+
+    private void clearWindowAttention(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
+        if (mPaneController == null || mAttentionShellPids.isEmpty()) return;
+        for (TerminalSession shell : mPaneController.shellsOf(window)) {
+            mAttentionShellPids.remove(shell.getPid());
+        }
+    }
+
+    private boolean isWindowAwaitingUser(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
+        if (mPaneController == null || mAttentionShellPids.isEmpty()) return false;
+        for (TerminalSession shell : mPaneController.shellsOf(window)) {
+            if (mAttentionShellPids.contains(shell.getPid())) return true;
+        }
+        return false;
     }
 
     /**

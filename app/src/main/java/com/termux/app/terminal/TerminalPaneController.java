@@ -1707,6 +1707,13 @@ public class TerminalPaneController {
         private static final int ACTION_CLOSE = 2;
 
         private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        /** Scratch for the handle pips, so a drag does not allocate a rect per frame. */
+        private final RectF mHandleRect = new RectF();
+        /** Scratch for pane rects read while drawing, and one for the control-tab geometry pass. */
+        private final RectF mDrawPaneRect = new RectF();
+        private final RectF mGeometryPaneRect = new RectF();
+        /** Scratch for pane rects read while hit-testing a touch stream. */
+        private final RectF mHitPaneRect = new RectF();
         private final Path mPath = new Path();
         private final RectF mControlRect = new RectF();
         private final RectF[] mControlButtons = {new RectF(), new RectF(), new RectF()};
@@ -2034,7 +2041,7 @@ public class TerminalPaneController {
             Leaf best = null;
             float bestDistance = Float.MAX_VALUE;
             for (Leaf leaf : leavesOf(mActiveWindow.root)) {
-                RectF rect = paneRect(leaf);
+                RectF rect = paneRect(leaf, mHitPaneRect);
                 if (rect == null) continue;
                 if (rect.contains(x, y)) return leaf;
                 float dx = Math.max(rect.left - x, Math.max(0f, x - rect.right));
@@ -2049,22 +2056,34 @@ public class TerminalPaneController {
         }
 
         private boolean isNearPaneBorder(@NonNull Leaf leaf, float x, float y) {
-            RectF rect = paneRect(leaf);
+            RectF rect = paneRect(leaf, mHitPaneRect);
             if (rect == null) return false;
             float threshold = dp(12);
             return Math.min(Math.min(Math.abs(x - rect.left), Math.abs(x - rect.right)),
                 Math.min(Math.abs(y - rect.top), Math.abs(y - rect.bottom))) <= threshold;
         }
 
+        /** Allocating form, for callers that keep several pane rects alive at once. */
         @Nullable
         private RectF paneRect(@NonNull Leaf leaf) {
+            return paneRect(leaf, new RectF());
+        }
+
+        /**
+         * Fills {@code out} with the leaf's frame in host coordinates and returns it, or null when the
+         * leaf has no attached frame. Every per-frame and per-touch caller passes its own scratch:
+         * these run inside draw and move handling, where one rect per call is one rect per frame.
+         */
+        @Nullable
+        private RectF paneRect(@NonNull Leaf leaf, @NonNull RectF out) {
             FrameLayout frame = mPaneFrames.get(leaf.session);
             if (frame == null || frame.getParent() == null) return null;
             int[] frameLocation = location(frame);
             int[] hostLocation = location(mHostView);
             float left = frameLocation[0] - hostLocation[0];
             float top = frameLocation[1] - hostLocation[1];
-            return new RectF(left, top, left + frame.getWidth(), top + frame.getHeight());
+            out.set(left, top, left + frame.getWidth(), top + frame.getHeight());
+            return out;
         }
 
         private int[] location(@NonNull View view) {
@@ -2124,7 +2143,7 @@ public class TerminalPaneController {
         }
 
         private void computeControlGeometry() {
-            RectF pane = mControlLeaf == null ? null : paneRect(mControlLeaf);
+            RectF pane = mControlLeaf == null ? null : paneRect(mControlLeaf, mGeometryPaneRect);
             if (pane == null) {
                 mControlRect.setEmpty();
                 return;
@@ -2148,6 +2167,12 @@ public class TerminalPaneController {
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
+            if (!mDraggingDivider && !mBorderPressed && mMovingLeaf == null
+                && !(mControlsShown && mControlLeaf != null && mControlProgress > 0f)) {
+                // Nothing of ours to draw. Resolving theme colours before this check meant an overlay
+                // that draws nothing still did two theme lookups on every pass.
+                return;
+            }
             int primary = MaterialColors.getColor(getContext(),
                 com.termux.shared.R.attr.termuxColorPrimary,
                 ContextCompat.getColor(getContext(), R.color.termux_primary));
@@ -2161,15 +2186,17 @@ public class TerminalPaneController {
                 drawActiveDivider(canvas, mYSplit);
                 mPaint.setStyle(Paint.Style.FILL);
                 mPaint.setColor(tertiary);
-                canvas.drawRoundRect(new RectF(mHandleX - dp(5), mHandleY - dp(2),
-                    mHandleX + dp(5), mHandleY + dp(2)), dp(2), dp(2), mPaint);
+                mHandleRect.set(mHandleX - dp(5), mHandleY - dp(2),
+                    mHandleX + dp(5), mHandleY + dp(2));
+                canvas.drawRoundRect(mHandleRect, dp(2), dp(2), mPaint);
                 if (mXSplit != null && mYSplit != null) {
-                    canvas.drawRoundRect(new RectF(mHandleX - dp(2), mHandleY - dp(5),
-                        mHandleX + dp(2), mHandleY + dp(5)), dp(2), dp(2), mPaint);
+                    mHandleRect.set(mHandleX - dp(2), mHandleY - dp(5),
+                        mHandleX + dp(2), mHandleY + dp(5));
+                    canvas.drawRoundRect(mHandleRect, dp(2), dp(2), mPaint);
                 }
             }
             if (mBorderPressed && mBorderTapLeaf != null && !mDraggingDivider) {
-                RectF border = paneRect(mBorderTapLeaf);
+                RectF border = paneRect(mBorderTapLeaf, mDrawPaneRect);
                 if (border != null) {
                     border.inset(dp(1.5f), dp(1.5f));
                     mPaint.setStyle(Paint.Style.STROKE);
@@ -2178,12 +2205,13 @@ public class TerminalPaneController {
                     canvas.drawRect(border, mPaint);
                     mPaint.setStyle(Paint.Style.FILL);
                     mPaint.setColor(tertiary);
-                    canvas.drawRoundRect(new RectF(mHandleX - dp(5), mHandleY - dp(2),
-                        mHandleX + dp(5), mHandleY + dp(2)), dp(2), dp(2), mPaint);
+                    mHandleRect.set(mHandleX - dp(5), mHandleY - dp(2),
+                        mHandleX + dp(5), mHandleY + dp(2));
+                    canvas.drawRoundRect(mHandleRect, dp(2), dp(2), mPaint);
                 }
             }
             if (mMovingLeaf != null && mMoveTarget != null && mMoveTarget != mMovingLeaf) {
-                RectF target = paneRect(mMoveTarget);
+                RectF target = paneRect(mMoveTarget, mDrawPaneRect);
                 if (target != null) {
                     mPaint.setStyle(Paint.Style.STROKE);
                     mPaint.setStrokeWidth(dp(3));
@@ -2220,7 +2248,7 @@ public class TerminalPaneController {
             int surface = MaterialColors.getColor(getContext(),
                 com.termux.shared.R.attr.termuxColorSurfacePanel,
                 ContextCompat.getColor(getContext(), R.color.termux_surface_panel));
-            RectF pane = paneRect(mControlLeaf);
+            RectF pane = paneRect(mControlLeaf, mDrawPaneRect);
             if (pane == null) return;
             float paneTop = pane.top;
             float radius = dp(4);
@@ -2334,6 +2362,8 @@ public class TerminalPaneController {
 
         private final Leaf mLeaf;
         private final Paint mChromePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        /** Scratch for the pill grip and its glyphs, redrawn on every frame a float is on screen. */
+        private final RectF mChromeScratch = new RectF();
         private final Runnable mCollapsePill = this::collapsePill;
         private int mDragMode = DRAG_NONE;
         private float mDownRawX;
@@ -2594,9 +2624,9 @@ public class TerminalPaneController {
                 // grip needs a higher floor than the resize chevrons to read on busy output.
                 mChromePaint.setColor(ColorUtils.setAlphaComponent(primary,
                     Math.max(chromeAlpha, 120)));
-                canvas.drawRoundRect(new RectF(pill.centerX() - dp(14),
-                    pill.centerY() - dp(1.8f), pill.centerX() + dp(14),
-                    pill.centerY() + dp(1.8f)), dp(1.8f), dp(1.8f), mChromePaint);
+                mChromeScratch.set(pill.centerX() - dp(14), pill.centerY() - dp(1.8f),
+                    pill.centerX() + dp(14), pill.centerY() + dp(1.8f));
+                canvas.drawRoundRect(mChromeScratch, dp(1.8f), dp(1.8f), mChromePaint);
             } else {
                 mChromePaint.setStyle(Paint.Style.STROKE);
                 mChromePaint.setStrokeWidth(dp(1.5f));
@@ -2615,11 +2645,11 @@ public class TerminalPaneController {
                             slotCenterX - dp(4), slotCenterY + dp(4), mChromePaint);
                     } else {
                         // Dock-back-to-tiling: a small window split down the middle.
-                        RectF tiles = new RectF(slotCenterX - dp(6), slotCenterY - dp(4.5f),
+                        mChromeScratch.set(slotCenterX - dp(6), slotCenterY - dp(4.5f),
                             slotCenterX + dp(6), slotCenterY + dp(4.5f));
-                        canvas.drawRoundRect(tiles, dp(1.5f), dp(1.5f), mChromePaint);
-                        canvas.drawLine(slotCenterX, tiles.top, slotCenterX, tiles.bottom,
-                            mChromePaint);
+                        canvas.drawRoundRect(mChromeScratch, dp(1.5f), dp(1.5f), mChromePaint);
+                        canvas.drawLine(slotCenterX, mChromeScratch.top, slotCenterX,
+                            mChromeScratch.bottom, mChromePaint);
                     }
                 }
                 if (slots > 1) {

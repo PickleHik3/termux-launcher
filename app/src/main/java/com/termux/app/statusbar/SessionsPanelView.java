@@ -50,6 +50,8 @@ public final class SessionsPanelView extends LinearLayout {
     private final LinearLayout mRows;
     private final ScrollView mScroll;
     private final TextView mEmpty;
+    private final android.text.TextPaint mMeasurePaint =
+        new android.text.TextPaint(android.text.TextPaint.ANTI_ALIAS_FLAG);
     private final Map<Long, HeaderHolder> mHeaders = new HashMap<>();
     private final Map<Long, WindowHolder> mWindows = new HashMap<>();
 
@@ -221,8 +223,6 @@ public final class SessionsPanelView extends LinearLayout {
         TextView more = label(18f, mOnSurfaceVariant);
         more.setText("⋮");
         more.setGravity(Gravity.CENTER);
-        more.setContentDescription(getResources().getString(
-            R.string.sessions_panel_more, session.index + 1));
         more.setOnClickListener(v -> showOverflow(v, session.id));
         row.addView(more, new LayoutParams(dp(36), LayoutParams.MATCH_PARENT));
         row.setOnClickListener(v -> post(() -> {
@@ -230,7 +230,9 @@ public final class SessionsPanelView extends LinearLayout {
                 ? null : session.id;
             rebuild();
         }));
-        mHeaders.put(session.id, new HeaderHolder(row, title, subtitle, chevron, more));
+        GradientDrawable surface = new GradientDrawable();
+        row.setBackground(surface);
+        mHeaders.put(session.id, new HeaderHolder(row, title, subtitle, chevron, more, surface));
         return row;
     }
 
@@ -252,7 +254,9 @@ public final class SessionsPanelView extends LinearLayout {
         row.setOnClickListener(v -> {
             if (mListener != null) mListener.onWindowSelected(session.id, window.id);
         });
-        mWindows.put(window.id, new WindowHolder(row, title, subtitle));
+        GradientDrawable surface = new GradientDrawable();
+        row.setBackground(surface);
+        mWindows.put(window.id, new WindowHolder(row, title, subtitle, surface));
         return row;
     }
 
@@ -265,9 +269,13 @@ public final class SessionsPanelView extends LinearLayout {
                 holder.title.setTypeface(null, session.current ? Typeface.BOLD : Typeface.NORMAL);
                 holder.subtitle.setText(counts(session));
                 holder.chevron.setText(expanded ? "⌄" : "›");
-                holder.row.setBackground(rowSurface(session.current));
+                styleRowSurface(holder.surface, session.current);
                 holder.row.setContentDescription(sessionContentDescription(session, expanded));
-                holder.more.setOnClickListener(v -> showOverflow(v, session.id));
+                // Rebound rather than set once at build: a session keeps its id but can change index
+                // when another session closes, which is not a structural change and so does not
+                // rebuild the row.
+                holder.more.setContentDescription(getResources().getString(
+                    R.string.sessions_panel_more, session.index + 1));
             }
             for (SessionBrowserModel.Window window : session.windows) {
                 WindowHolder child = mWindows.get(window.id);
@@ -276,7 +284,7 @@ public final class SessionsPanelView extends LinearLayout {
                 child.title.setTypeface(null, window.current ? Typeface.BOLD : Typeface.NORMAL);
                 child.subtitle.setText(getResources().getQuantityString(
                     R.plurals.session_browser_pane_count, window.panes.size(), window.panes.size()));
-                child.row.setBackground(rowSurface(session.current && window.current));
+                styleRowSurface(child.surface, session.current && window.current);
                 child.row.setContentDescription(windowTitle(window) + " · " + child.subtitle.getText());
             }
         }
@@ -343,15 +351,18 @@ public final class SessionsPanelView extends LinearLayout {
         return text;
     }
 
-    private GradientDrawable rowSurface(boolean current) {
-        GradientDrawable surface = new GradientDrawable();
+    /**
+     * Restyles a row's own drawable in place. The panel rebinds on every foreground poll while it is
+     * open, and each row keeps its own instance rather than sharing one: a shared drawable would have
+     * the 40dp headers and the 36dp window rows fighting over its bounds.
+     */
+    private void styleRowSurface(@NonNull GradientDrawable surface, boolean current) {
         surface.setCornerRadius(mCapsuleSurface ? Math.min(mStatusBarRadiusPx, dp(20)) : 0f);
         surface.setColor(current ? ColorUtils.setAlphaComponent(mPrimary, 52)
             : ColorUtils.setAlphaComponent(mSecondary, 10));
         surface.setStroke(Math.max(1, dp(1)), current
             ? ColorUtils.setAlphaComponent(mPrimary, 100)
             : ColorUtils.setAlphaComponent(mOutlineVariant, 24));
-        return surface;
     }
 
     private TextView label(float sp, int color) {
@@ -366,9 +377,8 @@ public final class SessionsPanelView extends LinearLayout {
     }
 
     private float measureText(@NonNull String text, float sp) {
-        android.text.TextPaint paint = new android.text.TextPaint(android.text.TextPaint.ANTI_ALIAS_FLAG);
-        paint.setTextSize(sp * getResources().getDisplayMetrics().scaledDensity);
-        return paint.measureText(text);
+        mMeasurePaint.setTextSize(sp * getResources().getDisplayMetrics().scaledDensity);
+        return mMeasurePaint.measureText(text);
     }
 
     @NonNull private static String structureKey(@NonNull List<SessionBrowserModel.Session> sessions) {
@@ -388,17 +398,20 @@ public final class SessionsPanelView extends LinearLayout {
     private static final class HeaderHolder {
         final View row;
         final TextView title, subtitle, chevron, more;
-        HeaderHolder(View row, TextView title, TextView subtitle, TextView chevron, TextView more) {
+        final GradientDrawable surface;
+        HeaderHolder(View row, TextView title, TextView subtitle, TextView chevron, TextView more,
+                     GradientDrawable surface) {
             this.row = row; this.title = title; this.subtitle = subtitle;
-            this.chevron = chevron; this.more = more;
+            this.chevron = chevron; this.more = more; this.surface = surface;
         }
     }
 
     private static final class WindowHolder {
         final View row;
         final TextView title, subtitle;
-        WindowHolder(View row, TextView title, TextView subtitle) {
-            this.row = row; this.title = title; this.subtitle = subtitle;
+        final GradientDrawable surface;
+        WindowHolder(View row, TextView title, TextView subtitle, GradientDrawable surface) {
+            this.row = row; this.title = title; this.subtitle = subtitle; this.surface = surface;
         }
     }
 }

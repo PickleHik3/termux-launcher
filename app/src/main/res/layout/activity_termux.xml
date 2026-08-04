@@ -1385,6 +1385,83 @@
 
                     <LinearLayout
                         android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:layout_marginBottom="2dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="64dp"
+                            android:layout_height="wrap_content"
+                            android:text="@string/termux_dock_tuning_terminal_contrast"
+                            android:textColor="?attr/termuxColorOnSurface"
+                            android:textSize="12sp" />
+
+                        <com.google.android.material.button.MaterialButtonToggleGroup
+                            android:id="@+id/dock_tuning_terminal_contrast_group"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            app:selectionRequired="true"
+                            app:singleSelection="true">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/dock_tuning_terminal_contrast_softer"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:insetTop="0dp"
+                                android:insetBottom="0dp"
+                                android:minHeight="34dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="2dp"
+                                android:text="@string/termux_dock_tuning_terminal_contrast_softer"
+                                android:textSize="10.5sp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/dock_tuning_terminal_contrast_default"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:insetTop="0dp"
+                                android:insetBottom="0dp"
+                                android:minHeight="34dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="2dp"
+                                android:text="@string/termux_dock_tuning_terminal_contrast_default"
+                                android:textSize="10.5sp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/dock_tuning_terminal_contrast_harder"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:insetTop="0dp"
+                                android:insetBottom="0dp"
+                                android:minHeight="34dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="2dp"
+                                android:text="@string/termux_dock_tuning_terminal_contrast_harder"
+                                android:textSize="10.5sp" />
+                        </com.google.android.material.button.MaterialButtonToggleGroup>
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/dock_tuning_terminal_contrast_hint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:text="@string/settings_terminal_contrast_disabled"
+                        android:textColor="?attr/termuxColorOnSurfaceVariant"
+                        android:textSize="10.5sp"
+                        android:visibility="gone" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="36dp"
                         android:gravity="center_vertical"
                         android:orientation="horizontal">

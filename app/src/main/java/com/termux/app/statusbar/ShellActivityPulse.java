@@ -38,4 +38,20 @@ public final class ShellActivityPulse {
         float lit = (float) (0.5 + 0.5 * cosine);
         return RIM_FLOOR + (1f - RIM_FLOOR) * lit;
     }
+
+    /** A rim that never dims far, so a window waiting on the user does not fade out between breaths. */
+    private static final float GLOW_FLOOR = 0.55f;
+
+    /**
+     * Strength of the attention rim at {@code phase}, in {@code [GLOW_FLOOR, 1]}. Shares the working
+     * rim's period so the two never beat against each other in one bar, and sharpens the same cosine
+     * so the peak arrives as a flare rather than a swell: this state is a request, not a status.
+     */
+    public static float glowWeight(float phase) {
+        double cosine = Math.cos(2 * Math.PI * phase);
+        float lit = (float) (0.5 + 0.5 * cosine);
+        // Squaring narrows the bright part of the cycle without moving where the peak lands.
+        float flared = lit * lit;
+        return GLOW_FLOOR + (1f - GLOW_FLOOR) * flared;
+    }
 }

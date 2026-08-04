@@ -18,6 +18,8 @@
 - **Working indication** — a sweeping underline on the pill of each window whose shell is producing output, plus three pulsing dots in the status row for the current session. Unprivileged, a silent foreground process (`sleep 300`, an idle editor) reads as not working.
 - **Settings cog in the status row**, opening Terminal & status settings directly.
 - **Rename and close buttons on sessions-panel rows** — the long press still works, but it was the only way to know it was possible.
+- **A window whose shell asked for you lights up.** The pill rim of a window turns the Material error colour and pulses with a halo once a shell in it rings the terminal bell — a permission prompt, an agent handing its turn back, a build that stopped for input. The bell is the signal, so no cooperation from the program is needed, and it is recorded even when the launcher is in the background. Focusing the window clears it, and a bell from the window you are already in is not news.
+- **Terminal contrast in the surface editor** — Edit surfaces → Terminal now carries the Softer/Default/Harder control alongside opacity and border, applied live like everything else there, with Reset tab and dismiss behaving as they do for the rest of the tab. Disabled with a reason when wallpaper colours are off, since contrast only grades the generated palette.
 
 ### Changed
 
@@ -30,6 +32,9 @@
 - The Rounded surface style's follow-the-style corner radius is 20dp (was 16–26dp by surface height), and the status surface honours it instead of squaring off.
 - Session names are capped at 8 characters instead of 5, and the scratchpad shell is named `scratch`; an existing scratchpad is re-adopted rather than duplicated.
 - The transient notice chip moved to the top-right, is quieter, and now carries every terminal notice — window positions, "no session to split", the max-terminals refusal — which were previously stock toasts. Creating a pane reports the new pane count.
+- **Background commands report per session, not per pane.** Opening a window, splitting a pane, or moving between the windows of one session no longer raises a corner notice, even when you leave a command running: those windows are still on screen and their pills carry the working and waiting states. Only leaving the session hides them, and that is what now puts a standing row in the top-right corner.
+- **A changing window title no longer raises a notice.** It fired on every progress write — several times a second for one background job — to say what the window's own pill and the corner stack already say.
+- **The transient notice chip is a Material surface.** Label-medium type on a surface-container-high fill with an outline hairline and elevation, entering on the emphasized-decelerate curve, instead of 9.5sp text on a black scrim. The standing background rows match it one step lower in the elevation scale, and the two share one column: the rows sit directly under the notice and slide up into its slot when it expires.
 
 ### Fixed
 
@@ -43,6 +48,13 @@
 - The command palette's focus highlight and bottom fade stay inside its rounded corners, and its accent rim is no longer painted over.
 - The floating pane's grab pill no longer draws a near-black slab across the top of the float.
 - The sessions pop-down accounts for its own row chrome, and only autoscrolls a title that overflows by a readable amount.
+- **The wallpaper is visible again in wallpaper mode.** With wallpaper colours on, the terminal surface was raising its own opacity to keep every generated glyph legible over any wallpaper — a floor that only full opacity could satisfy, because a mid-tone grey ANSI colour cannot meet a contrast target over both a dark and a light backdrop at once. That colour is painted on the full-screen root, so the whole launcher went opaque behind the dock and keyboard. The opacity slider is the contract again.
+- **The background-command chips no longer blink.** Every bind rebuilt all the rows, which handed the layout transition a full turnover on a view that is re-bound on every title change of every background shell. Rows are reused now, so only real arrivals and departures animate.
+- **A new window no longer flashes a chip for its own startup.** Anything a shell's rc files spawn is a non-idle foreground with no shell-integration mark yet, indistinguishable from a background command; a foreground now has to survive one resolver poll before it earns a row.
+- **Working indication counts a wrapper script's child.** CPU was read from the foreground process-group leader alone, so `sh build.sh` — which only waits while its child works — reported zero and every wrapped command read as idle. The whole process group is summed now, matched on `pgrp` in one pass over `/proc`.
+- **A shell that exits no longer leaves its foreground process behind in the cache**, where a reused pid would inherit it.
+- **The exported palette files are built on the main thread.** The writer thread was resolving theme attributes and re-deriving the palette itself, so the files could describe different colours than the terminal took.
+- **The terminal surface no longer rebuilds the whole generated palette to read one colour** — a 101-tone contrast search per foreground, cursor and ANSI colour, every time the surface was restyled.
 
 ## 0.2.30
 
