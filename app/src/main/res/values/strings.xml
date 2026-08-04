@@ -493,7 +493,6 @@
                 <string name="termux_keyboard_color_scheme_colors">Colors</string>
                 <string name="termux_keyboard_color_scheme_edit_colors">Edit colors</string>
                 <string name="termux_keyboard_color_scheme_save_colors">Save colors</string>
-                <string name="termux_keyboard_color_scheme_advanced">Advanced</string>
                 <string name="termux_keyboard_color_scheme_import_tinted">Import Tinted theme</string>
                 <string name="termux_keyboard_color_scheme_tinted_name_title">Import a Tinted theme</string>
                 <string name="termux_keyboard_color_scheme_tinted_name_message">Enter the complete theme ID shown in the Tinted Gallery. Base16, Base24, and Tinted8 are supported.</string>
@@ -509,16 +508,55 @@
                 <string name="termux_keyboard_color_scheme_imported_file_name">Imported Tinted theme</string>
                 <string name="termux_keyboard_color_scheme_tinted_error">This isn’t a complete Base16, Base24, or Tinted8 scheme.</string>
                 <string name="termux_keyboard_color_scheme_tinted_read_error">Couldn’t read this theme file.</string>
-                <string name="termux_keyboard_color_scheme_reset">Reset</string>
-                <string name="termux_keyboard_color_scheme_reset_title">Reset color scheme?</string>
-                <string name="termux_keyboard_color_scheme_reset_message">Remove all per-key colors and restore the current Material swatches.</string>
-                <string name="termux_keyboard_color_scheme_instructions">Paint keys directly: choose a swatch and role, then tap or drag across the keyboard. To change a palette value, tap Edit colors and then tap its swatch.</string>
+                <string name="termux_keyboard_color_scheme_follow_theme">Follow theme</string>
+                <string name="termux_keyboard_color_scheme_follow_theme_title">Follow the system theme?</string>
+                <string name="termux_keyboard_color_scheme_follow_theme_message">Pinned colors and any imported palette are discarded: every keyboard color follows your system theme and wallpaper again. Keys you painted keep their slot assignments.</string>
+                <string name="termux_keyboard_color_scheme_follow_theme_clear_keys">Clear painted keys too</string>
+                <string name="termux_keyboard_color_scheme_follow_theme_done">Colors follow the system theme again</string>
+                <string name="termux_keyboard_color_scheme_status_dynamic">Every color follows your system theme, so the keyboard moves with your wallpaper.</string>
+                <string name="termux_keyboard_color_scheme_status_pinned">%1$d of %2$d colors are pinned. The rest follow your system theme and wallpaper.</string>
+                <string name="termux_keyboard_color_scheme_status_imported">Imported palette %1$s is in use, so no color follows your wallpaper.</string>
+                <string name="termux_keyboard_color_scheme_status_imported_unnamed">An imported palette is in use, so no color follows your wallpaper.</string>
+                <string name="termux_keyboard_color_scheme_slot_pinned">pinned</string>
+                <string name="termux_keyboard_color_scheme_slot_dynamic">follows theme</string>
+                <string name="termux_keyboard_color_scheme_slot_description">%1$s, %2$s, %3$s</string>
+                <string name="termux_keyboard_color_scheme_slot_unpin">Follow theme again</string>
+                <string name="termux_keyboard_color_scheme_slot_unpinned">%1$s follows the system theme again</string>
+                <string name="termux_keyboard_color_scheme_instructions">Paint keys directly: choose a color and role, then tap or drag across the keyboard. Tap Edit colors and then a color to pin it to a hex value. Dashed colors follow your system theme; a dot marks a pinned one.</string>
                 <string name="termux_keyboard_color_scheme_key_bg">Key bg</string>
                 <string name="termux_keyboard_color_scheme_key_border">Key border</string>
                 <string name="termux_keyboard_color_scheme_primary">Primary</string>
                 <string name="termux_keyboard_color_scheme_secondary">Secondary</string>
                 <string name="termux_keyboard_color_scheme_secondary_bottom">Secondary bottom override</string>
-                <string name="termux_keyboard_color_scheme_swatch">Color swatch %1$d</string>
+                <!-- Short Material-role names for the 24 keyboard color slots, in slot order
+                     (base00 … base17). Index 06 and 10 are both colorSurface in the palette
+                     factory, so both are labelled Surface. -->
+                <string-array name="termux_keyboard_color_scheme_slot_labels">
+                    <item>Surface high</item>
+                    <item>Primary</item>
+                    <item>Secondary</item>
+                    <item>On surface</item>
+                    <item>On surface var</item>
+                    <item>Secondary cont</item>
+                    <item>Surface</item>
+                    <item>Surface highest</item>
+                    <item>Error</item>
+                    <item>Tertiary</item>
+                    <item>Primary cont</item>
+                    <item>On primary</item>
+                    <item>On secondary</item>
+                    <item>On tertiary</item>
+                    <item>Outline var</item>
+                    <item>Error cont</item>
+                    <item>Surface</item>
+                    <item>Surface cont</item>
+                    <item>Error tint</item>
+                    <item>Tertiary tint</item>
+                    <item>Primary tint</item>
+                    <item>Secondary tint</item>
+                    <item>Tertiary+primary</item>
+                    <item>Primary+secondary</item>
+                </string-array>
                 <string name="termux_keyboard_color_scheme_hex_title">Enter hex color</string>
                 <string name="termux_keyboard_color_scheme_hex_error">Use #RRGGBB or #AARRGGBB</string>
                 <string name="termux_in_app_keyboard_height_adjust_title">Size &amp; shape</string>

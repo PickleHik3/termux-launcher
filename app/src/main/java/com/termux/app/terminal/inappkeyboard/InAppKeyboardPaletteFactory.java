@@ -94,7 +94,24 @@ public final class InAppKeyboardPaletteFactory {
         return resolve(context).signature();
     }
 
-    /** Material roles used as the color editor's initial, wallpaper-aware swatches. */
+    /**
+     * Material roles behind every dynamic swatch of the color editor. Re-resolved on every load
+     * and on every {@link InAppKeyboardColorScheme#refreshDynamicSwatches}, so unpinned slots
+     * follow the system theme and the wallpaper.
+     *
+     * <p>Slot → role (base16 index in the editor's advanced mode):
+     * <pre>
+     * 00 surfaceContainerHigh   01 primary                02 secondary
+     * 03 onSurface              04 onSurfaceVariant       05 secondaryContainer
+     * 06 surface                07 surfaceContainerHighest
+     * 08 error                  09 tertiary               0A primaryContainer
+     * 0B onPrimary              0C onSecondary            0D onTertiary
+     * 0E outlineVariant         0F errorContainer         10 surface
+     * 11 surfaceContainer       12 error+onSurface 20%    13 tertiary+onSurface 20%
+     * 14 primary+onSurface 20%  15 secondary+onSurface 20%
+     * 16 tertiary+primary 50%   17 primary+secondary 50%
+     * </pre>
+     */
     @NonNull
     public static int[] defaultEditorSwatches(@NonNull Context context) {
         SourceRoles roles = resolve(context);

@@ -2,7 +2,9 @@ package com.termux.app.terminal.inappkeyboard;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
@@ -11,6 +13,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.os.Bundle;
+import android.util.SparseArray;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
@@ -21,6 +24,9 @@ import com.termux.shared.view.KeyboardUtils;
 import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalView;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -397,6 +403,146 @@ public class TermuxInAppKeyboardTest {
         assertEquals(2f, applied.keysHeight, 0.0001f);
         assertTrue(mHost.measurementInvalidationCount > invalidationsBeforeCustomLayout);
         assertTrue(mHost.geometrySyncCount > geometrySyncsBeforeCustomLayout);
+    }
+
+    @Test
+    public void refreshMaterialPaletteIsNoOpWhileDisabledHiddenOrDestroyed() {
+        mPreferences.setInAppKeyboardEnabled(false);
+        mController.onCreate(null);
+        applyMaterialRoles(true);
+
+        assertFalse("a disabled keyboard must not resolve or repaint anything",
+            mController.refreshMaterialPalette());
+
+        mPreferences.setInAppKeyboardEnabled(true);
+        mController.onPreferencesReloaded();
+        Keyboard2View view = (Keyboard2View) mHost.attachedView;
+        Theme shownTheme = ReflectionHelpers.getField(view, "_theme");
+
+        mController.hide(TermuxInAppKeyboard.HideReason.USER_EVENT);
+        applyMaterialRoles(false);
+        assertFalse("a hidden keyboard is not repainted in place",
+            mController.refreshMaterialPalette());
+        assertSame(shownTheme, ReflectionHelpers.<Theme>getField(view, "_theme"));
+
+        // Hiding keeps the renderer alive, so the missed change lands on the way back on screen.
+        mController.show(TermuxInAppKeyboard.ShowReason.TERMINAL_TAP);
+        assertNotSame(shownTheme, ReflectionHelpers.<Theme>getField(view, "_theme"));
+
+        mController.onDestroy();
+        assertFalse("a destroyed keyboard must not touch its detached host",
+            mController.refreshMaterialPalette());
+    }
+
+    @Test
+    public void refreshMaterialPaletteRebuildsOnlyWhenMaterialRolesMove() {
+        mPreferences.setInAppKeyboardEnabled(true);
+        mController.onCreate(null);
+        Keyboard2View view = (Keyboard2View) mHost.attachedView;
+        Theme first = ReflectionHelpers.getField(view, "_theme");
+
+        assertFalse("unmoved Material roles must not rebuild the palette",
+            mController.refreshMaterialPalette());
+        assertSame(first, ReflectionHelpers.<Theme>getField(view, "_theme"));
+
+        applyMaterialRoles(true);
+        assertTrue(mController.refreshMaterialPalette());
+        Theme moved = ReflectionHelpers.getField(view, "_theme");
+        assertNotSame(first, moved);
+        assertNotEquals(first.colorKey, moved.colorKey);
+
+        assertFalse("a repeat wallpaper event with the same palette is a no-op",
+            mController.refreshMaterialPalette());
+        assertSame(moved, ReflectionHelpers.<Theme>getField(view, "_theme"));
+    }
+
+    @Test
+    public void refreshMaterialPaletteMovesDynamicSwatchesAndHoldsPinnedOnes() throws Exception {
+        // Slot 5 is pinned; slot 3 stays dynamic. One key paints its background from the pinned
+        // slot and its primary label from the dynamic one.
+        JSONArray swatches = new JSONArray();
+        for (int i = 0; i < 24; i++)
+            swatches.put(i == 5 ? (Object) Integer.valueOf(0xFF123456) : JSONObject.NULL);
+        mPreferences.setInAppKeyboardColorScheme(
+            schemeJson(swatches, false, keyAssignment(5, 3)));
+        mPreferences.setInAppKeyboardEnabled(true);
+        mController.onCreate(null);
+        Keyboard2View view = (Keyboard2View) mHost.attachedView;
+
+        Keyboard2View.KeyColorOverride before = keyOverride(view, 1, 3);
+        assertEquals(Integer.valueOf(0xFF123456), before.keyBackground);
+
+        applyMaterialRoles(true);
+        assertTrue(mController.refreshMaterialPalette());
+
+        Keyboard2View.KeyColorOverride after = keyOverride(view, 1, 3);
+        assertEquals("a pinned swatch never follows the Material theme",
+            Integer.valueOf(0xFF123456), after.keyBackground);
+        assertNotEquals("a dynamic swatch re-resolves against the new Material roles",
+            before.primaryLabel, after.primaryLabel);
+    }
+
+    @Test
+    public void refreshMaterialPaletteKeepsAnImportedPaletteExactly() throws Exception {
+        JSONArray swatches = new JSONArray();
+        for (int i = 0; i < 24; i++)
+            swatches.put(i < 16 ? (Object) Integer.valueOf(0xFF101010 + i) : JSONObject.NULL);
+        mPreferences.setInAppKeyboardColorScheme(schemeJson(swatches, true, null));
+        mPreferences.setInAppKeyboardTheme("custom");
+        mPreferences.setInAppKeyboardEnabled(true);
+        mController.onCreate(null);
+        Keyboard2View view = (Keyboard2View) mHost.attachedView;
+
+        Theme before = ReflectionHelpers.getField(view, "_theme");
+        assertEquals(0x101011, before.colorKey & 0x00FFFFFF);
+        assertEquals(0xFF101015, before.labelColor);
+
+        applyMaterialRoles(true);
+        assertTrue(mController.refreshMaterialPalette());
+
+        Theme after = ReflectionHelpers.getField(view, "_theme");
+        assertNotSame(before, after);
+        assertEquals("an imported key color survives a wallpaper change",
+            before.colorKey, after.colorKey);
+        assertEquals("an imported label color survives a wallpaper change",
+            before.labelColor, after.labelColor);
+        assertEquals(before.colorKeyActivated, after.colorKeyActivated);
+    }
+
+    /** Moves every Material source role the keyboard palette is built from. */
+    private void applyMaterialRoles(boolean dark) {
+        mActivity.getTheme().applyStyle(dark
+            ? com.google.android.material.R.style.ThemeOverlay_Material3_Dark
+            : com.google.android.material.R.style.ThemeOverlay_Material3_Light, true);
+    }
+
+    private static JSONObject keyAssignment(int backgroundSlot, int primarySlot)
+        throws JSONException {
+        JSONObject assignment = new JSONObject();
+        assignment.put("bg", backgroundSlot);
+        assignment.put("primary", primarySlot);
+        return assignment;
+    }
+
+    private static String schemeJson(JSONArray swatches, boolean imported,
+                                     JSONObject keyOneThree) throws JSONException {
+        JSONObject root = new JSONObject();
+        root.put("schemaVersion", InAppKeyboardColorScheme.SCHEMA_VERSION);
+        root.put("base16Palette", imported);
+        root.put("importedThemeId", "");
+        root.put("swatches", swatches);
+        JSONObject keys = new JSONObject();
+        if (keyOneThree != null)
+            keys.put("1:3", keyOneThree);
+        root.put("keys", keys);
+        return root.toString();
+    }
+
+    private static Keyboard2View.KeyColorOverride keyOverride(Keyboard2View view, int row,
+                                                              int column) {
+        SparseArray<Keyboard2View.KeyColorOverride> overrides =
+            ReflectionHelpers.getField(view, "_keyColorOverrides");
+        return overrides.get((row << 16) | column);
     }
 
     private static KeyValue centerKey(Keyboard2View view, int row, int column) {

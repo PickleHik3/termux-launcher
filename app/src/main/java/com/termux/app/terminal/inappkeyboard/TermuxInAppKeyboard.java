@@ -90,6 +90,12 @@ public final class TermuxInAppKeyboard {
     private float mPreAdjustKeyCornerRadiusDp = -1f;
     private String mSelectedLayoutId = LAYOUT_MAIN;
     private String mAppliedConfigSignature;
+    /**
+     * Material source-role signature the currently rendered palette was built from. Only ever
+     * read while {@link #mKeyboardView} is non-null, which implies {@link #createPalette()} has
+     * already recorded one.
+     */
+    private int mAppliedPaletteSignature;
     private String mExtraKeysStoredValue;
     private LayoutModifier.LayoutOptions mLayoutOptions;
     private final int[] mLaunchWaveLocation = new int[2];
@@ -689,6 +695,9 @@ public final class TermuxInAppKeyboard {
             return;
         }
         ensureKeyboardView();
+        // Hiding keeps the renderer alive, so a theme or wallpaper change that arrived while the
+        // keyboard was off screen is applied on the way back on.
+        refreshMaterialPaletteIfSignatureMoved();
         setContainerVisible(true);
         mHost.requestAccessoryGeometrySync();
         recheckLayout();
@@ -711,6 +720,8 @@ public final class TermuxInAppKeyboard {
         mAppliedConfigSignature = configPreferenceSignature();
         mKeyboardView = new Keyboard2View(requireContainer().getContext(),
             configBuilder.build(), createPalette());
+        mAppliedPaletteSignature = InAppKeyboardPaletteFactory.signature(
+            requireContainer().getContext());
         mKeyboardView.setHeightScale(mHeightScale);
         mKeyboardView.setKeyMarginScale(mKeyMarginScale);
         mKeyboardView.setKeyCornerRadiusOverride(radiusDpToPx(mKeyCornerRadiusDp));
@@ -791,10 +802,49 @@ public final class TermuxInAppKeyboard {
         }
         resetInputPipeline();
         mKeyboardView.setPalette(createPalette());
+        mAppliedPaletteSignature = InAppKeyboardPaletteFactory.signature(
+            requireContainer().getContext());
         applyCustomColorScheme();
         if (mHeightAdjusting)
             mHost.setKeyboardHeightAdjustmentVisible(true);
         mHost.requestAccessoryGeometrySync();
+    }
+
+    /**
+     * Re-resolves the Material-driven half of the keyboard's appearance — the theme palette and
+     * the per-key color scheme — and repaints the live keyboard in place, so a wallpaper or
+     * system-theme change is visible without hiding and reshowing the keyboard.
+     *
+     * <p>The stored scheme is reloaded, which re-resolves its dynamic slots against the fresh
+     * Material roles while pinned swatches and imported palettes keep their stored colors
+     * exactly: only dynamic slots move.
+     *
+     * <p>The Material source-role signature is compared first, so a wallpaper change that does
+     * not move the palette costs one role resolve and nothing else. Must be called on the main
+     * thread. No-op while the keyboard is disabled, destroyed, or not currently on screen — a
+     * keyboard that is hidden picks the change up in {@link #showInternal()} when it returns.
+     *
+     * @return true when the palette had moved and the live keyboard was repainted
+     */
+    public boolean refreshMaterialPalette() {
+        if (!mEnabled || mDestroyed || !isVisible())
+            return false;
+        return refreshMaterialPaletteIfSignatureMoved();
+    }
+
+    /** Cheap signature check first, palette rebuild only when the Material roles actually moved. */
+    private boolean refreshMaterialPaletteIfSignatureMoved() {
+        if (mKeyboardView == null)
+            return false;
+        int signature = InAppKeyboardPaletteFactory.signature(requireContainer().getContext());
+        if (signature == mAppliedPaletteSignature)
+            return false;
+        mAppliedPaletteSignature = signature;
+        // Both of these reload the stored scheme, so dynamic slots re-resolve against the new
+        // Material roles while pinned and imported swatches keep their persisted colors.
+        mKeyboardView.setPalette(createPalette());
+        applyCustomColorScheme();
+        return true;
     }
 
     private void applyCustomColorScheme() {

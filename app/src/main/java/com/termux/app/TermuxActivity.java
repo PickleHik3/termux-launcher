@@ -1270,6 +1270,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColors(true);
                 }
                 applyTerminalSurfaceAppearance();
+                // Dynamic keyboard swatches follow the Material roles; pinned or imported ones
+                // are left exactly as stored. Gated internally on the palette signature moving.
+                if (mInAppKeyboard != null) {
+                    mInAppKeyboard.refreshMaterialPalette();
+                }
                 scheduleAccessoryRenderSync("wallpaper:colors");
             };
             wallpaperManager.addOnColorsChangedListener(mWallpaperColorsChangedListener, mAccessoryRenderHandler);
