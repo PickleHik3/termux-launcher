@@ -1137,14 +1137,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // this on top of them is what pushed the split panes inside the outer border and clipped
         // their top corners.
         //
-        // The corner term is what the straight 2dp missed. A rounded rect of radius r reaches
-        // r·(1 - 1/√2) ≈ 0.29r past its own corner along the diagonal, and the pane host is clipped
-        // to exactly that shape — so with a capsule radius the bottom-left arc ate the prompt glyph
-        // on the last row. Reserving the arc's depth is the same trade tmux and zellij make when
-        // they spend a whole cell on the frame: the frame owns space the content never enters.
-        int cornerClearancePx = Math.round(cornerRadiusPx * 0.30f);
-        int paneInsetPx = enabled
-            ? Math.max(strokePx + Math.round(dpToPx(2)), cornerClearancePx) : 0;
+        // Arc clearance is not part of this margin. A margin moves the clipped box; it does not
+        // move the box's own corners away from the arc it is clipped to, so at any radius the
+        // corner cells were still being nibbled — worse the larger the radius. That clearance is
+        // padding inside the clip instead (see cornerArcPaddingPx below).
+        int paneInsetPx = enabled ? strokePx + Math.round(dpToPx(2)) : 0;
         int paneHorizontalInsetPx = capsuleMarginPx + paneInsetPx;
         int paneVerticalInsetPx = borderVerticalInsetPx + paneInsetPx;
         ViewGroup.LayoutParams paneParams = paneHost.getLayoutParams();
@@ -1163,6 +1160,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         if (!enabled) {
             borderView.setBackground(null);
+            applyPaneHostCornerPadding(paneHost, 0);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 paneHost.setOutlineProvider(ViewOutlineProvider.BOUNDS);
                 paneHost.setClipToOutline(false);
@@ -1180,9 +1178,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         border.setStroke(strokePx, withAlphaComponent(resolveAccessoryOutlineColor(), 150));
         borderView.setBackground(border);
 
+        float innerRadiusPx = capsule ? Math.max(0f, cornerRadiusPx - paneInsetPx) : 0f;
+        // A rounded rect of radius r reaches r·(1 - 1/√2) ≈ 0.293r past its own corner along the
+        // diagonal, so content that starts at the corner of a clip with radius r loses that much of
+        // its first cell. Padding the host by the arc's depth is what keeps the corner glyphs whole,
+        // and because it is derived from the radius it holds at 20dp and at 40dp alike — the same
+        // trade tmux and zellij make when they spend a whole cell on the frame: the frame owns
+        // space the content never enters.
+        applyPaneHostCornerPadding(paneHost, Math.round(innerRadiusPx * 0.30f));
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             if (capsule) {
-                float innerRadiusPx = Math.max(0f, cornerRadiusPx - paneInsetPx);
                 paneHost.setOutlineProvider(new ViewOutlineProvider() {
                     @Override
                     public void getOutline(View view, android.graphics.Outline outline) {
@@ -1195,6 +1201,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 paneHost.setClipToOutline(true);
             }
         }
+    }
+
+    /**
+     * Arc clearance the pane tree lays out inside, so no glyph sits under the rounded clip. Applied
+     * as padding rather than as a margin on purpose: the clip follows the host's bounds, so only
+     * padding puts distance between the content's corners and the arc.
+     */
+    private static void applyPaneHostCornerPadding(@NonNull View paneHost, int paddingPx) {
+        if (paneHost.getPaddingLeft() == paddingPx && paneHost.getPaddingTop() == paddingPx
+            && paneHost.getPaddingRight() == paddingPx
+            && paneHost.getPaddingBottom() == paddingPx)
+            return;
+        paneHost.setPadding(paddingPx, paddingPx, paddingPx, paddingPx);
     }
 
     /**
@@ -1428,7 +1447,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float resolveStatusBarCornerRadiusPx() {
         if (mPreferences == null)
             return 0f;
-        return dpToPx(mPreferences.getStatusBarCornerRadius());
+        int configured = mPreferences.getStatusBarCornerRadius();
+        // -1 means "follow the style", which used to reach the drawable as a negative radius and
+        // silently squared the status surface off while the dock beside it was rounded.
+        return dpToPx(configured >= 0 ? configured
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_ROUNDED_SURFACE_CORNER_RADIUS_DP);
     }
 
     @NonNull
@@ -2441,9 +2464,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (configuredRadius >= 0) {
             return Math.min(dpToPx(configuredRadius), surfaceHeightPx / 2f);
         }
-        // Capsule radius 26 (design redline · Card radius 26).
-        float maxRadius = dpToPx(26);
-        return Math.max(dpToPx(16), Math.min(maxRadius, surfaceHeightPx / 2f));
+        // Follow-the-style radius, shared with the status surface and the terminal border. The
+        // design redline's 26 read as a lozenge on a short dock and cost the terminal a wide corner
+        // arc; 20 is the same family, quieter, and still capsule-like at dock height.
+        return Math.min(dpToPx(
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_ROUNDED_SURFACE_CORNER_RADIUS_DP),
+            surfaceHeightPx / 2f);
     }
 
     private void applyDockSurfaceShape(@NonNull View surface, boolean capsule, int surfaceHeightPx) {

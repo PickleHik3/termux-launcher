@@ -183,6 +183,13 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS = -1;
         public static final int MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS = 40;
 
+        /**
+         * Radius every Rounded-style surface takes when its own radius is left on -1 (follow the
+         * style): the dock capsule, the status surface and the terminal border all read this, so
+         * "Rounded" is one shape rather than three that drifted apart.
+         */
+        public static final int DEFAULT_ROUNDED_SURFACE_CORNER_RADIUS_DP = 20;
+
         /** Section the surface editor last had open ("dock", "keyboard", "status", "other"). */
         public static final String KEY_SURFACE_TUNING_LAST_SECTION = "surface_tuning_last_section";
         public static final String DEFAULT_SURFACE_TUNING_LAST_SECTION = "dock";
