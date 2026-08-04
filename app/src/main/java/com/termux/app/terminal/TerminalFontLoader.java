@@ -12,6 +12,7 @@ import com.termux.view.TerminalRenderer;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,6 +24,7 @@ public final class TerminalFontLoader {
 
     private static final long MAX_FONT_FILE_BYTES = 64L * 1024L * 1024L;
     private static final int MAX_SYMBOL_FONTS = 64;
+    private static final int MAX_FALLBACK_FONTS = 8;
 
     public static final class Faces {
         @NonNull public final Typeface regular;
@@ -30,29 +32,37 @@ public final class TerminalFontLoader {
         @Nullable public final Typeface italic;
         @Nullable public final Typeface boldItalic;
         @NonNull public final TerminalRenderer.SymbolMap[] symbolMaps;
+        /** {@code fallback_font} faces in config order, tried after the primary faces. */
+        @NonNull public final List<Typeface> fallbackFonts;
         @NonNull public final TerminalRenderer.LigaturePolicy ligaturePolicy;
         @NonNull public final TerminalRenderer.FontFeatures fontFeatures;
         @NonNull public final TerminalRenderer.FontVariations fontVariations;
         @NonNull public final TerminalRenderer.FontMetricsAdjustments fontMetricsAdjustments;
+        /** {@code box_drawing}, {@code box_drawing_scale} and {@code powerline_symbols}. */
+        @NonNull public final TerminalRenderer.BoxDrawingPolicy boxDrawingPolicy;
         @NonNull public final List<String> errors;
 
         private Faces(@NonNull Typeface regular, @Nullable Typeface bold,
                       @Nullable Typeface italic, @Nullable Typeface boldItalic,
                       @NonNull TerminalRenderer.SymbolMap[] symbolMaps,
+                      @NonNull List<Typeface> fallbackFonts,
                       @NonNull TerminalRenderer.LigaturePolicy ligaturePolicy,
                       @NonNull TerminalRenderer.FontFeatures fontFeatures,
                       @NonNull TerminalRenderer.FontVariations fontVariations,
                       @NonNull TerminalRenderer.FontMetricsAdjustments fontMetricsAdjustments,
+                      @NonNull TerminalRenderer.BoxDrawingPolicy boxDrawingPolicy,
                       @NonNull List<String> errors) {
             this.regular = regular;
             this.bold = bold;
             this.italic = italic;
             this.boldItalic = boldItalic;
             this.symbolMaps = symbolMaps.clone();
+            this.fallbackFonts = Collections.unmodifiableList(new ArrayList<>(fallbackFonts));
             this.ligaturePolicy = ligaturePolicy;
             this.fontFeatures = fontFeatures;
             this.fontVariations = fontVariations;
             this.fontMetricsAdjustments = fontMetricsAdjustments;
+            this.boxDrawingPolicy = boxDrawingPolicy;
             this.errors = Collections.unmodifiableList(new ArrayList<>(errors));
         }
     }
@@ -77,7 +87,13 @@ public final class TerminalFontLoader {
                 "font-italic.ttf", errors);
         Typeface boldItalic = loadConfigured(config.face(TerminalFontConfig.Face.BOLD_ITALIC),
             Typeface.BOLD_ITALIC, "bold_italic_font", errors);
-        TerminalRenderer.SymbolMap[] symbolMaps = loadSymbolMaps(config.symbolMaps, errors);
+        // One memo for every (face, axes) check the symbol path makes, so a setting inherited by
+        // several maps from the shared symbols target is validated — and reported — once.
+        Map<String, Boolean> variationChecks = new HashMap<>();
+        String sharedSymbolVariations = config.variations(TerminalFontConfig.FontTarget.SYMBOLS);
+        TerminalRenderer.SymbolMap[] symbolMaps = loadSymbolMaps(config.symbolMaps,
+            sharedSymbolVariations, errors, variationChecks);
+        List<Typeface> fallbackFonts = loadFallbackFonts(config.fallbackFonts, errors);
         TerminalRenderer.LigaturePolicy ligaturePolicy = TerminalRenderer.LigaturePolicy.valueOf(
             config.ligaturePolicy.name());
         TerminalRenderer.FontFeatures fontFeatures = new TerminalRenderer.FontFeatures(
@@ -98,8 +114,8 @@ public final class TerminalFontLoader {
             config.variations(TerminalFontConfig.FontTarget.ITALIC), "italic", errors);
         String boldItalicVariations = validateVariations(boldItalicResolved,
             config.variations(TerminalFontConfig.FontTarget.BOLD_ITALIC), "bold_italic", errors);
-        String symbolVariations = validateSymbolVariations(symbolMaps,
-            config.variations(TerminalFontConfig.FontTarget.SYMBOLS), errors);
+        String symbolVariations = validateSymbolVariations(symbolMaps, sharedSymbolVariations,
+            errors, variationChecks);
         TerminalRenderer.FontVariations fontVariations = new TerminalRenderer.FontVariations(
             regularVariations, boldVariations, italicVariations, boldItalicVariations,
             symbolVariations);
@@ -112,8 +128,40 @@ public final class TerminalFontLoader {
                 metric(config, TerminalFontConfig.Metric.UNDERLINE_THICKNESS),
                 metric(config, TerminalFontConfig.Metric.STRIKETHROUGH_POSITION),
                 metric(config, TerminalFontConfig.Metric.STRIKETHROUGH_THICKNESS));
-        return new Faces(regular, bold, italic, boldItalic, symbolMaps, ligaturePolicy,
-            fontFeatures, fontVariations, fontMetricsAdjustments, errors);
+        return new Faces(regular, bold, italic, boldItalic, symbolMaps, fallbackFonts,
+            ligaturePolicy, fontFeatures, fontVariations, fontMetricsAdjustments,
+            boxDrawingPolicy(config), errors);
+    }
+
+    /** Translates the box-drawing directives into the renderer's own policy type. */
+    @NonNull
+    private static TerminalRenderer.BoxDrawingPolicy boxDrawingPolicy(
+        @NonNull TerminalFontConfig.Result config) {
+        TerminalFontConfig.BoxDrawingScale scale = config.boxDrawingScale;
+        return new TerminalRenderer.BoxDrawingPolicy(
+            config.boxDrawing == TerminalFontConfig.BoxDrawingMode.FONT
+                ? TerminalRenderer.BoxDrawingPolicy.Mode.FONT
+                : TerminalRenderer.BoxDrawingPolicy.Mode.SYNTHESIZE,
+            new float[] {(float) scale.thin, (float) scale.light, (float) scale.heavy,
+                (float) scale.veryHeavy},
+            config.powerlineSymbols == TerminalFontConfig.PowerlineMode.SYNTHESIZE);
+    }
+
+    /** Resolves the fallback chain in order, dropping only the entries Android cannot load. */
+    @NonNull
+    private static List<Typeface> loadFallbackFonts(
+        @NonNull List<TerminalFontConfig.FaceSpec> specs, @NonNull List<String> errors) {
+        List<Typeface> result = new ArrayList<>();
+        for (TerminalFontConfig.FaceSpec spec : specs) {
+            if (result.size() >= MAX_FALLBACK_FONTS) {
+                errors.add("fallback_font: font count exceeds " + MAX_FALLBACK_FONTS);
+                break;
+            }
+            Typeface typeface = loadConfigured(spec, Typeface.NORMAL,
+                "fallback_font " + sourceDescription(spec), errors);
+            if (typeface != null) result.add(typeface);
+        }
+        return result;
     }
 
     @Nullable
@@ -130,37 +178,72 @@ public final class TerminalFontLoader {
                                              @Nullable String settings,
                                              @NonNull String label,
                                              @NonNull List<String> errors) {
+        return validateVariations(typeface, settings, label, errors, null);
+    }
+
+    /**
+     * The axes to hand the renderer, or null once the rejection has been reported as an error.
+     *
+     * <p>{@code checks} memoizes one (face, label, axes) verdict so the same check cannot report
+     * the same error twice; pass null for a check that is only made once.
+     */
+    @Nullable
+    private static String validateVariations(@NonNull Typeface typeface,
+                                             @Nullable String settings,
+                                             @NonNull String label,
+                                             @NonNull List<String> errors,
+                                             @Nullable Map<String, Boolean> checks) {
         if (settings == null) return null;
+        String key = checks == null ? null
+            : System.identityHashCode(typeface) + "\n" + label + "\n" + settings;
+        if (key != null) {
+            Boolean cached = checks.get(key);
+            if (cached != null) return cached ? settings : null;
+        }
         Paint paint = new Paint();
         paint.setTypeface(typeface);
         try {
-            if (paint.setFontVariationSettings(settings)) return settings;
+            if (paint.setFontVariationSettings(settings)) {
+                if (key != null) checks.put(key, Boolean.TRUE);
+                return settings;
+            }
             errors.add("font_variations " + label + ": Android rejected the requested axes");
         } catch (RuntimeException e) {
             errors.add("font_variations " + label + ": Android rejected the requested axes: "
                 + safeMessage(e));
         }
+        if (key != null) checks.put(key, Boolean.FALSE);
         return null;
     }
 
     @Nullable
     private static String validateSymbolVariations(
         @NonNull TerminalRenderer.SymbolMap[] symbolMaps, @Nullable String settings,
-        @NonNull List<String> errors) {
+        @NonNull List<String> errors, @NonNull Map<String, Boolean> checks) {
         if (settings == null || symbolMaps.length == 0) return settings;
         Set<Typeface> checked = new HashSet<>();
         for (TerminalRenderer.SymbolMap map : symbolMaps) {
             if (checked.add(map.typeface)
-                && validateVariations(map.typeface, settings, "symbols", errors) == null)
+                && validateVariations(map.typeface, settings, "symbols", errors, checks) == null)
                 return null;
         }
         return settings;
     }
 
+    /**
+     * Resolves every {@code symbol_map} range, carrying the settings its map resolved to.
+     *
+     * <p>A named map's own {@code font_features}/{@code font_variations} reach the renderer on the
+     * map itself; an unnamed map carries the shared {@code symbols} settings the parser already
+     * resolved for it. Features arrive translated and bounded by the parser, exactly as the face
+     * targets' do, so only the axes need a face to be checked against here.
+     */
     @NonNull
     private static TerminalRenderer.SymbolMap[] loadSymbolMaps(
         @NonNull List<TerminalFontConfig.SymbolMapSpec> specs,
-        @NonNull List<String> errors) {
+        @Nullable String sharedVariations,
+        @NonNull List<String> errors,
+        @NonNull Map<String, Boolean> variationChecks) {
         List<TerminalRenderer.SymbolMap> result = new ArrayList<>();
         Map<String, Typeface> loaded = new LinkedHashMap<>();
         Set<String> failed = new HashSet<>();
@@ -178,10 +261,21 @@ public final class TerminalFontLoader {
                 else loaded.put(key, typeface);
             }
             if (typeface == null) continue;
+            // Axes inherited from the shared target are reported under that target's label, so the
+            // user reads one message about the line they actually wrote.
+            String label = spec.name != null && !sameSettings(spec.variations, sharedVariations)
+                ? spec.name : "symbols";
+            String variations = validateVariations(typeface, spec.variations, label, errors,
+                variationChecks);
             for (TerminalFontConfig.CodePointRange range : spec.ranges)
-                result.add(new TerminalRenderer.SymbolMap(range.first, range.last, typeface));
+                result.add(new TerminalRenderer.SymbolMap(range.first, range.last, typeface,
+                    spec.features, variations));
         }
         return result.toArray(new TerminalRenderer.SymbolMap[0]);
+    }
+
+    private static boolean sameSettings(@Nullable String first, @Nullable String second) {
+        return first == null ? second == null : first.equals(second);
     }
 
     @NonNull

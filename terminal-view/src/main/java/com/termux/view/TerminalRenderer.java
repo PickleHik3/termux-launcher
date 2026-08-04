@@ -30,14 +30,29 @@ public final class TerminalRenderer {
         public final int firstCodePoint;
         public final int lastCodePoint;
         public final Typeface typeface;
+        /**
+         * This map's own Android feature-setting string, or null to inherit the shared
+         * {@code symbols} slot of {@link FontFeatures}. An empty string inherits too.
+         */
+        @Nullable public final String features;
+        /** This map's own axis settings, scoped like {@link #features}. */
+        @Nullable public final String variations;
 
         public SymbolMap(int firstCodePoint, int lastCodePoint, Typeface typeface) {
+            this(firstCodePoint, lastCodePoint, typeface, null, null);
+        }
+
+        /** A range mapped to a font that carries its own shaping settings. */
+        public SymbolMap(int firstCodePoint, int lastCodePoint, Typeface typeface,
+                         @Nullable String features, @Nullable String variations) {
             if (firstCodePoint < 0 || lastCodePoint < firstCodePoint
                 || lastCodePoint > Character.MAX_CODE_POINT || typeface == null)
                 throw new IllegalArgumentException("Invalid symbol font range");
             this.firstCodePoint = firstCodePoint;
             this.lastCodePoint = lastCodePoint;
             this.typeface = typeface;
+            this.features = features == null || features.isEmpty() ? null : features;
+            this.variations = variations == null || variations.isEmpty() ? null : variations;
         }
     }
 
@@ -139,7 +154,45 @@ public final class TerminalRenderer {
         }
     }
 
+    /**
+     * How the geometric code points — box drawing, blocks, shades, braille, the legacy-computing
+     * eighths and, optionally, the Powerline separators — are drawn.
+     *
+     * <p>{@link Mode#SYNTHESIZE} computes their ink from the cell, which is the only way adjacent
+     * cells are guaranteed to join; {@link Mode#FONT} leaves every one of them to the configured
+     * face. A code point covered by an explicit {@code symbol_map} range is always left to its
+     * font, since asking for that font was a deliberate choice.
+     */
+    public static final class BoxDrawingPolicy {
+
+        public enum Mode { SYNTHESIZE, FONT }
+
+        public static final BoxDrawingPolicy DEFAULT = new BoxDrawingPolicy(null, null, false);
+
+        final Mode mode;
+
+        /** Multipliers for the thin, light, heavy and very heavy line weights. */
+        final float[] thicknessScales;
+
+        final boolean powerline;
+
+        public BoxDrawingPolicy(@Nullable Mode mode, @Nullable float[] thicknessScales,
+                                boolean powerline) {
+            this.mode = mode == null ? Mode.SYNTHESIZE : mode;
+            this.thicknessScales = thicknessScales == null || thicknessScales.length < 4
+                ? BoxGeometry.DEFAULT_THICKNESS_SCALES : thicknessScales.clone();
+            this.powerline = powerline;
+        }
+
+        /** Whether this cell is drawn as geometry rather than shaped as text. */
+        boolean synthesizes(int codePoint) {
+            return mode == Mode.SYNTHESIZE && BoxGeometry.isSynthesizable(codePoint, powerline);
+        }
+    }
+
     private static final SymbolMap[] NO_SYMBOL_MAPS = new SymbolMap[0];
+
+    private static final Typeface[] NO_FALLBACK_TYPEFACES = new Typeface[0];
 
     final int mTextSize;
 
@@ -154,6 +207,9 @@ public final class TerminalRenderer {
 
     final SymbolMap[] mSymbolMaps;
 
+    /** Faces consulted, in configured order, for code points the primary face has no glyph for. */
+    final Typeface[] mFallbackTypefaces;
+
     final LigaturePolicy mLigaturePolicy;
 
     final FontFeatures mFontFeatures;
@@ -162,8 +218,31 @@ public final class TerminalRenderer {
 
     final FontMetricsAdjustments mFontMetricsAdjustments;
 
+    final BoxDrawingPolicy mBoxDrawingPolicy;
+
     private final Paint mTextPaint = new Paint();
     private Typeface mCurrentTypeface;
+
+    /** Memoized fallback-chain lookups; sized for this renderer's chain and never resized. */
+    private final FallbackFontResolver mFallbackResolver;
+
+    /** Scratch paint for coverage probes, so they cannot disturb the drawing paint's state. */
+    private final Paint mCoveragePaint = new Paint();
+
+    /**
+     * Coverage probes for {@link #mFallbackResolver}, as one instance so the render loop allocates
+     * nothing. The probe itself only runs on a memo miss — at most once per code point and face —
+     * which is what makes the string {@link Paint#hasGlyph} needs affordable.
+     */
+    private final FallbackFontResolver.Coverage mCoverage = new FallbackFontResolver.Coverage() {
+        @Override
+        public boolean hasGlyph(int faceStyle, int faceIndex, int codePoint) {
+            mCoveragePaint.setTypeface(faceIndex == FallbackFontResolver.NO_OVERRIDE
+                ? primaryTypeface((faceStyle & 1) != 0, (faceStyle & 2) != 0)
+                : mFallbackTypefaces[faceIndex]);
+            return mCoveragePaint.hasGlyph(new String(Character.toChars(codePoint)));
+        }
+    };
 
     /**
      * Variable-font instances, keyed by base typeface and axis settings.
@@ -207,6 +286,13 @@ public final class TerminalRenderer {
 
     /** Reused when drawing curly underlines, to keep the render loop allocation free. */
     private final Path mDecorationPath = new Path();
+
+    /** Reused by the synthesized box-drawing pass, for the same reason. */
+    private final BoxGeometry.Segments mBoxSegments = new BoxGeometry.Segments();
+
+    private final Path mBoxPath = new Path();
+
+    private final RectF mBoxOval = new RectF();
 
     /** Stroke width of underlines and their dash lengths, all derived from the font size. */
     private final float mDecorationThickness;
@@ -289,6 +375,45 @@ public final class TerminalRenderer {
                             @Nullable FontFeatures fontFeatures,
                             @Nullable FontVariations fontVariations,
                             @Nullable FontMetricsAdjustments fontMetricsAdjustments) {
+        this(textSize, typeface, boldTypeface, italicTypeface, boldItalicTypeface, symbolMaps,
+            ligaturePolicy, fontFeatures, fontVariations, fontMetricsAdjustments,
+            BoxDrawingPolicy.DEFAULT);
+    }
+
+    /** Construct a renderer with every font, shaping, metric and box-drawing control. */
+    public TerminalRenderer(int textSize, Typeface typeface, @Nullable Typeface boldTypeface,
+                            @Nullable Typeface italicTypeface,
+                            @Nullable Typeface boldItalicTypeface,
+                            @Nullable SymbolMap[] symbolMaps,
+                            @Nullable LigaturePolicy ligaturePolicy,
+                            @Nullable FontFeatures fontFeatures,
+                            @Nullable FontVariations fontVariations,
+                            @Nullable FontMetricsAdjustments fontMetricsAdjustments,
+                            @Nullable BoxDrawingPolicy boxDrawingPolicy) {
+        this(textSize, typeface, boldTypeface, italicTypeface, boldItalicTypeface, symbolMaps,
+            ligaturePolicy, fontFeatures, fontVariations, fontMetricsAdjustments, boxDrawingPolicy,
+            NO_FALLBACK_TYPEFACES);
+    }
+
+    /**
+     * Construct a renderer with every control, including the ordered fallback-face chain consulted
+     * for code points the face selected for a run has no glyph of its own for.
+     */
+    public TerminalRenderer(int textSize, Typeface typeface, @Nullable Typeface boldTypeface,
+                            @Nullable Typeface italicTypeface,
+                            @Nullable Typeface boldItalicTypeface,
+                            @Nullable SymbolMap[] symbolMaps,
+                            @Nullable LigaturePolicy ligaturePolicy,
+                            @Nullable FontFeatures fontFeatures,
+                            @Nullable FontVariations fontVariations,
+                            @Nullable FontMetricsAdjustments fontMetricsAdjustments,
+                            @Nullable BoxDrawingPolicy boxDrawingPolicy,
+                            @Nullable Typeface[] fallbackTypefaces) {
+        mBoxDrawingPolicy = boxDrawingPolicy == null
+            ? BoxDrawingPolicy.DEFAULT : boxDrawingPolicy;
+        mFallbackTypefaces = fallbackTypefaces == null || fallbackTypefaces.length == 0
+            ? NO_FALLBACK_TYPEFACES : fallbackTypefaces.clone();
+        mFallbackResolver = new FallbackFontResolver(mFallbackTypefaces.length);
         mTextSize = textSize;
         mTypeface = typeface;
         mBoldTypeface = boldTypeface;
@@ -432,6 +557,10 @@ public final class TerminalRenderer {
             int lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
             int lastRunHyperlinkId = 0;
             Typeface lastRunSymbolTypeface = null;
+            Typeface lastRunFallbackTypeface = null;
+            // The settings the run's matched symbol map resolved to; null outside a symbol run.
+            String lastRunSymbolFeatures = null;
+            String lastRunSymbolVariations = null;
             int currentCharIndex = 0;
             float measuredWidthForRun = 0.f;
             // Both live in side tables on the row rather than in the style long, so they are only
@@ -462,7 +591,9 @@ public final class TerminalRenderer {
                             boldWithBright, reverseVideo || invertCursorTextColor
                                 || lastRunInsideSelection,
                             horizontalOffset, lastRunDecorationColor,
-                            lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface, false);
+                            lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface,
+                            lastRunFallbackTypeface, lastRunSymbolFeatures,
+                            lastRunSymbolVariations, false);
                     }
                     Bitmap bm = mEmulator.getScreen().getSixelBitmap(codePoint, style);
                     if (bm != null) {
@@ -483,6 +614,9 @@ public final class TerminalRenderer {
                     lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
                     lastRunHyperlinkId = 0;
                     lastRunSymbolTypeface = null;
+                    lastRunFallbackTypeface = null;
+                    lastRunSymbolFeatures = null;
+                    lastRunSymbolVariations = null;
                     continue;
                 }
                 final int codePointWcWidth = lineObject.getDisplayWidthAt(currentCharIndex);
@@ -493,13 +627,69 @@ public final class TerminalRenderer {
                     | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0;
                 final boolean cellItalic = (effect & TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0;
                 final int faceStyle = (cellBold ? 1 : 0) | (cellItalic ? 2 : 0);
-                final Typeface symbolTypeface = symbolTypefaceFor(codePoint);
-                configureFont(cellBold, cellItalic, symbolTypeface);
+                final SymbolMap symbolMap = symbolMapFor(codePoint);
+                final Typeface symbolTypeface = symbolMap == null ? null : symbolMap.typeface;
+                final String symbolFeatures = symbolFeaturesOf(symbolMap);
+                final String symbolVariations = symbolVariationsOf(symbolMap);
+                if (symbolTypeface == null && mBoxDrawingPolicy.synthesizes(codePoint)) {
+                    // Geometry, not a glyph: flush the run accumulated to the left of this cell
+                    // exactly as an image cell does, then draw the ink and start a fresh run.
+                    if (column > 0 && column != lastRunStartColumn) {
+                        final int columnWidthSinceLastRun = column - lastRunStartColumn;
+                        final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
+                        int runCursorColor = lastRunInsideCursor
+                            ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
+                        boolean invertRunTextColor = lastRunInsideCursor
+                            && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
+                        drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
+                            columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
+                            measuredWidthForRun, runCursorColor, cursorShape, lastRunStyle,
+                            boldWithBright, reverseVideo || invertRunTextColor
+                                || lastRunInsideSelection,
+                            horizontalOffset, lastRunDecorationColor,
+                            lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface,
+                            lastRunFallbackTypeface, lastRunSymbolFeatures,
+                            lastRunSymbolVariations, false);
+                    }
+                    final int cellColumns = Math.max(1, codePointWcWidth);
+                    if ((effect & TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE) == 0) {
+                        final boolean invertCellTextColor = insideCursor
+                            && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
+                        drawSynthesizedCell(canvas, codePoint, column, cellColumns, heightOffset,
+                            horizontalOffset, resolveInkColor(style, palette, boldWithBright,
+                                reverseVideo || invertCellTextColor || insideSelection));
+                    }
+                    column += cellColumns;
+                    currentCharIndex += charsForCodePoint;
+                    while (currentCharIndex < charsUsedInLine
+                        && lineObject.getDisplayWidthAt(currentCharIndex) <= 0) {
+                        currentCharIndex += Character.isHighSurrogate(line[currentCharIndex]) ? 2 : 1;
+                    }
+                    measuredWidthForRun = 0.f;
+                    lastRunStyle = 0;
+                    lastRunInsideCursor = false;
+                    lastRunInsideSelection = false;
+                    lastRunStartColumn = column;
+                    lastRunStartIndex = currentCharIndex;
+                    lastRunFontWidthMismatch = false;
+                    lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
+                    lastRunHyperlinkId = 0;
+                    lastRunSymbolTypeface = null;
+                    lastRunFallbackTypeface = null;
+                    lastRunSymbolFeatures = null;
+                    lastRunSymbolVariations = null;
+                    continue;
+                }
+                final Typeface fallbackTypeface = symbolTypeface == null
+                    ? fallbackTypefaceFor(codePoint, cellBold, cellItalic) : null;
+                configureFont(cellBold, cellItalic, symbolTypeface, fallbackTypeface,
+                    symbolVariations);
                 // Check if the measured text width for this code point is not the same as that expected by wcwidth().
                 // This could happen for some fonts which are not truly monospace, or for more exotic characters such as
                 // smileys which android font renders as wide.
                 // If this is detected, we draw this code point scaled to match what wcwidth() expects.
                 final float measuredCodePointWidth = (symbolTypeface == null
+                    && fallbackTypeface == null
                     && codePoint < mAsciiMeasures[faceStyle].length)
                     ? mAsciiMeasures[faceStyle][codePoint]
                     : mTextPaint.measureText(line, currentCharIndex, charsForCodePoint);
@@ -508,7 +698,10 @@ public final class TerminalRenderer {
                     || insideSelection != lastRunInsideSelection || fontWidthMismatch
                     || lastRunFontWidthMismatch || decorationColor != lastRunDecorationColor
                     || hyperlinkId != lastRunHyperlinkId
-                    || symbolTypeface != lastRunSymbolTypeface) {
+                    || symbolTypeface != lastRunSymbolTypeface
+                    || fallbackTypeface != lastRunFallbackTypeface
+                    || !sameSymbolSettings(symbolFeatures, symbolVariations,
+                        lastRunSymbolFeatures, lastRunSymbolVariations)) {
                     if (column == 0 || column == lastRunStartColumn) {
                         // Skip first column as there is nothing to draw, just record the current style.
                     } else {
@@ -525,7 +718,9 @@ public final class TerminalRenderer {
                             boldWithBright, reverseVideo || invertCursorTextColor
                                 || lastRunInsideSelection,
                             horizontalOffset, lastRunDecorationColor,
-                            lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface, false);
+                            lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface,
+                            lastRunFallbackTypeface, lastRunSymbolFeatures,
+                            lastRunSymbolVariations, false);
                     }
                     measuredWidthForRun = 0.f;
                     lastRunStyle = style;
@@ -537,6 +732,9 @@ public final class TerminalRenderer {
                     lastRunDecorationColor = decorationColor;
                     lastRunHyperlinkId = hyperlinkId;
                     lastRunSymbolTypeface = symbolTypeface;
+                    lastRunFallbackTypeface = fallbackTypeface;
+                    lastRunSymbolFeatures = symbolFeatures;
+                    lastRunSymbolVariations = symbolVariations;
                 }
                 measuredWidthForRun += measuredCodePointWidth;
                 column += codePointWcWidth;
@@ -560,7 +758,8 @@ public final class TerminalRenderer {
                 measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, boldWithBright,
                 reverseVideo || invertCursorTextColor || lastRunInsideSelection,
                 horizontalOffset, lastRunDecorationColor, lastRunHyperlinkId != 0, 0,
-                lastRunSymbolTypeface, false);
+                lastRunSymbolTypeface, lastRunFallbackTypeface, lastRunSymbolFeatures,
+                lastRunSymbolVariations, false);
         }
         drawExtraCursors(mEmulator, canvas, screen, palette, topRow, endRow, boldWithBright, reverseVideo, horizontalOffset);
     }
@@ -571,13 +770,53 @@ public final class TerminalRenderer {
                              boolean reverseVideo, float horizontalOffset, int decorationColor,
                              boolean hyperlink, int foregroundOverride,
                              @Nullable Typeface symbolTypeface, boolean drawBackgroundAndCursor) {
+        drawTextRun(canvas, text, palette, y, startColumn, runWidthColumns, startCharIndex,
+            runWidthChars, mes, cursor, cursorStyle, textStyle, boldWithBright, reverseVideo,
+            horizontalOffset, decorationColor, hyperlink, foregroundOverride, symbolTypeface, null,
+            drawBackgroundAndCursor);
+    }
+
+    private void drawTextRun(Canvas canvas, char[] text, int[] palette, float y, int startColumn,
+                             int runWidthColumns, int startCharIndex, int runWidthChars, float mes,
+                             int cursor, int cursorStyle, long textStyle, boolean boldWithBright,
+                             boolean reverseVideo, float horizontalOffset, int decorationColor,
+                             boolean hyperlink, int foregroundOverride,
+                             @Nullable Typeface symbolTypeface,
+                             @Nullable Typeface fallbackTypeface,
+                             boolean drawBackgroundAndCursor) {
+        // Callers with no matched map behind them keep the shared symbols slot they always used.
+        drawTextRun(canvas, text, palette, y, startColumn, runWidthColumns, startCharIndex,
+            runWidthChars, mes, cursor, cursorStyle, textStyle, boldWithBright, reverseVideo,
+            horizontalOffset, decorationColor, hyperlink, foregroundOverride, symbolTypeface,
+            fallbackTypeface, symbolTypeface == null ? null : mFontFeatures.symbols,
+            symbolTypeface == null ? null : mFontVariations.symbols, drawBackgroundAndCursor);
+    }
+
+    /**
+     * Draw one run, using the settings the run's matched {@code symbol_map} resolved to.
+     *
+     * <p>{@code symbolFeatures} and {@code symbolVariations} are the already-resolved settings of
+     * the map that matched the run's cells — see {@link #symbolSetting(String, String)} — and are
+     * only consulted when {@code symbolTypeface} is non-null.
+     */
+    private void drawTextRun(Canvas canvas, char[] text, int[] palette, float y, int startColumn,
+                             int runWidthColumns, int startCharIndex, int runWidthChars, float mes,
+                             int cursor, int cursorStyle, long textStyle, boolean boldWithBright,
+                             boolean reverseVideo, float horizontalOffset, int decorationColor,
+                             boolean hyperlink, int foregroundOverride,
+                             @Nullable Typeface symbolTypeface,
+                             @Nullable Typeface fallbackTypeface,
+                             @Nullable String symbolFeatures,
+                             @Nullable String symbolVariations,
+                             boolean drawBackgroundAndCursor) {
         boolean disableLigatures = disablesLigatures(mLigaturePolicy, cursor != 0);
         int effect = TextStyle.decodeEffect(textStyle);
         boolean bold = (effect & (TextStyle.CHARACTER_ATTRIBUTE_BOLD
             | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0;
         boolean italic = (effect & TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0;
         String previousFeatures = mTextPaint.getFontFeatureSettings();
-        String runFeatures = mFontFeatures.forRun(bold, italic, symbolTypeface != null);
+        String runFeatures = symbolTypeface != null ? symbolFeatures
+            : mFontFeatures.forRun(bold, italic, false);
         if (disableLigatures) {
             runFeatures = runFeatures == null || runFeatures.isEmpty()
                 ? "'calt' 0" : runFeatures + ", 'calt' 0";
@@ -589,7 +828,8 @@ public final class TerminalRenderer {
             drawTextRunConfigured(canvas, text, palette, y, startColumn, runWidthColumns,
                 startCharIndex, runWidthChars, mes, cursor, cursorStyle, textStyle,
                 boldWithBright, reverseVideo, horizontalOffset, decorationColor, hyperlink,
-                foregroundOverride, symbolTypeface, drawBackgroundAndCursor);
+                foregroundOverride, symbolTypeface, fallbackTypeface, symbolVariations,
+                drawBackgroundAndCursor);
         } finally {
             if (changedFeatures) mTextPaint.setFontFeatureSettings(previousFeatures);
         }
@@ -604,6 +844,38 @@ public final class TerminalRenderer {
         return first == null ? second == null : first.equals(second);
     }
 
+    /**
+     * The setting a symbol run draws with: the matched map's own when it declares one, otherwise
+     * the shared {@code symbols} slot every symbol run used to be stuck with.
+     */
+    @Nullable
+    static String symbolSetting(@Nullable String mapOwn, @Nullable String sharedSymbols) {
+        return mapOwn == null || mapOwn.isEmpty() ? sharedSymbols : mapOwn;
+    }
+
+    /**
+     * Whether two adjacent symbol cells resolve to the same shaping settings, so one run may span
+     * both. Two maps can name one typeface and still declare different settings, so the run's
+     * typeface alone cannot decide this: without the settings in the comparison the second map's
+     * cells would be drawn with the first map's settings.
+     */
+    static boolean sameSymbolSettings(@Nullable String featuresA, @Nullable String variationsA,
+                                      @Nullable String featuresB, @Nullable String variationsB) {
+        return sameString(featuresA, featuresB) && sameString(variationsA, variationsB);
+    }
+
+    /** The resolved feature settings of a symbol run, or null when no map matched the cell. */
+    @Nullable
+    private String symbolFeaturesOf(@Nullable SymbolMap map) {
+        return map == null ? null : symbolSetting(map.features, mFontFeatures.symbols);
+    }
+
+    /** The resolved axis settings of a symbol run, or null when no map matched the cell. */
+    @Nullable
+    private String symbolVariationsOf(@Nullable SymbolMap map) {
+        return map == null ? null : symbolSetting(map.variations, mFontVariations.symbols);
+    }
+
     private void drawTextRunConfigured(Canvas canvas, char[] text, int[] palette, float y,
                                        int startColumn, int runWidthColumns, int startCharIndex,
                                        int runWidthChars, float mes, int cursor, int cursorStyle,
@@ -611,6 +883,8 @@ public final class TerminalRenderer {
                                        float horizontalOffset, int decorationColor,
                                        boolean hyperlink, int foregroundOverride,
                                        @Nullable Typeface symbolTypeface,
+                                       @Nullable Typeface fallbackTypeface,
+                                       @Nullable String symbolVariations,
                                        boolean drawBackgroundAndCursor) {
         final int effect = TextStyle.decodeEffect(textStyle);
         final boolean bold = (effect & (TextStyle.CHARACTER_ATTRIBUTE_BOLD | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0;
@@ -623,7 +897,7 @@ public final class TerminalRenderer {
         final float fontWidth = mFontWidth;
         final int fontLineSpacing = mFontLineSpacing;
         final int fontBaselineDescent = mFontBaselineDescent;
-        configureFont(bold, italic, symbolTypeface);
+        configureFont(bold, italic, symbolTypeface, fallbackTypeface, symbolVariations);
         // Measure the same shaped run that Canvas will draw. Per-code-point measureText() cannot
         // account for ligatures, Indic conjuncts, Arabic joining, or ZWJ emoji continuations.
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
@@ -673,15 +947,7 @@ public final class TerminalRenderer {
         }
         if ((effect & TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE) == 0) {
             if (dim) {
-                int red = (0xFF & (foreColor >> 16));
-                int green = (0xFF & (foreColor >> 8));
-                int blue = (0xFF & foreColor);
-                // Dim color handling used by libvte which in turn took it from xterm
-                // (https://bug735245.bugzilla-attachments.gnome.org/attachment.cgi?id=284267):
-                red = red * 2 / 3;
-                green = green * 2 / 3;
-                blue = blue * 2 / 3;
-                foreColor = 0xFF000000 + (red << 16) + (green << 8) + blue;
+                foreColor = dimColor(foreColor);
             }
             // Underlines are drawn as geometry below, since Paint only knows one straight variant.
             mTextPaint.setUnderlineText(false);
@@ -739,6 +1005,29 @@ public final class TerminalRenderer {
             backColor = swap;
         }
         return ((long) foreColor << 32) | (backColor & 0xffffffffL);
+    }
+
+    /**
+     * Dim color handling used by libvte which in turn took it from xterm
+     * (https://bug735245.bugzilla-attachments.gnome.org/attachment.cgi?id=284267).
+     */
+    private static int dimColor(int color) {
+        final int red = (0xFF & (color >> 16)) * 2 / 3;
+        final int green = (0xFF & (color >> 8)) * 2 / 3;
+        final int blue = (0xFF & color) * 2 / 3;
+        return 0xFF000000 + (red << 16) + (green << 8) + blue;
+    }
+
+    /**
+     * The final ink colour of one cell, so that a synthesized glyph inverts under a block cursor or
+     * inside a selection exactly as the text around it does.
+     */
+    private static int resolveInkColor(long textStyle, int[] palette, boolean boldWithBright,
+                                       boolean reverseVideo) {
+        final int foreColor = (int) (resolveRunColors(textStyle, palette, boldWithBright,
+            reverseVideo) >>> 32);
+        return (TextStyle.decodeEffect(textStyle) & TextStyle.CHARACTER_ATTRIBUTE_DIM) != 0
+            ? dimColor(foreColor) : foreColor;
     }
 
     /**
@@ -822,6 +1111,113 @@ public final class TerminalRenderer {
             drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor);
     }
 
+    /**
+     * Draw one cell of box drawing, blocks, shades, braille, legacy eighths or Powerline geometry.
+     *
+     * <p>Only foreground ink is painted: the cell's background, its selection fill and the cursor
+     * block were all laid down by the pass in {@link #render}. The cell's pixel bounds come from
+     * {@link BoxGeometry#edge}, so this cell's edges are the same integers its neighbours computed
+     * and a rule drawn across the screen has no seams in it.
+     */
+    private void drawSynthesizedCell(Canvas canvas, int codePoint, int column, int columns,
+                                     float heightOffset, float horizontalOffset, int color) {
+        final int cellLeft = BoxGeometry.edge(horizontalOffset, mFontWidth, column);
+        final int cellRight = BoxGeometry.edge(horizontalOffset, mFontWidth, column + columns);
+        final int cellBottom = Math.round(heightOffset);
+        final int cellTop = cellBottom - mFontLineSpacing;
+        final BoxGeometry.Segments segments = mBoxSegments;
+        if (!BoxGeometry.fill(codePoint, cellLeft, cellTop, cellRight, cellBottom,
+            mBoxDrawingPolicy.thicknessScales, mBoxDrawingPolicy.powerline, segments))
+            return;
+        mTextPaint.setColor(color);
+        for (int i = 0; i < segments.rectCount; i++) {
+            final int offset = i * 4;
+            canvas.drawRect(segments.rects[offset], segments.rects[offset + 1],
+                segments.rects[offset + 2], segments.rects[offset + 3], mTextPaint);
+        }
+        for (int i = 0; i < segments.dashCount; i++) {
+            final int offset = i * 6;
+            final int left = segments.dashRuns[offset];
+            final int top = segments.dashRuns[offset + 1];
+            final int right = segments.dashRuns[offset + 2];
+            final int bottom = segments.dashRuns[offset + 3];
+            final int period = segments.dashRuns[offset + 4];
+            final int onLength = segments.dashRuns[offset + 5];
+            final boolean horizontal = (right - left) >= (bottom - top);
+            final int end = horizontal ? right : bottom;
+            for (int at = horizontal ? left : top; at < end; at += period) {
+                final int stop = Math.min(at + onLength, end);
+                if (horizontal) canvas.drawRect(at, top, stop, bottom, mTextPaint);
+                else canvas.drawRect(left, at, right, stop, mTextPaint);
+            }
+        }
+        for (int i = 0; i < segments.dotCount; i++) {
+            canvas.drawCircle(segments.dots[i * 2], segments.dots[i * 2 + 1], segments.dotRadius,
+                mTextPaint);
+        }
+        int polygonPoint = 0;
+        for (int i = 0; i < segments.polygonCount; i++) {
+            final int vertices = segments.polygonSizes[i];
+            mBoxPath.rewind();
+            mBoxPath.moveTo(segments.polygonPoints[polygonPoint],
+                segments.polygonPoints[polygonPoint + 1]);
+            for (int vertex = 1; vertex < vertices; vertex++) {
+                mBoxPath.lineTo(segments.polygonPoints[polygonPoint + vertex * 2],
+                    segments.polygonPoints[polygonPoint + vertex * 2 + 1]);
+            }
+            mBoxPath.close();
+            canvas.drawPath(mBoxPath, mTextPaint);
+            polygonPoint += vertices * 2;
+        }
+        if (segments.capFilled) {
+            for (int i = 0; i < segments.capCount; i++) {
+                final int offset = i * 6;
+                mBoxOval.set(segments.caps[offset], segments.caps[offset + 1],
+                    segments.caps[offset + 2], segments.caps[offset + 3]);
+                canvas.drawArc(mBoxOval, segments.caps[offset + 4], segments.caps[offset + 5],
+                    true, mTextPaint);
+            }
+        }
+        if (segments.diagonalCount > 0 || segments.arcCount > 0
+            || (segments.capCount > 0 && !segments.capFilled)) {
+            mTextPaint.setStyle(Paint.Style.STROKE);
+            mTextPaint.setStrokeWidth(segments.strokeThickness);
+            for (int i = 0; i < segments.diagonalCount; i++) {
+                final int offset = i * 4;
+                canvas.drawLine(segments.diagonals[offset], segments.diagonals[offset + 1],
+                    segments.diagonals[offset + 2], segments.diagonals[offset + 3], mTextPaint);
+            }
+            for (int i = 0; i < segments.arcCount; i++) {
+                final int offset = i * 6;
+                mBoxPath.rewind();
+                mBoxPath.moveTo(segments.arcs[offset], segments.arcs[offset + 1]);
+                mBoxPath.quadTo(segments.arcs[offset + 2], segments.arcs[offset + 3],
+                    segments.arcs[offset + 4], segments.arcs[offset + 5]);
+                canvas.drawPath(mBoxPath, mTextPaint);
+            }
+            if (!segments.capFilled) {
+                for (int i = 0; i < segments.capCount; i++) {
+                    final int offset = i * 6;
+                    mBoxOval.set(segments.caps[offset], segments.caps[offset + 1],
+                        segments.caps[offset + 2], segments.caps[offset + 3]);
+                    canvas.drawArc(mBoxOval, segments.caps[offset + 4], segments.caps[offset + 5],
+                        false, mTextPaint);
+                }
+            }
+            mTextPaint.setStyle(Paint.Style.FILL);
+            mTextPaint.setStrokeWidth(0f);
+        }
+        for (int i = 0; i < segments.shadeCount; i++) {
+            final int offset = i * 4;
+            // The shade is the foreground at a reduced alpha, blended over whatever the background
+            // pass already painted, so no second colour has to be resolved here.
+            mTextPaint.setColor((segments.shadeAlphaPercents[i] * 255 / 100) << 24
+                | (color & 0x00ffffff));
+            canvas.drawRect(segments.shadeRects[offset], segments.shadeRects[offset + 1],
+                segments.shadeRects[offset + 2], segments.shadeRects[offset + 3], mTextPaint);
+        }
+    }
+
     private void drawCellRect(Canvas canvas, int startColumn, int endColumn, float top, float bottom,
                               float horizontalOffset, int color) {
         mTextPaint.setColor(color);
@@ -887,17 +1283,46 @@ public final class TerminalRenderer {
                 continue;
             }
             int effect = TextStyle.decodeEffect(style);
-            Typeface symbolTypeface = symbolTypefaceFor(codePoint);
-            configureFont((effect & (TextStyle.CHARACTER_ATTRIBUTE_BOLD
-                    | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0,
-                (effect & TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0, symbolTypeface);
+            boolean cellBold = (effect & (TextStyle.CHARACTER_ATTRIBUTE_BOLD
+                | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0;
+            boolean cellItalic = (effect & TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0;
+            SymbolMap symbolMap = symbolMapFor(codePoint);
+            Typeface symbolTypeface = symbolMap == null ? null : symbolMap.typeface;
+            if (symbolTypeface == null && mBoxDrawingPolicy.synthesizes(codePoint)) {
+                // The overlay has to reach the same conclusion as the glyph pass. Drawing this cell
+                // as text would stamp the font's idea of the code point — commonly a tofu — on top
+                // of the geometry already painted for it.
+                int overlayBackground = (int) resolveRunColors(style, palette, boldWithBright,
+                    reverseVideo || invertText);
+                float left = horizontalOffset + startColumn * mFontWidth;
+                if (overlayBackground != palette[TextStyle.COLOR_INDEX_BACKGROUND]) {
+                    mTextPaint.setColor(overlayBackground);
+                    canvas.drawRect(left, y - mFontLineSpacing, left + width * mFontWidth, y,
+                        mTextPaint);
+                }
+                drawCursorShape(canvas, left, y, width * mFontWidth, shape, cursorColor);
+                if ((effect & TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE) == 0) {
+                    int ink = (int) (resolveRunColors(style, palette, boldWithBright,
+                        reverseVideo || invertText) >>> 32);
+                    if (textOverride != 0) ink = textOverride;
+                    if ((effect & TextStyle.CHARACTER_ATTRIBUTE_DIM) != 0) ink = dimColor(ink);
+                    drawSynthesizedCell(canvas, codePoint, startColumn, width, y, horizontalOffset,
+                        ink);
+                }
+                continue;
+            }
+            Typeface fallbackTypeface = fallbackTypefaceFor(codePoint, cellBold, cellItalic);
+            String symbolFeatures = symbolFeaturesOf(symbolMap);
+            String symbolVariations = symbolVariationsOf(symbolMap);
+            configureFont(cellBold, cellItalic, symbolTypeface, fallbackTypeface, symbolVariations);
             float measured = mTextPaint.measureText(text, startIndex, chars);
             int decorationColor = row.hasDecorationColors() ? row.getDecorationColor(startColumn)
                 : TextStyle.DECORATION_COLOR_DEFAULT;
             boolean hyperlink = row.hasHyperlinks() && row.getHyperlinkId(startColumn) != 0;
             drawTextRun(canvas, text, palette, y, startColumn, width, startIndex, chars, measured,
                 cursorColor, shape, style, boldWithBright, reverseVideo || invertText, horizontalOffset,
-                decorationColor, hyperlink, textOverride, symbolTypeface, true);
+                decorationColor, hyperlink, textOverride, symbolTypeface, fallbackTypeface,
+                symbolFeatures, symbolVariations, true);
         }
     }
 
@@ -922,7 +1347,7 @@ public final class TerminalRenderer {
     @Nullable
     private Typeface variationTypeface(@Nullable Typeface base, @Nullable String variations) {
         if (base == null || variations == null || variations.isEmpty()) return base;
-        String key = System.identityHashCode(base) + " " + variations;
+        String key = variationKey(base, variations);
         Typeface cached = mVariationTypefaces.get(key);
         if (cached != null) return cached;
         Typeface resolved = base;
@@ -940,8 +1365,72 @@ public final class TerminalRenderer {
         return resolved;
     }
 
-    /** Symbol fonts intentionally ignore SGR face synthesis, matching Kitty's explicit map. */
+    /**
+     * The {@link #mVariationTypefaces} key of one (face, axes) pair. Both halves matter: two symbol
+     * maps naming the same font with different axes are two instances, and one font with the same
+     * axes reached from two maps is one instance.
+     */
+    private static String variationKey(@Nullable Typeface base, @Nullable String variations) {
+        return variationKey(System.identityHashCode(base), variations);
+    }
+
+    static String variationKey(int baseIdentity, @Nullable String variations) {
+        return baseIdentity + "\0" + variations;
+    }
+
+    /**
+     * The real face an SGR style renders with, before any synthetic bolding or skew. This is the
+     * face the fallback chain measures its coverage against, and it mirrors the selection in
+     * {@link #configureFont(boolean, boolean, Typeface, Typeface)}.
+     */
+    private Typeface primaryTypeface(boolean bold, boolean italic) {
+        if (bold && italic) {
+            if (mBoldItalicTypeface != null) return mBoldItalicTypeface;
+            if (mItalicTypeface != null) return mItalicTypeface;
+            if (mBoldTypeface != null) return mBoldTypeface;
+            return mTypeface;
+        }
+        if (bold) return mBoldTypeface == null ? mTypeface : mBoldTypeface;
+        if (italic) return mItalicTypeface == null ? mTypeface : mItalicTypeface;
+        return mTypeface;
+    }
+
+    /**
+     * The configured fallback face for a code point, or null to leave the run's own face — and
+     * after it Android's platform fallback — in place.
+     *
+     * <p>Resolution is on the cell's base code point, never on a continuation of a cluster, which
+     * is the same rule {@code symbol_map} follows: combining marks are eaten into the run their
+     * base started, so they inherit that decision instead of making their own.
+     */
+    @Nullable
+    private Typeface fallbackTypefaceFor(int codePoint, boolean bold, boolean italic) {
+        if (mFallbackTypefaces.length == 0) return null;
+        final int faceStyle = (bold ? 1 : 0) | (italic ? 2 : 0);
+        final int index = mFallbackResolver.resolve(faceStyle, codePoint, mCoverage);
+        return index == FallbackFontResolver.NO_OVERRIDE ? null : mFallbackTypefaces[index];
+    }
+
     private void configureFont(boolean bold, boolean italic, @Nullable Typeface symbolTypeface) {
+        configureFont(bold, italic, symbolTypeface, null);
+    }
+
+    private void configureFont(boolean bold, boolean italic, @Nullable Typeface symbolTypeface,
+                               @Nullable Typeface fallbackTypeface) {
+        configureFont(bold, italic, symbolTypeface, fallbackTypeface,
+            symbolTypeface == null ? null : mFontVariations.symbols);
+    }
+
+    /**
+     * Symbol fonts intentionally ignore SGR face synthesis, matching Kitty's explicit map.
+     *
+     * <p>{@code symbolVariations} is the resolved axis setting of the map that matched this cell
+     * and is only used when {@code symbolTypeface} is non-null; face runs keep taking their axes
+     * from {@link #mFontVariations}.
+     */
+    private void configureFont(boolean bold, boolean italic, @Nullable Typeface symbolTypeface,
+                               @Nullable Typeface fallbackTypeface,
+                               @Nullable String symbolVariations) {
         Typeface desired;
         boolean fakeBold = false;
         boolean fakeItalic = false;
@@ -970,8 +1459,15 @@ public final class TerminalRenderer {
         } else {
             desired = mTypeface;
         }
-        desired = variationTypeface(desired,
-            mFontVariations.forRun(bold, italic, symbolTypeface != null));
+        if (symbolTypeface == null && fallbackTypeface != null) {
+            // A chain entry is one face with no declared variants, so the SGR style the primary
+            // face would have shown is synthesized on top of it rather than silently dropped.
+            desired = fallbackTypeface;
+            fakeBold = bold;
+            fakeItalic = italic;
+        }
+        desired = variationTypeface(desired, symbolTypeface != null
+            ? symbolVariations : mFontVariations.forRun(bold, italic, false));
         if (desired != mCurrentTypeface) {
             mTextPaint.setTypeface(desired);
             mCurrentTypeface = desired;
@@ -980,13 +1476,14 @@ public final class TerminalRenderer {
         mTextPaint.setTextSkewX(fakeItalic ? -0.35f : 0f);
     }
 
+    /** The map a code point draws from, kept whole so the run can use its own settings. */
     @Nullable
-    private Typeface symbolTypefaceFor(int codePoint) {
+    private SymbolMap symbolMapFor(int codePoint) {
         // Repeated directives are ordered; a later overlapping range wins.
         for (int i = mSymbolMaps.length - 1; i >= 0; i--) {
             SymbolMap map = mSymbolMaps[i];
             if (codePoint >= map.firstCodePoint && codePoint <= map.lastCodePoint)
-                return map.typeface;
+                return map;
         }
         return null;
     }

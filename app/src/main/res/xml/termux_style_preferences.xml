@@ -11,6 +11,16 @@
             app:summary="@string/termux_dock_tune_live_summary" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="@string/settings_fonts_header">
+        <Preference
+            app:key="terminal_fonts"
+            app:icon="@drawable/ic_symbol_terminal"
+            app:persistent="false"
+            app:title="@string/termux_fonts_preferences_title"
+            app:summary="@string/termux_fonts_preferences_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/settings_theme_header">
         <ListPreference
             app:key="theme_mode"

@@ -118,6 +118,8 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_SESSION_RENAME_PROMPT = "session.rename_prompt";
     public static final String TOOL_TERMINAL_SHARE_SELECTED = "terminal.share_selected";
     public static final String TOOL_CLIPBOARD_COPY_SELECTED = "clipboard.copy_selected";
+    public static final String TOOL_FONTS_PICK = "fonts.pick";
+    public static final String TOOL_FONTS_INSTALL = "fonts.install";
 
     private static final TerminalActionDispatcher INSTANCE = new TerminalActionDispatcher();
 
@@ -224,6 +226,8 @@ public final class TerminalActionDispatcher {
             case TOOL_SESSION_RENAME_PROMPT:
             case TOOL_TERMINAL_SHARE_SELECTED:
             case TOOL_CLIPBOARD_COPY_SELECTED:
+            case TOOL_FONTS_PICK:
+            case TOOL_FONTS_INSTALL:
                 return true;
             default:
                 return false;
@@ -563,6 +567,47 @@ public final class TerminalActionDispatcher {
                 case TOOL_APP_OPEN_APPS_BAR:
                     activity.openAppsBar();
                     return ok();
+
+                case TOOL_FONTS_PICK:
+                    // Straight to the settings screen rather than through an Activity helper: the
+                    // picker is an ordinary preference fragment and needs nothing from the terminal.
+                    com.termux.shared.activity.ActivityUtils.startActivity(activity,
+                        com.termux.app.activities.SettingsActivity.createFragmentIntent(activity,
+                            com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment.class,
+                            com.termux.R.string.termux_fonts_preferences_title));
+                    return ok();
+                case TOOL_FONTS_INSTALL: {
+                    String familyId = arguments.optString("id", "").trim();
+                    if (familyId.isEmpty()) return error(400, "bad_request", "Missing 'id'");
+                    com.termux.app.fonts.FontCatalog.Family family =
+                        com.termux.app.fonts.FontCatalog.load(activity).family(familyId);
+                    if (family == null) {
+                        return error(404, "not_found", "No font family '" + familyId
+                            + "' in the bundled catalog");
+                    }
+                    com.termux.app.fonts.FontInstaller.Options options =
+                        new com.termux.app.fonts.FontInstaller.Options(
+                            arguments.optBoolean("nerd_icons", true),
+                            arguments.optString("ligatures", family.defaultLigatures),
+                            true,
+                            arguments.optInt("weight", 0));
+                    com.termux.app.fonts.FontInstallCoordinator coordinator =
+                        com.termux.app.fonts.FontInstallCoordinator.getInstance(activity);
+                    // Already on disk: no transfer, just rewrite the managed config and reload.
+                    if (new com.termux.app.fonts.FontInstaller().isInstalled(family)) {
+                        if (!coordinator.reapply(family, options)) {
+                            return error(500, "execution_failed",
+                                "Could not write ~/.termux/fonts.d/10-launcher.conf");
+                        }
+                        return ok().put("familyId", family.id).put("installed", true)
+                            .put("downloaded", false);
+                    }
+                    if (!coordinator.start(family, options)) {
+                        return error(409, "busy", "Another font install is already running");
+                    }
+                    return ok().put("familyId", family.id).put("installed", false)
+                        .put("downloaded", true).put("downloadBytes", family.downloadBytes);
+                }
 
                 case TOOL_APP_COMMAND_PALETTE:
                     TerminalCommandPalette.show(activity);

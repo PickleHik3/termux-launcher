@@ -36,8 +36,8 @@ import com.termux.R;
 import com.termux.app.statusbar.ShellActivityPulse;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.terminal.TerminalSession;
+import com.termux.view.TerminalRenderer;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -90,7 +90,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private int mSelectedIndex = -1;
     @NonNull private List<WindowItem> mItems = new ArrayList<>();
     private Typeface mTerminalTypeface = Typeface.MONOSPACE;
-    private long mTerminalTypefaceModified;
+    /** The terminal's symbol_map ranges, so a tab label's icon is drawn by the face that has it. */
+    @NonNull private TerminalRenderer.SymbolMap[] mSymbolMaps = new TerminalRenderer.SymbolMap[0];
     private boolean mCapsuleSurface;
     private float mStatusBarRadiusPx;
     private int mSelectedTextColor;
@@ -294,7 +295,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         tab.setIncludeFontPadding(false);
         tab.setTextAlignment(TEXT_ALIGNMENT_CENTER);
         tab.setEllipsize(TextUtils.TruncateAt.END);
-        tab.setText(label);
+        // Spanned only where a symbol_map claims a code point; a plain ASCII label is set as it is.
+        tab.setText(TerminalLabelSymbolSpans.apply(label, mSymbolMaps));
         tab.setTextColor(selected ? mSelectedTextColor : mUnselectedTextColor);
         tab.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
         tab.setTypeface(mTerminalTypeface, selected ? Typeface.BOLD : Typeface.NORMAL);
@@ -624,17 +626,19 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         }
     }
 
+    /**
+     * Take the faces the terminal itself is drawing with, rather than reading font.ttf on our own:
+     * the row's labels are terminal text, icons included, and a face the panes are not using is how
+     * a symbol_map'd icon code point ends up as tofu here.
+     *
+     * <p>Identity is the whole change check — the holder returns the same value while nothing has
+     * moved — so this stays a pair of pointer comparisons on a path the pill row walks often.
+     */
     private boolean reloadTerminalTypeface() {
-        File file = TermuxConstants.TERMUX_FONT_FILE;
-        long modified = file.isFile() ? file.lastModified() : 0L;
-        if (modified == mTerminalTypefaceModified && mTerminalTypeface != null) return false;
-        try {
-            mTerminalTypeface = modified > 0L ? Typeface.createFromFile(file) : Typeface.MONOSPACE;
-            mTerminalTypefaceModified = modified;
-        } catch (Exception ignored) {
-            mTerminalTypeface = Typeface.MONOSPACE;
-            mTerminalTypefaceModified = 0L;
-        }
+        TerminalLabelFaces faces = TerminalLabelFaces.current();
+        if (faces.regular == mTerminalTypeface && faces.symbolMaps == mSymbolMaps) return false;
+        mTerminalTypeface = faces.regular;
+        mSymbolMaps = faces.symbolMaps;
         return true;
     }
 

@@ -396,6 +396,8 @@ public final class LauncherToolRegistry {
     public static final String TOOL_SESSION_RENAME_PROMPT = "session.rename_prompt";
     public static final String TOOL_TERMINAL_SHARE_SELECTED = "terminal.share_selected";
     public static final String TOOL_CLIPBOARD_COPY_SELECTED = "clipboard.copy_selected";
+    public static final String TOOL_FONTS_PICK = "fonts.pick";
+    public static final String TOOL_FONTS_INSTALL = "fonts.install";
 
     private static LauncherToolRegistry instance;
 
@@ -877,6 +879,33 @@ public final class LauncherToolRegistry {
             CATEGORY_TERMINAL, R.string.tool_terminal_jump_next_prompt, R.string.tool_desc_terminal_jump_next_prompt,
             null, REQUIRES_SESSION);
 
+        // Terminal fonts. Appearance rather than a category of their own: a font is what the
+        // terminal looks like, and a one-tool section reads as a mistake in the palette.
+        addUi(map, TOOL_FONTS_PICK,
+            "Open the terminal font picker: bundled catalog of installable families, and the"
+                + " Nerd icon, ligature and weight toggles.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_APPEARANCE, R.string.tool_fonts_pick, R.string.tool_desc_fonts_pick, null);
+        // Required 'id' keeps this out of the palette's tool rows, the same way app.launch's
+        // 'query' does; the picker screen is the interactive front door. MEDIUM and confirmed
+        // because it spends multiple megabytes of the user's data and then changes every glyph
+        // on screen.
+        addUi(map, TOOL_FONTS_INSTALL,
+            "Download, verify and activate a font family from the bundled catalog, writing"
+                + " ~/.termux/fonts.d/10-launcher.conf. Toggles default to the family's own"
+                + " recommended values when omitted.",
+            schemaObject()
+                .withString("id", "Catalog family id, for example maple-mono", true)
+                .withBoolean("nerd_icons", "Map U+E000-U+F8FF to the bundled Nerd Font symbols face",
+                    false, true)
+                .withEnum("ligatures", new String[]{"never", "cursor", "always"}, false, "cursor")
+                .withInteger("weight",
+                    "Regular-face wght for a variable family; 0 keeps the family default",
+                    0, 1000, 0, false)
+                .build(),
+            ToolRisk.MEDIUM, true, ToolExecutor.TERMINAL,
+            CATEGORY_APPEARANCE, R.string.tool_fonts_install, 0, null);
     }
 
     @NonNull

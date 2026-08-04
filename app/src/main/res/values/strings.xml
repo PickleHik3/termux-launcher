@@ -1345,4 +1345,77 @@
     <string name="palette_unavailable_no_selection">Unavailable: no text selected</string>
     <string name="palette_unavailable_no_session">Unavailable: no active session</string>
 
+    <!-- Terminal fonts: catalog, downloader and picker -->
+    <string name="settings_fonts_header">Terminal font</string>
+    <string name="termux_fonts_preferences_title">Terminal fonts</string>
+    <string name="termux_fonts_preferences_summary">Install a multi-face font with Nerd Font icons from the bundled catalog</string>
+    <string name="termux_fonts_setup_title">Setup</string>
+    <string name="termux_fonts_status_title">Active font</string>
+    <string name="termux_fonts_status_none_label">FONT.TTF</string>
+    <string name="termux_fonts_status_none_summary">No app-managed font. The terminal is using ~/.termux/font.ttf, Termux:Styling, or Android monospace.</string>
+    <string name="termux_fonts_status_active_summary">%1$s · %2$s · managed by ~/.termux/fonts.d/10-launcher.conf</string>
+    <string name="termux_fonts_action_install">Install</string>
+    <string name="termux_fonts_action_use">Use</string>
+    <string name="termux_fonts_action_active">Active</string>
+    <string name="termux_fonts_action_cancel">Cancel</string>
+    <string name="termux_fonts_pill_active">Active</string>
+    <string name="termux_fonts_pill_installed">Installed</string>
+    <string name="termux_fonts_pill_downloading">Downloading</string>
+    <string name="termux_fonts_tuning_title">Tuning</string>
+    <string name="termux_fonts_nerd_icons_title">Nerd Font icons</string>
+    <string name="termux_fonts_nerd_icons_summary">Route U+E000–U+F8FF and U+F0000–U+FFFFD to the bundled Symbols Nerd Font Mono, so powerline, devicon and Material Design glyphs work with any family</string>
+    <string name="termux_fonts_ligatures_title">Ligature policy</string>
+    <string name="termux_fonts_ligatures_none_summary">Install a font to choose a policy</string>
+    <string name="termux_fonts_ligatures_never">Always shaped (disable_ligatures never)</string>
+    <string name="termux_fonts_ligatures_cursor">Un-fuse under the cursor (disable_ligatures cursor)</string>
+    <string name="termux_fonts_ligatures_always">Off (disable_ligatures always)</string>
+    <string name="termux_fonts_weight_title">Weight</string>
+    <string name="termux_fonts_weight_static_summary">Only variable families have a weight axis</string>
+    <string name="termux_fonts_weight_summary">wght %1$d (axis %2$d–%3$d)</string>
+    <string name="termux_fonts_weight_dialog_title">Weight (%1$d–%2$d)</string>
+    <string name="termux_fonts_weight_apply">Apply</string>
+    <string name="termux_fonts_weight_reset">Family default</string>
+    <string name="termux_fonts_families_title">Families</string>
+    <string name="termux_fonts_meta_installed">Installed</string>
+    <!-- Count of real faces a family ships. A leading space in a resource value is stripped, so the
+         count is formatted in rather than concatenated. -->
+    <string name="termux_fonts_meta_faces">%1$d faces</string>
+    <string name="termux_fonts_meta_variable">variable</string>
+    <string name="termux_fonts_meta_ligatures">ligatures</string>
+    <string name="termux_fonts_meta_no_italic">no italic upstream</string>
+    <string name="termux_fonts_license_action">License</string>
+    <string name="termux_fonts_open_license">Open license</string>
+    <string name="termux_fonts_open_upstream">Upstream</string>
+    <string name="termux_fonts_details_id">ID: %1$s</string>
+    <string name="termux_fonts_details_release">Release: %1$s</string>
+    <string name="termux_fonts_details_download">Download: %1$s</string>
+    <string name="termux_fonts_details_license">License: %1$s</string>
+    <string name="termux_fonts_install_title">Install %1$s</string>
+    <string name="termux_fonts_install_message">Downloads %1$s from the upstream release, verifies it against a pinned SHA-256, and installs it under ~/.termux/fonts.\n\nLicensed %2$s\n%3$s</string>
+    <string name="termux_fonts_install_started">Downloading %1$s…</string>
+    <string name="termux_fonts_install_failed">Font install failed: %1$s</string>
+    <string name="termux_fonts_installed_toast">Font installed</string>
+    <string name="termux_fonts_cancelling">Cancelling…</string>
+    <string name="termux_fonts_busy">Another font is still downloading</string>
+    <string name="termux_fonts_reapply_failed">Could not write ~/.termux/fonts.d/10-launcher.conf</string>
+    <string name="termux_fonts_metered_title">Metered connection</string>
+    <string name="termux_fonts_metered_message">This connection is metered and the download is %1$s. Continue anyway?</string>
+    <string name="termux_fonts_metered_continue">Download</string>
+    <string name="termux_fonts_manual_title">Manual control</string>
+    <string name="termux_fonts_use_font_ttf_title">Use font.ttf / Termux:Styling</string>
+    <string name="termux_fonts_use_font_ttf_summary">Removes the app-managed config so the terminal goes back to ~/.termux/font.ttf. Installed families stay on disk.</string>
+    <string name="termux_fonts_use_font_ttf_confirm">Deletes ~/.termux/fonts.d/10-launcher.conf and nothing else. Your own ~/.termux/fonts.conf and the installed font files are left untouched.</string>
+    <string name="termux_fonts_use_font_ttf_action">Remove</string>
+    <string name="termux_fonts_uninstalled">Managed font config removed</string>
+    <string name="termux_fonts_uninstall_missing">There was no managed font config</string>
+    <string name="termux_fonts_power_user_title">Hand-edited config</string>
+    <string name="termux_fonts_power_user_summary">Write your own ~/.termux/fonts.conf: it is read after every fonts.d fragment, so it overrides everything the app sets. A fully commented example is refreshed at ~/.termux/launcher/examples/fonts.conf.</string>
+    <string name="termux_fonts_catalog_empty_title">No families available</string>
+    <string name="termux_fonts_catalog_empty_summary">The bundled font catalog could not be read.</string>
+
+    <!-- Terminal font tools -->
+    <string name="tool_fonts_pick">Terminal fonts</string>
+    <string name="tool_desc_fonts_pick">Open the terminal font picker.</string>
+    <string name="tool_fonts_install">Install terminal font</string>
+
 </resources>
