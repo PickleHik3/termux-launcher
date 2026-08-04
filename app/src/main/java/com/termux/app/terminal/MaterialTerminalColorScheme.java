@@ -8,11 +8,14 @@ import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 
 import com.google.android.material.color.MaterialColors;
+import com.google.android.material.color.utilities.Hct;
 import com.termux.R;
 import com.termux.shared.errors.Error;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
+import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -30,6 +33,15 @@ public final class MaterialTerminalColorScheme {
 
     @NonNull
     public static Properties create(@NonNull Context context) {
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, false);
+        TerminalContrastLevel level = preferences == null
+            ? TerminalContrastLevel.DEFAULT : preferences.getTerminalContrastLevel();
+        return create(context, level);
+    }
+
+    /** Build a palette for an explicit level; public so ratio and signature tests are deterministic. */
+    @NonNull
+    public static Properties create(@NonNull Context context, @NonNull TerminalContrastLevel level) {
         Properties props = new Properties();
 
         int background = materialColor(context, com.google.android.material.R.attr.colorSurface,
@@ -52,7 +64,12 @@ public final class MaterialTerminalColorScheme {
             R.color.termux_on_surface_variant);
 
         boolean dark = perceivedBrightness(background) < 128;
+        background = surfaceTone(background, dark, level);
 
+        foreground = contrastTone(foreground, background, level.foregroundRatio);
+        primary = contrastTone(primary, background, level.cursorRatio);
+
+        props.setProperty("contrast_level", level.value);
         props.setProperty("background", hex(background));
         props.setProperty("foreground", hex(foreground));
         props.setProperty("cursor", hex(primary));
@@ -74,6 +91,12 @@ public final class MaterialTerminalColorScheme {
         props.setProperty("color13", hex(materialAnsi("#FF80AB", "#AD3774", primary, dark)));
         props.setProperty("color14", hex(materialAnsi("#A7FDEB", "#008078", secondary, dark)));
         props.setProperty("color15", hex(foreground));
+
+        for (int i = 0; i < 16; i++) {
+            String key = "color" + i;
+            int value = Color.parseColor(props.getProperty(key));
+            props.setProperty(key, hex(contrastTone(value, background, level.ansiRatio)));
+        }
 
         return props;
     }
@@ -114,6 +137,8 @@ public final class MaterialTerminalColorScheme {
             R.color.termux_outline_variant);
 
         Properties terminalProps = create(context);
+        props.setProperty("contrast_level", terminalProps.getProperty("contrast_level",
+            TerminalContrastLevel.DEFAULT.value));
         for (String key : terminalProps.stringPropertyNames()) {
             props.setProperty("terminal_" + key, terminalProps.getProperty(key));
         }
@@ -141,7 +166,109 @@ public final class MaterialTerminalColorScheme {
             R.color.termux_primary);
         result = 31 * result + materialColor(context, com.google.android.material.R.attr.colorError,
             R.color.termux_error);
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, false);
+        result = 31 * result + (preferences == null ? TerminalContrastLevel.DEFAULT.ordinal()
+            : preferences.getTerminalContrastLevel().ordinal());
         return result;
+    }
+
+    /**
+     * Effective wallpaper-mode surface opacity. The stored slider value is never changed; rendering
+     * raises it just enough for every generated glyph class over black and white wallpaper extrema.
+     */
+    public static int effectiveOpacityPercent(@NonNull Context context, int storedPercent,
+                                              @NonNull TerminalContrastLevel level) {
+        Properties palette = create(context, level);
+        int surface = Color.parseColor(palette.getProperty("background"));
+        int foreground = Color.parseColor(palette.getProperty("foreground"));
+        int cursor = Color.parseColor(palette.getProperty("cursor"));
+        int floor = 100;
+        for (int alpha = 0; alpha <= 100; alpha++) {
+            if (!meetsOverWallpaper(surface, foreground, level.foregroundRatio, alpha)) continue;
+            if (!meetsOverWallpaper(surface, cursor, level.cursorRatio, alpha)) continue;
+            boolean ansiOk = true;
+            for (int i = 0; i < 16; i++) {
+                int ansi = Color.parseColor(palette.getProperty("color" + i));
+                if (!meetsOverWallpaper(surface, ansi, level.ansiRatio, alpha)) {
+                    ansiOk = false;
+                    break;
+                }
+            }
+            if (ansiOk) {
+                floor = alpha;
+                break;
+            }
+        }
+        return Math.max(Math.max(0, Math.min(100, storedPercent)), floor);
+    }
+
+    private static boolean meetsOverWallpaper(@ColorInt int surface, @ColorInt int glyph,
+                                              double ratio, int alphaPercent) {
+        double amount = alphaPercent / 100d;
+        int overBlack = composite(surface, Color.BLACK, amount);
+        int overWhite = composite(surface, Color.WHITE, amount);
+        return contrastRatio(glyph, overBlack) + 0.0001d >= ratio
+            && contrastRatio(glyph, overWhite) + 0.0001d >= ratio;
+    }
+
+    /** WCAG relative-luminance contrast ratio. */
+    public static double contrastRatio(@ColorInt int first, @ColorInt int second) {
+        double a = luminance(first);
+        double b = luminance(second);
+        return (Math.max(a, b) + 0.05d) / (Math.min(a, b) + 0.05d);
+    }
+
+    @ColorInt
+    private static int contrastTone(@ColorInt int color, @ColorInt int surface, double target) {
+        if (contrastRatio(color, surface) >= target) return color;
+        Hct source = Hct.fromInt(color);
+        int best = color;
+        double bestDistance = Double.MAX_VALUE;
+        // HCT keeps semantic hue/chroma while tone supplies the requested legibility. Searching all
+        // displayable tones is more robust than assuming dark themes always want a lighter glyph.
+        for (int tone = 0; tone <= 100; tone++) {
+            int candidate = Hct.from(source.getHue(), source.getChroma(), tone).toInt();
+            if (contrastRatio(candidate, surface) < target) continue;
+            double distance = Math.abs(tone - source.getTone());
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = candidate;
+            }
+        }
+        return best;
+    }
+
+    @ColorInt
+    private static int surfaceTone(@ColorInt int color, boolean dark,
+                                   @NonNull TerminalContrastLevel level) {
+        Hct source = Hct.fromInt(color);
+        double tone;
+        switch (level) {
+            case SOFTER: tone = dark ? 14d : 94d; break;
+            case HARDER: tone = dark ? 4d : 99d; break;
+            default: tone = dark ? 8d : 97d; break;
+        }
+        return Hct.from(source.getHue(), source.getChroma(), tone).toInt();
+    }
+
+    private static double luminance(@ColorInt int color) {
+        return 0.2126d * linear(Color.red(color) / 255d)
+            + 0.7152d * linear(Color.green(color) / 255d)
+            + 0.0722d * linear(Color.blue(color) / 255d);
+    }
+
+    private static double linear(double channel) {
+        return channel <= 0.04045d ? channel / 12.92d
+            : Math.pow((channel + 0.055d) / 1.055d, 2.4d);
+    }
+
+    @ColorInt
+    private static int composite(@ColorInt int foreground, @ColorInt int background, double amount) {
+        double a = Math.max(0d, Math.min(1d, amount));
+        return Color.rgb(
+            (int) Math.round(Color.red(foreground) * a + Color.red(background) * (1d - a)),
+            (int) Math.round(Color.green(foreground) * a + Color.green(background) * (1d - a)),
+            (int) Math.round(Color.blue(foreground) * a + Color.blue(background) * (1d - a)));
     }
 
     @ColorInt

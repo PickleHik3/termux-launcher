@@ -54,6 +54,7 @@ end
 # Fallback palette so the prompt still renders in plain Termux or before the
 # launcher has exported wallpaper colors.
 set -q TERMUX_MATERIAL_ERROR; or set -gx TERMUX_MATERIAL_ERROR "#F2B8B5"
+set -q TERMUX_MATERIAL_ERROR_CONTAINER; or set -gx TERMUX_MATERIAL_ERROR_CONTAINER "#8C1D18"
 set -q TERMUX_MATERIAL_ON_PRIMARY; or set -gx TERMUX_MATERIAL_ON_PRIMARY "#003826"
 set -q TERMUX_MATERIAL_ON_SECONDARY; or set -gx TERMUX_MATERIAL_ON_SECONDARY "#1E3529"
 set -q TERMUX_MATERIAL_ON_SURFACE; or set -gx TERMUX_MATERIAL_ON_SURFACE "#DEE4DE"
@@ -62,6 +63,7 @@ set -q TERMUX_MATERIAL_PRIMARY; or set -gx TERMUX_MATERIAL_PRIMARY "#8CD5B3"
 set -q TERMUX_MATERIAL_SECONDARY; or set -gx TERMUX_MATERIAL_SECONDARY "#B3CCBE"
 set -q TERMUX_MATERIAL_SURFACE; or set -gx TERMUX_MATERIAL_SURFACE "#0F1512"
 set -q TERMUX_MATERIAL_SURFACE_CONTAINER_HIGHEST; or set -gx TERMUX_MATERIAL_SURFACE_CONTAINER_HIGHEST "#303632"
+set -q TERMUX_MATERIAL_SURFACE_VARIANT; or set -gx TERMUX_MATERIAL_SURFACE_VARIANT "#404943"
 set -q TERMUX_MATERIAL_TERTIARY; or set -gx TERMUX_MATERIAL_TERTIARY "#A5CCDF"
 
 # Keep the prompt near the bottom of the screen after clearing.
@@ -142,10 +144,10 @@ if status is-interactive
     end
 
     # Oh My Posh prompt. Keep this after the Material colors are sourced.
-    # Both themes ship with the launcher docs: pure-material (minimal, no
-    # backgrounds) and termux-launcher (full segments).
+    # The compact Aliens-derived theme follows the launcher's Material palette.
+    # termux-launcher remains available as the fuller alternate theme.
     if type -q oh-my-posh
-        set -l omp_theme "$HOME/.config/ohmyposh/pure-material.omp.json"
+        set -l omp_theme "$HOME/.config/ohmyposh/aliens-material.omp.json"
         test -f "$omp_theme"; or set omp_theme "$HOME/.config/ohmyposh/termux-launcher.omp.json"
 
         if test -f "$omp_theme"

@@ -976,6 +976,29 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         setFontSize(fontSize);
     }
 
+    /**
+     * Scratchpad text size is display-local just like the main terminal size. The first read copies
+     * the current main size, making this a migration-free, one-time initialization.
+     */
+    public int getScratchpadFontSize() {
+        String key = TERMUX_APP.KEY_FONTSIZE + "_scratchpad" + getDisplayIdAsString();
+        if (!mSharedPreferences.contains(key)) {
+            SharedPreferenceUtils.setIntStoredAsString(mSharedPreferences, key, getFontSize(), false);
+        }
+        return DataUtils.clamp(SharedPreferenceUtils.getIntStoredAsString(
+            mSharedPreferences, key, getFontSize()), MIN_FONTSIZE, MAX_FONTSIZE);
+    }
+
+    public void setScratchpadFontSize(int value) {
+        String key = TERMUX_APP.KEY_FONTSIZE + "_scratchpad" + getDisplayIdAsString();
+        SharedPreferenceUtils.setIntStoredAsString(mSharedPreferences, key,
+            DataUtils.clamp(value, MIN_FONTSIZE, MAX_FONTSIZE), false);
+    }
+
+    public void changeScratchpadFontSize(boolean increase) {
+        setScratchpadFontSize(getScratchpadFontSize() + (increase ? 2 : -2));
+    }
+
     public String getCurrentSession() {
         return SharedPreferenceUtils.getString(mSharedPreferences, TERMUX_APP.KEY_CURRENT_SESSION, null, true);
     }
@@ -1205,6 +1228,19 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setTerminalDynamicColorsEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_DYNAMIC_COLORS_ENABLED, value, false);
+    }
+
+    @NonNull
+    public TerminalContrastLevel getTerminalContrastLevel() {
+        return TerminalContrastLevel.from(SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_CONTRAST_LEVEL,
+            TERMUX_APP.DEFAULT_VALUE_TERMINAL_CONTRAST_LEVEL, true));
+    }
+
+    public void setTerminalContrastLevel(@Nullable String value) {
+        TerminalContrastLevel level = TerminalContrastLevel.from(value == null ? "" : value);
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_CONTRAST_LEVEL,
+            level.value, false);
     }
 
     public boolean arePluginErrorNotificationsEnabled(boolean readFromFile) {

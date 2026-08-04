@@ -457,6 +457,8 @@ public final class TerminalEmulator {
 
     /** Whether any OSC 133 mark has been seen, which is how the app knows shell integration is set up. */
     private boolean mShellIntegrationSeen;
+    /** True between OSC 133;C (command output) and OSC 133;D/prompt return. */
+    private boolean mShellIntegrationCommandRunning;
 
     /**
      * The kitty keyboard protocol state of one screen: its active flags and its mode stack.
@@ -2950,15 +2952,18 @@ public final class TerminalEmulator {
             mShellIntegrationSeen = true;
         switch(kind) {
             case 'A':
+                mShellIntegrationCommandRunning = false;
                 mScreen.setShellIntegrationMark(mCursorRow, TerminalRow.MARK_PROMPT_START);
                 break;
             case 'B':
                 mScreen.setShellIntegrationMark(mCursorRow, TerminalRow.MARK_COMMAND_START);
                 break;
             case 'C':
+                mShellIntegrationCommandRunning = true;
                 mScreen.setShellIntegrationMark(mCursorRow, TerminalRow.MARK_OUTPUT_START);
                 break;
             case 'D':
+                mShellIntegrationCommandRunning = false;
                 mLastCommandExitCode = COMMAND_EXIT_CODE_UNKNOWN;
                 int separator = textParameter.indexOf(';');
                 if (separator >= 0) {
@@ -3278,6 +3283,10 @@ public final class TerminalEmulator {
     /** Whether the shell has ever reported an OSC 133 mark, i.e. whether shell integration is active. */
     public boolean hasShellIntegration() {
         return mShellIntegrationSeen;
+    }
+
+    public boolean isShellIntegrationCommandRunning() {
+        return mShellIntegrationSeen && mShellIntegrationCommandRunning;
     }
 
     /**
@@ -3812,6 +3821,7 @@ public final class TerminalEmulator {
         mCurrentHyperlinkId = TerminalHyperlinks.NO_LINK;
         mHyperlinks.clear();
         mLastCommandExitCode = COMMAND_EXIT_CODE_UNKNOWN;
+        mShellIntegrationCommandRunning = false;
         mShellIntegrationSeen = false;
         mKeyboardModesMain.reset();
         mKeyboardModesAlt.reset();

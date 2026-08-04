@@ -1,0 +1,82 @@
+diff --git a/crates/sigye/Cargo.toml b/crates/sigye/Cargo.toml
+index 43920a4..bfd51aa 100644
+--- a/crates/sigye/Cargo.toml
++++ b/crates/sigye/Cargo.toml
+@@ -27,6 +27,8 @@ serde.workspace = true
+ clap.workspace = true
+ notify-rust.workspace = true
+ chrono-tz.workspace = true
++
++[target.'cfg(not(target_os = "android"))'.dependencies]
+ arboard.workspace = true
+
+ [lints]
+diff --git a/crates/sigye/src/modes/clock.rs b/crates/sigye/src/modes/clock.rs
+index 3eeb369..f73cad0 100644
+--- a/crates/sigye/src/modes/clock.rs
++++ b/crates/sigye/src/modes/clock.rs
+@@ -19,6 +19,39 @@ use crate::render::{self, AsciiTextParams};
+ /// Duration in milliseconds for toast visibility.
+ const TOAST_DURATION_MS: u128 = 2000;
+
++#[cfg(not(target_os = "android"))]
++fn copy_to_clipboard(text: &str) -> bool {
++    arboard::Clipboard::new()
++        .and_then(|mut clipboard| clipboard.set_text(text.to_owned()))
++        .is_ok()
++}
++
++#[cfg(target_os = "android")]
++fn copy_to_clipboard(text: &str) -> bool {
++    use std::io::Write;
++    use std::process::{Command, Stdio};
++
++    let Ok(mut child) = Command::new("termux-clipboard-set")
++        .stdin(Stdio::piped())
++        .stdout(Stdio::null())
++        .stderr(Stdio::null())
++        .spawn()
++    else {
++        return false;
++    };
++
++    let Some(mut stdin) = child.stdin.take() else {
++        return false;
++    };
++
++    if stdin.write_all(text.as_bytes()).is_err() {
++        return false;
++    }
++    drop(stdin);
++
++    child.wait().map(|status| status.success()).unwrap_or(false)
++}
++
+ /// Clock display mode — shows the current time as big ASCII art.
+ pub struct ClockMode {
+     pub last_second: u32,
+@@ -404,18 +437,20 @@ impl Mode for ClockMode {
+             }
+             KeyCode::Char('u') => {
+                 let ts = Local::now().timestamp().to_string();
+-                if let Ok(mut clipboard) = arboard::Clipboard::new() {
+-                    let _ = clipboard.set_text(ts.clone());
++                if copy_to_clipboard(&ts) {
+                     self.show_toast(format!("Copied: {ts}"));
++                } else {
++                    self.show_toast("Clipboard unavailable".to_string());
+                 }
+                 ctx.trigger_flash(0.5);
+                 true
+             }
+             KeyCode::Char('i') => {
+                 let iso = Local::now().format("%Y-%m-%dT%H:%M:%S%:z").to_string();
+-                if let Ok(mut clipboard) = arboard::Clipboard::new() {
+-                    let _ = clipboard.set_text(iso.clone());
++                if copy_to_clipboard(&iso) {
+                     self.show_toast(format!("Copied: {iso}"));
++                } else {
++                    self.show_toast("Clipboard unavailable".to_string());
+                 }
+                 ctx.trigger_flash(0.5);
+                 true

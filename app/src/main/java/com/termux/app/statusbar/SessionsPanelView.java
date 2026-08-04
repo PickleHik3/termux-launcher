@@ -1,68 +1,66 @@
 package com.termux.app.statusbar;
 
 import android.content.Context;
-import android.content.res.ColorStateList;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.Menu;
+import android.view.MotionEvent;
 import android.view.View;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.PopupMenu;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.widget.AppCompatImageButton;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
-import androidx.core.widget.ImageViewCompat;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.terminal.SessionBrowserModel;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
-/**
- * Fork-native sessions list, dropped beneath the status row by the session chip. Rows carry the
- * one-based index pill plus the session name or its focused shell, and the current session keeps a
- * primary-tinted wash, a leading bar, and the brighter label. Rebuilt in place from a
- * {@link SessionBrowserModel.Session} projection, so anything that rebuilds the drawer list also
- * refreshes this panel while it is open.
- */
+/** Compact accordion tree used by the status-row sessions dropdown. */
 public final class SessionsPanelView extends LinearLayout {
 
-    /** Row and header actions. Index values are positions in the last bound projection. */
     public interface Listener {
-        void onSessionSelected(int index);
-        void onSessionClosed(int index);
-        void onSessionRenameRequested(int index);
+        void onWindowSelected(long sessionId, long windowId);
+        void onSessionClosed(long sessionId);
+        void onSessionRenameRequested(long sessionId);
         void onNewSession();
         void onNewSessionPrompt();
     }
+
+    private static final int MENU_RENAME = 1;
+    private static final int MENU_CLOSE = 2;
 
     private final int mPrimary;
     private final int mOnSurface;
     private final int mOnSurfaceVariant;
     private final int mSecondary;
-    private final int mTertiary;
-    private final int mTertiaryContainer;
-    private final int mOnTertiaryContainer;
     private final int mOutlineVariant;
-
     private final LinearLayout mRows;
     private final ScrollView mScroll;
     private final TextView mEmpty;
+    private final Map<Long, HeaderHolder> mHeaders = new HashMap<>();
+    private final Map<Long, WindowHolder> mWindows = new HashMap<>();
 
     @Nullable private Listener mListener;
+    @NonNull private List<SessionBrowserModel.Session> mSessions = new ArrayList<>();
+    @Nullable private Long mExpandedSessionId;
+    @Nullable private String mStructureKey;
+    private boolean mGestureActive;
+    private boolean mDeferredStructuralRebuild;
     private boolean mCapsuleSurface;
     private float mStatusBarRadiusPx;
-    @NonNull private List<SessionBrowserModel.Session> mSessions = new ArrayList<>();
-    /** Recomputed by every rebuild; never null so a width query before the first bind is safe. */
     @NonNull private SessionsPanelMetrics.Layout mLayout =
         new SessionsPanelMetrics.Layout(SessionsPanelMetrics.MIN_WIDTH_DP, 0f);
 
@@ -78,30 +76,21 @@ public final class SessionsPanelView extends LinearLayout {
             ContextCompat.getColor(context, R.color.termux_on_surface_variant));
         mSecondary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSecondary,
             ContextCompat.getColor(context, R.color.termux_secondary));
-        mTertiary = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorTertiary, mPrimary);
-        mTertiaryContainer = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorTertiaryContainer, mSecondary);
-        mOnTertiaryContainer = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorOnTertiaryContainer, mOnSurface);
         mOutlineVariant = MaterialColors.getColor(context,
             com.termux.shared.R.attr.termuxColorOutlineVariant,
             ContextCompat.getColor(context, R.color.termux_outline_variant));
 
-        addView(buildHeader(context), new LayoutParams(LayoutParams.MATCH_PARENT, dp(24)));
-
+        addView(buildPanelHeader(context), new LayoutParams(LayoutParams.MATCH_PARENT, dp(24)));
         View hairline = new View(context);
         hairline.setBackgroundColor(ColorUtils.setAlphaComponent(mOutlineVariant, 96));
-        LayoutParams hairlineParams = new LayoutParams(LayoutParams.MATCH_PARENT,
-            Math.max(1, dp(1)));
-        hairlineParams.topMargin = dp(4);
-        hairlineParams.bottomMargin = dp(3);
-        addView(hairline, hairlineParams);
+        LayoutParams line = new LayoutParams(LayoutParams.MATCH_PARENT, Math.max(1, dp(1)));
+        line.topMargin = dp(3);
+        line.bottomMargin = dp(3);
+        addView(hairline, line);
 
         mRows = new LinearLayout(context);
         mRows.setOrientation(VERTICAL);
         mScroll = new ScrollView(context);
-        mScroll.setFillViewport(false);
         mScroll.setVerticalScrollBarEnabled(false);
         mScroll.setOverScrollMode(OVER_SCROLL_IF_CONTENT_SCROLLS);
         mScroll.addView(mRows, new ScrollView.LayoutParams(
@@ -112,295 +101,257 @@ public final class SessionsPanelView extends LinearLayout {
         mEmpty.setText(R.string.sessions_panel_empty);
         mEmpty.setGravity(Gravity.CENTER);
         mEmpty.setVisibility(GONE);
-        LayoutParams emptyParams = new LayoutParams(LayoutParams.MATCH_PARENT, dp(40));
-        addView(mEmpty, emptyParams);
+        addView(mEmpty, new LayoutParams(LayoutParams.MATCH_PARENT, dp(40)));
     }
 
-    public void setListener(@Nullable Listener listener) {
-        mListener = listener;
-    }
+    public void setListener(@Nullable Listener listener) { mListener = listener; }
 
-    /** Match the row capsules to the status-bar surface geometry that opened the panel. */
-    public void setSurfaceStyle(boolean capsule, float statusBarRadiusPx) {
-        float radius = Math.max(0f, statusBarRadiusPx);
-        if (mCapsuleSurface == capsule && mStatusBarRadiusPx == radius) return;
+    public void setSurfaceStyle(boolean capsule, float radiusPx) {
+        if (mCapsuleSurface == capsule && mStatusBarRadiusPx == radiusPx) return;
         mCapsuleSurface = capsule;
-        mStatusBarRadiusPx = radius;
+        mStatusBarRadiusPx = Math.max(0f, radiusPx);
         rebuild();
     }
 
-    /** Rebuild every row from a fresh projection. Safe to call while the panel is open. */
+    /** Non-structural binds update the same views; structural binds wait for an active gesture. */
     public void bind(@NonNull List<SessionBrowserModel.Session> sessions) {
         mSessions = new ArrayList<>(sessions);
-        rebuild();
-    }
-
-    /**
-     * Popup width that fits the widest row, so short session names get a compact panel instead
-     * of the old fixed 320dp. Recomputed by every {@link #rebuild()}; the panel's own call site
-     * binds before it asks.
-     */
-    public int desiredWidthDp() {
-        return mLayout.widthDp;
-    }
-
-    /**
-     * Everything in a row that is not the text block: the index pill and its margin, the rename
-     * and close buttons, the row's own padding, and the card host's 10dp-per-side container
-     * padding. Single source of truth — the width calculation and the marquee decision both read
-     * it, so adding a row button can no longer silently shrink the title without widening the
-     * panel.
-     */
-    private float chromePx() {
-        return dp(22 + 7 + 28 + 32 + 4 + 4 + 20);
-    }
-
-    private float measureWidestTextPx() {
-        float widest = 0f;
-        for (SessionBrowserModel.Session session : mSessions) {
-            widest = Math.max(widest, measureTitlePx(session));
-            widest = Math.max(widest, measureSubtitlePx(session));
+        String nextKey = structureKey(mSessions);
+        boolean structural = !nextKey.equals(mStructureKey);
+        if (mExpandedSessionId != null && findSession(mExpandedSessionId) == null)
+            mExpandedSessionId = null;
+        if (structural && mGestureActive) {
+            mDeferredStructuralRebuild = true;
+            return;
         }
-        return widest;
+        if (structural) {
+            mStructureKey = nextKey;
+            rebuild();
+        } else {
+            rebindRows();
+        }
     }
 
-    private float measureTitlePx(@NonNull SessionBrowserModel.Session session) {
-        return measureTextPx(rowTitle(session), 13f);
+    public int desiredWidthDp() { return mLayout.widthDp; }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) mGestureActive = true;
+        boolean handled = super.dispatchTouchEvent(event);
+        if (event.getActionMasked() == MotionEvent.ACTION_UP
+            || event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+            mGestureActive = false;
+            if (mDeferredStructuralRebuild) {
+                mDeferredStructuralRebuild = false;
+                mStructureKey = structureKey(mSessions);
+                post(this::rebuild);
+            }
+        }
+        return handled;
     }
 
-    private float measureSubtitlePx(@NonNull SessionBrowserModel.Session session) {
-        return measureTextPx(rowSubtitle(session), 10.5f);
-    }
-
-    private float measureTextPx(@NonNull String text, float sp) {
-        android.text.TextPaint paint = new android.text.TextPaint(
-            android.text.TextPaint.ANTI_ALIAS_FLAG);
-        paint.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        paint.setTextSize(sp * getResources().getDisplayMetrics().scaledDensity);
-        return paint.measureText(text);
-    }
-
-    private LinearLayout buildHeader(@NonNull Context context) {
+    private View buildPanelHeader(@NonNull Context context) {
         LinearLayout header = new LinearLayout(context);
-        header.setOrientation(HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
-
         TextView title = label(10.5f, ColorUtils.setAlphaComponent(mOnSurfaceVariant, 190));
         title.setText(R.string.session_browser_title);
         header.addView(title, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
-
-        AppCompatImageButton add = new AppCompatImageButton(context);
-        add.setImageResource(R.drawable.ic_status_bar_add_window);
-        ImageViewCompat.setImageTintList(add, ColorStateList.valueOf(
-            ColorUtils.setAlphaComponent(mTertiary, 184)));
-        add.setScaleType(ImageView.ScaleType.CENTER);
-        add.setBackground(null);
-        add.setPadding(0, 0, 0, 0);
+        TextView add = label(18f, ColorUtils.setAlphaComponent(mPrimary, 210));
+        add.setText("+");
+        add.setGravity(Gravity.CENTER);
         add.setContentDescription(getResources().getString(R.string.sessions_panel_new));
-        add.setOnClickListener(v -> {
-            if (mListener != null) mListener.onNewSession();
-        });
+        add.setOnClickListener(v -> { if (mListener != null) mListener.onNewSession(); });
         add.setOnLongClickListener(v -> {
             if (mListener == null) return false;
             mListener.onNewSessionPrompt();
             return true;
         });
-        header.addView(add, new LayoutParams(dp(24), LayoutParams.MATCH_PARENT));
+        header.addView(add, new LayoutParams(dp(32), LayoutParams.MATCH_PARENT));
         return header;
     }
 
     private void rebuild() {
-        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
-        mLayout = SessionsPanelMetrics.calculate(measureWidestTextPx(), chromePx(),
-            Math.min(metrics.widthPixels, metrics.heightPixels), metrics.density);
+        if (mRows == null) return;
+        mHeaders.clear();
+        mWindows.clear();
         mRows.removeAllViews();
+        float widest = 0f;
+        int visibleRows = 0;
         for (SessionBrowserModel.Session session : mSessions) {
-            LayoutParams params = new LayoutParams(LayoutParams.MATCH_PARENT,
-                LayoutParams.WRAP_CONTENT);
-            if (mRows.getChildCount() > 0) params.topMargin = dp(2);
-            mRows.addView(buildRow(session), params);
+            widest = Math.max(widest, measureText(sessionTitle(session), 12.5f));
+            LayoutParams hp = new LayoutParams(LayoutParams.MATCH_PARENT, dp(40));
+            if (mRows.getChildCount() > 0) hp.topMargin = dp(1);
+            mRows.addView(buildSessionHeader(session), hp);
+            visibleRows++;
+            if (mExpandedSessionId != null && mExpandedSessionId == session.id) {
+                for (int i = 0; i < session.windows.size(); i++) {
+                    SessionBrowserModel.Window window = session.windows.get(i);
+                    widest = Math.max(widest, measureText(windowTitle(window), 11f));
+                    mRows.addView(buildWindowRow(session, window, i == session.windows.size() - 1),
+                        new LayoutParams(LayoutParams.MATCH_PARENT, dp(36)));
+                    visibleRows++;
+                }
+            }
         }
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        mLayout = SessionsPanelMetrics.calculate(widest, dp(88),
+            Math.min(dm.widthPixels, dm.heightPixels), dm.density);
         boolean empty = mSessions.isEmpty();
         mEmpty.setVisibility(empty ? VISIBLE : GONE);
         mScroll.setVisibility(empty ? GONE : VISIBLE);
-        // Cap the list at roughly six rows; anything beyond that scrolls inside the panel.
-        LayoutParams scrollParams = (LayoutParams) mScroll.getLayoutParams();
-        int maxHeight = dp(6 * 42);
-        int target = mSessions.size() > 6 ? maxHeight : LayoutParams.WRAP_CONTENT;
-        if (scrollParams.height != target) {
-            scrollParams.height = target;
-            mScroll.setLayoutParams(scrollParams);
+        LayoutParams params = (LayoutParams) mScroll.getLayoutParams();
+        params.height = visibleRows > 7 ? dp(7 * 40) : LayoutParams.WRAP_CONTENT;
+        mScroll.setLayoutParams(params);
+        rebindRows();
+    }
+
+    private View buildSessionHeader(@NonNull SessionBrowserModel.Session session) {
+        LinearLayout row = baseRow();
+        row.setTag(session.id);
+        row.setPaddingRelative(dp(6), dp(2), dp(2), dp(2));
+        TextView chevron = label(15f, mOnSurfaceVariant);
+        chevron.setGravity(Gravity.CENTER);
+        row.addView(chevron, new LayoutParams(dp(22), LayoutParams.MATCH_PARENT));
+        LinearLayout text = textBlock();
+        TextView title = label(12.5f, mOnSurface);
+        TextView subtitle = label(9.5f, ColorUtils.setAlphaComponent(mOnSurfaceVariant, 170));
+        text.addView(title);
+        text.addView(subtitle);
+        row.addView(text, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
+        TextView more = label(18f, mOnSurfaceVariant);
+        more.setText("⋮");
+        more.setGravity(Gravity.CENTER);
+        more.setContentDescription(getResources().getString(
+            R.string.sessions_panel_more, session.index + 1));
+        more.setOnClickListener(v -> showOverflow(v, session.id));
+        row.addView(more, new LayoutParams(dp(36), LayoutParams.MATCH_PARENT));
+        row.setOnClickListener(v -> post(() -> {
+            mExpandedSessionId = mExpandedSessionId != null && mExpandedSessionId == session.id
+                ? null : session.id;
+            rebuild();
+        }));
+        mHeaders.put(session.id, new HeaderHolder(row, title, subtitle, chevron, more));
+        return row;
+    }
+
+    private View buildWindowRow(@NonNull SessionBrowserModel.Session session,
+                                @NonNull SessionBrowserModel.Window window, boolean last) {
+        LinearLayout row = baseRow();
+        row.setTag(window.id);
+        row.setPaddingRelative(dp(18), dp(1), dp(5), dp(1));
+        TextView connector = label(12f, ColorUtils.setAlphaComponent(mOutlineVariant, 190));
+        connector.setText(last ? "└" : "├");
+        connector.setGravity(Gravity.CENTER);
+        row.addView(connector, new LayoutParams(dp(18), LayoutParams.MATCH_PARENT));
+        LinearLayout text = textBlock();
+        TextView title = label(11f, mOnSurface);
+        TextView subtitle = label(9.5f, ColorUtils.setAlphaComponent(mOnSurfaceVariant, 160));
+        text.addView(title);
+        text.addView(subtitle);
+        row.addView(text, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
+        row.setOnClickListener(v -> {
+            if (mListener != null) mListener.onWindowSelected(session.id, window.id);
+        });
+        mWindows.put(window.id, new WindowHolder(row, title, subtitle));
+        return row;
+    }
+
+    private void rebindRows() {
+        for (SessionBrowserModel.Session session : mSessions) {
+            HeaderHolder holder = mHeaders.get(session.id);
+            if (holder != null) {
+                boolean expanded = mExpandedSessionId != null && mExpandedSessionId == session.id;
+                holder.title.setText(sessionTitle(session));
+                holder.title.setTypeface(null, session.current ? Typeface.BOLD : Typeface.NORMAL);
+                holder.subtitle.setText(counts(session));
+                holder.chevron.setText(expanded ? "⌄" : "›");
+                holder.row.setBackground(rowSurface(session.current));
+                holder.row.setContentDescription(sessionContentDescription(session, expanded));
+                holder.more.setOnClickListener(v -> showOverflow(v, session.id));
+            }
+            for (SessionBrowserModel.Window window : session.windows) {
+                WindowHolder child = mWindows.get(window.id);
+                if (child == null) continue;
+                child.title.setText(windowTitle(window));
+                child.title.setTypeface(null, window.current ? Typeface.BOLD : Typeface.NORMAL);
+                child.subtitle.setText(getResources().getQuantityString(
+                    R.plurals.session_browser_pane_count, window.panes.size(), window.panes.size()));
+                child.row.setBackground(rowSurface(session.current && window.current));
+                child.row.setContentDescription(windowTitle(window) + " · " + child.subtitle.getText());
+            }
         }
     }
 
-    private View buildRow(@NonNull SessionBrowserModel.Session session) {
-        Context context = getContext();
-        LinearLayout row = new LinearLayout(context);
-        row.setOrientation(HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        // 40dp keeps a sane touch target while dropping the dead band the old 44dp minimum
-        // left around the two text lines.
-        row.setMinimumHeight(dp(40));
-        row.setClickable(true);
-        row.setFocusable(true);
-        row.setPaddingRelative(dp(4), dp(2), dp(4), dp(2));
-        row.setBackground(rowSurface(session.current));
-
-        TextView pill = label(10.5f, mOnTertiaryContainer);
-        pill.setGravity(Gravity.CENTER);
-        pill.setText(Integer.toString(session.index + 1));
-        pill.setBackground(pillSurface());
-        LayoutParams pillParams = new LayoutParams(dp(22), dp(22));
-        pillParams.gravity = Gravity.CENTER_VERTICAL;
-        pillParams.setMarginEnd(dp(7));
-        row.addView(pill, pillParams);
-
-        LinearLayout text = new LinearLayout(context);
-        text.setOrientation(VERTICAL);
-        TextView title = label(13f, session.current
-            ? mOnSurface : ColorUtils.setAlphaComponent(mOnSurfaceVariant, 214));
-        title.setText(rowTitle(session));
-        if (session.current && SessionsPanelMetrics.shouldMarquee(measureTitlePx(session),
-                mLayout.availableTitlePx, dp(SessionsPanelMetrics.MARQUEE_MIN_OVERFLOW_DP))) {
-            // The current row's long title autoscrolls instead of dying on an ellipsis; marquee
-            // only runs on a selected view, and only this row gets selection. Titles that overflow
-            // by a character or two are excluded: their tail scrolls out and restarts inside the
-            // stock marquee delay, which reads as a twitch rather than as motion.
-            title.setEllipsize(TextUtils.TruncateAt.MARQUEE);
-            title.setMarqueeRepeatLimit(-1);
-            title.setHorizontalFadingEdgeEnabled(true);
-            title.setSelected(true);
-        }
-        text.addView(title, new LayoutParams(LayoutParams.MATCH_PARENT,
-            LayoutParams.WRAP_CONTENT));
-        TextView subtitle = label(10.5f, ColorUtils.setAlphaComponent(mOnSurfaceVariant, 148));
-        subtitle.setTypeface(Typeface.SANS_SERIF);
-        subtitle.setText(rowSubtitle(session));
-        LayoutParams subtitleParams = new LayoutParams(LayoutParams.MATCH_PARENT,
-            LayoutParams.WRAP_CONTENT);
-        subtitleParams.topMargin = dp(1);
-        text.addView(subtitle, subtitleParams);
-        LayoutParams textParams = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
-        textParams.gravity = Gravity.CENTER_VERTICAL;
-        row.addView(text, textParams);
-
-        // Rename sits inboard of close so the destructive action keeps the outer edge, where a
-        // mis-aimed tap is least likely to land on it.
-        AppCompatImageButton rename = new AppCompatImageButton(context);
-        rename.setImageResource(R.drawable.ic_sessions_panel_rename);
-        ImageViewCompat.setImageTintList(rename, ColorStateList.valueOf(
-            ColorUtils.setAlphaComponent(mOnSurfaceVariant, 168)));
-        rename.setScaleType(ImageView.ScaleType.CENTER);
-        rename.setBackground(null);
-        rename.setPadding(0, 0, 0, 0);
-        rename.setContentDescription(getResources().getString(
-            R.string.sessions_panel_rename_session, session.index + 1));
-        rename.setOnClickListener(v -> {
-            if (mListener != null) mListener.onSessionRenameRequested(session.index);
-        });
-        LayoutParams renameParams = new LayoutParams(dp(28), dp(28));
-        renameParams.gravity = Gravity.CENTER_VERTICAL;
-        row.addView(rename, renameParams);
-
-        AppCompatImageButton close = new AppCompatImageButton(context);
-        close.setImageResource(R.drawable.ic_sessions_panel_close);
-        ImageViewCompat.setImageTintList(close, ColorStateList.valueOf(
-            ColorUtils.setAlphaComponent(mOnSurfaceVariant, 168)));
-        close.setScaleType(ImageView.ScaleType.CENTER);
-        close.setBackground(null);
-        close.setPadding(0, 0, 0, 0);
-        close.setContentDescription(getResources().getString(
-            R.string.sessions_panel_close_session, session.index + 1));
-        close.setOnClickListener(v -> {
-            if (mListener != null) mListener.onSessionClosed(session.index);
-        });
-        LayoutParams closeParams = new LayoutParams(dp(32), dp(32));
-        closeParams.gravity = Gravity.CENTER_VERTICAL;
-        row.addView(close, closeParams);
-
-        row.setContentDescription(rowContentDescription(session));
-        row.setOnClickListener(v -> {
-            if (mListener != null) mListener.onSessionSelected(session.index);
-        });
-        row.setOnLongClickListener(v -> {
+    private void showOverflow(@NonNull View anchor, long sessionId) {
+        PopupMenu popup = new PopupMenu(getContext(), anchor);
+        popup.getMenu().add(Menu.NONE, MENU_RENAME, 0, R.string.session_browser_rename);
+        popup.getMenu().add(Menu.NONE, MENU_CLOSE, 1, R.string.session_browser_close);
+        popup.setOnMenuItemClickListener(item -> {
             if (mListener == null) return false;
-            mListener.onSessionRenameRequested(session.index);
+            if (item.getItemId() == MENU_RENAME) mListener.onSessionRenameRequested(sessionId);
+            else if (item.getItemId() == MENU_CLOSE) mListener.onSessionClosed(sessionId);
+            else return false;
             return true;
         });
+        popup.show();
+    }
+
+    @Nullable private SessionBrowserModel.Session findSession(long id) {
+        for (SessionBrowserModel.Session session : mSessions) if (session.id == id) return session;
+        return null;
+    }
+
+    @NonNull private String sessionTitle(@NonNull SessionBrowserModel.Session session) {
+        return TextUtils.isEmpty(session.name)
+            ? getResources().getString(R.string.sessions_panel_session_fallback, session.index + 1)
+            : session.name;
+    }
+
+    @NonNull private String windowTitle(@NonNull SessionBrowserModel.Window window) {
+        String label = TextUtils.isEmpty(window.label) ? getResources().getString(
+            R.string.sessions_panel_window_fallback) : window.label;
+        return getResources().getString(R.string.sessions_panel_window_title,
+            window.index + 1, label);
+    }
+
+    @NonNull private String counts(@NonNull SessionBrowserModel.Session session) {
+        return getResources().getQuantityString(R.plurals.session_browser_window_count,
+            session.windows.size(), session.windows.size()) + " · "
+            + getResources().getQuantityString(R.plurals.session_browser_pane_count,
+            session.paneCount(), session.paneCount());
+    }
+
+    @NonNull private String sessionContentDescription(@NonNull SessionBrowserModel.Session session,
+                                                      boolean expanded) {
+        return sessionTitle(session) + " · " + counts(session) + " · "
+            + (expanded ? getResources().getString(R.string.sessions_panel_expanded)
+                : getResources().getString(R.string.sessions_panel_collapsed));
+    }
+
+    private LinearLayout baseRow() {
+        LinearLayout row = new LinearLayout(getContext());
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setClickable(true);
+        row.setFocusable(true);
         return row;
+    }
+
+    private LinearLayout textBlock() {
+        LinearLayout text = new LinearLayout(getContext());
+        text.setOrientation(VERTICAL);
+        text.setGravity(Gravity.CENTER_VERTICAL);
+        return text;
     }
 
     private GradientDrawable rowSurface(boolean current) {
         GradientDrawable surface = new GradientDrawable();
-        surface.setCornerRadius(rowCornerRadiusPx());
-        surface.setColor(current
-            ? ColorUtils.setAlphaComponent(mPrimary, 58)
-            : ColorUtils.setAlphaComponent(mSecondary, 14));
+        surface.setCornerRadius(mCapsuleSurface ? Math.min(mStatusBarRadiusPx, dp(20)) : 0f);
+        surface.setColor(current ? ColorUtils.setAlphaComponent(mPrimary, 52)
+            : ColorUtils.setAlphaComponent(mSecondary, 10));
         surface.setStroke(Math.max(1, dp(1)), current
-            ? ColorUtils.setAlphaComponent(mPrimary, 112)
-            : ColorUtils.setAlphaComponent(mSecondary, 26));
+            ? ColorUtils.setAlphaComponent(mPrimary, 100)
+            : ColorUtils.setAlphaComponent(mOutlineVariant, 24));
         return surface;
-    }
-
-    private GradientDrawable pillSurface() {
-        GradientDrawable pill = new GradientDrawable();
-        pill.setCornerRadius(mCapsuleSurface ? dp(11) : 0f);
-        pill.setColor(ColorUtils.setAlphaComponent(
-            ColorUtils.blendARGB(mTertiaryContainer, mTertiary, .22f), 198));
-        pill.setStroke(Math.max(1, dp(1)), mTertiary);
-        return pill;
-    }
-
-    private float rowCornerRadiusPx() {
-        return mCapsuleSurface ? Math.min(mStatusBarRadiusPx, dp(44) / 2f) : 0f;
-    }
-
-    @NonNull
-    private String rowTitle(@NonNull SessionBrowserModel.Session session) {
-        if (!TextUtils.isEmpty(session.name)) return session.name;
-        String foreground = focusedForeground(session);
-        return foreground == null ? getResources().getString(R.string.sessions_panel_shell)
-            : foreground;
-    }
-
-    /** Windows and panes only — the title already carries the cwd when the session is unnamed. */
-    @NonNull
-    private String rowSubtitle(@NonNull SessionBrowserModel.Session session) {
-        return getResources().getQuantityString(R.plurals.session_browser_window_count,
-            session.windows.size(), session.windows.size())
-            + " · "
-            + getResources().getQuantityString(R.plurals.session_browser_pane_count,
-                session.paneCount(), session.paneCount());
-    }
-
-    @NonNull
-    private String rowContentDescription(@NonNull SessionBrowserModel.Session session) {
-        String name = TextUtils.isEmpty(session.name)
-            ? getResources().getString(R.string.session_browser_unnamed, session.index + 1)
-            : getResources().getString(R.string.session_browser_named, session.index + 1,
-                session.name);
-        return session.current
-            ? name + " · " + getResources().getString(R.string.session_browser_current) : name;
-    }
-
-    @Nullable
-    private static String focusedForeground(@NonNull SessionBrowserModel.Session session) {
-        SessionBrowserModel.Pane pane = focusedPane(session);
-        return pane == null ? null : pane.foreground;
-    }
-
-    @Nullable
-    private static SessionBrowserModel.Pane focusedPane(
-            @NonNull SessionBrowserModel.Session session) {
-        for (SessionBrowserModel.Window window : session.windows) {
-            if (!window.current || window.panes.isEmpty()) continue;
-            int index = Math.max(0, Math.min(window.activePane, window.panes.size() - 1));
-            return window.panes.get(index);
-        }
-        for (SessionBrowserModel.Window window : session.windows) {
-            if (!window.panes.isEmpty()) return window.panes.get(0);
-        }
-        return null;
     }
 
     private TextView label(float sp, int color) {
@@ -414,11 +365,40 @@ public final class SessionsPanelView extends LinearLayout {
         return view;
     }
 
-    private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
+    private float measureText(@NonNull String text, float sp) {
+        android.text.TextPaint paint = new android.text.TextPaint(android.text.TextPaint.ANTI_ALIAS_FLAG);
+        paint.setTextSize(sp * getResources().getDisplayMetrics().scaledDensity);
+        return paint.measureText(text);
+    }
+
+    @NonNull private static String structureKey(@NonNull List<SessionBrowserModel.Session> sessions) {
+        StringBuilder out = new StringBuilder();
+        for (SessionBrowserModel.Session session : sessions) {
+            out.append(session.id).append(':');
+            for (SessionBrowserModel.Window window : session.windows) out.append(window.id).append(',');
+            out.append(';');
+        }
+        return out.toString();
     }
 
     private int dp(float value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private static final class HeaderHolder {
+        final View row;
+        final TextView title, subtitle, chevron, more;
+        HeaderHolder(View row, TextView title, TextView subtitle, TextView chevron, TextView more) {
+            this.row = row; this.title = title; this.subtitle = subtitle;
+            this.chevron = chevron; this.more = more;
+        }
+    }
+
+    private static final class WindowHolder {
+        final View row;
+        final TextView title, subtitle;
+        WindowHolder(View row, TextView title, TextView subtitle) {
+            this.row = row; this.title = title; this.subtitle = subtitle;
+        }
     }
 }

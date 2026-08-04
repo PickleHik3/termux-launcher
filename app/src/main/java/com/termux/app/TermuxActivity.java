@@ -216,6 +216,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** A tmux-style session: an ordered list of windows (each a pane tree) + which is current. */
     static final class WSession {
+        private static final java.util.concurrent.atomic.AtomicLong NEXT_ID =
+            new java.util.concurrent.atomic.AtomicLong(1L);
+        final long id = NEXT_ID.getAndIncrement();
         final java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows = new java.util.ArrayList<>();
         int current;
         @Nullable String name;
@@ -267,6 +270,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private android.animation.ValueAnimator mStatusBarCollapseAnimator;
     private int mStatusBarTerminalResizeGeneration;
     private static final int REQUEST_CODE_WEATHER_LOCATION = 4711;
+    private static final int REQUEST_CODE_VOICE_TYPING = 4712;
+    @Nullable private TerminalSession mVoiceTypingTargetSession;
     /** Drawer-visible sessions = service sessions minus secondary panes. Backs the list adapter. */
     public final java.util.List<com.termux.shared.termux.shell.command.runner.terminal.TermuxSession> mDrawerSessions = new java.util.ArrayList<>();
 
@@ -396,6 +401,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Nullable private AlertDialog mTerminalActionDialog;
     @Nullable private com.termux.app.terminal.SessionSwitchIndicatorView mSessionSwitchIndicator;
+    private final com.termux.app.statusbar.BackgroundProcessModel mBackgroundProcessModel =
+        new com.termux.app.statusbar.BackgroundProcessModel();
+    @Nullable private com.termux.app.statusbar.BackgroundProcessStackView mBackgroundProcessStack;
     @Nullable private com.termux.app.terminal.TerminalCommandPaletteController mCommandPalette;
 
     /**
@@ -2035,6 +2043,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private int resolveTerminalOverlayBaseColor() {
+        if (mPreferences != null && mPreferences.isTerminalDynamicColorsEnabled()) {
+            String generated = com.termux.app.terminal.MaterialTerminalColorScheme.create(
+                this, mPreferences.getTerminalContrastLevel()).getProperty("background");
+            if (generated != null) {
+                try {
+                    return Color.parseColor(generated);
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+        }
         if (isNightThemeActive()) {
             return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
         }
@@ -2045,9 +2063,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int baseColor = shouldUseWallpaperPassthroughMode()
             ? resolveTerminalOverlayBaseColor()
             : getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
-        int alpha = Math.round(resolveOpacityAlpha(
-            mPreferences != null ? mPreferences.getTerminalBackgroundOpacity() : 100
-        ) * 255f);
+        int opacity = mPreferences != null ? mPreferences.getTerminalBackgroundOpacity() : 100;
+        if (mPreferences != null && mPreferences.isTerminalDynamicColorsEnabled()
+            && shouldUseWallpaperPassthroughMode()) {
+            opacity = com.termux.app.terminal.MaterialTerminalColorScheme.effectiveOpacityPercent(
+                this, opacity, mPreferences.getTerminalContrastLevel());
+        }
+        int alpha = Math.round(resolveOpacityAlpha(opacity) * 255f);
         return (alpha << 24) | (baseColor & 0x00FFFFFF);
     }
 
@@ -8150,6 +8172,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
+        public void requestVoiceTyping(boolean chooser) {
+            launchVoiceTyping(chooser);
+        }
+
+        @Override
         public void setComposePending(boolean pending) {
             if (mAttachedInAppKeyboardView instanceof Keyboard2View)
                 ((Keyboard2View) mAttachedInAppKeyboardView).set_compose_pending(pending);
@@ -9347,6 +9374,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mSessionSwitchIndicator;
     }
 
+    @Nullable
+    private com.termux.app.statusbar.BackgroundProcessStackView obtainBackgroundProcessStack() {
+        FrameLayout host = findViewById(R.id.terminal_surface_host);
+        if (host == null) return null;
+        if (mBackgroundProcessStack == null)
+            mBackgroundProcessStack = new com.termux.app.statusbar.BackgroundProcessStackView(this);
+        if (mBackgroundProcessStack.getParent() == null) {
+            host.addView(mBackgroundProcessStack,
+                com.termux.app.statusbar.BackgroundProcessStackView.buildHostLayoutParams(this));
+        }
+        return mBackgroundProcessStack;
+    }
+
     /**
      * Hook system menu to show the terminal action sheet instead.
      */
@@ -9419,7 +9459,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logVerbose(LOG_TAG, "onActivityResult: requestCode: " + requestCode + ", resultCode: " + resultCode + ", data: " + IntentUtils.getIntentString(data));
         if (requestCode == PermissionUtils.REQUEST_GRANT_STORAGE_PERMISSION) {
             requestStoragePermission(true);
+        } else if (requestCode == REQUEST_CODE_VOICE_TYPING) {
+            TerminalSession target = mVoiceTypingTargetSession;
+            mVoiceTypingTargetSession = null;
+            if (resultCode != RESULT_OK || data == null || target == null) return;
+            java.util.ArrayList<String> results = data.getStringArrayListExtra(
+                android.speech.RecognizerIntent.EXTRA_RESULTS);
+            if (results == null) return;
+            for (String result : results) {
+                if (result != null && !result.trim().isEmpty()) {
+                    target.write(result);
+                    break;
+                }
+            }
         }
+    }
+
+    private void launchVoiceTyping(boolean chooser) {
+        TerminalSession target = getCurrentSession();
+        if (target == null) return;
+        Intent recognition = new Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        recognition.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+            android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        if (getPackageManager().resolveActivity(recognition,
+                android.content.pm.PackageManager.MATCH_DEFAULT_ONLY) == null) {
+            Toast.makeText(this, R.string.voice_typing_unavailable, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Intent launch = createVoiceTypingIntent(this, chooser);
+        try {
+            mVoiceTypingTargetSession = target;
+            startActivityForResult(launch, REQUEST_CODE_VOICE_TYPING);
+        } catch (android.content.ActivityNotFoundException e) {
+            mVoiceTypingTargetSession = null;
+            Toast.makeText(this, R.string.voice_typing_unavailable, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    static Intent createVoiceTypingIntent(@NonNull Context context, boolean chooser) {
+        Intent recognition = new Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        recognition.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+            android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        return chooser ? Intent.createChooser(recognition,
+            context.getString(R.string.voice_typing_chooser_title)) : recognition;
     }
 
     @Override
@@ -9692,10 +9774,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     panes.add(new com.termux.app.terminal.SessionBrowserModel.Pane(
                         shell.getCwd(), foreground));
                 }
-                windows.add(new com.termux.app.terminal.SessionBrowserModel.Window(windowIndex,
-                    windowIndex == ws.current, activePane, panes));
+                String windowLabel = com.termux.app.terminal.TerminalWindowBar
+                    .itemFor(activeShell, windowIndex).spokenLabel;
+                windows.add(new com.termux.app.terminal.SessionBrowserModel.Window(window.id,
+                    windowIndex, windowIndex == ws.current, activePane, panes, windowLabel));
             }
-            sessions.add(new com.termux.app.terminal.SessionBrowserModel.Session(sessionIndex,
+            sessions.add(new com.termux.app.terminal.SessionBrowserModel.Session(ws.id, sessionIndex,
                 ws == mCurrentWSession, ws.name, windows));
         }
         return sessions;
@@ -9714,6 +9798,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             activateSessionInPanes(shell);
         }
         return true;
+    }
+
+    /** Activate exactly the stable session/window pair selected by the sessions tree. */
+    public boolean activateBrowserWindow(long sessionId, long windowId) {
+        if (mPaneController == null) return false;
+        WSession targetSession = null;
+        com.termux.app.terminal.TerminalPaneController.Window targetWindow = null;
+        for (WSession session : mWSessions) {
+            if (session.id != sessionId) continue;
+            targetSession = session;
+            for (com.termux.app.terminal.TerminalPaneController.Window window : session.windows) {
+                if (window.id == windowId) {
+                    targetWindow = window;
+                    break;
+                }
+            }
+            break;
+        }
+        if (targetSession == null || targetWindow == null) return false;
+        targetSession.current = targetSession.windows.indexOf(targetWindow);
+        TerminalSession shell = mPaneController.windowActiveSession(targetWindow);
+        if (shell == null) return false;
+        if (getTermuxTerminalSessionClient() != null) {
+            getTermuxTerminalSessionClient().setCurrentSession(shell);
+        } else {
+            activateSessionInPanes(shell);
+        }
+        return true;
+    }
+
+    private int browserSessionIndex(long sessionId) {
+        for (int i = 0; i < mWSessions.size(); i++) {
+            if (mWSessions.get(i).id == sessionId) return i;
+        }
+        return -1;
     }
 
     /** Create a fresh top-level session from the currently focused pane's CWD. */
@@ -9810,6 +9929,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void onWindowForegroundResolved() {
         refreshTerminalWindowBar();
         refreshSessionsPanel();
+        syncBackgroundProcessStack();
         if (mSessionBrowserRefreshCallback != null) mSessionBrowserRefreshCallback.run();
     }
 
@@ -10256,6 +10376,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             showWindowFromBar(index);
         });
         bar.setOnCreateWindowListener(this::createNewWindow);
+        bar.setOnEdgeOverswipeListener(collapsed -> setTopStatusBarCollapsed(collapsed, true));
         com.termux.app.statusbar.SessionsIndicatorView sessionsIndicator =
             findViewById(R.id.terminal_sessions_indicator);
         if (sessionsIndicator != null) {
@@ -10271,6 +10392,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && mPreferences.isTopPaneClockCollapsed());
             swipeHost.setListener(collapsed -> setTopStatusBarCollapsed(collapsed, true));
         }
+        bar.setStatusBarCollapsed(mPreferences != null
+            && mPreferences.isTopPaneClockCollapsed());
         refreshTerminalWindowBar();
     }
 
@@ -10392,6 +10515,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean preferenceChanged = mPreferences.isTopPaneClockCollapsed() != collapsed;
         boolean geometryChanged = host != null && currentTopStatusBarHeight(host) != targetHeight;
         if (swipeHost != null) swipeHost.setCollapsed(collapsed);
+        com.termux.app.terminal.TerminalWindowBar windowBar =
+            findViewById(R.id.terminal_window_bar);
+        if (windowBar != null) windowBar.setStatusBarCollapsed(collapsed);
         if (!preferenceChanged && !geometryChanged) {
             if (topWidgets != null) {
                 topWidgets.setClipBounds(null);
@@ -10542,7 +10668,54 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         bar.setWindows(items, selected);
-        return foregroundPids;
+        syncBackgroundProcessStack();
+        return collectAllPanePids();
+    }
+
+    @NonNull
+    private java.util.List<Integer> collectAllPanePids() {
+        java.util.LinkedHashSet<Integer> unique = new java.util.LinkedHashSet<>();
+        if (mPaneController != null) {
+            for (WSession session : mWSessions) {
+                for (com.termux.app.terminal.TerminalPaneController.Window window : session.windows) {
+                    for (TerminalSession shell : mPaneController.shellsOf(window)) {
+                        if (shell.getPid() > 0) unique.add(shell.getPid());
+                    }
+                }
+            }
+        }
+        return new java.util.ArrayList<>(unique);
+    }
+
+    public void syncBackgroundProcessStack() {
+        java.util.List<com.termux.app.statusbar.BackgroundProcessModel.Snapshot> snapshots =
+            new java.util.ArrayList<>();
+        if (mPaneController != null && mWindowForegroundResolver != null) {
+            java.util.HashSet<Integer> seenShells = new java.util.HashSet<>();
+            for (WSession session : mWSessions) {
+                for (com.termux.app.terminal.TerminalPaneController.Window window : session.windows) {
+                    for (TerminalSession shell : mPaneController.shellsOf(window)) {
+                        int shellPid = shell.getPid();
+                        if (shellPid < 1 || !seenShells.add(shellPid)) continue;
+                        com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+                            mWindowForegroundResolver.get(shellPid);
+                        if (info == null || info.idle || info.foregroundPid < 1) continue;
+                        com.termux.terminal.TerminalEmulator emulator = shell.getEmulator();
+                        boolean running = emulator == null || !emulator.hasShellIntegration()
+                            || emulator.isShellIntegrationCommandRunning();
+                        snapshots.add(new com.termux.app.statusbar.BackgroundProcessModel.Snapshot(
+                            shellPid, info.foregroundPid, info.processName, shell.getTitle(), running));
+                    }
+                }
+            }
+        }
+        mBackgroundProcessModel.update(snapshots, android.os.SystemClock.elapsedRealtime());
+        TerminalSession focused = getCurrentSession();
+        java.util.List<com.termux.app.statusbar.BackgroundProcessModel.Entry> visible =
+            mBackgroundProcessModel.visibleEntries(focused == null ? -1 : focused.getPid());
+        if (mBackgroundProcessStack == null && visible.isEmpty()) return;
+        com.termux.app.statusbar.BackgroundProcessStackView stack = obtainBackgroundProcessStack();
+        if (stack != null) stack.bind(visible);
     }
 
     /**
@@ -10877,12 +11050,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.statusbar.SessionsPanelView.Listener sessionsPanelListener() {
         return new com.termux.app.statusbar.SessionsPanelView.Listener() {
             @Override
-            public void onSessionSelected(int index) {
-                if (activateBrowserSession(index)) mStatusCardHost.dismissAnimated();
+            public void onWindowSelected(long sessionId, long windowId) {
+                if (activateBrowserWindow(sessionId, windowId)) mStatusCardHost.dismissAnimated();
             }
 
             @Override
-            public void onSessionClosed(int index) {
+            public void onSessionClosed(long sessionId) {
+                int index = browserSessionIndex(sessionId);
                 if (!sessionHasForegroundJob(index)) {
                     // Nothing is running, so the panel stays open and just loses the row.
                     closeBrowserSession(index);
@@ -10893,7 +11067,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override
-            public void onSessionRenameRequested(int index) {
+            public void onSessionRenameRequested(long sessionId) {
+                int index = browserSessionIndex(sessionId);
                 mStatusCardHost.dismissAnimated();
                 if (index < 0 || index >= mWSessions.size()) return;
                 promptWindowSessionRename(mWSessions.get(index));
@@ -10962,7 +11137,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.statusbar.StatusCardHost.StyleProvider statusCardStyleProvider() {
         return new com.termux.app.statusbar.StatusCardHost.StyleProvider() {
             @Override
-            public Drawable cardBackground() {
+            public Drawable cardBackground(boolean panel) {
                 int surface = getTermuxThemeColor(
                     com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
                     R.color.termux_surface_panel_high);
@@ -10971,7 +11146,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     R.color.termux_outline_variant);
                 GradientDrawable materialSurface = new GradientDrawable();
                 materialSurface.setColor(withAlphaComponent(surface, 248));
-                materialSurface.setCornerRadius(isRoundedDockStyle()
+                materialSurface.setCornerRadius(panel && isRoundedDockStyle()
                     ? resolveStatusBarCapsuleCornerRadiusPx(Integer.MAX_VALUE) : dpToPx(16));
                 materialSurface.setStroke(Math.max(1, Math.round(dpToPx(1))),
                     withAlphaComponent(outline, 118));
@@ -10979,9 +11154,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override
-            public float cornerRadiusPx() {
-                return isRoundedDockStyle()
+            public float cornerRadiusPx(boolean panel) {
+                return panel && isRoundedDockStyle()
                     ? resolveStatusBarCapsuleCornerRadiusPx(Integer.MAX_VALUE) : dpToPx(16);
+            }
+
+            @Override
+            public float contentInsetPx(boolean panel) {
+                return dpToPx(panel ? 8 : 12);
             }
         };
     }
@@ -11385,6 +11565,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             view.setSplitChar(getSuggestionBarSplitChar());
             if (getTermuxTerminalSessionClient() != null)
                 getTermuxTerminalSessionClient().applyFontToView(view);
+        }
+
+        @Override public void configureAttachedPaneView(TerminalView view, TerminalSession session) {
+            if (getPreferences() == null || view == null) return;
+            view.setTextSize(com.termux.app.terminal.TerminalPaneController
+                .isScratchpadShellName(session == null ? null : session.mSessionName)
+                ? getPreferences().getScratchpadFontSize()
+                : getPreferences().getFontSize());
         }
 
         @Override public void removeShell(TerminalSession session) {

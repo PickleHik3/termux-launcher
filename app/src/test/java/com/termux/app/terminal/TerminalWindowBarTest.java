@@ -15,7 +15,10 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -185,6 +188,27 @@ public class TerminalWindowBarTest {
         assertSame(busy, busy.withBusy(true));
     }
 
+    @Test
+    public void edgeOverswipeRequiresExtraDistanceAndReversalCancelsIt() {
+        TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
+        List<Boolean> requests = new ArrayList<>();
+        bar.setOnEdgeOverswipeListener(requests::add);
+        bar.setStatusBarCollapsed(true);
+        bar.measure(exact(220), exact(30));
+        bar.layout(0, 0, 220, 30);
+
+        touch(bar, android.view.MotionEvent.ACTION_DOWN, 20, 15);
+        touch(bar, android.view.MotionEvent.ACTION_MOVE, 80, 15);
+        touch(bar, android.view.MotionEvent.ACTION_MOVE, 40, 15); // reverse clears accumulated 60dp
+        touch(bar, android.view.MotionEvent.ACTION_UP, 40, 15);
+        assertEquals(0, requests.size());
+
+        touch(bar, android.view.MotionEvent.ACTION_DOWN, 20, 15);
+        touch(bar, android.view.MotionEvent.ACTION_MOVE, 90, 15);
+        touch(bar, android.view.MotionEvent.ACTION_UP, 90, 15);
+        assertEquals(Collections.singletonList(Boolean.FALSE), requests);
+    }
+
     /**
      * A bar inside a real attached window, because the busy animator refuses to run while detached
      * or in an invisible window — the whole point of those guards.
@@ -205,5 +229,11 @@ public class TerminalWindowBarTest {
     private static int exact(int size) {
         return android.view.View.MeasureSpec.makeMeasureSpec(
             size, android.view.View.MeasureSpec.EXACTLY);
+    }
+
+    private static void touch(TerminalWindowBar bar, int action, float x, float y) {
+        android.view.MotionEvent event = android.view.MotionEvent.obtain(0, 1, action, x, y, 0);
+        bar.onTouchEvent(event);
+        event.recycle();
     }
 }

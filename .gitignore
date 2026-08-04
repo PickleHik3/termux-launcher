@@ -71,6 +71,7 @@ reference-repos/
 /TL-handoff/
 
 # Local agent / session scratch (do not commit)
+.codex-tmp/
 .codex-remote-attachments/
 .omo/
 *.mp4

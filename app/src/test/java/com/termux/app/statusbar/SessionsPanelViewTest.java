@@ -2,7 +2,7 @@ package com.termux.app.statusbar;
 
 import android.app.Application;
 import android.os.Build;
-import android.text.TextUtils;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
@@ -14,6 +14,7 @@ import com.termux.app.terminal.SessionBrowserModel;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 
 import java.util.ArrayList;
@@ -22,127 +23,115 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertSame;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class SessionsPanelViewTest {
 
     @Test
-    public void renameButton_dispatchesRenameForItsOwnRow() {
-        RecordingListener listener = new RecordingListener();
-        SessionsPanelView view = panel(listener, session(0, false), session(1, true));
-
-        buttonWith(view, "Rename session 2").performClick();
-
-        assertEquals(Collections.singletonList("rename:1"), listener.events);
-    }
-
-    @Test
-    public void closeButton_stillDispatchesCloseAndNotRename() {
-        // Both buttons are built from the same template and added back to back, so a swapped
-        // add order or a copy-pasted listener would silently retarget one of them.
-        RecordingListener listener = new RecordingListener();
-        SessionsPanelView view = panel(listener, session(0, true), session(1, false));
-
-        buttonWith(view, "Close session 1").performClick();
-        buttonWith(view, "Rename session 1").performClick();
-
-        assertEquals(Arrays.asList("close:0", "rename:0"), listener.events);
-    }
-
-    @Test
-    public void everyRowCarriesItsOwnIndexedContentDescriptions() {
+    public void sessionsAreCollapsedByDefaultAndOnlyOneExpands() {
         SessionsPanelView view = panel(new RecordingListener(),
-            session(0, true), session(1, false), session(2, false));
+            session(10, 0, false, 100, 2), session(20, 1, true, 200, 1));
+        assertEquals(2, rows(view).getChildCount());
 
-        for (int index = 0; index < 3; index++) {
-            assertNotNull(buttonWith(view, "Rename session " + (index + 1)));
-            assertNotNull(buttonWith(view, "Close session " + (index + 1)));
-        }
+        rows(view).getChildAt(0).performClick();
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals(4, rows(view).getChildCount());
+
+        // The second header shifted after two children; expanding it collapses the first.
+        rows(view).getChildAt(3).performClick();
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals(3, rows(view).getChildCount());
+        assertEquals(Long.valueOf(20), rows(view).getChildAt(1).getTag());
     }
 
     @Test
-    public void currentRowTitle_marqueesOnlyWhenItOverflowsByAReadableAmount() {
-        StringBuilder tooLong = new StringBuilder();
-        for (int i = 0; i < 200; i++) tooLong.append("session ");
+    public void childClickDispatchesStableSessionAndWindowIds() {
+        RecordingListener listener = new RecordingListener();
+        SessionsPanelView view = panel(listener, session(77, 0, true, 901, 1));
+        rows(view).getChildAt(0).performClick();
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
 
-        SessionsPanelView overflowing = panel(new RecordingListener(),
-            named(0, true, tooLong.toString()));
-        assertEquals(TextUtils.TruncateAt.MARQUEE, currentTitle(overflowing).getEllipsize());
+        rows(view).getChildAt(1).performClick();
 
-        SessionsPanelView fitting = panel(new RecordingListener(), named(0, true, "hi"));
-        assertEquals(TextUtils.TruncateAt.END, currentTitle(fitting).getEllipsize());
+        assertEquals(Collections.singletonList("window:77:901"), listener.events);
     }
 
     @Test
-    public void nonCurrentRowsNeverMarquee() {
-        StringBuilder tooLong = new StringBuilder();
-        for (int i = 0; i < 200; i++) tooLong.append("session ");
-
+    public void nonStructuralRefreshRebindsExistingRowsAndPreservesExpansion() {
         SessionsPanelView view = panel(new RecordingListener(),
-            named(0, false, tooLong.toString()), named(1, true, "now"));
+            namedSession(5, 0, true, 55, "before"));
+        View header = rows(view).getChildAt(0);
+        header.performClick();
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        header = rows(view).getChildAt(0);
 
-        assertEquals(TextUtils.TruncateAt.END, titleOfRow(view, 0).getEllipsize());
+        view.bind(Collections.singletonList(namedSession(5, 0, true, 55, "after")));
+
+        assertSame(header, rows(view).getChildAt(0));
+        assertEquals(2, rows(view).getChildCount());
+        assertEquals("after", titleOfHeader(rows(view).getChildAt(0)).getText().toString());
     }
 
-    /** The bound row's title: first child of the row's vertical text block. */
-    private static TextView currentTitle(SessionsPanelView view) {
-        return titleOfRow(view, 0);
+    @Test
+    public void structuralRefreshWaitsUntilPointerGestureEnds() {
+        SessionsPanelView view = panel(new RecordingListener(), session(1, 0, true, 2, 1));
+        view.dispatchTouchEvent(MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 1, 1, 0));
+
+        view.bind(Arrays.asList(session(1, 0, true, 2, 1), session(3, 1, false, 4, 1)));
+        assertEquals(1, rows(view).getChildCount());
+
+        view.dispatchTouchEvent(MotionEvent.obtain(0, 1, MotionEvent.ACTION_CANCEL, 1, 1, 0));
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals(2, rows(view).getChildCount());
     }
 
-    private static TextView titleOfRow(SessionsPanelView view, int rowIndex) {
-        ViewGroup rows = (ViewGroup) ((ViewGroup) view.getChildAt(2)).getChildAt(0);
-        ViewGroup row = (ViewGroup) rows.getChildAt(rowIndex);
+    private static TextView titleOfHeader(View view) {
+        ViewGroup row = (ViewGroup) view;
         return (TextView) ((ViewGroup) row.getChildAt(1)).getChildAt(0);
     }
 
-    private static SessionBrowserModel.Session named(int index, boolean current, String name) {
-        return new SessionBrowserModel.Session(index, current, name,
-            Collections.singletonList(new SessionBrowserModel.Window(0, true, 0,
-                Collections.singletonList(new SessionBrowserModel.Pane("/home", "bash")))));
+    private static ViewGroup rows(SessionsPanelView view) {
+        return (ViewGroup) ((ViewGroup) view.getChildAt(2)).getChildAt(0);
     }
 
     private static SessionsPanelView panel(SessionsPanelView.Listener listener,
                                            SessionBrowserModel.Session... sessions) {
-        SessionsPanelView view = new SessionsPanelView(
-            ApplicationProvider.getApplicationContext());
+        SessionsPanelView view = new SessionsPanelView(ApplicationProvider.getApplicationContext());
         view.setListener(listener);
         view.bind(Arrays.asList(sessions));
         return view;
     }
 
-    private static SessionBrowserModel.Session session(int index, boolean current) {
-        return new SessionBrowserModel.Session(index, current, null,
-            Collections.singletonList(new SessionBrowserModel.Window(0, true, 0,
-                Collections.singletonList(new SessionBrowserModel.Pane("/home", "bash")))));
+    private static SessionBrowserModel.Session session(long id, int index, boolean current,
+                                                       long firstWindowId, int windows) {
+        List<SessionBrowserModel.Window> children = new ArrayList<>();
+        for (int i = 0; i < windows; i++) {
+            children.add(new SessionBrowserModel.Window(firstWindowId + i, i, i == 0, 0,
+                Collections.singletonList(new SessionBrowserModel.Pane("/home", "bash")),
+                "bash in home"));
+        }
+        return new SessionBrowserModel.Session(id, index, current, null, children);
     }
 
-    /** The row buttons are built in code and unaddressable by id, so match on what a11y sees. */
-    private static View buttonWith(View root, String contentDescription) {
-        List<View> found = new ArrayList<>();
-        collect(root, contentDescription, found);
-        assertTrue("no view described as \"" + contentDescription + '"', !found.isEmpty());
-        assertEquals("ambiguous content description", 1, found.size());
-        return found.get(0);
-    }
-
-    private static void collect(View view, String contentDescription, List<View> found) {
-        CharSequence described = view.getContentDescription();
-        if (described != null && contentDescription.contentEquals(described)) found.add(view);
-        if (!(view instanceof ViewGroup)) return;
-        ViewGroup group = (ViewGroup) view;
-        for (int i = 0; i < group.getChildCount(); i++)
-            collect(group.getChildAt(i), contentDescription, found);
+    private static SessionBrowserModel.Session namedSession(long id, int index, boolean current,
+                                                            long windowId, String name) {
+        SessionBrowserModel.Window window = new SessionBrowserModel.Window(windowId, 0, true, 0,
+            Collections.singletonList(new SessionBrowserModel.Pane("/home", "bash")), "bash");
+        return new SessionBrowserModel.Session(id, index, current, name,
+            Collections.singletonList(window));
     }
 
     private static final class RecordingListener implements SessionsPanelView.Listener {
         final List<String> events = new ArrayList<>();
-
-        @Override public void onSessionSelected(int index) { events.add("select:" + index); }
-        @Override public void onSessionClosed(int index) { events.add("close:" + index); }
-        @Override public void onSessionRenameRequested(int index) { events.add("rename:" + index); }
+        @Override public void onWindowSelected(long sessionId, long windowId) {
+            events.add("window:" + sessionId + ':' + windowId);
+        }
+        @Override public void onSessionClosed(long sessionId) { events.add("close:" + sessionId); }
+        @Override public void onSessionRenameRequested(long sessionId) {
+            events.add("rename:" + sessionId);
+        }
         @Override public void onNewSession() { events.add("new"); }
         @Override public void onNewSessionPrompt() { events.add("newPrompt"); }
     }

@@ -226,7 +226,7 @@ Scripts:
 - `launcher-weather-widget`: cached weather formatter using wttr.in.
 - `setup-btop-rish`: installs Linux `btop` under `/data/local/tmp` through Shizuku `rish`.
 - `kew-tmux-status`: optional second tmux status row for `kew-now-playing`.
-- `config.fish` and `termux-launcher.omp.json`: optional fish and Oh My Posh defaults.
+- `config.fish`, `aliens-material.omp.json`, and `termux-launcher.omp.json`: optional Fish and Oh My Posh defaults.
 - `tmux.conf` and `material-theme.tmux`: manual tmux examples.
 
 `launcher-system-monitor` samples `/proc/stat` and `/proc/meminfo` directly when Shizuku `rish` is available, so it works in plain Termux plus Shizuku setups without any launcher HTTP route. It keeps a short cache file so tmux status bars do not fork a Shizuku shell on every refresh.

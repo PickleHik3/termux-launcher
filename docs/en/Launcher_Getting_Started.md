@@ -152,7 +152,7 @@ For endpoint files, authentication, route tables, and scripting examples, see [L
 
 ## 5. Optional Guarded Shell Setup
 
-The repository contains secret-free templates derived from the live development setup: fish with a commented quick-start guide, two Oh My Posh themes driven by wallpaper Material colors, the `~/.termux` terminal configs, and the Maple Mono font family the terminal's ligature support was tuned against. The shell setup includes:
+The repository contains secret-free templates derived from the live development setup: fish with a commented quick-start guide, a compact Aliens-derived Oh My Posh theme driven by wallpaper Material colors (plus the fuller legacy theme), the `~/.termux` terminal configs, and the Maple Mono font family the terminal's ligature support was tuned against. The shell setup includes:
 
 - fish
 - oh-my-posh

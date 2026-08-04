@@ -794,8 +794,23 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     public void changeFontSize(boolean increase) {
-        mActivity.getPreferences().changeFontSize(increase);
-        mActivity.getTerminalView().setTextSize(mActivity.getPreferences().getFontSize());
+        TerminalSession current = mActivity.getCurrentSession();
+        boolean scratchpad = current != null && TerminalPaneController
+            .isScratchpadShellName(current.mSessionName);
+        if (scratchpad) {
+            mActivity.getPreferences().changeScratchpadFontSize(increase);
+            TerminalView view = mActivity.getTerminalView();
+            if (view != null) view.setTextSize(mActivity.getPreferences().getScratchpadFontSize());
+        } else {
+            mActivity.getPreferences().changeFontSize(increase);
+            int size = mActivity.getPreferences().getFontSize();
+            // Main zoom is workspace-wide, but the independently sized scratchpad is excluded.
+            for (TerminalView view : mActivity.getTerminalPaneViews()) {
+                TerminalSession session = view.getCurrentSession();
+                if (session == null || !TerminalPaneController
+                    .isScratchpadShellName(session.mSessionName)) view.setTextSize(size);
+            }
+        }
         mActivity.requestTerminalFlushDockGeometryUpdate();
     }
 

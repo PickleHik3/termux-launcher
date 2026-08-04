@@ -51,6 +51,20 @@
     <string name="settings_color_mode_title">Color mode</string>
     <string name="settings_wallpaper_colors_title">Use wallpaper colors</string>
     <string name="settings_wallpaper_colors_summary">Builds the launcher palette from the current wallpaper.</string>
+    <string name="settings_terminal_contrast_title">Terminal contrast</string>
+    <string name="settings_terminal_contrast_summary">%1$s</string>
+    <string name="settings_terminal_contrast_summary_raised">%1$s · effective opacity %2$d%% (stored %3$d%%)</string>
+    <string name="settings_terminal_contrast_disabled">Available when wallpaper colors are on</string>
+    <string-array name="terminal_contrast_entries">
+        <item>Softer</item>
+        <item>Default</item>
+        <item>Harder</item>
+    </string-array>
+    <string-array name="terminal_contrast_values">
+        <item>softer</item>
+        <item>default</item>
+        <item>harder</item>
+    </string-array>
     <string name="settings_wallpaper_title">Wallpaper</string>
     <string name="settings_icon_appearance_header">Icon appearance</string>
     <string name="settings_icon_appearance_title">Use monochrome icons</string>
@@ -1338,6 +1352,18 @@
 
     <!-- Searchable session browser -->
     <string name="session_browser_title">Sessions</string>
+    <string name="sessions_panel_session_fallback">Session %1$d</string>
+    <string name="sessions_panel_window_fallback">shell</string>
+    <string name="sessions_panel_window_title">Window %1$d · %2$s</string>
+    <string name="sessions_panel_more">More actions for session %1$d</string>
+    <string name="sessions_panel_expanded">Expanded</string>
+    <string name="sessions_panel_collapsed">Collapsed</string>
+    <string name="voice_typing_chooser_title">Choose speech recognizer</string>
+    <string name="voice_typing_unavailable">Speech recognition unavailable</string>
+    <plurals name="background_process_hidden_count">
+        <item quantity="one">%d more background process</item>
+        <item quantity="other">%d more background processes</item>
+    </plurals>
     <string name="session_browser_search_hint">Search name, CWD, or process</string>
     <string name="session_browser_empty">No matching sessions</string>
     <string name="session_browser_new">New</string>

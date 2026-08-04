@@ -113,6 +113,8 @@ public class TerminalPaneController {
         @Nullable TerminalSession createShell(@Nullable String cwd);
         /** Wire client + font + text size + keep-screen-on onto a freshly created pane view. */
         void configurePaneView(TerminalView view);
+        /** Called after the shell is attached, when per-session view preferences can be selected. */
+        default void configureAttachedPaneView(TerminalView view, TerminalSession session) {}
         /** Kill/remove a shell session from the service. */
         void removeShell(TerminalSession session);
         /** The active pane changed; activity should refresh anything keyed off the current view. */
@@ -178,6 +180,10 @@ public class TerminalPaneController {
 
     /** A window = one pane tree + which leaf is focused within it. Stable identity (object). */
     public static final class Window {
+        private static final java.util.concurrent.atomic.AtomicLong NEXT_ID =
+            new java.util.concurrent.atomic.AtomicLong(1L);
+        /** Runtime-stable UI identity; independent from the window's mutable list index. */
+        public final long id = NEXT_ID.getAndIncrement();
         Node root;
         Leaf active;
         /**
@@ -1584,11 +1590,14 @@ public class TerminalPaneController {
                 return false;
             });
             view.attachSession(session);
+            mHost.configureAttachedPaneView(view, session);
             mPaneFrames.put(session, frame);
             mPaneViews.put(session, view);
         } else if (frame.getParent() instanceof ViewGroup) {
             ((ViewGroup) frame.getParent()).removeView(frame);
         }
+        TerminalView attachedView = mPaneViews.get(session);
+        if (attachedView != null) mHost.configureAttachedPaneView(attachedView, session);
         return frame;
     }
 

@@ -653,6 +653,11 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_VALUE_TERMINAL_DYNAMIC_COLORS_ENABLED = true;
 
+        /** Contrast profile for wallpaper-derived terminal colors. */
+        public static final String KEY_TERMINAL_CONTRAST_LEVEL = "terminal_contrast_level";
+
+        public static final String DEFAULT_VALUE_TERMINAL_CONTRAST_LEVEL = "default";
+
         /**
          * Defines the key for whether the system wallpaper should be used.
          */

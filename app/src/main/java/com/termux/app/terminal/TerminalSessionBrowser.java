@@ -285,8 +285,9 @@ public final class TerminalSessionBrowser {
         @Override public Object getItem(int position) { return entryAt(position); }
         @Override public long getItemId(int position) {
             SessionBrowserModel.Session session = entryAt(position);
-            return session == null ? position : session.index;
+            return session == null ? position : session.id;
         }
+        @Override public boolean hasStableIds() { return true; }
 
         @Override
         public View getView(int position, View convertView, ViewGroup parent) {

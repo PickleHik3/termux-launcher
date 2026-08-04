@@ -4,6 +4,10 @@
 
 ### Added
 
+- **Reproducible Termux recipes for Sigye and animated-Kitty Fastfetch** — pinned upstream builds
+  carry the Android clipboard compatibility fix Sigye v0.6.0 still needs and the Fastfetch GIF
+  frame upload/playback patch used to exercise the launcher's terminal-driven Kitty animation.
+  Both install under `~/.local` without replacing APT-owned files.
 - **Terminal font picker** — Settings → Appearance → Terminal fonts installs a complete multi-face font with no shell: pick from seven curated families with download sizes, SHA-256 verification and license text shown up front, with a star on the suggested one (Maple Mono, the variable pair) and each family's own icon, ligature and feature defaults applied on install. Toggles for icons, ligature policy and the `wght` axis rewrite the config in place, and **Use font.ttf / Termux:Styling** hands control back by deleting exactly one file. The picker writes only under `~/.termux/fonts/`, plus `~/.termux/fonts.d/10-launcher.conf`; it never creates, overwrites or deletes `~/.termux/font.ttf` or `font-italic.ttf`, so installing a family changes the terminal only. Reachable from the palette, keybindings and agents as `fonts.pick` and `fonts.install`.
 - **`~/.termux/fonts.d/*.conf` drop-ins** — font config fragments load in filename order before your own `fonts.conf`, so a hand-written file always overrides an app-managed or third-party fragment while still inheriting what it does not restate. Bounded to 32 files and 256 KiB across all of them, which never eats into `fonts.conf`'s own 64 KiB allowance.
 - **Ordered font fallback** — `fallback_font path=…|family=…`, repeatable up to 8, is the controllable answer to Android substituting a CJK or emoji face you did not choose. Coverage is probed on the cluster's base code point and memoized, and a fallback face never changes cell width.
@@ -17,6 +21,9 @@
 
 ### Changed
 
+- **Shipped terminal defaults now match the maintained live setup.** The bundled keyboard and its
+  editable copies use the revised navigation/voice gestures, while the Fish template and guarded
+  installer select the compact, status-aware Aliens Material prompt.
 - **An upper-case letter in a binding is Shift.** `map Ctrl+Alt+R …` and `map Ctrl+Alt+r …` are now two bindings rather than the same one — case on the key was previously discarded, so a config file had no short way to name the shifted stroke. Modifier names and multi-character key names (`left`, `pageup`) stay case-insensitive. Using it: `Ctrl+Alt+R` renames the shell session on any layout, while `Ctrl+Alt+r` renames the current window (and still renames the session when split panes are off, where there is no window to rename). The palette prints a shifted letter the same way: `C-A-R`.
 - **One group colour per action family, everywhere a binding is shown.** The keybind hint legend and the lit caps on the in-app keyboard now colour each key by its action's namespace — panes, windows, session, workspace, terminal, clipboard, appearance, app — as hue rotations of the live Material primary instead of three shared roles, so windows and session no longer wear the same colour.
 - **Pressing a lit cap on the in-app keyboard runs its binding.** A character key under a latched `Ctrl+Alt` is resolved as a stroke instead of being written to the shell as an escape-prefixed control byte, so `termux-launcher-bindings.conf` governs the soft keyboard exactly as it governs a hardware one.

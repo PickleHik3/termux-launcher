@@ -16,6 +16,8 @@ import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
+import android.view.MotionEvent;
+import android.view.ViewConfiguration;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
 import android.view.animation.PathInterpolator;
@@ -56,6 +58,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         void onCreateWindow();
     }
 
+    public interface OnEdgeOverswipeListener {
+        void onEdgeOverswipeRequested(boolean collapsed);
+    }
+
     /** Visual label plus a spoken label that does not expose Nerd Font private-use glyphs. */
     public static final class WindowItem {
         @NonNull public final String label;
@@ -87,6 +93,16 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private final SelectionStrip mTabs;
     @Nullable private OnWindowSelectedListener mSelectionListener;
     @Nullable private OnCreateWindowListener mCreateListener;
+    @Nullable private OnEdgeOverswipeListener mEdgeOverswipeListener;
+    private final int mTouchSlop;
+    private final float mOverswipeThresholdPx;
+    private boolean mStatusBarCollapsed;
+    private boolean mGestureHorizontal;
+    private boolean mGestureRejected;
+    private float mTouchDownX;
+    private float mTouchDownY;
+    private float mLastTouchX;
+    private float mOverswipePx;
     private int mSelectedIndex = -1;
     @NonNull private List<WindowItem> mItems = new ArrayList<>();
     private Typeface mTerminalTypeface = Typeface.MONOSPACE;
@@ -117,6 +133,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         setClipToPadding(true);
         setClipChildren(true);
         setOverScrollMode(OVER_SCROLL_NEVER);
+        mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        mOverswipeThresholdPx = dp(48);
         // The parent already supplies the intended gap after the session indicator. A second
         // leading inset here made that gap look like trailing padding owned by the session chip.
         setPaddingRelative(0, dp(2), dp(5), dp(2));
@@ -136,6 +154,72 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     public void setOnCreateWindowListener(@Nullable OnCreateWindowListener listener) {
         mCreateListener = listener;
+    }
+
+    public void setOnEdgeOverswipeListener(@Nullable OnEdgeOverswipeListener listener) {
+        mEdgeOverswipeListener = listener;
+    }
+
+    public void setStatusBarCollapsed(boolean collapsed) {
+        mStatusBarCollapsed = collapsed;
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            mTouchDownX = mLastTouchX = event.getX();
+            mTouchDownY = event.getY();
+            mOverswipePx = 0f;
+            mGestureHorizontal = false;
+            mGestureRejected = false;
+            if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+            return super.onTouchEvent(event);
+        }
+        if (action == MotionEvent.ACTION_MOVE) {
+            float dx = event.getX() - mLastTouchX;
+            float totalX = event.getX() - mTouchDownX;
+            float totalY = event.getY() - mTouchDownY;
+            if (!mGestureHorizontal && !mGestureRejected) {
+                if (Math.abs(totalY) > mTouchSlop && Math.abs(totalY) >= Math.abs(totalX)) {
+                    mGestureRejected = true;
+                } else if (Math.abs(totalX) > mTouchSlop
+                    && Math.abs(totalX) > Math.abs(totalY) * 1.2f) {
+                    mGestureHorizontal = true;
+                }
+            }
+            int before = getScrollX();
+            boolean handled = super.onTouchEvent(event);
+            int consumed = Math.abs(getScrollX() - before);
+            if (mGestureHorizontal && !mGestureRejected) {
+                boolean outward = mStatusBarCollapsed ? dx > 0f : dx < 0f;
+                boolean atEdge = mStatusBarCollapsed
+                    ? !canScrollHorizontally(-1) : !canScrollHorizontally(1);
+                if (!outward) {
+                    // Reversal always cancels the extra-distance request; ordinary scrolling stays.
+                    mOverswipePx = 0f;
+                } else if (atEdge) {
+                    mOverswipePx += Math.max(0f, Math.abs(dx) - consumed);
+                }
+            }
+            mLastTouchX = event.getX();
+            return handled;
+        }
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+            boolean commit = action == MotionEvent.ACTION_UP
+                && mGestureHorizontal && mOverswipePx >= mOverswipeThresholdPx;
+            boolean handled = super.onTouchEvent(event);
+            if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
+            mOverswipePx = 0f;
+            mGestureHorizontal = false;
+            mGestureRejected = false;
+            if (commit && mEdgeOverswipeListener != null) {
+                mEdgeOverswipeListener.onEdgeOverswipeRequested(!mStatusBarCollapsed);
+                return true;
+            }
+            return handled;
+        }
+        return super.onTouchEvent(event);
     }
 
     /** Keep window containers square in the default bar and capsule-rounded in Rounded. */

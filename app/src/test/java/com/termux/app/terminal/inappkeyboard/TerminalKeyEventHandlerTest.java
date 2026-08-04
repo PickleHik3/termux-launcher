@@ -279,9 +279,11 @@ public class TerminalKeyEventHandlerTest {
                 case SWITCH_BACK_EMOJI:
                 case SWITCH_CLIPBOARD:
                 case SWITCH_BACK_CLIPBOARD:
+                    assertEquals(logs + 1, mHost.logs.size());
+                    break;
                 case SWITCH_VOICE_TYPING:
                 case SWITCH_VOICE_TYPING_CHOOSER:
-                    assertEquals(logs + 1, mHost.logs.size());
+                    assertEquals(hostActions + 1, mHost.totalActions());
                     break;
                 case ACTION:
                     assertEquals(keys + 1, mTerminal.keyCalls.size());
@@ -630,6 +632,7 @@ public class TerminalKeyEventHandlerTest {
         private int settings;
         private int hides;
         private int capsLocks;
+        private int voiceRequests;
         private final List<Boolean> composeStates = new ArrayList<>();
         private final List<String> suggestions = new ArrayList<>();
         private final List<String> logs = new ArrayList<>();
@@ -697,6 +700,11 @@ public class TerminalKeyEventHandlerTest {
         }
 
         @Override
+        public void requestVoiceTyping(boolean chooser) {
+            voiceRequests++;
+        }
+
+        @Override
         public void setComposePending(boolean pending) {
             composeStates.add(pending);
         }
@@ -718,7 +726,7 @@ public class TerminalKeyEventHandlerTest {
 
         private int totalActions() {
             return pastes + copies + textLayouts + numericLayouts + greekLayouts + nextLayouts +
-                previousLayouts + settings + hides + capsLocks;
+                previousLayouts + settings + hides + capsLocks + voiceRequests;
         }
     }
 }

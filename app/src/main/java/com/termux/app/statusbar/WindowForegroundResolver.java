@@ -33,6 +33,8 @@ public final class WindowForegroundResolver {
     public static final class ForegroundInfo {
         /** Shell itself is in the foreground — the pane is idle; label with the directory. */
         public final boolean idle;
+        /** Kernel pid of the foreground process-group leader; -1 when idle/unknown. */
+        public final int foregroundPid;
         /** Foreground process basename, e.g. {@code codex}, {@code nvim}. Null when idle/unknown. */
         @Nullable public final String processName;
         /** Open file basename for editors, e.g. {@code config.toml}. Null otherwise. */
@@ -47,9 +49,11 @@ public final class WindowForegroundResolver {
         /** Its CPU use since the previous poll, as a fraction of one core; -1 when unknown. */
         public final double cpuFraction;
 
-        ForegroundInfo(boolean idle, @Nullable String processName, @Nullable String openFile,
-                       @NonNull List<String> command, double cpuFraction) {
+        ForegroundInfo(boolean idle, int foregroundPid, @Nullable String processName,
+                       @Nullable String openFile, @NonNull List<String> command,
+                       double cpuFraction) {
             this.idle = idle;
+            this.foregroundPid = foregroundPid;
             this.processName = processName;
             this.openFile = openFile;
             this.command = Collections.unmodifiableList(new ArrayList<>(command));
@@ -180,10 +184,12 @@ public final class WindowForegroundResolver {
             String kind = parts[1];
             if ("idle".equals(kind)) {
                 mCpuSamples.remove(pid);
-                next.put(pid, new ForegroundInfo(true, null, null, Collections.emptyList(), -1d));
+                next.put(pid, new ForegroundInfo(true, -1, null, null,
+                    Collections.emptyList(), -1d));
             } else if ("fg".equals(kind) && parts.length == 5) {
-                ForegroundInfo info = parseForeground(parts[4],
-                    cpuFraction(pid, parseInt(parts[2]), parseLong(parts[3]), nowMs));
+                int foregroundPid = parseInt(parts[2]);
+                ForegroundInfo info = parseForeground(parts[4], foregroundPid,
+                    cpuFraction(pid, foregroundPid, parseLong(parts[3]), nowMs));
                 if (info != null) next.put(pid, info);
             }
             // "x" (unreadable) leaves no entry so callers fall back to title/cwd.
@@ -198,7 +204,8 @@ public final class WindowForegroundResolver {
     }
 
     @Nullable
-    private static ForegroundInfo parseForeground(@NonNull String payload, double cpuFraction) {
+    private static ForegroundInfo parseForeground(@NonNull String payload, int foregroundPid,
+                                                  double cpuFraction) {
         if (payload.isEmpty()) return null;
         String[] argv = payload.split("\t");
         String process = basename(argv[0]);
@@ -215,7 +222,7 @@ public final class WindowForegroundResolver {
         }
         List<String> command = new ArrayList<>();
         Collections.addAll(command, argv);
-        return new ForegroundInfo(false, process, openFile, command, cpuFraction);
+        return new ForegroundInfo(false, foregroundPid, process, openFile, command, cpuFraction);
     }
 
     /**
@@ -278,6 +285,7 @@ public final class WindowForegroundResolver {
     private static boolean equalInfo(@Nullable ForegroundInfo a, @Nullable ForegroundInfo b) {
         if (a == null || b == null) return a == b;
         return a.idle == b.idle
+            && a.foregroundPid == b.foregroundPid
             && a.working == b.working
             && equalStr(a.processName, b.processName)
             && equalStr(a.openFile, b.openFile)

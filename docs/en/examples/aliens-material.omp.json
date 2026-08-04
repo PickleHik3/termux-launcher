@@ -1,0 +1,108 @@
+{
+  "$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json",
+  "blocks": [
+    {
+      "alignment": "left",
+      "segments": [
+        {
+          "background_templates": [
+            "{{ .Env.TERMUX_MATERIAL_PRIMARY }}"
+          ],
+          "foreground_templates": [
+            "{{ .Env.TERMUX_MATERIAL_ON_PRIMARY }}"
+          ],
+          "leading_diamond": "\ue0b6",
+          "style": "diamond",
+          "template": "{{ if not .Executed }}󰚩{{ else if eq .Code 0 }}{{ if eq (mod .PromptCount 3) 0 }}󱚥{{ else if eq (mod .PromptCount 3) 1 }}󱚣{{ else }}󱜙{{ end }}{{ else if eq .Code 1 }}󱚟{{ else if eq .Code 2 }}󱚝{{ else if or (eq .Code 126) (eq .Code 127) }}󱚡{{ else if ge .Code 128 }}󱚡{{ else }}󱚝{{ end }} ",
+          "trailing_diamond": "",
+          "type": "session"
+        },
+        {
+          "background_templates": [
+            "{{ .Env.TERMUX_MATERIAL_SURFACE_CONTAINER_HIGHEST }}"
+          ],
+          "foreground_templates": [
+            "{{ .Env.TERMUX_MATERIAL_TERTIARY }}"
+          ],
+          "powerline_symbol": "\ue0b0",
+          "options": {
+            "style": "full"
+          },
+          "style": "powerline",
+          "template": " {{ .Path }}",
+          "type": "path"
+        },
+        {
+          "background_templates": [
+            "{{ .Env.TERMUX_MATERIAL_SURFACE_VARIANT }}"
+          ],
+          "foreground_templates": [
+            "{{ .Env.TERMUX_MATERIAL_SECONDARY }}"
+          ],
+          "powerline_symbol": "\ue0b0",
+          "options": {
+            "fetch_status": true,
+            "fetch_upstream_icon": true
+          },
+          "style": "powerline",
+          "template": " {{ .HEAD }}{{ if .BranchStatus }} {{ .BranchStatus }}{{ end }}{{ if .Working.Changed }} *{{ .Working.String }}{{ end }}{{ if and (.Working.Changed) (.Staging.Changed) }} |{{ end }}{{ if .Staging.Changed }} +{{ .Staging.String }}{{ end }}",
+          "type": "git"
+        },
+        {
+          "background_templates": [
+            "{{ .Env.TERMUX_MATERIAL_ERROR_CONTAINER }}"
+          ],
+          "foreground_templates": [
+            "{{ .Env.TERMUX_MATERIAL_ERROR }}"
+          ],
+          "leading_diamond": "\ue0b0",
+          "style": "diamond",
+          "template": "{{ if .Error }}{{ .Error }}{{ else }}{{ if .Venv }}{{ .Venv }} {{ end }}{{ .Full }}{{ end }}",
+          "trailing_diamond": "\ue0b4",
+          "type": "python"
+        }
+      ],
+      "type": "prompt"
+    },
+    {
+      "alignment": "left",
+      "newline": true,
+      "segments": [
+        {
+          "background": "transparent",
+          "foreground_templates": [
+            "{{ .Env.TERMUX_MATERIAL_PRIMARY }}",
+            "{{ if gt .Code 0 }}{{ .Env.TERMUX_MATERIAL_ERROR }}{{ end }}"
+          ],
+          "options": {
+            "always_enabled": true
+          },
+          "style": "plain",
+          "template": "❯",
+          "type": "status"
+        },
+        {
+          "background": "transparent",
+          "foreground_templates": [
+            "{{ .Env.TERMUX_MATERIAL_TERTIARY }}",
+            "{{ if gt .Code 0 }}{{ .Env.TERMUX_MATERIAL_ERROR_CONTAINER }}{{ end }}"
+          ],
+          "options": {
+            "always_enabled": true
+          },
+          "style": "plain",
+          "template": "❯",
+          "type": "status"
+        }
+      ],
+      "type": "prompt"
+    }
+  ],
+  "console_title_template": "{{ if .Root }}[root] {{ end }}{{ .Shell }} in {{ .PWD }}",
+  "final_space": true,
+  "transient_prompt": {
+    "background": "transparent",
+    "template": "<{{ if gt .Code 0 }}{{ .Env.TERMUX_MATERIAL_ERROR }}{{ else }}{{ .Env.TERMUX_MATERIAL_PRIMARY }}{{ end }}>❯</><{{ if gt .Code 0 }}{{ .Env.TERMUX_MATERIAL_ERROR_CONTAINER }}{{ else }}{{ .Env.TERMUX_MATERIAL_TERTIARY }}{{ end }}>❯</> "
+  },
+  "version": 4
+}

@@ -33,8 +33,9 @@ public final class StatusCardHost {
 
     /** Supplies the current status-bar styling so the card matches Default glass or the capsule. */
     public interface StyleProvider {
-        @NonNull Drawable cardBackground();
-        float cornerRadiusPx();
+        @NonNull Drawable cardBackground(boolean panel);
+        float cornerRadiusPx(boolean panel);
+        float contentInsetPx(boolean panel);
     }
 
     private static final long ENTER_DURATION_MS = 200L;
@@ -97,8 +98,8 @@ public final class StatusCardHost {
         int maxWidth = portraitMaxWidthPx(context, desiredWidthDp);
 
         FrameLayout container = new FrameLayout(context);
-        final float radius = style.cornerRadiusPx();
-        container.setBackground(style.cardBackground());
+        final float radius = style.cornerRadiusPx(alignStart);
+        container.setBackground(style.cardBackground(alignStart));
         container.setClipToOutline(true);
         container.setOutlineProvider(new ViewOutlineProvider() {
             @Override
@@ -107,7 +108,7 @@ public final class StatusCardHost {
             }
         });
         container.setElevation(dp(context, 10));
-        int pad = dp(context, 10);
+        int pad = Math.round(style.contentInsetPx(alignStart));
         container.setPadding(pad, pad, pad, pad);
         container.addView(content,
             new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,

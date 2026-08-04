@@ -196,6 +196,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             // and don't want an annoying notice for that.
             mActivity.showSessionSwitchIndicator(toToastTitle(updatedSession));
         }
+        mActivity.syncBackgroundProcessStack();
         termuxSessionListNotifyUpdated();
     }
 
