@@ -70,6 +70,47 @@ public class ShellActivityTrackerTest {
     }
 
     @Test
+    public void aShortBurstIsActivityButNotYetWork() {
+        // One keystroke echoed back is a screen update. It must not read as a command working.
+        ShellActivityTracker tracker = new ShellActivityTracker();
+
+        tracker.noteActivity(101, 1_000L);
+
+        assertTrue(tracker.isActive(101, 1_000L));
+        assertFalse(tracker.isWorking(101, 1_000L));
+    }
+
+    @Test
+    public void aBurstBecomesWorkOnceItIsLongEnoughAndBusyEnough() {
+        ShellActivityTracker tracker = new ShellActivityTracker();
+        long start = 1_000L;
+        for (int i = 0; i < ShellActivityTracker.SUSTAIN_UPDATES - 1; i++) {
+            tracker.noteActivity(101, start + i * 100L);
+        }
+        long last = start + ShellActivityTracker.SUSTAIN_MS;
+
+        // Neither long enough nor busy enough yet; one more update satisfies both.
+        assertFalse(tracker.isWorking(101, start + 300L));
+        tracker.noteActivity(101, last);
+
+        assertTrue(tracker.isWorking(101, last));
+        assertFalse("work ends with the output", tracker.isWorking(101, last + DECAY));
+    }
+
+    @Test
+    public void updatesSpreadTooThinlyNeverAddUpToWork() {
+        // A TUI that repaints once every couple of seconds leaves a gap wider than the decay window,
+        // so each repaint starts a fresh burst instead of accumulating credit forever.
+        ShellActivityTracker tracker = new ShellActivityTracker();
+        long at = 1_000L;
+        for (int i = 0; i < 20; i++) {
+            tracker.noteActivity(101, at);
+            assertFalse("repaint " + i, tracker.isWorking(101, at));
+            at += DECAY + 1;
+        }
+    }
+
+    @Test
     public void forgetAndClearDropTrackedShells() {
         ShellActivityTracker tracker = new ShellActivityTracker();
         tracker.noteActivity(101, 1_000L);

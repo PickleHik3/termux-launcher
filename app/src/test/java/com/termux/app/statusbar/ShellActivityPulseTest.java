@@ -22,73 +22,43 @@ public class ShellActivityPulseTest {
     }
 
     @Test
-    public void dotWeightsStayInRangeForEveryDotAndPhase() {
-        for (int i = 0; i < ShellActivityPulse.DOT_COUNT; i++) {
-            for (float phase = 0f; phase < 1f; phase += 0.01f) {
-                float weight = ShellActivityPulse.dotWeight(i, phase);
-                assertTrue("dot " + i + " at " + phase, weight >= 0f && weight <= 1f);
-            }
+    public void theRimBreathesBetweenItsFloorAndFullStrength() {
+        assertEquals(1f, ShellActivityPulse.rimWeight(0f), .0001f);
+        float floor = ShellActivityPulse.rimWeight(0.5f);
+        assertTrue("floor " + floor, floor > 0f && floor < 0.5f);
+        for (float phase = 0f; phase <= 1f; phase += 0.005f) {
+            float weight = ShellActivityPulse.rimWeight(phase);
+            assertTrue("weight " + weight, weight >= floor - .0001f && weight <= 1.0001f);
         }
     }
 
     @Test
-    public void eachDotPeaksAtItsOwnPhase() {
-        // Otherwise the three dots blink together, which reads as flashing rather than as motion.
-        float[] peaks = new float[ShellActivityPulse.DOT_COUNT];
-        for (int i = 0; i < ShellActivityPulse.DOT_COUNT; i++) {
-            float bestPhase = 0f;
-            float best = -1f;
-            for (float phase = 0f; phase < 1f; phase += 0.001f) {
-                float weight = ShellActivityPulse.dotWeight(i, phase);
-                if (weight > best) {
-                    best = weight;
-                    bestPhase = phase;
-                }
-            }
-            peaks[i] = bestPhase;
-            assertEquals(1f, best, .01f);
-        }
-        for (int i = 0; i < peaks.length; i++) {
-            for (int j = i + 1; j < peaks.length; j++) {
-                assertTrue("dots " + i + " and " + j + " peak together",
-                    Math.abs(peaks[i] - peaks[j]) > 0.1f);
-            }
-        }
-    }
-
-    @Test
-    public void dotWeightsAreContinuousAcrossTheWrap() {
-        for (int i = 0; i < ShellActivityPulse.DOT_COUNT; i++) {
-            assertEquals(ShellActivityPulse.dotWeight(i, 0f),
-                ShellActivityPulse.dotWeight(i, 0.999f), .02f);
-        }
-    }
-
-    @Test
-    public void sweepIsContinuousAcrossTheWrap() {
-        // A saw would snap from the far end back to the near end once a cycle, and that snap reads
-        // as a dropped frame.
-        assertEquals(ShellActivityPulse.sweepStartFraction(0f),
-            ShellActivityPulse.sweepStartFraction(0.999f), .01f);
-        float previous = ShellActivityPulse.sweepStartFraction(0f);
+    public void theRimBreathIsSmoothAndContinuousAcrossTheWrap() {
+        // A corner at either end of the breath reads as a dropped frame rather than as breathing.
+        assertEquals(ShellActivityPulse.rimWeight(0f), ShellActivityPulse.rimWeight(0.999f), .01f);
+        float previous = ShellActivityPulse.rimWeight(0f);
         for (float phase = 0.005f; phase <= 1f; phase += 0.005f) {
-            float current = ShellActivityPulse.sweepStartFraction(phase);
+            float current = ShellActivityPulse.rimWeight(phase);
             assertTrue("jump at " + phase, Math.abs(current - previous) < 0.05f);
             previous = current;
         }
     }
 
     @Test
-    public void theSweepWindowNeverLeavesThePill() {
-        for (float phase = 0f; phase <= 1f; phase += 0.005f) {
-            float start = ShellActivityPulse.sweepStartFraction(phase);
-            assertTrue("start " + start, start >= 0f);
-            assertTrue("end " + (start + ShellActivityPulse.SWEEP_WIDTH_FRACTION),
-                start + ShellActivityPulse.SWEEP_WIDTH_FRACTION <= 1.0001f);
+    public void theBreathFallsOnceAndRisesOncePerCycle() {
+        // One swell per cycle. Two would read as a double blink rather than as breathing: out from
+        // the peak at the start of the cycle, and back to it by the end, with no turn in between.
+        float previous = ShellActivityPulse.rimWeight(0f);
+        for (float phase = 0.002f; phase < 0.5f; phase += 0.002f) {
+            float current = ShellActivityPulse.rimWeight(phase);
+            assertTrue("rose at " + phase, current <= previous);
+            previous = current;
         }
-        // And it actually travels the full available span rather than sitting still.
-        assertEquals(0f, ShellActivityPulse.sweepStartFraction(0f), .0001f);
-        assertEquals(1f - ShellActivityPulse.SWEEP_WIDTH_FRACTION,
-            ShellActivityPulse.sweepStartFraction(0.5f), .0001f);
+        previous = ShellActivityPulse.rimWeight(0.5f);
+        for (float phase = 0.502f; phase <= 1f; phase += 0.002f) {
+            float current = ShellActivityPulse.rimWeight(phase);
+            assertTrue("fell at " + phase, current >= previous);
+            previous = current;
+        }
     }
 }

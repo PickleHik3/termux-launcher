@@ -38,7 +38,11 @@ public final class SystemStatsController {
     public static final class Proc {
         public final int pid;
         @NonNull public final String name;
-        public final double cpu;   // percent
+        /**
+         * Percent of the whole device, on the same scale as {@link Stats#cpuPercent} — not top's
+         * per-core percent. See {@link #deviceCpuPercent(double)}.
+         */
+        public final double cpu;
         public final long rssKb;
         public final boolean kernel;
 
@@ -350,9 +354,10 @@ public final class SystemStatsController {
         for (Proc proc : sampledCpu) {
             if (proc.pid < 0) continue;
             seen.add(proc.pid);
+            double sampled = deviceCpuPercent(proc.cpu, mLatest.cores);
             double previous = mSmoothedProcessCpu.containsKey(proc.pid)
-                ? mSmoothedProcessCpu.get(proc.pid) : proc.cpu;
-            double smoothed = previous * .68d + proc.cpu * .32d;
+                ? mSmoothedProcessCpu.get(proc.pid) : sampled;
+            double smoothed = previous * .68d + sampled * .32d;
             mSmoothedProcessCpu.put(proc.pid, smoothed);
             ProcessIdentity identity = identities.get(proc.pid);
             String name = identity == null ? proc.name : identity.name;
@@ -387,6 +392,20 @@ public final class SystemStatsController {
         seen.addAll(selected.keySet());
         mSmoothedProcessCpu.keySet().retainAll(seen);
         mLatest.top = mergeProcessRows(mLatest.top, selected.values());
+    }
+
+    /**
+     * Rescale one of top's percentages onto the whole device.
+     *
+     * <p>toybox {@code top} reports {@code %CPU} against a single core, so its scale runs to
+     * {@code 100 × cores} — the same convention as its own {@code 800%cpu} header line. The widget and
+     * the card header read {@code /proc/stat}'s aggregate, which is already 0–100 for the whole
+     * device. Left alone, the two disagree by a factor of the core count: a process at "22%" of one
+     * core sat in a card whose header said the device was at 10%, which reads as the card contradicting
+     * itself. Everything on screen now means the same thing by a percent.
+     */
+    static double deviceCpuPercent(double topPercent, int cores) {
+        return cores > 1 ? topPercent / cores : topPercent;
     }
 
     /**

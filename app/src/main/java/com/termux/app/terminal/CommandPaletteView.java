@@ -51,8 +51,12 @@ import java.util.List;
  */
 public final class CommandPaletteView extends View {
 
-    /** Frequent-action keycaps, per the handoff's default six. */
-    public static final int KEYCAP_COUNT = 6;
+    /**
+     * Frequent-action keycaps. Four rather than the handoff's six: at six, the row only fit by
+     * scaling the caps down until their labels no longer fit inside them, so the strip read as a
+     * crowded band of clipped words instead of four legible shortcuts.
+     */
+    public static final int KEYCAP_COUNT = 4;
 
     public interface Callbacks {
         /** A tap landed on the row at {@code index} in the current row list. */
@@ -816,7 +820,11 @@ public final class CommandPaletteView extends View {
             float labelStart = cap.left + dp(CAP_PAD_H) + mMono.measureText(keycap.glyph) + dp(4f);
             mMono.setTextSize(dp(SIZE_CAP_LABEL));
             mMono.setColor(withBodyAlpha(mCapLabel, alpha));
-            canvas.drawText(keycap.label, labelStart, baseline, mMono);
+            // Clipped to the cap it belongs to: layoutKeycaps may have scaled the caps down to fit
+            // the row, and the text does not scale with them, so an unclipped label ran past its own
+            // border and into the next cap.
+            canvas.drawText(ellipsize(mMono, keycap.label,
+                cap.right - dp(CAP_PAD_H) - labelStart), labelStart, baseline, mMono);
         }
         canvas.restoreToCount(save);
     }

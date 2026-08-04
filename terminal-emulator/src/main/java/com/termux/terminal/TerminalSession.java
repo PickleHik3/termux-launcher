@@ -69,6 +69,14 @@ public final class TerminalSession extends TerminalOutput {
     int mShellExitStatus;
 
     /**
+     * When anything was last written towards the process, on the {@link android.os.SystemClock#uptimeMillis()}
+     * clock, or 0 while nothing has been. Everything reaching the pty from this side is input — a
+     * keystroke, a paste, a bound sequence — so this is what lets a caller tell a shell echoing what
+     * the user is typing apart from a command producing output on its own.
+     */
+    private volatile long mLastWriteUptimeMs;
+
+    /**
      * Whether to show bold text with bright colors.
      */
     private boolean mBoldWithBright;
@@ -206,8 +214,18 @@ public final class TerminalSession extends TerminalOutput {
      */
     @Override
     public void write(byte[] data, int offset, int count) {
-        if (mShellPid > 0)
+        if (mShellPid > 0) {
+            mLastWriteUptimeMs = android.os.SystemClock.uptimeMillis();
             mTerminalToProcessIOQueue.write(data, offset, count);
+        }
+    }
+
+    /**
+     * When this session was last written to, on the {@code SystemClock.uptimeMillis()} clock, or 0
+     * while it never has been.
+     */
+    public long getLastWriteUptimeMs() {
+        return mLastWriteUptimeMs;
     }
 
     /**

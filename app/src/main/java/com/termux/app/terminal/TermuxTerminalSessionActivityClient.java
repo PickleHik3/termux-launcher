@@ -654,7 +654,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 if (v.isFontInitialized())
                     v.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic,
                         faces.symbolMaps, faces.ligaturePolicy, faces.fontFeatures,
-                        faces.fontVariations, faces.fontMetricsAdjustments);
+                        faces.fontVariations, faces.fontMetricsAdjustments,
+                        faces.boxDrawingPolicy, fallbackTypefaces(faces));
             }
             mActivity.requestTerminalFlushDockGeometryUpdate();
         } catch (Exception e) {
@@ -671,10 +672,17 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             for (String error : faces.errors) Logger.logError(LOG_TAG, "Font config: " + error);
             view.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic,
                 faces.symbolMaps, faces.ligaturePolicy, faces.fontFeatures,
-                faces.fontVariations, faces.fontMetricsAdjustments);
+                faces.fontVariations, faces.fontMetricsAdjustments,
+                faces.boxDrawingPolicy, fallbackTypefaces(faces));
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyFontToView()", e);
         }
+    }
+
+    /** The {@code fallback_font} chain in config order, as the renderer's array form. */
+    private static android.graphics.Typeface[] fallbackTypefaces(
+        @NonNull TerminalFontLoader.Faces faces) {
+        return faces.fallbackFonts.toArray(new android.graphics.Typeface[0]);
     }
 
     private void reportFontErrors(@NonNull java.util.List<String> errors) {

@@ -31,6 +31,9 @@ public final class TopPaneFeed {
 
         /** Unpin {@code key}, cancelling the source notification when {@code clear} is set. */
         boolean dismissPinned(@NonNull String key, boolean clear);
+
+        /** Open what {@code key} points at, the way tapping it in the shade would. */
+        boolean openPinned(@NonNull String key);
     }
 
     public interface Observer {
@@ -119,6 +122,11 @@ public final class TopPaneFeed {
     public static boolean dismissPinned(@NonNull String key, boolean clear) {
         Controls current = controls;
         return current != null && current.dismissPinned(key, clear);
+    }
+
+    public static boolean openPinned(@NonNull String key) {
+        Controls current = controls;
+        return current != null && current.openPinned(key);
     }
 
     /**

@@ -455,10 +455,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mSelectedStrokeColor = ColorUtils.setAlphaComponent(primary, 112);
         mTabs.setHighlightStyle(mSelectedFillColor, mSelectedStrokeColor,
             mCapsuleSurface ? mStatusBarRadiusPx : 0f, dp(1));
-        // Tertiary, like the row's other "something is happening" accents, and not fully opaque:
-        // the underline is a hint, not a reading.
-        mTabs.setBusyColor(ColorUtils.setAlphaComponent(MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorTertiary, primary), 210));
+        // Tertiary, like the row's other "something is happening" accents. Opaque here: the breath
+        // owns the rim's alpha, so a pre-dimmed base would flatten the swell it is made of.
+        mTabs.setBusyColor(MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorTertiary, primary));
     }
 
     private void applyTabSurfaceStyle() {
@@ -488,9 +488,11 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     /** Draws one selected surface beneath the pills so it can travel without moving their labels. */
     private static final class SelectionStrip extends LinearLayout {
 
-        /** Underline geometry, in dp. Sized to live entirely in the pill's bottom clearance. */
-        private static final float BUSY_UNDERLINE_HEIGHT_DP = 1.5f;
-        private static final float BUSY_UNDERLINE_BOTTOM_INSET_DP = 2.5f;
+        /** Rim weight and opacity at the bottom and the top of the breath. */
+        private static final float BUSY_RIM_MIN_WIDTH_DP = 1f;
+        private static final float BUSY_RIM_MAX_WIDTH_DP = 1.75f;
+        private static final int BUSY_RIM_MIN_ALPHA = 70;
+        private static final int BUSY_RIM_MAX_ALPHA = 235;
 
         private final Paint mFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -503,6 +505,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         private float mCornerRadius;
         /** Busy flag per window, held on the strip so removeAllViews has nothing to clean up. */
         @NonNull private boolean[] mBusy = new boolean[0];
+        private int mBusyColor;
         private long mBusyStartMs;
 
         SelectionStrip(@NonNull Context context) {
@@ -510,7 +513,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             setWillNotDraw(false);
             mFillPaint.setStyle(Paint.Style.FILL);
             mStrokePaint.setStyle(Paint.Style.STROKE);
-            mBusyPaint.setStyle(Paint.Style.FILL);
+            mBusyPaint.setStyle(Paint.Style.STROKE);
         }
 
         void setBusyStates(@NonNull boolean[] busy) {
@@ -528,7 +531,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         }
 
         void setBusyColor(int color) {
-            mBusyPaint.setColor(color);
+            mBusyColor = color;
             invalidate();
         }
 
@@ -589,33 +592,34 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 canvas.drawRoundRect(bounds, mCornerRadius, mCornerRadius, mStrokePaint);
             }
             super.dispatchDraw(canvas);
-            drawBusyUnderlines(canvas);
+            drawBusyRims(canvas);
         }
 
         /**
-         * A sweeping underline along the bottom of each working window's pill, drawn after the
-         * children so it sits over the chip background rather than under it.
+         * A breathing outline around each working window's pill, drawn after the children so it sits
+         * over the chip's own border rather than under it.
          *
-         * <p>A travelling underline rather than a corner dot: at this size a dot would have to sit on
-         * top of the Nerd Font glyph, while the underline lives entirely inside the pill's ~3dp
-         * bottom clearance and can never collide with it.
+         * <p>The rim rather than a mark inside the pill: at this size anything drawn inside would have
+         * to share the row with the Nerd Font glyph and the label, while the border is already there
+         * and already the pill's own shape, so lighting it costs no space at all.
          */
-        private void drawBusyUnderlines(@NonNull Canvas canvas) {
+        private void drawBusyRims(@NonNull Canvas canvas) {
             if (!hasBusyWindow()) return;
             float density = getResources().getDisplayMetrics().density;
-            float height = BUSY_UNDERLINE_HEIGHT_DP * density;
-            float bottomInset = BUSY_UNDERLINE_BOTTOM_INSET_DP * density;
-            float phase = ShellActivityPulse.phase(busyElapsedMs());
-            float startFraction = ShellActivityPulse.sweepStartFraction(phase);
+            float weight = ShellActivityPulse.rimWeight(ShellActivityPulse.phase(busyElapsedMs()));
+            float width = density * (BUSY_RIM_MIN_WIDTH_DP
+                + (BUSY_RIM_MAX_WIDTH_DP - BUSY_RIM_MIN_WIDTH_DP) * weight);
+            mBusyPaint.setStrokeWidth(width);
+            mBusyPaint.setColor(ColorUtils.setAlphaComponent(mBusyColor, Math.round(
+                BUSY_RIM_MIN_ALPHA + (BUSY_RIM_MAX_ALPHA - BUSY_RIM_MIN_ALPHA) * weight)));
+            float inset = width / 2f;
             for (int i = 0; i < mBusy.length && i < getChildCount(); i++) {
                 if (!mBusy[i]) continue;
                 View child = getChildAt(i);
                 if (child.getWidth() <= 0 || child.getHeight() <= 0) continue;
-                float sweepWidth = child.getWidth() * ShellActivityPulse.SWEEP_WIDTH_FRACTION;
-                float left = child.getLeft() + child.getWidth() * startFraction;
-                float bottom = child.getBottom() - bottomInset;
-                mBusyRect.set(left, bottom - height, left + sweepWidth, bottom);
-                canvas.drawRoundRect(mBusyRect, height / 2f, height / 2f, mBusyPaint);
+                mBusyRect.set(child.getLeft() + inset, child.getTop() + inset,
+                    child.getRight() - inset, child.getBottom() - inset);
+                canvas.drawRoundRect(mBusyRect, mCornerRadius, mCornerRadius, mBusyPaint);
             }
         }
 

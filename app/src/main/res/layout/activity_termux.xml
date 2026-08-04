@@ -199,16 +199,8 @@
                             android:clipChildren="false"
                             android:clipToPadding="false">
 
-                            <!-- Shown while a shell in the current session's windows is producing
-                                 output; the animator only runs while it is actually on screen. -->
-                            <com.termux.app.statusbar.ShellActivityIndicatorView
-                                android:id="@+id/terminal_status_activity"
-                                android:layout_width="14dp"
-                                android:layout_height="match_parent"
-                                android:layout_marginEnd="3dp"
-                                android:visibility="gone"
-                                android:contentDescription="@string/termux_status_activity_content_description" />
-
+                            <!-- No working indicator here: the window pill's own rim carries it, so
+                                 the state is shown once, at the window it belongs to. -->
                             <com.termux.app.statusbar.StatusBarWidgetView
                                 android:id="@+id/terminal_status_widget_cpu"
                                 android:layout_width="wrap_content"

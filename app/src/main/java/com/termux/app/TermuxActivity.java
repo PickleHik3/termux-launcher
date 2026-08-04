@@ -234,6 +234,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Trailing CPU/RAM/weather widgets, their data controllers, and the shared detail card host. */
     @Nullable private com.termux.app.statusbar.SystemStatsController mStatsController;
     @Nullable private com.termux.app.statusbar.SystemStatsCardView mStatsCardView;
+    /**
+     * Presentation smoothing for the two bar readings only. One controller feeds both surfaces, and
+     * the card wants every raw sample; the bar does not — see {@link
+     * com.termux.app.statusbar.StatusBarStatSmoother}.
+     */
+    private final com.termux.app.statusbar.StatusBarStatSmoother mBarCpuSmoother =
+        com.termux.app.statusbar.StatusBarStatSmoother.forCpuPercent();
+    private final com.termux.app.statusbar.StatusBarStatSmoother mBarMemorySmoother =
+        com.termux.app.statusbar.StatusBarStatSmoother.forMemoryPercent();
+    /**
+     * Sampling cadence while the mini-btop card is open. A live monitor is the point of the card, so
+     * this is the one number here that must not grow.
+     */
+    private static final long STATS_CARD_INTERVAL_MS = 1500L;
+    /**
+     * And with the card closed, when the only consumers are the two bar readings. Those go through
+     * {@link com.termux.app.statusbar.StatusBarStatSmoother} and repaint no faster than every 3 s
+     * anyway, so sampling twice inside one of their publish windows was buying nothing and paying for
+     * it with a privileged {@code /proc} read. Six seconds also widens the {@code /proc/stat} delta
+     * window, which makes the raw CPU reading less spiky before any smoothing is applied.
+     */
+    private static final long STATS_BAR_INTERVAL_MS = 6000L;
     @Nullable private com.termux.app.statusbar.WeatherController mWeatherController;
     @Nullable private com.termux.app.statusbar.WeatherCardView mWeatherCardView;
     /** Fork-native sessions list dropped beneath the status-row session chip. */
@@ -366,6 +388,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mShellActivityRefreshPending;
     /** Output arrives far faster than a status row can usefully redraw. */
     private static final long SHELL_ACTIVITY_REFRESH_MS = 150L;
+    /**
+     * How long after something was written to a pane it stays exempt from the working indication.
+     * Covers the echo of a keystroke and the render it triggers, so typing never lights the pill.
+     */
+    private static final long SHELL_INPUT_GRACE_MS = 700L;
 
     @Nullable private AlertDialog mTerminalActionDialog;
     @Nullable private com.termux.app.terminal.SessionSwitchIndicatorView mSessionSwitchIndicator;
@@ -4645,6 +4672,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mWindowLabelHandler.removeCallbacksAndMessages(null);
         mStatusCardHost.dismiss();
         if (mStatsController != null) mStatsController.stop();
+        // Sampling stops here, so the smoothed history stops meaning anything. Dropped now rather
+        // than aged out on resume: the first reading the user sees again has to be the true one.
+        mBarCpuSmoother.reset();
+        mBarMemorySmoother.reset();
         if (mIsInvalidState)
             return;
         mIsVisible = false;
@@ -9002,14 +9033,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 R.string.termux_style_preferences_title));
     }
 
-    /** Destination of the status row's cog: the page that owns everything the row displays. */
-    private void openTerminalStatusSettings() {
-        ActivityUtils.startActivity(this,
-            SettingsActivity.createFragmentIntent(this,
-                com.termux.app.fragments.settings.termux.TerminalStatusPreferencesFragment.class,
-                R.string.settings_destination_terminal_status));
-    }
-
     private void openAppsBarSettings() {
         ActivityUtils.startActivity(this,
             SettingsActivity.createFragmentIntent(this,
@@ -9019,6 +9042,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void openSettingsHome() {
         ActivityUtils.startActivity(this, new Intent(this, SettingsActivity.class));
+    }
+
+    /** Clock apps the platform intents do not reach, tried in order once those have failed. */
+    private static final String[] CLOCK_PACKAGES = {
+        "com.google.android.deskclock",
+        "com.android.deskclock",
+        "com.sec.android.app.clockpackage",
+        "com.oneplus.deskclock",
+        "com.coloros.alarmclock",
+        "com.nothing.clock",
+    };
+
+    /**
+     * Destination of a tap on the top-pane clock: the device's own clock app.
+     *
+     * <p>{@code ACTION_SHOW_ALARMS} first because it is the documented way to ask for whatever the
+     * user's clock app is, without this fork having to know its package. Only if nothing handles it —
+     * some OEM clocks declare neither alarm action — does the package list get a turn.
+     */
+    private void openSystemClockApp() {
+        if (startClockIntent(new Intent(android.provider.AlarmClock.ACTION_SHOW_ALARMS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))) return;
+        for (String packageName : CLOCK_PACKAGES) {
+            Intent launch = getPackageManager().getLaunchIntentForPackage(packageName);
+            if (launch != null && startClockIntent(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)))
+                return;
+        }
+        Logger.logWarn(LOG_TAG, "No clock app available for the top-pane clock tap");
+    }
+
+    /**
+     * Launch attempt reported by outcome rather than by a prior {@code resolveActivity}: under
+     * Android 11 package visibility that query is filtered for an action this app does not declare in
+     * {@code <queries>}, so it answers "nothing handles this" even when the clock app does.
+     */
+    private boolean startClockIntent(@NonNull Intent intent) {
+        try {
+            startActivity(intent);
+            return true;
+        } catch (Exception exception) {
+            Logger.logWarn(LOG_TAG, "Cannot open clock app: " + exception.getMessage());
+            return false;
+        }
     }
 
     private boolean handleTerminalAction(int itemId) {
@@ -10188,6 +10254,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             statusRow.setLayoutParams(params);
         }
 
+        applyStatusSettingsExpansion(findViewById(R.id.terminal_status_settings),
+            geometry.expansion);
+
         View sessions = findViewById(R.id.terminal_sessions_indicator);
         if (sessions != null && sessions.getLayoutParams() != null) {
             int collapsedSessionHeight = Math.round(dpToPx(capsule ? 18 : 20));
@@ -10203,6 +10272,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             sessions.setLayoutParams(params);
         }
         return geometry;
+    }
+
+    /**
+     * The status row's cog belongs to the expanded panel: it fades and slides with the panel and is
+     * GONE once collapsed, so the collapsed bar carries only readings. GONE rather than transparent
+     * so the invisible glyph cannot swallow taps meant for the trailing widgets beside it.
+     */
+    private void applyStatusSettingsExpansion(@Nullable View settings, float expansion) {
+        if (settings == null) return;
+        float clamped = Math.max(0f, Math.min(1f, expansion));
+        boolean visible = clamped > 0.02f;
+        if ((settings.getVisibility() == View.VISIBLE) != visible) {
+            settings.setVisibility(visible ? View.VISIBLE : View.GONE);
+        }
+        settings.setAlpha(clamped);
+        settings.setTranslationY(-dpToPx(6) * (1f - clamped));
     }
 
     private int currentTopStatusBarHeight(View host) {
@@ -10312,9 +10397,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         com.termux.app.terminal.TerminalClockWidget clock = findViewById(R.id.terminal_clock_widget);
-        if (clock != null && mPreferences != null) {
-            clock.setStyle(mPreferences.getTopPaneClockStyle());
-            clock.setUseAmPm(mPreferences.isTopPaneClockAmPmEnabled());
+        if (clock != null) {
+            if (mPreferences != null) {
+                clock.setStyle(mPreferences.getTopPaneClockStyle());
+                clock.setUseAmPm(mPreferences.isTopPaneClockAmPmEnabled());
+            }
+            // Only reachable while the panel is expanded: the widget slot the clock lives in is GONE
+            // in the collapsed bar, so this needs no state check of its own.
+            if (clock.getTag() == null) {
+                clock.setTag("wired");
+                clock.setOnClickListener(v -> openSystemClockApp());
+            }
         }
 
         float opacity = mPreferences != null ? mPreferences.getStatusBarOpacity() / 100f : 1f;
@@ -10383,12 +10476,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Whether any shell in {@code window} is working: output within the decay window, unioned with
-     * the privileged resolver's "not idle" when it happens to have data.
+     * Whether any shell in {@code window} has a command actively working in it — an agent thinking, a
+     * build compiling — as opposed to merely having something on screen.
      *
-     * <p>The union is what covers the one case output activity misses — a foreground process that
-     * runs silently, like {@code sleep 300} or an idle vim. Unprivileged, such a process shows as
-     * not working; that is the honest limitation of an output-only signal.
+     * <p>The signal is the foreground process group's CPU use between the resolver's polls. That is
+     * what separates the three states that all look identical to an output-only signal: a shell
+     * echoing what is being typed at it, a TUI sitting there repainting its clock once a second, and
+     * an agent actually working. Only the last of the three burns CPU.
+     *
+     * <p>Input silences the indication outright: while the user is typing, the pane is being
+     * interacted with, not working in the background, whatever its process spends on rendering the
+     * keystrokes.
+     *
+     * <p>Where no CPU reading is available — no privileged backend, an unreadable procfs, or simply
+     * the first poll of a newly started command — the pane falls back to sustained output activity,
+     * excluding full-screen (alternate buffer) applications, since a repainting TUI is exactly what
+     * that fallback cannot tell apart from work. A reading that exists and is below the threshold is
+     * final, though: that is the answer, not a gap to be filled in.
      */
     private boolean isWindowWorking(
             @NonNull com.termux.app.terminal.TerminalPaneController.Window window, long nowMs) {
@@ -10396,12 +10500,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         for (TerminalSession shell : mPaneController.shellsOf(window)) {
             int pid = shell.getPid();
             if (pid <= 0) continue;
-            if (mShellActivityTracker.isActive(pid, nowMs)) return true;
+            long lastWrite = shell.getLastWriteUptimeMs();
+            if (lastWrite > 0L && nowMs - lastWrite < SHELL_INPUT_GRACE_MS) continue;
             com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
                 mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(pid);
-            if (info != null && !info.idle) return true;
+            if (info != null && info.idle) continue;          // the shell itself has the terminal
+            if (info != null) {
+                if (info.working) return true;
+                if (info.cpuFraction >= 0d) continue;         // measured, and it is not working
+            }
+            if (isFullScreenApplication(shell)) continue;
+            if (mShellActivityTracker.isWorking(pid, nowMs)) return true;
         }
         return false;
+    }
+
+    /** Whether {@code shell} has a full-screen application on the alternate screen buffer. */
+    private static boolean isFullScreenApplication(@NonNull TerminalSession shell) {
+        com.termux.terminal.TerminalEmulator emulator = shell.getEmulator();
+        return emulator != null && emulator.isAlternateBufferActive();
     }
 
     /**
@@ -10431,7 +10548,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mShellActivityRefreshPending = false;
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar != null && isSplitPanesEnabled()) syncWindowBarItems(bar);
-        updateShellActivityIndicator();
         scheduleShellActivityDecay();
     }
 
@@ -10445,27 +10561,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         long expiry = mShellActivityTracker.nextExpiryMs(now);
         if (expiry < 0L) return;
         mShellActivityHandler.postDelayed(mShellActivityDecay, Math.max(50L, expiry - now) + 20L);
-    }
-
-    /** Scoped to the current session's windows: the status row describes the session on screen. */
-    private void updateShellActivityIndicator() {
-        com.termux.app.statusbar.ShellActivityIndicatorView indicator =
-            findViewById(R.id.terminal_status_activity);
-        if (indicator == null) return;
-        boolean busy = false;
-        if (mCurrentWSession != null && mPaneController != null) {
-            long now = android.os.SystemClock.uptimeMillis();
-            for (com.termux.app.terminal.TerminalPaneController.Window window
-                    : mCurrentWSession.windows) {
-                if (isWindowWorking(window, now)) {
-                    busy = true;
-                    break;
-                }
-            }
-        }
-        indicator.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.TERTIARY);
-        indicator.refreshAppearance();
-        indicator.setBusy(busy);
     }
 
     @Nullable
@@ -10561,15 +10656,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 weather.setOnClickListener(v -> toggleWeatherCard(v));
             }
         }
-        updateShellActivityIndicator();
 
         androidx.appcompat.widget.AppCompatImageButton settings =
             findViewById(R.id.terminal_status_settings);
         if (settings != null) {
-            // Always visible while the status row is: applyTopStatusBarInteractiveHeight() only
-            // fades terminal_top_widget_area, so the row itself is opaque in both swipe states and
-            // collapsed is the default. Deliberately quieter than the accent-tinted readings
-            // beside it — it is chrome, not a value. Re-tinted every pass so theme changes take.
+            // Belongs to the expanded panel, not to the collapsed bar: collapsed is the resting
+            // state, and a cog sitting in it permanently read as a fourth reading in the row. The
+            // interactive resize fades it with the rest of the panel; this is the settled state.
+            applyStatusSettingsExpansion(settings,
+                mPreferences != null && mPreferences.isTopPaneClockCollapsed() ? 0f : 1f);
+            // Deliberately quieter than the accent-tinted readings beside it — it is chrome, not a
+            // value. Re-tinted every pass so theme changes take.
             androidx.core.widget.ImageViewCompat.setImageTintList(settings,
                 android.content.res.ColorStateList.valueOf(
                     androidx.core.graphics.ColorUtils.setAlphaComponent(
@@ -10579,7 +10676,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                 R.color.termux_on_surface_variant)), 152)));
             if (settings.getTag() == null) {
                 settings.setTag("wired");
-                settings.setOnClickListener(v -> openTerminalStatusSettings());
+                settings.setOnClickListener(v -> openSettingsHome());
             }
         }
 
@@ -10598,7 +10695,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         if (cpuOn || ramOn) {
             boolean cardShowing = mStatusCardHost.isShowing() && mStatsCardView != null;
-            ensureStatsController().start(cardShowing ? 1500L : 4000L, cardShowing);
+            ensureStatsController().start(
+                cardShowing ? STATS_CARD_INTERVAL_MS : STATS_BAR_INTERVAL_MS, cardShowing);
         } else if (mStatsController != null) {
             mStatsController.stop();
         }
@@ -10618,16 +10716,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mStatsController;
     }
 
+    /**
+     * The one callback behind two surfaces with opposite needs. The card is a monitor and gets the raw
+     * snapshot at whatever cadence it asked for; the bar is a glance and goes through the smoothers,
+     * which repaint it on their own calm rhythm and, in the common case, say "nothing changed" so no
+     * view is touched at all.
+     */
     private void onStatsUpdated(@NonNull com.termux.app.statusbar.SystemStatsController.Stats stats) {
+        long nowMs = android.os.SystemClock.uptimeMillis();
         com.termux.app.statusbar.StatusBarWidgetView cpu = findViewById(R.id.terminal_status_widget_cpu);
         com.termux.app.statusbar.StatusBarWidgetView ram = findViewById(R.id.terminal_status_widget_ram);
-        if (cpu != null && cpu.getVisibility() == View.VISIBLE) {
-            cpu.setValue(stats.cpuPercent >= 0 ? stats.cpuPercent + "%" : "--");
+        if (cpu != null && cpu.getVisibility() == View.VISIBLE
+            && mBarCpuSmoother.offer(stats.cpuPercent, nowMs)) {
+            cpu.setValue(mBarCpuSmoother.text());
         }
         if (ram != null && ram.getVisibility() == View.VISIBLE) {
             int memPct = stats.memTotalKb > 0
                 ? (int) Math.round(100.0 * stats.memUsedKb / stats.memTotalKb) : -1;
-            ram.setValue(memPct >= 0 ? memPct + "%" : "--");
+            if (mBarMemorySmoother.offer(memPct, nowMs)) ram.setValue(mBarMemorySmoother.text());
         }
         if (mStatsCardView != null && mStatusCardHost.isShowing()) {
             mStatsCardView.bind(stats);
@@ -10645,7 +10751,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         detachFromParent(mStatsCardView);
         mStatsCardView.bind(ensureStatsController().latest());
-        ensureStatsController().start(1500L, true);
+        ensureStatsController().start(STATS_CARD_INTERVAL_MS, true);
         setWidgetAccent(anchor, true);
         mStatusCardHost.setDropEdge(findViewById(R.id.terminal_window_bar_host));
         mStatusCardHost.show(anchor, mStatsCardView, statusCardStyleProvider(), () -> {
@@ -10653,7 +10759,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mStatsController != null
                 && mPreferences != null
                 && (mPreferences.isStatusWidgetCpuEnabled() || mPreferences.isStatusWidgetRamEnabled())) {
-                mStatsController.start(4000L, false);
+                mStatsController.start(STATS_BAR_INTERVAL_MS, false);
             }
         });
     }

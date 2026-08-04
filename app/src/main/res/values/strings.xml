@@ -413,7 +413,6 @@
                 <string name="termux_window_bar_content_description">Terminal windows</string>
                 <string name="termux_window_tab_content_description">Window %1$d of %2$d: %3$s</string>
                 <string name="termux_window_tab_busy_content_description">working</string>
-                <string name="termux_status_activity_content_description">A shell is working</string>
                 <string name="termux_window_new_content_description">New terminal window</string>
                 <string name="termux_top_pane_clock_content_description">Clock and status panel</string>
                 <string name="termux_top_pane_media_content_description">Media playback controls</string>
@@ -1160,7 +1159,7 @@
     <!-- Command palette chrome -->
     <string name="action_command_palette">Command palette</string>
     <string name="palette_title">Command palette</string>
-    <string name="palette_search_hint">filter actions · sessions · apps</string>
+    <string name="palette_search_hint">search</string>
     <string name="palette_empty">No matching actions</string>
     <string name="palette_unavailable_splits_disabled">Unavailable: compatibility mode is on</string>
     <string name="palette_category_session">Session</string>
@@ -1179,7 +1178,7 @@
     <string name="palette_capture_needs_modifier">Add Ctrl, Alt or Shift — a bare key would swallow typing</string>
     <string name="palette_capture_saved">%1$s bound to %2$s</string>
     <string name="palette_capture_failed">Could not save the binding: %1$s</string>
-    <string name="palette_meta_awaiting_key">awaiting key</string>
+    <string name="palette_meta_awaiting_key">press key</string>
     <string name="palette_session_rename">Rename %1$s</string>
     <string name="palette_session_rename_hint">Type a new name, up to 8 characters</string>
     <string name="palette_confirm_title">Run %1$s?</string>
@@ -1187,11 +1186,11 @@
     <string name="palette_action_failed">Could not run %1$s</string>
     <string name="palette_no_match">NO MATCH — ⏎ RUNS \"%1$s\" IN THE SHELL</string>
     <string name="palette_argument_notice">TYPE A VALUE FOR %1$s, ⏎ TO APPLY</string>
-    <string name="palette_meta_awaiting_value">awaiting value · esc</string>
-    <string name="palette_meta_idle">type to search · ↓ browse</string>
+    <string name="palette_meta_awaiting_value">value</string>
+    <string name="palette_meta_idle">↓ browse</string>
     <plurals name="palette_meta_results">
-        <item quantity="one">%1$d result · esc</item>
-        <item quantity="other">%1$d results · esc</item>
+        <item quantity="one">%1$d result</item>
+        <item quantity="other">%1$d results</item>
     </plurals>
 
     <!-- Terminal action titles, shown in the command palette -->

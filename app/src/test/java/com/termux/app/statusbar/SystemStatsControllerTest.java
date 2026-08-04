@@ -57,6 +57,18 @@ public class SystemStatsControllerTest {
     }
 
     @Test
+    public void deviceCpuPercent_putsTopsPerCoreReadingOnTheSameScaleAsTheWidget() {
+        // top counts to 100 per core (its own header says "800%cpu" on eight), while the widget and
+        // the card header read /proc/stat's 0-100 aggregate. Unscaled, a process showing 22% sat in a
+        // card whose header said 10%, which read as the card contradicting itself.
+        assertEquals(2.75d, SystemStatsController.deviceCpuPercent(22d, 8), .0001d);
+        assertEquals(11d, SystemStatsController.deviceCpuPercent(22d, 2), .0001d);
+        // A single core, or a core count that was never resolved, leaves the reading alone.
+        assertEquals(22d, SystemStatsController.deviceCpuPercent(22d, 1), .0001d);
+        assertEquals(22d, SystemStatsController.deviceCpuPercent(22d, 0), .0001d);
+    }
+
+    @Test
     public void mergeProcessRows_keepsThePreviousListWhenTheBackendReturnedNothing() {
         // The definitive cause of "the process list disappears": a failed read parses to zero rows,
         // and the list was assigned unconditionally, so the card hid the section entirely.
