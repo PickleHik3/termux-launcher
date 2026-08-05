@@ -241,6 +241,10 @@ public final class TermuxInAppKeyboard {
     public void onConfigurationChanged(Configuration configuration) {
         if (!mEnabled || mDestroyed)
             return;
+        // Height scale is stored per orientation; rotation must swap to the new orientation's value
+        // before the keyboard view is rebuilt below.
+        if (!mHeightAdjusting)
+            mHeightScale = mPreferences.getInAppKeyboardHeightScale();
         resetInputPipeline();
         if (mKeyboardView != null) {
             mHost.detachKeyboardView();

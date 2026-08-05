@@ -263,9 +263,10 @@ public class TermuxInAppKeyboardTest {
         view.measure(
             View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(500, View.MeasureSpec.AT_MOST));
-        int scaledCap = (int) Math.ceil(
-            500f * config.maxKeyboardHeightFraction * 1.5f);
-        assertTrue(Math.abs(scaledCap - view.getMeasuredHeight()) <= 1);
+        // The fraction is a hard ceiling on available height; the height scale sizes rows under it
+        // but cannot raise it.
+        int fractionCap = (int) Math.ceil(500f * config.maxKeyboardHeightFraction);
+        assertTrue(Math.abs(fractionCap - view.getMeasuredHeight()) <= 1);
 
         int geometrySyncs = mHost.geometrySyncCount;
         mPreferences.setInAppKeyboardHeightScale(0.75f);

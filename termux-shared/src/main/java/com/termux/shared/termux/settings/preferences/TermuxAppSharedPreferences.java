@@ -726,18 +726,31 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public float getInAppKeyboardHeightScale() {
-        float defaultValue = getDefaultInAppKeyboardHeightScale();
-        float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
+        float defaultValue = SharedPreferenceUtils.getFloat(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            getDefaultInAppKeyboardHeightScale());
+        if (Float.isNaN(defaultValue) || Float.isInfinite(defaultValue))
+            defaultValue = getDefaultInAppKeyboardHeightScale();
+        if (!isLandscapeOrientation())
+            return clampInAppKeyboardHeightScale(defaultValue);
+        float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE_LANDSCAPE,
             defaultValue);
-        if (Float.isNaN(value) || Float.isInfinite(value)) return defaultValue;
+        if (Float.isNaN(value) || Float.isInfinite(value)) return clampInAppKeyboardHeightScale(defaultValue);
         return clampInAppKeyboardHeightScale(value);
     }
 
     public void setInAppKeyboardHeightScale(float value) {
         SharedPreferenceUtils.setFloat(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            isLandscapeOrientation()
+                ? TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE_LANDSCAPE
+                : TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE,
             clampInAppKeyboardHeightScale(value), false);
+    }
+
+    private boolean isLandscapeOrientation() {
+        return getContext().getResources().getConfiguration().orientation
+            == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
     }
 
     public static float clampInAppKeyboardHeightScale(float value) {

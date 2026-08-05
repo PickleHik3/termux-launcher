@@ -2556,6 +2556,28 @@ public final class SuggestionBarView extends GridLayout {
         launchRippleListener.onLaunchRipple(entry.appRef.packageName, icon, sourceView);
     }
 
+    /**
+     * Resolved pinned entries for an external dock surface (the landscape rail). Folders are
+     * excluded — the rail has no popup surface to open them into.
+     */
+    @NonNull
+    public List<LauncherAppEntry> getDockRailEntries() {
+        List<PinnedItem> source = configRepository != null
+            ? configRepository.loadPinnedItems() : pinnedItems;
+        List<LauncherAppEntry> out = new ArrayList<>();
+        for (LauncherAppEntry entry : entriesForPinnedItems(source)) {
+            if (!"folder".equals(entry.appRef.packageName)) {
+                out.add(entry);
+            }
+        }
+        return out;
+    }
+
+    /** Launches an entry on behalf of an external dock surface (the landscape rail). */
+    public void launchEntryFromRail(@NonNull LauncherAppEntry entry, @Nullable View sourceView) {
+        launchEntry(entry, null, sourceView, true);
+    }
+
     private List<LauncherAppEntry> entriesForPinnedItems(@NonNull List<PinnedItem> source) {
         List<LauncherAppEntry> out = new ArrayList<>();
         for (PinnedItem item : source) {

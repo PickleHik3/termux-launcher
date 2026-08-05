@@ -387,6 +387,12 @@ public final class TermuxPreferenceConstants {
         /** Defines the persisted height scale for the in-app keyboard. */
         public static final String KEY_IN_APP_KEYBOARD_HEIGHT_SCALE = "in_app_keyboard_height_scale";
 
+        /**
+         * Defines the persisted height scale for the in-app keyboard while the device is in
+         * landscape, so adjusting one orientation never changes the other.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_HEIGHT_SCALE_LANDSCAPE = "in_app_keyboard_height_scale_landscape";
+
         // Default-dock baseline tuned on Pong (1080x2412). Height is drag-based, so retain the
         // exact confirmed value; spacing and radius below are discrete slider steps.
         public static final float DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.0830541f;

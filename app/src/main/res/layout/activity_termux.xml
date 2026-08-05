@@ -1611,6 +1611,26 @@
             android:visibility="gone" />
         </RelativeLayout>
 
+        <!-- Landscape-only vertical dock rail. A sibling of the padded content root so it can
+             occupy the display-cutout column the terminal is inset from. updateDockRailView()
+             sizes and populates it. -->
+        <ScrollView
+            android:id="@+id/dock_rail_scroll"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_gravity="start"
+            android:scrollbars="none"
+            android:overScrollMode="never"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/dock_rail_list"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center_horizontal" />
+        </ScrollView>
+
         <!-- Command palette overlay. Last child of the content root so the palette can sprout
              from the in-app keyboard's space bar and land over the terminal without a Dialog
              window - a dialog would take focus and summon the system IME, which embedded-keyboard

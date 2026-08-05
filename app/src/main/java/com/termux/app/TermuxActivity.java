@@ -65,6 +65,7 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.RelativeLayout;
 import android.widget.ScrollView;
@@ -771,6 +772,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setTermuxTerminalViewAndClients();
         setTerminalWindowBar();
         setTerminalToolbarView(savedInstanceState);
+        updateDockRailView();
         initializeInAppKeyboard(savedInstanceState);
         // Only a fresh launch may enter adjust mode: after process death the system re-delivers
         // the original launch intent with the extra still set, which must not re-enter it.
@@ -2623,7 +2625,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return new AccessoryRenderState(false, keyboardShown, keyboardHeight,
                 false, false, false, 1.0f, 0);
         }
-        boolean appsRowEnabled = mPreferences.isAppLauncherAppsRowEnabled();
+        // Mirror the metrics-side collapse: zero-height dock rows still paint at full size through
+        // the stack's clipChildren=false chain, so the render state must hide them outright. The
+        // landscape launcher surface is the left dock rail instead.
+        boolean appsRowEnabled = mPreferences.isAppLauncherAppsRowEnabled()
+            && !isLandscapeOrientation();
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
         float barAlpha = mPreferences.getAppBarOpacity() / 100f;
         return new AccessoryRenderState(
@@ -4373,6 +4379,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
 
+        // Keep content out of the camera hole now that the window draws under the cutout. Only the
+        // horizontal insets matter: the top cutout is already covered by the status-bar inset.
+        // In landscape the dock rail claims the left column, so the content inset grows to the
+        // rail's width (which itself never shrinks below the cutout inset).
+        androidx.core.graphics.Insets cutoutInsets = insetsCompat.getInsets(Type.displayCutout());
+        mLastDisplayCutoutInsetLeft = cutoutInsets.left;
+        int leftContentInsetPx = isDockRailActive() ? resolveDockRailWidthPx() : cutoutInsets.left;
+        View rootRelativeLayout = findViewById(R.id.activity_termux_root_relative_layout);
+        if (rootRelativeLayout != null
+            && (rootRelativeLayout.getPaddingLeft() != leftContentInsetPx
+                || rootRelativeLayout.getPaddingRight() != cutoutInsets.right)) {
+            rootRelativeLayout.setPadding(leftContentInsetPx, rootRelativeLayout.getPaddingTop(),
+                cutoutInsets.right, rootRelativeLayout.getPaddingBottom());
+        }
+
         applyTerminalSurfaceAppearance();
     }
 
@@ -4834,6 +4855,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mCommandPalette.dismissImmediately();
             mCommandPalette.refreshAppearance();
         }
+        // Dock metrics are orientation-dependent: landscape collapses the horizontal rows in favor
+        // of the left rail, portrait restores them. The full toolbar-geometry pass reruns because
+        // the accessory stack container is explicitly sized from these metrics.
+        setTerminalToolbarHeight();
+        updateDockRailView();
         updateWindowBackgroundForCurrentSession();
     }
 
@@ -5012,6 +5038,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             getWindow().setNavigationBarContrastEnforced(false);
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            // Let the window extend into the display-cutout ear in landscape; otherwise the system
+            // letterboxes the window off that edge and the raw wallpaper shows as an unscrimmed strip.
+            WindowManager.LayoutParams attributes = getWindow().getAttributes();
+            attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            getWindow().setAttributes(attributes);
+        }
     }
 
     private void setMargins() {
@@ -5080,7 +5114,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         mSuggestionBarView.setAppDataProvider(mLauncherAppDataProvider);
         mSuggestionBarView.setConfigRepository(mLauncherConfigRepository);
-        mSuggestionBarView.setAppCatalogChangedListener(this::syncAzScrubLettersAndTint);
+        mSuggestionBarView.setAppCatalogChangedListener(() -> {
+            syncAzScrubLettersAndTint();
+            updateDockRailView();
+        });
         mSuggestionBarView.setNotificationPopupInteractionListener(
             new SuggestionBarView.NotificationPopupInteractionListener() {
                 @Override
@@ -5322,7 +5359,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSuggestionBarView.setMostUsedPageEnabled(mPreferences.isAppLauncherMostUsedPageEnabled());
         mSuggestionBarView.setAppDataProvider(mLauncherAppDataProvider);
         mSuggestionBarView.setConfigRepository(mLauncherConfigRepository);
-        mSuggestionBarView.setAppCatalogChangedListener(this::syncAzScrubLettersAndTint);
+        mSuggestionBarView.setAppCatalogChangedListener(() -> {
+            syncAzScrubLettersAndTint();
+            updateDockRailView();
+        });
         mSuggestionBarView.setOverflowInteractionListener(new SuggestionBarView.OverflowInteractionListener() {
             @Override
             public void onOverflowInteractionChanged(boolean interacting) {
@@ -8454,6 +8494,89 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyDockLayoutMetrics(buildDockLayoutMetrics(0));
     }
 
+    private boolean isLandscapeOrientation() {
+        return getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+    }
+
+    private static final float DOCK_RAIL_MIN_WIDTH_DP = 52f;
+    private static final float DOCK_RAIL_ICON_SIZE_DP = 38f;
+    private static final float DOCK_RAIL_ICON_SPACING_DP = 10f;
+
+    /** Left display-cutout inset from the last insets pass; the rail never draws narrower. */
+    private int mLastDisplayCutoutInsetLeft;
+
+    private boolean isDockRailActive() {
+        return isLandscapeOrientation()
+            && mPreferences != null
+            && mPreferences.isAppLauncherAppsRowEnabled();
+    }
+
+    private int resolveDockRailWidthPx() {
+        return Math.max(mLastDisplayCutoutInsetLeft, Math.round(dpToPx(DOCK_RAIL_MIN_WIDTH_DP)));
+    }
+
+    /**
+     * Rebuilds the landscape dock rail: the pinned dock apps as a vertical icon column that owns
+     * the left edge (the horizontal dock rows stay collapsed in landscape). The rail sits beside
+     * the padded content root, so it lives in the same column the terminal is inset from.
+     */
+    private void updateDockRailView() {
+        android.widget.ScrollView railScroll = findViewById(R.id.dock_rail_scroll);
+        LinearLayout railList = findViewById(R.id.dock_rail_list);
+        if (railScroll == null || railList == null)
+            return;
+        if (!isDockRailActive() || mSuggestionBarView == null) {
+            railScroll.setVisibility(View.GONE);
+            railList.removeAllViews();
+            return;
+        }
+        int railWidthPx = resolveDockRailWidthPx();
+        ViewGroup.LayoutParams scrollParams = railScroll.getLayoutParams();
+        if (scrollParams != null && scrollParams.width != railWidthPx) {
+            scrollParams.width = railWidthPx;
+            railScroll.setLayoutParams(scrollParams);
+        }
+        int verticalPadPx = Math.round(dpToPx(10));
+        railScroll.setPadding(0, mLastStatusBarInsetTop + verticalPadPx, 0, verticalPadPx);
+        railScroll.setClipToPadding(false);
+        railList.removeAllViews();
+        int iconSizePx = Math.round(dpToPx(DOCK_RAIL_ICON_SIZE_DP));
+        int spacingPx = Math.round(dpToPx(DOCK_RAIL_ICON_SPACING_DP));
+        for (com.termux.app.launcher.model.LauncherAppEntry entry
+                : mSuggestionBarView.getDockRailEntries()) {
+            if (entry.icon == null)
+                continue;
+            ImageView iconView = new ImageView(this);
+            iconView.setImageDrawable(entry.icon);
+            iconView.setContentDescription(entry.label);
+            LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(iconSizePx, iconSizePx);
+            iconParams.topMargin = spacingPx;
+            iconParams.bottomMargin = spacingPx;
+            railList.addView(iconView, iconParams);
+            iconView.setOnClickListener(v -> mSuggestionBarView.launchEntryFromRail(entry, v));
+        }
+        railScroll.setVisibility(railList.getChildCount() > 0 ? View.VISIBLE : View.GONE);
+    }
+
+    /**
+     * Ceiling for the accessory stack: whatever the window holds minus the status inset, the
+     * window bar, and a minimum usable terminal slice. Returns MAX_VALUE before first layout.
+     */
+    private int computeMaxAccessoryStackHeightPx(int accessoryBottomMarginPx) {
+        // The root relative layout already sits below the status-bar inset, so only the window bar
+        // and the reserved terminal slice come out of its height.
+        View root = findViewById(R.id.activity_termux_root_relative_layout);
+        int rootHeightPx = root != null ? root.getHeight() : 0;
+        if (rootHeightPx <= 0)
+            return Integer.MAX_VALUE;
+        View windowBarHost = findViewById(R.id.terminal_window_bar_host);
+        int windowBarPx = windowBarHost != null && windowBarHost.getVisibility() == View.VISIBLE
+            ? windowBarHost.getHeight() : 0;
+        int minTerminalPx = Math.round(dpToPx(72));
+        return Math.max(0, rootHeightPx - windowBarPx - minTerminalPx
+            - Math.max(0, accessoryBottomMarginPx));
+    }
+
     public void setTerminalToolbarHeight() {
         setTerminalToolbarHeight(true);
     }
@@ -8480,8 +8603,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         AccessoryRenderState state = buildAccessoryRenderState();
         DockLayoutMetrics dockMetrics = buildDockLayoutMetrics(0);
-        applyDockLayoutMetrics(dockMetrics);
         int accessoryBottomMarginPx = resolveAccessoryStackBottomMarginPx(state);
+        // The stack has no natural ceiling: dock rows + keyboard can otherwise consume the whole
+        // window and crush the terminal and its window bar to zero height. Shed the overflow from
+        // the apps row (its icons rescale to the row-height hint); the keyboard's own screen-share
+        // cap bounds the rest.
+        int maxAccessoryStackPx = computeMaxAccessoryStackHeightPx(accessoryBottomMarginPx);
+        int projectedStackPx = computeAccessoryStackHeight(
+            dockMetrics.combinedHeight(toolbarHeightPx), 0, state.keyboardHeight);
+        if (projectedStackPx > maxAccessoryStackPx) {
+            dockMetrics = buildDockLayoutMetrics(-(projectedStackPx - maxAccessoryStackPx));
+        }
+        applyDockLayoutMetrics(dockMetrics);
         // Preserve the legacy (GONE) toolbar-only layout params byte-for-byte when no embedded
         // keyboard is present. Once the keyboard is shown, hidden toolbar rows contribute zero.
         int dockContentHeightPx = state.keyboardShown && !state.toolbarShown
@@ -8708,7 +8841,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float barHeightScale = mPreferences.getAppLauncherBarHeightScale();
         float normalizedScale = resolveDockSizeProgress(barHeightScale);
         float defaultDockProgress = resolveDefaultDockSizeProgress(barHeightScale);
-        boolean appsRowEnabled = mPreferences.isAppLauncherAppsRowEnabled();
+        boolean appsRowEnabled = mPreferences.isAppLauncherAppsRowEnabled()
+            && !isLandscapeOrientation();
         int appsBarHeightPx = appsRowEnabled
             ? resolveDockAppsBarHeightPx(normalizedScale, defaultDockProgress,
                 Math.max(0, additionalAppsBarHeightPx))
