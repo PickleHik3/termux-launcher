@@ -189,7 +189,7 @@ public class TerminalFontConfigFilesTest {
         assertTrue(result.fallbackFonts.isEmpty());
         assertTrue(result.errors.toString(), result.errors.isEmpty());
         assertEquals(TerminalFontConfig.BoxDrawingMode.SYNTHESIZE, result.boxDrawing);
-        assertEquals(TerminalFontConfig.PowerlineMode.FONT, result.powerlineSymbols);
+        assertEquals(TerminalFontConfig.PowerlineMode.SYNTHESIZE, result.powerlineSymbols);
     }
 
     private TerminalFontConfig.Result load() {

@@ -419,8 +419,8 @@ therefore continue to work untouched, and so does a `fonts.conf` written before 
 
 **Settings → Appearance → Terminal fonts** installs a complete multi-face font without a shell.
 
-- **Families** is the install path, and the only one. Seven curated families — Maple Mono, Hack,
-  JetBrains Mono, Fira Code, Victor Mono, Cascadia Code and Maple Mono NF — each with its download
+- **Families** is the install path, and the only one. A curated family list — Maple Mono, Hack,
+  JetBrains Mono, Fira Code, Victor Mono, Cascadia Code and more — each with its download
   size, face count, and full license text shown before anything is fetched. A star on its list row
   marks the suggested family, Maple Mono (the variable pair, so weight is an axis rather than a
   file). Installing from the list applies that family's own defaults: the app's bundled Symbols Nerd

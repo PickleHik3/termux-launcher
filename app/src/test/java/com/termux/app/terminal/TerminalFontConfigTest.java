@@ -310,7 +310,7 @@ public class TerminalFontConfigTest {
     public void parsesBoxDrawingAndPowerlineDirectivesWithKittyDefaults() {
         TerminalFontConfig.Result defaults = TerminalFontConfig.parse("", true);
         assertEquals(TerminalFontConfig.BoxDrawingMode.SYNTHESIZE, defaults.boxDrawing);
-        assertEquals(TerminalFontConfig.PowerlineMode.FONT, defaults.powerlineSymbols);
+        assertEquals(TerminalFontConfig.PowerlineMode.SYNTHESIZE, defaults.powerlineSymbols);
         assertEquals(0.001d, defaults.boxDrawingScale.thin, 0d);
         assertEquals(1d, defaults.boxDrawingScale.light, 0d);
         assertEquals(1.5d, defaults.boxDrawingScale.heavy, 0d);
@@ -354,7 +354,7 @@ public class TerminalFontConfigTest {
         assertEquals("line 9: powerline_symbols must be font or synthesize",
             result.errors.get(7));
         assertEquals(TerminalFontConfig.BoxDrawingMode.SYNTHESIZE, result.boxDrawing);
-        assertEquals(TerminalFontConfig.PowerlineMode.FONT, result.powerlineSymbols);
+        assertEquals(TerminalFontConfig.PowerlineMode.SYNTHESIZE, result.powerlineSymbols);
         // The one valid line stays active.
         assertEquals(4d, result.boxDrawingScale.veryHeavy, 0d);
     }

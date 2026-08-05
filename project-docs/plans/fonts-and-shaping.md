@@ -418,10 +418,12 @@ install headlessly for the palette, keybindings and agents; it is `MEDIUM`/confi
 `id`, which keeps it out of the palette's argument-free tool rows the way `app.launch` does.
 
 `app/src/main/assets/fonts/catalog.json` is bundled, so the picker works with no network and no apt
-repository, and every `url`/`sha256`/`sizeBytes` in it was verified by downloading the artifact. Seven
-families: Maple Mono (recommended, variable `wght` 100-800), Hack, JetBrains Mono, Fira Code
-(regular + bold only, upstream ships no italic), Victor Mono, Cascadia Code (variable) and
-Maple Mono NF. License text and download size are shown before anything is fetched, downloads are
+repository, and every `url`/`sha256`/`sizeBytes` in it was verified by downloading the artifact.
+Families include Maple Mono (recommended, variable `wght` 100-800), Hack, JetBrains Mono, Fira Code
+(regular + bold only, upstream ships no italic), Victor Mono and Cascadia Code (variable).
+The Nerd-Font-patched Maple Mono NF build was dropped: the bundled Symbols Nerd Font already
+routes icon planes for every family, so its 20 MB download bought nothing.
+License text and download size are shown before anything is fetched, downloads are
 SHA-256 verified, and a metered connection is confirmed separately.
 
 `FontInstaller` owns a layout and nothing else: faces plus a `LICENSE.txt` under

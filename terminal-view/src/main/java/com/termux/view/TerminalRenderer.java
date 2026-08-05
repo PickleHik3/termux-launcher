@@ -287,6 +287,9 @@ public final class TerminalRenderer {
     /** Reused when drawing curly underlines, to keep the render loop allocation free. */
     private final Path mDecorationPath = new Path();
 
+    /** Reused when centering a symbol run in its cells, for the same reason. */
+    private final Paint.FontMetrics mSymbolFontMetrics = new Paint.FontMetrics();
+
     /** Reused by the synthesized box-drawing pass, for the same reason. */
     private final BoxGeometry.Segments mBoxSegments = new BoxGeometry.Segments();
 
@@ -627,13 +630,11 @@ public final class TerminalRenderer {
                     | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0;
                 final boolean cellItalic = (effect & TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0;
                 final int faceStyle = (cellBold ? 1 : 0) | (cellItalic ? 2 : 0);
-                final SymbolMap symbolMap = symbolMapFor(codePoint);
-                final Typeface symbolTypeface = symbolMap == null ? null : symbolMap.typeface;
-                final String symbolFeatures = symbolFeaturesOf(symbolMap);
-                final String symbolVariations = symbolVariationsOf(symbolMap);
-                if (symbolTypeface == null && mBoxDrawingPolicy.synthesizes(codePoint)) {
+                if (mBoxDrawingPolicy.synthesizes(codePoint)) {
                     // Geometry, not a glyph: flush the run accumulated to the left of this cell
                     // exactly as an image cell does, then draw the ink and start a fresh run.
+                    // The policy outranks any symbol_map here — the managed nerd-font map spans
+                    // the whole PUA, and matching it must not silently turn synthesis off.
                     if (column > 0 && column != lastRunStartColumn) {
                         final int columnWidthSinceLastRun = column - lastRunStartColumn;
                         final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
@@ -680,6 +681,10 @@ public final class TerminalRenderer {
                     lastRunSymbolVariations = null;
                     continue;
                 }
+                final SymbolMap symbolMap = symbolMapFor(codePoint);
+                final Typeface symbolTypeface = symbolMap == null ? null : symbolMap.typeface;
+                final String symbolFeatures = symbolFeaturesOf(symbolMap);
+                final String symbolVariations = symbolVariationsOf(symbolMap);
                 final Typeface fallbackTypeface = symbolTypeface == null
                     ? fallbackTypefaceFor(codePoint, cellBold, cellItalic) : null;
                 configureFont(cellBold, cellItalic, symbolTypeface, fallbackTypeface,
@@ -694,6 +699,66 @@ public final class TerminalRenderer {
                     ? mAsciiMeasures[faceStyle][codePoint]
                     : mTextPaint.measureText(line, currentCharIndex, charsForCodePoint);
                 final boolean fontWidthMismatch = Math.abs(measuredCodePointWidth / mFontWidth - codePointWcWidth) > 0.01;
+                // Kitty's private-use expansion: a PUA symbol whose neighbour is a same-styled
+                // blank gets both cells, so an icon wcwidth() calls narrow is not stamped into a
+                // single square. The space is consumed; the background pass painted its fill.
+                if (symbolTypeface != null && codePointWcWidth == 1 && isPrivateUse(codePoint)
+                    && !insideCursor && !insideSelection && column + 1 < columns
+                    && cursorX != column + 1 && !(column + 1 >= selx1 && column + 1 <= selx2)) {
+                    final int spaceIndex = currentCharIndex + charsForCodePoint;
+                    if (spaceIndex < charsUsedInLine && line[spaceIndex] == ' '
+                        && lineObject.getDisplayWidthAt(spaceIndex) == 1
+                        && lineObject.getStyle(column + 1) == style
+                        && (rowHasDecorationColors
+                            ? lineObject.getDecorationColor(column + 1)
+                            : TextStyle.DECORATION_COLOR_DEFAULT) == decorationColor
+                        && (rowHasHyperlinks ? lineObject.getHyperlinkId(column + 1) : 0)
+                            == hyperlinkId) {
+                        if (column > 0 && column != lastRunStartColumn) {
+                            final int columnWidthSinceLastRun = column - lastRunStartColumn;
+                            final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
+                            int runCursorColor = lastRunInsideCursor
+                                ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
+                            boolean invertRunTextColor = lastRunInsideCursor
+                                && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
+                            drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
+                                columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
+                                measuredWidthForRun, runCursorColor, cursorShape, lastRunStyle,
+                                boldWithBright, reverseVideo || invertRunTextColor
+                                    || lastRunInsideSelection,
+                                horizontalOffset, lastRunDecorationColor,
+                                lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface,
+                                lastRunFallbackTypeface, lastRunSymbolFeatures,
+                                lastRunSymbolVariations, false);
+                        }
+                        drawTextRun(canvas, line, palette, heightOffset, column, 2,
+                            currentCharIndex, charsForCodePoint, measuredCodePointWidth, 0,
+                            cursorShape, style, boldWithBright, reverseVideo, horizontalOffset,
+                            decorationColor, hyperlinkId != 0, 0, symbolTypeface, null,
+                            symbolFeatures, symbolVariations, false);
+                        column += 2;
+                        currentCharIndex = spaceIndex + 1;
+                        while (currentCharIndex < charsUsedInLine
+                            && lineObject.getDisplayWidthAt(currentCharIndex) <= 0) {
+                            currentCharIndex +=
+                                Character.isHighSurrogate(line[currentCharIndex]) ? 2 : 1;
+                        }
+                        measuredWidthForRun = 0.f;
+                        lastRunStyle = 0;
+                        lastRunInsideCursor = false;
+                        lastRunInsideSelection = false;
+                        lastRunStartColumn = column;
+                        lastRunStartIndex = currentCharIndex;
+                        lastRunFontWidthMismatch = false;
+                        lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
+                        lastRunHyperlinkId = 0;
+                        lastRunSymbolTypeface = null;
+                        lastRunFallbackTypeface = null;
+                        lastRunSymbolFeatures = null;
+                        lastRunSymbolVariations = null;
+                        continue;
+                    }
+                }
                 if (style != lastRunStyle || insideCursor != lastRunInsideCursor
                     || insideSelection != lastRunInsideSelection || fontWidthMismatch
                     || lastRunFontWidthMismatch || decorationColor != lastRunDecorationColor
@@ -918,14 +983,42 @@ public final class TerminalRenderer {
             foreColor = foregroundOverride;
         float left = horizontalOffset + startColumn * fontWidth;
         float right = left + runWidthColumns * fontWidth;
-        mes = mes / fontWidth;
+        float glyphLeft = left;
+        float glyphBaseline = y - fontBaselineDescent;
         boolean savedMatrix = false;
-        if (Math.abs(mes - runWidthColumns) > 0.01) {
-            canvas.save();
-            canvas.scale(runWidthColumns / mes, 1.f);
-            left *= mes / runWidthColumns;
-            right *= mes / runWidthColumns;
-            savedMatrix = true;
+        boolean scaledTextSize = false;
+        if (symbolTypeface != null) {
+            // A symbol face has its own advance and vertical metrics, and squeezing its glyphs on
+            // one axis into the cells wcwidth() granted distorts them. The run is instead scaled
+            // uniformly — up or down — until its line box meets the cell box, and centered in its
+            // cells horizontally on its measured advance and vertically by that line box, so an
+            // icon is as large as its cells allow and sits level with its neighbours instead of
+            // riding the primary face's baseline.
+            final float runWidth = runWidthColumns * fontWidth;
+            mTextPaint.getFontMetrics(mSymbolFontMetrics);
+            float lineBox = mSymbolFontMetrics.descent - mSymbolFontMetrics.ascent;
+            float ascent = mSymbolFontMetrics.ascent;
+            final float scale = Math.min(mes > 0f ? runWidth / mes : 1f,
+                lineBox > 0f ? fontLineSpacing / lineBox : 1f);
+            if (scale != 1f) {
+                mTextPaint.setTextSize(mTextSize * scale);
+                scaledTextSize = true;
+                mes *= scale;
+                lineBox *= scale;
+                ascent *= scale;
+            }
+            glyphLeft = left + (runWidth - mes) / 2f;
+            glyphBaseline = y - fontLineSpacing + (fontLineSpacing - lineBox) / 2f - ascent;
+        } else {
+            mes = mes / fontWidth;
+            if (Math.abs(mes - runWidthColumns) > 0.01) {
+                canvas.save();
+                canvas.scale(runWidthColumns / mes, 1.f);
+                left *= mes / runWidthColumns;
+                right *= mes / runWidthColumns;
+                glyphLeft = left;
+                savedMatrix = true;
+            }
         }
         if (drawBackgroundAndCursor) {
             // The normal screen paints backgrounds and the cursor in a separate pass before any
@@ -955,7 +1048,7 @@ public final class TerminalRenderer {
             mTextPaint.setColor(foreColor);
             // The text alignment is the default Paint.Align.LEFT.
             canvas.drawTextRun(text, startCharIndex, runWidthChars, startCharIndex, runWidthChars,
-                left, y - fontBaselineDescent, false, mTextPaint);
+                glyphLeft, glyphBaseline, false, mTextPaint);
             int underlineStyle = TextStyle.decodeUnderlineStyle(textStyle);
             if (underlineStyle == TextStyle.UNDERLINE_STYLE_NONE && underline) {
                 // The attribute bit without a style: DECCARA, or a style set before this fork stored one.
@@ -975,6 +1068,8 @@ public final class TerminalRenderer {
             if (strikeThrough)
                 drawStrikethrough(canvas, left, right, y, foreColor);
         }
+        if (scaledTextSize)
+            mTextPaint.setTextSize(mTextSize);
         if (savedMatrix)
             canvas.restore();
     }
@@ -1288,7 +1383,7 @@ public final class TerminalRenderer {
             boolean cellItalic = (effect & TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0;
             SymbolMap symbolMap = symbolMapFor(codePoint);
             Typeface symbolTypeface = symbolMap == null ? null : symbolMap.typeface;
-            if (symbolTypeface == null && mBoxDrawingPolicy.synthesizes(codePoint)) {
+            if (mBoxDrawingPolicy.synthesizes(codePoint)) {
                 // The overlay has to reach the same conclusion as the glyph pass. Drawing this cell
                 // as text would stamp the font's idea of the code point — commonly a tofu — on top
                 // of the geometry already painted for it.
@@ -1474,6 +1569,13 @@ public final class TerminalRenderer {
         }
         mTextPaint.setFakeBoldText(fakeBold);
         mTextPaint.setTextSkewX(fakeItalic ? -0.35f : 0f);
+    }
+
+    /** Whether the code point is in one of the three Unicode Private Use Areas. */
+    static boolean isPrivateUse(int codePoint) {
+        return (codePoint >= 0xE000 && codePoint <= 0xF8FF)
+            || (codePoint >= 0xF0000 && codePoint <= 0xFFFFD)
+            || (codePoint >= 0x100000 && codePoint <= 0x10FFFD);
     }
 
     /** The map a code point draws from, kept whole so the run can use its own settings. */

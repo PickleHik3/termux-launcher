@@ -291,50 +291,341 @@
       }
     },
     {
-      "id": "maple-mono-nf",
-      "displayName": "Maple Mono NF",
-      "summary": "The Nerd Font patched static build: icons live in the text faces themselves, at the cost of a 20 MB download.",
+      "id": "meslo-lgs-nf",
+      "displayName": "MesloLGS NF",
+      "summary": "The Powerlevel10k face: four static Nerd Font builds tuned so prompt glyphs align without any tweaking.",
       "recommended": false,
       "variable": false,
-      "releaseTag": "v7.9",
-      "homepageUrl": "https://github.com/subframe7536/maple-font",
-      "license": "SIL Open Font License 1.1",
-      "licenseUrl": "https://github.com/subframe7536/maple-font/blob/v7.9/OFL.txt",
-      "licenseNotice": "Copyright 2022 The Maple Mono Project Authors (https://github.com/subframe7536/maple-font). This Font Software is licensed under the SIL Open Font License, Version 1.1. Nerd Fonts glyphs are MIT licensed, see https://github.com/ryanoasis/nerd-fonts/blob/master/LICENSE.",
-      "defaultLigatures": "cursor",
-      "defaultFontFeatures": "+zero",
+      "releaseTag": "master",
+      "homepageUrl": "https://github.com/romkatv/powerlevel10k",
+      "license": "Apache License 2.0",
+      "licenseUrl": "https://github.com/romkatv/powerlevel10k-media/blob/master/MesloLGS%20NF%20License.txt",
+      "licenseNotice": "MesloLGS NF is Meslo LG S patched with Nerd Fonts glyphs. Meslo LG is Copyright 2009-2013 Andre Berg, licensed Apache 2.0; Bitstream Vera is Copyright Bitstream, Inc.; Nerd Fonts glyphs are MIT licensed.",
+      "defaultLigatures": "never",
+      "defaultFontFeatures": "",
       "weightAxis": null,
+      "archives": [],
+      "faces": {
+        "regular": {
+          "url": "https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Regular.ttf",
+          "sha256": "d97946186e97f8d7c0139e8983abf40a1d2d086924f2c5dbf1c29bd8f2c6e57d",
+          "sizeBytes": 2594368
+        },
+        "bold": {
+          "url": "https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Bold.ttf",
+          "sha256": "b6c0199cf7c7483c8343ea020658925e6de0aeb318b89908152fcb4d19226003",
+          "sizeBytes": 2603868
+        },
+        "italic": {
+          "url": "https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Italic.ttf",
+          "sha256": "6f357bcbe2597704e157a915625928bca38364a89c22a4ac36e7a116dcd392ef",
+          "sizeBytes": 2553260
+        },
+        "bold_italic": {
+          "url": "https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Bold%20Italic.ttf",
+          "sha256": "56b4131adecec052c4b324efb818dd326d586dbc316fc68f98f1cae2eb8d1220",
+          "sizeBytes": 2561984
+        }
+      }
+    },
+    {
+      "id": "iosevka-term",
+      "displayName": "Iosevka Term",
+      "summary": "The narrow slab grotesk with enormous Unicode coverage, in its terminal spacing; Nerd Font build.",
+      "recommended": false,
+      "variable": false,
+      "releaseTag": "v3.5.0",
+      "homepageUrl": "https://github.com/be5invis/Iosevka",
+      "license": "SIL Open Font License 1.1",
+      "licenseUrl": "https://github.com/be5invis/Iosevka/blob/v34.8.0/LICENSE.md",
+      "licenseNotice": "Iosevka is Copyright 2015-2024 Renzhi Li (aka. Belleve Invis), licensed under the SIL Open Font License, Version 1.1. Nerd Fonts glyphs are MIT licensed, see https://github.com/ryanoasis/nerd-fonts/blob/master/LICENSE.",
+      "defaultLigatures": "cursor",
+      "defaultFontFeatures": "",
+      "weightAxis": null,
+      "archives": [],
+      "faces": {
+        "regular": {
+          "url": "https://raw.githubusercontent.com/ryanoasis/nerd-fonts/v3.5.0/patched-fonts/IosevkaTerm/IosevkaTermNerdFont-Regular.ttf",
+          "sha256": "acc70f884909ec474f2ffa3c3199ba484b87510430f9f51a8a9c8970c933f666",
+          "sizeBytes": 14404528
+        },
+        "bold": {
+          "url": "https://raw.githubusercontent.com/ryanoasis/nerd-fonts/v3.5.0/patched-fonts/IosevkaTerm/IosevkaTermNerdFont-Bold.ttf",
+          "sha256": "948bddaeeac96186dcd8196a77fa7fb827d366014e8c6c61f7f78b7f0e8ba22b",
+          "sizeBytes": 14456112
+        },
+        "italic": {
+          "url": "https://raw.githubusercontent.com/ryanoasis/nerd-fonts/v3.5.0/patched-fonts/IosevkaTerm/IosevkaTermNerdFont-Italic.ttf",
+          "sha256": "2468a211cf486676e5dbc788cb89db353f91201e4d10e63a2b221ba940c755c0",
+          "sizeBytes": 14992140
+        },
+        "bold_italic": {
+          "url": "https://raw.githubusercontent.com/ryanoasis/nerd-fonts/v3.5.0/patched-fonts/IosevkaTerm/IosevkaTermNerdFont-BoldItalic.ttf",
+          "sha256": "b96924a74946c810e99e4f99a30df1bb9e4b4a843cd0c0954cb64caf83aacf98",
+          "sizeBytes": 15057052
+        }
+      }
+    },
+    {
+      "id": "monaspace-neon",
+      "displayName": "Monaspace Neon",
+      "summary": "GitHub's type superfamily: variable weight, texture healing, and ligatures that live in font_features stylistic sets.",
+      "recommended": false,
+      "variable": true,
+      "releaseTag": "v1.400",
+      "homepageUrl": "https://github.com/githubnext/monaspace",
+      "license": "SIL Open Font License 1.1",
+      "licenseUrl": "https://github.com/githubnext/monaspace/blob/v1.400/LICENSE",
+      "licenseNotice": "Copyright (c) 2023, GitHub https://github.com/githubnext/monaspace with Reserved Font Name Monaspace. This Font Software is licensed under the SIL Open Font License, Version 1.1.",
+      "defaultLigatures": "cursor",
+      "defaultFontFeatures": "+calt +ss01 +ss02 +ss03 +ss07 +ss08",
+      "weightAxis": {
+        "min": 200,
+        "max": 800,
+        "regularWeight": 400,
+        "boldWeight": 700
+      },
       "archives": [
         {
-          "url": "https://github.com/subframe7536/maple-font/releases/download/v7.9/MapleMono-NF.zip",
-          "sha256": "59098b87c895d871635d37680e88000ae2b2b25b55428195b228ec589e35fb89",
-          "sizeBytes": 21151049
+          "url": "https://github.com/githubnext/monaspace/releases/download/v1.400/monaspace-variable-v1.400.zip",
+          "sha256": "b69a7f2a3c455c89dcb6cc23b61bb3fb8beecba728ccdebeccd80577e58de0c8",
+          "sizeBytes": 4208172
         }
       ],
       "faces": {
         "regular": {
-          "zipUrl": "https://github.com/subframe7536/maple-font/releases/download/v7.9/MapleMono-NF.zip",
-          "memberPath": "MapleMono-NF-Regular.ttf",
-          "sha256": "dbf160ce96358056a47777e95a50af208b438312787cf20917ce2321066de8e5",
-          "sizeBytes": 2384652
+          "zipUrl": "https://github.com/githubnext/monaspace/releases/download/v1.400/monaspace-variable-v1.400.zip",
+          "memberPath": "Variable Fonts/Monaspace Neon/Monaspace Neon Var.ttf",
+          "sha256": "e3cc8bf1c4a0384309d584c0dce9291166535066c538e60e2d5ac444b76fec4c",
+          "sizeBytes": 1646548
         },
         "bold": {
-          "zipUrl": "https://github.com/subframe7536/maple-font/releases/download/v7.9/MapleMono-NF.zip",
-          "memberPath": "MapleMono-NF-Bold.ttf",
-          "sha256": "cf6fb13160424257ea764a5deb1d55116c9ab5c347cb69c6be2576b44dc3d544",
-          "sizeBytes": 2386736
+          "zipUrl": "https://github.com/githubnext/monaspace/releases/download/v1.400/monaspace-variable-v1.400.zip",
+          "memberPath": "Variable Fonts/Monaspace Neon/Monaspace Neon Var.ttf",
+          "sha256": "e3cc8bf1c4a0384309d584c0dce9291166535066c538e60e2d5ac444b76fec4c",
+          "sizeBytes": 1646548
+        }
+      }
+    },
+    {
+      "id": "commit-mono",
+      "displayName": "Commit Mono",
+      "summary": "Deliberately neutral, with smart kerning; alternates are opt-in font_features toggles rather than defaults.",
+      "recommended": false,
+      "variable": false,
+      "releaseTag": "v1.143",
+      "homepageUrl": "https://commitmono.com",
+      "license": "SIL Open Font License 1.1",
+      "licenseUrl": "https://scripts.sil.org/OFL",
+      "licenseNotice": "Commit Mono is Copyright 2023 Eigil Nikolajsen (https://github.com/eigilnikolajsen/commit-mono). This Font Software is licensed under the SIL Open Font License, Version 1.1; the license text ships inside the release archive.",
+      "defaultLigatures": "cursor",
+      "defaultFontFeatures": "",
+      "weightAxis": null,
+      "archives": [
+        {
+          "url": "https://github.com/eigilnikolajsen/commit-mono/releases/download/v1.143/CommitMono-1.143.zip",
+          "sha256": "f7d1f26a7c7554800a996f76f5d706bf0648b936ca2a66b5bc4d46e3a2c49ed0",
+          "sizeBytes": 724227
+        }
+      ],
+      "faces": {
+        "regular": {
+          "zipUrl": "https://github.com/eigilnikolajsen/commit-mono/releases/download/v1.143/CommitMono-1.143.zip",
+          "memberPath": "CommitMono-1.143/CommitMono-400-Regular.otf",
+          "sha256": "a0031e19949b928b6ef749775fbd229adb43f4b96a30175d3098fa1fd92e58ee",
+          "sizeBytes": 274752
+        },
+        "bold": {
+          "zipUrl": "https://github.com/eigilnikolajsen/commit-mono/releases/download/v1.143/CommitMono-1.143.zip",
+          "memberPath": "CommitMono-1.143/CommitMono-700-Regular.otf",
+          "sha256": "658d3920e788196d6be9c4f444bb7c305acfbe3b247a527be1424af5ddc3ee6d",
+          "sizeBytes": 276188
         },
         "italic": {
-          "zipUrl": "https://github.com/subframe7536/maple-font/releases/download/v7.9/MapleMono-NF.zip",
-          "memberPath": "MapleMono-NF-Italic.ttf",
-          "sha256": "f20012da3a738ff070292aae453b5f7b47de3992451a581cd4ba6f7fed7b9785",
-          "sizeBytes": 2414036
+          "zipUrl": "https://github.com/eigilnikolajsen/commit-mono/releases/download/v1.143/CommitMono-1.143.zip",
+          "memberPath": "CommitMono-1.143/CommitMono-400-Italic.otf",
+          "sha256": "ba793845fad67d71e9dcf8e79a1bcffe1a32b9450feeef4ca5c3e03242935365",
+          "sizeBytes": 274500
         },
         "bold_italic": {
-          "zipUrl": "https://github.com/subframe7536/maple-font/releases/download/v7.9/MapleMono-NF.zip",
-          "memberPath": "MapleMono-NF-BoldItalic.ttf",
-          "sha256": "97a40e0a25c8adb2c9e29d755a127b7fae989debf40e9f62ca3e393b1de2d429",
-          "sizeBytes": 2416508
+          "zipUrl": "https://github.com/eigilnikolajsen/commit-mono/releases/download/v1.143/CommitMono-1.143.zip",
+          "memberPath": "CommitMono-1.143/CommitMono-700-Italic.otf",
+          "sha256": "b20b9f37580e6a16ce5d426074b34d7ed29aea98583e6ecd75e203346acc703e",
+          "sizeBytes": 276000
+        }
+      }
+    },
+    {
+      "id": "0xproto",
+      "displayName": "0xProto",
+      "summary": "Legibility-first shapes and a ligature engine that repairs spacing as you type; ships no bold italic.",
+      "recommended": false,
+      "variable": false,
+      "releaseTag": "2.502",
+      "homepageUrl": "https://github.com/0xType/0xProto",
+      "license": "SIL Open Font License 1.1",
+      "licenseUrl": "https://github.com/0xType/0xProto/blob/2.502/LICENSE",
+      "licenseNotice": "Copyright (c) 2023, 0xType (https://github.com/0xType/0xProto). This Font Software is licensed under the SIL Open Font License, Version 1.1.",
+      "defaultLigatures": "cursor",
+      "defaultFontFeatures": "",
+      "weightAxis": null,
+      "archives": [
+        {
+          "url": "https://github.com/0xType/0xProto/releases/download/2.502/0xProto_2_502.zip",
+          "sha256": "402d046b6056111ae5b974892fe2d6d921c66a64681980ec81db051de05851e7",
+          "sizeBytes": 1244756
+        }
+      ],
+      "faces": {
+        "regular": {
+          "zipUrl": "https://github.com/0xType/0xProto/releases/download/2.502/0xProto_2_502.zip",
+          "memberPath": "fonts/0xProto-Regular.ttf",
+          "sha256": "f19d091ceed51ae6a7fa42d239f22b92bc9c98191fecf431bdaca7b8974e4799",
+          "sizeBytes": 211324
+        },
+        "bold": {
+          "zipUrl": "https://github.com/0xType/0xProto/releases/download/2.502/0xProto_2_502.zip",
+          "memberPath": "fonts/0xProto-Bold.ttf",
+          "sha256": "d1cbed9791ee048af2f58477a50205649c067a42eeec6982ae8a9619bd71f039",
+          "sizeBytes": 210004
+        },
+        "italic": {
+          "zipUrl": "https://github.com/0xType/0xProto/releases/download/2.502/0xProto_2_502.zip",
+          "memberPath": "fonts/0xProto-Italic.ttf",
+          "sha256": "e0832e53534bb08115a5a901d07b1e642abd19f2e11286bd9f015f9ea53ae404",
+          "sizeBytes": 248224
+        }
+      }
+    },
+    {
+      "id": "intel-one-mono",
+      "displayName": "Intel One Mono",
+      "summary": "Designed with and for low-vision developers; the smallest full four-face download in the catalog.",
+      "recommended": false,
+      "variable": false,
+      "releaseTag": "V1.4.0",
+      "homepageUrl": "https://github.com/intel/intel-one-mono",
+      "license": "SIL Open Font License 1.1",
+      "licenseUrl": "https://github.com/intel/intel-one-mono/blob/V1.4.0/OFL.txt",
+      "licenseNotice": "Copyright (c) 2023 Intel Corporation (https://github.com/intel/intel-one-mono). This Font Software is licensed under the SIL Open Font License, Version 1.1.",
+      "defaultLigatures": "never",
+      "defaultFontFeatures": "",
+      "weightAxis": null,
+      "archives": [
+        {
+          "url": "https://github.com/intel/intel-one-mono/releases/download/V1.4.0/ttf.zip",
+          "sha256": "54863552d25dcb9c3f5360b296fc980d6e1fbfd02e0d214224e8b78f0a2bccf0",
+          "sizeBytes": 505443
+        }
+      ],
+      "faces": {
+        "regular": {
+          "zipUrl": "https://github.com/intel/intel-one-mono/releases/download/V1.4.0/ttf.zip",
+          "memberPath": "ttf/IntelOneMono-Regular.ttf",
+          "sha256": "131ab6a8f6e8b9160bc526353262828bc24caab8fcdcfd7a9edc7a044e974230",
+          "sizeBytes": 125928
+        },
+        "bold": {
+          "zipUrl": "https://github.com/intel/intel-one-mono/releases/download/V1.4.0/ttf.zip",
+          "memberPath": "ttf/IntelOneMono-Bold.ttf",
+          "sha256": "511623927c22f8c5e70af85598e01eaed06bf9eb875aa77452ce0f379a52826a",
+          "sizeBytes": 124708
+        },
+        "italic": {
+          "zipUrl": "https://github.com/intel/intel-one-mono/releases/download/V1.4.0/ttf.zip",
+          "memberPath": "ttf/IntelOneMono-Italic.ttf",
+          "sha256": "124e14d8448447608f5e9d65645ec77f3d274ba729049c9f7931ccf30b4647ea",
+          "sizeBytes": 128844
+        },
+        "bold_italic": {
+          "zipUrl": "https://github.com/intel/intel-one-mono/releases/download/V1.4.0/ttf.zip",
+          "memberPath": "ttf/IntelOneMono-BoldItalic.ttf",
+          "sha256": "88aa389ce50467cc189b1176bdde8a1d1f8bd8adea879b5eed595f46b8ead0e8",
+          "sizeBytes": 127716
+        }
+      }
+    },
+    {
+      "id": "rec-mono-casual",
+      "displayName": "Rec Mono Casual",
+      "summary": "Recursive's casual instance: brush-loop letterforms across all four faces, not just the italics. One large upstream archive.",
+      "recommended": false,
+      "variable": false,
+      "releaseTag": "v1.085",
+      "homepageUrl": "https://github.com/arrowtype/recursive",
+      "license": "SIL Open Font License 1.1",
+      "licenseUrl": "https://github.com/arrowtype/recursive/blob/v1.085/OFL.txt",
+      "licenseNotice": "Copyright 2020 The Recursive Project Authors (https://github.com/arrowtype/recursive). This Font Software is licensed under the SIL Open Font License, Version 1.1.",
+      "defaultLigatures": "never",
+      "defaultFontFeatures": "",
+      "weightAxis": null,
+      "archives": [
+        {
+          "url": "https://github.com/arrowtype/recursive/releases/download/v1.085/ArrowType-Recursive-1.085.zip",
+          "sha256": "cbcbdf7a0e181d284a9235e09ed5f3873e527bc5dd1d977df71cdc1ff937da02",
+          "sizeBytes": 50440082
+        }
+      ],
+      "faces": {
+        "regular": {
+          "zipUrl": "https://github.com/arrowtype/recursive/releases/download/v1.085/ArrowType-Recursive-1.085.zip",
+          "memberPath": "ArrowType-Recursive-1.085/Recursive_Code/RecMonoCasual/RecMonoCasual-Regular-1.085.ttf",
+          "sha256": "0f534445f3b591608b69d68de74e9cc81e5030f6a3c855db461d8a1f481cc233",
+          "sizeBytes": 483004
+        },
+        "bold": {
+          "zipUrl": "https://github.com/arrowtype/recursive/releases/download/v1.085/ArrowType-Recursive-1.085.zip",
+          "memberPath": "ArrowType-Recursive-1.085/Recursive_Code/RecMonoCasual/RecMonoCasual-Bold-1.085.ttf",
+          "sha256": "539892e40f53251caf14db86e44a9d2458b6b773adc4421b8d2892341898ba4b",
+          "sizeBytes": 479612
+        },
+        "italic": {
+          "zipUrl": "https://github.com/arrowtype/recursive/releases/download/v1.085/ArrowType-Recursive-1.085.zip",
+          "memberPath": "ArrowType-Recursive-1.085/Recursive_Code/RecMonoCasual/RecMonoCasual-Italic-1.085.ttf",
+          "sha256": "4afcdb84e4ef44af2c4640f5b8f04f70c097eaaf7cc22766a8dc46ed6ee0c957",
+          "sizeBytes": 465036
+        },
+        "bold_italic": {
+          "zipUrl": "https://github.com/arrowtype/recursive/releases/download/v1.085/ArrowType-Recursive-1.085.zip",
+          "memberPath": "ArrowType-Recursive-1.085/Recursive_Code/RecMonoCasual/RecMonoCasual-BoldItalic-1.085.ttf",
+          "sha256": "93ffeb304f3d431e5182fd9a5eaab7e4991efd090d2938e7a6b74bd6335db1b2",
+          "sizeBytes": 484184
+        }
+      }
+    },
+    {
+      "id": "comic-shanns-mono",
+      "displayName": "Comic Shanns Mono",
+      "summary": "The comic-book font grown up: honest monospace metrics, icons already patched in, zero seriousness.",
+      "recommended": false,
+      "variable": false,
+      "releaseTag": "v3.5.0",
+      "homepageUrl": "https://github.com/shannpersand/comic-shanns",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/shannpersand/comic-shanns/blob/master/LICENSE",
+      "licenseNotice": "Comic Shanns is Copyright (c) 2018 Shannon Miwa (https://github.com/shannpersand/comic-shanns), licensed MIT. Nerd Fonts patched build; Nerd Fonts glyphs are MIT licensed, see https://github.com/ryanoasis/nerd-fonts/blob/master/LICENSE.",
+      "defaultLigatures": "never",
+      "defaultFontFeatures": "",
+      "weightAxis": null,
+      "archives": [
+        {
+          "url": "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.0/ComicShannsMono.zip",
+          "sha256": "d3c6897700494181ea0184acf3d0caa0dc8a8bf2826316e29402115ffe844ffe",
+          "sizeBytes": 9009612
+        }
+      ],
+      "faces": {
+        "regular": {
+          "zipUrl": "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.0/ComicShannsMono.zip",
+          "memberPath": "ComicShannsMonoNerdFontMono-Regular.otf",
+          "sha256": "354c6e2e7b90926a913ff46dacc1f46a27a5e60261b3f37c810cfbbc38a818ac",
+          "sizeBytes": 2404500
+        },
+        "bold": {
+          "zipUrl": "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.0/ComicShannsMono.zip",
+          "memberPath": "ComicShannsMonoNerdFontMono-Bold.otf",
+          "sha256": "1fce694b1d5ca24d46f15c7491b55ca73ba1ce4b7ccfd2fc8cc3b22c7bdff97e",
+          "sizeBytes": 2396148
         }
       }
     }

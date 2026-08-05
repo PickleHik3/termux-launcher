@@ -254,7 +254,9 @@ public final class TerminalFontConfig {
         LigaturePolicy ligaturePolicy = LigaturePolicy.NEVER;
         BoxDrawingMode boxDrawing = BoxDrawingMode.SYNTHESIZE;
         BoxDrawingScale boxDrawingScale = DEFAULT_BOX_DRAWING_SCALE;
-        PowerlineMode powerlineSymbols = PowerlineMode.FONT;
+        // Kitty renders the Powerline separators itself, and geometry is the only way their edges
+        // sit flush with the cell-aligned background rectangles; a font glyph never fills the cell.
+        PowerlineMode powerlineSymbols = PowerlineMode.SYNTHESIZE;
         int symbolRangeCount;
         boolean filePresent;
     }
