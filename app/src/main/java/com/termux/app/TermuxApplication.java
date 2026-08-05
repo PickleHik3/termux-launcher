@@ -41,6 +41,8 @@ public class TermuxApplication extends Application {
         Logger.logDebug("Starting Application");
         // Set TermuxBootstrap.TERMUX_APP_PACKAGE_MANAGER and TermuxBootstrap.TERMUX_APP_PACKAGE_VARIANT
         TermuxBootstrap.setTermuxPackageManagerAndVariant(BuildConfig.TERMUX_PACKAGE_VARIANT);
+        // Terminal name and version reported to applications via XTVERSION ("CSI > 0 q")
+        com.termux.terminal.TerminalEmulator.setXtVersion(BuildConfig.VERSION_NAME);
         // Init app wide SharedProperties loaded from termux.properties
         TermuxAppSharedProperties properties = TermuxAppSharedProperties.init(context);
         // Init app wide shell manager

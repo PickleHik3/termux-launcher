@@ -579,6 +579,14 @@ public final class TerminalEmulator {
 
     private int cellW = 12, cellH = 12;
 
+    /** Terminal name and version reported for XTVERSION ("CSI > 0 q"); the app supplies its version at startup. */
+    private static String sXtVersionName = "termux-launcher";
+
+    public static void setXtVersion(String appVersionName) {
+        sXtVersionName = appVersionName == null || appVersionName.isEmpty()
+            ? "termux-launcher" : "termux-launcher(" + appVersionName + ")";
+    }
+
     public void setCellSize(int w, int h) {
         cellW = w;
         cellH = h;
@@ -1727,6 +1735,30 @@ public final class TerminalEmulator {
                         return;
                 }
                 break;
+            case // XTSMGRAPHICS - "${CSI}?${Pi};${Pa};${Pv}S" set or request graphics attributes.
+            'S': {
+                // Pi: 1=color registers, 2=sixel geometry. Pa: 1=read, 2=reset, 3=set, 4=read maximum.
+                // Reply is "CSI ? Pi ; Ps ; Pv S" with Ps 0=success, 1=bad Pi, 2=bad Pa, 3=failure.
+                // Sixel clients (notcurses, libsixel) read these before deciding palette size and image
+                // geometry, so a terminal advertising sixel in DA1 should answer rather than swallow it.
+                int item = getArg0(0);
+                int action = getArg1(0);
+                if (item == 1) {
+                    // The sixel implementation has a fixed 256 color registers, so read, reset,
+                    // set and read-maximum all report that value.
+                    mSession.write(action >= 1 && action <= 4 ? "\033[?1;0;256S" : "\033[?1;2;0S");
+                } else if (item == 2) {
+                    if (action == 1 || action == 4) {
+                        mSession.write(String.format(Locale.US, "\033[?2;0;%d;%dS", mColumns * mCellWidthPixels, mRows * mCellHeightPixels));
+                    } else {
+                        // Geometry follows the screen size and cannot be reset or set.
+                        mSession.write("\033[?2;2;0S");
+                    }
+                } else {
+                    mSession.write(String.format(Locale.US, "\033[?%d;1;0S", item));
+                }
+                break;
+            }
             case 'r':
             case 's':
                 if (mArgIndex >= mArgs.length)
@@ -1918,6 +1950,15 @@ public final class TerminalEmulator {
             case // "CSI > flags u" - push the current keyboard flags and apply new ones.
             'u':
                 keyboardModes().push(getArg0(0) & KittyKeyEncoder.FLAGS_MASK);
+                break;
+            case // "${CSI}>0q" - XTVERSION, report terminal name and version.
+            'q':
+                if (getArg0(0) == 0) {
+                    // Response format is DCS > | text ST, matching xterm/kitty/foot ("name(version)").
+                    mSession.write("\033P>|" + sXtVersionName + "\033\\");
+                } else {
+                    unknownSequence(b);
+                }
                 break;
             case // "${CSI}>c" or "${CSI}>c". Secondary Device Attributes (DA2).
             'c':
