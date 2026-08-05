@@ -759,6 +759,57 @@ public class TerminalPaneControllerTest {
         assertEquals(only, controller.getActiveSession());
     }
 
+    @Test
+    public void fontSize_pinnedZoomIsInheritedBySplitsAndNewWindows() {
+        TerminalPaneController controller = newSplittingController();
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        assertEquals(0, controller.getActivePaneFontSize());
+
+        assertTrue(controller.setActivePaneFontSize(30));
+        assertTrue(controller.split(LinearLayout.HORIZONTAL));
+        assertEquals(30, controller.getActivePaneFontSize());
+
+        TerminalPaneController.Window second = controller.newWindow(terminal());
+        controller.showWindow(second);
+        assertEquals(30, controller.getActivePaneFontSize());
+    }
+
+    @Test
+    public void fontSize_savedAndRestoredPerPaneIncludingFloats() {
+        TerminalPaneController source = newController();
+        TerminalSession first = terminal();
+        TerminalSession second = terminal();
+        TerminalSession floater = terminal();
+        TerminalPaneController.Leaf firstLeaf = new TerminalPaneController.Leaf(first);
+        firstLeaf.fontSize = 24;
+        TerminalPaneController.Leaf secondLeaf = new TerminalPaneController.Leaf(second);
+        TerminalPaneController.Split root = new TerminalPaneController.Split();
+        root.orientation = LinearLayout.HORIZONTAL;
+        root.a = firstLeaf;
+        root.b = secondLeaf;
+        firstLeaf.parent = root;
+        secondLeaf.parent = root;
+        TerminalPaneController.Window window = new TerminalPaneController.Window(firstLeaf);
+        window.root = root;
+        TerminalPaneController.Leaf floatLeaf = new TerminalPaneController.Leaf(floater);
+        floatLeaf.floatFrac = new RectF(.1f, .1f, .6f, .6f);
+        floatLeaf.fontSize = 40;
+        window.floating.add(floatLeaf);
+
+        Bundle saved = source.saveWindow(window);
+        Map<String, TerminalSession> sessions = new HashMap<>();
+        sessions.put(first.mHandle, first);
+        sessions.put(second.mHandle, second);
+        sessions.put(floater.mHandle, floater);
+        TerminalPaneController.Window restored = newController().restoreWindow(saved, sessions);
+
+        TerminalPaneController.Split restoredRoot = (TerminalPaneController.Split) restored.root;
+        assertEquals(24, ((TerminalPaneController.Leaf) restoredRoot.a).fontSize);
+        assertEquals(0, ((TerminalPaneController.Leaf) restoredRoot.b).fontSize);
+        assertEquals(40, restored.floating.get(0).fontSize);
+    }
+
     /** Four panes whose controller can also create shells, so {@code split()} actually runs. */
     private static PaneFixture splittableFourPaneFixture() {
         PaneFixture base = fourPaneFixture(newSplittingController());

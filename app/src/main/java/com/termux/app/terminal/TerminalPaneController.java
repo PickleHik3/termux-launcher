@@ -67,6 +67,7 @@ public class TerminalPaneController {
 
     private static final String STATE_NODE_TYPE = "type";
     private static final String STATE_NODE_SESSION = "session";
+    private static final String STATE_NODE_FONT_SIZE = "font_size";
     private static final String STATE_NODE_ORIENTATION = "orientation";
     private static final String STATE_NODE_WEIGHT_A = "weight_a";
     private static final String STATE_NODE_WEIGHT_B = "weight_b";
@@ -169,6 +170,12 @@ public class TerminalPaneController {
          * because remembering a shape the user did not ask for is the ratchet this replaced.
          */
         @Nullable transient RectF appliedFloatFrac;
+        /**
+         * This pane's pinned font size, or 0 while it follows the app-wide default. Set the first
+         * time the pane is zoomed (and inherited by panes split off it), never by the default
+         * changing — so zooming one pane can't move any other.
+         */
+        int fontSize;
         Leaf(TerminalSession session) { this.session = session; }
     }
 
@@ -255,8 +262,20 @@ public class TerminalPaneController {
     /** Create a new single-pane window around {@code shell} (not shown yet). */
     public Window newWindow(TerminalSession shell) {
         Window w = new Window(new Leaf(shell));
+        // A window opened while another is focused starts at that pane's zoom level.
+        ((Leaf) w.root).fontSize =
+            inheritableFontSize(mActiveWindow == null ? null : mActiveWindow.active);
         mWindows.add(w);
         return w;
+    }
+
+    /**
+     * The font size a pane created from {@code leaf} should start with: the leaf's pinned size,
+     * or 0 (follow the app default) when it has none or is the independently sized scratchpad.
+     */
+    private static int inheritableFontSize(@Nullable Leaf leaf) {
+        if (leaf == null || leaf.fontSize <= 0 || isScratchpadLeaf(leaf)) return 0;
+        return leaf.fontSize;
     }
 
     /** Export one live window without coupling the pane controller to process/CWD discovery. */
@@ -361,6 +380,7 @@ public class TerminalPaneController {
                 floatState.putFloat(STATE_FLOAT_TOP, frac.top);
                 floatState.putFloat(STATE_FLOAT_WIDTH, frac.width());
                 floatState.putFloat(STATE_FLOAT_HEIGHT, frac.height());
+                if (leaf.fontSize > 0) floatState.putInt(STATE_NODE_FONT_SIZE, leaf.fontSize);
                 floats.add(floatState);
             }
             state.putParcelableArrayList(STATE_WINDOW_FLOATS, floats);
@@ -411,6 +431,8 @@ public class TerminalPaneController {
         if (node instanceof Leaf) {
             state.putInt(STATE_NODE_TYPE, NODE_LEAF);
             state.putString(STATE_NODE_SESSION, ((Leaf) node).session.mHandle);
+            if (((Leaf) node).fontSize > 0)
+                state.putInt(STATE_NODE_FONT_SIZE, ((Leaf) node).fontSize);
             return state;
         }
         Split split = (Split) node;
@@ -430,7 +452,10 @@ public class TerminalPaneController {
         if (state.getInt(STATE_NODE_TYPE, NODE_LEAF) == NODE_LEAF) {
             TerminalSession session = sessionsByHandle.get(state.getString(STATE_NODE_SESSION));
             // A terminal may appear only once across the restored tree set.
-            return session == null || windowOf(session) != null ? null : new Leaf(session);
+            if (session == null || windowOf(session) != null) return null;
+            Leaf leaf = new Leaf(session);
+            leaf.fontSize = Math.max(0, state.getInt(STATE_NODE_FONT_SIZE, 0));
+            return leaf;
         }
         Node a = restoreNode(state.getBundle(STATE_NODE_A), sessionsByHandle);
         Node b = restoreNode(state.getBundle(STATE_NODE_B), sessionsByHandle);
@@ -469,6 +494,7 @@ public class TerminalPaneController {
                 floatState.getFloat(STATE_FLOAT_TOP, Float.NaN),
                 floatState.getFloat(STATE_FLOAT_WIDTH, Float.NaN),
                 floatState.getFloat(STATE_FLOAT_HEIGHT, Float.NaN));
+            leaf.fontSize = Math.max(0, floatState.getInt(STATE_NODE_FONT_SIZE, 0));
             floats.add(leaf);
         }
         return floats;
@@ -663,6 +689,7 @@ public class TerminalPaneController {
         if (newSession == null) return false;
 
         Leaf newLeaf = new Leaf(newSession);
+        newLeaf.fontSize = inheritableFontSize(oldLeaf);
         Split split = new Split();
         split.orientation = orientation;
         split.a = oldLeaf;
@@ -1597,8 +1624,33 @@ public class TerminalPaneController {
             ((ViewGroup) frame.getParent()).removeView(frame);
         }
         TerminalView attachedView = mPaneViews.get(session);
-        if (attachedView != null) mHost.configureAttachedPaneView(attachedView, session);
+        if (attachedView != null) {
+            mHost.configureAttachedPaneView(attachedView, session);
+            // Reapply the pane's pinned zoom after the host stamped its default, so re-showing a
+            // window (or any re-render) can't fold every pane back to the app-wide size.
+            Window owner = windowOf(session);
+            Leaf leaf = owner == null ? null : findLeafInWindow(owner, session);
+            if (leaf != null && leaf.fontSize > 0) attachedView.setTextSize(leaf.fontSize);
+        }
         return frame;
+    }
+
+    /** The focused pane's pinned font size, or 0 while it follows the app-wide default. */
+    public int getActivePaneFontSize() {
+        if (mActiveWindow == null || mActiveWindow.active == null) return 0;
+        return mActiveWindow.active.fontSize;
+    }
+
+    /**
+     * Pin the focused pane's font size and apply it to its view. From then on the pane keeps this
+     * size across window switches and re-renders, independent of the app-wide default.
+     */
+    public boolean setActivePaneFontSize(int size) {
+        if (mActiveWindow == null || mActiveWindow.active == null || size <= 0) return false;
+        mActiveWindow.active.fontSize = size;
+        TerminalView view = mPaneViews.get(mActiveWindow.active.session);
+        if (view != null) view.setTextSize(size);
+        return true;
     }
 
     private void detachPaneView(TerminalSession session) {

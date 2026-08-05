@@ -4,6 +4,13 @@
 
 ### Added
 
+- **Per-pane zoom.** Pinch (or the font-size keys) now sizes only the pane you did it in and pins
+  that size to the pane — switching windows or re-rendering no longer folds every pane back to
+  one shared size, and no pane in any other window moves with it. A new split starts at the size
+  of the pane it was split from, and a new window at the size of the pane you came from; panes
+  you never zoomed keep following the settings default. Pinned sizes survive activity recreation.
+  The scratchpad stays on its own remembered size, neither inheriting nor donating.
+
 - **Reproducible Termux recipes for Sigye and animated-Kitty Fastfetch** — pinned upstream builds
   carry the Android clipboard compatibility fix Sigye v0.6.0 still needs and the Fastfetch GIF
   frame upload/playback patch used to exercise the launcher's terminal-driven Kitty animation.

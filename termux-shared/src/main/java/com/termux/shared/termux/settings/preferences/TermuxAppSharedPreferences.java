@@ -983,10 +983,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public void changeFontSize(boolean increase) {
-        int fontSize = getFontSize();
-        fontSize += (increase ? 1 : -1) * 2;
-        fontSize = Math.max(MIN_FONTSIZE, Math.min(fontSize, MAX_FONTSIZE));
-        setFontSize(fontSize);
+        setFontSize(stepFontSize(getFontSize(), increase));
+    }
+
+    /** {@code current} stepped one zoom increment, clamped to this display's font size limits. */
+    public int stepFontSize(int current, boolean increase) {
+        int fontSize = current + (increase ? 1 : -1) * 2;
+        return Math.max(MIN_FONTSIZE, Math.min(fontSize, MAX_FONTSIZE));
     }
 
     /**

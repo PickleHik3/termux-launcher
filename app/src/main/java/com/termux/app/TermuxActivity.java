@@ -11612,6 +11612,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mPaneController == null || mPaneController.resizeActive(keyCode);
     }
 
+    /** The focused pane's pinned font size, or 0 while it follows the app-wide default. */
+    public int getActivePaneFontSize() {
+        return mPaneController == null ? 0 : mPaneController.getActivePaneFontSize();
+    }
+
+    /** Pin the focused pane's font size; false when no pane controller is active. */
+    public boolean setActivePaneFontSize(int size) {
+        return mPaneController != null && mPaneController.setActivePaneFontSize(size);
+    }
+
     /** Apply an automatic pane layout to the current window. */
     public boolean applyPaneLayout(@NonNull String layout) {
         return isSplitPanesEnabled() && mPaneController != null && mPaneController.applyLayout(layout);
