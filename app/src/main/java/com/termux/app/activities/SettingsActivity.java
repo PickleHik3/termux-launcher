@@ -4,13 +4,18 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Environment;
+import android.text.TextUtils;
 import android.view.View;
 import android.view.Window;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 import androidx.preference.Preference;
+import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceFragmentCompat;
+import androidx.preference.PreferenceGroup;
+import androidx.preference.PreferenceManager;
+import androidx.preference.PreferenceScreen;
 import com.termux.R;
 import com.termux.app.fragments.settings.PillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
@@ -40,6 +45,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 public class SettingsActivity extends AppCompatActivity implements PreferenceFragmentCompat.OnPreferenceStartFragmentCallback {
 
@@ -189,6 +199,49 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
 
     public static class RootPreferencesFragment extends PreferenceFragmentCompat {
 
+        /**
+         * Maps each root destination row key to the XML preference resources that are reachable
+         * underneath it (including nested sub-screens), used to build the lazily-computed child
+         * search index below.
+         */
+        private static final Map<String, int[]> CHILD_XML_RESOURCES = new HashMap<>();
+        static {
+            CHILD_XML_RESOURCES.put("appearance", new int[]{
+                R.xml.termux_style_preferences, R.xml.termux_fonts_preferences});
+            CHILD_XML_RESOURCES.put("terminal_status", new int[]{
+                R.xml.terminal_status_preferences});
+            CHILD_XML_RESOURCES.put("keyboard_input", new int[]{
+                R.xml.termux_keyboard_preferences});
+            CHILD_XML_RESOURCES.put("launcher_apps", new int[]{
+                R.xml.launcher_preferences});
+            CHILD_XML_RESOURCES.put("services_permissions", new int[]{
+                R.xml.services_permissions_preferences, R.xml.termux_ai_preferences,
+                R.xml.termux_privileged_access_preferences, R.xml.termux_api_preferences});
+            CHILD_XML_RESOURCES.put("advanced_diagnostics", new int[]{
+                R.xml.advanced_diagnostics_preferences, R.xml.termux_terminal_io_preferences,
+                R.xml.termux_terminal_view_preferences});
+            CHILD_XML_RESOURCES.put("about_support", new int[]{
+                R.xml.about_support_preferences});
+        }
+
+        /** One indexed child preference: its display title and lowercase searchable text. */
+        private static final class ChildSearchEntry {
+            final String title;
+            final String searchable;
+            ChildSearchEntry(String title, String searchable) {
+                this.title = title;
+                this.searchable = searchable;
+            }
+        }
+
+        // Lazily built on first non-empty query; key -> indexed child preferences under it.
+        private final Map<String, List<ChildSearchEntry>> mChildSearchIndex = new HashMap<>();
+        private boolean mChildSearchIndexBuilt = false;
+
+        // Stashed original summaries for destination rows, keyed by preference key, so a
+        // "Contains: X, Y, Z" summary swapped in during a search can be restored afterwards.
+        private final Map<String, CharSequence> mOriginalSummaries = new HashMap<>();
+
         @Override
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
             Context context = getContext();
@@ -210,21 +263,149 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         private void configureSearch() {
             SettingsSearchPreference search = findPreference("settings_search");
             if (search == null) return;
+            stashOriginalSummaries();
             search.setOnQueryChangedListener(query -> {
-                String needle = query.trim().toLowerCase(java.util.Locale.ROOT);
-                androidx.preference.PreferenceScreen screen = getPreferenceScreen();
+                String needle = query.trim().toLowerCase(Locale.ROOT);
+                PreferenceScreen screen = getPreferenceScreen();
                 if (screen == null) return;
+                if (!needle.isEmpty()) {
+                    ensureChildSearchIndexBuilt();
+                }
                 for (int i = 0; i < screen.getPreferenceCount(); i++) {
-                    Preference row = screen.getPreference(i);
-                    if (row == search) continue;
-                    CharSequence title = row.getTitle();
-                    CharSequence summary = row.getSummary();
-                    String searchable = (title == null ? "" : title.toString()) + " "
-                        + (summary == null ? "" : summary.toString());
-                    row.setVisible(needle.isEmpty()
-                        || searchable.toLowerCase(java.util.Locale.ROOT).contains(needle));
+                    Preference top = screen.getPreference(i);
+                    if (top == search) continue;
+                    if (top instanceof PreferenceCategory) {
+                        PreferenceGroup category = (PreferenceGroup) top;
+                        boolean anyChildVisible = false;
+                        for (int j = 0; j < category.getPreferenceCount(); j++) {
+                            if (filterDestinationRow(category.getPreference(j), needle)) {
+                                anyChildVisible = true;
+                            }
+                        }
+                        top.setVisible(needle.isEmpty() || anyChildVisible);
+                    } else {
+                        filterDestinationRow(top, needle);
+                    }
                 }
             });
+        }
+
+        /** Captures each destination row's original summary before the search box mutates it. */
+        private void stashOriginalSummaries() {
+            PreferenceScreen screen = getPreferenceScreen();
+            if (screen == null) return;
+            for (int i = 0; i < screen.getPreferenceCount(); i++) {
+                Preference top = screen.getPreference(i);
+                if (top instanceof PreferenceCategory) {
+                    PreferenceGroup category = (PreferenceGroup) top;
+                    for (int j = 0; j < category.getPreferenceCount(); j++) {
+                        Preference row = category.getPreference(j);
+                        if (row.getKey() != null) {
+                            mOriginalSummaries.put(row.getKey(), row.getSummary());
+                        }
+                    }
+                }
+            }
+        }
+
+        /**
+         * Shows/hides a single destination row for the given lowercase query and returns whether
+         * it should be visible. Matches on the row's own title/summary first; if that fails, falls
+         * back to the indexed child preferences reachable under it (see {@link #CHILD_XML_RESOURCES}),
+         * swapping in a "Contains: ..." summary so the match reason is visible.
+         */
+        private boolean filterDestinationRow(@NonNull Preference row, @NonNull String needle) {
+            String key = row.getKey();
+            CharSequence originalSummary = key == null ? row.getSummary() : mOriginalSummaries.get(key);
+
+            if (needle.isEmpty()) {
+                row.setSummary(originalSummary);
+                row.setVisible(true);
+                return true;
+            }
+
+            CharSequence title = row.getTitle();
+            String ownSearchable = ((title == null ? "" : title.toString()) + " "
+                + (originalSummary == null ? "" : originalSummary.toString()))
+                .toLowerCase(Locale.ROOT);
+            if (ownSearchable.contains(needle)) {
+                row.setSummary(originalSummary);
+                row.setVisible(true);
+                return true;
+            }
+
+            List<ChildSearchEntry> childEntries = key == null ? null : mChildSearchIndex.get(key);
+            if (childEntries != null) {
+                List<String> matchedTitles = new ArrayList<>();
+                boolean anyChildMatch = false;
+                for (ChildSearchEntry entry : childEntries) {
+                    if (entry.searchable.contains(needle)) {
+                        anyChildMatch = true;
+                        if (!entry.title.isEmpty() && matchedTitles.size() < 3) {
+                            matchedTitles.add(entry.title);
+                        }
+                    }
+                }
+                if (anyChildMatch) {
+                    row.setSummary(row.getContext().getString(R.string.settings_search_contains,
+                        TextUtils.join(", ", matchedTitles)));
+                    row.setVisible(true);
+                    return true;
+                }
+            }
+
+            row.setSummary(originalSummary);
+            row.setVisible(false);
+            return false;
+        }
+
+        /**
+         * Inflates the XML resources reachable under each destination row into a scratch
+         * {@link PreferenceScreen} and walks them to build a searchable index of child titles and
+         * summaries. Runs once, lazily, on the first non-empty search query. A fresh
+         * {@link PreferenceManager} is used per inflate (rather than this fragment's own manager)
+         * so keys in these sub-screen XMLs cannot collide with the live root screen's preferences.
+         * Each XML is inflated in its own try/catch so a single misbehaving custom Preference
+         * constructor cannot break search for the rest.
+         */
+        private void ensureChildSearchIndexBuilt() {
+            if (mChildSearchIndexBuilt) return;
+            mChildSearchIndexBuilt = true;
+            Context context = getContext();
+            if (context == null) return;
+            for (Map.Entry<String, int[]> destination : CHILD_XML_RESOURCES.entrySet()) {
+                List<ChildSearchEntry> entries = new ArrayList<>();
+                for (int xmlRes : destination.getValue()) {
+                    try {
+                        PreferenceManager scratchManager = new PreferenceManager(context);
+                        PreferenceScreen inflated = scratchManager.inflateFromResource(context, xmlRes, null);
+                        if (inflated != null) {
+                            collectChildSearchEntries(inflated, entries);
+                        }
+                    } catch (Exception e) {
+                        // Skip this XML; search degrades gracefully instead of crashing the screen.
+                    }
+                }
+                mChildSearchIndex.put(destination.getKey(), entries);
+            }
+        }
+
+        private static void collectChildSearchEntries(@NonNull PreferenceGroup group,
+                                                       @NonNull List<ChildSearchEntry> out) {
+            for (int i = 0; i < group.getPreferenceCount(); i++) {
+                Preference child = group.getPreference(i);
+                CharSequence title = child.getTitle();
+                CharSequence summary = child.getSummary();
+                String titleText = title == null ? "" : title.toString();
+                String searchable = (titleText + " " + (summary == null ? "" : summary.toString()))
+                    .trim().toLowerCase(Locale.ROOT);
+                if (!searchable.isEmpty()) {
+                    out.add(new ChildSearchEntry(titleText, searchable));
+                }
+                if (child instanceof PreferenceGroup) {
+                    collectChildSearchEntries((PreferenceGroup) child, out);
+                }
+            }
         }
 
         private void updateShizukuPill() {

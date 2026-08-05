@@ -14,8 +14,9 @@
 
 <resources>
     <string name="settings_search_hint">Search settings</string>
+    <string name="settings_search_contains">Contains: %1$s</string>
     <string name="settings_destination_appearance">Appearance</string>
-    <string name="settings_destination_appearance_summary">Theme, wallpaper, colors, icons, dock, terminal, sessions, and glass</string>
+    <string name="settings_destination_appearance_summary">Theme, wallpaper, colors, fonts, icons, dock, terminal, sessions, and glass</string>
     <string name="settings_destination_terminal_status">Terminal &amp; status</string>
     <string name="settings_destination_terminal_status_summary">Display, panes, clock, CPU, memory, weather, margins, and Recents</string>
     <string name="settings_destination_keyboard_input">Keyboard &amp; input</string>
@@ -71,11 +72,11 @@
     <string name="settings_pinned_icon_pack_title">Pinned-app icon pack</string>
     <string name="settings_surfaces_header">Surfaces</string>
     <string name="settings_customize_dock_title">Customize dock appearance</string>
-    <string name="settings_customize_dock_summary">Choose the shared Default or Rounded shape and tune the dock on the real home screen.</string>
+    <string name="settings_customize_dock_summary">Choose the shared Default or Rounded shape and tune the dock live on the home screen.</string>
     <string name="settings_customize_status_title">Customize status appearance</string>
-    <string name="settings_customize_status_summary">Tune status blur, opacity, grain, and radius on the real home screen. Shape follows the shared surface choice.</string>
-    <string name="settings_customize_keyboard_title">Customize keyboard surface</string>
-    <string name="settings_customize_keyboard_summary">Edit keyboard size, spacing, key radius, and colors on the real home screen. Shape follows the shared surface choice.</string>
+    <string name="settings_customize_status_summary">Tune status blur, opacity, grain, and radius live on the home screen. Shape follows the shared surface choice.</string>
+    <string name="settings_customize_keyboard_title">Customize keyboard appearance</string>
+    <string name="settings_customize_keyboard_summary">Edit keyboard size, spacing, key radius, and colors live on the home screen. Shape follows the shared surface choice.</string>
     <string name="settings_dock_appearance_title">Dock appearance</string>
     <string name="settings_dock_appearance_summary">Style, size, apps per page, blur, opacity, grain, and shape with a live launcher preview.</string>
     <string name="settings_terminal_appearance_title">Terminal appearance</string>
@@ -353,7 +354,6 @@
     <string name="title_activity_termux_settings">Settings</string>
 
     <!-- Termux App Preferences -->
-    <string name="settings_root_assistant_header">Assistant</string>
     <string name="settings_root_launcher_header">Launcher</string>
     <string name="settings_root_system_info_header">System &amp; Info</string>
 
