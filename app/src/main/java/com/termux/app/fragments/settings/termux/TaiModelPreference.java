@@ -2,6 +2,8 @@ package com.termux.app.fragments.settings.termux;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.graphics.Typeface;
+import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.View;
 import android.widget.Button;
@@ -38,9 +40,12 @@ public final class TaiModelPreference extends Preference {
     private boolean primaryActionEnabled = true;
     private boolean primaryActionDestructive;
     private boolean recommended;
+    @Nullable private Typeface titleTypeface;
     private View.OnClickListener primaryActionClickListener;
     private CharSequence tuneActionText = "";
     private View.OnClickListener tuneActionClickListener;
+    /** The currently bound progress bar, so per-tick updates can skip the rebind entirely. */
+    @Nullable private ProgressBar boundProgressBar;
 
     public TaiModelPreference(@NonNull Context context) {
         super(context);
@@ -48,56 +53,92 @@ public final class TaiModelPreference extends Preference {
         setIconSpaceReserved(false);
     }
 
+    // Every setter below only calls notifyChanged() when the visible state actually changed.
+    // The catalogs refresh all their rows on every download progress tick, and a no-op rebind is
+    // not free: Nothing OS (Android 16) flashes a ghost insertion cursor over the last glyph of
+    // any button whose text is re-bound on screen.
+
     public void setDownloadProgress(boolean showProgress, boolean indeterminate, int progress) {
+        progress = Math.max(0, Math.min(10000, progress));
+        if (this.showProgress == showProgress && this.indeterminate == indeterminate
+            && this.progress == progress) return;
+        boolean visibilityChanged = this.showProgress != showProgress;
         this.showProgress = showProgress;
         this.indeterminate = indeterminate;
-        this.progress = Math.max(0, Math.min(10000, progress));
+        this.progress = progress;
+        // A pure value tick is applied straight to the bound bar: a rebind per megabyte makes
+        // the whole list repaint, which flickers (and ghost-cursors on Nothing OS). The tag
+        // check guards against the holder having been recycled to another row.
+        if (!visibilityChanged && boundProgressBar != null && boundProgressBar.getTag() == this) {
+            boundProgressBar.setIndeterminate(indeterminate);
+            boundProgressBar.setProgress(progress);
+            return;
+        }
         notifyChanged();
     }
 
     public void setPill(@Nullable CharSequence text, boolean accent) {
-        this.pillText = text == null ? "" : text;
+        CharSequence value = text == null ? "" : text;
+        if (TextUtils.equals(this.pillText, value) && this.pillAccent == accent) return;
+        this.pillText = value;
         this.pillAccent = accent;
         notifyChanged();
     }
 
     public void setBackendTone(@NonNull BackendTone tone) {
+        if (this.backendTone == tone) return;
         this.backendTone = tone;
         notifyChanged();
     }
 
     public void setMetaLine(@Nullable CharSequence metaLine) {
-        this.metaLine = metaLine == null ? "" : metaLine;
-        notifyChanged();
-    }
-
-public void setPrimaryAction(@Nullable CharSequence text, boolean enabled,
-                                  @Nullable View.OnClickListener listener) {
-        this.primaryActionText = text == null ? "" : text;
-        this.primaryActionEnabled = enabled;
-        this.primaryActionDestructive = false;
-        this.primaryActionClickListener = listener;
+        CharSequence value = metaLine == null ? "" : metaLine;
+        if (TextUtils.equals(this.metaLine, value)) return;
+        this.metaLine = value;
         notifyChanged();
     }
 
     public void setPrimaryAction(@Nullable CharSequence text, boolean enabled,
+                                  @Nullable View.OnClickListener listener) {
+        setPrimaryAction(text, enabled, false, listener);
+    }
+
+    public void setPrimaryAction(@Nullable CharSequence text, boolean enabled,
                                   boolean destructive, @Nullable View.OnClickListener listener) {
-        this.primaryActionText = text == null ? "" : text;
+        CharSequence value = text == null ? "" : text;
+        // The listener is stored unconditionally but never forces a rebind: the bound view holds
+        // a stable trampoline that reads this field at click time.
+        this.primaryActionClickListener = listener;
+        if (TextUtils.equals(this.primaryActionText, value) && this.primaryActionEnabled == enabled
+            && this.primaryActionDestructive == destructive) return;
+        this.primaryActionText = value;
         this.primaryActionEnabled = enabled;
         this.primaryActionDestructive = destructive;
-        this.primaryActionClickListener = listener;
         notifyChanged();
     }
 
     public void setTuneAction(@Nullable CharSequence text, @Nullable View.OnClickListener listener) {
-        this.tuneActionText = text == null ? "" : text;
+        CharSequence value = text == null ? "" : text;
         this.tuneActionClickListener = listener;
+        if (TextUtils.equals(this.tuneActionText, value)) return;
+        this.tuneActionText = value;
         notifyChanged();
     }
 
     /** Shows a small star before the model name for recommended models. */
     public void setRecommended(boolean recommended) {
+        if (this.recommended == recommended) return;
         this.recommended = recommended;
+        notifyChanged();
+    }
+
+    /**
+     * Renders the title in the given typeface — the font picker uses the family's own installed
+     * regular face so each row previews itself. Null restores the layout's default face.
+     */
+    public void setTitleTypeface(@Nullable Typeface typeface) {
+        if (this.titleTypeface == typeface) return;
+        this.titleTypeface = typeface;
         notifyChanged();
     }
 
@@ -107,6 +148,9 @@ public void setPrimaryAction(@Nullable CharSequence text, boolean enabled,
 
         TextView title = (TextView) holder.findViewById(android.R.id.title);
         if (title != null) {
+            // Holders recycle, so the default face must be restored explicitly when unset.
+            title.setTypeface(titleTypeface != null
+                ? titleTypeface : Typeface.create("sans-serif-medium", Typeface.NORMAL));
             if (recommended) {
                 title.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_star_16, 0, 0, 0);
                 title.setCompoundDrawablePadding(dp(5));
@@ -123,6 +167,8 @@ public void setPrimaryAction(@Nullable CharSequence text, boolean enabled,
             progressBar.setVisibility(showProgress ? View.VISIBLE : View.GONE);
             progressBar.setIndeterminate(indeterminate);
             progressBar.setProgress(progress);
+            progressBar.setTag(this);
+            boundProgressBar = progressBar;
         }
 
         TextView pill = (TextView) holder.findViewById(R.id.tai_model_pill);
@@ -131,7 +177,7 @@ public void setPrimaryAction(@Nullable CharSequence text, boolean enabled,
                 pill.setVisibility(View.GONE);
             } else {
                 pill.setVisibility(View.VISIBLE);
-                pill.setText(pillText);
+                if (!pillText.toString().contentEquals(pill.getText())) pill.setText(pillText);
                 int pillTextColor;
                 int pillBgColor;
                 if (pillAccent) {
@@ -163,10 +209,9 @@ public void setPrimaryAction(@Nullable CharSequence text, boolean enabled,
         }
 
         ImageButton tuneAction = (ImageButton) holder.findViewById(R.id.tai_model_tune_action);
-        boolean showTune = bindTuneButton(tuneAction, tuneActionText, tuneActionClickListener);
+        boolean showTune = bindTuneButton(tuneAction, tuneActionText);
         Button primaryAction = (Button) holder.findViewById(R.id.tai_model_primary_action);
-        boolean showPrimary = bindActionButton(primaryAction, primaryActionText, primaryActionEnabled,
-            primaryActionClickListener);
+        boolean showPrimary = bindActionButton(primaryAction, primaryActionText, primaryActionEnabled);
         if (primaryAction != null && showPrimary) {
             tintPrimaryAction(primaryAction);
         }
@@ -175,7 +220,7 @@ public void setPrimaryAction(@Nullable CharSequence text, boolean enabled,
     }
 
     private boolean bindActionButton(@Nullable Button button, @NonNull CharSequence text,
-                                     boolean enabled, @Nullable View.OnClickListener listener) {
+                                     boolean enabled) {
         if (button == null) return false;
         if (text.length() == 0) {
             button.setVisibility(View.GONE);
@@ -183,9 +228,15 @@ public void setPrimaryAction(@Nullable CharSequence text, boolean enabled,
             return false;
         }
         button.setVisibility(View.VISIBLE);
-        button.setText(text);
+        // Only touch the text when it actually changed — see the setter comment above.
+        if (!text.toString().contentEquals(button.getText())) button.setText(text);
         button.setEnabled(enabled);
-        button.setOnClickListener(listener);
+        // Stable trampoline: the current listener is read at click time, so swapping listeners
+        // (they capture per-refresh state) never requires re-binding the row.
+        button.setOnClickListener(view -> {
+            View.OnClickListener current = primaryActionClickListener;
+            if (current != null) current.onClick(view);
+        });
         return true;
     }
 
@@ -210,8 +261,7 @@ public void setPrimaryAction(@Nullable CharSequence text, boolean enabled,
         button.setTextColor(resolveAttrColor(textAttr));
     }
 
-    private boolean bindTuneButton(@Nullable ImageButton button, @NonNull CharSequence text,
-                                   @Nullable View.OnClickListener listener) {
+    private boolean bindTuneButton(@Nullable ImageButton button, @NonNull CharSequence text) {
         if (button == null) return false;
         if (text.length() == 0) {
             button.setVisibility(View.GONE);
@@ -224,7 +274,10 @@ public void setPrimaryAction(@Nullable CharSequence text, boolean enabled,
             resolveAttrColor(com.termux.shared.R.attr.termuxColorOnSurface)));
         button.setBackgroundTintList(ColorStateList.valueOf(
             resolveAttrColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh)));
-        button.setOnClickListener(listener);
+        button.setOnClickListener(view -> {
+            View.OnClickListener current = tuneActionClickListener;
+            if (current != null) current.onClick(view);
+        });
         return true;
     }
 

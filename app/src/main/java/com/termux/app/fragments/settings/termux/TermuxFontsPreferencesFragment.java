@@ -2,6 +2,7 @@ package com.termux.app.fragments.settings.termux;
 
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.widget.LinearLayout;
@@ -28,8 +29,11 @@ import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.fragments.settings.StatusCardPreference;
 
+import java.io.File;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * The terminal font picker: a family list with per-family license text and download sizes, the
@@ -49,6 +53,13 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
     implements FontInstallCoordinator.Listener {
 
     private static final String ROW_KEY_PREFIX = "fonts_family_";
+
+    /**
+     * Installed families render their own row title as a live preview. Parsed faces are cached
+     * for the fragment's lifetime; a family that fails to parse caches null so a broken file is
+     * probed once, not on every refresh.
+     */
+    private final Map<String, Typeface> mPreviewTypefaces = new HashMap<>();
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -190,15 +201,21 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
         }
     }
 
+    /**
+     * Rows are updated in place whenever the family list itself is unchanged. Tearing the
+     * category down and rebuilding it re-binds every row, which is visibly not free — progress
+     * arrives once per megabyte, and on Nothing OS (Android 16) each re-bound button briefly
+     * paints a ghost insertion cursor over the last glyph of its label.
+     */
     private void refreshFamilyRows(@NonNull Context context, @NonNull FontCatalog.Result catalog,
                                    @NonNull FontInstaller installer,
                                    @NonNull FontInstallCoordinator coordinator,
                                    boolean managed, @NonNull String activeId) {
         PreferenceCategory families = findPreference("fonts_families_category");
         if (families == null) return;
-        families.removeAll();
         List<FontCatalog.Family> entries = catalog.families;
         if (entries.isEmpty()) {
+            families.removeAll();
             Preference empty = new Preference(context);
             empty.setIconSpaceReserved(false);
             empty.setSelectable(false);
@@ -209,20 +226,38 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
         }
         String installing = coordinator.getActiveFamilyId();
         FontDownloader.Progress progress = coordinator.getLastProgress();
-        for (FontCatalog.Family family : entries) {
-            families.addPreference(buildRow(context, family, installer, managed, activeId,
-                installing, progress));
+        if (!rowsMatch(families, entries)) {
+            families.removeAll();
+            for (FontCatalog.Family family : entries) {
+                TaiModelPreference row = new TaiModelPreference(context);
+                row.setKey(ROW_KEY_PREFIX + family.id);
+                row.setPersistent(false);
+                families.addPreference(row);
+            }
+        }
+        for (int i = 0; i < entries.size(); i++) {
+            configureRow(context, (TaiModelPreference) families.getPreference(i), entries.get(i),
+                installer, managed, activeId, installing, progress);
         }
     }
 
-    @NonNull
-    private TaiModelPreference buildRow(@NonNull Context context, @NonNull FontCatalog.Family family,
-                                        @NonNull FontInstaller installer, boolean managed,
-                                        @NonNull String activeId, @NonNull String installingId,
-                                        @Nullable FontDownloader.Progress progress) {
-        TaiModelPreference row = new TaiModelPreference(context);
-        row.setKey(ROW_KEY_PREFIX + family.id);
-        row.setPersistent(false);
+    /** Whether the category already holds exactly one row per family, in catalog order. */
+    private static boolean rowsMatch(@NonNull PreferenceCategory families,
+                                     @NonNull List<FontCatalog.Family> entries) {
+        if (families.getPreferenceCount() != entries.size()) return false;
+        for (int i = 0; i < entries.size(); i++) {
+            Preference row = families.getPreference(i);
+            if (!(row instanceof TaiModelPreference)
+                || !(ROW_KEY_PREFIX + entries.get(i).id).equals(row.getKey())) return false;
+        }
+        return true;
+    }
+
+    private void configureRow(@NonNull Context context, @NonNull TaiModelPreference row,
+                              @NonNull FontCatalog.Family family,
+                              @NonNull FontInstaller installer, boolean managed,
+                              @NonNull String activeId, @NonNull String installingId,
+                              @Nullable FontDownloader.Progress progress) {
         row.setTitle(family.displayName);
         row.setRecommended(family.recommended);
         row.setSummary(family.summary);
@@ -231,6 +266,7 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
         boolean installed = installer.isInstalled(family);
         boolean active = managed && family.id.equals(activeId);
         boolean downloading = family.id.equals(installingId);
+        row.setTitleTypeface(installed ? previewTypeface(installer, family) : null);
         row.setMetaLine(buildMetaLine(family, installed));
 
         if (downloading && progress != null && progress.isActive()) {
@@ -261,7 +297,6 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
             showLicenseDialog(context, family);
             return true;
         });
-        return row;
     }
 
     @NonNull
@@ -455,6 +490,23 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /** The family's installed regular face, or null when the file is missing or unparsable. */
+    @Nullable
+    private Typeface previewTypeface(@NonNull FontInstaller installer,
+                                     @NonNull FontCatalog.Family family) {
+        if (mPreviewTypefaces.containsKey(family.id)) return mPreviewTypefaces.get(family.id);
+        Typeface typeface = null;
+        try {
+            File face = new File(installer.getFamilyDir(family.id),
+                FontCatalog.FaceSlot.REGULAR.fileName);
+            if (face.isFile()) typeface = Typeface.createFromFile(face);
+        } catch (RuntimeException ignored) {
+            // Typeface.createFromFile throws on corrupt files; the row just keeps the default face.
+        }
+        mPreviewTypefaces.put(family.id, typeface);
+        return typeface;
+    }
 
     @Nullable
     private FontCatalog.Family activeFamily(@NonNull Context context) {
