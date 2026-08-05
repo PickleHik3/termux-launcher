@@ -50,10 +50,12 @@
         },
         {
           "background_templates": [
-            "{{ .Env.TERMUX_MATERIAL_ERROR_CONTAINER }}"
+            "{{ .Env.TERMUX_MATERIAL_TERTIARY_CONTAINER }}",
+            "{{ if .Error }}{{ .Env.TERMUX_MATERIAL_ERROR_CONTAINER }}{{ end }}"
           ],
           "foreground_templates": [
-            "{{ .Env.TERMUX_MATERIAL_ERROR }}"
+            "{{ .Env.TERMUX_MATERIAL_ON_TERTIARY_CONTAINER }}",
+            "{{ if .Error }}{{ .Env.TERMUX_MATERIAL_ON_ERROR_CONTAINER }}{{ end }}"
           ],
           "leading_diamond": "\ue0b0",
           "style": "diamond",

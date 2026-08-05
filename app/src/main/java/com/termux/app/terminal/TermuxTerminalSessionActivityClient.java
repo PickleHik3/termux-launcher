@@ -21,6 +21,7 @@ import com.termux.shared.termux.interact.TextInputDialogUtils;
 import com.termux.app.TermuxActivity;
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
 import com.termux.shared.termux.TermuxConstants;
+import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 import com.termux.app.TermuxService;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.terminal.io.BellHandler;
@@ -624,12 +625,26 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     public void checkForFontAndColors() {
+        applyTerminalColors();
+        applyTerminalFonts();
+    }
+
+    /**
+     * Rebuild the terminal palette and hand it to every session.
+     *
+     * <p>Split from the font half because a wallpaper change has no business re-reading font config
+     * from disk and rebuilding typefaces, which is what the combined path did on every refresh.
+     */
+    public void applyTerminalColors() {
         try {
-            File colorsFile = TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE;
+            boolean dynamic = mActivity.getPreferences() != null
+                && mActivity.getPreferences().isTerminalDynamicColorsEnabled();
             final Properties props;
-            if (mActivity.getPreferences() != null && mActivity.getPreferences().isTerminalDynamicColorsEnabled()) {
-                props = MaterialTerminalColorScheme.create(mActivity);
-                mLastMaterialTerminalPaletteSignature = MaterialTerminalColorScheme.signature(mActivity);
+            if (dynamic) {
+                TerminalContrastLevel level = mActivity.getPreferences().getTerminalContrastLevel();
+                props = MaterialTerminalColorScheme.create(mActivity, level);
+                mLastMaterialTerminalPaletteSignature =
+                    MaterialTerminalColorScheme.signature(mActivity, level);
                 // Built here, on the main thread, and handed over as finished values: the writer thread
                 // must not touch the theme or resources, and this way the files describe the same
                 // palette the terminal just took.
@@ -646,18 +661,26 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             } else {
                 props = new Properties();
                 mLastMaterialTerminalPaletteSignature = 0;
-            }
-            if (mLastMaterialTerminalPaletteSignature == 0 && colorsFile.isFile()) {
-                try (InputStream in = new FileInputStream(colorsFile)) {
-                    props.load(in);
+                File colorsFile = TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE;
+                if (colorsFile.isFile()) {
+                    try (InputStream in = new FileInputStream(colorsFile)) {
+                        props.load(in);
+                    }
                 }
             }
             TerminalColors.COLOR_SCHEME.updateWith(props);
             resetAllSessionColors();
             updateBackgroundColor();
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyTerminalColors()", e);
+        }
+    }
+
+    /** Load the configured faces and apply them to every pane that has a renderer. */
+    public void applyTerminalFonts() {
+        try {
             TerminalFontLoader.Faces faces = TerminalFontLoader.load(TerminalFontConfig.load());
             reportFontErrors(faces.errors);
-            // Apply to every pane that has a renderer so split panes get the nerd font too.
             for (com.termux.view.TerminalView v : mActivity.getTerminalPaneViews()) {
                 if (v.isFontInitialized())
                     v.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic,
@@ -667,7 +690,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             }
             mActivity.requestTerminalFlushDockGeometryUpdate();
         } catch (Exception e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Error in checkForFontAndColors()", e);
+            Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyTerminalFonts()", e);
         }
     }
 
@@ -703,18 +726,21 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             R.plurals.terminal_font_config_errors, errors.size(), errors.size()), true);
     }
 
+    /**
+     * Rebuild the palette only if the Material roles or the contrast level actually moved. This is the
+     * path for resume, configuration changes and wallpaper-colour callbacks: they fire whether or not
+     * anything changed, and the work behind them is a full HCT palette build, a recolour and repaint of
+     * every session, and two file writes that open shells watch.
+     */
     public void refreshMaterialTerminalColorsIfNeeded() {
-        refreshMaterialTerminalColors(false);
-    }
-
-    public void refreshMaterialTerminalColors(boolean force) {
-        if (mActivity.getPreferences() == null || !mActivity.getPreferences().isTerminalDynamicColorsEnabled()) {
+        if (mActivity.getPreferences() == null
+            || !mActivity.getPreferences().isTerminalDynamicColorsEnabled()) {
             return;
         }
-        int signature = MaterialTerminalColorScheme.signature(mActivity);
-        if (force || signature != mLastMaterialTerminalPaletteSignature) {
-            checkForFontAndColors();
-        }
+        int signature = MaterialTerminalColorScheme.signature(mActivity,
+            mActivity.getPreferences().getTerminalContrastLevel());
+        if (signature == mLastMaterialTerminalPaletteSignature) return;
+        applyTerminalColors();
     }
 
     private void resetAllSessionColors() {

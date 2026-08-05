@@ -5,6 +5,7 @@ import android.graphics.Color;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
+import androidx.annotation.VisibleForTesting;
 import androidx.core.content.ContextCompat;
 
 import com.google.android.material.color.MaterialColors;
@@ -15,7 +16,6 @@ import com.termux.shared.file.FileUtils;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -30,14 +30,6 @@ public final class MaterialTerminalColorScheme {
     private static final String MATERIAL_COLORS_SHELL_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors.sh";
 
     private MaterialTerminalColorScheme() {}
-
-    @NonNull
-    public static Properties create(@NonNull Context context) {
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, false);
-        TerminalContrastLevel level = preferences == null
-            ? TerminalContrastLevel.DEFAULT : preferences.getTerminalContrastLevel();
-        return create(context, level);
-    }
 
     /** Build a palette for an explicit level; public so ratio and signature tests are deterministic. */
     @NonNull
@@ -122,10 +114,33 @@ public final class MaterialTerminalColorScheme {
             R.color.termux_on_secondary);
         putMaterialColor(props, "tertiary", context, com.google.android.material.R.attr.colorTertiary,
             R.color.termux_primary);
+        putMaterialColor(props, "on_tertiary", context, com.google.android.material.R.attr.colorOnTertiary,
+            R.color.termux_on_primary);
         putMaterialColor(props, "error", context, com.google.android.material.R.attr.colorError,
             R.color.termux_error);
+        putMaterialColor(props, "on_error", context, com.google.android.material.R.attr.colorOnError,
+            R.color.termux_surface_base);
         putMaterialColor(props, "error_container", context, com.google.android.material.R.attr.colorErrorContainer,
             R.color.termux_error_container);
+        // The "on-" partner of every container this exports. Without them a theme cannot draw a
+        // filled chip with guaranteed contrast — it has to borrow an accent role, which is why the
+        // bundled prompt was painting a virtualenv in the error colours.
+        putMaterialColor(props, "on_error_container", context,
+            com.google.android.material.R.attr.colorOnErrorContainer, R.color.termux_error);
+        putMaterialColor(props, "primary_container", context,
+            com.google.android.material.R.attr.colorPrimaryContainer, R.color.termux_primary);
+        putMaterialColor(props, "on_primary_container", context,
+            com.google.android.material.R.attr.colorOnPrimaryContainer, R.color.termux_on_primary);
+        putMaterialColor(props, "secondary_container", context,
+            com.google.android.material.R.attr.colorSecondaryContainer, R.color.termux_secondary);
+        putMaterialColor(props, "on_secondary_container", context,
+            com.google.android.material.R.attr.colorOnSecondaryContainer, R.color.termux_on_secondary);
+        putMaterialColor(props, "tertiary_container", context,
+            com.google.android.material.R.attr.colorTertiaryContainer, R.color.termux_primary);
+        putMaterialColor(props, "on_tertiary_container", context,
+            com.google.android.material.R.attr.colorOnTertiaryContainer, R.color.termux_on_primary);
+        putMaterialColor(props, "outline", context, com.google.android.material.R.attr.colorOutline,
+            R.color.termux_on_surface_variant);
         putMaterialColor(props, "surface", context, com.google.android.material.R.attr.colorSurface,
             R.color.termux_surface_base);
         putMaterialColor(props, "surface_variant", context, com.google.android.material.R.attr.colorSurfaceVariant,
@@ -162,24 +177,80 @@ public final class MaterialTerminalColorScheme {
         writeFile(MATERIAL_COLORS_SHELL_PATH, toShellExports(props));
     }
 
-    public static int signature(@NonNull Context context) {
+    /**
+     * Whether the exported files already say exactly this. Shells watch these files by modification
+     * time — the bundled fish config re-sources the palette when it moves — so rewriting identical
+     * content is not free: it makes every open shell reload on its next prompt, and re-runs the tmux
+     * theme script inside tmux.
+     */
+    @VisibleForTesting
+    static boolean alreadyOnDisk(@NonNull String path, @NonNull String content) {
+        java.io.File file = new java.io.File(path);
+        byte[] wanted = content.getBytes(StandardCharsets.UTF_8);
+        if (!file.isFile() || file.length() != wanted.length) return false;
+        // Read raw rather than through FileUtils.readTextFromFile: that joins lines with \n and so
+        // drops the trailing newline these files end with, which made every comparison fail and every
+        // refresh rewrite identical content.
+        try (java.io.InputStream in = new java.io.FileInputStream(file)) {
+            byte[] existing = new byte[wanted.length];
+            int read = 0;
+            while (read < wanted.length) {
+                int step = in.read(existing, read, wanted.length - read);
+                if (step < 0) return false;
+                read += step;
+            }
+            return in.read() < 0 && java.util.Arrays.equals(existing, wanted);
+        } catch (java.io.IOException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Every Material role the exported palette is derived from, in a fixed order.
+     *
+     * <p>The signature has to cover all of them, not just the accents: a wallpaper can move the
+     * neutral-variant tones — which is what the bundled prompt fills its slabs with — while leaving
+     * primary, secondary and tertiary where they were, and such a change used to read as "unchanged".
+     */
+    private static final int[] PALETTE_ATTRS = {
+        com.google.android.material.R.attr.colorPrimary,
+        com.google.android.material.R.attr.colorOnPrimary,
+        com.google.android.material.R.attr.colorPrimaryContainer,
+        com.google.android.material.R.attr.colorOnPrimaryContainer,
+        com.google.android.material.R.attr.colorSecondary,
+        com.google.android.material.R.attr.colorOnSecondary,
+        com.google.android.material.R.attr.colorSecondaryContainer,
+        com.google.android.material.R.attr.colorOnSecondaryContainer,
+        com.google.android.material.R.attr.colorTertiary,
+        com.google.android.material.R.attr.colorOnTertiary,
+        com.google.android.material.R.attr.colorTertiaryContainer,
+        com.google.android.material.R.attr.colorOnTertiaryContainer,
+        com.google.android.material.R.attr.colorError,
+        com.google.android.material.R.attr.colorOnError,
+        com.google.android.material.R.attr.colorErrorContainer,
+        com.google.android.material.R.attr.colorOnErrorContainer,
+        com.google.android.material.R.attr.colorSurface,
+        com.google.android.material.R.attr.colorSurfaceVariant,
+        com.google.android.material.R.attr.colorSurfaceContainer,
+        com.google.android.material.R.attr.colorSurfaceContainerHigh,
+        com.google.android.material.R.attr.colorSurfaceContainerHighest,
+        com.google.android.material.R.attr.colorOnSurface,
+        com.google.android.material.R.attr.colorOnSurfaceVariant,
+        com.google.android.material.R.attr.colorOutline,
+        com.google.android.material.R.attr.colorOutlineVariant,
+    };
+
+    /**
+     * Cheap fingerprint of the palette this would generate: the resolved role colours plus the
+     * contrast level. Attribute lookups only — deliberately not a {@link #create} and a hash of the
+     * result, since the point of the fingerprint is to decide whether that work is needed at all.
+     */
+    public static int signature(@NonNull Context context, @NonNull TerminalContrastLevel level) {
         int result = 17;
-        result = 31 * result + materialColor(context, com.google.android.material.R.attr.colorSurface,
-            R.color.termux_surface_base);
-        result = 31 * result + materialColor(context, com.google.android.material.R.attr.colorOnSurface,
-            R.color.termux_on_surface);
-        result = 31 * result + materialColor(context, com.google.android.material.R.attr.colorPrimary,
-            R.color.termux_primary);
-        result = 31 * result + materialColor(context, com.google.android.material.R.attr.colorSecondary,
-            R.color.termux_secondary);
-        result = 31 * result + materialColor(context, com.google.android.material.R.attr.colorTertiary,
-            R.color.termux_primary);
-        result = 31 * result + materialColor(context, com.google.android.material.R.attr.colorError,
-            R.color.termux_error);
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, false);
-        result = 31 * result + (preferences == null ? TerminalContrastLevel.DEFAULT.ordinal()
-            : preferences.getTerminalContrastLevel().ordinal());
-        return result;
+        for (int attr : PALETTE_ATTRS) {
+            result = 31 * result + MaterialColors.getColor(context, attr, 0);
+        }
+        return 31 * result + level.ordinal();
     }
 
     /** WCAG relative-luminance contrast ratio. */
@@ -259,6 +330,7 @@ public final class MaterialTerminalColorScheme {
     }
 
     private static void writeFile(@NonNull String path, @NonNull String content) {
+        if (alreadyOnDisk(path, content)) return;
         Error error = FileUtils.writeTextToFile(path, path, StandardCharsets.UTF_8, content, false);
         if (error != null) {
             Logger.logErrorExtended(LOG_TAG, error.toString());

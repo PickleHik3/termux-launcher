@@ -984,7 +984,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onResume();
         if (mTermuxTerminalSessionActivityClient != null)
-            mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColors(true);
+            mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();
         if (mTermuxTerminalViewClient != null)
             mTermuxTerminalViewClient.onResume();
         refreshLauncherIconsIfPreferencesChanged();
@@ -1330,7 +1330,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return;
                 }
                 if (mTermuxTerminalSessionActivityClient != null) {
-                    mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColors(true);
+                    mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();
                 }
                 applyTerminalSurfaceAppearance();
                 // Dynamic keyboard swatches follow the Material roles; pinned or imported ones
@@ -4825,7 +4825,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logVerbose(LOG_TAG, "onConfigurationChanged");
         super.onConfigurationChanged(newConfig);
         if (mTermuxTerminalSessionActivityClient != null)
-            mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColors(true);
+            mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();
         if (mInAppKeyboard != null) {
             mInAppKeyboardShiftLocked = false;
             mInAppKeyboard.onConfigurationChanged(newConfig);
@@ -7903,7 +7903,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void applyTerminalContrastChange() {
         if (mTermuxTerminalSessionActivityClient != null)
-            mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColors(true);
+            mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();
         applyTerminalSurfaceAppearance();
     }
 

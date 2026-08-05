@@ -20,6 +20,7 @@
 - **Rename and close buttons on sessions-panel rows** — the long press still works, but it was the only way to know it was possible.
 - **A window whose shell asked for you lights up.** The pill rim of a window turns the Material error colour and pulses with a halo once a shell in it rings the terminal bell — a permission prompt, an agent handing its turn back, a build that stopped for input. The bell is the signal, so no cooperation from the program is needed, and it is recorded even when the launcher is in the background. Focusing the window clears it, and a bell from the window you are already in is not news.
 - **Terminal contrast in the surface editor** — Edit surfaces → Terminal now carries the Softer/Default/Harder control alongside opacity and border, applied live like everything else there, with Reset tab and dismiss behaving as they do for the rest of the tab. Disabled with a reason when wallpaper colours are off, since contrast only grades the generated palette.
+- **Every Material container role is exported.** `on_error_container`, `on_tertiary`, `on_tertiary_container`, `outline` and the `primary`/`secondary`/`tertiary_container` families with their `on-` partners join `~/.termux/material-colors.{sh,properties}`, so a prompt or script can draw a filled chip with a guaranteed-contrast pairing instead of borrowing an accent role. The bundled Aliens Material prompt uses them: its Python/virtualenv chip is `on_tertiary_container` on `tertiary_container` (7.25:1) and only turns red when there is an actual error, where it was painting every virtualenv in the error colours (5.34:1).
 
 ### Changed
 
@@ -35,6 +36,8 @@
 - **Background commands report per session, not per pane.** Opening a window, splitting a pane, or moving between the windows of one session no longer raises a corner notice, even when you leave a command running: those windows are still on screen and their pills carry the working and waiting states. Only leaving the session hides them, and that is what now puts a standing row in the top-right corner.
 - **A changing window title no longer raises a notice.** It fired on every progress write — several times a second for one background job — to say what the window's own pill and the corner stack already say.
 - **The transient notice chip is a Material surface.** Label-medium type on a surface-container-high fill with an outline hairline and elevation, entering on the emphasized-decelerate curve, instead of 9.5sp text on a black scrim. The standing background rows match it one step lower in the elevation scale, and the two share one column: the rows sit directly under the notice and slide up into its slot when it expires.
+- **The palette is only rebuilt when it actually changed.** Resume, configuration changes and wallpaper-colour callbacks all forced a full refresh — an HCT palette build, a recolour and repaint of every session, a font-config re-read with typefaces rebuilt and re-applied to every pane, and two file writes — whether or not any Material role had moved. They now consult a fingerprint first, and that fingerprint covers all 25 roles the export is derived from rather than six accents plus the contrast level.
+- **Colour and font refreshes are separate.** A wallpaper change no longer re-reads font config from disk, rebuilds typefaces or re-measures panes; only a font change does.
 
 ### Fixed
 
@@ -55,6 +58,7 @@
 - **A shell that exits no longer leaves its foreground process behind in the cache**, where a reused pid would inherit it.
 - **The exported palette files are built on the main thread.** The writer thread was resolving theme attributes and re-deriving the palette itself, so the files could describe different colours than the terminal took.
 - **The terminal surface no longer rebuilds the whole generated palette to read one colour** — a 101-tone contrast search per foreground, cursor and ANSI colour, every time the surface was restyled.
+- **Returning to the launcher no longer makes every shell re-read the palette.** The exported colour files were rewritten byte-for-byte identically on every resume, and shells watch them by modification time — the bundled fish config re-sources the palette when it moves and re-runs the tmux theme script inside tmux. Identical content is now left alone.
 
 ## 0.2.30
 

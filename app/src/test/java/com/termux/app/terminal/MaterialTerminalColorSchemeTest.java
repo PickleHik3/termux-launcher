@@ -16,6 +16,8 @@ import org.robolectric.annotation.Config;
 import java.util.Properties;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
@@ -55,6 +57,48 @@ public class MaterialTerminalColorSchemeTest {
                 MaterialTerminalColorScheme.backgroundColor(
                     ApplicationProvider.getApplicationContext(), level) | 0xFF000000);
         }
+    }
+
+    /** A theme cannot draw a filled chip with guaranteed contrast unless both halves are exported. */
+    @Test
+    public void everyExportedContainerHasItsOnPartner() {
+        Properties roles = MaterialTerminalColorScheme.createMaterialRoleProperties(
+            ApplicationProvider.getApplicationContext(),
+            MaterialTerminalColorScheme.create(
+                ApplicationProvider.getApplicationContext(), TerminalContrastLevel.DEFAULT));
+        for (String container : new String[] {"primary", "secondary", "tertiary", "error",
+                "primary_container", "secondary_container", "tertiary_container",
+                "error_container"}) {
+            assertNotNull(container, roles.getProperty(container));
+            assertNotNull("on_" + container, roles.getProperty("on_" + container));
+        }
+        // Surfaces pair with on_surface / on_surface_variant rather than an on_<name> of their own.
+        for (String surface : new String[] {"surface", "surface_variant", "surface_container",
+                "surface_container_high", "surface_container_highest", "outline",
+                "outline_variant", "on_surface", "on_surface_variant"}) {
+            assertNotNull(surface, roles.getProperty(surface));
+        }
+    }
+
+    /**
+     * The fingerprint has to move with any role the export is built from. It used to cover only the
+     * six accents, so a wallpaper that shifted the neutral-variant tones — what the bundled prompt
+     * fills its slabs with — read as unchanged.
+     */
+    @Test
+    public void theSignatureCoversTheContrastLevel() {
+        int softer = MaterialTerminalColorScheme.signature(
+            ApplicationProvider.getApplicationContext(), TerminalContrastLevel.SOFTER);
+        int dflt = MaterialTerminalColorScheme.signature(
+            ApplicationProvider.getApplicationContext(), TerminalContrastLevel.DEFAULT);
+        int harder = MaterialTerminalColorScheme.signature(
+            ApplicationProvider.getApplicationContext(), TerminalContrastLevel.HARDER);
+        assertNotEquals(softer, dflt);
+        assertNotEquals(dflt, harder);
+        assertNotEquals(softer, harder);
+        // Stable for the same inputs, or every resume would look like a change.
+        assertEquals(dflt, MaterialTerminalColorScheme.signature(
+            ApplicationProvider.getApplicationContext(), TerminalContrastLevel.DEFAULT));
     }
 
     private static int color(Properties properties, String key) {
