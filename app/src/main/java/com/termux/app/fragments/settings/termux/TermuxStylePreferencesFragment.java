@@ -69,6 +69,7 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
             });
         }
         configureDockPreferencePresentation();
+        configureTerminalContrastPreference();
         updateDockBlurAvailability();
     }
 
@@ -83,6 +84,38 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
             LauncherIconPackPreferenceController.configure(this, context);
         }
         updateDockBlurAvailability();
+        configureTerminalContrastPreference();
+    }
+
+    private void configureTerminalContrastPreference() {
+        androidx.preference.ListPreference contrast = findPreference("terminal_contrast_level");
+        androidx.preference.SwitchPreferenceCompat dynamic =
+            findPreference("terminal_dynamic_colors_enabled");
+        if (contrast == null || dynamic == null) return;
+        boolean enabled = dynamic.isChecked();
+        contrast.setEnabled(enabled);
+        updateTerminalContrastSummary(contrast, enabled);
+        contrast.setOnPreferenceChangeListener((preference, value) -> {
+            contrast.setValue(String.valueOf(value));
+            updateTerminalContrastSummary(contrast, true);
+            return true;
+        });
+        dynamic.setOnPreferenceChangeListener((preference, value) -> {
+            boolean on = Boolean.TRUE.equals(value);
+            contrast.setEnabled(on);
+            updateTerminalContrastSummary(contrast, on);
+            return true;
+        });
+    }
+
+    private void updateTerminalContrastSummary(@NonNull androidx.preference.ListPreference contrast,
+                                               boolean enabled) {
+        if (!enabled) {
+            contrast.setSummary(R.string.settings_terminal_contrast_disabled);
+            return;
+        }
+        String label = contrast.getEntry() == null ? "Default" : contrast.getEntry().toString();
+        contrast.setSummary(getString(R.string.settings_terminal_contrast_summary, label));
     }
 
     private void updateDockBlurAvailability() {
@@ -395,6 +428,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         if (key == null)
             return;
         switch (key) {
+            case "terminal_contrast_level":
+                mPreferences.setTerminalContrastLevel(value);
+                scheduleTermuxActivityStylingSync(false);
+                break;
             case "theme_mode":
                 writeTermuxPropertyToProperties(TermuxPropertyConstants.KEY_NIGHT_MODE, value);
                 TermuxThemeUtils.setAppNightMode(value);
@@ -452,6 +489,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         if (key == null)
             return defValue;
         switch (key) {
+            case "terminal_contrast_level":
+                return mPreferences.getTerminalContrastLevel().value;
             case "theme_mode":
                 return TermuxSharedProperties.getNightMode(mContext);
             case "app_launcher_button_count":

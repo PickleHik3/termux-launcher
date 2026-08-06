@@ -29,8 +29,9 @@ public class LauncherExampleConfigsTest {
     private static final Pattern BINDING_DIRECTIVE =
         Pattern.compile("^#\\s?((?:map|unmap)\\s.*)$");
     private static final Pattern FONT_DIRECTIVE = Pattern.compile(
-        "^#\\s?((?:font_family|bold_font|italic_font|bold_italic_font|symbol_map"
-            + "|disable_ligatures|font_features|font_variations|modify_font)\\s.*)$");
+        "^#\\s?((?:font_family|bold_font|italic_font|bold_italic_font|symbol_map|fallback_font"
+            + "|disable_ligatures|font_features|font_variations|modify_font|box_drawing_scale"
+            + "|box_drawing|powerline_symbols)\\s.*)$");
 
     @Test
     public void everyCommentedBindingDirectiveParses() throws Exception {

@@ -27,6 +27,9 @@ public class TermuxShellEnvironment extends AndroidShellEnvironment {
      */
     public static final String ENV_PREFIX = "PREFIX";
 
+    /** Value exported as {@link #ENV_TERM_PROGRAM}, identifying this terminal to capability detectors. */
+    public static final String TERM_PROGRAM_NAME = "termux-launcher";
+
     public TermuxShellEnvironment() {
         super();
         shellCommandShellEnvironment = new TermuxShellCommandShellEnvironment();
@@ -78,6 +81,11 @@ public class TermuxShellEnvironment extends AndroidShellEnvironment {
 
         environment.put(ENV_HOME, TermuxConstants.TERMUX_HOME_DIR_PATH);
         environment.put(ENV_PREFIX, TermuxConstants.TERMUX_PREFIX_DIR_PATH);
+        // Identify the hosting terminal so capability detectors that never query the tty
+        // (chafa's terminal db and everything built on it) can recognize this terminal.
+        environment.put(ENV_TERM_PROGRAM, TERM_PROGRAM_NAME);
+        if (termuxAppEnvironment != null && termuxAppEnvironment.containsKey(TermuxAppShellEnvironment.ENV_TERMUX_VERSION))
+            environment.put(ENV_TERM_PROGRAM_VERSION, termuxAppEnvironment.get(TermuxAppShellEnvironment.ENV_TERMUX_VERSION));
         // If failsafe is not enabled, then we keep default PATH and TMPDIR so that system binaries can be used
         if (!isFailSafe) {
             environment.put(ENV_TMPDIR, TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH);

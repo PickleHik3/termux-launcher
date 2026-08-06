@@ -4,6 +4,10 @@ import android.app.Application;
 import android.os.Build;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.FrameLayout;
+
+import com.termux.R;
+import com.termux.app.terminal.TerminalWindowBar;
 
 import androidx.test.core.app.ApplicationProvider;
 
@@ -67,6 +71,22 @@ public class StatusBarSwipeLayoutTest {
 
         assertFalse(view.onInterceptTouchEvent(event(MotionEvent.ACTION_DOWN, 40f, 40f)));
         assertFalse(view.onInterceptTouchEvent(event(MotionEvent.ACTION_UP, 40f, 40f)));
+    }
+
+    @Test
+    public void gestureStartingInsideWindowBarIsNeverIntercepted() {
+        StatusBarSwipeLayout view = createView();
+        TerminalWindowBar bar = new TerminalWindowBar(view.getContext(), null);
+        bar.setId(R.id.terminal_window_bar);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(160, 30);
+        params.leftMargin = 20;
+        params.topMargin = 30;
+        view.addView(bar, params);
+        bar.layout(20, 30, 180, 60);
+
+        assertFalse(view.onInterceptTouchEvent(event(MotionEvent.ACTION_DOWN, 40f, 40f)));
+        assertFalse(view.onInterceptTouchEvent(event(MotionEvent.ACTION_MOVE, 170f, 40f)));
+        assertFalse(view.onInterceptTouchEvent(event(MotionEvent.ACTION_UP, 170f, 40f)));
     }
 
     @Test

@@ -10,9 +10,13 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.BaseAdapter;
+import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.PopupMenu;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -167,32 +171,120 @@ public final class TerminalSessionBrowser {
             Toast.makeText(activity, R.string.workspace_picker_empty, Toast.LENGTH_SHORT).show();
             return;
         }
-        String[] names = new String[entries.size()];
-        for (int i = 0; i < entries.size(); i++) names[i] = entries.get(i).name;
-        new MaterialAlertDialogBuilder(activity)
+        LinearLayout list = dialogFrame(activity);
+        AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
             .setTitle(R.string.workspace_picker_title)
-            .setItems(names, (dialog, which) -> promptWorkspaceLoadMode(activity, names[which]))
+            .setView(wrapScrolling(list))
             .setNegativeButton(android.R.string.cancel, null)
+            .create();
+        for (com.termux.app.terminal.TerminalWorkspaceStore.Entry entry : entries) {
+            addToFrame(list, workspaceRow(activity, entry.name, dialog));
+        }
+        dialog.show();
+    }
+
+    /** One picker row: the name loads it, the trailing button deletes it. */
+    @NonNull
+    private static View workspaceRow(@NonNull TermuxActivity activity, @NonNull String name,
+                                     @NonNull AlertDialog picker) {
+        int density = Math.round(activity.getResources().getDisplayMetrics().density);
+        LinearLayout row = new LinearLayout(activity);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+
+        TextView label = new TextView(activity);
+        label.setText(name);
+        label.setTextSize(16f);
+        label.setSingleLine(true);
+        label.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+        label.setMinHeight(48 * density);
+        label.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        label.setOnClickListener(v -> {
+            picker.dismiss();
+            promptWorkspaceLoadMode(activity, name);
+        });
+        row.addView(label, new LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        ImageButton delete = new ImageButton(activity);
+        delete.setImageResource(R.drawable.ic_delete_sweep_24);
+        delete.setBackgroundColor(0x00000000);
+        delete.setContentDescription(activity.getString(R.string.workspace_delete_description, name));
+        delete.setOnClickListener(v -> {
+            picker.dismiss();
+            promptWorkspaceDelete(activity, name);
+        });
+        row.addView(delete, new LinearLayout.LayoutParams(40 * density, 40 * density));
+        return row;
+    }
+
+    /** Deleting a workspace file cannot be undone, so it is always confirmed by name. */
+    private static void promptWorkspaceDelete(@NonNull TermuxActivity activity,
+                                              @NonNull String name) {
+        new MaterialAlertDialogBuilder(activity)
+            .setTitle(activity.getString(R.string.workspace_delete_title, name))
+            .setMessage(R.string.workspace_delete_message)
+            .setNegativeButton(android.R.string.cancel,
+                (dialog, which) -> showWorkspacePicker(activity))
+            .setPositiveButton(R.string.workspace_delete_confirm, (dialog, which) -> {
+                try {
+                    activity.deleteWorkspace(name);
+                    Toast.makeText(activity, activity.getString(
+                        R.string.workspace_deleted, name), Toast.LENGTH_SHORT).show();
+                } catch (TerminalWorkspace.WorkspaceException e) {
+                    Toast.makeText(activity, activity.getString(
+                        R.string.workspace_picker_failed, e.getMessage()), Toast.LENGTH_SHORT).show();
+                }
+                showWorkspacePicker(activity);
+            })
             .show();
+    }
+
+    /** Keeps a long workspace list reachable on a short screen. */
+    @NonNull
+    private static View wrapScrolling(@NonNull View content) {
+        ScrollView scroll = new ScrollView(content.getContext());
+        scroll.addView(content, new ScrollView.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return scroll;
     }
 
     private static void promptWorkspaceLoadMode(@NonNull TermuxActivity activity,
                                                 @NonNull String name) {
-        new MaterialAlertDialogBuilder(activity)
+        // Only offer to run commands when the workspace actually carries some. Reading the file
+        // here keeps the offer honest; a workspace saved without capture never shows the box.
+        int commandCount = 0;
+        try {
+            commandCount = new TerminalWorkspaceStore().load(name).commandCount();
+        } catch (TerminalWorkspace.WorkspaceException ignored) {
+            // Loading proper will surface the failure; the checkbox simply stays hidden.
+        }
+        final CheckBox runCommands;
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity)
             .setTitle(name)
-            .setMessage(activity.getString(R.string.workspace_picker_mode_message, name))
+            .setMessage(activity.getString(R.string.workspace_picker_mode_message, name));
+        if (commandCount == 0) {
+            runCommands = null;
+        } else {
+            LinearLayout frame = dialogFrame(activity);
+            runCommands = addCheckBox(frame, activity.getResources().getQuantityString(
+                    R.plurals.workspace_load_run_commands, commandCount, commandCount),
+                activity.getString(R.string.workspace_load_run_commands_summary));
+            builder.setView(frame);
+        }
+        builder
             .setPositiveButton(R.string.workspace_picker_replace,
-                (dialog, which) -> loadWorkspace(activity, name, true))
+                (dialog, which) -> loadWorkspace(activity, name, true, isChecked(runCommands)))
             .setNeutralButton(R.string.workspace_picker_append,
-                (dialog, which) -> loadWorkspace(activity, name, false))
+                (dialog, which) -> loadWorkspace(activity, name, false, isChecked(runCommands)))
             .setNegativeButton(android.R.string.cancel, null)
             .show();
     }
 
     private static void loadWorkspace(@NonNull TermuxActivity activity, @NonNull String name,
-                                      boolean replace) {
+                                      boolean replace, boolean runCommands) {
         try {
-            activity.loadWorkspace(name, replace, false);
+            activity.loadWorkspace(name, replace, runCommands);
             Toast.makeText(activity, activity.getString(R.string.workspace_picker_loaded, name),
                 Toast.LENGTH_SHORT).show();
         } catch (TerminalWorkspace.WorkspaceException e) {
@@ -202,16 +294,71 @@ public final class TerminalSessionBrowser {
     }
 
     private static void promptSave(@NonNull TermuxActivity activity) {
-        TextInputDialogUtils.textInput(activity, R.string.session_browser_workspace_name, null,
-            android.R.string.ok, text -> saveWorkspace(activity, text, false),
-            -1, null, -1, null, null);
+        LinearLayout frame = dialogFrame(activity);
+        EditText nameField = new EditText(activity);
+        nameField.setSingleLine();
+        nameField.setHint(R.string.session_browser_workspace_name);
+        addToFrame(frame, nameField);
+        CheckBox captureCommands = addCheckBox(frame,
+            activity.getString(R.string.workspace_save_capture_commands),
+            activity.getString(R.string.workspace_save_capture_commands_summary));
+        new MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.session_browser_workspace_name)
+            .setView(frame)
+            .setPositiveButton(android.R.string.ok, (dialog, which) -> saveWorkspace(activity,
+                nameField.getText().toString(), false, captureCommands.isChecked()))
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    private static boolean isChecked(@Nullable CheckBox box) {
+        return box != null && box.isChecked();
+    }
+
+    /** A vertical dialog body with the inset a Material dialog expects around its content. */
+    @NonNull
+    private static LinearLayout dialogFrame(@NonNull Context context) {
+        int density = Math.round(context.getResources().getDisplayMetrics().density);
+        LinearLayout frame = new LinearLayout(context);
+        frame.setOrientation(LinearLayout.VERTICAL);
+        frame.setPadding(24 * density, 8 * density, 24 * density, 0);
+        return frame;
+    }
+
+    private static void addToFrame(@NonNull LinearLayout frame, @NonNull View child) {
+        frame.addView(child, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+    }
+
+    /**
+     * An unchecked box with the explanation its consequence needs stacked underneath, since both
+     * of these boxes change what happens to the user's shells rather than just what is stored.
+     */
+    @NonNull
+    private static CheckBox addCheckBox(@NonNull LinearLayout frame, @NonNull String title,
+                                        @NonNull String summary) {
+        Context context = frame.getContext();
+        int density = Math.round(context.getResources().getDisplayMetrics().density);
+        CheckBox box = new CheckBox(context);
+        box.setText(title);
+        addToFrame(frame, box);
+
+        TextView explanation = new TextView(context);
+        explanation.setText(summary);
+        explanation.setTextSize(12f);
+        explanation.setAlpha(0.7f);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.bottomMargin = 8 * density;
+        frame.addView(explanation, params);
+        return box;
     }
 
     private static void saveWorkspace(@NonNull TermuxActivity activity, @Nullable String name,
-                                      boolean overwrite) {
+                                      boolean overwrite, final boolean captureCommands) {
         try {
             TerminalWorkspace workspace = activity.saveWorkspace(name == null ? "" : name,
-                overwrite, false);
+                overwrite, captureCommands);
             Toast.makeText(activity,
                 activity.getString(R.string.session_browser_workspace_saved, workspace.name),
                 Toast.LENGTH_SHORT).show();
@@ -224,7 +371,7 @@ public final class TerminalSessionBrowser {
                     .setMessage(R.string.session_browser_workspace_overwrite_message)
                     .setNegativeButton(android.R.string.cancel, null)
                     .setPositiveButton(R.string.session_browser_overwrite,
-                        (dialog, which) -> saveWorkspace(activity, requested, true))
+                        (dialog, which) -> saveWorkspace(activity, requested, true, captureCommands))
                     .show();
             } else {
                 Toast.makeText(activity, e.getMessage(), Toast.LENGTH_LONG).show();
@@ -285,8 +432,9 @@ public final class TerminalSessionBrowser {
         @Override public Object getItem(int position) { return entryAt(position); }
         @Override public long getItemId(int position) {
             SessionBrowserModel.Session session = entryAt(position);
-            return session == null ? position : session.index;
+            return session == null ? position : session.id;
         }
+        @Override public boolean hasStableIds() { return true; }
 
         @Override
         public View getView(int position, View convertView, ViewGroup parent) {

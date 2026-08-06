@@ -57,7 +57,28 @@ public class LauncherToolRegistryTest {
             assertNotNull(name, tool.category);
             assertTrue(name, tool.hasUiMetadata());
         }
-        assertEquals(57, registry.getUiTools().size());
+        // Bumped from 58 by fonts.pick and fonts.install.
+        assertEquals(60, registry.getUiTools().size());
+    }
+
+    @Test
+    public void sessionRenameAtIndex_requiresIndexBeforeNameAndClaimsNoStroke() {
+        LauncherToolRegistry.ToolMetadata tool = registry.getTool("session.rename_at_index");
+        assertNotNull(tool);
+
+        // Positional invocation fills required arguments in order, so `session.rename_at_index 1
+        // work` has to mean session 1 named "work" and not the reverse.
+        JSONArray required = tool.schema.optJSONArray("required");
+        assertNotNull(required);
+        assertEquals(2, required.length());
+        assertEquals("index", required.optString(0));
+        assertEquals("name", required.optString(1));
+
+        // No default binding: renaming an arbitrary session is a palette action, and Ctrl+Alt+R is
+        // already split between the two rename prompts.
+        assertTrue(tool.defaultBindings.isEmpty());
+        assertEquals(LauncherToolRegistry.ToolExecutor.TERMINAL, tool.executor);
+        assertTrue(tool.hasUiMetadata());
     }
 
     @Test
@@ -68,11 +89,20 @@ public class LauncherToolRegistryTest {
         assertEquals(LauncherToolRegistry.BindingCondition.SPLITS_OFF,
             registry.getTool("clipboard.paste").defaultBindings.get(0).condition);
         assertEquals("ctrl+alt+v", registry.getTool("clipboard.paste").defaultBindings.get(0).stroke);
-        // The rename prompts split Ctrl+Alt+R the same way.
+        // Ctrl+Alt+r renames the window with splits on and the session with them off, while the
+        // shifted Ctrl+Alt+R always renames the session.
         assertEquals(LauncherToolRegistry.BindingCondition.SPLITS_ON,
             registry.getTool("window.rename_prompt").defaultBindings.get(0).condition);
+        assertEquals("ctrl+alt+r",
+            registry.getTool("window.rename_prompt").defaultBindings.get(0).stroke);
+        LauncherToolRegistry.ToolMetadata sessionRename = registry.getTool("session.rename_prompt");
+        assertEquals(2, sessionRename.defaultBindings.size());
+        assertEquals("ctrl+alt+shift+r", sessionRename.defaultBindings.get(0).stroke);
+        assertEquals(LauncherToolRegistry.BindingCondition.ALWAYS,
+            sessionRename.defaultBindings.get(0).condition);
+        assertEquals("ctrl+alt+r", sessionRename.defaultBindings.get(1).stroke);
         assertEquals(LauncherToolRegistry.BindingCondition.SPLITS_OFF,
-            registry.getTool("session.rename_prompt").defaultBindings.get(0).condition);
+            sessionRename.defaultBindings.get(1).condition);
     }
 
     @Test

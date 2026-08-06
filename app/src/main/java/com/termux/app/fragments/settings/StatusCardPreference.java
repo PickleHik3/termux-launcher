@@ -43,7 +43,10 @@ public class StatusCardPreference extends Preference {
     }
 
     public void setStatus(CharSequence label, boolean active) {
-        mStatusLabel = label == null ? "" : label;
+        CharSequence value = label == null ? "" : label;
+        // Skip the no-op rebind: callers refresh on every download progress tick.
+        if (android.text.TextUtils.equals(mStatusLabel, value) && mStatusActive == active) return;
+        mStatusLabel = value;
         mStatusActive = active;
         notifyChanged();
     }

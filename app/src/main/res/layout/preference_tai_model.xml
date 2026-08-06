@@ -88,6 +88,9 @@
                 android:src="@drawable/ic_tune_sliders_24"
                 android:visibility="gone" />
 
+            <!-- cursorVisible=false: Nothing OS (Android 16) briefly paints a ghost insertion
+                 cursor over the last glyph when a button's text is (re)bound while the row is
+                 on screen, which reads as a grey overlay on the label during downloads. -->
             <Button
                 android:id="@+id/tai_model_primary_action"
                 android:layout_width="wrap_content"
@@ -97,6 +100,7 @@
                 android:paddingStart="12dp"
                 android:paddingEnd="12dp"
                 android:contentDescription="@string/termux_ai_model_primary_action_desc"
+                android:cursorVisible="false"
                 android:textAllCaps="false"
                 android:textSize="11.5sp"
                 android:visibility="gone" />

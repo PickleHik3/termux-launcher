@@ -43,6 +43,11 @@ public final class PinnedNotificationsView extends View {
         void onDismissPinned(@NonNull PinnedNotification notification);
     }
 
+    /** A tap anywhere on a pin other than its dismiss control. */
+    public interface OpenListener {
+        void onOpenPinned(@NonNull PinnedNotification notification);
+    }
+
     /** Card height for the contention layout, where the media strip takes the rest of the slot. */
     public static final float CONTENTION_CARD_HEIGHT_DP = 40f;
     private static final float HEADER_HEIGHT_DP = 14f;
@@ -52,13 +57,17 @@ public final class PinnedNotificationsView extends View {
     private final Paint mFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF mRect = new RectF();
     private final List<Rect> mDismissRects = new ArrayList<>();
+    /** Where each pin was drawn, parallel to {@link #mItems}, so a tap can find the one it hit. */
+    private final List<Rect> mItemRects = new ArrayList<>();
     private final PinnedNotificationIconCache mIcons;
 
     private List<PinnedNotification> mItems = Collections.emptyList();
     @Nullable private DismissListener mListener;
+    @Nullable private OpenListener mOpenListener;
     private float mHeaderInsetStart;
     private boolean mCompactCard;
     private int mPressedIndex = -1;
+    private int mPressedOpenIndex = -1;
 
     private int mOnSurface;
     private int mOnSurfaceVariant;
@@ -92,11 +101,16 @@ public final class PinnedNotificationsView extends View {
         mListener = listener;
     }
 
+    public void setOpenListener(@Nullable OpenListener listener) {
+        mOpenListener = listener;
+    }
+
     public void setItems(@NonNull List<PinnedNotification> items) {
         mItems = items.size() > TopPaneSlotMode.MAX_PINNED
             ? new ArrayList<>(items.subList(0, TopPaneSlotMode.MAX_PINNED))
             : items;
         mPressedIndex = -1;
+        mPressedOpenIndex = -1;
         invalidate();
     }
 
@@ -127,6 +141,7 @@ public final class PinnedNotificationsView extends View {
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         mDismissRects.clear();
+        mItemRects.clear();
         if (mItems.isEmpty() || getWidth() <= 0 || getHeight() <= 0) return;
         if (isStacked()) drawStack(canvas);
         else if (mItems.size() == 2) drawTwoCards(canvas);
@@ -143,9 +158,11 @@ public final class PinnedNotificationsView extends View {
     private void drawCard(Canvas canvas, @NonNull PinnedNotification item, int index, float top,
                           float height, boolean singleLineBody) {
         mRect.set(0f, top, getWidth(), top + height);
+        recordItemRect(index, mRect);
         mFillPaint.setShader(null);
         mFillPaint.setStyle(Paint.Style.FILL);
-        mFillPaint.setColor(ColorUtils.setAlphaComponent(mTertiary, 26));
+        mFillPaint.setColor(ColorUtils.setAlphaComponent(mTertiary,
+            mPressedOpenIndex == index ? 46 : 26));
         canvas.drawRoundRect(mRect, dp(8f), dp(8f), mFillPaint);
         mFillPaint.setStyle(Paint.Style.STROKE);
         mFillPaint.setStrokeWidth(dp(1f));
@@ -235,9 +252,11 @@ public final class PinnedNotificationsView extends View {
     private void drawStackRow(Canvas canvas, @NonNull PinnedNotification item, int index, float top,
                               float height) {
         mRect.set(0f, top, getWidth(), top + height);
+        recordItemRect(index, mRect);
         mFillPaint.setShader(null);
         mFillPaint.setStyle(Paint.Style.FILL);
-        mFillPaint.setColor(ColorUtils.setAlphaComponent(mTertiary, 23));
+        mFillPaint.setColor(ColorUtils.setAlphaComponent(mTertiary,
+            mPressedOpenIndex == index ? 43 : 23));
         canvas.drawRoundRect(mRect, dp(6f), dp(6f), mFillPaint);
 
         float icon = dp(13f);
@@ -319,26 +338,59 @@ public final class PinnedNotificationsView extends View {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 mPressedIndex = hitDismiss(event.getX(), event.getY());
-                if (mPressedIndex < 0) return false;
+                // The dismiss control wins the overlap; the rest of the pin opens it.
+                mPressedOpenIndex = mPressedIndex >= 0
+                    ? -1 : hitItem(event.getX(), event.getY());
+                if (mPressedIndex < 0 && mPressedOpenIndex < 0) return false;
                 invalidate();
                 return true;
             case MotionEvent.ACTION_MOVE:
-                return mPressedIndex >= 0;
+                if (mPressedOpenIndex >= 0
+                    && hitItem(event.getX(), event.getY()) != mPressedOpenIndex) {
+                    // A finger that slid off the pin is a scroll or a swipe, not a tap on it.
+                    mPressedOpenIndex = -1;
+                    invalidate();
+                }
+                return mPressedIndex >= 0 || mPressedOpenIndex >= 0;
             case MotionEvent.ACTION_UP: {
-                int index = mPressedIndex;
+                int dismissIndex = mPressedIndex;
+                int openIndex = mPressedOpenIndex;
                 mPressedIndex = -1;
+                mPressedOpenIndex = -1;
                 invalidate();
-                if (index < 0 || hitDismiss(event.getX(), event.getY()) != index) return true;
-                if (mListener != null && index < mItems.size()) {
-                    mListener.onDismissPinned(mItems.get(index));
+                if (dismissIndex >= 0) {
+                    if (hitDismiss(event.getX(), event.getY()) != dismissIndex) return true;
+                    if (mListener != null && dismissIndex < mItems.size()) {
+                        mListener.onDismissPinned(mItems.get(dismissIndex));
+                    }
+                    return true;
+                }
+                if (openIndex < 0 || hitItem(event.getX(), event.getY()) != openIndex) return true;
+                if (mOpenListener != null && openIndex < mItems.size()) {
+                    playSoundEffect(android.view.SoundEffectConstants.CLICK);
+                    mOpenListener.onOpenPinned(mItems.get(openIndex));
                 }
                 return true;
             }
             default:
                 mPressedIndex = -1;
+                mPressedOpenIndex = -1;
                 invalidate();
                 return false;
         }
+    }
+
+    private void recordItemRect(int index, @NonNull RectF bounds) {
+        while (mItemRects.size() <= index) mItemRects.add(new Rect());
+        bounds.round(mItemRects.get(index));
+    }
+
+    /** Which pin contains the point, or -1. Exact bounds: the pins tile, so nothing may grow. */
+    private int hitItem(float x, float y) {
+        for (int i = 0; i < mItemRects.size(); i++) {
+            if (mItemRects.get(i).contains(Math.round(x), Math.round(y))) return i;
+        }
+        return -1;
     }
 
     /** The visual glyphs are 14-20dp; hit rects grow to 40dp, nearest center wins on overlap. */

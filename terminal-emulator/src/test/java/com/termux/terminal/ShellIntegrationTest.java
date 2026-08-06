@@ -52,6 +52,18 @@ public class ShellIntegrationTest extends TerminalTestCase {
         assertTrue(mTerminal.hasShellIntegration());
     }
 
+    public void testCommandLifecycleRunsFromOutputStartUntilExitOrPrompt() {
+        withTerminalSized(4, 4);
+        assertFalse(mTerminal.isShellIntegrationCommandRunning());
+        enterString("\033]133;C\033\\");
+        assertTrue(mTerminal.isShellIntegrationCommandRunning());
+        enterString("\033]133;D;0\033\\");
+        assertFalse(mTerminal.isShellIntegrationCommandRunning());
+        enterString("\033]133;C\033\\");
+        enterString("\033]133;A\033\\");
+        assertFalse(mTerminal.isShellIntegrationCommandRunning());
+    }
+
     public void testFindPromptRowSearchesBothWays() {
         withTerminalSized(4, 4).enterString("\033]133;A\033\\a\r\nb\r\n\033]133;A\033\\c\r\nd");
         assertEquals(0, mTerminal.findPromptRow(2, true));
@@ -81,6 +93,7 @@ public class ShellIntegrationTest extends TerminalTestCase {
         withTerminalSized(4, 4).enterString("\033]133;A\033\\a\033]133;D;3\033\\");
         mTerminal.reset();
         assertFalse(mTerminal.hasShellIntegration());
+        assertFalse(mTerminal.isShellIntegrationCommandRunning());
         assertEquals(TerminalEmulator.COMMAND_EXIT_CODE_UNKNOWN, mTerminal.getLastCommandExitCode());
     }
 

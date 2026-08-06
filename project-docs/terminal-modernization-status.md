@@ -1,6 +1,6 @@
 # Terminal modernization status
 
-Status: delivered feature record, updated 2026-07-28.
+Status: delivered feature record, updated 2026-08-03.
 
 This is the engineering entry point for the Kitty-inspired terminal work. The public, task-oriented
 documentation is [`../docs/en/Terminal_Modernization.md`](../docs/en/Terminal_Modernization.md).
@@ -18,7 +18,7 @@ scope.
 | Pane layouts | `stack`, `grid`, `tall`, `fat`, `horizontal`, and `vertical`; equalize; geometric rotation; move focused pane to an outer edge; retained per-window layout policy that re-tiles on split/close, plus `pane.next_layout` cycling (`Ctrl+Alt+L`) | [`plans/automatic-pane-layouts.md`](plans/automatic-pane-layouts.md) |
 | Session browser | Searchable session/window/pane hierarchy; create, activate, clone with CWD, rename, close, and save workspace | [`plans/session-browser.md`](plans/session-browser.md) |
 | Terminal protocols | Extended underlines and color, safe OSC 8, cursor trail, OSC 133, Kitty keyboard protocol, multiple cursors, Kitty graphics through Tier 2 core (PNG + raw RGB/RGBA with zlib, stored images, placements, crop, z-index, delete forms) | [`plans/kitty-protocol-features.md`](plans/kitty-protocol-features.md) |
-| Fonts and shaping | Native-font compatibility, four real faces, grapheme-aware Canvas shaping, symbol maps, ligature policy, OpenType features, variable axes, and bounded metrics | [`plans/fonts-and-shaping.md`](plans/fonts-and-shaping.md) |
+| Fonts and shaping | Native-font compatibility, four real faces, grapheme-aware Canvas shaping, symbol maps (named or not), ordered `fallback_font` chain, ligature policy, OpenType features, variable axes, bounded metrics, geometric box/block/braille/Powerline rendering, `fonts.d` drop-in autoload, and the in-app font picker | [`plans/fonts-and-shaping.md`](plans/fonts-and-shaping.md) |
 | Robustness and observability | Parser size limits and fuzzing, renderer/window timing, allocation/GC counters, and a non-focusable key inspector | [`plans/kitty-protocol-features.md`](plans/kitty-protocol-features.md) |
 
 The original feasibility study is
@@ -32,9 +32,13 @@ All terminal-modernization user files live under `~/.termux/` in both package ed
 | Path | Contract |
 |---|---|
 | `~/.termux/termux-launcher-bindings.conf` | Optional binding/chord/modal-map overlay |
-| `~/.termux/fonts.conf` | Optional advanced faces, symbol maps, shaping policy, features, axes, and metrics |
-| `~/.termux/font.ttf` | Existing native Termux regular-font contract, retained when `fonts.conf` is absent |
-| `~/.termux/font-italic.ttf` | Existing optional italic-font contract, retained when `fonts.conf` is absent |
+| `~/.termux/fonts.conf` | Optional advanced faces, symbol maps, fallback chain, shaping policy, features, axes, box-drawing policy, and metrics. Read **last**, so it overrides every `fonts.d` fragment |
+| `~/.termux/fonts.d/*.conf` | Optional drop-in fragments, autoloaded in ascending filename order before `fonts.conf`. 32 files, 256 KiB across all of them, which never eats into `fonts.conf`'s own 64 KiB allowance |
+| `~/.termux/fonts.d/10-launcher.conf` | App-managed, written by the in-app font picker. Regenerated in full on every picker action; deleted by **Use font.ttf / Termux:Styling** |
+| `~/.termux/fonts/<family-id>/` | Picker-installed faces (`regular.ttf`, `bold.ttf`, `italic.ttf`, `bold-italic.ttf`) plus the family's `LICENSE.txt` |
+| `~/.termux/fonts/symbols/` | The bundled Symbols Nerd Font Mono, extracted from the APK on first use |
+| `~/.termux/font.ttf` | Existing native Termux regular-font contract, read as the regular face when no font config selects one. **User-owned: the picker never creates, overwrites or deletes it** |
+| `~/.termux/font-italic.ttf` | Existing optional italic-font contract, read as the italic face when no font config selects one. User-owned on the same terms |
 | `~/.termux/launcher/examples/` | App-managed reference copies of every example, refreshed on each app start |
 | `~/.termux/shell-integration/termux-launcher.bash` | App-managed, user-opt-in Bash OSC 133 integration |
 | `~/.termux/shell-integration/termux-launcher.zsh` | App-managed, user-opt-in zsh OSC 133 integration |
@@ -53,6 +57,29 @@ yet have an argument-entry UI.
 - No user configuration preserves existing Termux font and legacy keyboard behavior. The seeded
   `.conf` files ship every directive commented out, so seeding one is behavior-neutral; the keyboard
   layout is deliberately not seeded because a present `layout.xml` replaces the bundled layout.
+- Font configuration has one precedence order and it is stated in the same words everywhere:
+  `fonts.conf` beats `fonts.d/*.conf`, which beat `font.ttf`/Termux:Styling. It is enforced by load
+  order alone — the drop-ins are read first and the existing last-duplicate-wins rule does the rest —
+  rather than by a second merge policy. `fonts.conf` is read outside the drop-in byte budget so no set
+  of fragments can displace it, and nothing in the picker touches that file on any code path.
+- The picker is additive, not a replacement. It writes only its own fragment and its own
+  `~/.termux/fonts/` subtree, so Termux:Styling and hand-written setups keep working and a user can
+  graduate from the picker to `fonts.conf` by copying lines out of the generated file. It writes no
+  legacy `font.ttf`/`font-italic.ttf` mirrors: an earlier revision did, and destroyed a user's own
+  Nerd Font build on a real device. Those two files are read-only input to the loader's legacy
+  fallback now, so installing a family from the picker changes the terminal and nothing else.
+- A family's line metrics set the cell height, so they set how many rows fit. Switching families is
+  therefore a resize as well as a restyle, and a running full-screen TUI can reflow or truncate until
+  it resizes itself. Documented rather than compensated for — `modify_font cell_height` is the knob.
+- The picker's one-tap "Recommended setup" entry was removed at the user's request; the family list is
+  the only install path. `recommended` in the catalog now means "draw a star on this row", and the
+  per-family defaults (icons, ligature policy, features, axes) are applied on any install from the
+  list.
+- Box drawing, blocks, shades, braille and sextants are synthesized by default because adjacent-cell
+  joins are only guaranteed when both cells derive the shared boundary from the same integer
+  expression. `box_drawing font` is the documented escape hatch, and an explicit `symbol_map` always
+  outranks synthesis. Powerline separators default to the font, since a patched Nerd Font draws them
+  as its author intended.
 - Single-pane compatibility mode disables the pane/window layer and restores conditional legacy
   shortcuts such as `Ctrl+Alt+V` for paste.
 - Protocol state belongs to the emulator/session so Activity recreation does not erase it; Android
@@ -86,11 +113,16 @@ The completion state includes:
 - bounded error handling and cleanup checks for malformed fonts, hostile workspace definitions,
   overlong escape sequences, graphics payloads, and link-pool saturation.
 
-The app-wide `:app:testDebugUnitTest` task passes: 598 tests across 92 classes, zero failures.
+The app-wide `:app:testDebugUnitTest` task passes: 769 tests across 109 classes, zero failures,
+zero skips (re-measured 2026-08-04; the growth over the previous 598/92 is mostly the font batch —
+`TerminalFontConfigFilesTest`, `TerminalFontLoaderTest`, `ManagedFontConfigParseTest`,
+`FontCatalogTest`, `FontDownloaderTest`, `FontInstallerTest`, `FontToolsRegistryTest`, plus
+`BoxGeometryTest` and `FallbackFontResolverTest` in `terminal-view`).
 Expect green and treat any failure as a regression. Run `:app:testReleaseUnitTest` too — it was
 outside the old baseline and hid its own failure, and it now passes with one debug-only case skipped.
-`terminal-emulator` (251), `inapp-keyboard` (17), `terminal-view` (15), and `termux-shared` (2) are
-green in both variants as well. Read the counts out of
+`terminal-emulator` (251), `inapp-keyboard` (17), `terminal-view` (43 across 5 classes as of
+2026-08-04, up from 15 with `BoxGeometryTest`, `FallbackFontResolverTest` and the symbol-map
+settings cases), and `termux-shared` (2) are green in both variants as well. Read the counts out of
 `<module>/build/test-results/<task>/*.xml`: Gradle can exit `0` while that XML records failures.
 
 This replaces a long-standing "48 environmental failures across 12 classes" baseline, which was a

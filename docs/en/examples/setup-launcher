@@ -113,7 +113,7 @@ install_shell_configs() {
     log ""
     log "== Fish + Oh My Posh configs =="
     fetch config.fish "$FISH_CONFIG"
-    fetch pure-material.omp.json "$OMP_DIR/pure-material.omp.json"
+    fetch aliens-material.omp.json "$OMP_DIR/aliens-material.omp.json"
     fetch termux-launcher.omp.json "$OMP_DIR/termux-launcher.omp.json"
 
     if command -v fish >/dev/null 2>&1; then

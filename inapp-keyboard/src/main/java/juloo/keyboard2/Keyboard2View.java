@@ -982,8 +982,10 @@ public class Keyboard2View extends View
       // reference so those two AT_MOST contexts resolve to the same desired keyboard height.
       int capReferenceHeight = _heightCapReferencePx > 0
           ? _heightCapReferencePx : heightSize;
+      // The fraction is a hard ceiling on screen share; the user's height scale sizes the rows
+      // under it but must not be able to raise it, or a tall scale starves the terminal.
       float cappedHeight = capReferenceHeight
-          * Math.min(1f, _config.maxKeyboardHeightFraction * _heightScale);
+          * Math.min(1f, _config.maxKeyboardHeightFraction);
       rowHeight = Math.min(rowHeight,
           Math.max(0f, cappedHeight - fixedHeight) / _keyboard.keysHeight);
     }

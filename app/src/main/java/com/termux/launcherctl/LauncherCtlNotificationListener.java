@@ -648,6 +648,63 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         }
     }
 
+    /**
+     * Opens a pin the way tapping it in the shade would: by sending the notification's own
+     * {@code contentIntent}, so the app lands on the screen the notification is about rather than on
+     * whatever it happens to show at launch. Only if there is no such intent — or it has been
+     * cancelled — does the app's plain launcher entry get used.
+     *
+     * <p>Auto-cancelling notifications are cleared afterwards, as the shade does; a pin whose source
+     * is gone would otherwise stay on the pane until it is dismissed by hand.
+     */
+    @Override
+    public boolean openPinned(@NonNull String key) {
+        StatusBarNotification sbn = activeNotification(key);
+        android.app.Notification notification = sbn == null ? null : sbn.getNotification();
+        String packageName = sbn == null
+            ? (mPinned.containsKey(key) ? mPinned.get(key).packageName : null)
+            : sbn.getPackageName();
+        if (notification != null && notification.contentIntent != null) {
+            try {
+                notification.contentIntent.send();
+                if ((notification.flags & android.app.Notification.FLAG_AUTO_CANCEL) != 0) {
+                    dismissPinned(key, true);
+                }
+                return true;
+            } catch (Throwable throwable) {
+                Logger.logWarn(LOG_TAG,
+                    "Pinned notification content intent failed: " + throwable.getMessage());
+            }
+        }
+        if (packageName == null) return false;
+        android.content.Intent launch =
+            getPackageManager().getLaunchIntentForPackage(packageName);
+        if (launch == null) {
+            Logger.logWarn(LOG_TAG, "No way to open " + packageName + " for a pinned notification");
+            return false;
+        }
+        launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(launch);
+            return true;
+        } catch (Throwable throwable) {
+            Logger.logWarn(LOG_TAG, "Cannot open " + packageName + ": " + throwable.getMessage());
+            return false;
+        }
+    }
+
+    @Nullable
+    private StatusBarNotification activeNotification(@NonNull String key) {
+        try {
+            StatusBarNotification[] active = getActiveNotifications(new String[] {key});
+            if (active != null && active.length > 0) return active[0];
+        } catch (Throwable throwable) {
+            Logger.logWarn(LOG_TAG, "Failed to read notification " + key + ": "
+                + throwable.getMessage());
+        }
+        return null;
+    }
+
     private String playbackStateName(int state) {
         switch (state) {
             case PlaybackState.STATE_NONE: return "NONE";

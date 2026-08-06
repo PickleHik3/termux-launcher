@@ -36,21 +36,31 @@ public final class SessionBrowserModel {
     }
 
     public static final class Window {
+        public final long id;
         public final int index;
         public final boolean current;
         /** Index into {@link #panes} of the focused pane; 0 when unknown. */
         public final int activePane;
         @NonNull public final List<Pane> panes;
+        @Nullable public final String label;
 
         public Window(int index, boolean current, int activePane, @NonNull List<Pane> panes) {
+            this(index, index, current, activePane, panes, null);
+        }
+
+        public Window(long id, int index, boolean current, int activePane,
+                      @NonNull List<Pane> panes, @Nullable String label) {
+            this.id = id;
             this.index = index;
             this.current = current;
             this.activePane = activePane;
             this.panes = Collections.unmodifiableList(new ArrayList<>(panes));
+            this.label = emptyToNull(label);
         }
     }
 
     public static final class Session {
+        public final long id;
         public final int index;
         public final boolean current;
         @Nullable public final String name;
@@ -58,6 +68,12 @@ public final class SessionBrowserModel {
 
         public Session(int index, boolean current, @Nullable String name,
                        @NonNull List<Window> windows) {
+            this(index, index, current, name, windows);
+        }
+
+        public Session(long id, int index, boolean current, @Nullable String name,
+                       @NonNull List<Window> windows) {
+            this.id = id;
             this.index = index;
             this.current = current;
             this.name = emptyToNull(name);

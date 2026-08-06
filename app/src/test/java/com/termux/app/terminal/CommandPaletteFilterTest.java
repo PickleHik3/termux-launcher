@@ -163,6 +163,41 @@ public class CommandPaletteFilterTest {
     }
 
     @Test
+    public void appRowWithAChordShowsTheChordRatherThanTheAppMarker() {
+        // shortcutLabel() checks bindings before falling back to the "app" marker, so putting the
+        // resolved stroke in an app row's bindings is the whole of what makes it visible. This is
+        // the regression guard on that ordering.
+        CommandPaletteFilter.Entry bound = entry("app.launch", "Firefox",
+            LauncherToolRegistry.CATEGORY_APPS, Collections.singletonList("ctrl+alt+w"));
+        assertEquals("C-A-w", bound.shortcutLabel());
+
+        CommandPaletteFilter.Entry unbound = entry("app.launch", "Firefox",
+            LauncherToolRegistry.CATEGORY_APPS, Collections.<String>emptyList());
+        assertEquals("app", unbound.shortcutLabel());
+    }
+
+    @Test
+    public void appRowIsFindableByItsChord() {
+        // score() matches an entry's bindings, so a bound app row becomes searchable by chord for
+        // free once the stroke is in the list.
+        List<CommandPaletteFilter.Entry> entries = Collections.singletonList(
+            entry("app.launch", "Firefox", LauncherToolRegistry.CATEGORY_APPS,
+                Collections.singletonList("ctrl+alt+w")));
+
+        assertEquals(1, CommandPaletteFilter.filterAndRank(entries, "ctrl+alt+w").size());
+    }
+
+    @Test
+    public void compactStroke_printsAShiftedLetterAsThatLetterInUpperCase() {
+        // The same shorthand the config file accepts for it, so a row and a `map` line read alike.
+        assertEquals("C-A-R", CommandPaletteFilter.compactStroke("ctrl+alt+shift+r"));
+        assertEquals("C-A-r", CommandPaletteFilter.compactStroke("ctrl+alt+r"));
+        // A named key has no shifted spelling, so shift keeps its own segment.
+        assertEquals("C-A-S-left", CommandPaletteFilter.compactStroke("ctrl+alt+shift+left"));
+        assertEquals("C-A-space>p", CommandPaletteFilter.compactStroke("ctrl+alt+space>p"));
+    }
+
+    @Test
     public void resultsAreImmutable() {
         List<CommandPaletteFilter.Entry> result = CommandPaletteFilter.filterAndRank(sample(), "close");
         try {

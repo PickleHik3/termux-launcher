@@ -51,8 +51,12 @@ import java.util.List;
  */
 public final class CommandPaletteView extends View {
 
-    /** Frequent-action keycaps, per the handoff's default six. */
-    public static final int KEYCAP_COUNT = 6;
+    /**
+     * Frequent-action keycaps. Four rather than the handoff's six: at six, the row only fit by
+     * scaling the caps down until their labels no longer fit inside them, so the strip read as a
+     * crowded band of clipped words instead of four legible shortcuts.
+     */
+    public static final int KEYCAP_COUNT = 4;
 
     public interface Callbacks {
         /** A tap landed on the row at {@code index} in the current row list. */
@@ -60,6 +64,9 @@ public final class CommandPaletteView extends View {
 
         /** A tap landed on the keycap at {@code index} in the frequent-action strip. */
         void onKeycapTapped(int index);
+
+        /** A long press landed on the row at {@code index}: the secondary action for that row. */
+        void onRowLongPressed(int index);
 
         /** A tap landed outside the palette and its strip. */
         void onOutsideTapped();
@@ -148,6 +155,8 @@ public final class CommandPaletteView extends View {
     private static final float CAP_PAD_V = 6f;
     private static final float CAP_RADIUS = 6f;
     private static final float HAIRLINE = 1f;
+    /** Head of the argument row when the caller does not supply one of its own. */
+    private static final String DEFAULT_ARGUMENT_PROMPT = "arg ❯";
     private static final float SPECULAR_RADIUS = 320f;
 
     // Drop shadow, drawn here rather than taken from View elevation: the caster would have to be
@@ -186,6 +195,14 @@ public final class CommandPaletteView extends View {
     private final RectF mFrame = new RectF();
     private final Path mShadowClip = new Path();
     /**
+     * The rounded frame as a clip path. Every body and list fill is a square-cornered drawRect, so
+     * clipping them to a plain rect let anything flush with the frame's bottom paint into the
+     * corner arcs the surface's drawRoundRect leaves empty. Cached because it is rebuilt only when
+     * the animated frame moves, not once per fill.
+     */
+    private final Path mFramePath = new Path();
+    private boolean mFramePathDirty = true;
+    /**
      * Region the overlay is modal over. The view fills the activity so the sprout can start at
      * the space bar, but only this rectangle may swallow touches — everything below it is the
      * in-app keyboard, and taps there have to reach the keys or the palette could never be typed
@@ -222,6 +239,8 @@ public final class CommandPaletteView extends View {
     private int mQueryCursor = Integer.MAX_VALUE;
     private boolean mArgumentMode;
     private String mArgumentPlaceholder = "";
+    /** Prompt drawn at the head of the argument row; capture mode replaces the default. */
+    @NonNull private String mArgumentPrompt = DEFAULT_ARGUMENT_PROMPT;
     private String mArgumentValue = "";
     @Nullable private String mConfirmationText;
     private float mConfirmationLeft;
@@ -232,6 +251,10 @@ public final class CommandPaletteView extends View {
     /** True while the offset is the finger's rather than the focused row's. */
     private boolean mUserScrolled;
     private boolean mDragging;
+    /** Pending long-press callback, or null when none is armed. */
+    @Nullable private Runnable mLongPress;
+    /** Set once a long press has acted, so the following UP does not also tap the row. */
+    private boolean mLongPressFired;
     private float mDownX;
     private float mDownY;
     private float mLastTouchY;
@@ -295,6 +318,7 @@ public final class CommandPaletteView extends View {
                          float stripOffsetPx, float progress) {
         mFrame.set(frame);
         mRadius = radius;
+        mFramePathDirty = true;
         mBodyAlpha = clamp01(bodyAlpha);
         mStripAlpha = clamp01(stripAlpha);
         mStripOffset = stripOffsetPx;
@@ -359,6 +383,13 @@ public final class CommandPaletteView extends View {
      */
     public void setArgumentMode(boolean argumentMode, @NonNull String placeholder,
                                 @NonNull String value) {
+        setArgumentMode(argumentMode, placeholder, value, DEFAULT_ARGUMENT_PROMPT);
+    }
+
+    /** As above, with a prompt of its own: capture mode reads "key ❯" rather than "arg ❯". */
+    public void setArgumentMode(boolean argumentMode, @NonNull String placeholder,
+                                @NonNull String value, @NonNull String prompt) {
+        mArgumentPrompt = prompt;
         mArgumentMode = argumentMode;
         mArgumentPlaceholder = placeholder;
         mArgumentValue = value;
@@ -430,6 +461,7 @@ public final class CommandPaletteView extends View {
 
         drawSurface(canvas);
         if (mBodyAlpha > 0.004f) drawBody(canvas);
+        drawRim(canvas);
         if (mStripAlpha > 0.004f) drawStrip(canvas);
         if (mConfirmationText != null) drawConfirmation(canvas);
     }
@@ -465,8 +497,15 @@ public final class CommandPaletteView extends View {
         canvas.drawRect(mFrame, mFill);
         mFill.setShader(null);
         canvas.restoreToCount(save);
+    }
 
-        // Accent-tinted rim: the palette rim is primary, unlike the keycaps' white hairline.
+    /**
+     * Accent-tinted rim: the palette rim is primary, unlike the keycaps' white hairline. Drawn
+     * after the body, not as part of the surface — the rim belongs to the surface, so it has to
+     * survive the body's fills. Stroked before them, the bottom fade and the last row's focus wash
+     * painted over its bottom segment, which is what made the edge read as a band rather than a rim.
+     */
+    private void drawRim(@NonNull Canvas canvas) {
         mStroke.setColor(ColorUtils.setAlphaComponent(mPrimary, 150));
         float inset = mStroke.getStrokeWidth() / 2f;
         mRect.set(mFrame.left + inset, mFrame.top + inset,
@@ -475,7 +514,24 @@ public final class CommandPaletteView extends View {
     }
 
     private void clipToFrame(@NonNull Canvas canvas) {
-        canvas.clipRect(mFrame);
+        canvas.clipPath(framePath());
+    }
+
+    /**
+     * minSdk is 26 and Canvas has no clipRoundRect, so clipPath is the only option. A
+     * uniform-radius addRoundRect is recognised by Skia as an rrect and clipped analytically, so
+     * this costs about what the existing clipOutPath in the shadow pass does. Hardware rrect clips
+     * are not always antialiased, which can leave the focus wash's corner marginally jaggy —
+     * invisible at its alpha of 28.
+     */
+    @NonNull
+    private Path framePath() {
+        if (mFramePathDirty) {
+            mFramePath.rewind();
+            mFramePath.addRoundRect(mFrame, mRadius, mRadius, Path.Direction.CW);
+            mFramePathDirty = false;
+        }
+        return mFramePath;
     }
 
     /**
@@ -713,8 +769,8 @@ public final class CommandPaletteView extends View {
         mMono.setLetterSpacing(0f);
         float argBaseline = baseline(top, dp(ARG_ROW_H), mMono);
         mMono.setColor(withBodyAlpha(mPrimary, alpha));
-        canvas.drawText("arg ❯", mFrame.left + dp(ROW_PAD_LEFT), argBaseline, mMono);
-        float valueStart = mFrame.left + dp(ROW_PAD_LEFT) + mMono.measureText("arg ❯ ");
+        canvas.drawText(mArgumentPrompt, mFrame.left + dp(ROW_PAD_LEFT), argBaseline, mMono);
+        float valueStart = mFrame.left + dp(ROW_PAD_LEFT) + mMono.measureText(mArgumentPrompt + " ");
         boolean empty = mArgumentValue.isEmpty();
         mMono.setColor(withBodyAlpha(empty ? mMeta : mOnSurface, alpha));
         float enterWidth = mMono.measureText("⏎") + dp(8f);
@@ -764,7 +820,11 @@ public final class CommandPaletteView extends View {
             float labelStart = cap.left + dp(CAP_PAD_H) + mMono.measureText(keycap.glyph) + dp(4f);
             mMono.setTextSize(dp(SIZE_CAP_LABEL));
             mMono.setColor(withBodyAlpha(mCapLabel, alpha));
-            canvas.drawText(keycap.label, labelStart, baseline, mMono);
+            // Clipped to the cap it belongs to: layoutKeycaps may have scaled the caps down to fit
+            // the row, and the text does not scale with them, so an unclipped label ran past its own
+            // border and into the next cap.
+            canvas.drawText(ellipsize(mMono, keycap.label,
+                cap.right - dp(CAP_PAD_H) - labelStart), labelStart, baseline, mMono);
         }
         canvas.restoreToCount(save);
     }
@@ -831,10 +891,13 @@ public final class CommandPaletteView extends View {
                 if (mVelocity != null) mVelocity.clear();
                 else mVelocity = VelocityTracker.obtain();
                 mVelocity.addMovement(event);
+                mLongPressFired = false;
+                scheduleLongPress(mDownX, mDownY);
                 return true;
             case MotionEvent.ACTION_MOVE: {
                 if (mVelocity != null) mVelocity.addMovement(event);
                 float y = event.getY();
+                if (Math.abs(y - mDownY) > mTouchSlop) cancelPendingLongPress();
                 if (!mDragging && Math.abs(y - mDownY) > mTouchSlop
                     && maxScroll() > 0f && inList(mDownX, mDownY))
                     mDragging = true;
@@ -845,20 +908,48 @@ public final class CommandPaletteView extends View {
                 return true;
             }
             case MotionEvent.ACTION_UP:
+                cancelPendingLongPress();
                 if (mDragging) {
                     startFling();
                     return true;
                 }
                 releaseVelocity();
-                handleTap(event.getX(), event.getY());
+                // The long press already acted; releasing must not also launch the row.
+                if (!mLongPressFired) handleTap(event.getX(), event.getY());
+                mLongPressFired = false;
                 return true;
             case MotionEvent.ACTION_CANCEL:
+                cancelPendingLongPress();
+                mLongPressFired = false;
                 mDragging = false;
                 releaseVelocity();
                 return true;
             default:
                 return true;
         }
+    }
+
+    /**
+     * Long press on a row is the palette's one secondary gesture. Posted rather than measured on UP
+     * so it fires while the finger is still down, and cancelled by a drag, an UP or a CANCEL so a
+     * scroll never turns into one.
+     */
+    private void scheduleLongPress(float x, float y) {
+        cancelPendingLongPress();
+        if (!inList(x, y)) return;
+        final int index = rowIndexAt(y);
+        if (index < 0 || !mRows.get(index).isSelectable()) return;
+        mLongPress = () -> {
+            mLongPress = null;
+            mLongPressFired = true;
+            if (mCallbacks != null) mCallbacks.onRowLongPressed(index);
+        };
+        postDelayed(mLongPress, ViewConfiguration.getLongPressTimeout());
+    }
+
+    private void cancelPendingLongPress() {
+        if (mLongPress != null) removeCallbacks(mLongPress);
+        mLongPress = null;
     }
 
     /** Whether the palette owns this point, or it belongs to whatever is underneath. */
@@ -889,16 +980,20 @@ public final class CommandPaletteView extends View {
             mCallbacks.onOutsideTapped();
             return;
         }
-        if (y < listTop() || y > listBottom()) return;
+        int index = rowIndexAt(y);
+        if (index >= 0 && mRows.get(index).isSelectable()) mCallbacks.onRowTapped(index);
+    }
+
+    /** Row under {@code y} in the scrolled list, or -1 when the point is outside it. */
+    private int rowIndexAt(float y) {
+        if (y < listTop() || y > listBottom()) return -1;
         float rowY = listTop() - mScrollOffset;
         for (int i = 0; i < mRows.size(); i++) {
             float height = rowHeight(i);
-            if (y >= rowY && y < rowY + height) {
-                if (mRows.get(i).isSelectable()) mCallbacks.onRowTapped(i);
-                return;
-            }
+            if (y >= rowY && y < rowY + height) return i;
             rowY += height;
         }
+        return -1;
     }
 
     /** @return true when the offset actually moved, so a fling knows it has not hit an edge. */

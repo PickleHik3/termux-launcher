@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        app:key="fonts_setup_category"
+        app:title="@string/termux_fonts_setup_title">
+        <com.termux.app.fragments.settings.StatusCardPreference
+            app:key="fonts_status"
+            app:title="@string/termux_fonts_status_title"
+            app:persistent="false"
+            app:selectable="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:key="fonts_tuning_category"
+        app:title="@string/termux_fonts_tuning_title">
+        <SwitchPreferenceCompat
+            app:key="nerd_icons"
+            app:title="@string/termux_fonts_nerd_icons_title"
+            app:summary="@string/termux_fonts_nerd_icons_summary"
+            app:defaultValue="true"
+            app:iconSpaceReserved="false" />
+        <Preference
+            app:key="fonts_ligatures"
+            app:title="@string/termux_fonts_ligatures_title"
+            app:persistent="false"
+            app:iconSpaceReserved="false" />
+        <Preference
+            app:key="fonts_weight"
+            app:title="@string/termux_fonts_weight_title"
+            app:persistent="false"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:key="fonts_families_category"
+        app:title="@string/termux_fonts_families_title" />
+
+    <PreferenceCategory
+        app:key="fonts_manual_category"
+        app:title="@string/termux_fonts_manual_title">
+        <Preference
+            app:key="fonts_use_font_ttf"
+            app:title="@string/termux_fonts_use_font_ttf_title"
+            app:summary="@string/termux_fonts_use_font_ttf_summary"
+            app:persistent="false"
+            app:iconSpaceReserved="false" />
+        <Preference
+            app:key="fonts_power_user_hint"
+            app:title="@string/termux_fonts_power_user_title"
+            app:summary="@string/termux_fonts_power_user_summary"
+            app:persistent="false"
+            app:selectable="false"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+</PreferenceScreen>

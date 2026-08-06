@@ -19,11 +19,29 @@ import java.util.regex.Pattern;
 
 import juloo.keyboard2.Keyboard2View;
 
-/** Persisted swatches and role assignments for the per-key keyboard color editor. */
+/**
+ * Persisted swatches and role assignments for the per-key keyboard color editor.
+ *
+ * <p>Every swatch slot is in one of two states:
+ * <ul>
+ *   <li><b>dynamic</b> — no color is stored. The slot is resolved from the host's live Material
+ *       roles ({@link InAppKeyboardPaletteFactory#defaultEditorSwatches}) on every load and on
+ *       every {@link #refreshDynamicSwatches}, so it follows the system theme and wallpaper.</li>
+ *   <li><b>pinned</b> — an explicit ARGB value is stored and never changes with the wallpaper.
+ *       A slot becomes pinned only through a manual assignment
+ *       ({@link #pinSwatch}/{@link #setSwatch}) or a palette import
+ *       ({@link #importBasePalette}, {@link #importBase16}, {@link #importTinted8}).</li>
+ * </ul>
+ * Editing per-key role assignments ({@link #paint}) never pins anything, so the common case keeps
+ * following the Material theme.
+ */
 public final class InAppKeyboardColorScheme {
 
     public static final int BASE16_COLOR_COUNT = 16;
     public static final int BASE24_COLOR_COUNT = 24;
+    /** Persisted format version. Version 1 (absent field) stored 24 absolute colors. */
+    public static final int SCHEMA_VERSION = 2;
+    private static final int LEGACY_SCHEMA_VERSION = 1;
     private static final Pattern BASE_COLOR_LINE = Pattern.compile(
         "(?im)^\\s*[\\\"']?base([0-1][0-9a-f])[\\\"']?\\s*[:=]\\s*[\\\"']?#?([0-9a-f]{6})(?:[0-9a-f]{2})?[\\\"']?\\s*,?\\s*(?:#.*)?$");
     private static final Pattern TINTED8_COLOR_LINE = Pattern.compile(
@@ -31,6 +49,7 @@ public final class InAppKeyboardColorScheme {
 
     public enum Role { KEY_BACKGROUND, KEY_BORDER, PRIMARY, SECONDARY, SECONDARY_BOTTOM }
 
+    private static final String JSON_SCHEMA_VERSION = "schemaVersion";
     private static final String JSON_SWATCHES = "swatches";
     private static final String JSON_KEYS = "keys";
     private static final String JSON_BASE16_PALETTE = "base16Palette";
@@ -41,33 +60,70 @@ public final class InAppKeyboardColorScheme {
     private static final String JSON_SECONDARY = "secondary";
     private static final String JSON_SECONDARY_BOTTOM = "secondaryBottom";
 
+    /** Currently resolved color of every slot, pinned or dynamic. Always usable. */
     private final int[] mSwatches;
+    /** Last known Material defaults; dynamic slots mirror these. */
+    private final int[] mDynamicDefaults;
+    private final boolean[] mPinned;
     private final Map<String, Assignment> mAssignments = new LinkedHashMap<>();
     private boolean mBase16Palette;
     private String mImportedThemeId = "";
 
-    private InAppKeyboardColorScheme(@NonNull int[] swatches) {
-        mSwatches = swatches.clone();
+    private InAppKeyboardColorScheme(@NonNull int[] materialDefaults) {
+        int[] defaults = normalizeDefaults(materialDefaults);
+        mSwatches = defaults;
+        mDynamicDefaults = defaults.clone();
+        mPinned = new boolean[defaults.length];
+    }
+
+    /**
+     * A palette shorter than the Base24 slot count would leave the editor with missing swatches,
+     * so short arrays are padded by repeating their last color.
+     */
+    @NonNull
+    private static int[] normalizeDefaults(@Nullable int[] materialDefaults) {
+        if (materialDefaults != null && materialDefaults.length >= BASE24_COLOR_COUNT)
+            return materialDefaults.clone();
+        int[] padded = new int[BASE24_COLOR_COUNT];
+        for (int i = 0; i < padded.length; i++) {
+            if (materialDefaults == null || materialDefaults.length == 0)
+                padded[i] = 0xFF000000;
+            else
+                padded[i] = materialDefaults[Math.min(i, materialDefaults.length - 1)];
+        }
+        return padded;
     }
 
     @NonNull
     public static InAppKeyboardColorScheme fromJson(@NonNull Context context, String json) {
-        int[] defaults = InAppKeyboardPaletteFactory.defaultEditorSwatches(context);
-        InAppKeyboardColorScheme scheme = new InAppKeyboardColorScheme(defaults);
+        return fromJson(InAppKeyboardPaletteFactory.defaultEditorSwatches(context), json);
+    }
+
+    /**
+     * Context-free variant used by tests and by callers that already resolved the Material
+     * defaults. {@code materialDefaults} seeds every dynamic slot.
+     */
+    @NonNull
+    public static InAppKeyboardColorScheme fromJson(@NonNull int[] materialDefaults, String json) {
+        InAppKeyboardColorScheme scheme = new InAppKeyboardColorScheme(materialDefaults);
+        int slotCount = scheme.swatchCount();
         if (json == null || json.trim().isEmpty())
             return scheme;
         try {
             JSONObject root = new JSONObject(json);
-            JSONArray swatches = root.optJSONArray(JSON_SWATCHES);
-            if (swatches != null && swatches.length() > 0) {
-                // Older builds stored six colors. Copying the common prefix preserves every old
-                // assignment while the remaining Base16 slots inherit current Material colors.
-                for (int i = 0; i < Math.min(defaults.length, swatches.length()); i++)
-                    scheme.mSwatches[i] = swatches.getInt(i);
-            }
-            JSONObject keys = root.optJSONObject(JSON_KEYS);
             scheme.mBase16Palette = root.optBoolean(JSON_BASE16_PALETTE, false);
             scheme.mImportedThemeId = root.optString(JSON_IMPORTED_THEME_ID, "");
+            int version = root.optInt(JSON_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION);
+            JSONArray swatches = root.optJSONArray(JSON_SWATCHES);
+            if (swatches != null) {
+                if (version <= LEGACY_SCHEMA_VERSION)
+                    scheme.readLegacySwatches(swatches);
+                else
+                    // A schemaVersion from the future is read with the current rules: unknown
+                    // fields are ignored and anything unreadable stays dynamic.
+                    scheme.readVersionedSwatches(swatches);
+            }
+            JSONObject keys = root.optJSONObject(JSON_KEYS);
             if (keys != null) {
                 Iterator<String> ids = keys.keys();
                 while (ids.hasNext()) {
@@ -75,11 +131,11 @@ public final class InAppKeyboardColorScheme {
                     JSONObject value = keys.optJSONObject(id);
                     if (value == null) continue;
                     Assignment assignment = new Assignment(
-                        validIndex(value.optInt(JSON_BACKGROUND, -1), defaults.length),
-                        validIndex(value.optInt(JSON_BORDER, -1), defaults.length),
-                        validIndex(value.optInt(JSON_PRIMARY, -1), defaults.length),
-                        validIndex(value.optInt(JSON_SECONDARY, -1), defaults.length),
-                        validIndex(value.optInt(JSON_SECONDARY_BOTTOM, -1), defaults.length));
+                        validIndex(value.optInt(JSON_BACKGROUND, -1), slotCount),
+                        validIndex(value.optInt(JSON_BORDER, -1), slotCount),
+                        validIndex(value.optInt(JSON_PRIMARY, -1), slotCount),
+                        validIndex(value.optInt(JSON_SECONDARY, -1), slotCount),
+                        validIndex(value.optInt(JSON_SECONDARY_BOTTOM, -1), slotCount));
                     if (!assignment.isEmpty()) scheme.mAssignments.put(id, assignment);
                 }
             }
@@ -89,16 +145,114 @@ public final class InAppKeyboardColorScheme {
         return scheme;
     }
 
+    /**
+     * Version 2 stores dynamic slots as JSON {@code null} and pinned slots as a color. Missing,
+     * null, or non-numeric entries stay dynamic; extra entries are ignored.
+     */
+    private void readVersionedSwatches(@NonNull JSONArray swatches) {
+        for (int i = 0; i < Math.min(mSwatches.length, swatches.length()); i++) {
+            Object value = swatches.opt(i);
+            if (value instanceof Number)
+                pinSwatch(i, ((Number) value).intValue());
+        }
+    }
+
+    /**
+     * Version 1 stored absolute colors with no record of which slots the user actually chose.
+     * An imported palette is exactly the case that should stay fixed, so its colors are pinned;
+     * everything else becomes dynamic and the stored colors are dropped, which is what
+     * dynamic-by-default asks for. Per-key assignments survive either way.
+     */
+    private void readLegacySwatches(@NonNull JSONArray swatches) {
+        if (!mBase16Palette)
+            return;
+        for (int i = 0; i < Math.min(mSwatches.length, swatches.length()); i++) {
+            Object value = swatches.opt(i);
+            if (value instanceof Number)
+                pinSwatch(i, ((Number) value).intValue());
+        }
+    }
+
     private static int validIndex(int value, int count) {
         return value >= 0 && value < count ? value : -1;
     }
 
     public int swatchCount() { return mSwatches.length; }
 
+    /** Resolved color of a slot, whether it is pinned or dynamic. */
     @ColorInt
     public int getSwatch(int index) { return mSwatches[index]; }
 
-    public void setSwatch(int index, @ColorInt int color) { mSwatches[index] = color; }
+    /**
+     * Manual assignment of an explicit color, which pins the slot: it stops following the
+     * Material theme until {@link #unpinSwatch} puts it back.
+     */
+    public void setSwatch(int index, @ColorInt int color) { pinSwatch(index, color); }
+
+    /** Pins a slot to an explicit color. Out-of-range indices are ignored. */
+    public void pinSwatch(int index, @ColorInt int color) {
+        if (index < 0 || index >= mSwatches.length)
+            return;
+        mSwatches[index] = color;
+        mPinned[index] = true;
+    }
+
+    /**
+     * Returns a slot to dynamic and immediately re-resolves it from the last known Material
+     * defaults. Out-of-range indices are ignored.
+     */
+    public void unpinSwatch(int index) {
+        if (index < 0 || index >= mSwatches.length)
+            return;
+        mPinned[index] = false;
+        mSwatches[index] = mDynamicDefaults[index];
+    }
+
+    /** Returns every slot to dynamic. Also clears the imported-palette flag. */
+    public void unpinAllSwatches() {
+        for (int i = 0; i < mPinned.length; i++) {
+            mPinned[i] = false;
+            mSwatches[i] = mDynamicDefaults[i];
+        }
+        mBase16Palette = false;
+        mImportedThemeId = "";
+    }
+
+    /** True when the slot holds an explicit color the user assigned or imported. */
+    public boolean isSwatchPinned(int index) {
+        return index >= 0 && index < mPinned.length && mPinned[index];
+    }
+
+    public boolean hasPinnedSwatches() {
+        for (boolean pinned : mPinned) {
+            if (pinned) return true;
+        }
+        return false;
+    }
+
+    /** True when every slot still follows the system Material theme. */
+    public boolean isFullyDynamic() { return !hasPinnedSwatches(); }
+
+    /**
+     * Re-resolves every dynamic slot from a freshly resolved Material palette; pinned slots keep
+     * their colors. Returns true when any resolved color changed.
+     */
+    public boolean refreshDynamicSwatches(@NonNull int[] materialDefaults) {
+        boolean changed = false;
+        for (int i = 0; i < Math.min(mDynamicDefaults.length, materialDefaults.length); i++) {
+            mDynamicDefaults[i] = materialDefaults[i];
+            if (mPinned[i] || mSwatches[i] == materialDefaults[i])
+                continue;
+            mSwatches[i] = materialDefaults[i];
+            changed = true;
+        }
+        return changed;
+    }
+
+    /** Convenience overload resolving the current host Material roles. */
+    public boolean refreshDynamicSwatches(@NonNull Context context) {
+        return refreshDynamicSwatches(InAppKeyboardPaletteFactory.defaultEditorSwatches(context));
+    }
 
     public boolean hasImportedPalette() { return mBase16Palette; }
 
@@ -131,7 +285,9 @@ public final class InAppKeyboardColorScheme {
             if (!present) return false;
         }
         if (mSwatches.length < colorCount) return false;
-        System.arraycopy(imported, 0, mSwatches, 0, colorCount);
+        // An import is an explicit choice: every filled slot is pinned and the scheme stops
+        // following the wallpaper.
+        for (int i = 0; i < colorCount; i++) pinSwatch(i, imported[i]);
         mBase16Palette = true;
         return true;
     }
@@ -173,7 +329,7 @@ public final class InAppKeyboardColorScheme {
             colors.get("cyan"), colors.get("blue"), colors.get("magenta"),
             colorOr(colors, "red-bright", colors.get("red"))
         };
-        System.arraycopy(imported, 0, mSwatches, 0, imported.length);
+        for (int i = 0; i < imported.length; i++) pinSwatch(i, imported[i]);
         mBase16Palette = true;
         return true;
     }
@@ -256,10 +412,13 @@ public final class InAppKeyboardColorScheme {
     public String toJson() {
         try {
             JSONObject root = new JSONObject();
+            root.put(JSON_SCHEMA_VERSION, SCHEMA_VERSION);
             root.put(JSON_BASE16_PALETTE, mBase16Palette);
             root.put(JSON_IMPORTED_THEME_ID, mImportedThemeId);
             JSONArray swatches = new JSONArray();
-            for (int color : mSwatches) swatches.put(color);
+            // Dynamic slots are stored as null so they re-resolve from the Material theme.
+            for (int i = 0; i < mSwatches.length; i++)
+                swatches.put(mPinned[i] ? (Object) Integer.valueOf(mSwatches[i]) : JSONObject.NULL);
             root.put(JSON_SWATCHES, swatches);
             JSONObject keys = new JSONObject();
             for (Map.Entry<String, Assignment> entry : mAssignments.entrySet()) {

@@ -794,8 +794,27 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     public void changeFontSize(boolean increase) {
-        mActivity.getPreferences().changeFontSize(increase);
-        mActivity.getTerminalView().setTextSize(mActivity.getPreferences().getFontSize());
+        TerminalSession current = mActivity.getCurrentSession();
+        boolean scratchpad = current != null && TerminalPaneController
+            .isScratchpadShellName(current.mSessionName);
+        if (scratchpad) {
+            mActivity.getPreferences().changeScratchpadFontSize(increase);
+            TerminalView view = mActivity.getTerminalView();
+            if (view != null) view.setTextSize(mActivity.getPreferences().getScratchpadFontSize());
+        } else {
+            // Zoom pins a per-pane size on the focused pane instead of moving the app-wide
+            // default, so no other pane — in this window or any other — changes with it. Panes
+            // that were never zoomed keep following the default from settings.
+            int size = mActivity.getActivePaneFontSize();
+            if (size <= 0) size = mActivity.getPreferences().getFontSize();
+            size = mActivity.getPreferences().stepFontSize(size, increase);
+            if (!mActivity.setActivePaneFontSize(size)) {
+                // No pane controller (compatibility mode): the single view follows the default.
+                mActivity.getPreferences().setFontSize(size);
+                TerminalView view = mActivity.getTerminalView();
+                if (view != null) view.setTextSize(size);
+            }
+        }
         mActivity.requestTerminalFlushDockGeometryUpdate();
     }
 

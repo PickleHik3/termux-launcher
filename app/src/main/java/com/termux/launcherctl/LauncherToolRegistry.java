@@ -374,6 +374,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_WINDOW_SELECT = "window.select";
     public static final String TOOL_WINDOW_RENAME = "window.rename";
     public static final String TOOL_SESSION_RENAME = "session.rename";
+    public static final String TOOL_SESSION_RENAME_AT_INDEX = "session.rename_at_index";
     public static final String TOOL_TERMINAL_RESET = "terminal.reset";
     public static final String TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT = "terminal.jump_previous_prompt";
     public static final String TOOL_TERMINAL_JUMP_NEXT_PROMPT = "terminal.jump_next_prompt";
@@ -395,6 +396,8 @@ public final class LauncherToolRegistry {
     public static final String TOOL_SESSION_RENAME_PROMPT = "session.rename_prompt";
     public static final String TOOL_TERMINAL_SHARE_SELECTED = "terminal.share_selected";
     public static final String TOOL_CLIPBOARD_COPY_SELECTED = "clipboard.copy_selected";
+    public static final String TOOL_FONTS_PICK = "fonts.pick";
+    public static final String TOOL_FONTS_INSTALL = "fonts.install";
 
     private static LauncherToolRegistry instance;
 
@@ -696,10 +699,10 @@ public final class LauncherToolRegistry {
             CATEGORY_WINDOW, R.string.tool_window_select, 0, null, REQUIRES_SPLITS);
         addUi(map, TOOL_WINDOW_RENAME,
             "Rename the current tmux-style session that holds the windows. Names are"
-                + " capped at 5 characters; an empty name clears the label.",
+                + " capped at 8 characters; an empty name clears the label.",
             schemaObject()
                 .withString("name",
-                    "New name, capped at 5 characters. Empty clears the label.", true)
+                    "New name, capped at 8 characters. Empty clears the label.", true)
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_WINDOW, R.string.tool_window_rename, 0, null, REQUIRES_SPLITS);
@@ -711,6 +714,23 @@ public final class LauncherToolRegistry {
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_SESSION, R.string.tool_session_rename, 0, null, REQUIRES_SESSION);
+        // A separate tool rather than an optional index on session.rename, because it renames a
+        // different object: the tmux-style session that owns the windows — what the palette's and
+        // the panel's session rows display — whereas session.rename renames the focused shell,
+        // which has its own naming rules and no cap.
+        //
+        // index is declared before name so a positional invocation
+        // (`map … session.rename_at_index 1 work`) fills them in the order a reader expects.
+        addUi(map, TOOL_SESSION_RENAME_AT_INDEX,
+            "Rename a tmux-style session by its zero-based index. Names are capped at 8"
+                + " characters; an empty name clears the label.",
+            schemaObject()
+                .withInteger("index", "Zero-based session index", 0, 64, 0, true)
+                .withString("name",
+                    "New name, capped at 8 characters. Empty clears the label.", true)
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_SESSION, R.string.tool_session_rename_at_index, 0, null, REQUIRES_SESSION);
         // Reset clears the emulator state and scrollback; the shell survives.
         // The space bar's north swipe opens this, but that lives in the keyboard layout file
         // as a tool: key rather than in a binding here — see bottom_row.xml.
@@ -763,6 +783,11 @@ public final class LauncherToolRegistry {
                 "ctrl+alt+6", "ctrl+alt+7", "ctrl+alt+8", "ctrl+alt+9"));
         // Prompt variants exist because Ctrl+Alt+R has always opened a dialog. The
         // argument-taking window.rename / session.rename remain the remote path.
+        //
+        // Case is the split: Ctrl+Alt+r renames the window, Ctrl+Alt+R (shifted) renames the shell
+        // session, whatever the layout — so both renames are always reachable and the shifted one
+        // is not a synonym of the other. Ctrl+Alt+r keeps naming the session with splits off, where
+        // there is no window to rename and the stroke would otherwise be dead.
         addUi(map, TOOL_WINDOW_RENAME_PROMPT,
             "Ask for a new name for the current window session.",
             schemaEmpty(),
@@ -775,7 +800,8 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_SESSION, R.string.tool_session_rename_prompt, R.string.tool_desc_session_rename_prompt,
-            Collections.singletonList(Binding.of("ctrl+alt+r", BindingCondition.SPLITS_OFF)),
+            Arrays.asList(Binding.of("ctrl+alt+shift+r"),
+                Binding.of("ctrl+alt+r", BindingCondition.SPLITS_OFF)),
             REQUIRES_SESSION);
 
         // Selection-dependent actions. Availability tracks the live selection, so
@@ -859,6 +885,33 @@ public final class LauncherToolRegistry {
             CATEGORY_TERMINAL, R.string.tool_terminal_jump_next_prompt, R.string.tool_desc_terminal_jump_next_prompt,
             null, REQUIRES_SESSION);
 
+        // Terminal fonts. Appearance rather than a category of their own: a font is what the
+        // terminal looks like, and a one-tool section reads as a mistake in the palette.
+        addUi(map, TOOL_FONTS_PICK,
+            "Open the terminal font picker: bundled catalog of installable families, and the"
+                + " Nerd icon, ligature and weight toggles.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_APPEARANCE, R.string.tool_fonts_pick, R.string.tool_desc_fonts_pick, null);
+        // Required 'id' keeps this out of the palette's tool rows, the same way app.launch's
+        // 'query' does; the picker screen is the interactive front door. MEDIUM and confirmed
+        // because it spends multiple megabytes of the user's data and then changes every glyph
+        // on screen.
+        addUi(map, TOOL_FONTS_INSTALL,
+            "Download, verify and activate a font family from the bundled catalog, writing"
+                + " ~/.termux/fonts.d/10-launcher.conf. Toggles default to the family's own"
+                + " recommended values when omitted.",
+            schemaObject()
+                .withString("id", "Catalog family id, for example maple-mono", true)
+                .withBoolean("nerd_icons", "Map U+E000-U+F8FF to the bundled Nerd Font symbols face",
+                    false, true)
+                .withEnum("ligatures", new String[]{"never", "cursor", "always"}, false, "cursor")
+                .withInteger("weight",
+                    "Regular-face wght for a variable family; 0 keeps the family default",
+                    0, 1000, 0, false)
+                .build(),
+            ToolRisk.MEDIUM, true, ToolExecutor.TERMINAL,
+            CATEGORY_APPEARANCE, R.string.tool_fonts_install, 0, null);
     }
 
     @NonNull

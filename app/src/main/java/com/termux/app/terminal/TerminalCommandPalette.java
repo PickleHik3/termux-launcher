@@ -141,14 +141,17 @@ public final class TerminalCommandPalette {
     }
 
     /**
-     * One row per live session, activating it by index. Uses the session browser's projection
+     * Two rows per live session: activate it, and rename it. Uses the session browser's projection
      * so the palette and the sessions panel always agree on what exists.
+     *
+     * <p>Doubling the section is deliberate. At one to four sessions it costs nothing, and it is
+     * what makes "rename session 2" findable by typing — which is the palette's whole point.
      */
     @NonNull
     static List<CommandPaletteFilter.Entry> buildSessionEntries(@NonNull TermuxActivity activity) {
         List<SessionBrowserModel.Session> sessions = activity.getSessionBrowserSessions();
         if (sessions.isEmpty()) return Collections.emptyList();
-        List<CommandPaletteFilter.Entry> entries = new ArrayList<>(sessions.size());
+        List<CommandPaletteFilter.Entry> entries = new ArrayList<>(sessions.size() * 2);
         for (SessionBrowserModel.Session session : sessions) {
             JSONObject arguments = new JSONObject();
             try {
@@ -172,8 +175,43 @@ public final class TerminalCommandPalette {
                 false,
                 LauncherToolRegistry.ToolRisk.LOW,
                 arguments));
+            entries.add(renameSessionEntry(session.index,
+                activity.getString(R.string.palette_session_rename, title),
+                activity.getString(R.string.palette_session_rename_hint)));
         }
         return entries;
+    }
+
+    /**
+     * The rename row for one session: {@code index} is supplied by the row, {@code name} is the
+     * argument the palette prompts for. Two required arguments are not a problem here —
+     * {@link #promptableArgument} is only consulted for tool projections in {@link #buildEntries},
+     * while a hand-built row sets {@code argumentName} directly and the controller's
+     * {@code withArgument} merges the typed value into the arguments the row already carries.
+     *
+     * <p>Pure and static so the row shape is testable without an activity.
+     */
+    @NonNull
+    static CommandPaletteFilter.Entry renameSessionEntry(int index, @NonNull String title,
+                                                         @NonNull String subtitle) {
+        JSONObject arguments = new JSONObject();
+        try {
+            arguments.put("index", index);
+        } catch (JSONException ignored) {
+        }
+        return new CommandPaletteFilter.Entry(
+            LauncherToolRegistry.TOOL_SESSION_RENAME_AT_INDEX,
+            title,
+            subtitle,
+            CATEGORY_SESSIONS,
+            Collections.<String>emptyList(),
+            true,
+            null,
+            false,
+            LauncherToolRegistry.ToolRisk.LOW,
+            arguments,
+            "name",
+            null);
     }
 
     /**
@@ -181,26 +219,20 @@ public final class TerminalCommandPalette {
      * the palette must never block the main thread on a PackageManager sweep.
      * Without a query the rows are usage-ranked, so the apps actually used land on
      * top; with one, the launcher's own fuzzy ranking decides.
+     *
+     * <p>{@code shortcuts} maps stable id to the chord already bound to that app, so a row can show
+     * what will launch it — and, because {@code score()} matches an entry's bindings, so the row is
+     * findable by typing its chord. Additionally fills {@code iconsOut} with the artwork for the
+     * rows it returns, keyed by {@link CommandPaletteFilter.Entry#iconKey}; only these rows carry
+     * icons, so the map stays as short as the Apps section rather than the whole installed set.
      */
     @NonNull
     static List<CommandPaletteFilter.Entry> buildAppEntries(
-        @NonNull LauncherAppDataProvider provider,
-        @NonNull LauncherUsageStatsStore usageStats,
-        @NonNull String query
-    ) {
-        return buildAppEntries(provider, usageStats, query, null);
-    }
-
-    /**
-     * As above, and additionally fills {@code iconsOut} with the artwork for the rows it returns,
-     * keyed by {@link CommandPaletteFilter.Entry#iconKey}. Only these rows carry icons, so the
-     * map stays as short as the Apps section rather than the whole installed set.
-     */
-    @NonNull
-    static List<CommandPaletteFilter.Entry> buildAppEntries(
+        @NonNull Context context,
         @NonNull LauncherAppDataProvider provider,
         @NonNull LauncherUsageStatsStore usageStats,
         @NonNull String query,
+        @NonNull Map<String, String> shortcuts,
         @Nullable Map<String, Drawable> iconsOut
     ) {
         List<LauncherAppEntry> apps = provider.getAllApps();
@@ -223,12 +255,16 @@ public final class TerminalCommandPalette {
             } catch (JSONException ignored) {
             }
             if (iconsOut != null && app.icon != null) iconsOut.put(stableId, app.icon);
+            String stroke = shortcuts.get(stableId);
             entries.add(new CommandPaletteFilter.Entry(
                 LauncherToolRegistry.TOOL_APP_LAUNCH,
                 app.label,
-                app.appRef.packageName,
+                // The subtitle doubles as the only place the palette says a row is bindable;
+                // drawRow renders the description on the focused row alone, so this costs no rows.
+                context.getString(R.string.palette_app_row_subtitle, app.appRef.packageName),
                 LauncherToolRegistry.CATEGORY_APPS,
-                Collections.<String>emptyList(),
+                stroke == null ? Collections.<String>emptyList()
+                    : Collections.singletonList(stroke),
                 true,
                 null,
                 false,
@@ -239,6 +275,25 @@ public final class TerminalCommandPalette {
                 stableId));
         }
         return entries;
+    }
+
+    /**
+     * Stable id to chord, for every {@code app.launch} binding in the config that resolves against
+     * the provider's warm cache. Resolution goes through the dispatcher's own resolveApp so a row
+     * cannot advertise a stroke that launches a different app; nothing here blocks on a
+     * PackageManager sweep, so a cold cache simply yields no chords until it warms.
+     */
+    @NonNull
+    static Map<String, String> buildAppShortcuts(@NonNull LauncherAppDataProvider provider) {
+        if (!provider.hasLoadedApps()) return Collections.emptyMap();
+        Map<String, String> argumentToStroke = TerminalKeyBindingResolver.getInstance()
+            .getArgumentStrokesForTool(LauncherToolRegistry.TOOL_APP_LAUNCH, "query",
+                TerminalActionDispatcher.getInstance().actionContext());
+        if (argumentToStroke.isEmpty()) return Collections.emptyMap();
+        return CommandPaletteAppShortcuts.index(argumentToStroke, query -> {
+            LauncherAppEntry app = TerminalActionDispatcher.resolveApp(provider, query, false);
+            return app == null ? null : app.appRef.stableId();
+        });
     }
 
     static boolean hasRequiredArguments(@NonNull LauncherToolRegistry.ToolMetadata tool) {

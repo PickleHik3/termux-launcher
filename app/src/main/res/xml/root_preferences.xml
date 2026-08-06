@@ -6,53 +6,61 @@
         app:title="@string/settings_search_hint"
         app:persistent="false" />
 
-    <Preference
-        app:key="appearance"
-        app:icon="@drawable/ic_symbol_palette"
-        app:title="@string/settings_destination_appearance"
-        app:summary="@string/settings_destination_appearance_summary"
-        app:fragment="com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment" />
+    <PreferenceCategory app:title="@string/settings_root_launcher_header">
 
-    <Preference
-        app:key="terminal_status"
-        app:icon="@drawable/ic_symbol_terminal"
-        app:title="@string/settings_destination_terminal_status"
-        app:summary="@string/settings_destination_terminal_status_summary"
-        app:fragment="com.termux.app.fragments.settings.termux.TerminalStatusPreferencesFragment" />
+        <Preference
+            app:key="appearance"
+            app:icon="@drawable/ic_symbol_palette"
+            app:title="@string/settings_destination_appearance"
+            app:summary="@string/settings_destination_appearance_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment" />
 
-    <Preference
-        app:key="keyboard_input"
-        app:icon="@drawable/ic_symbol_keyboard"
-        app:title="@string/settings_destination_keyboard_input"
-        app:summary="@string/settings_destination_keyboard_input_summary"
-        app:fragment="com.termux.app.fragments.settings.termux.KeyboardPreferencesFragment" />
+        <Preference
+            app:key="terminal_status"
+            app:icon="@drawable/ic_symbol_terminal"
+            app:title="@string/settings_destination_terminal_status"
+            app:summary="@string/settings_destination_terminal_status_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.TerminalStatusPreferencesFragment" />
 
-    <Preference
-        app:key="launcher_apps"
-        app:icon="@drawable/ic_symbol_apps"
-        app:title="@string/settings_destination_launcher_apps"
-        app:summary="@string/settings_destination_launcher_apps_summary"
-        app:fragment="com.termux.app.fragments.settings.termux.LauncherPreferencesFragment" />
+        <Preference
+            app:key="keyboard_input"
+            app:icon="@drawable/ic_symbol_keyboard"
+            app:title="@string/settings_destination_keyboard_input"
+            app:summary="@string/settings_destination_keyboard_input_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.KeyboardPreferencesFragment" />
 
-    <Preference
-        app:key="services_permissions"
-        app:icon="@drawable/ic_symbol_admin_panel_settings"
-        app:title="@string/settings_destination_services_permissions"
-        app:summary="@string/settings_destination_services_permissions_summary"
-        app:fragment="com.termux.app.fragments.settings.termux.ServicesPermissionsPreferencesFragment" />
+        <Preference
+            app:key="launcher_apps"
+            app:icon="@drawable/ic_symbol_apps"
+            app:title="@string/settings_destination_launcher_apps"
+            app:summary="@string/settings_destination_launcher_apps_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.LauncherPreferencesFragment" />
 
-    <Preference
-        app:key="advanced_diagnostics"
-        app:icon="@drawable/ic_symbol_bug_report"
-        app:title="@string/settings_destination_advanced_diagnostics"
-        app:summary="@string/settings_destination_advanced_diagnostics_summary"
-        app:fragment="com.termux.app.fragments.settings.termux.AdvancedDiagnosticsPreferencesFragment" />
+    </PreferenceCategory>
 
-    <Preference
-        app:key="about_support"
-        app:icon="@drawable/ic_symbol_info"
-        app:title="@string/settings_destination_about_support"
-        app:summary="@string/settings_destination_about_support_summary"
-        app:fragment="com.termux.app.fragments.settings.AboutSupportPreferencesFragment" />
+    <PreferenceCategory app:title="@string/settings_root_system_info_header">
+
+        <Preference
+            app:key="services_permissions"
+            app:icon="@drawable/ic_symbol_admin_panel_settings"
+            app:title="@string/settings_destination_services_permissions"
+            app:summary="@string/settings_destination_services_permissions_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.ServicesPermissionsPreferencesFragment" />
+
+        <Preference
+            app:key="advanced_diagnostics"
+            app:icon="@drawable/ic_symbol_bug_report"
+            app:title="@string/settings_destination_advanced_diagnostics"
+            app:summary="@string/settings_destination_advanced_diagnostics_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.AdvancedDiagnosticsPreferencesFragment" />
+
+        <Preference
+            app:key="about_support"
+            app:icon="@drawable/ic_symbol_info"
+            app:title="@string/settings_destination_about_support"
+            app:summary="@string/settings_destination_about_support_summary"
+            app:fragment="com.termux.app.fragments.settings.AboutSupportPreferencesFragment" />
+
+    </PreferenceCategory>
 
 </PreferenceScreen>

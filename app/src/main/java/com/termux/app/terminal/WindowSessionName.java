@@ -5,7 +5,12 @@ import androidx.annotation.Nullable;
 /** Naming policy for the app's tmux-style sessions. */
 public final class WindowSessionName {
 
-    public static final int MAX_CODE_POINTS = 5;
+    /**
+     * Two copy mirrors quote this number and must move in lockstep with it:
+     * {@code R.string.title_rename_window_session} and the {@code window.rename} tool
+     * description/argument text in {@code LauncherToolRegistry}.
+     */
+    public static final int MAX_CODE_POINTS = 8;
 
     private WindowSessionName() {}
 

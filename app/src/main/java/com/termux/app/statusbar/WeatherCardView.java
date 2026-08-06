@@ -2,9 +2,11 @@ package com.termux.app.statusbar;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -33,6 +35,8 @@ import java.util.Locale;
  */
 public final class WeatherCardView extends LinearLayout {
 
+    private static final String ATTRIBUTION_URL = "https://open-meteo.com/";
+
     private final int mOnSurface;
     private final int mOnSurfaceVariant;
     private final int mPrimary;
@@ -45,6 +49,7 @@ public final class WeatherCardView extends LinearLayout {
     private final TextView mDayToggle;
     private final TextView mWeekToggle;
     private final LinearLayout mList;
+    private final TextView mAttribution;
 
     private boolean mWeekMode;
     @NonNull private WeatherController.Weather mWeather = new WeatherController.Weather();
@@ -105,6 +110,27 @@ public final class WeatherCardView extends LinearLayout {
         LayoutParams listParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
         listParams.topMargin = dp(8);
         addView(forecastStrip, listParams);
+
+        // Open-Meteo's forecasts are CC BY 4.0, which asks for this credit beside the data itself.
+        mAttribution = new TextView(context);
+        mAttribution.setText(R.string.weather_attribution);
+        mAttribution.setTextColor(mOnSurfaceVariant);
+        mAttribution.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9);
+        mAttribution.setOnClickListener(v -> openAttributionLink());
+        LayoutParams attributionParams = new LayoutParams(
+            LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
+        attributionParams.topMargin = dp(6);
+        addView(mAttribution, attributionParams);
+    }
+
+    private void openAttributionLink() {
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(ATTRIBUTION_URL));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+        } catch (Exception ignored) {
+            // No browser to take it; the credit still reads as text.
+        }
     }
 
     public void bind(@NonNull WeatherController.Weather weather) {
@@ -114,8 +140,11 @@ public final class WeatherCardView extends LinearLayout {
             mCurrent.setText("no-location".equals(weather.error)
                 ? "Weather · location unavailable" : "Weather · unavailable");
             mList.removeAllViews();
+            // Nothing of theirs is on screen to credit.
+            mAttribution.setVisibility(GONE);
             return;
         }
+        mAttribution.setVisibility(VISIBLE);
         mCurrentIcon.setVisibility(VISIBLE);
         mCurrentIcon.setImageResource(WeatherController.iconFor(
             weather.currentCode, weather.currentIsDay));

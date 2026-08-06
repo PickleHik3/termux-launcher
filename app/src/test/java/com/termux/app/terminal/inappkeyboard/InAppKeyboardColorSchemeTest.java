@@ -1,6 +1,7 @@
 package com.termux.app.terminal.inappkeyboard;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -52,6 +53,20 @@ public class InAppKeyboardColorSchemeTest {
             scheme.swatchCount());
         assertEquals(0, scheme.resolvedOverrides().size());
         assertEquals(InAppKeyboardColorScheme.BASE24_COLOR_COUNT, scheme.swatchCount());
+        assertTrue(scheme.isFullyDynamic());
+    }
+
+    @Test
+    public void contextSchemeStartsFromLiveMaterialRolesAndStaysDynamic() {
+        Context context = ApplicationProvider.getApplicationContext();
+        int[] material = InAppKeyboardPaletteFactory.defaultEditorSwatches(context);
+        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context, "");
+
+        for (int i = 0; i < material.length; i++) {
+            assertEquals(material[i], scheme.getSwatch(i));
+            assertFalse(scheme.isSwatchPinned(i));
+        }
+        assertFalse(scheme.refreshDynamicSwatches(context));
     }
 
     @Test
@@ -107,12 +122,14 @@ public class InAppKeyboardColorSchemeTest {
     }
 
     @Test
-    public void migratesLegacySixSwatchesWithoutChangingTheirIndexes() {
+    public void migratesLegacySixSwatchesAsDynamicSlots() {
         Context context = ApplicationProvider.getApplicationContext();
+        int[] material = InAppKeyboardPaletteFactory.defaultEditorSwatches(context);
         InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
             "{\"swatches\":[-16777216,-16777215,-16777214,-16777213,-16777212,-16777211],\"keys\":{}}");
 
         assertEquals(InAppKeyboardColorScheme.BASE24_COLOR_COUNT, scheme.swatchCount());
-        assertEquals(0xFF000002, scheme.getSwatch(2));
+        assertTrue(scheme.isFullyDynamic());
+        assertEquals(material[2], scheme.getSwatch(2));
     }
 }

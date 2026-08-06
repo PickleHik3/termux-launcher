@@ -21,6 +21,7 @@ import com.termux.shared.termux.interact.TextInputDialogUtils;
 import com.termux.app.TermuxActivity;
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
 import com.termux.shared.termux.TermuxConstants;
+import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 import com.termux.app.TermuxService;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.terminal.io.BellHandler;
@@ -154,6 +155,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     public void onTextChanged(@NonNull TerminalSession changedSession) {
         if (!mActivity.isVisible())
             return;
+        // Every screen update is output activity — this is tmux's monitor-activity. Noted above the
+        // early return below: windows other than the active one have no TerminalView, so their
+        // activity would otherwise never register.
+        mActivity.noteShellActivity(changedSession);
         // Split-pane: redraw whichever pane is showing the changed session (may be the
         // non-active pane). Coalesce per-session so two live panes never drop each other's frames.
         if (mActivity.getTerminalViewForSession(changedSession) == null)
@@ -186,12 +191,11 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     public void onTitleChanged(@NonNull TerminalSession updatedSession) {
         if (!mActivity.isVisible())
             return;
-        if (updatedSession != mActivity.getCurrentSession()) {
-            // Only show an indicator for other sessions than the current one, since the user
-            // probably consciously caused the title change to change in the current session
-            // and don't want an annoying notice for that.
-            mActivity.showSessionSwitchIndicator(toToastTitle(updatedSession));
-        }
+        // Deliberately no corner notice here. A title changes whenever a command starts, finishes, or
+        // reports progress, which made the notice fire several times a second for one background job.
+        // A window of this session says so on its own pill; another session's job gets a standing row
+        // in the corner stack. Neither needs a transient copy of the same news.
+        mActivity.syncBackgroundProcessStack();
         termuxSessionListNotifyUpdated();
     }
 
@@ -236,6 +240,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             if (isPluginExecutionCommandWithPendingResult)
                 Logger.logVerbose(LOG_TAG, "The \"" + finishedSession.mSessionName + "\" session will be force finished automatically since result in pending.");
         }
+        mActivity.clearShellAttention(finishedSession.getPid());
         if (mActivity.isVisible() && finishedSession != mActivity.getCurrentSession()) {
             // Show indicator for non-current sessions that exit.
             // Verify that session was not removed before we got told about it finishing:
@@ -275,6 +280,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     @Override
     public void onBell(@NonNull TerminalSession session) {
+        // Marked before the visibility and behaviour gates: the pill is not a sound, and a bell that
+        // rang while the launcher was in the background is exactly the one the user needs to find.
+        mActivity.noteShellAttention(session);
         if (!mActivity.isVisible())
             return;
         switch(mActivity.getProperties().getBellBehaviour()) {
@@ -486,10 +494,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             return false;
         if (service.getTermuxSessionsSize() >= MAX_SESSIONS) {
             // A modal with an OK button interrupts a keyboard-driven flow for something the user
-            // can do nothing about mid-dialog. The window and pane paths already report this as a
-            // toast; match them.
-            mActivity.showToast(mActivity.getString(R.string.title_max_terminals_reached) + " — "
-                + mActivity.getString(R.string.msg_max_terminals_reached), true);
+            // can do nothing about mid-dialog. The window and pane paths report this on the notice
+            // chip; match them. This branch returns before createShellForCwd, so the same event
+            // never produces two presentations.
+            mActivity.showSessionSwitchIndicator(
+                mActivity.getString(R.string.title_max_terminals_reached) + " — "
+                    + mActivity.getString(R.string.msg_max_terminals_reached));
             return false;
         } else {
             if (workingDirectory == null) {
@@ -615,15 +625,34 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     public void checkForFontAndColors() {
+        applyTerminalColors();
+        applyTerminalFonts();
+    }
+
+    /**
+     * Rebuild the terminal palette and hand it to every session.
+     *
+     * <p>Split from the font half because a wallpaper change has no business re-reading font config
+     * from disk and rebuilding typefaces, which is what the combined path did on every refresh.
+     */
+    public void applyTerminalColors() {
         try {
-            File colorsFile = TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE;
+            boolean dynamic = mActivity.getPreferences() != null
+                && mActivity.getPreferences().isTerminalDynamicColorsEnabled();
             final Properties props;
-            if (mActivity.getPreferences() != null && mActivity.getPreferences().isTerminalDynamicColorsEnabled()) {
-                props = MaterialTerminalColorScheme.create(mActivity);
-                mLastMaterialTerminalPaletteSignature = MaterialTerminalColorScheme.signature(mActivity);
+            if (dynamic) {
+                TerminalContrastLevel level = mActivity.getPreferences().getTerminalContrastLevel();
+                props = MaterialTerminalColorScheme.create(mActivity, level);
+                mLastMaterialTerminalPaletteSignature =
+                    MaterialTerminalColorScheme.signature(mActivity, level);
+                // Built here, on the main thread, and handed over as finished values: the writer thread
+                // must not touch the theme or resources, and this way the files describe the same
+                // palette the terminal just took.
+                final Properties exported =
+                    MaterialTerminalColorScheme.createMaterialRoleProperties(mActivity, props);
                 MATERIAL_COLOR_FILE_EXECUTOR.execute(() -> {
                     try {
-                        MaterialTerminalColorScheme.writeMaterialColorFiles(mActivity);
+                        MaterialTerminalColorScheme.writeMaterialColorFiles(exported);
                     } catch (Exception e) {
                         Logger.logStackTraceWithMessage(LOG_TAG,
                             "Error writing material color files", e);
@@ -632,27 +661,36 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             } else {
                 props = new Properties();
                 mLastMaterialTerminalPaletteSignature = 0;
-            }
-            if (mLastMaterialTerminalPaletteSignature == 0 && colorsFile.isFile()) {
-                try (InputStream in = new FileInputStream(colorsFile)) {
-                    props.load(in);
+                File colorsFile = TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE;
+                if (colorsFile.isFile()) {
+                    try (InputStream in = new FileInputStream(colorsFile)) {
+                        props.load(in);
+                    }
                 }
             }
             TerminalColors.COLOR_SCHEME.updateWith(props);
             resetAllSessionColors();
             updateBackgroundColor();
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyTerminalColors()", e);
+        }
+    }
+
+    /** Load the configured faces and apply them to every pane that has a renderer. */
+    public void applyTerminalFonts() {
+        try {
             TerminalFontLoader.Faces faces = TerminalFontLoader.load(TerminalFontConfig.load());
             reportFontErrors(faces.errors);
-            // Apply to every pane that has a renderer so split panes get the nerd font too.
             for (com.termux.view.TerminalView v : mActivity.getTerminalPaneViews()) {
                 if (v.isFontInitialized())
                     v.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic,
                         faces.symbolMaps, faces.ligaturePolicy, faces.fontFeatures,
-                        faces.fontVariations, faces.fontMetricsAdjustments);
+                        faces.fontVariations, faces.fontMetricsAdjustments,
+                        faces.boxDrawingPolicy, fallbackTypefaces(faces));
             }
             mActivity.requestTerminalFlushDockGeometryUpdate();
         } catch (Exception e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Error in checkForFontAndColors()", e);
+            Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyTerminalFonts()", e);
         }
     }
 
@@ -665,10 +703,17 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             for (String error : faces.errors) Logger.logError(LOG_TAG, "Font config: " + error);
             view.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic,
                 faces.symbolMaps, faces.ligaturePolicy, faces.fontFeatures,
-                faces.fontVariations, faces.fontMetricsAdjustments);
+                faces.fontVariations, faces.fontMetricsAdjustments,
+                faces.boxDrawingPolicy, fallbackTypefaces(faces));
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyFontToView()", e);
         }
+    }
+
+    /** The {@code fallback_font} chain in config order, as the renderer's array form. */
+    private static android.graphics.Typeface[] fallbackTypefaces(
+        @NonNull TerminalFontLoader.Faces faces) {
+        return faces.fallbackFonts.toArray(new android.graphics.Typeface[0]);
     }
 
     private void reportFontErrors(@NonNull java.util.List<String> errors) {
@@ -681,18 +726,21 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             R.plurals.terminal_font_config_errors, errors.size(), errors.size()), true);
     }
 
+    /**
+     * Rebuild the palette only if the Material roles or the contrast level actually moved. This is the
+     * path for resume, configuration changes and wallpaper-colour callbacks: they fire whether or not
+     * anything changed, and the work behind them is a full HCT palette build, a recolour and repaint of
+     * every session, and two file writes that open shells watch.
+     */
     public void refreshMaterialTerminalColorsIfNeeded() {
-        refreshMaterialTerminalColors(false);
-    }
-
-    public void refreshMaterialTerminalColors(boolean force) {
-        if (mActivity.getPreferences() == null || !mActivity.getPreferences().isTerminalDynamicColorsEnabled()) {
+        if (mActivity.getPreferences() == null
+            || !mActivity.getPreferences().isTerminalDynamicColorsEnabled()) {
             return;
         }
-        int signature = MaterialTerminalColorScheme.signature(mActivity);
-        if (force || signature != mLastMaterialTerminalPaletteSignature) {
-            checkForFontAndColors();
-        }
+        int signature = MaterialTerminalColorScheme.signature(mActivity,
+            mActivity.getPreferences().getTerminalContrastLevel());
+        if (signature == mLastMaterialTerminalPaletteSignature) return;
+        applyTerminalColors();
     }
 
     private void resetAllSessionColors() {

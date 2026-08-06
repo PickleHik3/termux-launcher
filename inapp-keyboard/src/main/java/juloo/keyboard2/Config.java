@@ -192,7 +192,9 @@ public final class Config
       // Design defaults: 48-56dp portrait / 40-48dp landscape, capped against the full
       // terminal-root height by Keyboard2View's AT_MOST measurement.
       rowHeightPx = dp(resources, landscape ? 44f : 52f);
-      maxKeyboardHeightFraction = landscape ? 0.55f : 0.42f;
+      // Landscape screens are short: anything past ~40% starves the terminal to a line or two
+      // once the status bar, window bar and extra-keys row take their share.
+      maxKeyboardHeightFraction = landscape ? 0.40f : 0.42f;
       horizontalMarginPx = dp(resources, 3f);
       bottomMarginPx = dp(resources, 7f);
       marginTopPx = resources.getDimension(R.dimen.margin_top);

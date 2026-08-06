@@ -2,13 +2,16 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory app:title="@string/settings_terminal_display_header">
+    <PreferenceCategory app:title="@string/settings_surfaces_header">
         <Preference
             app:key="customize_status_surface"
             app:icon="@drawable/ic_symbol_palette"
             app:persistent="false"
             app:title="@string/settings_customize_status_title"
             app:summary="@string/settings_customize_status_summary" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_terminal_display_header">
         <SwitchPreferenceCompat
             app:key="fullscreen"
             app:title="@string/settings_full_screen_title"
@@ -18,11 +21,6 @@
             app:key="terminal_margin_adjustment"
             app:title="@string/settings_adjust_keyboard_title"
             app:summary="@string/settings_adjust_keyboard_summary" />
-        <SwitchPreferenceCompat
-            app:key="show_in_recents_when_not_default"
-            app:title="@string/settings_show_recents_title"
-            app:summary="@string/settings_show_recents_summary"
-            android:defaultValue="true" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_sessions_panes_header">

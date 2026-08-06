@@ -187,22 +187,39 @@ public final class CommandPaletteFilter {
     /**
      * Compacts a binding into the ledger's shorthand: {@code ctrl+alt+k} reads {@code C-A-k},
      * matching the emacs-style notation the mock uses in the shortcut column.
+     *
+     * <p>Shift on a single letter prints as that letter in upper case rather than as its own
+     * {@code S-} segment, so {@code ctrl+alt+shift+r} reads {@code C-A-R} — the same shorthand the
+     * config file accepts for it, and one segment shorter in a column this narrow. Shift on a named
+     * key ({@code C-A-S-left}) has no such spelling and keeps the segment.
      */
     @NonNull
     static String compactStroke(@NonNull String stroke) {
         int condition = stroke.indexOf(" (");
         String bare = condition < 0 ? stroke : stroke.substring(0, condition);
         StringBuilder out = new StringBuilder();
-        for (String part : bare.split("\\+")) {
+        String[] parts = bare.split("\\+");
+        String tail = parts.length == 0 ? "" : parts[parts.length - 1];
+        boolean letterTail = tail.length() == 1 && Character.isLetter(tail.charAt(0));
+        boolean hasShift = false;
+        for (String part : parts) {
+            if ("shift".equalsIgnoreCase(part)) hasShift = true;
+        }
+        boolean shiftedLetter = hasShift && letterTail;
+        for (int i = 0; i < parts.length; i++) {
+            String part = parts[i];
             if (part.isEmpty()) continue;
-            if (out.length() > 0) out.append('-');
             String lower = part.toLowerCase(Locale.US);
+            if (shiftedLetter && "shift".equals(lower)) continue;
+            if (out.length() > 0) out.append('-');
             switch (lower) {
                 case "ctrl": out.append('C'); break;
                 case "alt": out.append('A'); break;
                 case "shift": out.append('S'); break;
                 case "meta": out.append('M'); break;
-                default: out.append(part); break;
+                default:
+                    out.append(shiftedLetter && i == parts.length - 1
+                        ? tail.toUpperCase(Locale.US) : part);
             }
         }
         return out.toString();
