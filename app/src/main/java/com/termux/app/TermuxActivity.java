@@ -5211,7 +5211,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         try {
             if (getTaskId() != -1) {
                 for (android.app.ActivityManager.AppTask appTask : getSystemService(android.app.ActivityManager.class).getAppTasks()) {
-                    if (appTask == null || appTask.getTaskInfo() == null || appTask.getTaskInfo().taskId != getTaskId()) {
+                    if (appTask == null || appTask.getTaskInfo() == null
+                        || taskIdOf(appTask.getTaskInfo()) != getTaskId()) {
                         continue;
                     }
                     appTask.setExcludeFromRecents(excludeFromRecents);
@@ -5221,6 +5222,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } catch (Throwable throwable) {
             Logger.logWarn(LOG_TAG, "Failed to sync recents visibility: " + throwable.getMessage());
         }
+    }
+
+    /**
+     * {@code TaskInfo.taskId} only exists from Q. Reading it below that throws NoSuchFieldError,
+     * which the caller's catch swallows — so the recents policy silently stopped applying on
+     * Android 8 and 9 instead of failing loudly. The pre-Q field carries the same task id.
+     */
+    @SuppressWarnings("deprecation")
+    private static int taskIdOf(@NonNull android.app.ActivityManager.RecentTaskInfo taskInfo) {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? taskInfo.taskId : taskInfo.id;
     }
 
     private char getSuggestionBarSplitChar() {
