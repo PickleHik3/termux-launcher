@@ -1279,9 +1279,19 @@
     <string name="tool_desc_workspace_picker">Pick a saved workspace and load it into the current layout or in place of it.</string>
     <string name="tool_desc_workspace_save_prompt">Prompt for a name and save the current sessions, windows, and panes.</string>
     <string name="workspace_picker_title">Load workspace</string>
+    <string name="workspace_delete_description">Delete workspace %1$s</string>
+    <string name="workspace_delete_title">Delete “%1$s”?</string>
+    <string name="workspace_delete_message">The saved workspace file is removed. Running sessions are not affected.</string>
+    <string name="workspace_delete_confirm">Delete</string>
+    <string name="workspace_deleted">Deleted “%1$s”</string>
     <string name="workspace_picker_empty">No saved workspaces</string>
     <string name="workspace_picker_mode_message">Load “%1$s” in place of the current workspace, or append its windows to it?</string>
     <string name="workspace_picker_replace">Replace</string>
+    <plurals name="workspace_load_run_commands">
+        <item quantity="one">Re-run the 1 saved command</item>
+        <item quantity="other">Re-run the %1$d saved commands</item>
+    </plurals>
+    <string name="workspace_load_run_commands_summary">Each command starts again from the beginning; it is not resumed. Its shell stays open afterwards.</string>
     <string name="workspace_picker_append">Append</string>
     <string name="workspace_picker_loaded">Workspace “%1$s” loaded</string>
     <string name="workspace_picker_failed">Could not load workspace: %1$s</string>
@@ -1396,6 +1406,8 @@
         <item quantity="other">This terminates all %1$d panes in the session.</item>
     </plurals>
     <string name="session_browser_workspace_name">Workspace name</string>
+    <string name="workspace_save_capture_commands">Also save what is running</string>
+    <string name="workspace_save_capture_commands_summary">Records the command in the foreground of each pane so loading can offer to run it again. Idle panes record nothing.</string>
     <string name="session_browser_workspace_saved">Saved workspace %1$s</string>
     <string name="session_browser_workspace_overwrite_title">Replace %1$s?</string>
     <string name="session_browser_workspace_overwrite_message">A workspace with this name already exists.</string>

@@ -10282,6 +10282,90 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The shell a restored pane runs its command through and then hands back to.
+     *
+     * <p>It has to be the user's own shell, because the command was captured from an environment
+     * that shell built: {@code ~/.termux/shell} is the symlink {@code chsh} maintains and Termux's
+     * own {@code login} follows, so it is the same choice a new session gets. Falling back to a
+     * fixed preference order instead would hand a fish user bash, and a command living on a PATH
+     * their config sets up would not be found.
+     *
+     * <p>Deliberately not {@link
+     * com.termux.shared.shell.command.environment.UnixShellEnvironment#LOGIN_SHELL_BINARIES}, whose
+     * first entry is the {@code login} wrapper script rather than a shell: right for starting a
+     * session, but it has no defined {@code -c} behaviour to wrap a command with.
+     */
+    @Nullable
+    private static String wrapperShellPath() {
+        java.io.File configured = new java.io.File(
+            com.termux.shared.termux.TermuxConstants.TERMUX_HOME_DIR_PATH, ".termux/shell");
+        if (configured.canExecute()) {
+            try {
+                return configured.getCanonicalPath();
+            } catch (java.io.IOException ignored) {
+                return configured.getAbsolutePath();
+            }
+        }
+        // Same fallback order as login's, so the shell picked here is the shell it would pick.
+        String binPath = new com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment()
+            .getDefaultBinPath();
+        if (binPath != null && !binPath.isEmpty()) {
+            for (String shellBinary : new String[] {"bash", "sh"}) {
+                java.io.File shellFile = new java.io.File(binPath, shellBinary);
+                if (shellFile.canExecute()) return shellFile.getAbsolutePath();
+            }
+        }
+        java.io.File systemShell = new java.io.File("/system/bin/sh");
+        return systemShell.canExecute() ? systemShell.getAbsolutePath() : null;
+    }
+
+    /** Termux's {@code login}, which sets a session's environment up before exec'ing the shell. */
+    @Nullable
+    private static String loginProgramPath() {
+        String binPath = new com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment()
+            .getDefaultBinPath();
+        if (binPath == null || binPath.isEmpty()) return null;
+        java.io.File login = new java.io.File(binPath, "login");
+        return login.canExecute() ? login.getAbsolutePath() : null;
+    }
+
+    /** True when the shell parses single-quoted strings fish's way rather than POSIX's. */
+    @androidx.annotation.VisibleForTesting
+    static boolean isFishShell(@Nullable String shellPath) {
+        if (shellPath == null) return false;
+        return "fish".equals(new java.io.File(shellPath).getName());
+    }
+
+    /**
+     * Single-quote an argument so a shell reads it back as the one literal word it was.
+     *
+     * <p>The two families disagree inside single quotes. POSIX shells take every character
+     * literally, so a quote has to end the string, be escaped outside it, and start a new one.
+     * Fish instead honours {@code \'} and {@code \\} within the quotes, which means a backslash
+     * must be doubled for fish and must not be for anyone else — and an argument ending in a
+     * backslash would otherwise escape fish's own closing quote and swallow the rest of the line.
+     */
+    @NonNull
+    @androidx.annotation.VisibleForTesting
+    static String shellQuote(@NonNull String argument, boolean fishStyle) {
+        if (fishStyle)
+            return "'" + argument.replace("\\", "\\\\").replace("'", "\\'") + "'";
+        return "'" + argument.replace("'", "'\\''") + "'";
+    }
+
+    /** Rebuild a shell command line from captured argv, quoting every word. */
+    @NonNull
+    @androidx.annotation.VisibleForTesting
+    static String shellCommandLine(@NonNull java.util.List<String> command, boolean fishStyle) {
+        StringBuilder line = new StringBuilder();
+        for (String argument : command) {
+            if (line.length() > 0) line.append(' ');
+            line.append(shellQuote(argument, fishStyle));
+        }
+        return line.toString();
+    }
+
+    /**
      * Recreate a saved workspace. Shell+CWD restore is the default; foreground argv execution is a
      * separate explicit opt-in because workspace files are user-editable executable input.
      */
@@ -10324,8 +10408,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         String executable = null;
                         String[] arguments = null;
                         if (runCommands && !pane.command.isEmpty()) {
-                            executable = pane.command.get(0);
-                            arguments = pane.command.subList(1, pane.command.size()).toArray(new String[0]);
+                            String shell = wrapperShellPath();
+                            if (shell != null) {
+                                // The command is looked up on the PATH the user's own config
+                                // builds, since a captured command frequently lives somewhere only
+                                // that config knows about, and a shell stays behind once it exits
+                                // so a pane restoring `make` does not vanish with the build.
+                                boolean fishStyle = isFishShell(shell);
+                                String script = shellCommandLine(pane.command, fishStyle)
+                                    + "; exec " + shellQuote(shell, fishStyle) + " -l";
+                                String login = loginProgramPath();
+                                if (login != null) {
+                                    // Termux's login ends in `exec "$SHELL" -l "$@"`, so this runs
+                                    // the same shell the same way a normal pane does — and only it
+                                    // sets up LD_PRELOAD for termux-exec and sources
+                                    // termux-login.sh. Passing arguments also skips its motd.
+                                    executable = login;
+                                    arguments = new String[] {"-c", script};
+                                } else {
+                                    executable = shell;
+                                    arguments = new String[] {"-l", "-c", script};
+                                }
+                            } else {
+                                executable = pane.command.get(0);
+                                arguments = pane.command.subList(1, pane.command.size()).toArray(new String[0]);
+                            }
                         }
                         String cwd = pane.cwd;
                         if (cwd == null || cwd.isEmpty()) cwd = getProperties().getDefaultWorkingDirectory();
