@@ -199,6 +199,8 @@
                             android:clipChildren="false"
                             android:clipToPadding="false">
 
+                            <!-- No working indicator here: the window pill's own rim carries it, so
+                                 the state is shown once, at the window it belongs to. -->
                             <com.termux.app.statusbar.StatusBarWidgetView
                                 android:id="@+id/terminal_status_widget_cpu"
                                 android:layout_width="wrap_content"
@@ -237,6 +239,20 @@
                                 android:layout_marginStart="3dp"
                                 android:visibility="gone"
                                 android:contentDescription="@string/termux_status_widget_weather_content_description" />
+
+                            <!-- No dot separator before this: dots punctuate readings, and this is
+                                 an action. match_parent + center keeps the glyph optically centred
+                                 as the row breathes between its collapsed and expanded heights,
+                                 without participating in applyInteractiveStatusRowGeometry(). -->
+                            <androidx.appcompat.widget.AppCompatImageButton
+                                android:id="@+id/terminal_status_settings"
+                                android:layout_width="18dp"
+                                android:layout_height="match_parent"
+                                android:layout_marginStart="4dp"
+                                android:background="@null"
+                                android:scaleType="center"
+                                android:src="@drawable/ic_status_bar_settings"
+                                android:contentDescription="@string/termux_status_settings_content_description" />
                         </LinearLayout>
                     </LinearLayout>
 
@@ -1369,6 +1385,83 @@
 
                     <LinearLayout
                         android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:layout_marginBottom="2dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="64dp"
+                            android:layout_height="wrap_content"
+                            android:text="@string/termux_dock_tuning_terminal_contrast"
+                            android:textColor="?attr/termuxColorOnSurface"
+                            android:textSize="12sp" />
+
+                        <com.google.android.material.button.MaterialButtonToggleGroup
+                            android:id="@+id/dock_tuning_terminal_contrast_group"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            app:selectionRequired="true"
+                            app:singleSelection="true">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/dock_tuning_terminal_contrast_softer"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:insetTop="0dp"
+                                android:insetBottom="0dp"
+                                android:minHeight="34dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="2dp"
+                                android:text="@string/termux_dock_tuning_terminal_contrast_softer"
+                                android:textSize="10.5sp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/dock_tuning_terminal_contrast_default"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:insetTop="0dp"
+                                android:insetBottom="0dp"
+                                android:minHeight="34dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="2dp"
+                                android:text="@string/termux_dock_tuning_terminal_contrast_default"
+                                android:textSize="10.5sp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/dock_tuning_terminal_contrast_harder"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:insetTop="0dp"
+                                android:insetBottom="0dp"
+                                android:minHeight="34dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="2dp"
+                                android:text="@string/termux_dock_tuning_terminal_contrast_harder"
+                                android:textSize="10.5sp" />
+                        </com.google.android.material.button.MaterialButtonToggleGroup>
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/dock_tuning_terminal_contrast_hint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:text="@string/settings_terminal_contrast_disabled"
+                        android:textColor="?attr/termuxColorOnSurfaceVariant"
+                        android:textSize="10.5sp"
+                        android:visibility="gone" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="36dp"
                         android:gravity="center_vertical"
                         android:orientation="horizontal">
@@ -1517,6 +1610,26 @@
             android:focusable="false"
             android:visibility="gone" />
         </RelativeLayout>
+
+        <!-- Landscape-only vertical dock rail. A sibling of the padded content root so it can
+             occupy the display-cutout column the terminal is inset from. updateDockRailView()
+             sizes and populates it. -->
+        <ScrollView
+            android:id="@+id/dock_rail_scroll"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_gravity="start"
+            android:scrollbars="none"
+            android:overScrollMode="never"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/dock_rail_list"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center_horizontal" />
+        </ScrollView>
 
         <!-- Command palette overlay. Last child of the content root so the palette can sprout
              from the in-app keyboard's space bar and land over the terminal without a Dialog

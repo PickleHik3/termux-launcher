@@ -202,6 +202,164 @@ public class TerminalFontConfigTest {
     }
 
     @Test
+    public void namedSymbolMapsResolveTheirOwnFeaturesAndVariations() {
+        TerminalFontConfig.Result result = TerminalFontConfig.parse(
+            "symbol_map name=nerd U+E000-U+E0FF path=/nerd.ttf\n"
+                + "symbol_map U+F0000-U+F0FFF path=/other.ttf\n"
+                + "symbol_map U+2500-U+257F name=box family=Box\n"
+                + "font_features nerd +liga\n"
+                + "font_variations nerd wght=600\n"
+                + "font_features symbols ss01=1\n", true);
+
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+        assertEquals(3, result.symbolMaps.size());
+        assertEquals("nerd", result.symbolMaps.get(0).name);
+        assertEquals("'liga' 1", result.symbolMaps.get(0).features);
+        assertEquals("'wght' 600", result.symbolMaps.get(0).variations);
+        assertNull(result.symbolMaps.get(1).name);
+        assertEquals("'ss01' 1", result.symbolMaps.get(1).features);
+        assertNull(result.symbolMaps.get(1).variations);
+        // A named map without its own settings still inherits the shared symbols target.
+        assertEquals("box", result.symbolMaps.get(2).name);
+        assertEquals("'ss01' 1", result.symbolMaps.get(2).features);
+        assertEquals("'liga' 1", result.namedFeatures("NERD"));
+        assertEquals("'wght' 600", result.namedVariations("nerd"));
+    }
+
+    @Test
+    public void twoSymbolMapsMayShareOneName() {
+        TerminalFontConfig.Result result = TerminalFontConfig.parse(
+            "symbol_map name=nerd U+E000 family=Nerd\n"
+                + "symbol_map name=nerd U+E100 family=Nerd\n"
+                + "font_features nerd +calt\n", true);
+
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+        assertEquals(2, result.symbolMaps.size());
+        assertEquals("'calt' 1", result.symbolMaps.get(0).features);
+        assertEquals("'calt' 1", result.symbolMaps.get(1).features);
+    }
+
+    @Test
+    public void rejectsReservedAndMalformedSymbolMapNames() {
+        TerminalFontConfig.Result result = TerminalFontConfig.parse(
+            "symbol_map name=bold U+E000 family=x\n"
+                + "symbol_map name=symbols U+E100 family=x\n"
+                + "symbol_map name=bad! U+E200 family=x\n"
+                + "symbol_map name= U+E300 family=x\n"
+                + "symbol_map name=a name=b U+E400 family=x\n"
+                + "symbol_map name=ok U+E500 family=x\n", true);
+
+        assertEquals(result.errors.toString(), 5, result.errors.size());
+        assertEquals("line 1: symbol map name 'bold' is a reserved font target",
+            result.errors.get(0));
+        assertEquals("line 5: symbol_map accepts one name= value", result.errors.get(4));
+        assertEquals(1, result.symbolMaps.size());
+        assertEquals("ok", result.symbolMaps.get(0).name);
+    }
+
+    @Test
+    public void rejectsFeatureAndVariationTargetsThatNameNoSymbolMap() {
+        TerminalFontConfig.Result result = TerminalFontConfig.parse(
+            "symbol_map name=nerd U+E000 family=Nerd\n"
+                + "font_features nerd +liga\n"
+                + "font_features ghost +liga\n"
+                + "font_variations ghost wght=500\n"
+                + "font_features 'bad name' +liga\n", true);
+
+        assertEquals(result.errors.toString(), 3, result.errors.size());
+        assertEquals("line 3: font_features names undeclared symbol map 'ghost'",
+            result.errors.get(1));
+        assertEquals("line 4: font_variations names undeclared symbol map 'ghost'",
+            result.errors.get(2));
+        assertNull(result.namedFeatures("ghost"));
+        assertNull(result.namedVariations("ghost"));
+        assertEquals("'liga' 1", result.symbolMaps.get(0).features);
+    }
+
+    @Test
+    public void parsesOrderedFallbackChainAndBoundsItsLength() {
+        StringBuilder config = new StringBuilder("fallback_font family=\"Noto Sans Symbols 2\"\n");
+        for (int i = 1; i <= 8; i++) config.append("fallback_font path=/f").append(i)
+            .append(".ttf\n");
+
+        TerminalFontConfig.Result result = TerminalFontConfig.parse(config.toString(), true);
+
+        assertEquals(result.errors.toString(), 1, result.errors.size());
+        assertEquals("line 9: fallback_font count exceeds 8", result.errors.get(0));
+        assertEquals(8, result.fallbackFonts.size());
+        assertEquals(TerminalFontConfig.SourceType.FAMILY, result.fallbackFonts.get(0).type);
+        assertEquals("Noto Sans Symbols 2", result.fallbackFonts.get(0).value);
+        assertEquals("/f1.ttf", result.fallbackFonts.get(1).value);
+        assertEquals("/f7.ttf", result.fallbackFonts.get(7).value);
+    }
+
+    @Test
+    public void rejectsMalformedFallbackFontsWithoutDiscardingValidOnes() {
+        TerminalFontConfig.Result result = TerminalFontConfig.parse(
+            "fallback_font path=/good.ttf\n"
+                + "fallback_font relative.ttf\n"
+                + "fallback_font\n"
+                + "fallback_font path=/a.ttf path=/b.ttf\n", true);
+
+        assertEquals(result.errors.toString(), 3, result.errors.size());
+        assertEquals(1, result.fallbackFonts.size());
+        assertEquals("/good.ttf", result.fallbackFonts.get(0).value);
+    }
+
+    @Test
+    public void parsesBoxDrawingAndPowerlineDirectivesWithKittyDefaults() {
+        TerminalFontConfig.Result defaults = TerminalFontConfig.parse("", true);
+        assertEquals(TerminalFontConfig.BoxDrawingMode.SYNTHESIZE, defaults.boxDrawing);
+        assertEquals(TerminalFontConfig.PowerlineMode.SYNTHESIZE, defaults.powerlineSymbols);
+        assertEquals(0.001d, defaults.boxDrawingScale.thin, 0d);
+        assertEquals(1d, defaults.boxDrawingScale.light, 0d);
+        assertEquals(1.5d, defaults.boxDrawingScale.heavy, 0d);
+        assertEquals(2d, defaults.boxDrawingScale.veryHeavy, 0d);
+
+        TerminalFontConfig.Result result = TerminalFontConfig.parse(
+            "box_drawing FONT\n"
+                + "box_drawing_scale 0.5,1,2,3\n"
+                + "powerline_symbols synthesize\n", true);
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+        assertEquals(TerminalFontConfig.BoxDrawingMode.FONT, result.boxDrawing);
+        assertEquals(TerminalFontConfig.PowerlineMode.SYNTHESIZE, result.powerlineSymbols);
+        assertEquals(0.5d, result.boxDrawingScale.thin, 0d);
+        assertEquals(3d, result.boxDrawingScale.veryHeavy, 0d);
+
+        TerminalFontConfig.Result spaced = TerminalFontConfig.parse(
+            "box_drawing_scale 0.001, 1 1.5,2\n", true);
+        assertTrue(spaced.errors.toString(), spaced.errors.isEmpty());
+        assertEquals(1.5d, spaced.boxDrawingScale.heavy, 0d);
+    }
+
+    @Test
+    public void rejectsMalformedBoxDrawingAndPowerlineValues() {
+        TerminalFontConfig.Result result = TerminalFontConfig.parse(
+            "box_drawing_scale 0.5,1,2,4\n"
+                + "box_drawing outline\n"
+                + "box_drawing\n"
+                + "box_drawing_scale 1,2,3\n"
+                + "box_drawing_scale 1,2,3,4,5\n"
+                + "box_drawing_scale 0,1,2,3\n"
+                + "box_drawing_scale 1,2,3,9\n"
+                + "box_drawing_scale 1,2,3,x\n"
+                + "powerline_symbols draw\n", true);
+
+        assertEquals(result.errors.toString(), 8, result.errors.size());
+        assertEquals("line 2: box_drawing must be synthesize or font", result.errors.get(0));
+        assertEquals("line 4: expected box_drawing_scale with 4 comma or space separated values",
+            result.errors.get(2));
+        assertEquals("line 6: box_drawing_scale values must be greater than 0 and at most 8",
+            result.errors.get(4));
+        assertEquals("line 9: powerline_symbols must be font or synthesize",
+            result.errors.get(7));
+        assertEquals(TerminalFontConfig.BoxDrawingMode.SYNTHESIZE, result.boxDrawing);
+        assertEquals(TerminalFontConfig.PowerlineMode.SYNTHESIZE, result.powerlineSymbols);
+        // The one valid line stays active.
+        assertEquals(4d, result.boxDrawingScale.veryHeavy, 0d);
+    }
+
+    @Test
     public void missingFileIsAnEmptyBackwardCompatibleConfig() throws Exception {
         java.io.File missing = new java.io.File(
             System.getProperty("java.io.tmpdir"), "missing-font-config-" + System.nanoTime());

@@ -726,18 +726,31 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public float getInAppKeyboardHeightScale() {
-        float defaultValue = getDefaultInAppKeyboardHeightScale();
-        float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
+        float defaultValue = SharedPreferenceUtils.getFloat(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            getDefaultInAppKeyboardHeightScale());
+        if (Float.isNaN(defaultValue) || Float.isInfinite(defaultValue))
+            defaultValue = getDefaultInAppKeyboardHeightScale();
+        if (!isLandscapeOrientation())
+            return clampInAppKeyboardHeightScale(defaultValue);
+        float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE_LANDSCAPE,
             defaultValue);
-        if (Float.isNaN(value) || Float.isInfinite(value)) return defaultValue;
+        if (Float.isNaN(value) || Float.isInfinite(value)) return clampInAppKeyboardHeightScale(defaultValue);
         return clampInAppKeyboardHeightScale(value);
     }
 
     public void setInAppKeyboardHeightScale(float value) {
         SharedPreferenceUtils.setFloat(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE,
+            isLandscapeOrientation()
+                ? TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE_LANDSCAPE
+                : TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE,
             clampInAppKeyboardHeightScale(value), false);
+    }
+
+    private boolean isLandscapeOrientation() {
+        return getContext().getResources().getConfiguration().orientation
+            == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
     }
 
     public static float clampInAppKeyboardHeightScale(float value) {
@@ -970,10 +983,36 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public void changeFontSize(boolean increase) {
-        int fontSize = getFontSize();
-        fontSize += (increase ? 1 : -1) * 2;
-        fontSize = Math.max(MIN_FONTSIZE, Math.min(fontSize, MAX_FONTSIZE));
-        setFontSize(fontSize);
+        setFontSize(stepFontSize(getFontSize(), increase));
+    }
+
+    /** {@code current} stepped one zoom increment, clamped to this display's font size limits. */
+    public int stepFontSize(int current, boolean increase) {
+        int fontSize = current + (increase ? 1 : -1) * 2;
+        return Math.max(MIN_FONTSIZE, Math.min(fontSize, MAX_FONTSIZE));
+    }
+
+    /**
+     * Scratchpad text size is display-local just like the main terminal size. The first read copies
+     * the current main size, making this a migration-free, one-time initialization.
+     */
+    public int getScratchpadFontSize() {
+        String key = TERMUX_APP.KEY_FONTSIZE + "_scratchpad" + getDisplayIdAsString();
+        if (!mSharedPreferences.contains(key)) {
+            SharedPreferenceUtils.setIntStoredAsString(mSharedPreferences, key, getFontSize(), false);
+        }
+        return DataUtils.clamp(SharedPreferenceUtils.getIntStoredAsString(
+            mSharedPreferences, key, getFontSize()), MIN_FONTSIZE, MAX_FONTSIZE);
+    }
+
+    public void setScratchpadFontSize(int value) {
+        String key = TERMUX_APP.KEY_FONTSIZE + "_scratchpad" + getDisplayIdAsString();
+        SharedPreferenceUtils.setIntStoredAsString(mSharedPreferences, key,
+            DataUtils.clamp(value, MIN_FONTSIZE, MAX_FONTSIZE), false);
+    }
+
+    public void changeScratchpadFontSize(boolean increase) {
+        setScratchpadFontSize(getScratchpadFontSize() + (increase ? 2 : -2));
     }
 
     public String getCurrentSession() {
@@ -1205,6 +1244,19 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setTerminalDynamicColorsEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_DYNAMIC_COLORS_ENABLED, value, false);
+    }
+
+    @NonNull
+    public TerminalContrastLevel getTerminalContrastLevel() {
+        return TerminalContrastLevel.from(SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_CONTRAST_LEVEL,
+            TERMUX_APP.DEFAULT_VALUE_TERMINAL_CONTRAST_LEVEL, true));
+    }
+
+    public void setTerminalContrastLevel(@Nullable String value) {
+        TerminalContrastLevel level = TerminalContrastLevel.from(value == null ? "" : value);
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_CONTRAST_LEVEL,
+            level.value, false);
     }
 
     public boolean arePluginErrorNotificationsEnabled(boolean readFromFile) {

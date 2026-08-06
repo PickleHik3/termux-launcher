@@ -17,6 +17,7 @@ This wiki is only for Termux Launcher-specific usage: the launcher surface, shel
 ## Integrations
 
 - [Modern terminal guide](Terminal_Modernization)
+- [Building showcase tools](Building_Terminal_Showcase_Tools)
 - [Shell integration](Launcher_Shell_Integration)
 - [Termux Launcher AI](Termux_Launcher_AI)
 - [TAI / Termux AI](Termux_AI)

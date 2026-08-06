@@ -816,7 +816,8 @@ public final class TerminalView extends View {
             : new TerminalRenderer(textSize, mRenderer.mTypeface, mRenderer.mBoldTypeface,
                 mRenderer.mItalicTypeface, mRenderer.mBoldItalicTypeface, mRenderer.mSymbolMaps,
                 mRenderer.mLigaturePolicy, mRenderer.mFontFeatures, mRenderer.mFontVariations,
-                mRenderer.mFontMetricsAdjustments);
+                mRenderer.mFontMetricsAdjustments, mRenderer.mBoxDrawingPolicy,
+                mRenderer.mFallbackTypefaces);
         updateSize();
     }
 
@@ -871,8 +872,40 @@ public final class TerminalView extends View {
                             TerminalRenderer.FontFeatures fontFeatures,
                             TerminalRenderer.FontVariations fontVariations,
                             TerminalRenderer.FontMetricsAdjustments fontMetricsAdjustments) {
+        setTypeface(regular, bold, italic, boldItalic, symbolMaps, ligaturePolicy, fontFeatures,
+            fontVariations, fontMetricsAdjustments, TerminalRenderer.BoxDrawingPolicy.DEFAULT);
+    }
+
+    /** Apply all font sources, shaping settings, metrics, and box-drawing policy atomically. */
+    public void setTypeface(Typeface regular, Typeface bold, Typeface italic,
+                            Typeface boldItalic, TerminalRenderer.SymbolMap[] symbolMaps,
+                            TerminalRenderer.LigaturePolicy ligaturePolicy,
+                            TerminalRenderer.FontFeatures fontFeatures,
+                            TerminalRenderer.FontVariations fontVariations,
+                            TerminalRenderer.FontMetricsAdjustments fontMetricsAdjustments,
+                            TerminalRenderer.BoxDrawingPolicy boxDrawingPolicy) {
+        setTypeface(regular, bold, italic, boldItalic, symbolMaps, ligaturePolicy, fontFeatures,
+            fontVariations, fontMetricsAdjustments, boxDrawingPolicy, null);
+    }
+
+    /**
+     * Apply every font source, including the ordered fallback chain, as one renderer replacement.
+     *
+     * @param fallbackTypefaces faces tried in order for code points the face chosen for a run has
+     *                          no glyph for, after any {@code symbol_map} match and before
+     *                          Android's own platform fallback.
+     */
+    public void setTypeface(Typeface regular, Typeface bold, Typeface italic,
+                            Typeface boldItalic, TerminalRenderer.SymbolMap[] symbolMaps,
+                            TerminalRenderer.LigaturePolicy ligaturePolicy,
+                            TerminalRenderer.FontFeatures fontFeatures,
+                            TerminalRenderer.FontVariations fontVariations,
+                            TerminalRenderer.FontMetricsAdjustments fontMetricsAdjustments,
+                            TerminalRenderer.BoxDrawingPolicy boxDrawingPolicy,
+                            Typeface[] fallbackTypefaces) {
         mRenderer = new TerminalRenderer(mRenderer.mTextSize, regular, bold, italic, boldItalic,
-            symbolMaps, ligaturePolicy, fontFeatures, fontVariations, fontMetricsAdjustments);
+            symbolMaps, ligaturePolicy, fontFeatures, fontVariations, fontMetricsAdjustments,
+            boxDrawingPolicy, fallbackTypefaces);
         updateSize();
         invalidate();
     }

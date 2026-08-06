@@ -3,9 +3,7 @@ package com.termux.privileged;
 import android.content.Context;
 import android.util.Log;
 
-import java.io.BufferedReader;
 import java.io.FileNotFoundException;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -22,6 +20,8 @@ import java.io.IOException;
 public class ShellBackend implements PrivilegedBackend {
     private static final String TAG = "ShellBackend";
     private static final long COMMAND_TIMEOUT_SECONDS = 30;
+    /** The child is already gone or reaped by the time a pump is awaited, so this is a backstop. */
+    private static final long PUMP_DRAIN_TIMEOUT_MS = 2_000L;
     
     private Context context;
     private boolean isAvailable = false;
@@ -64,7 +64,7 @@ public class ShellBackend implements PrivilegedBackend {
                 hasPermission = false;
                 return false;
             }
-        });
+        }, PrivilegedExecutors.commands());
     }
     
     @Override
@@ -114,7 +114,7 @@ public class ShellBackend implements PrivilegedBackend {
                 Log.e(TAG, "Failed to get installed packages", e);
                 return List.of();
             }
-        });
+        }, PrivilegedExecutors.commands());
     }
     
     @Override
@@ -141,7 +141,7 @@ public class ShellBackend implements PrivilegedBackend {
                 Log.e(TAG, "Failed to install package: " + apkPath, e);
                 return false;
             }
-        });
+        }, PrivilegedExecutors.commands());
     }
     
     @Override
@@ -168,7 +168,7 @@ public class ShellBackend implements PrivilegedBackend {
                 Log.e(TAG, "Failed to uninstall package: " + packageName, e);
                 return false;
             }
-        });
+        }, PrivilegedExecutors.commands());
     }
     
     @Override
@@ -196,7 +196,7 @@ public class ShellBackend implements PrivilegedBackend {
                 Log.e(TAG, "Failed to set component enabled: " + componentName, e);
                 return false;
             }
-        });
+        }, PrivilegedExecutors.commands());
     }
     
     @Override
@@ -217,7 +217,7 @@ public class ShellBackend implements PrivilegedBackend {
                 Log.e(TAG, "Failed to execute command: " + command, e);
                 return "Error: " + e.getMessage();
             }
-        });
+        }, PrivilegedExecutors.commands());
     }
     
     @Override
@@ -274,16 +274,26 @@ public class ShellBackend implements PrivilegedBackend {
         try {
             Process process = new ProcessBuilder(command).start();
 
-            // Wait for process with timeout
+            // Both pipes are drained on their own threads BEFORE anything waits on the process.
+            // Reading them afterwards deadlocks as soon as the child writes more than the pipe
+            // buffer holds: the child blocks on a full pipe while the parent waits for the child.
+            ProcessOutputPump stdout = ProcessOutputPump.start(
+                "privileged-stdout", process.getInputStream());
+            ProcessOutputPump stderr = ProcessOutputPump.start(
+                "privileged-stderr", process.getErrorStream());
+
             boolean finished = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             if (!finished) {
+                // Forcibly killing the child closes its pipes, which is what lets the pumps finish.
                 process.destroyForcibly();
+                stdout.await(PUMP_DRAIN_TIMEOUT_MS);
+                stderr.await(PUMP_DRAIN_TIMEOUT_MS);
                 Log.w(TAG, "Command timed out: " + maskSensitive(logCommand));
                 return "Error: Command timed out";
             }
 
-            String output = readStream(process.getInputStream());
-            String errorOutput = readStream(process.getErrorStream());
+            String output = stdout.await(PUMP_DRAIN_TIMEOUT_MS);
+            String errorOutput = stderr.await(PUMP_DRAIN_TIMEOUT_MS);
 
             int exitCode = process.exitValue();
             if (exitCode != 0) {
@@ -305,19 +315,6 @@ public class ShellBackend implements PrivilegedBackend {
             Log.e(TAG, "Failed to execute shell command: " + maskSensitive(logCommand), e);
             return "Error: " + e.getMessage();
         }
-    }
-
-    private String readStream(java.io.InputStream inputStream) throws IOException {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-        StringBuilder output = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) {
-            if (output.length() > 0) {
-                output.append("\n");
-            }
-            output.append(line);
-        }
-        return output.toString();
     }
 
     private String buildShellCommand(List<String> args) {

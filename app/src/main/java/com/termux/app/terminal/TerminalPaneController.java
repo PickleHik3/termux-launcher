@@ -67,6 +67,7 @@ public class TerminalPaneController {
 
     private static final String STATE_NODE_TYPE = "type";
     private static final String STATE_NODE_SESSION = "session";
+    private static final String STATE_NODE_FONT_SIZE = "font_size";
     private static final String STATE_NODE_ORIENTATION = "orientation";
     private static final String STATE_NODE_WEIGHT_A = "weight_a";
     private static final String STATE_NODE_WEIGHT_B = "weight_b";
@@ -113,6 +114,8 @@ public class TerminalPaneController {
         @Nullable TerminalSession createShell(@Nullable String cwd);
         /** Wire client + font + text size + keep-screen-on onto a freshly created pane view. */
         void configurePaneView(TerminalView view);
+        /** Called after the shell is attached, when per-session view preferences can be selected. */
+        default void configureAttachedPaneView(TerminalView view, TerminalSession session) {}
         /** Kill/remove a shell session from the service. */
         void removeShell(TerminalSession session);
         /** The active pane changed; activity should refresh anything keyed off the current view. */
@@ -161,6 +164,18 @@ public class TerminalPaneController {
          * the pane proportionally where the user left it.
          */
         @Nullable RectF floatFrac;
+        /**
+         * What {@link #floatFrac} was clamped to for the host size it was last laid out against —
+         * a projection onto the current host, not user intent. Transient: never saved or restored,
+         * because remembering a shape the user did not ask for is the ratchet this replaced.
+         */
+        @Nullable transient RectF appliedFloatFrac;
+        /**
+         * This pane's pinned font size, or 0 while it follows the app-wide default. Set the first
+         * time the pane is zoomed (and inherited by panes split off it), never by the default
+         * changing — so zooming one pane can't move any other.
+         */
+        int fontSize;
         Leaf(TerminalSession session) { this.session = session; }
     }
 
@@ -172,6 +187,10 @@ public class TerminalPaneController {
 
     /** A window = one pane tree + which leaf is focused within it. Stable identity (object). */
     public static final class Window {
+        private static final java.util.concurrent.atomic.AtomicLong NEXT_ID =
+            new java.util.concurrent.atomic.AtomicLong(1L);
+        /** Runtime-stable UI identity; independent from the window's mutable list index. */
+        public final long id = NEXT_ID.getAndIncrement();
         Node root;
         Leaf active;
         /**
@@ -243,8 +262,20 @@ public class TerminalPaneController {
     /** Create a new single-pane window around {@code shell} (not shown yet). */
     public Window newWindow(TerminalSession shell) {
         Window w = new Window(new Leaf(shell));
+        // A window opened while another is focused starts at that pane's zoom level.
+        ((Leaf) w.root).fontSize =
+            inheritableFontSize(mActiveWindow == null ? null : mActiveWindow.active);
         mWindows.add(w);
         return w;
+    }
+
+    /**
+     * The font size a pane created from {@code leaf} should start with: the leaf's pinned size,
+     * or 0 (follow the app default) when it has none or is the independently sized scratchpad.
+     */
+    private static int inheritableFontSize(@Nullable Leaf leaf) {
+        if (leaf == null || leaf.fontSize <= 0 || isScratchpadLeaf(leaf)) return 0;
+        return leaf.fontSize;
     }
 
     /** Export one live window without coupling the pane controller to process/CWD discovery. */
@@ -349,6 +380,7 @@ public class TerminalPaneController {
                 floatState.putFloat(STATE_FLOAT_TOP, frac.top);
                 floatState.putFloat(STATE_FLOAT_WIDTH, frac.width());
                 floatState.putFloat(STATE_FLOAT_HEIGHT, frac.height());
+                if (leaf.fontSize > 0) floatState.putInt(STATE_NODE_FONT_SIZE, leaf.fontSize);
                 floats.add(floatState);
             }
             state.putParcelableArrayList(STATE_WINDOW_FLOATS, floats);
@@ -399,6 +431,8 @@ public class TerminalPaneController {
         if (node instanceof Leaf) {
             state.putInt(STATE_NODE_TYPE, NODE_LEAF);
             state.putString(STATE_NODE_SESSION, ((Leaf) node).session.mHandle);
+            if (((Leaf) node).fontSize > 0)
+                state.putInt(STATE_NODE_FONT_SIZE, ((Leaf) node).fontSize);
             return state;
         }
         Split split = (Split) node;
@@ -418,7 +452,10 @@ public class TerminalPaneController {
         if (state.getInt(STATE_NODE_TYPE, NODE_LEAF) == NODE_LEAF) {
             TerminalSession session = sessionsByHandle.get(state.getString(STATE_NODE_SESSION));
             // A terminal may appear only once across the restored tree set.
-            return session == null || windowOf(session) != null ? null : new Leaf(session);
+            if (session == null || windowOf(session) != null) return null;
+            Leaf leaf = new Leaf(session);
+            leaf.fontSize = Math.max(0, state.getInt(STATE_NODE_FONT_SIZE, 0));
+            return leaf;
         }
         Node a = restoreNode(state.getBundle(STATE_NODE_A), sessionsByHandle);
         Node b = restoreNode(state.getBundle(STATE_NODE_B), sessionsByHandle);
@@ -457,6 +494,7 @@ public class TerminalPaneController {
                 floatState.getFloat(STATE_FLOAT_TOP, Float.NaN),
                 floatState.getFloat(STATE_FLOAT_WIDTH, Float.NaN),
                 floatState.getFloat(STATE_FLOAT_HEIGHT, Float.NaN));
+            leaf.fontSize = Math.max(0, floatState.getInt(STATE_NODE_FONT_SIZE, 0));
             floats.add(leaf);
         }
         return floats;
@@ -551,6 +589,24 @@ public class TerminalPaneController {
         return out;
     }
 
+    /**
+     * Leaves of the active window's tiled tree, floats excluded; a maximized pane counts as one.
+     *
+     * <p>Deliberately separate from {@link #getVisiblePaneViews()}, which fans font, size and
+     * keyboard changes out and must include floats. This is the count that decides who owns the
+     * frame line, and a float must not change that: flipping the pane inset resizes the tiled
+     * TerminalView, which reflows its PTY and resets the scroll position — the visible jump when the
+     * scratchpad appears.
+     *
+     * <p>Never less than one, which covers the float-only window (root == null) that dropping the
+     * last tiled shell can produce.
+     */
+    public int tiledPaneCount() {
+        if (mActiveWindow == null) return 1;
+        if (mMaximizedLeaf != null) return 1;
+        return Math.max(1, leavesOf(mActiveWindow.root).size());
+    }
+
     /** Re-measure every visible pane once layout settles. Returning from another app can leave the
      *  panes measured against a stale (tiny) host size; posting updateSize after the next layout
      *  pass recomputes rows/cols against the restored full size. */
@@ -616,9 +672,13 @@ public class TerminalPaneController {
 
     // --- Pane operations (act on the active window) ---
 
-    /** Split the focused pane; new shell fills the new leaf. orientation = LinearLayout.*. */
-    public void split(int orientation) {
-        if (mActiveWindow == null || mActiveWindow.active == null) return;
+    /**
+     * Split the focused pane; new shell fills the new leaf. orientation = LinearLayout.*.
+     *
+     * @return true when a pane was actually added, so the caller can say so.
+     */
+    public boolean split(int orientation) {
+        if (mActiveWindow == null || mActiveWindow.active == null) return false;
         mMaximizedLeaf = null;
         Leaf oldLeaf = mActiveWindow.active;
         // A floating pane shares no divider, so splitting while one is focused splits the tiled
@@ -626,9 +686,10 @@ public class TerminalPaneController {
         if (mActiveWindow.floating.contains(oldLeaf)) oldLeaf = firstLeaf(mActiveWindow.root);
         String cwd = oldLeaf.session.getCwd();
         TerminalSession newSession = mHost.createShell(cwd != null ? cwd : mHost.defaultCwd());
-        if (newSession == null) return;
+        if (newSession == null) return false;
 
         Leaf newLeaf = new Leaf(newSession);
+        newLeaf.fontSize = inheritableFontSize(oldLeaf);
         Split split = new Split();
         split.orientation = orientation;
         split.a = oldLeaf;
@@ -657,6 +718,7 @@ public class TerminalPaneController {
         }, 250);
         mHost.onActivePaneChanged();
         mHost.onTreesChanged();
+        return true;
     }
 
     /** Drop a finished shell's pane. Returns one of FINISHED_*. */
@@ -1027,7 +1089,14 @@ public class TerminalPaneController {
     // ------------------------------------------------------------------ scratchpad
 
     /** Session name that marks the scratchpad shell; it survives hides and activity restarts. */
-    public static final String SCRATCHPAD_SESSION_NAME = "scratchpad";
+    public static final String SCRATCHPAD_SESSION_NAME = "scratch";
+
+    /**
+     * What the scratchpad shell was called before the name was shortened to fit
+     * {@link WindowSessionName#MAX_CODE_POINTS}. Existing shells keep this name for the life of
+     * the process, so every recognition path has to accept both spellings.
+     */
+    public static final String LEGACY_SCRATCHPAD_SESSION_NAME = "scratchpad";
 
     /** toggleScratchpad outcomes. */
     public static final int SCRATCHPAD_TOGGLE_NONE = 0;
@@ -1066,6 +1135,10 @@ public class TerminalPaneController {
             return SCRATCHPAD_TOGGLE_HIDDEN;
         }
         TerminalSession session = mHost.findIdleShellByName(SCRATCHPAD_SESSION_NAME);
+        // A scratchpad created before the rename still answers to the old name; re-adopt it
+        // instead of creating a second one alongside it.
+        if (session == null)
+            session = mHost.findIdleShellByName(LEGACY_SCRATCHPAD_SESSION_NAME);
         if (session == null)
             session = mHost.createNamedShell(SCRATCHPAD_SESSION_NAME, mHost.defaultCwd());
         if (session == null) return SCRATCHPAD_TOGGLE_NONE;
@@ -1073,11 +1146,14 @@ public class TerminalPaneController {
         leaf.floatFrac = mScratchpadFrac != null ? new RectF(mScratchpadFrac)
             : new RectF(SCRATCHPAD_LEFT_FRAC, SCRATCHPAD_TOP_FRAC,
                 SCRATCHPAD_RIGHT_FRAC, SCRATCHPAD_BOTTOM_FRAC);
+        // Captured before clearing it: un-maximizing genuinely restructures the surface, so that
+        // case still needs a full render.
+        boolean wasMaximized = mMaximizedLeaf != null;
         mMaximizedLeaf = null;
         window.floating.add(leaf);
         window.active = leaf;
         mPendingFloatEntryLeaf = leaf;
-        render();
+        if (wasMaximized || !addFloatOnly(leaf)) render();
         mHost.onActivePaneChanged();
         mHost.onTreesChanged();
         return SCRATCHPAD_TOGGLE_SHOWN;
@@ -1114,10 +1190,24 @@ public class TerminalPaneController {
         mScratchpadFrac = new RectF(left, top, left + width, top + height);
     }
 
+    /** True for either spelling of the scratchpad shell's name. */
+    public static boolean isScratchpadShellName(@Nullable String sessionName) {
+        return SCRATCHPAD_SESSION_NAME.equals(sessionName)
+            || LEGACY_SCRATCHPAD_SESSION_NAME.equals(sessionName);
+    }
+
+    /**
+     * Whether a shell with this name should be adopted as a top-level window session. The
+     * scratchpad is a floating leaf that follows the user across windows; adopting it mints a
+     * bogus session row in the sessions panel and the drawer.
+     */
+    public static boolean shouldAdoptAsWindowSession(@Nullable String sessionName) {
+        return !isScratchpadShellName(sessionName);
+    }
+
     /** True when {@code leaf} hosts the dedicated scratchpad shell. */
     private static boolean isScratchpadLeaf(@NonNull Leaf leaf) {
-        return leaf.session != null
-            && SCRATCHPAD_SESSION_NAME.equals(leaf.session.mSessionName);
+        return leaf.session != null && isScratchpadShellName(leaf.session.mSessionName);
     }
 
     @Nullable
@@ -1139,12 +1229,17 @@ public class TerminalPaneController {
         Runnable remove = () -> {
             if (mHidingScratchpadLeaf == leaf) mHidingScratchpadLeaf = null;
             if (!window.floating.remove(leaf)) return;
-            removeFloatContainer(leaf);
             if (window.active == leaf)
                 window.active = window.root != null ? firstLeaf(window.root) : null;
             if (window == mActiveWindow) {
-                render();
+                // removeFloatOnly drops the container itself; only the fallback needs to be told.
+                if (!removeFloatOnly(leaf)) {
+                    removeFloatContainer(leaf);
+                    render();
+                }
                 mHost.onActivePaneChanged();
+            } else {
+                removeFloatContainer(leaf);
             }
             mHost.onTreesChanged();
         };
@@ -1237,9 +1332,16 @@ public class TerminalPaneController {
     }
 
     /**
-     * Clamp fractional float bounds against a host size: no smaller than the minimum pane size,
-     * no larger than the host, and always leaving at least {@code minVisiblePx} of the drag
-     * handle row on screen so a float can never be pushed somewhere it cannot be grabbed from.
+     * Clamp fractional float bounds against a host size: no smaller than the minimum pane size, no
+     * larger than the host, horizontal overhang allowed as long as {@code minVisiblePx} of the drag
+     * handle stays reachable, and the whole float kept above the host's bottom edge.
+     *
+     * <p>The vertical rule is stricter than the horizontal one on purpose. Sideways, part of the
+     * handle row remains grabbable however far the float hangs off, because the handle spans the
+     * float's full width. Downward there is nothing to grab, and the float would paint into the dock
+     * band: {@code applyTerminalBorderAppearance} clears clipToOutline the moment a second pane
+     * appears — which is exactly what showing the scratchpad does — so an overflowing bottom is
+     * visible rather than clipped.
      */
     @NonNull
     static RectF clampFloatFractions(@NonNull RectF candidate, float hostWidth, float hostHeight,
@@ -1248,10 +1350,11 @@ public class TerminalPaneController {
         float width = Math.min(1f, Math.max(Math.min(minWidthPx / hostWidth, 1f), candidate.width()));
         float height = Math.min(1f, Math.max(Math.min(minHeightPx / hostHeight, 1f), candidate.height()));
         float minVisibleX = Math.min(minVisiblePx / hostWidth, width);
-        float minVisibleY = Math.min(minVisiblePx / hostHeight, height);
         float left = Math.max(minVisibleX - width, Math.min(1f - minVisibleX, candidate.left));
-        // The handle is the top edge, so the top may never leave the host upward at all.
-        float top = Math.max(0f, Math.min(1f - minVisibleY, candidate.top));
+        // The handle is the top edge, so the top may never leave the host upward at all — and
+        // bottom <= 1 keeps the float clear of the dock, whether the host shrank under it or the
+        // user dragged it down by hand.
+        float top = Math.max(0f, Math.min(1f - height, candidate.top));
         return new RectF(left, top, left + width, top + height);
     }
 
@@ -1263,7 +1366,10 @@ public class TerminalPaneController {
         if (hostWidth > 0f && hostHeight > 0f) {
             frac = clampFloatFractions(frac, hostWidth, hostHeight,
                 dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP), dp(FLOAT_MIN_VISIBLE_DP));
-            leaf.floatFrac = frac;
+            // Deliberately NOT written back into leaf.floatFrac. The clamp is a projection of the
+            // user's shape onto the current host, not new intent from the user — writing it back is
+            // what ratcheted the scratchpad smaller every time the keyboard opened and closed.
+            leaf.appliedFloatFrac = new RectF(frac);
         }
         FrameLayout.LayoutParams params = container.getLayoutParams() instanceof FrameLayout.LayoutParams
             ? (FrameLayout.LayoutParams) container.getLayoutParams()
@@ -1428,17 +1534,46 @@ public class TerminalPaneController {
         // Floats are added last so they sit above both the tree and the interaction overlay;
         // list order is z-order. A maximized pane owns the whole surface, floats included.
         if (mMaximizedLeaf == null) {
-            for (Leaf leaf : mActiveWindow.floating) {
-                FloatingPaneContainer container = new FloatingPaneContainer(leaf);
-                mFloatContainers.put(leaf, container);
-                mHostView.addView(container, new FrameLayout.LayoutParams(0, 0));
-                applyFloatBounds(leaf, container);
-                maybeAnimateFloatEntry(leaf, container);
-            }
+            for (Leaf leaf : mActiveWindow.floating) attachFloatContainer(leaf);
         }
         updateActiveBorders();
         focusActiveView();
         mHost.onPanesRendered();
+    }
+
+    /** Build, place and (if pending) animate one float's container. One path, two callers. */
+    private void attachFloatContainer(@NonNull Leaf leaf) {
+        FloatingPaneContainer container = new FloatingPaneContainer(leaf);
+        mFloatContainers.put(leaf, container);
+        mHostView.addView(container, new FrameLayout.LayoutParams(0, 0));
+        applyFloatBounds(leaf, container);
+        maybeAnimateFloatEntry(leaf, container);
+    }
+
+    /**
+     * Add one float without rebuilding the tiled tree, so the pane behind it is never detached and
+     * re-attached. Falls back to {@link #render()} whenever the cheap path does not apply.
+     *
+     * <p>Skipping {@code mHost.onPanesRendered()} is safe: that callback only re-applies the terminal
+     * border appearance, and a float no longer changes who owns the frame line.
+     */
+    private boolean addFloatOnly(@NonNull Leaf leaf) {
+        if (mActiveWindow == null || mActiveWindow.root == null || mMaximizedLeaf != null
+            || mHostView.getChildCount() == 0) return false;
+        attachFloatContainer(leaf);
+        updateActiveBorders();
+        focusActiveView();
+        return true;
+    }
+
+    /** Counterpart of {@link #addFloatOnly}: drop one float's container and nothing else. */
+    private boolean removeFloatOnly(@NonNull Leaf leaf) {
+        if (mActiveWindow == null || mActiveWindow.root == null || mMaximizedLeaf != null
+            || mHostView.getChildCount() == 0) return false;
+        removeFloatContainer(leaf);
+        updateActiveBorders();
+        focusActiveView();
+        return true;
     }
 
     private View buildView(Node node) {
@@ -1482,12 +1617,40 @@ public class TerminalPaneController {
                 return false;
             });
             view.attachSession(session);
+            mHost.configureAttachedPaneView(view, session);
             mPaneFrames.put(session, frame);
             mPaneViews.put(session, view);
         } else if (frame.getParent() instanceof ViewGroup) {
             ((ViewGroup) frame.getParent()).removeView(frame);
         }
+        TerminalView attachedView = mPaneViews.get(session);
+        if (attachedView != null) {
+            mHost.configureAttachedPaneView(attachedView, session);
+            // Reapply the pane's pinned zoom after the host stamped its default, so re-showing a
+            // window (or any re-render) can't fold every pane back to the app-wide size.
+            Window owner = windowOf(session);
+            Leaf leaf = owner == null ? null : findLeafInWindow(owner, session);
+            if (leaf != null && leaf.fontSize > 0) attachedView.setTextSize(leaf.fontSize);
+        }
         return frame;
+    }
+
+    /** The focused pane's pinned font size, or 0 while it follows the app-wide default. */
+    public int getActivePaneFontSize() {
+        if (mActiveWindow == null || mActiveWindow.active == null) return 0;
+        return mActiveWindow.active.fontSize;
+    }
+
+    /**
+     * Pin the focused pane's font size and apply it to its view. From then on the pane keeps this
+     * size across window switches and re-renders, independent of the app-wide default.
+     */
+    public boolean setActivePaneFontSize(int size) {
+        if (mActiveWindow == null || mActiveWindow.active == null || size <= 0) return false;
+        mActiveWindow.active.fontSize = size;
+        TerminalView view = mPaneViews.get(mActiveWindow.active.session);
+        if (view != null) view.setTextSize(size);
+        return true;
     }
 
     private void detachPaneView(TerminalSession session) {
@@ -1499,12 +1662,20 @@ public class TerminalPaneController {
 
     private void updateActiveBorders() {
         List<TerminalView> views = getVisiblePaneViews();
-        boolean split = views.size() > 1;
+        // Tiled panes, not every pane: a float always carries its own focus-keyed border, and a lone
+        // tiled pane keeps the terminal border as its frame. So showing the scratchpad no longer
+        // paints and unpaints a border on the pane behind it.
+        boolean split = tiledPaneCount() > 1;
         TerminalSession activeSession = getActiveSession();
+        java.util.Set<TerminalSession> floatingSessions = new java.util.HashSet<>();
+        if (mActiveWindow != null) {
+            for (Leaf leaf : mActiveWindow.floating) floatingSessions.add(leaf.session);
+        }
         for (TerminalView v : views) {
             FrameLayout frame = mPaneFrames.get(v.getCurrentSession());
             if (frame == null) continue;
-            if (!split && mMaximizedLeaf == null) { frame.setForeground(null); continue; }
+            boolean floating = floatingSessions.contains(v.getCurrentSession());
+            if (!split && mMaximizedLeaf == null && !floating) { frame.setForeground(null); continue; }
             boolean isActive = v.getCurrentSession() == activeSession;
             // Same Material primary hue for every pane, but the focused pane's border is at full
             // strength while the rest are dimmed — an unambiguous, theme-proof focus cue.
@@ -1588,6 +1759,13 @@ public class TerminalPaneController {
         private static final int ACTION_CLOSE = 2;
 
         private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        /** Scratch for the handle pips, so a drag does not allocate a rect per frame. */
+        private final RectF mHandleRect = new RectF();
+        /** Scratch for pane rects read while drawing, and one for the control-tab geometry pass. */
+        private final RectF mDrawPaneRect = new RectF();
+        private final RectF mGeometryPaneRect = new RectF();
+        /** Scratch for pane rects read while hit-testing a touch stream. */
+        private final RectF mHitPaneRect = new RectF();
         private final Path mPath = new Path();
         private final RectF mControlRect = new RectF();
         private final RectF[] mControlButtons = {new RectF(), new RectF(), new RectF()};
@@ -1915,7 +2093,7 @@ public class TerminalPaneController {
             Leaf best = null;
             float bestDistance = Float.MAX_VALUE;
             for (Leaf leaf : leavesOf(mActiveWindow.root)) {
-                RectF rect = paneRect(leaf);
+                RectF rect = paneRect(leaf, mHitPaneRect);
                 if (rect == null) continue;
                 if (rect.contains(x, y)) return leaf;
                 float dx = Math.max(rect.left - x, Math.max(0f, x - rect.right));
@@ -1930,22 +2108,34 @@ public class TerminalPaneController {
         }
 
         private boolean isNearPaneBorder(@NonNull Leaf leaf, float x, float y) {
-            RectF rect = paneRect(leaf);
+            RectF rect = paneRect(leaf, mHitPaneRect);
             if (rect == null) return false;
             float threshold = dp(12);
             return Math.min(Math.min(Math.abs(x - rect.left), Math.abs(x - rect.right)),
                 Math.min(Math.abs(y - rect.top), Math.abs(y - rect.bottom))) <= threshold;
         }
 
+        /** Allocating form, for callers that keep several pane rects alive at once. */
         @Nullable
         private RectF paneRect(@NonNull Leaf leaf) {
+            return paneRect(leaf, new RectF());
+        }
+
+        /**
+         * Fills {@code out} with the leaf's frame in host coordinates and returns it, or null when the
+         * leaf has no attached frame. Every per-frame and per-touch caller passes its own scratch:
+         * these run inside draw and move handling, where one rect per call is one rect per frame.
+         */
+        @Nullable
+        private RectF paneRect(@NonNull Leaf leaf, @NonNull RectF out) {
             FrameLayout frame = mPaneFrames.get(leaf.session);
             if (frame == null || frame.getParent() == null) return null;
             int[] frameLocation = location(frame);
             int[] hostLocation = location(mHostView);
             float left = frameLocation[0] - hostLocation[0];
             float top = frameLocation[1] - hostLocation[1];
-            return new RectF(left, top, left + frame.getWidth(), top + frame.getHeight());
+            out.set(left, top, left + frame.getWidth(), top + frame.getHeight());
+            return out;
         }
 
         private int[] location(@NonNull View view) {
@@ -2005,7 +2195,7 @@ public class TerminalPaneController {
         }
 
         private void computeControlGeometry() {
-            RectF pane = mControlLeaf == null ? null : paneRect(mControlLeaf);
+            RectF pane = mControlLeaf == null ? null : paneRect(mControlLeaf, mGeometryPaneRect);
             if (pane == null) {
                 mControlRect.setEmpty();
                 return;
@@ -2029,6 +2219,12 @@ public class TerminalPaneController {
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
+            if (!mDraggingDivider && !mBorderPressed && mMovingLeaf == null
+                && !(mControlsShown && mControlLeaf != null && mControlProgress > 0f)) {
+                // Nothing of ours to draw. Resolving theme colours before this check meant an overlay
+                // that draws nothing still did two theme lookups on every pass.
+                return;
+            }
             int primary = MaterialColors.getColor(getContext(),
                 com.termux.shared.R.attr.termuxColorPrimary,
                 ContextCompat.getColor(getContext(), R.color.termux_primary));
@@ -2042,15 +2238,17 @@ public class TerminalPaneController {
                 drawActiveDivider(canvas, mYSplit);
                 mPaint.setStyle(Paint.Style.FILL);
                 mPaint.setColor(tertiary);
-                canvas.drawRoundRect(new RectF(mHandleX - dp(5), mHandleY - dp(2),
-                    mHandleX + dp(5), mHandleY + dp(2)), dp(2), dp(2), mPaint);
+                mHandleRect.set(mHandleX - dp(5), mHandleY - dp(2),
+                    mHandleX + dp(5), mHandleY + dp(2));
+                canvas.drawRoundRect(mHandleRect, dp(2), dp(2), mPaint);
                 if (mXSplit != null && mYSplit != null) {
-                    canvas.drawRoundRect(new RectF(mHandleX - dp(2), mHandleY - dp(5),
-                        mHandleX + dp(2), mHandleY + dp(5)), dp(2), dp(2), mPaint);
+                    mHandleRect.set(mHandleX - dp(2), mHandleY - dp(5),
+                        mHandleX + dp(2), mHandleY + dp(5));
+                    canvas.drawRoundRect(mHandleRect, dp(2), dp(2), mPaint);
                 }
             }
             if (mBorderPressed && mBorderTapLeaf != null && !mDraggingDivider) {
-                RectF border = paneRect(mBorderTapLeaf);
+                RectF border = paneRect(mBorderTapLeaf, mDrawPaneRect);
                 if (border != null) {
                     border.inset(dp(1.5f), dp(1.5f));
                     mPaint.setStyle(Paint.Style.STROKE);
@@ -2059,12 +2257,13 @@ public class TerminalPaneController {
                     canvas.drawRect(border, mPaint);
                     mPaint.setStyle(Paint.Style.FILL);
                     mPaint.setColor(tertiary);
-                    canvas.drawRoundRect(new RectF(mHandleX - dp(5), mHandleY - dp(2),
-                        mHandleX + dp(5), mHandleY + dp(2)), dp(2), dp(2), mPaint);
+                    mHandleRect.set(mHandleX - dp(5), mHandleY - dp(2),
+                        mHandleX + dp(5), mHandleY + dp(2));
+                    canvas.drawRoundRect(mHandleRect, dp(2), dp(2), mPaint);
                 }
             }
             if (mMovingLeaf != null && mMoveTarget != null && mMoveTarget != mMovingLeaf) {
-                RectF target = paneRect(mMoveTarget);
+                RectF target = paneRect(mMoveTarget, mDrawPaneRect);
                 if (target != null) {
                     mPaint.setStyle(Paint.Style.STROKE);
                     mPaint.setStrokeWidth(dp(3));
@@ -2101,7 +2300,7 @@ public class TerminalPaneController {
             int surface = MaterialColors.getColor(getContext(),
                 com.termux.shared.R.attr.termuxColorSurfacePanel,
                 ContextCompat.getColor(getContext(), R.color.termux_surface_panel));
-            RectF pane = paneRect(mControlLeaf);
+            RectF pane = paneRect(mControlLeaf, mDrawPaneRect);
             if (pane == null) return;
             float paneTop = pane.top;
             float radius = dp(4);
@@ -2215,6 +2414,8 @@ public class TerminalPaneController {
 
         private final Leaf mLeaf;
         private final Paint mChromePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        /** Scratch for the pill grip and its glyphs, redrawn on every frame a float is on screen. */
+        private final RectF mChromeScratch = new RectF();
         private final Runnable mCollapsePill = this::collapsePill;
         private int mDragMode = DRAG_NONE;
         private float mDownRawX;
@@ -2353,7 +2554,11 @@ public class TerminalPaneController {
             mDownRawX = event.getRawX();
             mDownRawY = event.getRawY();
             mDragMoved = false;
-            mDownFrac = mLeaf.floatFrac != null ? new RectF(mLeaf.floatFrac) : defaultFloatFrac(0);
+            // Seed from what is on screen when the float is currently clamped, so a drag that
+            // starts while the host is short does not teleport back to the remembered shape. The
+            // MOVE branch still writes floatFrac: a deliberate gesture IS new intent.
+            RectF seed = mLeaf.appliedFloatFrac != null ? mLeaf.appliedFloatFrac : mLeaf.floatFrac;
+            mDownFrac = seed != null ? new RectF(seed) : defaultFloatFrac(0);
             if (mDragMode == DRAG_RESIZE) setSizeUpdatesPaused(true);
             getParent().requestDisallowInterceptTouchEvent(true);
         }
@@ -2443,21 +2648,37 @@ public class TerminalPaneController {
             int primary = MaterialColors.getColor(getContext(),
                 com.termux.shared.R.attr.termuxColorPrimary,
                 ContextCompat.getColor(getContext(), R.color.termux_primary));
-            int panel = MaterialColors.getColor(getContext(),
-                com.termux.shared.R.attr.termuxColorSurfacePanel,
-                ContextCompat.getColor(getContext(), R.color.termux_surface_panel));
+            // One step lighter than the float's own slab, so the action strip reads as chrome
+            // sitting on the float rather than as a hole punched through it.
+            int panelHigh = MaterialColors.getColor(getContext(),
+                com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+                ContextCompat.getColor(getContext(), R.color.termux_surface_panel_high));
+            int outlineVariant = MaterialColors.getColor(getContext(),
+                com.termux.shared.R.attr.termuxColorOutlineVariant,
+                ContextCompat.getColor(getContext(), R.color.termux_outline_variant));
             boolean active = mActiveWindow != null && mActiveWindow.active == mLeaf;
             RectF pill = pillRect();
             float radius = pill.height() / 2f;
-            mChromePaint.setStyle(Paint.Style.FILL);
-            mChromePaint.setColor(panel);
-            canvas.drawRoundRect(pill, radius, radius, mChromePaint);
+            int backdropAlpha = pillBackdropAlpha(mPillExpanded, active);
+            if (backdropAlpha > 0) {
+                mChromePaint.setStyle(Paint.Style.FILL);
+                mChromePaint.setColor(ColorUtils.setAlphaComponent(panelHigh, backdropAlpha));
+                canvas.drawRoundRect(pill, radius, radius, mChromePaint);
+                mChromePaint.setStyle(Paint.Style.STROKE);
+                mChromePaint.setStrokeWidth(Math.max(1f, dp(1f)));
+                mChromePaint.setColor(ColorUtils.setAlphaComponent(outlineVariant, 0x66));
+                canvas.drawRoundRect(pill, radius, radius, mChromePaint);
+            }
             int chromeAlpha = active ? 200 : 90;
+            mChromePaint.setStyle(Paint.Style.FILL);
             if (!mPillExpanded) {
-                mChromePaint.setColor(ColorUtils.setAlphaComponent(primary, chromeAlpha));
-                canvas.drawRoundRect(new RectF(pill.centerX() - dp(14),
-                    pill.centerY() - dp(1.8f), pill.centerX() + dp(14),
-                    pill.centerY() + dp(1.8f)), dp(1.8f), dp(1.8f), mChromePaint);
+                // With no slab behind it the grip is the whole affordance, so an inactive float's
+                // grip needs a higher floor than the resize chevrons to read on busy output.
+                mChromePaint.setColor(ColorUtils.setAlphaComponent(primary,
+                    Math.max(chromeAlpha, 120)));
+                mChromeScratch.set(pill.centerX() - dp(14), pill.centerY() - dp(1.8f),
+                    pill.centerX() + dp(14), pill.centerY() + dp(1.8f));
+                canvas.drawRoundRect(mChromeScratch, dp(1.8f), dp(1.8f), mChromePaint);
             } else {
                 mChromePaint.setStyle(Paint.Style.STROKE);
                 mChromePaint.setStrokeWidth(dp(1.5f));
@@ -2476,11 +2697,11 @@ public class TerminalPaneController {
                             slotCenterX - dp(4), slotCenterY + dp(4), mChromePaint);
                     } else {
                         // Dock-back-to-tiling: a small window split down the middle.
-                        RectF tiles = new RectF(slotCenterX - dp(6), slotCenterY - dp(4.5f),
+                        mChromeScratch.set(slotCenterX - dp(6), slotCenterY - dp(4.5f),
                             slotCenterX + dp(6), slotCenterY + dp(4.5f));
-                        canvas.drawRoundRect(tiles, dp(1.5f), dp(1.5f), mChromePaint);
-                        canvas.drawLine(slotCenterX, tiles.top, slotCenterX, tiles.bottom,
-                            mChromePaint);
+                        canvas.drawRoundRect(mChromeScratch, dp(1.5f), dp(1.5f), mChromePaint);
+                        canvas.drawLine(slotCenterX, mChromeScratch.top, slotCenterX,
+                            mChromeScratch.bottom, mChromePaint);
                     }
                 }
                 if (slots > 1) {
@@ -2501,6 +2722,17 @@ public class TerminalPaneController {
             canvas.drawLine(right - dp(5), bottom, right, bottom - dp(5), mChromePaint);
             mChromePaint.setStrokeCap(Paint.Cap.BUTT);
         }
+    }
+
+    /**
+     * Alpha of the slab drawn behind the floating pane's grab pill. Zero while collapsed: there is
+     * nothing to read against but the grip itself, and a filled capsule at that size looks like a
+     * black border across the top of the float. Expanded, the close and dock glyphs do need a
+     * surface, and an inactive float's is a touch more transparent so focus stays legible.
+     */
+    static int pillBackdropAlpha(boolean expanded, boolean activeFloat) {
+        if (!expanded) return 0;
+        return activeFloat ? 0xF0 : 0xD0;
     }
 
     // --- Tree helpers ---

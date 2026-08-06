@@ -266,7 +266,7 @@ public final class TerminalClockWidget extends View {
                 break;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB:
                 timeRow = spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 39f, -.045f) + dp(6f)
-                    + metaWidth(11f, 7f, 4f, mediumTypeface(), Typeface.DEFAULT_BOLD, .16f, false);
+                    + stackedMetaWidth(11f, 7f, mediumTypeface(), Typeface.DEFAULT_BOLD, .16f);
                 dateRow = spacedTextWidth(mSnapshot.date, Typeface.DEFAULT_BOLD, 8.5f, .26f);
                 break;
             default:
@@ -294,7 +294,7 @@ public final class TerminalClockWidget extends View {
                         + metaWidth(8f, 6f, 4f, Typeface.MONOSPACE, Typeface.MONOSPACE, .16f, false));
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB:
                 return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 27f, -.045f) + dp(5f)
-                    + metaWidth(9f, 6f, 5f, mediumTypeface(), Typeface.DEFAULT_BOLD, .16f, false);
+                    + stackedMetaWidth(9f, 6f, mediumTypeface(), Typeface.DEFAULT_BOLD, .16f);
             default:
                 return dp(64.5f) + dp(4f)
                     + metaWidth(9.5f, 6.5f, 3f, Typeface.DEFAULT, mediumTypeface(), .16f, false);
@@ -319,6 +319,18 @@ public final class TerminalClockWidget extends View {
         width += dp(gapDp) + spacedTextWidth(mSnapshot.period, periodFace, periodDp, periodSpacing);
         if (boxedPeriod) width += dp(8f);
         return width;
+    }
+
+    /**
+     * Width of the slab's stacked meta column: the wider of the seconds and the period, since they
+     * share a left edge instead of following each other along the baseline.
+     */
+    private float stackedMetaWidth(float secondsDp, float periodDp, Typeface secondsFace,
+                                   Typeface periodFace, float periodSpacing) {
+        float seconds = spacedTextWidth(mSnapshot.ss, secondsFace, secondsDp, 0f);
+        if (mSnapshot.period.isEmpty()) return seconds;
+        return Math.max(seconds,
+            spacedTextWidth(mSnapshot.period, periodFace, periodDp, periodSpacing));
     }
 
     private float ledMetaWidth(float secondsCellDp, float periodDp, float gapDp) {
@@ -671,16 +683,16 @@ public final class TerminalClockWidget extends View {
     private void drawFullSlab(Canvas canvas, long now, float dateTop, float right) {
         float baseline = baseline(0f, dp(34f), Typeface.DEFAULT_BOLD, 39f);
         float x = drawFadingTime(canvas, now, Typeface.DEFAULT_BOLD, 39f, -.045f, baseline);
-        drawMetaRow(canvas, x + dp(6f), baseline, 11f, 7f, 4f, mediumTypeface(),
-            Typeface.DEFAULT_BOLD, .16f, false, now, TEXT_DURATION_MS);
+        drawStackedMetaColumn(canvas, x + dp(6f), baseline, 11f, 7f, mediumTypeface(),
+            Typeface.DEFAULT_BOLD, .16f, now, TEXT_DURATION_MS);
         drawDateRow(canvas, dateTop, right, mSnapshot.date, Typeface.DEFAULT_BOLD, 8.5f, .26f);
     }
 
     private void drawCompactSlab(Canvas canvas, long now) {
         float baseline = baseline(0f, dp(22f), Typeface.DEFAULT_BOLD, 27f);
         float x = drawFadingTime(canvas, now, Typeface.DEFAULT_BOLD, 27f, -.045f, baseline);
-        drawMetaRow(canvas, x + dp(5f), baseline, 9f, 6f, 5f, mediumTypeface(),
-            Typeface.DEFAULT_BOLD, .16f, false, now, TEXT_DURATION_MS);
+        drawStackedMetaColumn(canvas, x + dp(5f), baseline, 9f, 6f, mediumTypeface(),
+            Typeface.DEFAULT_BOLD, .16f, now, TEXT_DURATION_MS);
     }
 
     // ---- Tape -------------------------------------------------------------
@@ -927,6 +939,39 @@ public final class TerminalClockWidget extends View {
             mPrimary);
         cursor += periodWidth + (boxedPeriod ? dp(3f) : 0f);
         return cursor - x;
+    }
+
+    /**
+     * The slab's meta as a column: seconds on the time baseline, period stacked directly above them
+     * and sharing their left edge.
+     *
+     * <p>The slab's time band is its widest, so folding the period in beside the seconds pushed the
+     * meta run out past the width the widget slot hands the clock — and the period, being last, was
+     * the part the media strip clipped. Stacked, the column is only as wide as the wider of the two,
+     * and the period is inside the block instead of hanging off its end.
+     */
+    private void drawStackedMetaColumn(Canvas canvas, float x, float baseline, float secondsDp,
+                                       float periodDp, Typeface secondsFace, Typeface periodFace,
+                                       float periodSpacing, long now, long duration) {
+        mPaint.setTypeface(secondsFace);
+        mPaint.setLetterSpacing(0f);
+        mPaint.setTextSize(dp(secondsDp));
+        mPaint.setTextAlign(Paint.Align.LEFT);
+        float secondsAscent = mPaint.ascent();
+        float cursor = x;
+        for (int i = 0; i < 2; i++) {
+            float eased = ease(progress(4 + i, now, duration));
+            mPaint.setColor(mSecondaryQuiet);
+            mPaint.setAlpha(Math.round(Color.alpha(mSecondaryQuiet) * eased));
+            String c = String.valueOf(mSnapshot.ss.charAt(i));
+            canvas.drawText(c, cursor, baseline + dp(4f) * (1f - eased), mPaint);
+            cursor += mPaint.measureText(c);
+        }
+        mPaint.setAlpha(255);
+        if (mSnapshot.period.isEmpty()) return;
+        // Clear of the seconds' own ascent, so the two never touch at any font scale.
+        drawLabel(canvas, mSnapshot.period, x, baseline + secondsAscent - dp(2.5f), periodDp,
+            periodFace, periodSpacing, mPrimary);
     }
 
     /** Time digits rising into place; shared by every text-drawn face. */

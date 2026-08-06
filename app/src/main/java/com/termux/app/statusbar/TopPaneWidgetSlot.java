@@ -68,6 +68,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         if (mNotifications != null) {
             mNotifications.setVisibility(GONE);
             mNotifications.setListener(this::dismissPinned);
+            mNotifications.setOpenListener(this::openPinned);
         }
         if (mMedia != null) mMedia.setVisibility(GONE);
         applyFeed(false);
@@ -98,6 +99,10 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
     private void dismissPinned(@NonNull PinnedNotification notification) {
         TopPaneFeed.dismissPinned(notification.key, notification.clearOnDismiss);
+    }
+
+    private void openPinned(@NonNull PinnedNotification notification) {
+        TopPaneFeed.openPinned(notification.key);
     }
 
     private void applyFeed(boolean animate) {

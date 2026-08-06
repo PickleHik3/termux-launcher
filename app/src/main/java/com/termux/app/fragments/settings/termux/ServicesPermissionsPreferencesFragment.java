@@ -127,7 +127,12 @@ public final class ServicesPermissionsPreferencesFragment extends MaterialPrefer
     private void bindPermissionActions(@NonNull Context context) {
         click(STORAGE, preference -> { startActivity(new Intent(context, TermuxActivity.class)
             .setAction(TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.ACTION_REQUEST_PERMISSIONS)); return true; });
-        click(NOTIFICATION_ACCESS, preference -> { start(LauncherNotificationAccess.detailSettingsIntent(context)); return true; });
+        // The per-app detail screen only exists from API 30; older versions need the list.
+        click(NOTIFICATION_ACCESS, preference -> {
+            if (!start(LauncherNotificationAccess.detailSettingsIntent(context)))
+                start(LauncherNotificationAccess.listSettingsIntent());
+            return true;
+        });
         click(ACCESSIBILITY, preference -> { start(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)); return true; });
         click(NOTIFICATIONS, preference -> { start(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
             .putExtra(Settings.EXTRA_APP_PACKAGE, context.getPackageName())); return true; });

@@ -86,7 +86,7 @@ public class Keyboard2ViewMeasurementTest
     Context landscape = portrait.createConfigurationContext(landscapeConfiguration);
     Config landscapeConfig = new Config(landscape.getResources(), new NoOpHandler());
     assertEquals(44f * density, landscapeConfig.rowHeightPx, 0.001f);
-    assertEquals(0.55f, landscapeConfig.maxKeyboardHeightFraction, 0.0001f);
+    assertEquals(0.40f, landscapeConfig.maxKeyboardHeightFraction, 0.0001f);
   }
 
   private static Theme.Palette palette()

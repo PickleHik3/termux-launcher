@@ -96,6 +96,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_WINDOW_SELECT = "window.select";
     public static final String TOOL_WINDOW_RENAME = "window.rename";
     public static final String TOOL_SESSION_RENAME = "session.rename";
+    public static final String TOOL_SESSION_RENAME_AT_INDEX = "session.rename_at_index";
     public static final String TOOL_TERMINAL_RESET = "terminal.reset";
     public static final String TOOL_APPEARANCE_SET_WALLPAPER = "appearance.set_wallpaper";
     public static final String TOOL_APPEARANCE_TOGGLE_WALLPAPER = "appearance.toggle_wallpaper";
@@ -117,6 +118,8 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_SESSION_RENAME_PROMPT = "session.rename_prompt";
     public static final String TOOL_TERMINAL_SHARE_SELECTED = "terminal.share_selected";
     public static final String TOOL_CLIPBOARD_COPY_SELECTED = "clipboard.copy_selected";
+    public static final String TOOL_FONTS_PICK = "fonts.pick";
+    public static final String TOOL_FONTS_INSTALL = "fonts.install";
 
     private static final TerminalActionDispatcher INSTANCE = new TerminalActionDispatcher();
 
@@ -201,6 +204,7 @@ public final class TerminalActionDispatcher {
             case TOOL_WINDOW_SELECT:
             case TOOL_WINDOW_RENAME:
             case TOOL_SESSION_RENAME:
+            case TOOL_SESSION_RENAME_AT_INDEX:
             case TOOL_TERMINAL_RESET:
             case TOOL_APPEARANCE_SET_WALLPAPER:
             case TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT:
@@ -222,6 +226,8 @@ public final class TerminalActionDispatcher {
             case TOOL_SESSION_RENAME_PROMPT:
             case TOOL_TERMINAL_SHARE_SELECTED:
             case TOOL_CLIPBOARD_COPY_SELECTED:
+            case TOOL_FONTS_PICK:
+            case TOOL_FONTS_INSTALL:
                 return true;
             default:
                 return false;
@@ -562,6 +568,47 @@ public final class TerminalActionDispatcher {
                     activity.openAppsBar();
                     return ok();
 
+                case TOOL_FONTS_PICK:
+                    // Straight to the settings screen rather than through an Activity helper: the
+                    // picker is an ordinary preference fragment and needs nothing from the terminal.
+                    com.termux.shared.activity.ActivityUtils.startActivity(activity,
+                        com.termux.app.activities.SettingsActivity.createFragmentIntent(activity,
+                            com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment.class,
+                            com.termux.R.string.termux_fonts_preferences_title));
+                    return ok();
+                case TOOL_FONTS_INSTALL: {
+                    String familyId = arguments.optString("id", "").trim();
+                    if (familyId.isEmpty()) return error(400, "bad_request", "Missing 'id'");
+                    com.termux.app.fonts.FontCatalog.Family family =
+                        com.termux.app.fonts.FontCatalog.load(activity).family(familyId);
+                    if (family == null) {
+                        return error(404, "not_found", "No font family '" + familyId
+                            + "' in the bundled catalog");
+                    }
+                    com.termux.app.fonts.FontInstaller.Options options =
+                        new com.termux.app.fonts.FontInstaller.Options(
+                            arguments.optBoolean("nerd_icons", true),
+                            arguments.optString("ligatures", family.defaultLigatures),
+                            true,
+                            arguments.optInt("weight", 0));
+                    com.termux.app.fonts.FontInstallCoordinator coordinator =
+                        com.termux.app.fonts.FontInstallCoordinator.getInstance(activity);
+                    // Already on disk: no transfer, just rewrite the managed config and reload.
+                    if (new com.termux.app.fonts.FontInstaller().isInstalled(family)) {
+                        if (!coordinator.reapply(family, options)) {
+                            return error(500, "execution_failed",
+                                "Could not write ~/.termux/fonts.d/10-launcher.conf");
+                        }
+                        return ok().put("familyId", family.id).put("installed", true)
+                            .put("downloaded", false);
+                    }
+                    if (!coordinator.start(family, options)) {
+                        return error(409, "busy", "Another font install is already running");
+                    }
+                    return ok().put("familyId", family.id).put("installed", false)
+                        .put("downloaded", true).put("downloadBytes", family.downloadBytes);
+                }
+
                 case TOOL_APP_COMMAND_PALETTE:
                     TerminalCommandPalette.show(activity);
                     return ok();
@@ -667,6 +714,24 @@ public final class TerminalActionDispatcher {
                     String sessionName = arguments.optString("name", "").trim();
                     if (!renameClient.renameCurrentSessionTo(sessionName)) return noSession(toolName);
                     return ok().put("name", sessionName.isEmpty() ? JSONObject.NULL : sessionName);
+                }
+
+                case TOOL_SESSION_RENAME_AT_INDEX: {
+                    if (!arguments.has("index")) return error(400, "bad_request", "Missing 'index'");
+                    // An explicit empty name clears the label; only an absent key is an error.
+                    if (!arguments.has("name")) return error(400, "bad_request", "Missing 'name'");
+                    int sessionIndex = arguments.optInt("index", -1);
+                    // Deliberately the browser index, not the drawer index: rebuildDrawerSessions
+                    // skips window-less sessions, so the two can diverge.
+                    if (!activity.renameBrowserSession(sessionIndex,
+                            arguments.optString("name", ""))) {
+                        return error(400, "bad_request", "No session at index " + sessionIndex);
+                    }
+                    // Report the stored name: WindowSessionName caps it, so what was asked for
+                    // and what was kept can differ.
+                    String storedName = activity.getBrowserSessionName(sessionIndex);
+                    return ok().put("index", sessionIndex)
+                        .put("name", storedName == null ? JSONObject.NULL : storedName);
                 }
 
                 case TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD:
@@ -873,7 +938,19 @@ public final class TerminalActionDispatcher {
     @Nullable
     private static LauncherAppEntry resolveApp(@NonNull TermuxActivity activity,
                                                @NonNull String query) {
-        LauncherAppDataProvider provider = LauncherAppDataProvider.getInstance(activity);
+        return resolveApp(LauncherAppDataProvider.getInstance(activity), query, true);
+    }
+
+    /**
+     * As above, against a caller-supplied provider. The palette resolves the chords it advertises
+     * through this same method — resolution has to be identical, or a row could promise a stroke
+     * that launches a different app — but passes {@code allowBlocking = false}, because the palette
+     * must never block the main thread on a PackageManager sweep.
+     */
+    @Nullable
+    static LauncherAppEntry resolveApp(@NonNull LauncherAppDataProvider provider,
+                                       @NonNull String query, boolean allowBlocking) {
+        if (!provider.hasLoadedApps() && !allowBlocking) return null;
         List<LauncherAppEntry> apps = provider.hasLoadedApps()
             ? provider.getAllApps()
             : provider.getAllAppsBlocking();

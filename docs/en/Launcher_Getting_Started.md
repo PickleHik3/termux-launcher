@@ -82,6 +82,20 @@ Live wallpapers can disable dock blur. If you use two rows of Extra Keys, turn o
 
 ### Change the terminal font
 
+The easy way needs no shell at all: **Settings → Appearance → Terminal fonts**, then pick a family
+from the list and tap **Install**. Seven families are listed with their download sizes and licenses;
+a star marks the suggested one, Maple Mono. Installing a family applies its own defaults — programming
+ligatures where the family has them, plus Nerd Font icons routed through the symbols font the app
+already carries — and the toggles above the list let you change icons, ligatures, and weight
+afterwards. It writes `~/.termux/fonts.d/10-launcher.conf`, and **Use font.ttf / Termux:Styling**
+removes that one file again.
+
+Two things the picker does *not* do. It never touches `~/.termux/font.ttf` or `font-italic.ttf`, so
+whatever font you put there stays exactly as it is and anything reading it directly is unaffected —
+installing a family changes the terminal only. And because a family's line metrics set the cell
+height, a face with taller metrics fits fewer rows; a full-screen TUI that is already running may
+reflow or look truncated until it resizes itself.
+
 The simple way is unchanged from Termux: drop a font file at `~/.termux/font.ttf`, add
 `~/.termux/font-italic.ttf` if you want a real italic face, then run:
 
@@ -90,10 +104,11 @@ termux-reload-settings
 ```
 
 [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases) does the same thing with a
-picker instead of a file copy. Either route is all most setups need.
+picker instead of a file copy. Either route still works exactly as it always did.
 
-For separate bold and italic files, Nerd Font icons on selected Unicode ranges, ligature control,
-OpenType features, or variable-font axes, write `~/.termux/fonts.conf` instead:
+The power-user way is `~/.termux/fonts.conf` — separate bold and italic files, Nerd Font icons on
+selected Unicode ranges, an ordered fallback chain, ligature control, OpenType features, variable-font
+axes, geometric box drawing, and cell metrics:
 
 ```sh
 # Installed on first run with every directive commented out. Uncomment what you want:
@@ -103,9 +118,12 @@ nano ~/.termux/fonts.conf
 ls ~/.termux/launcher/examples/fonts.conf
 ```
 
-While `fonts.conf` has no active directives, `font.ttf` and Termux:Styling keep working exactly as
-before — the file only takes over the faces you actually set. Delete or rename it to go back.
-The [Modern terminal guide](Terminal_Modernization.md) documents every directive.
+The three tiers stack in one order: **your `fonts.conf` beats the `fonts.d` drop-ins the app writes,
+which beat `font.ttf`/Termux:Styling.** So you can let the picker install a family and then override
+just the parts you care about by hand. While `fonts.conf` has no active directives, `font.ttf` and
+Termux:Styling keep working exactly as before — the file only takes over the faces you actually set.
+Delete or rename it to go back. The [Modern terminal guide](Terminal_Modernization.md) documents
+every directive.
 
 ## 4. Use the Local AI Endpoint From the Shell
 
@@ -134,7 +152,7 @@ For endpoint files, authentication, route tables, and scripting examples, see [L
 
 ## 5. Optional Guarded Shell Setup
 
-The repository contains secret-free templates derived from the live development setup: fish with a commented quick-start guide, two Oh My Posh themes driven by wallpaper Material colors, the `~/.termux` terminal configs, and the Maple Mono font family the terminal's ligature support was tuned against. The shell setup includes:
+The repository contains secret-free templates derived from the live development setup: fish with a commented quick-start guide, a compact Aliens-derived Oh My Posh theme driven by wallpaper Material colors (plus the fuller legacy theme), the `~/.termux` terminal configs, and the Maple Mono font family the terminal's ligature support was tuned against. The shell setup includes:
 
 - fish
 - oh-my-posh

@@ -59,6 +59,16 @@ public abstract class UnixShellEnvironment implements IShellEnvironment {
     public static final String ENV_TERM = "TERM";
 
     /**
+     * Environment variable identifying the terminal emulator program hosting the shell, following
+     * the convention set by iTerm2, Apple Terminal, WezTerm, ghostty and VSCode. Terminal
+     * capability detectors (like chafa's terminal db, used by kew and others) key entries off it.
+     */
+    public static final String ENV_TERM_PROGRAM = "TERM_PROGRAM";
+
+    /** Environment variable for the version of the {@link #ENV_TERM_PROGRAM} terminal emulator. */
+    public static final String ENV_TERM_PROGRAM_VERSION = "TERM_PROGRAM_VERSION";
+
+    /**
      * Environment variable for the path of a directory made available for programs that need a place
      * to create temporary files.
      */

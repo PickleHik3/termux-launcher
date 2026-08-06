@@ -14,8 +14,9 @@
 
 <resources>
     <string name="settings_search_hint">Search settings</string>
+    <string name="settings_search_contains">Contains: %1$s</string>
     <string name="settings_destination_appearance">Appearance</string>
-    <string name="settings_destination_appearance_summary">Theme, wallpaper, colors, icons, dock, terminal, sessions, and glass</string>
+    <string name="settings_destination_appearance_summary">Theme, wallpaper, colors, fonts, icons, dock, terminal, sessions, and glass</string>
     <string name="settings_destination_terminal_status">Terminal &amp; status</string>
     <string name="settings_destination_terminal_status_summary">Display, panes, clock, CPU, memory, weather, margins, and Recents</string>
     <string name="settings_destination_keyboard_input">Keyboard &amp; input</string>
@@ -51,6 +52,19 @@
     <string name="settings_color_mode_title">Color mode</string>
     <string name="settings_wallpaper_colors_title">Use wallpaper colors</string>
     <string name="settings_wallpaper_colors_summary">Builds the launcher palette from the current wallpaper.</string>
+    <string name="settings_terminal_contrast_title">Terminal contrast</string>
+    <string name="settings_terminal_contrast_summary">%1$s</string>
+    <string name="settings_terminal_contrast_disabled">Available when wallpaper colors are on</string>
+    <string-array name="terminal_contrast_entries">
+        <item>Softer</item>
+        <item>Default</item>
+        <item>Harder</item>
+    </string-array>
+    <string-array name="terminal_contrast_values">
+        <item>softer</item>
+        <item>default</item>
+        <item>harder</item>
+    </string-array>
     <string name="settings_wallpaper_title">Wallpaper</string>
     <string name="settings_icon_appearance_header">Icon appearance</string>
     <string name="settings_icon_appearance_title">Use monochrome icons</string>
@@ -58,11 +72,11 @@
     <string name="settings_pinned_icon_pack_title">Pinned-app icon pack</string>
     <string name="settings_surfaces_header">Surfaces</string>
     <string name="settings_customize_dock_title">Customize dock appearance</string>
-    <string name="settings_customize_dock_summary">Choose the shared Default or Rounded shape and tune the dock on the real home screen.</string>
+    <string name="settings_customize_dock_summary">Choose the shared Default or Rounded shape and tune the dock live on the home screen.</string>
     <string name="settings_customize_status_title">Customize status appearance</string>
-    <string name="settings_customize_status_summary">Tune status blur, opacity, grain, and radius on the real home screen. Shape follows the shared surface choice.</string>
-    <string name="settings_customize_keyboard_title">Customize keyboard surface</string>
-    <string name="settings_customize_keyboard_summary">Edit keyboard size, spacing, key radius, and colors on the real home screen. Shape follows the shared surface choice.</string>
+    <string name="settings_customize_status_summary">Tune status blur, opacity, grain, and radius live on the home screen. Shape follows the shared surface choice.</string>
+    <string name="settings_customize_keyboard_title">Customize keyboard appearance</string>
+    <string name="settings_customize_keyboard_summary">Edit keyboard size, spacing, key radius, and colors live on the home screen. Shape follows the shared surface choice.</string>
     <string name="settings_dock_appearance_title">Dock appearance</string>
     <string name="settings_dock_appearance_summary">Style, size, apps per page, blur, opacity, grain, and shape with a live launcher preview.</string>
     <string name="settings_terminal_appearance_title">Terminal appearance</string>
@@ -230,7 +244,7 @@
     <string name="msg_max_terminals_reached">Close down existing ones before creating new.</string>
 
     <string name="title_rename_session">Set session name</string>
-    <string name="title_rename_window_session">Set session name (5 characters max)</string>
+    <string name="title_rename_window_session">Set session name (8 characters max)</string>
     <string name="action_rename_session_confirm">Set</string>
     <string name="title_create_named_session">New named session</string>
     <string name="action_create_named_session_confirm">Create</string>
@@ -265,6 +279,12 @@
     <string name="title_share_selected_text_with">Send selected text to:</string>
 
     <string name="action_reset_terminal">Reset</string>
+    <string name="msg_no_session_to_split">No session to split</string>
+    <string name="msg_window_position">Window %1$d/%2$d</string>
+    <plurals name="msg_pane_count">
+        <item quantity="one">%d pane</item>
+        <item quantity="other">%d panes</item>
+    </plurals>
     <string name="msg_terminal_reset">Terminal reset</string>
 
     <string name="action_kill_process">Kill process (%d)</string>
@@ -334,7 +354,6 @@
     <string name="title_activity_termux_settings">Settings</string>
 
     <!-- Termux App Preferences -->
-    <string name="settings_root_assistant_header">Assistant</string>
     <string name="settings_root_launcher_header">Launcher</string>
     <string name="settings_root_system_info_header">System &amp; Info</string>
 
@@ -406,6 +425,8 @@
             <string name="termux_split_panes_header">Split panes</string>
                 <string name="termux_window_bar_content_description">Terminal windows</string>
                 <string name="termux_window_tab_content_description">Window %1$d of %2$d: %3$s</string>
+                <string name="termux_window_tab_busy_content_description">working</string>
+                <string name="termux_window_tab_attention_content_description">waiting for you</string>
                 <string name="termux_window_new_content_description">New terminal window</string>
                 <string name="termux_top_pane_clock_content_description">Clock and status panel</string>
                 <string name="termux_top_pane_media_content_description">Media playback controls</string>
@@ -485,7 +506,6 @@
                 <string name="termux_keyboard_color_scheme_colors">Colors</string>
                 <string name="termux_keyboard_color_scheme_edit_colors">Edit colors</string>
                 <string name="termux_keyboard_color_scheme_save_colors">Save colors</string>
-                <string name="termux_keyboard_color_scheme_advanced">Advanced</string>
                 <string name="termux_keyboard_color_scheme_import_tinted">Import Tinted theme</string>
                 <string name="termux_keyboard_color_scheme_tinted_name_title">Import a Tinted theme</string>
                 <string name="termux_keyboard_color_scheme_tinted_name_message">Enter the complete theme ID shown in the Tinted Gallery. Base16, Base24, and Tinted8 are supported.</string>
@@ -501,16 +521,55 @@
                 <string name="termux_keyboard_color_scheme_imported_file_name">Imported Tinted theme</string>
                 <string name="termux_keyboard_color_scheme_tinted_error">This isn’t a complete Base16, Base24, or Tinted8 scheme.</string>
                 <string name="termux_keyboard_color_scheme_tinted_read_error">Couldn’t read this theme file.</string>
-                <string name="termux_keyboard_color_scheme_reset">Reset</string>
-                <string name="termux_keyboard_color_scheme_reset_title">Reset color scheme?</string>
-                <string name="termux_keyboard_color_scheme_reset_message">Remove all per-key colors and restore the current Material swatches.</string>
-                <string name="termux_keyboard_color_scheme_instructions">Paint keys directly: choose a swatch and role, then tap or drag across the keyboard. To change a palette value, tap Edit colors and then tap its swatch.</string>
+                <string name="termux_keyboard_color_scheme_follow_theme">Follow theme</string>
+                <string name="termux_keyboard_color_scheme_follow_theme_title">Follow the system theme?</string>
+                <string name="termux_keyboard_color_scheme_follow_theme_message">Pinned colors and any imported palette are discarded: every keyboard color follows your system theme and wallpaper again. Keys you painted keep their slot assignments.</string>
+                <string name="termux_keyboard_color_scheme_follow_theme_clear_keys">Clear painted keys too</string>
+                <string name="termux_keyboard_color_scheme_follow_theme_done">Colors follow the system theme again</string>
+                <string name="termux_keyboard_color_scheme_status_dynamic">Every color follows your system theme, so the keyboard moves with your wallpaper.</string>
+                <string name="termux_keyboard_color_scheme_status_pinned">%1$d of %2$d colors are pinned. The rest follow your system theme and wallpaper.</string>
+                <string name="termux_keyboard_color_scheme_status_imported">Imported palette %1$s is in use, so no color follows your wallpaper.</string>
+                <string name="termux_keyboard_color_scheme_status_imported_unnamed">An imported palette is in use, so no color follows your wallpaper.</string>
+                <string name="termux_keyboard_color_scheme_slot_pinned">pinned</string>
+                <string name="termux_keyboard_color_scheme_slot_dynamic">follows theme</string>
+                <string name="termux_keyboard_color_scheme_slot_description">%1$s, %2$s, %3$s</string>
+                <string name="termux_keyboard_color_scheme_slot_unpin">Follow theme again</string>
+                <string name="termux_keyboard_color_scheme_slot_unpinned">%1$s follows the system theme again</string>
+                <string name="termux_keyboard_color_scheme_instructions">Paint keys directly: choose a color and role, then tap or drag across the keyboard. Tap Edit colors and then a color to pin it to a hex value. Dashed colors follow your system theme; a dot marks a pinned one.</string>
                 <string name="termux_keyboard_color_scheme_key_bg">Key bg</string>
                 <string name="termux_keyboard_color_scheme_key_border">Key border</string>
                 <string name="termux_keyboard_color_scheme_primary">Primary</string>
                 <string name="termux_keyboard_color_scheme_secondary">Secondary</string>
                 <string name="termux_keyboard_color_scheme_secondary_bottom">Secondary bottom override</string>
-                <string name="termux_keyboard_color_scheme_swatch">Color swatch %1$d</string>
+                <!-- Short Material-role names for the 24 keyboard color slots, in slot order
+                     (base00 … base17). Index 06 and 10 are both colorSurface in the palette
+                     factory, so both are labelled Surface. -->
+                <string-array name="termux_keyboard_color_scheme_slot_labels">
+                    <item>Surface high</item>
+                    <item>Primary</item>
+                    <item>Secondary</item>
+                    <item>On surface</item>
+                    <item>On surface var</item>
+                    <item>Secondary cont</item>
+                    <item>Surface</item>
+                    <item>Surface highest</item>
+                    <item>Error</item>
+                    <item>Tertiary</item>
+                    <item>Primary cont</item>
+                    <item>On primary</item>
+                    <item>On secondary</item>
+                    <item>On tertiary</item>
+                    <item>Outline var</item>
+                    <item>Error cont</item>
+                    <item>Surface</item>
+                    <item>Surface cont</item>
+                    <item>Error tint</item>
+                    <item>Tertiary tint</item>
+                    <item>Primary tint</item>
+                    <item>Secondary tint</item>
+                    <item>Tertiary+primary</item>
+                    <item>Primary+secondary</item>
+                </string-array>
                 <string name="termux_keyboard_color_scheme_hex_title">Enter hex color</string>
                 <string name="termux_keyboard_color_scheme_hex_error">Use #RRGGBB or #AARRGGBB</string>
                 <string name="termux_in_app_keyboard_height_adjust_title">Size &amp; shape</string>
@@ -917,6 +976,10 @@
                 <string name="termux_dock_tuning_size">Size</string>
                 <string name="termux_dock_tuning_icons">Apps per page</string>
                 <string name="termux_dock_tuning_terminal">Opacity</string>
+                <string name="termux_dock_tuning_terminal_contrast">Contrast</string>
+                <string name="termux_dock_tuning_terminal_contrast_softer">Softer</string>
+                <string name="termux_dock_tuning_terminal_contrast_default">Default</string>
+                <string name="termux_dock_tuning_terminal_contrast_harder">Harder</string>
                 <string name="termux_dock_tuning_terminal_border">Border</string>
                 <string name="termux_dock_tuning_sessions">Opacity</string>
                 <string name="termux_surface_tuning_normalize">Match all surfaces</string>
@@ -1114,7 +1177,7 @@
     <!-- Command palette chrome -->
     <string name="action_command_palette">Command palette</string>
     <string name="palette_title">Command palette</string>
-    <string name="palette_search_hint">filter actions · sessions · apps</string>
+    <string name="palette_search_hint">search</string>
     <string name="palette_empty">No matching actions</string>
     <string name="palette_unavailable_splits_disabled">Unavailable: compatibility mode is on</string>
     <string name="palette_category_session">Session</string>
@@ -1126,16 +1189,26 @@
     <string name="palette_category_app">App</string>
     <string name="palette_category_apps">Apps</string>
     <string name="palette_category_sessions">Sessions</string>
+    <string name="palette_app_row_subtitle">%1$s · hold to bind a key</string>
+    <string name="palette_capture_notice">Press a key combination for %1$s · ⏎ save · ⌫ clear · esc cancel</string>
+    <string name="palette_capture_placeholder">waiting for a key</string>
+    <string name="palette_capture_conflict">Already bound to %1$s · saving replaces it</string>
+    <string name="palette_capture_needs_modifier">Add Ctrl, Alt or Shift — a bare key would swallow typing</string>
+    <string name="palette_capture_saved">%1$s bound to %2$s</string>
+    <string name="palette_capture_failed">Could not save the binding: %1$s</string>
+    <string name="palette_meta_awaiting_key">press key</string>
+    <string name="palette_session_rename">Rename %1$s</string>
+    <string name="palette_session_rename_hint">Type a new name, up to 8 characters</string>
     <string name="palette_confirm_title">Run %1$s?</string>
     <string name="palette_confirm_run">Run</string>
     <string name="palette_action_failed">Could not run %1$s</string>
     <string name="palette_no_match">NO MATCH — ⏎ RUNS \"%1$s\" IN THE SHELL</string>
     <string name="palette_argument_notice">TYPE A VALUE FOR %1$s, ⏎ TO APPLY</string>
-    <string name="palette_meta_awaiting_value">awaiting value · esc</string>
-    <string name="palette_meta_idle">type to search · ↓ browse</string>
+    <string name="palette_meta_awaiting_value">value</string>
+    <string name="palette_meta_idle">↓ browse</string>
     <plurals name="palette_meta_results">
-        <item quantity="one">%1$d result · esc</item>
-        <item quantity="other">%1$d results · esc</item>
+        <item quantity="one">%1$d result</item>
+        <item quantity="other">%1$d results</item>
     </plurals>
 
     <!-- Terminal action titles, shown in the command palette -->
@@ -1174,6 +1247,7 @@
     <string name="tool_window_select">Switch to window</string>
     <string name="tool_window_rename">Rename window session</string>
     <string name="tool_session_rename">Rename session</string>
+    <string name="tool_session_rename_at_index">Rename session by index</string>
     <string name="tool_terminal_reset">Reset terminal</string>
     <string name="tool_appearance_set_wallpaper">Set wallpaper</string>
     <string name="tool_appearance_toggle_wallpaper">Toggle wallpaper</string>
@@ -1205,9 +1279,19 @@
     <string name="tool_desc_workspace_picker">Pick a saved workspace and load it into the current layout or in place of it.</string>
     <string name="tool_desc_workspace_save_prompt">Prompt for a name and save the current sessions, windows, and panes.</string>
     <string name="workspace_picker_title">Load workspace</string>
+    <string name="workspace_delete_description">Delete workspace %1$s</string>
+    <string name="workspace_delete_title">Delete “%1$s”?</string>
+    <string name="workspace_delete_message">The saved workspace file is removed. Running sessions are not affected.</string>
+    <string name="workspace_delete_confirm">Delete</string>
+    <string name="workspace_deleted">Deleted “%1$s”</string>
     <string name="workspace_picker_empty">No saved workspaces</string>
     <string name="workspace_picker_mode_message">Load “%1$s” in place of the current workspace, or append its windows to it?</string>
     <string name="workspace_picker_replace">Replace</string>
+    <plurals name="workspace_load_run_commands">
+        <item quantity="one">Re-run the 1 saved command</item>
+        <item quantity="other">Re-run the %1$d saved commands</item>
+    </plurals>
+    <string name="workspace_load_run_commands_summary">Each command starts again from the beginning; it is not resumed. Its shell stays open afterwards.</string>
     <string name="workspace_picker_append">Append</string>
     <string name="workspace_picker_loaded">Workspace “%1$s” loaded</string>
     <string name="workspace_picker_failed">Could not load workspace: %1$s</string>
@@ -1282,6 +1366,18 @@
 
     <!-- Searchable session browser -->
     <string name="session_browser_title">Sessions</string>
+    <string name="sessions_panel_session_fallback">Session %1$d</string>
+    <string name="sessions_panel_window_fallback">shell</string>
+    <string name="sessions_panel_window_title">Window %1$d · %2$s</string>
+    <string name="sessions_panel_more">More actions for session %1$d</string>
+    <string name="sessions_panel_expanded">Expanded</string>
+    <string name="sessions_panel_collapsed">Collapsed</string>
+    <string name="voice_typing_chooser_title">Choose speech recognizer</string>
+    <string name="voice_typing_unavailable">Speech recognition unavailable</string>
+    <plurals name="background_process_hidden_count">
+        <item quantity="one">%d more background process</item>
+        <item quantity="other">%d more background processes</item>
+    </plurals>
     <string name="session_browser_search_hint">Search name, CWD, or process</string>
     <string name="session_browser_empty">No matching sessions</string>
     <string name="session_browser_new">New</string>
@@ -1310,6 +1406,8 @@
         <item quantity="other">This terminates all %1$d panes in the session.</item>
     </plurals>
     <string name="session_browser_workspace_name">Workspace name</string>
+    <string name="workspace_save_capture_commands">Also save what is running</string>
+    <string name="workspace_save_capture_commands_summary">Records the command in the foreground of each pane so loading can offer to run it again. Idle panes record nothing.</string>
     <string name="session_browser_workspace_saved">Saved workspace %1$s</string>
     <string name="session_browser_workspace_overwrite_title">Replace %1$s?</string>
     <string name="session_browser_workspace_overwrite_message">A workspace with this name already exists.</string>
@@ -1321,7 +1419,116 @@
     <string name="sessions_panel_new">New session</string>
     <string name="sessions_panel_shell">shell</string>
     <string name="sessions_panel_close_session">Close session %1$d</string>
+    <string name="sessions_panel_rename_session">Rename session %1$d</string>
+    <string name="termux_status_settings_content_description">Terminal and status settings</string>
     <string name="palette_unavailable_no_selection">Unavailable: no text selected</string>
     <string name="palette_unavailable_no_session">Unavailable: no active session</string>
+
+    <!-- Terminal fonts: catalog, downloader and picker -->
+    <string name="settings_fonts_header">Terminal font</string>
+    <string name="termux_fonts_preferences_title">Terminal fonts</string>
+    <string name="termux_fonts_preferences_summary">Install a multi-face font with Nerd Font icons from the bundled catalog</string>
+    <string name="termux_fonts_setup_title">Setup</string>
+    <string name="termux_fonts_status_title">Active font</string>
+    <string name="termux_fonts_status_none_label">FONT.TTF</string>
+    <string name="termux_fonts_status_none_summary">No app-managed font. The terminal is using ~/.termux/font.ttf, Termux:Styling, or Android monospace.</string>
+    <string name="termux_fonts_status_active_summary">%1$s · %2$s · managed by ~/.termux/fonts.d/10-launcher.conf</string>
+    <string name="termux_fonts_action_install">Install</string>
+    <string name="termux_fonts_action_use">Use</string>
+    <string name="termux_fonts_action_active">Active</string>
+    <string name="termux_fonts_action_cancel">Cancel</string>
+    <string name="termux_fonts_pill_active">Active</string>
+    <string name="termux_fonts_pill_installed">Installed</string>
+    <string name="termux_fonts_pill_downloading">Downloading</string>
+    <string name="termux_fonts_tuning_title">Tuning</string>
+    <string name="termux_fonts_nerd_icons_title">Nerd Font icons</string>
+    <string name="termux_fonts_nerd_icons_summary">Route U+E000–U+F8FF and U+F0000–U+FFFFD to the bundled Symbols Nerd Font Mono, so powerline, devicon and Material Design glyphs work with any family</string>
+    <string name="termux_fonts_ligatures_title">Ligature policy</string>
+    <string name="termux_fonts_ligatures_none_summary">Install a font to choose a policy</string>
+    <string name="termux_fonts_ligatures_never">Always shaped (disable_ligatures never)</string>
+    <string name="termux_fonts_ligatures_cursor">Un-fuse under the cursor (disable_ligatures cursor)</string>
+    <string name="termux_fonts_ligatures_always">Off (disable_ligatures always)</string>
+    <string name="termux_fonts_weight_title">Weight</string>
+    <string name="termux_fonts_weight_static_summary">Only variable families have a weight axis</string>
+    <string name="termux_fonts_weight_summary">wght %1$d (axis %2$d–%3$d)</string>
+    <string name="termux_fonts_weight_dialog_title">Weight (%1$d–%2$d)</string>
+    <string name="termux_fonts_weight_apply">Apply</string>
+    <string name="termux_fonts_weight_reset">Family default</string>
+    <string name="termux_fonts_families_title">Families</string>
+    <string name="termux_fonts_meta_installed">Installed</string>
+    <!-- Count of real faces a family ships. A leading space in a resource value is stripped, so the
+         count is formatted in rather than concatenated. -->
+    <string name="termux_fonts_meta_faces">%1$d faces</string>
+    <string name="termux_fonts_meta_variable">variable</string>
+    <string name="termux_fonts_meta_ligatures">ligatures</string>
+    <string name="termux_fonts_meta_no_italic">no italic upstream</string>
+    <string name="termux_fonts_license_action">License</string>
+    <string name="termux_fonts_open_license">Open license</string>
+    <string name="termux_fonts_open_upstream">Upstream</string>
+    <string name="termux_fonts_details_id">ID: %1$s</string>
+    <string name="termux_fonts_details_release">Release: %1$s</string>
+    <string name="termux_fonts_details_download">Download: %1$s</string>
+    <string name="termux_fonts_details_license">License: %1$s</string>
+    <string name="termux_fonts_install_title">Install %1$s</string>
+    <string name="termux_fonts_install_message">Downloads %1$s from the upstream release, verifies it against a pinned SHA-256, and installs it under ~/.termux/fonts.\n\nLicensed %2$s\n%3$s</string>
+    <string name="termux_fonts_install_started">Downloading %1$s…</string>
+    <string name="termux_fonts_install_failed">Font install failed: %1$s</string>
+    <string name="termux_fonts_installed_toast">Font installed</string>
+    <string name="termux_fonts_cancelling">Cancelling…</string>
+    <string name="termux_fonts_busy">Another font is still downloading</string>
+    <string name="termux_fonts_reapply_failed">Could not write ~/.termux/fonts.d/10-launcher.conf</string>
+    <string name="termux_fonts_metered_title">Metered connection</string>
+    <string name="termux_fonts_metered_message">This connection is metered and the download is %1$s. Continue anyway?</string>
+    <string name="termux_fonts_metered_continue">Download</string>
+    <string name="termux_fonts_manual_title">Manual control</string>
+    <string name="termux_fonts_use_font_ttf_title">Use font.ttf / Termux:Styling</string>
+    <string name="termux_fonts_use_font_ttf_summary">Removes the app-managed config so the terminal goes back to ~/.termux/font.ttf. Installed families stay on disk.</string>
+    <string name="termux_fonts_use_font_ttf_confirm">Deletes ~/.termux/fonts.d/10-launcher.conf and nothing else. Your own ~/.termux/fonts.conf and the installed font files are left untouched.</string>
+    <string name="termux_fonts_use_font_ttf_action">Remove</string>
+    <string name="termux_fonts_uninstalled">Managed font config removed</string>
+    <string name="termux_fonts_uninstall_missing">There was no managed font config</string>
+    <string name="termux_fonts_power_user_title">Hand-edited config</string>
+    <string name="termux_fonts_power_user_summary">Write your own ~/.termux/fonts.conf: it is read after every fonts.d fragment, so it overrides everything the app sets. A fully commented example is refreshed at ~/.termux/launcher/examples/fonts.conf.</string>
+    <string name="termux_fonts_catalog_empty_title">No families available</string>
+    <string name="termux_fonts_catalog_empty_summary">The bundled font catalog could not be read.</string>
+
+    <!-- Terminal font tools -->
+    <string name="tool_fonts_pick">Terminal fonts</string>
+    <string name="tool_desc_fonts_pick">Open the terminal font picker.</string>
+    <string name="tool_fonts_install">Install terminal font</string>
+
+    <!-- Required credit for Open-Meteo forecast data (CC BY 4.0). Not translated: it is the
+         attribution wording Open-Meteo asks for. -->
+    <string name="weather_attribution" translatable="false">Weather data by Open-Meteo.com</string>
+
+    <!-- First-launch product onboarding -->
+    <string name="onboarding_brand">TERMUX:LAUNCHER</string>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_skip_description">Skip introduction and open &TERMUX_APP_NAME;</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_next_description">Show the next introduction page</string>
+    <string name="onboarding_get_started">Start using Termux</string>
+    <string name="onboarding_get_started_description">Finish setup tips and open your workspace</string>
+
+    <string name="onboarding_page_one_eyebrow">FIRST 60 SECONDS</string>
+    <string name="onboarding_page_one_title">Set up the essentials.</string>
+    <string name="onboarding_page_one_body">Run these commands in the terminal to refresh packages and give command-line tools access to shared storage.</string>
+    <string name="onboarding_page_one_tip_one">pkg update &amp;&amp; pkg upgrade</string>
+    <string name="onboarding_page_one_tip_two">termux-setup-storage</string>
+    <string name="onboarding_page_one_footer">Run these in your first terminal</string>
+
+    <string name="onboarding_page_two_eyebrow">APPS, WITHOUT DETOURS</string>
+    <string name="onboarding_page_two_title">Find and launch anything.</string>
+    <string name="onboarding_page_two_body">Use the dock as an app launcher. Search by typing a percent sign, or scrub the alphabet row to jump through installed apps.</string>
+    <string name="onboarding_page_two_tip_one">Type %settings to filter the app dock</string>
+    <string name="onboarding_page_two_tip_two">Tap to launch · long-press for app actions</string>
+    <string name="onboarding_page_two_footer">The dock stays beside your terminal</string>
+
+    <string name="onboarding_page_three_eyebrow">YOUR WORKSPACE</string>
+    <string name="onboarding_page_three_title">Keep work visible and alive.</string>
+    <string name="onboarding_page_three_body">Create persistent terminal windows, split the workspace, and open live system details without leaving your command line.</string>
+    <string name="onboarding_page_three_tip_one">+ creates another terminal window</string>
+    <string name="onboarding_page_three_tip_two">Tap CPU, memory, or weather for details</string>
+    <string name="onboarding_page_three_footer">Long-press a surface to personalize it</string>
 
 </resources>

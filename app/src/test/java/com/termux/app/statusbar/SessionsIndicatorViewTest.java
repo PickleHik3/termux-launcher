@@ -31,17 +31,17 @@ public class SessionsIndicatorViewTest {
 
         view.setSession("mainframe", 3, 1);
         assertEquals(1, view.getChildCount());
-        assertEquals("mainf", ((TextView) view.getChildAt(0)).getText().toString());
+        assertEquals("mainfram", ((TextView) view.getChildAt(0)).getText().toString());
         assertFalse(view.isShowingSessionNumber());
-        assertTrue(view.getContentDescription().toString().contains("mainf"));
+        assertTrue(view.getContentDescription().toString().contains("mainfram"));
 
         view.setSession(null, 3, 1);
         assertEquals("2", ((TextView) view.getChildAt(0)).getText().toString());
         assertEquals(18, Math.round(view.getMinimumWidth()
             / view.getResources().getDisplayMetrics().density));
 
-        view.setSession("123456", 3, 1);
-        assertEquals("12345", ((TextView) view.getChildAt(0)).getText().toString());
+        view.setSession("123456789", 3, 1);
+        assertEquals("12345678", ((TextView) view.getChildAt(0)).getText().toString());
         assertFalse(view.isShowingSessionNumber());
     }
 

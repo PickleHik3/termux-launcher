@@ -71,11 +71,13 @@ public class TerminalKeyEventHandlerTest {
         Pointers.Modifiers modifiers = mods(KeyValue.Modifier.CTRL, KeyValue.Modifier.ALT,
             KeyValue.Modifier.SHIFT, KeyValue.Modifier.META);
 
-        mHandler.key_up(KeyValue.makeCharKey('a'), modifiers);
+        // Ctrl alone is still terminal input, so the code-point path keeps its two-flag contract.
+        mHandler.key_up(KeyValue.makeCharKey('a'), mods(KeyValue.Modifier.CTRL,
+            KeyValue.Modifier.SHIFT, KeyValue.Modifier.META));
         CodePointCall charCall = mTerminal.codePointCalls.get(0);
         assertEquals(TerminalView.KEY_EVENT_SOURCE_VIRTUAL_KEYBOARD, charCall.eventSource);
         assertTrue(charCall.ctrl);
-        assertTrue(charCall.alt);
+        assertFalse(charCall.alt);
 
         mHandler.key_up(KeyValue.keyeventKey("tab", KeyEvent.KEYCODE_TAB, 0), modifiers);
         KeyCall keyCall = mTerminal.keyCalls.get(0);
@@ -87,6 +89,33 @@ public class TerminalKeyEventHandlerTest {
         assertTrue(keyCall.down.isMetaPressed());
         assertTrue(keyCall.down.isFromSource(InputDevice.SOURCE_KEYBOARD));
         assertEquals(android.view.KeyCharacterMap.VIRTUAL_KEYBOARD, keyCall.down.getDeviceId());
+    }
+
+    @Test
+    public void aCharUnderLatchedCtrlAltBecomesAKeyEventForTheBindingResolver() {
+        // The hint overlay lights these caps in their action's colour, so pressing one has to reach
+        // the same resolver a hardware Ctrl+Alt+R does instead of writing bytes to the shell.
+        Pointers.Modifiers modifiers = mods(KeyValue.Modifier.CTRL, KeyValue.Modifier.ALT,
+            KeyValue.Modifier.SHIFT);
+
+        mHandler.key_up(KeyValue.makeCharKey('R'), modifiers);
+
+        assertTrue(mTerminal.codePointCalls.isEmpty());
+        KeyCall keyCall = mTerminal.keyCalls.get(0);
+        assertEquals(KeyEvent.KEYCODE_R, keyCall.down.getKeyCode());
+        assertTrue(keyCall.down.isCtrlPressed());
+        assertTrue(keyCall.down.isAltPressed());
+        assertTrue(keyCall.down.isShiftPressed());
+    }
+
+    @Test
+    public void aCharWithNoKeyCodeUnderCtrlAltStillReachesTheShell() {
+        // Nothing binds a character the key-code table cannot name, so it must not be swallowed.
+        mHandler.key_up(KeyValue.makeCharKey('é'),
+            mods(KeyValue.Modifier.CTRL, KeyValue.Modifier.ALT));
+
+        assertTrue(mTerminal.keyCalls.isEmpty());
+        assertEquals((int) 'é', mTerminal.codePointCalls.get(0).codePoint);
     }
 
     @Test
@@ -250,9 +279,11 @@ public class TerminalKeyEventHandlerTest {
                 case SWITCH_BACK_EMOJI:
                 case SWITCH_CLIPBOARD:
                 case SWITCH_BACK_CLIPBOARD:
+                    assertEquals(logs + 1, mHost.logs.size());
+                    break;
                 case SWITCH_VOICE_TYPING:
                 case SWITCH_VOICE_TYPING_CHOOSER:
-                    assertEquals(logs + 1, mHost.logs.size());
+                    assertEquals(hostActions + 1, mHost.totalActions());
                     break;
                 case ACTION:
                     assertEquals(keys + 1, mTerminal.keyCalls.size());
@@ -601,6 +632,7 @@ public class TerminalKeyEventHandlerTest {
         private int settings;
         private int hides;
         private int capsLocks;
+        private int voiceRequests;
         private final List<Boolean> composeStates = new ArrayList<>();
         private final List<String> suggestions = new ArrayList<>();
         private final List<String> logs = new ArrayList<>();
@@ -668,6 +700,11 @@ public class TerminalKeyEventHandlerTest {
         }
 
         @Override
+        public void requestVoiceTyping(boolean chooser) {
+            voiceRequests++;
+        }
+
+        @Override
         public void setComposePending(boolean pending) {
             composeStates.add(pending);
         }
@@ -689,7 +726,7 @@ public class TerminalKeyEventHandlerTest {
 
         private int totalActions() {
             return pastes + copies + textLayouts + numericLayouts + greekLayouts + nextLayouts +
-                previousLayouts + settings + hides + capsLocks;
+                previousLayouts + settings + hides + capsLocks + voiceRequests;
         }
     }
 }

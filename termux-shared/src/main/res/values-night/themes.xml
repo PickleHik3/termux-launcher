@@ -7,7 +7,7 @@
      BaseActivity DayNight DarkActionBar theme.
      https://github.com/material-components/material-components-android/blob/1.4.0/lib/java/com/google/android/material/theme/res/values/themes.xml#L27
     -->
-    <style name="Theme.BaseActivity.DayNight.DarkActionBar" parent="Theme.MaterialComponents">
+    <style name="Theme.BaseActivity.DayNight.DarkActionBar" parent="Theme.Material3.Dark">
         <item name="termuxColorPrimary">@color/termux_primary</item>
         <item name="termuxColorOnPrimary">@color/termux_on_primary</item>
         <item name="termuxColorSecondary">@color/termux_secondary</item>
@@ -69,7 +69,7 @@
       BaseDialog DayNight theme.
       https://github.com/material-components/material-components-android/blob/1.4.0/lib/java/com/google/android/material/dialog/res/values/themes.xml#L70
      -->
-    <style name="ThemeOverlay.BaseDialog.DayNight" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+    <style name="ThemeOverlay.BaseDialog.DayNight" parent="ThemeOverlay.Material3.MaterialAlertDialog">
         <item name="colorPrimary">?attr/termuxColorPrimary</item>
         <item name="colorOnPrimary">?attr/termuxColorOnPrimary</item>
         <item name="colorSurface">?attr/termuxColorSurfacePanelHigh</item>

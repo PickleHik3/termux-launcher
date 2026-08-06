@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.31-vaj
+
+VAJ edition (`io.vaj.tl`), pinned to the verified aarch64 APT bootstrap and the signed `https://repo.pathayam.xyz stable main` repository.
+
+### Added
+
+- **First-launch onboarding** — a three-page tour over real footage of the launcher: the essential first commands, the dock with `%` search and alphabet rail, and persistent windows with splits and the live status surfaces. Forceable with `EXTRA_SHOW_ONBOARDING`.
+- **Landscape layout** — draws into the display cutout, per-orientation keyboard height with a lower landscape ceiling, and a vertical dock rail of pinned apps on the left edge.
+- **Workspace command restore** — saving records each pane's foreground command behind a checkbox, and loading offers to run them again through the normal login shell; plus per-row workspace delete.
+- **Terminal font picker** — fourteen curated families with SHA-256 verification, `fonts.d` drop-ins, ordered font fallback, named symbol maps, and geometric box drawing with Powerline separators synthesized by default.
+- **Working indication** — a window's pill rim breathes while its shell is actually burning CPU, and lights up in the error colour when a shell rings the bell for attention.
+- **Terminal capability advertising** — XTVERSION, XTSMGRAPHICS and `TERM_PROGRAM` identify the launcher to programs that pick features by terminal.
+- **Per-pane zoom**, case-sensitive keybindings with per-family group colours, app keybinding from the palette, and every Material container role exported to `~/.termux/material-colors.{sh,properties}`.
+
+### Changed
+
+- The in-app keyboard's colours follow the Material theme unless pinned; settings search reaches every sub-screen; Open-Meteo is credited beside the forecast; bar CPU/RAM readings are smoothed.
+
+### Fixed
+
+- "Customize status appearance" no longer crashes in dark mode below Android 12 (#7).
+- Closing a pane tears down its whole process group; the scratchpad no longer shrinks under the keyboard; the CPU card keeps working; the wallpaper is visible again in wallpaper mode; download catalogs no longer flicker.
+
 ## 0.2.30-vaj
 
 VAJ edition (`io.vaj.tl`), pinned to the verified aarch64 APT bootstrap and the signed `https://repo.pathayam.xyz stable main` repository.

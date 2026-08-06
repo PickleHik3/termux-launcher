@@ -5,11 +5,13 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.Space;
@@ -30,7 +32,6 @@ import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.color.MaterialColors;
-import com.google.android.material.materialswitch.MaterialSwitch;
 import com.termux.R;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory;
@@ -67,16 +68,31 @@ public class KeyboardColorSchemeFragment extends Fragment {
     private InAppKeyboardColorScheme mScheme;
     private Keyboard2View mKeyboard;
     private LinearLayout mSwatchRow;
+    private TextView mStatus;
     private final List<View> mSwatchViews = new ArrayList<>();
+    private final List<View> mSwatchBadges = new ArrayList<>();
+    private final List<View> mSwatchItems = new ArrayList<>();
     private final Map<Integer, InAppKeyboardColorScheme.Role> mRoleByChipId = new HashMap<>();
     private int mSelectedSwatch;
     private InAppKeyboardColorScheme.Role mSelectedRole =
         InAppKeyboardColorScheme.Role.KEY_BACKGROUND;
     private boolean mEditingSwatches;
-    private boolean mAdvanced;
-    private MaterialButton mImportButton;
-    private static final String STATE_ADVANCED = "advanced";
     private static final int MAX_BASE16_BYTES = 262144;
+    /**
+     * Material role behind every slot, mirroring
+     * {@link InAppKeyboardPaletteFactory#defaultEditorSwatches}. These stay untranslated on
+     * purpose: they are the API role names a theme author matches against, and they only appear in
+     * content descriptions and the hex dialog, never as on-screen chip text. Slots 06 and 10 are
+     * both {@code colorSurface} in the factory, which is named rather than hidden.
+     */
+    private static final String[] SLOT_ROLE_IDS = {
+        "surfaceContainerHigh", "primary", "secondary", "onSurface", "onSurfaceVariant",
+        "secondaryContainer", "surface", "surfaceContainerHighest", "error", "tertiary",
+        "primaryContainer", "onPrimary", "onSecondary", "onTertiary", "outlineVariant",
+        "errorContainer", "surface (same as base06)", "surfaceContainer",
+        "error + onSurface 20%", "tertiary + onSurface 20%", "primary + onSurface 20%",
+        "secondary + onSurface 20%", "tertiary + primary 50%", "primary + secondary 50%"
+    };
     private static final String TINTED_SCHEME_URL =
         "https://raw.githubusercontent.com/tinted-theming/schemes/spec-0.11/%s/%s.yaml";
     private static final String TINTED_GALLERY_URL =
@@ -100,11 +116,18 @@ public class KeyboardColorSchemeFragment extends Fragment {
             throw new IllegalStateException("Termux preferences unavailable");
         mScheme = InAppKeyboardColorScheme.fromJson(context,
             mPreferences.getInAppKeyboardColorScheme());
-        mAdvanced = savedInstanceState != null && savedInstanceState.getBoolean(STATE_ADVANCED);
 
         LinearLayout root = new LinearLayout(context);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(12), dp(16), dp(12));
+
+        // Whether the keyboard still moves with the wallpaper is the first thing to say.
+        mStatus = new TextView(context);
+        mStatus.setTextAppearance(
+            com.google.android.material.R.style.TextAppearance_Material3_TitleSmall);
+        mStatus.setText(statusText(context, mScheme));
+        root.addView(mStatus, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView instructions = new TextView(context);
         instructions.setText(R.string.termux_keyboard_color_scheme_instructions);
@@ -112,7 +135,10 @@ public class KeyboardColorSchemeFragment extends Fragment {
             com.google.android.material.R.style.TextAppearance_Material3_BodyMedium);
         instructions.setTextColor(MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorOnSurfaceVariant, Color.GRAY));
-        root.addView(instructions);
+        LinearLayout.LayoutParams instructionParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        instructionParams.topMargin = dp(6);
+        root.addView(instructions, instructionParams);
 
         // Push the preview and its palette to the bottom, within thumb reach, instead of
         // leaving dead space below a top-anchored palette.
@@ -188,60 +214,46 @@ public class KeyboardColorSchemeFragment extends Fragment {
             com.google.android.material.R.style.TextAppearance_Material3_TitleMedium);
         heading.addView(colorsTitle, new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        MaterialButton reset = new MaterialButton(context, null,
-            com.google.android.material.R.attr.materialButtonOutlinedStyle);
-        reset.setText(R.string.termux_keyboard_color_scheme_reset);
-        reset.setOnClickListener(view -> new MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.termux_keyboard_color_scheme_reset_title)
-            .setMessage(R.string.termux_keyboard_color_scheme_reset_message)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.termux_keyboard_color_scheme_reset, (dialog, which) -> {
-                mPreferences.setInAppKeyboardColorScheme("");
-                mPreferences.setInAppKeyboardTheme("system");
-                mScheme = InAppKeyboardColorScheme.fromJson(requireContext(), "");
-                mSelectedSwatch = 0;
-                createSwatches();
-                persistAndRender();
-            })
-            .show());
-        heading.addView(reset);
         MaterialButton edit = new MaterialButton(context, null,
             com.google.android.material.R.attr.materialButtonOutlinedStyle);
         edit.setText(R.string.termux_keyboard_color_scheme_edit_colors);
-        LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        editParams.setMarginStart(dp(8));
         edit.setOnClickListener(view -> {
             mEditingSwatches = !mEditingSwatches;
             edit.setText(mEditingSwatches ? R.string.termux_keyboard_color_scheme_save_colors
                 : R.string.termux_keyboard_color_scheme_edit_colors);
             updateSwatches();
         });
-        heading.addView(edit, editParams);
+        heading.addView(edit);
         content.addView(heading);
 
-        LinearLayout advancedRow = new LinearLayout(context);
-        advancedRow.setGravity(Gravity.CENTER_VERTICAL);
-        MaterialSwitch advanced = new MaterialSwitch(context);
-        advanced.setText(R.string.termux_keyboard_color_scheme_advanced);
-        advanced.setChecked(mAdvanced);
-        advanced.setOnCheckedChangeListener((button, checked) -> {
-            mAdvanced = checked;
-            mImportButton.setVisibility(checked ? View.VISIBLE : View.GONE);
-            createSwatches();
-        });
-        advancedRow.addView(advanced, new LinearLayout.LayoutParams(
-            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        mImportButton = new MaterialButton(context, null,
+        // Import and the scheme-level reset scroll rather than clip: both labels are long enough
+        // to overflow one row on a narrow phone.
+        HorizontalScrollView actionScroller = new HorizontalScrollView(context);
+        actionScroller.setHorizontalScrollBarEnabled(false);
+        actionScroller.setClipToPadding(false);
+        LinearLayout actions = new LinearLayout(context);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setGravity(Gravity.CENTER_VERTICAL);
+        MaterialButton importButton = new MaterialButton(context, null,
             com.google.android.material.R.attr.materialButtonOutlinedStyle);
-        mImportButton.setText(R.string.termux_keyboard_color_scheme_import_tinted);
-        mImportButton.setVisibility(mAdvanced ? View.VISIBLE : View.GONE);
-        mImportButton.setOnClickListener(view -> showBase16NameDialog());
-        LinearLayout.LayoutParams importParams = new LinearLayout.LayoutParams(
+        importButton.setText(R.string.termux_keyboard_color_scheme_import_tinted);
+        importButton.setOnClickListener(view -> showBase16NameDialog());
+        actions.addView(importButton, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        MaterialButton followTheme = new MaterialButton(context, null,
+            com.google.android.material.R.attr.materialButtonOutlinedStyle);
+        followTheme.setText(R.string.termux_keyboard_color_scheme_follow_theme);
+        followTheme.setOnClickListener(view -> showFollowThemeDialog());
+        LinearLayout.LayoutParams followParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        importParams.setMarginStart(dp(12));
-        advancedRow.addView(mImportButton, importParams);
-        content.addView(advancedRow);
+        followParams.setMarginStart(dp(8));
+        actions.addView(followTheme, followParams);
+        actionScroller.addView(actions, new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams actionParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        actionParams.topMargin = dp(4);
+        content.addView(actionScroller, actionParams);
 
         HorizontalScrollView swatchScroller = new HorizontalScrollView(context);
         swatchScroller.setHorizontalScrollBarEnabled(false);
@@ -250,9 +262,9 @@ public class KeyboardColorSchemeFragment extends Fragment {
         mSwatchRow.setOrientation(LinearLayout.HORIZONTAL);
         mSwatchRow.setGravity(Gravity.CENTER_VERTICAL);
         swatchScroller.addView(mSwatchRow, new ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, dp(76)));
+            ViewGroup.LayoutParams.WRAP_CONTENT, dp(100)));
         LinearLayout.LayoutParams swatchParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(76));
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(100));
         swatchParams.topMargin = dp(8);
         content.addView(swatchScroller, swatchParams);
         createSwatches();
@@ -297,6 +309,110 @@ public class KeyboardColorSchemeFragment extends Fragment {
     public void onResume() {
         super.onResume();
         requireActivity().setTitle(R.string.termux_keyboard_color_scheme_title);
+        // The wallpaper may have changed while this screen sat in the background; dynamic slots
+        // have to show what the keyboard will actually use.
+        if (mScheme != null && mKeyboard != null
+                && mScheme.refreshDynamicSwatches(requireContext())) {
+            persistAndRender();
+            updateSwatches();
+        }
+    }
+
+    /** Scheme-level reset: every slot goes back to following the system Material theme. */
+    private void showFollowThemeDialog() {
+        new MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.termux_keyboard_color_scheme_follow_theme_title)
+            .setMessage(R.string.termux_keyboard_color_scheme_follow_theme_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setNeutralButton(R.string.termux_keyboard_color_scheme_follow_theme_clear_keys,
+                (dialog, which) -> applyFollowTheme(true))
+            .setPositiveButton(R.string.termux_keyboard_color_scheme_follow_theme,
+                (dialog, which) -> applyFollowTheme(false))
+            .show();
+    }
+
+    private void applyFollowTheme(boolean clearPaintedKeys) {
+        if (clearPaintedKeys) {
+            mPreferences.setInAppKeyboardColorScheme("");
+            mScheme = InAppKeyboardColorScheme.fromJson(requireContext(), "");
+        } else {
+            resetSchemeToTheme(mScheme);
+        }
+        // An imported palette is applied only while the theme preference names a custom theme, so
+        // a deliberate light/dark choice is left alone.
+        if ("custom".equals(mPreferences.getInAppKeyboardTheme()))
+            mPreferences.setInAppKeyboardTheme("system");
+        mSelectedSwatch = 0;
+        persistAndRender();
+        createSwatches();
+        Toast.makeText(requireContext(),
+            R.string.termux_keyboard_color_scheme_follow_theme_done, Toast.LENGTH_SHORT).show();
+    }
+
+    /** Reset seam used by the confirmation dialog: unpins every slot and drops the import. */
+    static void resetSchemeToTheme(@NonNull InAppKeyboardColorScheme scheme) {
+        scheme.unpinAllSwatches();
+    }
+
+    @NonNull
+    static String slotName(int index) {
+        return String.format(Locale.ROOT, "base%02X", index);
+    }
+
+    /** Material role identifier behind a slot, or an empty string for an unmapped slot. */
+    @NonNull
+    static String slotRoleId(int index) {
+        return index >= 0 && index < SLOT_ROLE_IDS.length ? SLOT_ROLE_IDS[index] : "";
+    }
+
+    /** Short, translated role name shown under a swatch. */
+    @NonNull
+    static String slotRoleLabel(@NonNull android.content.Context context, int index) {
+        String[] labels = context.getResources().getStringArray(
+            R.array.termux_keyboard_color_scheme_slot_labels);
+        return index >= 0 && index < labels.length ? labels[index] : "";
+    }
+
+    /** "base00, surfaceContainerHigh, follows theme" — slot, role, and pinned state. */
+    @NonNull
+    static String slotDescription(@NonNull android.content.Context context,
+                                  @NonNull InAppKeyboardColorScheme scheme, int index) {
+        String role = slotRoleId(index);
+        if (role.isEmpty()) role = slotRoleLabel(context, index);
+        return context.getString(R.string.termux_keyboard_color_scheme_slot_description,
+            slotName(index), role,
+            context.getString(scheme.isSwatchPinned(index)
+                ? R.string.termux_keyboard_color_scheme_slot_pinned
+                : R.string.termux_keyboard_color_scheme_slot_dynamic));
+    }
+
+    static int pinnedSwatchCount(@NonNull InAppKeyboardColorScheme scheme) {
+        int pinned = 0;
+        for (int i = 0; i < scheme.swatchCount(); i++) {
+            if (scheme.isSwatchPinned(i)) pinned++;
+        }
+        return pinned;
+    }
+
+    /**
+     * One line saying whether the keyboard still follows the wallpaper: an imported palette wins
+     * over the pinned count, because an import pins every slot it fills.
+     */
+    @NonNull
+    static String statusText(@NonNull android.content.Context context,
+                             @NonNull InAppKeyboardColorScheme scheme) {
+        if (scheme.hasImportedPalette()) {
+            String themeId = scheme.getImportedThemeId();
+            return themeId.isEmpty()
+                ? context.getString(
+                    R.string.termux_keyboard_color_scheme_status_imported_unnamed)
+                : context.getString(R.string.termux_keyboard_color_scheme_status_imported,
+                    themeId);
+        }
+        if (scheme.isFullyDynamic())
+            return context.getString(R.string.termux_keyboard_color_scheme_status_dynamic);
+        return context.getString(R.string.termux_keyboard_color_scheme_status_pinned,
+            pinnedSwatchCount(scheme), scheme.swatchCount());
     }
 
     private void addRole(@NonNull android.content.Context context, @NonNull ChipGroup group,
@@ -313,56 +429,109 @@ public class KeyboardColorSchemeFragment extends Fragment {
         group.addView(chip, params);
     }
 
+    /** Every slot is always shown; unlabelled chips are unusable at 24 of them. */
     private void createSwatches() {
+        android.content.Context context = requireContext();
         mSwatchViews.clear();
+        mSwatchBadges.clear();
+        mSwatchItems.clear();
         mSwatchRow.removeAllViews();
-        int visibleCount = mAdvanced ? mScheme.swatchCount() : Math.min(6, mScheme.swatchCount());
-        for (int i = 0; i < visibleCount; i++) {
+        if (mSelectedSwatch < 0 || mSelectedSwatch >= mScheme.swatchCount())
+            mSelectedSwatch = 0;
+        int roleColor = MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorOnSurfaceVariant, Color.GRAY);
+        for (int i = 0; i < mScheme.swatchCount(); i++) {
             final int index = i;
-            View swatch = new View(requireContext());
-            String slot = String.format("base%02X", i);
-            swatch.setContentDescription(mAdvanced ? slot
-                : getString(R.string.termux_keyboard_color_scheme_swatch, i + 1));
-            swatch.setOnClickListener(view -> {
+            LinearLayout item = new LinearLayout(context);
+            item.setOrientation(LinearLayout.VERTICAL);
+            item.setGravity(Gravity.CENTER_HORIZONTAL);
+            item.setOnClickListener(view -> {
                 mSelectedSwatch = index;
                 if (mEditingSwatches) showHexEditor(index);
                 updateSwatches();
             });
-            LinearLayout item = new LinearLayout(requireContext());
-            item.setOrientation(LinearLayout.VERTICAL);
-            item.setGravity(Gravity.CENTER_HORIZONTAL);
-            item.addView(swatch, new LinearLayout.LayoutParams(dp(48), dp(48)));
-            if (mAdvanced) {
-                TextView label = new TextView(requireContext());
-                label.setText(slot);
-                label.setGravity(Gravity.CENTER);
-                label.setTextAppearance(
-                    com.google.android.material.R.style.TextAppearance_Material3_LabelSmall);
-                item.addView(label, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            }
+
+            // The pinned badge overlays the swatch, so the two share a well.
+            FrameLayout well = new FrameLayout(context);
+            View swatch = new View(context);
+            well.addView(swatch, new FrameLayout.LayoutParams(dp(48), dp(48)));
+            View badge = new View(context);
+            badge.setBackground(pinnedBadge(context));
+            FrameLayout.LayoutParams badgeParams = new FrameLayout.LayoutParams(dp(13), dp(13));
+            badgeParams.gravity = Gravity.TOP | Gravity.END;
+            well.addView(badge, badgeParams);
+            item.addView(well, new LinearLayout.LayoutParams(dp(48), dp(48)));
+
+            TextView slotLabel = new TextView(context);
+            slotLabel.setText(slotName(i));
+            slotLabel.setGravity(Gravity.CENTER);
+            slotLabel.setTextAppearance(
+                com.google.android.material.R.style.TextAppearance_Material3_LabelSmall);
+            item.addView(slotLabel, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            TextView roleLabel = new TextView(context);
+            roleLabel.setText(slotRoleLabel(context, i));
+            roleLabel.setGravity(Gravity.CENTER);
+            roleLabel.setTextAppearance(
+                com.google.android.material.R.style.TextAppearance_Material3_LabelSmall);
+            roleLabel.setTextSize(9f);
+            roleLabel.setMaxLines(2);
+            roleLabel.setEllipsize(TextUtils.TruncateAt.END);
+            roleLabel.setTextColor(roleColor);
+            item.addView(roleLabel, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                dp(54), ViewGroup.LayoutParams.WRAP_CONTENT);
+                dp(68), ViewGroup.LayoutParams.WRAP_CONTENT);
             params.setMarginEnd(dp(10));
             mSwatchRow.addView(item, params);
             mSwatchViews.add(swatch);
+            mSwatchBadges.add(badge);
+            mSwatchItems.add(item);
         }
         updateSwatches();
     }
 
+    /** Dot marking a pinned slot, ringed in the card color so it reads over any swatch. */
+    @NonNull
+    private GradientDrawable pinnedBadge(@NonNull android.content.Context context) {
+        GradientDrawable badge = new GradientDrawable();
+        badge.setShape(GradientDrawable.OVAL);
+        badge.setColor(MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorOnSurface, Color.WHITE));
+        badge.setStroke(dp(2), MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorSurfaceContainerHigh,
+            MaterialColors.getColor(context,
+                com.google.android.material.R.attr.colorSurface, Color.DKGRAY)));
+        return badge;
+    }
+
+    /** Dashed ring = follows the theme, solid ring plus dot = pinned to a fixed color. */
     private void updateSwatches() {
-        int outline = MaterialColors.getColor(requireContext(),
+        android.content.Context context = requireContext();
+        int outline = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorOnSurface, Color.WHITE);
+        int faint = Color.argb(90, Color.red(outline), Color.green(outline), Color.blue(outline));
         for (int i = 0; i < mSwatchViews.size(); i++) {
+            boolean selected = i == mSelectedSwatch;
+            boolean pinned = mScheme.isSwatchPinned(i);
             GradientDrawable drawable = new GradientDrawable();
             drawable.setShape(GradientDrawable.OVAL);
             drawable.setColor(mScheme.getSwatch(i));
-            drawable.setStroke(dp(i == mSelectedSwatch ? 3 : 1),
-                i == mSelectedSwatch ? outline : Color.argb(90, Color.red(outline),
-                    Color.green(outline), Color.blue(outline)));
+            int strokeWidth = dp(selected ? 3 : 1);
+            int strokeColor = selected ? outline : faint;
+            if (pinned)
+                drawable.setStroke(strokeWidth, strokeColor);
+            else
+                drawable.setStroke(strokeWidth, strokeColor, dpFloat(4), dpFloat(3));
             mSwatchViews.get(i).setBackground(drawable);
-            mSwatchViews.get(i).setAlpha(mEditingSwatches && i != mSelectedSwatch ? 0.72f : 1f);
+            mSwatchViews.get(i).setAlpha(mEditingSwatches && !selected ? 0.72f : 1f);
+            mSwatchBadges.get(i).setVisibility(pinned ? View.VISIBLE : View.INVISIBLE);
+            mSwatchItems.get(i).setContentDescription(slotDescription(context, mScheme, i));
         }
+        if (mStatus != null)
+            mStatus.setText(statusText(context, mScheme));
     }
 
     private void showHexEditor(int index) {
@@ -372,12 +541,17 @@ public class KeyboardColorSchemeFragment extends Fragment {
         input.setText(String.format("#%08X", mScheme.getSwatch(index)));
         input.selectAll();
         int horizontal = dp(24);
-        AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
+        AlertDialog.Builder builder = new MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.termux_keyboard_color_scheme_hex_title)
+            .setMessage(slotDescription(requireContext(), mScheme, index))
             .setView(input, horizontal, 0, horizontal, 0)
             .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(android.R.string.ok, null)
-            .create();
+            .setPositiveButton(android.R.string.ok, null);
+        // Pinning must not be one-way: the way back sits next to the hex field that pinned it.
+        if (mScheme.isSwatchPinned(index))
+            builder.setNeutralButton(R.string.termux_keyboard_color_scheme_slot_unpin,
+                (unused, which) -> unpinSwatch(index));
+        AlertDialog dialog = builder.create();
         dialog.setOnShowListener(unused -> dialog.getButton(AlertDialog.BUTTON_POSITIVE)
             .setOnClickListener(view -> {
                 Integer color = parseHexColor(input.getText().toString());
@@ -391,6 +565,15 @@ public class KeyboardColorSchemeFragment extends Fragment {
                 dialog.dismiss();
             }));
         dialog.show();
+    }
+
+    private void unpinSwatch(int index) {
+        mScheme.unpinSwatch(index);
+        persistAndRender();
+        updateSwatches();
+        Toast.makeText(requireContext(),
+            getString(R.string.termux_keyboard_color_scheme_slot_unpinned, slotName(index)),
+            Toast.LENGTH_SHORT).show();
     }
 
     @Nullable
@@ -662,12 +845,6 @@ public class KeyboardColorSchemeFragment extends Fragment {
 
         @NonNull
         String id() { return system + "-" + slug; }
-    }
-
-    @Override
-    public void onSaveInstanceState(@NonNull Bundle outState) {
-        outState.putBoolean(STATE_ADVANCED, mAdvanced);
-        super.onSaveInstanceState(outState);
     }
 
     private int dp(float value) { return Math.round(dpFloat(value)); }

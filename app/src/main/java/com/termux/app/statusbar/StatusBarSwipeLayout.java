@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.ViewConfiguration;
+import android.view.View;
 import android.widget.FrameLayout;
 
 import androidx.annotation.Nullable;
@@ -23,6 +24,7 @@ public final class StatusBarSwipeLayout extends FrameLayout {
     @Nullable private Boolean mPendingCollapsedState;
     private boolean mCollapsed;
     private boolean mTracking;
+    private boolean mStartedInWindowBar;
     private float mDownX;
     private float mDownY;
 
@@ -45,8 +47,10 @@ public final class StatusBarSwipeLayout extends FrameLayout {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 startTracking(event);
+                mStartedInWindowBar = isInsideWindowBar(event);
                 return false;
             case MotionEvent.ACTION_MOVE:
+                if (mStartedInWindowBar) return false;
                 updateSwipeRequest(event);
                 return mPendingCollapsedState != null;
             case MotionEvent.ACTION_UP:
@@ -121,6 +125,19 @@ public final class StatusBarSwipeLayout extends FrameLayout {
 
     private void resetTracking() {
         mTracking = false;
+        mStartedInWindowBar = false;
         mPendingCollapsedState = null;
+    }
+
+    /** A gesture born in the horizontal chip scroller belongs to that scroller for its lifetime. */
+    private boolean isInsideWindowBar(MotionEvent event) {
+        View bar = findViewById(com.termux.R.id.terminal_window_bar);
+        if (bar == null || bar.getVisibility() != VISIBLE) return false;
+        int[] location = new int[2];
+        bar.getLocationOnScreen(location);
+        float rawX = event.getRawX();
+        float rawY = event.getRawY();
+        return rawX >= location[0] && rawX < location[0] + bar.getWidth()
+            && rawY >= location[1] && rawY < location[1] + bar.getHeight();
     }
 }

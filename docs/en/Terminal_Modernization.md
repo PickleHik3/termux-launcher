@@ -49,7 +49,7 @@ The palette is the complete argument-free UI surface:
 |---|---|
 | Pane | Split horizontally/vertically, float or dock, cycle automatic layouts, equalize, rotate, terminate focused pane |
 | Window | Create, close, next, previous, and rename |
-| Session | Create, browse, clone with CWD, next, previous, close, and rename |
+| Session | Create, browse, clone with CWD, next, previous, close, rename, and rename any session by index |
 | Terminal | Keyboard/toolbar toggles, font size, URL picker, hints, scrollback search, prompt navigation, sharing, and reset |
 | Clipboard | Paste and copy selected text |
 | Appearance | Wallpaper picker/toggle, cursor-trail toggle, and Glass Lab |
@@ -70,25 +70,26 @@ produced by the current keyboard layout.
 
 | Shortcut | Split panes enabled | Compatibility mode |
 |---|---|---|
-| `Ctrl+Alt+V` | Split vertically (side by side) | Paste |
-| `Ctrl+Alt+H` | Split horizontally (stacked) | Sent to the shell if unclaimed |
+| `Ctrl+Alt+v` | Split vertically (side by side) | Paste |
+| `Ctrl+Alt+h` | Split horizontally (stacked) | Sent to the shell if unclaimed |
 | `Ctrl+Alt+Arrow` | Focus the pane in that direction | Left/right opens or closes the session drawer; up/down changes session |
 | `Ctrl+Alt+Shift+Arrow` | Resize the focused pane | Sent to the shell if unclaimed |
-| `Ctrl+Alt+C` | New window | New session |
-| `Ctrl+Alt+X` | Close current window, after confirmation | Sent to the shell if unclaimed |
+| `Ctrl+Alt+c` | New window | New session |
+| `Ctrl+Alt+x` | Close current window, after confirmation | Sent to the shell if unclaimed |
 | `Ctrl+Alt+[` / `Ctrl+Alt+]` | Previous/next window | Sent to the shell if unclaimed |
-| `Ctrl+Alt+L` | Next automatic pane layout | Sent to the shell if unclaimed |
-| `Ctrl+Alt+F` | Float or dock the focused pane | Sent to the shell if unclaimed |
-| `Ctrl+Alt+R` | Rename current window | Rename current session |
+| `Ctrl+Alt+l` | Next automatic pane layout | Sent to the shell if unclaimed |
+| `Ctrl+Alt+f` | Float or dock the focused pane | Sent to the shell if unclaimed |
+| `Ctrl+Alt+r` | Rename current window | Rename current session |
+| `Ctrl+Alt+R` (shifted) | Rename current session | Rename current session |
 | `Ctrl+Alt+Shift+C` | New session | New session |
 | `Ctrl+Alt+Shift+X` | Close current session, after confirmation | Sent to the shell if unclaimed |
-| `Ctrl+Alt+N` / `Ctrl+Alt+P` | Next/previous session | Next/previous session |
+| `Ctrl+Alt+n` / `Ctrl+Alt+p` | Next/previous session | Next/previous session |
 | `Ctrl+Alt+1` … `Ctrl+Alt+9` | Activate that drawer session | Activate that drawer session |
-| `Ctrl+Alt+K` | Toggle soft keyboard | Toggle soft keyboard |
+| `Ctrl+Alt+k` | Toggle soft keyboard | Toggle soft keyboard |
 | `Ctrl+Alt++` / `Ctrl+Alt+-` | Increase/decrease font size | Increase/decrease font size |
-| `Ctrl+Alt+M` | Open terminal action sheet | Open terminal action sheet |
-| `Ctrl+Alt+U` | Open terminal hints | Open terminal hints |
-| `Ctrl+Alt+S` | Search scrollback | Search scrollback |
+| `Ctrl+Alt+m` | Open terminal action sheet | Open terminal action sheet |
+| `Ctrl+Alt+u` | Open terminal hints | Open terminal hints |
+| `Ctrl+Alt+s` | Search scrollback | Search scrollback |
 
 “Vertical split” means a vertical dividing line and therefore creates side-by-side panes.
 
@@ -98,7 +99,7 @@ Use the default shortcuts or search the command palette for pane and window acti
 a fresh shell in the focused pane's working directory. Each pane retains its process, scrollback,
 selection, and terminal state while you focus another pane or window.
 
-Use **Float / dock pane**, `pane.toggle_float`, or `Ctrl+Alt+F` to detach the focused tiled pane
+Use **Float / dock pane**, `pane.toggle_float`, or `Ctrl+Alt+f` to detach the focused tiled pane
 above the tree. Drag the slim top handle to move it and the bottom-right grip to resize it. Terminal
 content keeps its normal touch behavior; long-press and drag inside it still reports a mouse drag to
 the running program. Toggle the action again to dock the pane back into the tiled tree. The last
@@ -124,7 +125,7 @@ The following layouts act on the current window without restarting any shell:
 | `horizontal` | Put every pane side by side at equal width |
 | `vertical` | Put every pane in one top-to-bottom column at equal height |
 
-`Ctrl+Alt+L`, **Next pane layout** in the palette, and `pane.next_layout` all cycle the window
+`Ctrl+Alt+l`, **Next pane layout** in the palette, and `pane.next_layout` all cycle the window
 through `grid`, `tall`, `fat`, `horizontal`, `vertical`, and `stack`, in that order. A window with no
 layout applied yet jumps to `grid`, so a single press never hides panes behind `stack`.
 
@@ -141,7 +142,7 @@ Hand-shaping the window drops the retained layout and returns it to manual contr
 it would mean your next split silently discarded that shaping. Rotating, moving a pane to an edge,
 and dragging or key-resizing a divider all release it. Equalizing does not, since resetting ratios is
 consistent with the layout still being in charge. Applying any layout again, including through
-`Ctrl+Alt+L`, puts the window back under management.
+`Ctrl+Alt+l`, puts the window back under management.
 
 Layout changes preserve pane order and focus. `stack` is temporary: saving a workspace stores the
 underlying pane tree, not the maximized presentation. Workspace *files* do not yet record the
@@ -164,12 +165,31 @@ their panes and windows. It appears only when the active launcher session change
 or window in the current session does not show it.
 
 The buttons at the top create a session, clone the current session, or save the whole terminal as a
-workspace. Each session row's overflow menu can activate, clone with CWD, rename, or close it.
+workspace. Each session row's overflow menu can activate, clone with CWD, rename, or close it. Rows
+in the pop-down sessions panel carry explicit rename and close buttons; a long press still renames.
+
+The palette lists a **Rename** row per session as well, so renaming a session other than the current
+one needs neither the browser nor the panel. Its tool id is `session.rename_at_index`, which takes a
+zero-based index and a name — note that this renames the tmux-style session that owns the windows,
+while `session.rename` renames the focused shell.
+
+Session names are capped at 8 characters, since they are displayed in the status row's session chip.
 
 Cloning intentionally starts a fresh shell at the selected pane's CWD. It does not copy the running
 process, shell environment changes, scrollback, windows, or pane layout. Closing a session terminates
 all shells it owns; closing the last session creates a fresh shell so the app is never left without
 a terminal.
+
+## Seeing which shell is working
+
+A window whose shell is producing output shows a sweeping underline on its pill, and the status row
+shows three pulsing dots while any window of the current session is working. Both read the same clock,
+so they move together, and both stop within about a second of the output stopping.
+
+The signal is terminal output, which is what tmux's `monitor-activity` watches. With a privileged
+backend available it is unioned with "the pane has a foreground process", which catches a command
+that runs silently. Without one, a silent foreground process — `sleep 300`, an idle editor — reads as
+not working.
 
 ## Save and restore workspaces
 
@@ -251,7 +271,14 @@ termux-reload-settings
 ```
 
 Mentioning a root sequence with `map` or `unmap` replaces every built-in mapping for that exact
-sequence. Key names are case-insensitive and `>` separates strokes in a chord.
+sequence. Modifier names and multi-character key names are case-insensitive, but an upper-case
+letter is itself Shift — `Ctrl+Alt+R` is the stroke `ctrl+alt+shift+r` and `Ctrl+Alt+r` is
+`ctrl+alt+r`, two bindings that can hold two actions. `>` separates strokes in a chord.
+
+Whatever this file binds is what the app shows: the command palette's shortcut column, the keybind
+hint legend, and the caps that light up on the in-app keyboard while `Ctrl+Alt` is latched all read
+the same resolved bindings, each coloured by its action's group (panes, windows, session,
+workspace, terminal, clipboard, appearance, app).
 
 ```text
 # Run registry actions.
@@ -311,6 +338,22 @@ map ctrl+alt+shift+m app.launch Maps
 Installed apps also appear in the command palette under **Apps**: the most-used ones with no query,
 and the full ranked match list while filtering. Selecting a row runs `app.launch`.
 
+An app row shows the chord already bound to it, so the palette doubles as the list of what is bound —
+and because the shortcut column is searchable, typing `ctrl+alt+w` finds the row it launches.
+
+You do not have to edit the file to bind one. **Long-press an app row** (or press `Ctrl+Alt+Enter` on
+the focused one) and the palette waits for a key combination: `⏎` saves, `⌫` clears, `Esc` cancels.
+The binding is written to `~/.termux/termux-launcher-bindings.conf` under a managed header, with your
+comments, blank lines and ordering preserved, and takes effect immediately.
+
+Three details are worth knowing:
+
+- A bare key is refused. Binding plain `w` would swallow typing that character, so the overlay
+  requires Ctrl, Alt, or Shift.
+- `⏎`, `Esc` and `⌫` are the overlay's own keys and cannot be captured. Bind those in the file.
+- If the combination is already bound, the overlay names what holds it and saves anyway — mentioning
+  a sequence replaces the defaults for it, which is what the file has always meant.
+
 ### Actions on in-app keyboard keys
 
 Keyboard swipes are not strokes and are not bound here. They live in the keyboard layout file, where
@@ -358,11 +401,69 @@ toast summary. The file is limited to 256 KiB, 4,096 lines, and 4,096 characters
 
 ## Fonts, symbols, shaping, and metrics
 
-Native Termux font handling remains compatible. With no `fonts.conf`, the regular face comes from
-`~/.termux/font.ttf`, optional italic from `~/.termux/font-italic.ttf`, and Android monospace is the
-final fallback. Termux:Styling and manual `font.ttf` replacement therefore continue to work.
+There are three ways to set the terminal font, listed here by how much work they are, least first:
 
-For independent faces and advanced controls, create `~/.termux/fonts.conf`:
+1. **The in-app picker** — **Settings → Appearance → Terminal fonts**. Downloads a font family and
+   writes `~/.termux/fonts.d/10-launcher.conf` for you.
+2. **`~/.termux/font.ttf`** plus the optional `~/.termux/font-italic.ttf`, which is also what
+   Termux:Styling writes.
+3. **`~/.termux/fonts.conf`**, hand-written, for everything the picker does not expose.
+
+**Precedence: your own `fonts.conf` beats the `fonts.d` drop-ins, which beat
+`font.ttf`/Termux:Styling.** A tree with no font configuration at all behaves exactly as before: the
+regular face comes from `~/.termux/font.ttf`, the optional italic from `~/.termux/font-italic.ttf`,
+and Android monospace is the final fallback. Termux:Styling and manual `font.ttf` replacement
+therefore continue to work untouched, and so does a `fonts.conf` written before the picker existed.
+
+### The in-app font picker
+
+**Settings → Appearance → Terminal fonts** installs a complete multi-face font without a shell.
+
+- **Families** is the install path, and the only one. A curated family list — Maple Mono, Hack,
+  JetBrains Mono, Fira Code, Victor Mono, Cascadia Code and more — each with its download
+  size, face count, and full license text shown before anything is fetched. A star on its list row
+  marks the suggested family, Maple Mono (the variable pair, so weight is an axis rather than a
+  file). Installing from the list applies that family's own defaults: the app's bundled Symbols Nerd
+  Font Mono for icons, the family's ligature policy, and its font features and axis values.
+  Downloads are SHA-256 verified, and a metered connection is confirmed separately.
+- **Tuning** carries the three toggles that reshape the managed config in place: Nerd Font icons,
+  ligature policy, and the `wght` axis for a variable family.
+- **Use font.ttf / Termux:Styling** deletes exactly one file, `~/.termux/fonts.d/10-launcher.conf`.
+  The installed font files stay on disk and `~/.termux/fonts.conf` is never touched.
+
+Installed layout:
+
+```text
+~/.termux/fonts/<family-id>/regular.ttf, bold.ttf, italic.ttf, bold-italic.ttf, LICENSE.txt
+~/.termux/fonts/symbols/SymbolsNerdFontMono.ttf   # extracted from the APK on first use
+~/.termux/fonts.d/10-launcher.conf                # the managed config
+```
+
+That is the whole list. **The picker never touches `~/.termux/font.ttf` or
+`~/.termux/font-italic.ttf`** — it creates, overwrites and deletes nothing outside the three paths
+above. Those two files are yours (and Termux:Styling's), and the only thing that ever looks at them
+is the loader's legacy fallback, used when no `font_family` is configured. An earlier version did
+mirror the installed regular face into `font.ttf`, which silently replaced a hand-built Nerd Font and
+took every icon glyph on every surface down with it; that mirroring is gone.
+
+The practical consequence: installing a family from the picker changes the **terminal** and nothing
+else. `~/.termux/font.ttf` keeps whatever you put there, and surfaces that read `font.ttf` directly
+are unaffected by a pick made here.
+
+One surprise worth expecting: a family's line metrics decide the cell height, so they decide how many
+rows fit. Switching to a face with taller metrics reduces the row count, which can reflow or truncate
+a full-screen TUI that is already running until it resizes itself. `modify_font cell_height` in your
+own `fonts.conf` is the knob if you want a row count back.
+
+The managed config contains only ordinary directives — face paths, the two private-use `symbol_map`
+ranges when icons are on, `disable_ligatures`, and per-face `font_features`/`font_variations` — so it
+can be read, copied into your own `fonts.conf`, and then removed. Every change made in the picker
+rewrites it completely.
+
+The palette, keybindings and agents reach the same code through the `fonts.pick` and `fonts.install`
+tools.
+
+### Writing `fonts.conf` by hand
 
 ```text
 font_family path=~/.termux/font.ttf
@@ -377,10 +478,21 @@ bold_italic_font path=~/.termux/font-bold-italic.ttf
 symbol_map U+E000-U+F8FF path=~/.termux/fonts/SymbolsNerdFontMono.ttf
 symbol_map U+E0A0-U+E0D7,U+F0001 family="Symbols Nerd Font Mono"
 
+# A named map can be targeted by font_features and font_variations.
+symbol_map name=nerd U+F0000-U+FFFFD path=~/.termux/fonts/symbols/SymbolsNerdFontMono.ttf
+
+# Ordered fallback chain for code points no configured face covers.
+fallback_font path=~/.termux/fonts/NotoSansMono-Regular.ttf
+fallback_font family="Noto Sans Symbols 2"
+
 disable_ligatures cursor
 font_features regular +zero -liga cv01=2
 font_features symbols +ss01
 font_variations regular wght=425 wdth=92.5
+
+box_drawing synthesize
+box_drawing_scale 0.001,1,1.5,2
+powerline_symbols font
 
 modify_font cell_width 90%
 modify_font cell_height 2px
@@ -399,17 +511,153 @@ termux-reload-settings
 
 Paths are the reliable Android use case; family names only work when Android can resolve the family.
 Later duplicate directives replace earlier values. `~/` expansion, quoted values, and `#` comments
-are supported.
+are supported. Each file is capped at 64 KiB, 512 lines, and 4,096 characters per line.
+
+### Drop-in fragments: `~/.termux/fonts.d`
+
+`~/.termux/fonts.d/*.conf` files are loaded automatically, in ascending filename order, **before**
+`~/.termux/fonts.conf`. Because a later duplicate directive replaces an earlier one, your own
+`fonts.conf` always overrides an app-managed or third-party drop-in — that is the whole point of the
+ordering. Any single directive you do not restate in `fonts.conf` keeps the drop-in's value, so you
+can override one face and leave the rest of a fragment alone.
+
+- Only top-level `*.conf` entries are read, and only regular readable files. Subdirectories are
+  ignored, and an entry whose real parent directory is not `fonts.d` — a symlink pointing outside it
+  — is skipped without an error.
+- At most 32 drop-in files are read, with a 256 KiB aggregate budget across all of them. That budget
+  applies to the drop-ins only: `~/.termux/fonts.conf` is always read under its own 64 KiB
+  allowance and can never be squeezed out by fragments. When the next fragment would exceed the
+  aggregate budget, it and every remaining fragment are skipped with one bounded error.
+- Each fragment is separately subject to the 64 KiB, 512-line and 4,096-character limits.
+- Errors from a fragment are prefixed `fonts.d/<file>: ` so the reported line number is unambiguous.
+  Messages from `fonts.conf` are unchanged.
+- A `fonts.d` fragment on its own counts as active font configuration. Faces it leaves unset still
+  fall back to `font.ttf` and Android monospace exactly as with no config at all.
+
+`10-launcher.conf` is the app's own fragment. The `10-` prefix leaves room for `05-` fragments that
+the app-managed one overrides and `20-` fragments that override it.
 
 ### Font faces and symbol maps
 
 Real bold, italic, and bold-italic faces are used when provided. Missing faces fall back to safe
 synthetic styling without preventing the terminal from opening.
 
-`symbol_map` is repeatable and accepts comma-separated `U+CODEPOINT` or inclusive
-`U+START-U+END` ranges. Later overlapping maps win. A map selects one font for the complete grapheme
-cluster beginning in that range; unmapped text continues through the primary face and Android's
-normal fallback. Symbol fonts do not change cell width.
+There are exactly four SGR faces — regular, bold, italic and bold-italic — because ANSI SGR only
+distinguishes bold × italic. No escape sequence exists that asks for a fifth face, so this is a
+protocol limit, not a configuration limit. It does not cap how many font **files** are active:
+`symbol_map` is repeatable up to 256 directives (1,024 ranges and 64 distinct font files in total)
+and `fallback_font` adds up to 8 more, so a dozen fonts can be live in one terminal at once.
+
+`symbol_map` accepts comma-separated `U+CODEPOINT` or inclusive `U+START-U+END` ranges followed by
+one `path=` or `family=` source. Later overlapping maps win. A map selects one font for the complete
+grapheme cluster beginning in that range; unmapped text continues through the primary face, the
+fallback chain, and then Android's normal fallback. Symbol fonts do not change cell width and do not
+receive SGR bold/italic synthesis.
+
+A map may be named, so features and axes can address it:
+
+```text
+symbol_map name=nerd U+E000-U+F8FF path=~/.termux/fonts/symbols/SymbolsNerdFontMono.ttf
+symbol_map U+2500-U+257F name=frames path=~/.termux/fonts/BoxFrames.ttf
+font_features nerd +ss01
+font_variations nerd wght=600
+```
+
+- `name=` may appear on either side of the ranges, but only once per line.
+- A name is 1 to 32 characters of `A-Z a-z 0-9 _ -`, and is matched case-insensitively.
+- The reserved targets `regular`, `bold`, `italic`, `bold_italic` and `symbols` are rejected as map
+  names.
+- A name may be declared in a file loaded *after* the `font_features`/`font_variations` line that
+  references it, so a drop-in and your `fonts.conf` can be written in either order. A name that is
+  never declared anywhere in the load is reported and its setting is dropped.
+- At most 256 named targets carry settings.
+- Unnamed maps keep using the shared `symbols` target exactly as before.
+
+A mapped cell draws with its own map's features and axes when that map declares them, and falls back
+to the shared `symbols` target when it does not. So `font_features symbols` remains the way to set
+one policy for every symbol font, and a named target overrides it for that map alone. Two maps may
+name the same font file and still declare different settings; each map's cells are drawn with its own.
+
+An axis Android rejects is reported and dropped per map, leaving that map's font at its default
+instance rather than disabling the map — under the map's name when the axes were its own, or under
+`symbols` when they were inherited, so the message names the line you actually wrote.
+
+### Fallback fonts
+
+`fallback_font` is the controllable answer to "Android picked a CJK or emoji font I did not choose".
+It is repeatable, takes one `path=` or `family=` source, and is capped at 8 entries; order of
+appearance is the try order.
+
+```text
+fallback_font path=~/.termux/fonts/NotoSansMonoCJK-Regular.otf
+fallback_font family="Noto Sans Symbols 2"
+```
+
+The effective per-cell precedence is:
+
+1. an explicit `symbol_map` range,
+2. box-drawing synthesis,
+3. the configured face for the cell's SGR style,
+4. the `fallback_font` chain, in order, and
+5. Android's own platform fallback.
+
+The chain is consulted only when the run's own face genuinely lacks the glyph. Coverage is probed
+with `Paint.hasGlyph` on the cluster's base code point — never on a continuation, which is the same
+rule `symbol_map` follows — and every answer is memoized per code point and SGR face, so the probe
+runs at most once each. A chain entry is one face with no declared variants, so any bold or italic
+the primary face would have shown is synthesized on top of it rather than dropped. A fallback face
+never changes cell width.
+
+### Geometric box drawing, blocks, braille, and Powerline
+
+Box-drawing, block, shade, braille and sextant cells are drawn as geometry snapped to shared integer
+cell edges rather than shaped from the font's own glyphs. Both cells that meet at a boundary derive
+that boundary from the same expression, so frames, block ramps and braille graphs join seamlessly at
+any cell size — including after `modify_font cell_width`/`cell_height` — instead of showing the
+hairline gaps a font's glyph metrics produce at fractional cell sizes.
+
+```text
+box_drawing synthesize            # or: font
+box_drawing_scale 0.001,1,1.5,2   # thin, light, heavy, very heavy
+powerline_symbols font            # or: synthesize
+```
+
+- `box_drawing` defaults to `synthesize`. `box_drawing font` restores glyph rendering for every one
+  of these code points exactly as before.
+- `box_drawing_scale` takes exactly four comma- or space-separated stroke multipliers for the thin,
+  light, heavy and very-heavy line weights. Each must be greater than 0 and at most 8. The default
+  is `0.001,1,1.5,2`; the base stroke is one sixteenth of the cell height, and every weight is
+  clamped to at least one pixel and at most a third of the cell's smaller dimension.
+- `powerline_symbols` defaults to `font`, because a patched Nerd Font usually draws the separators
+  the way its author intended. `synthesize` claims them instead, so two consecutive separators butt
+  against each other with no sliver of background between them. It only takes effect while
+  `box_drawing` is also `synthesize`.
+- An explicit `symbol_map` covering a code point always wins over synthesis: asking for that font
+  was a deliberate choice.
+- Shades render as the foreground colour at reduced alpha — 25% for `░`, 50% for `▒`, 75% for `▓` —
+  so they follow SGR colour, dim, selection and block-cursor inversion like any other cell.
+
+Synthesized ranges:
+
+| Range | Contents |
+|---|---|
+| `U+2500-U+257F` | box drawing: lines, dashes, corners, tees, crosses, arcs, diagonals |
+| `U+2580-U+259F` | block elements, eighth blocks, quadrants, and the three shades |
+| `U+25E2-U+25E5` | corner triangles |
+| `U+2800-U+28FF` | the complete braille pattern block |
+| `U+1FB00-U+1FB3B` | legacy-computing sextants |
+| `U+1FB70-U+1FB8F` | legacy-computing eighth blocks and half shades |
+| `U+E0B0-U+E0B7`, `U+E0BA-U+E0BD` | Powerline separators, only with `powerline_symbols synthesize` |
+
+Deliberately **not** synthesized — these still come from the font, and a font that lacks them still
+shows tofu:
+
+| Range | Contents |
+|---|---|
+| `U+1FB3C-U+1FB6F` | wedges and diagonal fills |
+| `U+1FB90-U+1FBFF` | inverse shades, pattern fills, and segmented digits |
+| `U+1CD00-U+1CDE5` | octants (Symbols for Legacy Computing Supplement) |
+| `U+E0B8-U+E0B9`, `U+E0BE-U+E0BF` | the remaining Powerline separator variants |
 
 ### Ligatures, features, and variable axes
 
@@ -422,10 +670,11 @@ normal fallback. Symbol fonts do not change cell width.
 This policy controls programming ligatures without disabling Arabic, Indic, emoji, or combining-mark
 shaping. Text remains in terminal logical order; Unicode bidi paragraph reordering is not provided.
 
-`font_features` and `font_variations` target `regular`, `bold`, `italic`, `bold_italic`, or
-`symbols`. Feature tokens use `+tag`, `-tag`, or `tag=value`; axes use `tag=value`. Commas and spaces
-are both accepted, and `none` clears the target's previous setting. A static font may accept a
-variation axis as a no-op, so use an actual variable font when axis changes matter.
+`font_features` and `font_variations` target `regular`, `bold`, `italic`, `bold_italic`, `symbols`,
+or the name of a declared `symbol_map`. Feature tokens use `+tag`, `-tag`, or `tag=value`; axes use
+`tag=value`. Commas and spaces are both accepted, and `none` clears the target's previous setting. A
+target carries at most 32 features and 16 axes. A static font may accept a variation axis as a no-op,
+so use an actual variable font when axis changes matter.
 
 ### Cell and decoration metrics
 
@@ -447,11 +696,11 @@ safe fallback. Keep font files owner-writable only and obtain them from a source
 
 ### Hints and search
 
-Press `Ctrl+Alt+U` for keyboard-labelled hints extracted from visible transcript content. Hints
+Press `Ctrl+Alt+u` for keyboard-labelled hints extracted from visible transcript content. Hints
 recognize URLs, absolute and relative paths, hashes, and `path:line[:column]` locations. Press a
 label to open a URL or copy another hint; hold Shift while choosing a URL to copy it instead.
 
-Press `Ctrl+Alt+S` to search the focused terminal's history and screen case-insensitively, then
+Press `Ctrl+Alt+s` to search the focused terminal's history and screen case-insensitively, then
 choose a result to scroll directly to its emulator row.
 
 ### Safe hyperlinks
@@ -533,11 +782,30 @@ shortcut, including the one you might later assign to it.
 
 ### A font setting is ignored
 
+- Check `ls ~/.termux/fonts.d/`. A drop-in is read before `fonts.conf`, so a directive you set there
+  wins — but a directive only present in a drop-in is still active. `10-launcher.conf` is written by
+  the in-app picker; remove it from **Settings → Appearance → Terminal fonts → Use font.ttf /
+  Termux:Styling**, not by hand-editing it, since the next picker action rewrites it.
 - Use `path=` for downloaded font files; Android may not know their family name.
 - Check that Termux can read the file and that it is non-empty and below 64 MiB.
-- Confirm every feature or axis tag is exactly four characters.
+- Confirm every feature or axis tag is exactly four characters, and that a `font_features` or
+  `font_variations` line naming a symbol map matches a `symbol_map name=` declared somewhere in the
+  load.
 - Look for the app's bounded font-error toast and app log, then retry with one directive at a time.
+  An error prefixed `fonts.d/<file>:` names the fragment, not `fonts.conf`.
 - Remove or rename `fonts.conf` and reload to return to native `font.ttf` behavior.
+
+### Frames or blocks look wrong, or icons come from the wrong font
+
+- Box drawing, blocks, shades, braille and sextants are drawn as geometry by default. Set
+  `box_drawing font` to hand every one of them back to the font, or map the range with an explicit
+  `symbol_map`, which always wins over synthesis.
+- Wedges (`U+1FB3C-U+1FB6F`), inverse shades and pattern fills (`U+1FB90-U+1FBFF`) and octants
+  (`U+1CD00-U+1CDE5`) are deliberately not synthesized, so those still need a font that covers them.
+- Powerline separators come from the font unless you set `powerline_symbols synthesize`, which also
+  requires `box_drawing synthesize`.
+- When Android substitutes a CJK or emoji face you did not choose, add `fallback_font` entries in the
+  order you want them tried instead of fighting the platform fallback.
 
 ### Prompt navigation says there are no marks
 
@@ -556,6 +824,9 @@ Pane and window commands need split panes enabled; enable them in settings and r
   bindings cannot carry an enum argument yet.
 - The terminal deliberately has no arbitrary Kitty multicell/variable-sized text,
   `narrow_symbols`, or symbols that occupy following cells.
+- Geometric cell rendering covers the ranges tabulated above. The legacy-computing wedges, inverse
+  shades, pattern fills and segmented digits, and the whole octant block at `U+1CD00-U+1CDE5`, are
+  still drawn from the font.
 - There is no Unicode bidi paragraph layout. Complex scripts are shaped in logical terminal order.
 - The renderer remains Android Canvas; there is no GPU glyph atlas or custom gamma/contrast compositor.
 - Kitty graphics Tier 2/3, desktop notification escape sequences, TTY file transfer, Kitty kittens,

@@ -11,6 +11,16 @@
             app:summary="@string/termux_dock_tune_live_summary" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="@string/settings_fonts_header">
+        <Preference
+            app:key="terminal_fonts"
+            app:icon="@drawable/ic_symbol_terminal"
+            app:persistent="false"
+            app:title="@string/termux_fonts_preferences_title"
+            app:summary="@string/termux_fonts_preferences_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/settings_theme_header">
         <ListPreference
             app:key="theme_mode"
@@ -23,6 +33,12 @@
             app:title="@string/settings_wallpaper_colors_title"
             app:summary="@string/settings_wallpaper_colors_summary"
             android:defaultValue="true" />
+        <ListPreference
+            app:key="terminal_contrast_level"
+            app:title="@string/settings_terminal_contrast_title"
+            app:entries="@array/terminal_contrast_entries"
+            app:entryValues="@array/terminal_contrast_values"
+            android:defaultValue="default" />
         <SwitchPreferenceCompat
             app:key="use_system_wallpaper"
             app:title="@string/settings_wallpaper_title"

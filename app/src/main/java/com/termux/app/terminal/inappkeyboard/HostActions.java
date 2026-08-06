@@ -31,6 +31,9 @@ public interface HostActions {
 
     void hideKeyboard();
 
+    /** Launch platform speech recognition; chooser selects a recognizer explicitly when requested. */
+    default void requestVoiceTyping(boolean chooser) {}
+
     void setComposePending(boolean pending);
 
     /** Toggle the keyboard view's Shift lock state and redraw it. */

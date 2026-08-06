@@ -129,9 +129,23 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
             modifiers.isCtrl(), modifiers.isAlt(), modifiers.isShift()))
             return;
         switch (value.getKind()) {
-            case Char:
-                inputCodePoint(value.getChar(), modifiers);
+            case Char: {
+                // A character cap under a latched Ctrl+Alt is a binding press, not text: the hint
+                // overlay lights exactly these caps in their action's colour, and sending the code
+                // point instead would write an escape-prefixed control byte to the shell while the
+                // cap claimed to run an action. Routing it as a key event puts soft and hardware
+                // keyboards on the one resolver, so termux-launcher-bindings.conf governs both.
+                Integer keyCode = modifiers.isCtrl() && modifiers.isAlt()
+                    ? com.termux.app.terminal.TerminalKeyBindingResolver.keyCodeForToken(
+                        com.termux.app.terminal.TerminalKeyBindingResolver.tokenForChar(
+                            value.getChar()))
+                    : null;
+                if (keyCode != null)
+                    dispatchKeyEvent(keyCode, modifiers);
+                else
+                    inputCodePoint(value.getChar(), modifiers);
                 break;
+            }
             case Keyevent:
                 dispatchKeyEvent(value.getKeyevent(), modifiers);
                 break;
@@ -261,9 +275,13 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
             case SWITCH_BACK_EMOJI:
             case SWITCH_CLIPBOARD:
             case SWITCH_BACK_CLIPBOARD:
-            case SWITCH_VOICE_TYPING:
-            case SWITCH_VOICE_TYPING_CHOOSER:
                 mHostActions.debugLog("Unsupported in-app keyboard pane event: " + event);
+                break;
+            case SWITCH_VOICE_TYPING:
+                mHostActions.requestVoiceTyping(false);
+                break;
+            case SWITCH_VOICE_TYPING_CHOOSER:
+                mHostActions.requestVoiceTyping(true);
                 break;
             case CHANGE_METHOD_PICKER:
             case CHANGE_METHOD_PREV:

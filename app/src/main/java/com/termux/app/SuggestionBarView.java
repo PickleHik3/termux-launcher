@@ -224,6 +224,8 @@ public final class SuggestionBarView extends GridLayout {
     @Nullable private NotificationPopupInteractionListener notificationPopupInteractionListener;
     @Nullable private String notificationPopupPackage;
     @NonNull private Set<String> notificationPopupKeys = Collections.emptySet();
+    /** The reply field currently on screen, so an incoming notification cannot discard a draft. */
+    @Nullable private EditText notificationReplyEditor;
     @Nullable private Dialog iconPickerDialog;
 
     private String lastInput = "";
@@ -623,7 +625,14 @@ public final class SuggestionBarView extends GridLayout {
                     LauncherNotificationBadgeStore.getNotificationsForPackage(notificationPopupPackage)) {
                     currentKeys.add(sbn.getKey() + "@" + sbn.getPostTime());
                 }
-                if (!currentKeys.equals(notificationPopupKeys)) dismissNotificationPopup();
+                boolean keysChanged = !currentKeys.equals(notificationPopupKeys);
+                if (shouldDismissNotificationPopupOnKeyChange(keysChanged, isComposingReply())) {
+                    dismissNotificationPopup();
+                } else if (keysChanged) {
+                    // Re-snapshot even when the popup stays: otherwise the very next notification
+                    // change compares against stale keys and dismisses immediately.
+                    notificationPopupKeys = Collections.unmodifiableSet(currentKeys);
+                }
             }
             invalidateNotificationBadgeViews();
         });
@@ -2545,6 +2554,28 @@ public final class SuggestionBarView extends GridLayout {
         Drawable icon = sourceView instanceof ImageView
             ? ((ImageView) sourceView).getDrawable() : null;
         launchRippleListener.onLaunchRipple(entry.appRef.packageName, icon, sourceView);
+    }
+
+    /**
+     * Resolved pinned entries for an external dock surface (the landscape rail). Folders are
+     * excluded — the rail has no popup surface to open them into.
+     */
+    @NonNull
+    public List<LauncherAppEntry> getDockRailEntries() {
+        List<PinnedItem> source = configRepository != null
+            ? configRepository.loadPinnedItems() : pinnedItems;
+        List<LauncherAppEntry> out = new ArrayList<>();
+        for (LauncherAppEntry entry : entriesForPinnedItems(source)) {
+            if (!"folder".equals(entry.appRef.packageName)) {
+                out.add(entry);
+            }
+        }
+        return out;
+    }
+
+    /** Launches an entry on behalf of an external dock surface (the landscape rail). */
+    public void launchEntryFromRail(@NonNull LauncherAppEntry entry, @Nullable View sourceView) {
+        launchEntry(entry, null, sourceView, true);
     }
 
     private List<LauncherAppEntry> entriesForPinnedItems(@NonNull List<PinnedItem> source) {
@@ -5119,6 +5150,7 @@ public final class SuggestionBarView extends GridLayout {
                 notificationPopupWindow = null;
                 notificationPopupPackage = null;
                 notificationPopupKeys = Collections.emptySet();
+                notificationReplyEditor = null;
             }
             if (notificationInteractionPopup == holder[0]) {
                 notificationInteractionPopup = null;
@@ -5142,16 +5174,21 @@ public final class SuggestionBarView extends GridLayout {
             shownKeys.add(sbn.getKey() + "@" + sbn.getPostTime());
         }
         notificationPopupKeys = Collections.unmodifiableSet(shownKeys);
-        // Keep this window non-focusable for its first layout. The external-input handoff below
-        // removes the embedded keyboard before an available inline reply requests IME focus.
+        // The window is focusable from creation (see setFocusable above — retrofitting focus with
+        // PopupWindow.update() can leave a focused EditText whose window is never registered as the
+        // IME target). The handoff that follows removes the embedded keyboard before an inline reply
+        // asks for IME focus.
         showPopupAtAnchor(notificationPopupWindow, anchor);
         applyNotificationPopupDim(notificationPopupWindow);
         if (notificationPopupInteractionListener != null)
             notificationPopupInteractionListener.onNotificationPopupShown();
-        // With several conversations, choosing the first reply field for the user is surprising.
-        // Auto-focus only when there is exactly one possible reply destination.
+        // Swiping a pinned icon means "reply to this app", so open a composer whenever there is
+        // one to open. getNotificationsForPackage sorts newest-first and each card keeps only its
+        // first free-form action, so target 0 is the latest conversation — which is what the gesture
+        // means. The card is highlighted and scrolled to, so which one it picked is never a mystery.
         NotificationReplyTarget finalAutoReplyTarget = shouldAutoOpenNotificationReply(
             replyTargets.size()) ? replyTargets.get(0) : null;
+        if (finalAutoReplyTarget != null) highlightAutoReplyCard(finalAutoReplyTarget);
         if (finalAutoReplyTarget != null) {
             post(() -> {
                 if (notificationPopupWindow != holder[0] || !holder[0].isShowing()) return;
@@ -5162,8 +5199,56 @@ public final class SuggestionBarView extends GridLayout {
         }
     }
 
+    /**
+     * Whether the swipe should open a reply composer straight away.
+     *
+     * <p>Notifications arrive newest-first, so target 0 is the latest conversation for this app —
+     * exactly what swiping its icon asks for. The old rule required exactly one reply-capable
+     * notification, which meant the gesture silently did nothing for any app the user actually talks
+     * to on.
+     */
     static boolean shouldAutoOpenNotificationReply(int replyTargetCount) {
-        return replyTargetCount == 1;
+        return replyTargetCount >= 1;
+    }
+
+    /**
+     * Mark the card whose composer was opened, and scroll it into view. With several conversations
+     * on screen the composer alone does not say which one it belongs to; the enclosing ScrollView is
+     * created inside buildPopupWindow, so requestRectangleOnScreen is the only handle that does not
+     * need to know about it.
+     */
+    private void highlightAutoReplyCard(@NonNull NotificationReplyTarget target) {
+        View card = target.card;
+        GradientDrawable highlight = new GradientDrawable();
+        highlight.setCornerRadius(dp(12));
+        highlight.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0x38));
+        highlight.setStroke(Math.max(1, dp(1)),
+            withAlphaComponent(com.google.android.material.color.MaterialColors.getColor(
+                this, com.google.android.material.R.attr.colorPrimary,
+                resolveLauncherOutlineColor()), 0xB0));
+        card.setBackground(highlight);
+        // Padding, or the stroke clips the title and the action row.
+        card.setPadding(card.getPaddingLeft() + dp(4), card.getPaddingTop(),
+            card.getPaddingRight() + dp(4), card.getPaddingBottom() + dp(3));
+        card.post(() -> card.requestRectangleOnScreen(
+            new Rect(0, 0, card.getWidth(), card.getHeight()), false));
+    }
+
+    /**
+     * A notification arriving must not throw away a half-typed reply. Rebuilding the popup is the
+     * right response to the list changing — unless the user is mid-compose, in which case the change
+     * they care about is the one under their fingers.
+     */
+    static boolean shouldDismissNotificationPopupOnKeyChange(boolean keysChanged,
+                                                            boolean composing) {
+        return keysChanged && !composing;
+    }
+
+    /** Composing means the reply field has focus or already holds text. */
+    private boolean isComposingReply() {
+        EditText editor = notificationReplyEditor;
+        if (editor == null) return false;
+        return editor.isFocused() || !TextUtils.isEmpty(editor.getText());
     }
 
     @Nullable
@@ -5335,7 +5420,7 @@ public final class SuggestionBarView extends GridLayout {
                 if (freeform != null) {
                     if (replyTarget == null) {
                         replyTarget = new NotificationReplyTarget(
-                            actionHost, action, remoteInputs, freeform, title);
+                            card, actionHost, action, remoteInputs, freeform, title);
                     }
                     actionButton.setOnClickListener(v ->
                         showInlineReply(actionHost, action, remoteInputs, freeform, title));
@@ -5372,15 +5457,18 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private static final class NotificationReplyTarget {
+        /** The whole card, so an auto-opened composer can say which conversation it belongs to. */
+        @NonNull final View card;
         @NonNull final FrameLayout actionHost;
         @NonNull final Notification.Action action;
         @NonNull final RemoteInput[] remoteInputs;
         @NonNull final RemoteInput freeform;
         @Nullable final CharSequence recipient;
 
-        NotificationReplyTarget(@NonNull FrameLayout actionHost,
+        NotificationReplyTarget(@NonNull View card, @NonNull FrameLayout actionHost,
             @NonNull Notification.Action action, @NonNull RemoteInput[] remoteInputs,
             @NonNull RemoteInput freeform, @Nullable CharSequence recipient) {
+            this.card = card;
             this.actionHost = actionHost;
             this.action = action;
             this.remoteInputs = remoteInputs;
@@ -5458,6 +5546,7 @@ public final class SuggestionBarView extends GridLayout {
         actionHost.removeAllViews();
         actionHost.addView(row, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        notificationReplyEditor = reply;
         enableNotificationReplyInput(reply);
     }
 
@@ -5613,6 +5702,7 @@ public final class SuggestionBarView extends GridLayout {
         notificationPopupWindow = null;
         notificationPopupPackage = null;
         notificationPopupKeys = Collections.emptySet();
+        notificationReplyEditor = null;
         dismissPopupWindowAnimated(popup, null);
     }
 

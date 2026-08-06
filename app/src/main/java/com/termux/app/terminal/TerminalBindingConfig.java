@@ -28,9 +28,12 @@ public final class TerminalBindingConfig {
 
     public static final String FILE_NAME = "termux-launcher-bindings.conf";
     public static final String FILE_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/" + FILE_NAME;
-    private static final long MAX_FILE_BYTES = 256 * 1024;
-    private static final int MAX_LINES = 4096;
-    private static final int MAX_LINE_CHARS = 4096;
+    // Package-private so TerminalBindingConfigWriter can refuse to produce a file this parser
+    // would reject wholesale: load() returns Result.empty on any limit breach, so a single
+    // oversized write would kill every binding in the file, not just the new one.
+    static final long MAX_FILE_BYTES = 256 * 1024;
+    static final int MAX_LINES = 4096;
+    static final int MAX_LINE_CHARS = 4096;
 
     public enum ActionType { TOOL, SEND_TEXT, SEND_KEY, PUSH_MODE, POP_MODE }
 
@@ -488,9 +491,15 @@ public final class TerminalBindingConfig {
         for (String key : remove) mappings.remove(key);
     }
 
-    /** Shell-like words with # comments and simple single/double quoted values. */
+    /**
+     * Shell-like words with # comments and simple single/double quoted values.
+     *
+     * <p>Package-private so the writer can tokenize with the real thing. A regex would drift from
+     * this on quotes, escapes and {@code #}, and the writer's whole job is to edit lines this
+     * parser will read back.
+     */
     @NonNull
-    private static List<String> words(@NonNull String line) {
+    static List<String> words(@NonNull String line) {
         List<String> result = new ArrayList<>();
         StringBuilder word = new StringBuilder();
         char quote = 0;

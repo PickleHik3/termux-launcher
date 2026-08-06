@@ -205,6 +205,48 @@ public class TerminalKeyBindingResolverTest {
     }
 
     @Test
+    public void argumentStrokes_mapEachAppLaunchQueryToItsOwnStroke() {
+        // One tool backs many rows, so getStrokesForTool cannot tell the palette which app a
+        // stroke launches. Only the argument distinguishes them.
+        TerminalBindingConfig.Result config = TerminalBindingConfig.parse(
+            "map ctrl+alt+w app.launch org.mozilla.firefox\n"
+                + "map ctrl+alt+m app.launch com.mail\n"
+                + "map ctrl+alt+n app.launch org.mozilla.firefox\n",
+            LauncherToolRegistry.getInstance(), true);
+        assertTrue(config.errors.toString(), config.errors.isEmpty());
+        TerminalKeyBindingResolver.installConfigForTesting(config);
+        resolver = TerminalKeyBindingResolver.getInstance();
+
+        Map<String, String> strokes =
+            resolver.getArgumentStrokesForTool("app.launch", "query", SPLITS_ON);
+        assertEquals(2, strokes.size());
+        // The first stroke wins per app, matching what the rest of the palette shows.
+        assertEquals("ctrl+alt+w", strokes.get("org.mozilla.firefox"));
+        assertEquals("ctrl+alt+m", strokes.get("com.mail"));
+    }
+
+    @Test
+    public void argumentStrokes_excludeABindingWhoseConditionDoesNotHold() {
+        // Same false-promise rule as strokesFor: a stroke that cannot fire in this mode must not be
+        // advertised on a row.
+        Map<String, String> pasteOn =
+            resolver.getArgumentStrokesForTool("app.launch", "query", SPLITS_ON);
+        assertTrue(pasteOn.isEmpty());
+
+        TerminalBindingConfig.Result config = TerminalBindingConfig.parse(
+            "map --when splits-off ctrl+alt+w app.launch org.mozilla.firefox\n",
+            LauncherToolRegistry.getInstance(), true);
+        assertTrue(config.errors.toString(), config.errors.isEmpty());
+        TerminalKeyBindingResolver.installConfigForTesting(config);
+        resolver = TerminalKeyBindingResolver.getInstance();
+
+        assertTrue(resolver.getArgumentStrokesForTool("app.launch", "query", SPLITS_ON).isEmpty());
+        assertEquals("ctrl+alt+w", resolver
+            .getArgumentStrokesForTool("app.launch", "query", SPLITS_OFF)
+            .get("org.mozilla.firefox"));
+    }
+
+    @Test
     public void unknownContinuation_cancelsAndConsumesTheSequence() {
         assertEquals(TerminalKeyBindingResolver.Step.Kind.PENDING,
             resolver.advance(key(KeyEvent.KEYCODE_SPACE, CTRL_ALT), SPLITS_ON).kind);
@@ -373,11 +415,24 @@ public class TerminalKeyBindingResolverTest {
     }
 
     @Test
-    public void strokeSpecNormalization_isCaseAndOrderInsensitive() {
-        assertEquals("ctrl+alt+v", TerminalKeyBindingResolver.normalizeStrokeSpec("Ctrl+Alt+V"));
+    public void strokeSpecNormalization_isModifierCaseAndOrderInsensitive() {
+        assertEquals("ctrl+alt+v", TerminalKeyBindingResolver.normalizeStrokeSpec("CTRL+Alt+v"));
         assertEquals("ctrl+alt+v", TerminalKeyBindingResolver.normalizeStrokeSpec("alt+ctrl+v"));
         assertEquals("ctrl+alt+shift+left", TerminalKeyBindingResolver.normalizeStrokeSpec("SHIFT+ALT+CTRL+left"));
         assertEquals("ctrl+alt+]", TerminalKeyBindingResolver.normalizeStrokeSpec("Control+Alt+]"));
+        // A multi-character key name has no shifted spelling, so case there is still just case.
+        assertEquals("ctrl+alt+pageup",
+            TerminalKeyBindingResolver.normalizeStrokeSpec("Ctrl+Alt+PageUp"));
+    }
+
+    @Test
+    public void strokeSpecNormalization_readsAnUpperCaseLetterAsShift() {
+        // What makes `map Ctrl+Alt+R` and `map Ctrl+Alt+r` two bindings a config file can tell
+        // apart, the way it already could with an explicit shift+.
+        assertEquals("ctrl+alt+shift+r", TerminalKeyBindingResolver.normalizeStrokeSpec("Ctrl+Alt+R"));
+        assertEquals("ctrl+alt+r", TerminalKeyBindingResolver.normalizeStrokeSpec("Ctrl+Alt+r"));
+        assertEquals("ctrl+alt+shift+r",
+            TerminalKeyBindingResolver.normalizeStrokeSpec("ctrl+alt+shift+R"));
     }
 
     @Test

@@ -48,6 +48,17 @@ The Android application also uses these independently maintained libraries:
 Dependencies used only by tests and build tooling are not part of the distributed APK. Their
 licenses remain available in their respective distributions.
 
+## Data sources
+
+- **[Open-Meteo](https://open-meteo.com/)** — forecast data licensed
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The status bar's weather reading and
+  its detail card are drawn from Open-Meteo's keyless forecast API, and carry the credit
+  **Weather data by Open-Meteo.com** beside the data. No account, API key or personal identifier is
+  sent — a request carries the device's last known coordinates to four decimal places and nothing
+  else — and a request is only made when the weather reading is enabled and location permission has
+  been granted. Open-Meteo's own server software is AGPLv3; Termux Launcher calls the public API and
+  distributes none of it.
+
 ## MIT notice for nlohmann/json
 
 Copyright © 2013-2022 Niels Lohmann
