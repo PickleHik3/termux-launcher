@@ -1,9 +1,27 @@
 # Changelog
 
-## Unreleased
+## 0.2.31
 
 ### Added
 
+- **A first-launch tour over real footage.** Three pages on first open: the two commands worth
+  running before anything else, the dock as an app launcher with its `%` search and alphabet
+  rail, and persistent windows with splits and the live status surfaces — each over a short
+  looping clip of the launcher actually doing it. Skippable from any page, shown once, and
+  forceable with `EXTRA_SHOW_ONBOARDING` for demos.
+- **A usable landscape layout.** The launcher draws into the display cutout and pads content by
+  its insets, ending the unscrimmed wallpaper strip on the camera edge. The in-app keyboard's
+  height scale is stored per orientation (landscape follows portrait until adjusted), and its
+  landscape ceiling drops so the keyboard can no longer starve the terminal to a single row.
+  The horizontal dock becomes a vertical rail of pinned apps on the left edge, which the window
+  bar, terminal and keyboard all inset past. Portrait is unchanged.
+- **A workspace can restore what was running.** Saving records the foreground command of each
+  pane behind a checkbox, and loading a workspace that carries commands offers to run them
+  again, labelled with how many — asked on both sides, because workspace files are hand-editable
+  and a hand-written one should execute nothing unasked. A restored command runs through the
+  normal Termux login shell, so it lands in your shell with your config and your PATH, and a
+  pane whose command ends or fails is left on a usable shell instead of vanishing. The picker
+  also gains a per-row delete, confirmed by name.
 - **Per-pane zoom.** Pinch (or the font-size keys) now sizes only the pane you did it in and pins
   that size to the pane — switching windows or re-rendering no longer folds every pane back to
   one shared size, and no pane in any other window moves with it. A new split starts at the size
@@ -15,15 +33,16 @@
   carry the Android clipboard compatibility fix Sigye v0.6.0 still needs and the Fastfetch GIF
   frame upload/playback patch used to exercise the launcher's terminal-driven Kitty animation.
   Both install under `~/.local` without replacing APT-owned files.
-- **Terminal font picker** — Settings → Appearance → Terminal fonts installs a complete multi-face font with no shell: pick from seven curated families with download sizes, SHA-256 verification and license text shown up front, with a star on the suggested one (Maple Mono, the variable pair) and each family's own icon, ligature and feature defaults applied on install. Toggles for icons, ligature policy and the `wght` axis rewrite the config in place, and **Use font.ttf / Termux:Styling** hands control back by deleting exactly one file. The picker writes only under `~/.termux/fonts/`, plus `~/.termux/fonts.d/10-launcher.conf`; it never creates, overwrites or deletes `~/.termux/font.ttf` or `font-italic.ttf`, so installing a family changes the terminal only. Reachable from the palette, keybindings and agents as `fonts.pick` and `fonts.install`.
+- **Terminal font picker** — Settings → Appearance → Terminal fonts installs a complete multi-face font with no shell: pick from fourteen curated families with download sizes, SHA-256 verification and license text shown up front, with a star on the suggested one (Maple Mono, the variable pair) and each family's own icon, ligature and feature defaults applied on install. Toggles for icons, ligature policy and the `wght` axis rewrite the config in place, and **Use font.ttf / Termux:Styling** hands control back by deleting exactly one file. The picker writes only under `~/.termux/fonts/`, plus `~/.termux/fonts.d/10-launcher.conf`; it never creates, overwrites or deletes `~/.termux/font.ttf` or `font-italic.ttf`, so installing a family changes the terminal only. Reachable from the palette, keybindings and agents as `fonts.pick` and `fonts.install`.
 - **`~/.termux/fonts.d/*.conf` drop-ins** — font config fragments load in filename order before your own `fonts.conf`, so a hand-written file always overrides an app-managed or third-party fragment while still inheriting what it does not restate. Bounded to 32 files and 256 KiB across all of them, which never eats into `fonts.conf`'s own 64 KiB allowance.
 - **Ordered font fallback** — `fallback_font path=…|family=…`, repeatable up to 8, is the controllable answer to Android substituting a CJK or emoji face you did not choose. Coverage is probed on the cluster's base code point and memoized, and a fallback face never changes cell width.
 - **Named symbol maps** — `symbol_map name=<ident> …` lets `font_features` and `font_variations` target one specific map instead of the shared `symbols` target.
 - **Geometric box drawing** — box-drawing, block, shade, braille and sextant cells are drawn as geometry snapped to shared integer cell edges, so frames, block ramps and braille graphs join seamlessly at any cell size instead of showing the hairline gaps a font's glyph metrics leave. `box_drawing font` restores glyph rendering, `box_drawing_scale` tunes the four line weights, and `powerline_symbols synthesize` claims the separator ranges too.
 - **Bind a key to an app from the palette** — long-press an app row (or `Ctrl+Alt+Enter` on the focused one) and press a combination; it is written to `~/.termux/termux-launcher-bindings.conf` with your comments and ordering preserved, and takes effect immediately. App rows also show the chord already bound to them, and are searchable by it.
 - **Rename any session from the palette** — a Rename row per session, so renaming a session other than the current one needs neither the browser nor the panel (`session.rename_at_index`).
-- **Working indication** — a sweeping underline on the pill of each window whose shell is producing output, plus three pulsing dots in the status row for the current session. Unprivileged, a silent foreground process (`sleep 300`, an idle editor) reads as not working.
-- **Settings cog in the status row**, opening Terminal & status settings directly.
+- **Working indication** — the pill rim of a window breathes while the shell in it is actually working. The signal is CPU burned by the foreground process group between polls, not output, so a shell echoing keystrokes or a TUI repainting its clock once a second does not read as work, and typing silences the indication outright. Where no privileged reading exists it falls back to sustained output, excluding alternate-buffer applications.
+- **Settings cog in the expanded status panel**, opening the launcher's settings; the top-pane clock opens the device's clock app.
+- **The terminal identifies itself to capability detectors.** XTVERSION replies `termux-launcher(version)`, XTSMGRAPHICS answers with the sixel colour-register count and screen-following geometry instead of swallowing the query, and `TERM_PROGRAM`/`TERM_PROGRAM_VERSION` are exported to every shell — so programs that pick features by asking which terminal this is (chafa, notcurses and everything on their databases) stop falling back to their most conservative path.
 - **Rename and close buttons on sessions-panel rows** — the long press still works, but it was the only way to know it was possible.
 - **A window whose shell asked for you lights up.** The pill rim of a window turns the Material error colour and pulses with a halo once a shell in it rings the terminal bell — a permission prompt, an agent handing its turn back, a build that stopped for input. The bell is the signal, so no cooperation from the program is needed, and it is recorded even when the launcher is in the background. Focusing the window clears it, and a bell from the window you are already in is not news.
 - **Terminal contrast in the surface editor** — Edit surfaces → Terminal now carries the Softer/Default/Harder control alongside opacity and border, applied live like everything else there, with Reset tab and dismiss behaving as they do for the rest of the tab. Disabled with a reason when wallpaper colours are off, since contrast only grades the generated palette.
@@ -45,6 +64,12 @@
 - **The transient notice chip is a Material surface.** Label-medium type on a surface-container-high fill with an outline hairline and elevation, entering on the emphasized-decelerate curve, instead of 9.5sp text on a black scrim. The standing background rows match it one step lower in the elevation scale, and the two share one column: the rows sit directly under the notice and slide up into its slot when it expires.
 - **The palette is only rebuilt when it actually changed.** Resume, configuration changes and wallpaper-colour callbacks all forced a full refresh — an HCT palette build, a recolour and repaint of every session, a font-config re-read with typefaces rebuilt and re-applied to every pane, and two file writes — whether or not any Material role had moved. They now consult a fingerprint first, and that fingerprint covers all 25 roles the export is derived from rather than six accents plus the contrast level.
 - **Colour and font refreshes are separate.** A wallpaper change no longer re-reads font config from disk, rebuilds typefaces or re-measures panes; only a font change does.
+- **The in-app keyboard's colours follow the Material theme.** Every swatch re-resolves its source role on load, on a wallpaper-colour change and on the way back from hidden, so the keyboard moves with the system theme instead of freezing whatever the roles were when the scheme was first written. A swatch you edit is pinned and left alone, an imported Tinted/Base16 palette pins the whole set, and Follow theme hands pinned colours back. Repaints are gated on the resolved roles actually moving.
+- **The font catalog doubles** — Meslo LGS NF, Iosevka Term, Monaspace Neon, Commit Mono, 0xProto, Intel One Mono, Recursive Mono Casual and Comic Shanns Mono join, every download verified as before. The Nerd-Font-patched Maple Mono build is dropped: the bundled Symbols Nerd Font already routes the icon planes for every family, so its 20 MB download bought nothing.
+- **Powerline separators are synthesized by default**, the way kitty draws them itself: geometry is the only way their edges sit flush with the cell-aligned background rectangles, since a font glyph never quite fills the cell. `powerline_symbols font` hands them back to a patched Nerd Font whose author drew their own.
+- **Settings search reaches every sub-screen.** Root search matched only the destination rows' own titles and summaries, so "fonts", "shizuku" or "ligatures" found nothing; each destination now indexes every preference reachable under it, and a row matched through its children says what it contains. The root screen groups its destinations under Launcher and System & Info headers, a duplicated Recents toggle is gone, and the three surface-editor entries are named in parallel.
+- **Open-Meteo is credited beside the forecast** — their CC BY 4.0 licence asks for the credit next to the data, not only in a notices file — and hidden when none of their data is on screen. The notices file and in-app licences screen gain a data-sources section recording what actually leaves the device: no account or key, the last known coordinates to four decimal places, and only once the reading is enabled and location granted.
+- Bar CPU/RAM readings are smoothed instead of repainting every raw sample, and with the mini-btop card closed sampling slows to halve the privileged `/proc` reads; the card still gets every sample.
 
 ### Fixed
 
@@ -66,6 +91,9 @@
 - **The exported palette files are built on the main thread.** The writer thread was resolving theme attributes and re-deriving the palette itself, so the files could describe different colours than the terminal took.
 - **The terminal surface no longer rebuilds the whole generated palette to read one colour** — a 101-tone contrast search per foreground, cursor and ANSI colour, every time the surface was restyled.
 - **Returning to the launcher no longer makes every shell re-read the palette.** The exported colour files were rewritten byte-for-byte identically on every resume, and shells watch them by modification time — the bundled fish config re-sources the palette when it moves and re-runs the tmux theme script inside tmux. Identical content is now left alone.
+- **"Customize status appearance" no longer crashes in dark mode below Android 12** (#7). The dark pre-API-31 base theme was the last style in the project on a Material 2 parent, which defines no `materialSwitchStyle`, and measuring a MaterialSwitch without one throws. Found alongside it: the recents-visibility policy silently stopped applying on Android 8–9, and the notification-access row was a dead button below Android 11 — both fixed. A new sweep measures a MaterialSwitch under every activity theme, in both night modes, at both ends of the supported API range, so a theme drifting off Material 3 fails as a test rather than as a report from someone else's phone.
+- **The download catalogs no longer flicker while downloading.** The font and TAI model lists re-bound every visible row on every progress tick; a pure progress tick now lands directly on the bound progress bar, a row only re-binds when something visible moved, and the ghost insertion cursor Nothing OS painted over re-bound buttons is gone.
+- **Box-drawing synthesis outranks a `symbol_map` match**, so the managed nerd-font map — which spans the whole private-use area — cannot silently turn geometry off; and a narrow private-use icon whose neighbour is a same-styled blank gets both cells, so an icon `wcwidth()` calls narrow is no longer stamped into a single square.
 
 ## 0.2.30
 
