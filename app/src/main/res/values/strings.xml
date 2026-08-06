@@ -1485,4 +1485,8 @@
     <string name="tool_desc_fonts_pick">Open the terminal font picker.</string>
     <string name="tool_fonts_install">Install terminal font</string>
 
+    <!-- Required credit for Open-Meteo forecast data (CC BY 4.0). Not translated: it is the
+         attribution wording Open-Meteo asks for. -->
+    <string name="weather_attribution" translatable="false">Weather data by Open-Meteo.com</string>
+
 </resources>
