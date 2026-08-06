@@ -97,6 +97,7 @@ import com.termux.app.launcher.data.LauncherConfigRepository;
 import com.termux.app.launcher.LauncherLockAccessibilityAccess;
 import com.termux.app.launcher.LockAccessibilityService;
 import com.termux.app.launcher.TerminalAppSearchKeyDecision;
+import com.termux.app.onboarding.FirstLaunchOnboarding;
 import com.termux.launcherctl.LauncherCtlApiServer;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
@@ -187,6 +188,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         "com.termux.app.extra.DOCK_TUNING";
     public static final String EXTRA_DOCK_TUNING_SECTION =
         "com.termux.app.extra.DOCK_TUNING_SECTION";
+    /** Forces the first-launch experience for screenshots, product demos, and UI verification. */
+    public static final String EXTRA_SHOW_ONBOARDING =
+        "com.termux.app.extra.SHOW_ONBOARDING";
 
     /**
      * The connection to the {@link TermuxService}. Requested in {@link #onCreate(Bundle)} with a call to
@@ -806,6 +810,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Send the {@link TermuxConstants#BROADCAST_TERMUX_OPENED} broadcast to notify apps that Termux
         // app has been opened.
         TermuxUtils.sendTermuxOpenedBroadcast(this);
+        if (savedInstanceState == null) {
+            boolean forceOnboarding = getIntent().getBooleanExtra(EXTRA_SHOW_ONBOARDING, false);
+            View contentView = findViewById(android.R.id.content);
+            contentView.post(() -> FirstLaunchOnboarding.showIfNeeded(this, forceOnboarding));
+        }
     }
 
     @Override

@@ -1489,4 +1489,34 @@
          attribution wording Open-Meteo asks for. -->
     <string name="weather_attribution" translatable="false">Weather data by Open-Meteo.com</string>
 
+    <!-- First-launch product onboarding -->
+    <string name="onboarding_brand">TERMUX:LAUNCHER</string>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_skip_description">Skip introduction and open &TERMUX_APP_NAME;</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_next_description">Show the next introduction page</string>
+    <string name="onboarding_get_started">Start using Termux</string>
+    <string name="onboarding_get_started_description">Finish setup tips and open your workspace</string>
+
+    <string name="onboarding_page_one_eyebrow">FIRST 60 SECONDS</string>
+    <string name="onboarding_page_one_title">Set up the essentials.</string>
+    <string name="onboarding_page_one_body">Run these commands in the terminal to refresh packages and give command-line tools access to shared storage.</string>
+    <string name="onboarding_page_one_tip_one">pkg update &amp;&amp; pkg upgrade</string>
+    <string name="onboarding_page_one_tip_two">termux-setup-storage</string>
+    <string name="onboarding_page_one_footer">Run these in your first terminal</string>
+
+    <string name="onboarding_page_two_eyebrow">APPS, WITHOUT DETOURS</string>
+    <string name="onboarding_page_two_title">Find and launch anything.</string>
+    <string name="onboarding_page_two_body">Use the dock as an app launcher. Search by typing a percent sign, or scrub the alphabet row to jump through installed apps.</string>
+    <string name="onboarding_page_two_tip_one">Type %settings to filter the app dock</string>
+    <string name="onboarding_page_two_tip_two">Tap to launch · long-press for app actions</string>
+    <string name="onboarding_page_two_footer">The dock stays beside your terminal</string>
+
+    <string name="onboarding_page_three_eyebrow">YOUR WORKSPACE</string>
+    <string name="onboarding_page_three_title">Keep work visible and alive.</string>
+    <string name="onboarding_page_three_body">Create persistent terminal windows, split the workspace, and open live system details without leaving your command line.</string>
+    <string name="onboarding_page_three_tip_one">+ creates another terminal window</string>
+    <string name="onboarding_page_three_tip_two">Tap CPU, memory, or weather for details</string>
+    <string name="onboarding_page_three_footer">Long-press a surface to personalize it</string>
+
 </resources>
