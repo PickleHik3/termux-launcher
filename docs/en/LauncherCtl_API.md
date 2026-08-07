@@ -52,7 +52,7 @@ The token is a startup-generated random secret stored owner-only at `~/.launcher
 
 ### Token-optional toggle (localhost only)
 
-A new setting **Require API token** (default **on**) lives under **Settings → Services & permissions → Termux AI**. When turned **off**, requests from localhost need no token — any placeholder API key (or none) works. This is convenient for local CLI clients that cannot easily read the token file.
+A setting **Require API token** (default **on**) lives under **Settings → Services & permissions → TAI · Termux AI**. When turned **off**, requests from localhost need no token — any placeholder API key (or none) works. This is convenient for local CLI clients that cannot easily read the token file.
 
 - `GET /` and `OPTIONS` never require auth, regardless of the toggle.
 - **LAN bind mode always requires the token**, no matter the toggle state. Anyone who can reach a LAN-exposed endpoint and does not present the token gets `401`.
@@ -324,7 +324,7 @@ Inspect `/v1/models` first to confirm both `_backend == "mnn-llm"` and the endpo
 
 ### Token errors (`401`)
 - Read the current token: `cat ~/.launcherctl/token`.
-- Rotate it with `POST /v1/auth/rotate` or from **Settings → Services & permissions → Termux AI → Recreate API token**, then re-run your command.
+- Rotate it with `POST /v1/auth/rotate` or from **Settings → Services & permissions → TAI · Termux AI → Recreate API token**, then re-run your command.
 - If you turned **Require API token** off, confirm you are still on `localhost` bind mode — LAN mode always requires the token.
 
 ### `Connection refused`

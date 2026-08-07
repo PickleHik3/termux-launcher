@@ -181,7 +181,7 @@ Models default to CPU on unknown devices. GPU is automatic only after a successf
 Open:
 
 ```text
-Settings -> TAI / Termux AI
+Settings → Services & permissions → TAI · Termux AI
 ```
 
 From there you can:
@@ -273,12 +273,12 @@ Requests must include the bearer token (`Authorization: Bearer <token>` or `X-Ap
 ~/.launcherctl/token
 ```
 
-A **Require API token** setting (default on) under **Settings → Services & permissions → Termux AI** lets you turn token checks off for localhost so local CLI clients need no real key. `GET /` and `OPTIONS` never require auth, and **LAN bind mode always requires the token** regardless of the toggle.
+A **Require API token** setting (default on) under **Settings → Services & permissions → TAI · Termux AI** lets you turn token checks off for localhost so local CLI clients need no real key. `GET /` and `OPTIONS` never require auth, and **LAN bind mode always requires the token** regardless of the toggle.
 
 Treat this token like an API key. If it is exposed, recreate it from:
 
 ```text
-Settings -> TAI / Termux AI -> Recreate API token
+Settings → Services & permissions → TAI · Termux AI → Recreate API token
 ```
 
 After recreating the token, update any CLI tools that stored the old key.
