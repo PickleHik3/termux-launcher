@@ -96,26 +96,6 @@ See [Getting Started](docs/en/Launcher_Getting_Started.md) for the setup flow.
 - [Termux AI](docs/en/Termux_AI.md): local model setup, `tai`, OpenAI-compatible clients, and troubleshooting.
 - [Developer Docs](docs/en/Developer_Docs.md): advanced API routes, runtime notes, helper scripts, and security details.
 
-## Quick Shell Example
-
-Check the on-device AI runtime from the terminal:
-
-```sh
-tai status
-tai models
-```
-
-Point an OpenAI-compatible client at the local endpoint:
-
-```sh
-export OPENAI_BASE_URL="$(cat ~/.launcherctl/endpoint)/v1"
-export OPENAI_API_KEY="$(cat ~/.launcherctl/token)"
-```
-
-## Known Limitations
-
-- When Termux is set as the home launcher and the last terminal shell exits, Android may recreate the activity before Termux can exit cleanly. Run `termux-reload-settings` if the terminal slows down or feels stale.
-
 ## Upstream Base
 
 - [termux-app](https://github.com/termux/termux-app)
