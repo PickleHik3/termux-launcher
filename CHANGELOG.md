@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.31-hotfix.1-vaj
+
+VAJ edition (`io.vaj.tl`), pinned to the verified aarch64 APT bootstrap and the signed `https://repo.pathayam.xyz stable main` repository.
+
+### Fixed
+
+- The v0.2.31-vaj APK was built with the `com.termux` application id and Termux manifest placeholders, so it installed into the `com.termux` slot and failed on first start with "failed to get package context for io.vaj.tl". The build now restores the `io.vaj.tl` application id, manifest package name, arm64-v8a-only publishing, and the runtime-downloaded VAJ bootstrap (no embedded Termux bootstraps). If v0.2.31-vaj replaced an existing `com.termux` install, reinstall the com.termux edition APK over it — data is preserved.
+
 ## 0.2.31-vaj
 
 VAJ edition (`io.vaj.tl`), pinned to the verified aarch64 APT bootstrap and the signed `https://repo.pathayam.xyz stable main` repository.

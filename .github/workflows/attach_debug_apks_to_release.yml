@@ -100,6 +100,9 @@ jobs:
           if grep -q 'android:debuggable="true"' "$RELEASE_MANIFEST_PATH"; then
             exit_on_error "Merged release manifest is debuggable: $RELEASE_MANIFEST_PATH"
           fi
+          if ! grep -q 'package="io.vaj.tl"' "$RELEASE_MANIFEST_PATH"; then
+            exit_on_error "Merged release manifest applicationId is not 'io.vaj.tl'. A merge from dev likely dropped the VAJ applicationId/manifest placeholders in app/build.gradle."
+          fi
           if ! ./gradlew assembleDebug; then
             exit_on_error "Build failed for '$APK_VERSION_TAG' release."
           fi

@@ -27,11 +27,12 @@ android {
     def hasReleaseSigningConfig = releaseStoreFilePath && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
 
     defaultConfig {
+        applicationId "io.vaj.tl"
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         versionCode 1020 // Always keep the same versionCode as Termux Upstream to allow users to swap between termux installations.
-        versionName "0.2.31-vaj"
+        versionName "0.2.31-hotfix.1-vaj"
 
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)
@@ -39,7 +40,7 @@ android {
         buildConfigField "String", "TERMUX_PACKAGE_VARIANT", "\"" + project.ext.packageVariant + "\"" // Used by TermuxApplication class
 
         manifestPlaceholders = [
-            TERMUX_PACKAGE_NAME    : "com.termux",
+            TERMUX_PACKAGE_NAME    : "io.vaj.tl",
             TERMUX_APP_NAME        : "Termux:Monet",
             TERMUX_API_APP_NAME    : "Termux:API",
             TERMUX_GUI_APP_NAME    : "Termux:GUI",
@@ -58,8 +59,10 @@ android {
                 enable ((gradle.startParameter.taskNames.any { it.contains("Debug") } && splitAPKsForDebugBuilds == "1") ||
                     (gradle.startParameter.taskNames.any { it.contains("Release") } && splitAPKsForReleaseBuilds == "1"))
                 reset()
-                include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
-                universalApk true
+                // The io.vaj.tl bootstrap is available only for aarch64. Do not publish APKs
+                // that can install on unsupported architectures and then fail during bootstrap.
+                include 'arm64-v8a'
+                universalApk false
             }
         }
     }
@@ -219,56 +222,6 @@ def validateVersionName(String versionName) {
     }
 }
 
-def downloadBootstrap(String arch, String expectedChecksum, String version) {
-    def digest = java.security.MessageDigest.getInstance("SHA-256")
-
-    def localUrl = "src/main/cpp/bootstrap-" + arch + ".zip"
-    def file = new File(projectDir, localUrl)
-    if (file.exists()) {
-        def buffer = new byte[8192]
-        def input = new FileInputStream(file)
-        while (true) {
-            def readBytes = input.read(buffer)
-            if (readBytes < 0) break
-            digest.update(buffer, 0, readBytes)
-        }
-        def checksum = new BigInteger(1, digest.digest()).toString(16)
-        while (checksum.length() < 64) { checksum = "0" + checksum }
-        if (checksum == expectedChecksum) {
-            return
-        } else {
-            logger.quiet("Deleting old local file with wrong hash: " + localUrl + ": expected: " + expectedChecksum + ", actual: " + checksum)
-            file.delete()
-        }
-    }
-
-    def remoteUrl = "https://github.com/termux/termux-packages/releases/download/bootstrap-" + version + "/bootstrap-" + arch + ".zip"
-    logger.quiet("Downloading " + remoteUrl + " ...")
-
-    file.parentFile.mkdirs()
-    def out = new BufferedOutputStream(new FileOutputStream(file))
-
-    def connection = new URL(remoteUrl).openConnection()
-    connection.setInstanceFollowRedirects(true)
-    def digestStream = new java.security.DigestInputStream(connection.inputStream, digest)
-    out << digestStream
-    out.close()
-    def checksum = new BigInteger(1, digest.digest()).toString(16)
-    while (checksum.length() < 64) { checksum = "0" + checksum }
-    if (checksum != expectedChecksum) {
-        file.delete()
-        throw new GradleException("Wrong checksum for " + remoteUrl + ": expected: " + expectedChecksum + ", actual: " + checksum)
-    }
-}
-
-clean {
-    doLast {
-        def tree = fileTree(new File(projectDir, 'src/main/cpp'))
-        tree.include 'bootstrap-*.zip'
-        tree.each { it.delete() }
-    }
-}
-
 // https://stackoverflow.com/questions/75274720/a-failure-occurred-while-executing-appcheckdebugduplicateclasses/
 configurations.implementation {
    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
@@ -303,29 +256,6 @@ tasks.named("preBuild").configure {
     dependsOn tasks.named("generateLicenseResources")
 }
 
-task downloadBootstraps() {
-    doLast {
-        def packageVariant = project.ext.packageVariant
-        if (packageVariant == "apt-android-7") {
-            def version = "2026.02.12-r1" + "%2B" + "apt.android-7"
-            downloadBootstrap("aarch64", "ea2aeba8819e517db711f8c32369e89e7c52cee73e07930ff91185e1ab93f4f3", version)
-            downloadBootstrap("arm", "a38f4d3b2f735f83be2bf54eff463e86dc32a3e2f9f861c1557c4378d249c018", version)
-            downloadBootstrap("i686", "f5bc0b025b9f3b420b5fcaeefc064f888f5f22a0d6fd7090f4aac0c33eb3555b", version)
-            downloadBootstrap("x86_64", "b7fd0f2e3a4de534be3144f9f91acc768630fc463eaf134ab2e64c545e834f7a", version)
-        } else if (packageVariant == "apt-android-5") {
-            def version = "2022.04.28-r6" + "+" + packageVariant
-            downloadBootstrap("aarch64", "913609d439415c828c5640be1b0561467e539cb1c7080662decaaca2fb4820e7", version)
-            downloadBootstrap("arm", "26bfb45304c946170db69108e5eb6e3641aad751406ce106c80df80cad2eccf8", version)
-            downloadBootstrap("i686", "46dcfeb5eef67ba765498db9fe4c50dc4690805139aa0dd141a9d8ee0693cd27", version)
-            downloadBootstrap("x86_64", "615b590679ee6cd885b7fd2ff9473c845e920f9b422f790bb158c63fe42b8481", version)
-        } else {
-            throw new GradleException("Unsupported TERMUX_PACKAGE_VARIANT \"" + packageVariant + "\"")
-        }
-    }
-}
-
-afterEvaluate {
-    android.applicationVariants.all { variant ->
-        variant.javaCompileProvider.get().dependsOn(downloadBootstraps)
-    }
-}
+// The VAJ bootstrap is NOT embedded in the APK. It is downloaded and SHA-256 verified on first run
+// by TermuxInstaller (openBootstrapInputStream), mirroring how the com.termux edition fetches its
+// bootstrap at runtime. Keep the URL/hash there in sync with the accepted bootstrap.
