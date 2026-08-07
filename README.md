@@ -16,7 +16,7 @@ Termux Launcher is a terminal-first Android home launcher inspired by [TEL](http
 
 **[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | [Download builds](https://github.com/PickleHik3/termux-launcher/releases) | [Getting Started](docs/en/Launcher_Getting_Started.md) | [Modern terminal](docs/en/Terminal_Modernization.md) | [Local AI API](docs/en/LauncherCtl_API.md) | [Termux AI](docs/en/Termux_AI.md) | [Changelog](CHANGELOG.md)
 
-> **Two editions are available.** The **`com.termux`** build is the **recommended** version — it stays fully compatible with the upstream Termux package ecosystem. The **`io.vaj.tl`** build installs side-by-side with a stock Termux, but it runs off my own custom APT repository, which I maintain by hand — so it is updated manually and less often. See [Editions](#editions).
+> **Two editions are available.** The **`com.termux`** build is the **recommended** version — it stays fully compatible with the upstream Termux package ecosystem. The **`io.vaj.tl`** build is a **demo edition**: it installs side-by-side with a stock Termux so you can try the launcher without touching your existing setup, but it runs off my small hand-maintained APT repository with far fewer packages and slower updates. See [Editions](#editions).
 
 <p align="center">
   <img src="screenshots/banner.png" alt="Termux Launcher hero showing terminal-first Android features and five device screenshots" width="100%">
@@ -52,18 +52,18 @@ All credits go to the amazing developers and contributors of Termux, TEL, and Te
 
 Every release ships two APK sets. They are the same launcher built from the same source; the only difference is the Android package identity and the package ecosystem they use.
 
-| | Termux edition | VAJ edition |
+| | Termux edition | VAJ demo edition |
 |---|---|---|
 | Package name | `com.termux` | `io.vaj.tl` |
 | Release tag | `vX.Y.Z` | `vX.Y.Z-vaj` |
 | Alongside official Termux? | ❌ No — same package name, replaces it | ✅ Yes — installs side by side |
-| Package repository | official Termux repos | VAJ APT repo (`https://repo.pathayam.xyz`) |
-| Architectures | arm64-v8a, armeabi-v7a, x86_64, x86 | arm64-v8a (aarch64) only, bootstrap embedded |
+| Package repository | official Termux repos | small VAJ APT repo (`https://repo.pathayam.xyz`) |
+| Architectures | arm64-v8a, armeabi-v7a, x86_64, x86 | arm64-v8a (aarch64) only, bootstrap downloaded on first run |
 | Companion add-ons | [Termux:API](https://github.com/PickleHik3/termux-api/releases) / [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases) (plain tags) | same forks, `-vaj` tagged releases |
 
-Pick the **Termux edition** if you want the launcher as your only Termux, fully compatible with the upstream Termux package ecosystem. This is the **recommended** edition for most users. Pick the **VAJ edition** if you want to keep your existing official Termux app untouched and run the launcher next to it with its own isolated prefix, data, and APT repository.
+Pick the **Termux edition** — it is the recommended edition for everyone: the launcher as your Termux, fully compatible with the upstream Termux package ecosystem. The **VAJ edition is a demo**: use it only to preview the launcher next to an existing official Termux install you don't want to touch, and expect to switch to the Termux edition for daily use.
 
-> ⚠️ The VAJ edition depends on my manually maintained custom APT repo (`https://repo.pathayam.xyz`), so its packages and `-vaj` releases are updated **less frequently** than the `com.termux` edition. If you want the most up-to-date builds and the broadest package compatibility, use the Termux (`com.termux`) edition.
+> ⚠️ The VAJ demo edition runs off my manually maintained custom APT repo (`https://repo.pathayam.xyz`), which carries only a small fraction of the Termux package set and is updated **less frequently** — many packages you rely on will simply not be installable there. For real use, pick the Termux (`com.termux`) edition.
 
 In both cases, companion add-ons must be the matching builds from this project's forks (they share the launcher's signing key and package family); official F-Droid add-ons will not pair with either edition.
 
@@ -80,6 +80,17 @@ Recommended setup:
 
 The built-in terminal keyboard is enabled on fresh installs; an external keyboard app is optional.
 See [Getting Started](docs/en/Launcher_Getting_Started.md) for the setup flow.
+
+### Quick start script
+
+[`setup-launcher`](docs/en/examples/setup-launcher) turns a fresh install into the full showcase shell in one run — fish + Oh My Posh with wallpaper Material colors, zoxide/eza/yazi/neovim, and the launcher terminal configs in `~/.termux`. It is interactive, and every config it replaces gets a timestamped `.bak` first:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-launcher
+sh setup-launcher
+```
+
+Fonts are not part of the script — the in-app font picker (**Settings › Terminal › Font**) downloads and wires up curated families, Nerd Font builds included.
 
 ## Documentation
 
