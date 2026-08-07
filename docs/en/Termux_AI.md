@@ -6,7 +6,7 @@ TAI is the model host. You can chat with it through an OpenAI- or Ollama-compati
 
 ## Quick start
 
-1. Open **Settings → TAI / Termux AI**.
+1. Open **Settings → Services & permissions → TAI · Termux AI**.
 2. Open the model catalog and choose a model that fits your device memory.
 3. Read and accept the model provider's terms when asked, then download the model.
 4. Tap the installed model and choose **Load**. You can also leave **OpenAI auto-load** enabled so the first API request loads it after safety checks pass.
@@ -160,7 +160,7 @@ Ollama streaming uses newline-delimited JSON. Ollama registry operations (`pull`
 
 ### Auth
 
-Routes require the bearer token (sent as `Authorization: Bearer <token>` or `X-Api-Key: <token>`). A new **Require API token** setting (default on) under **Settings → Services & permissions → Termux AI** lets you turn token checks off for localhost so local CLI clients need no real key — any placeholder works. `GET /` and `OPTIONS` never require auth. **LAN bind mode always requires the token** regardless of the toggle.
+Routes require the bearer token (sent as `Authorization: Bearer <token>` or `X-Api-Key: <token>`). A **Require API token** setting (default on) under **Settings → Services & permissions → TAI · Termux AI** lets you turn token checks off for localhost so local CLI clients need no real key — any placeholder works. `GET /` and `OPTIONS` never require auth. **LAN bind mode always requires the token** regardless of the toggle.
 
 Keep localhost mode enabled unless you deliberately need LAN access. Anyone who can reach a LAN-exposed endpoint and knows its token can submit model requests.
 
@@ -199,7 +199,7 @@ tai import /absolute/path/to/model.litertlm my-local-model
 
 TAI does not run GGUF, safetensors, PyTorch, or ONNX weights. Use a separate compatible runtime, such as llama.cpp in Termux, for GGUF models.
 
-For gated Hugging Face models, first accept the agreement on the model's Hugging Face page. Then create a read token and save it under **Settings → TAI / Termux AI → Hugging Face token**. The token is used only for Hugging Face downloads.
+For gated Hugging Face models, first accept the agreement on the model's Hugging Face page. Then create a read token and save it under **Settings → Services & permissions → TAI · Termux AI → Hugging Face token**. The token is used only for Hugging Face downloads.
 
 ## Runtime and safety behavior
 

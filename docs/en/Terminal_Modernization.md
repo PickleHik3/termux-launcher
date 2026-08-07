@@ -30,9 +30,8 @@ Session
 - A **pane** is one live shell inside a window. Panes can be split recursively in either direction.
 
 Split panes are enabled by default. To restore traditional single-pane Termux behavior, open
-**Settings → Termux → Terminal IO → Split panes** and enable **Single-pane compatibility mode**.
-Enabling compatibility mode closes secondary panes and disables window/pane commands, so finish or
-save work in those shells first.
+**Settings → Terminal & status → Split-pane controls** and turn the controls off. This closes
+secondary panes and disables window/pane commands, so finish or save work in those shells first.
 
 The fastest way to discover commands is the **Command palette**:
 
@@ -182,14 +181,10 @@ a terminal.
 
 ## Seeing which shell is working
 
-A window whose shell is producing output shows a sweeping underline on its pill, and the status row
-shows three pulsing dots while any window of the current session is working. Both read the same clock,
-so they move together, and both stop within about a second of the output stopping.
-
-The signal is terminal output, which is what tmux's `monitor-activity` watches. With a privileged
-backend available it is unioned with "the pane has a foreground process", which catches a command
-that runs silently. Without one, a silent foreground process — `sleep 300`, an idle editor — reads as
-not working.
+A window whose foreground process group is consuming CPU shows a breathing rim, and the status row
+shows three pulsing dots while any window of the current session is working. The sampler sums the
+whole foreground process group, so wrapper scripts are counted with their children. A shell merely
+echoing input, a clock repainting occasionally, `sleep 300`, or an idle editor does not read as busy.
 
 ## Save and restore workspaces
 
@@ -201,8 +196,15 @@ permissions at:
 ~/.termux/workspaces/<name>.json
 ```
 
-The Session browser's **Save** button is the easiest safe path. It saves topology and CWDs but does
-not capture foreground commands. Existing names require a separate replace confirmation.
+The Session browser's **Save** button or **Save workspace** in the command palette is the easiest safe
+path. The save dialog records topology and CWDs by default. **Also save what is running** additionally
+records the foreground command in each non-idle pane; existing names require a separate replace
+confirmation.
+
+When a saved workspace carries commands, the load flow separately asks whether to run them. Each
+approved command starts again from the beginning in the normal Termux login shell; it is not a
+process checkpoint. A failed or completed command leaves a usable shell behind. The picker also has
+a per-row delete action; deleting a definition does not affect running sessions.
 
 A workspace recreates terminal structure after app or service process death; it cannot resurrect
 Unix processes. Loading normally starts a login shell in each recorded CWD. Advanced API callers
@@ -754,6 +756,17 @@ Programs negotiate the keyboard and graphics protocols themselves. Legacy applic
 through the normal Termux key encoder. Main and alternate screens retain independent Kitty keyboard
 flags and bounded mode stacks.
 
+Capability detectors can identify the terminal without heuristics. Every shell receives:
+
+```sh
+TERM_PROGRAM=termux-launcher
+TERM_PROGRAM_VERSION=<installed version>
+```
+
+XTVERSION replies with `termux-launcher(version)`. XTSMGRAPHICS reports the Sixel color-register
+count and geometry that follows the current screen, so chafa, notcurses, and similar tools can choose
+their supported path.
+
 Unicode placeholders and shared-memory or file transmission remain out of scope and
 return a bounded protocol error. Images placed with a negative z-index never overwrite visible
 text: the terminal keeps the text and shows the image in the surrounding blank cells.
@@ -761,6 +774,11 @@ text: the terminal keeps the text and shows the image in the surrounding blank c
 configuration.
 
 ## Appearance and diagnostics
+
+When wallpaper colors are enabled, `~/.termux/material-colors.sh` and `.properties` export the full
+Material role set used by the launcher. Container colors include their matching `on_*_container`
+foreground, along with tertiary, error-container, and outline roles, so a shell prompt can use a
+guaranteed-contrast pair. The files are rewritten only when their content changes.
 
 The animated cursor trail is enabled by default and automatically suppressed in Android power-save
 mode. Toggle it from the command palette with **Toggle cursor trail**. Large cursor jumps and ordinary
@@ -775,7 +793,8 @@ shortcut, including the one you might later assign to it.
 
 ### A shortcut reaches the shell instead of the app
 
-- Check whether **Single-pane compatibility mode** changes the shortcut's meaning.
+- Check whether **Settings → Terminal & status → Split-pane controls** changes the shortcut's
+  meaning.
 - Open **Key inspector** and press the shortcut.
 - Check `~/.termux/termux-launcher-bindings.conf` for an override or `unmap`.
 - Run `termux-reload-settings` after editing configuration.

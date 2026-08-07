@@ -79,15 +79,18 @@ public class InAppKeyboardExtraKeysTest {
     }
 
     @Test
-    public void defaultsPreserveEveryPreviouslyVisibleLocKey() {
+    public void defaultsMatchTheTerminalFirstSelection() {
         Map<KeyValue, KeyboardData.PreferredPos> defaults =
             InAppKeyboardExtraKeys.resolve(InAppKeyboardExtraKeys.defaultStoredValue());
-        String[] expected = {
-            "tab", "esc", "capslock", "compose", "home", "end", "page_up", "page_down",
-            "switch_greekmath", "meta", "alt"
-        };
+        String[] expected = { "tab", "esc", "capslock", "copy", "paste", "cut", "alt" };
         for (String name : expected)
             assertTrue(name + " should be enabled by default",
+                defaults.containsKey(KeyValue.getKeyByName(name)));
+        assertEquals(expected.length, defaults.size());
+        // Navigation keys the terminal extra-keys bar covers stay off by default.
+        for (String name : new String[]{ "home", "end", "page_up", "page_down", "compose",
+                "switch_greekmath", "meta" })
+            assertFalse(name + " should not be enabled by default",
                 defaults.containsKey(KeyValue.getKeyByName(name)));
         // The sentinel and null resolve to the same defaults.
         assertEquals(defaults.keySet(),

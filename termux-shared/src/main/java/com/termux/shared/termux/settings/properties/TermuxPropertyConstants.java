@@ -400,7 +400,7 @@ public final class TermuxPropertyConstants {
 
     //public static final String DEFAULT_IVALUE_EXTRA_KEYS = "[[ESC, TAB, CTRL, ALT, {key: '-', popup: '|'}, DOWN, UP]]"; // Single row
     // Double row
-    public static final String DEFAULT_IVALUE_EXTRA_KEYS = "[['ESC', '/', {key: '|', popup: '-'}, 'HOME', 'UP', 'END', 'PGUP', 'PASTE'], ['TAB', {key: 'CTRL', popup: 'SHIFT'}, 'ALT', 'LEFT', 'DOWN', 'RIGHT', 'PGDN', {key: 'KEYBOARD', popup: {macro: 'CTRL c'}}]]";
+    public static final String DEFAULT_IVALUE_EXTRA_KEYS = "[[{key: KEYBOARD, popup: PASTE}, {key: 'tool:workspace.picker', display: '▤'}, {key: 'tool:workspace.save_prompt', display: '⛁'}, {key: 'tool:window.previous', display: '◧'}, {key: 'tool:window.next', display: '◨'}, {key: 'tool:pane.move_to_edge:edge=left', display: '⇤', popup: {key: 'tool:pane.next_layout', display: '⟳'}}, {key: 'tool:terminal.toggle_scratchpad', display: '▣', popup: {key: 'tool:pane.toggle_float', display: '◈'}}]]";
     public static final String DEFAULT_IVALUE_EXTRA_KEYS2 = "[[F1, F2, F3, F4, F5, F6, F7, F8, F9, F10], ['[', ']', '{', '}', '$', '~', '=', -, _, '\"']]";
 
     /**

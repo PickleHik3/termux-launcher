@@ -16,15 +16,21 @@ Termux Launcher is a terminal-first Android home launcher inspired by [TEL](http
 
 **[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | [Download builds](https://github.com/PickleHik3/termux-launcher/releases) | [Getting Started](docs/en/Launcher_Getting_Started.md) | [Modern terminal](docs/en/Terminal_Modernization.md) | [Local AI API](docs/en/LauncherCtl_API.md) | [Termux AI](docs/en/Termux_AI.md) | [Changelog](CHANGELOG.md)
 
-> **Two editions are available.** The **`com.termux`** build is the **recommended** version — it stays fully compatible with the upstream Termux package ecosystem. The **`io.vaj.tl`** build installs side-by-side with a stock Termux, but it runs off my own custom APT repository, which I maintain by hand — so it is updated manually and less often. See [Editions](#editions).
+> **Two editions are available.** The **`com.termux`** build is the **recommended** version — it stays fully compatible with the upstream Termux package ecosystem. The **`io.vaj.tl`** build is a **demo edition**: it installs side-by-side with a stock Termux so you can try the launcher without touching your existing setup, but it runs off my small hand-maintained APT repository with far fewer packages and slower updates. See [Editions](#editions).
 
-<img src="screenshots/demo.gif" alt="Launcher demo" width="360">
+<p align="center">
+  <img src="screenshots/banner.png" alt="Termux Launcher hero showing terminal-first Android features and five device screenshots" width="100%">
+</p>
 
 ## About
 
 Designed to be a Terminal/TUI Android home launcher.
 What started out as me just wanting sixel image drawing in [TEL](https://github.com/t-e-l/tel) spiralled out of scope to what this project is today.
 All credits go to the amazing developers and contributors of Termux, TEL, and Termux:Monet.
+
+<p align="center">
+  <img src="screenshots/demo.gif" alt="Termux Launcher walkthrough showing the command palette, Kitty graphics, split panes, media, and keyboard shortcuts" width="360">
+</p>
 
 ## Features
 
@@ -46,18 +52,18 @@ All credits go to the amazing developers and contributors of Termux, TEL, and Te
 
 Every release ships two APK sets. They are the same launcher built from the same source; the only difference is the Android package identity and the package ecosystem they use.
 
-| | Termux edition | VAJ edition |
+| | Termux edition | VAJ demo edition |
 |---|---|---|
 | Package name | `com.termux` | `io.vaj.tl` |
 | Release tag | `vX.Y.Z` | `vX.Y.Z-vaj` |
 | Alongside official Termux? | ❌ No — same package name, replaces it | ✅ Yes — installs side by side |
-| Package repository | official Termux repos | VAJ APT repo (`https://repo.pathayam.xyz`) |
-| Architectures | arm64-v8a, armeabi-v7a, x86_64, x86 | arm64-v8a (aarch64) only, bootstrap embedded |
+| Package repository | official Termux repos | small VAJ APT repo (`https://repo.pathayam.xyz`) |
+| Architectures | arm64-v8a, armeabi-v7a, x86_64, x86 | arm64-v8a (aarch64) only, bootstrap downloaded on first run |
 | Companion add-ons | [Termux:API](https://github.com/PickleHik3/termux-api/releases) / [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases) (plain tags) | same forks, `-vaj` tagged releases |
 
-Pick the **Termux edition** if you want the launcher as your only Termux, fully compatible with the upstream Termux package ecosystem. This is the **recommended** edition for most users. Pick the **VAJ edition** if you want to keep your existing official Termux app untouched and run the launcher next to it with its own isolated prefix, data, and APT repository.
+Pick the **Termux edition** — it is the recommended edition for everyone: the launcher as your Termux, fully compatible with the upstream Termux package ecosystem. The **VAJ edition is a demo**: use it only to preview the launcher next to an existing official Termux install you don't want to touch, and expect to switch to the Termux edition for daily use.
 
-> ⚠️ The VAJ edition depends on my manually maintained custom APT repo (`https://repo.pathayam.xyz`), so its packages and `-vaj` releases are updated **less frequently** than the `com.termux` edition. If you want the most up-to-date builds and the broadest package compatibility, use the Termux (`com.termux`) edition.
+> ⚠️ The VAJ demo edition runs off my manually maintained custom APT repo (`https://repo.pathayam.xyz`), which carries only a small fraction of the Termux package set and is updated **less frequently** — many packages you rely on will simply not be installable there. For real use, pick the Termux (`com.termux`) edition.
 
 In both cases, companion add-ons must be the matching builds from this project's forks (they share the launcher's signing key and package family); official F-Droid add-ons will not pair with either edition.
 
@@ -67,60 +73,39 @@ Download the latest APK of your chosen [edition](#editions) from [Releases](http
 
 Recommended setup:
 
-- [Unexpected Keyboard](https://github.com/Julow/Unexpected-Keyboard) for terminal and tmux-heavy use
 - [Shizuku](https://github.com/rikkaapps/shizuku) only if you want optional privileged features
-- Optional [termux-launcher-tmux](https://github.com/PickleHik3/termux-launcher-tmux) theme plugin, installed through the [Getting Started](docs/en/Launcher_Getting_Started.md) flow, for Material colors, CPU/RAM/weather widgets, extra keys, `kew`, and rish-backed `btop`
 - Matching companion forks when using Termux add-ons (pick the release matching your [edition](#editions): plain tag for `com.termux`, `-vaj` tag for `io.vaj.tl`):
   - [Termux:API](https://github.com/PickleHik3/termux-api/releases)
   - [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases)
 
+The built-in terminal keyboard is enabled on fresh installs; an external keyboard app is optional.
 See [Getting Started](docs/en/Launcher_Getting_Started.md) for the setup flow.
+
+### Quick start script
+
+[`setup-launcher`](docs/en/examples/setup-launcher) turns a fresh install into the full showcase shell in one run — fish + Oh My Posh with wallpaper Material colors, zoxide/eza/yazi/neovim, and the launcher terminal configs in `~/.termux`. It is interactive, and every config it replaces gets a timestamped `.bak` first:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-launcher
+sh setup-launcher
+```
+
+Fonts are not part of the script — the in-app font picker (**Settings › Terminal › Font**) downloads and wires up curated families, Nerd Font builds included.
 
 ## Documentation
 
-- [Getting Started](docs/en/Launcher_Getting_Started.md): install, launcher basics, tmux setup, rish setup, Extra Keys, and troubleshooting.
+- [What’s new in v0.2.31](docs/en/Whats_New_0.2.31.md): onboarding, landscape, workspace command restart, per-pane zoom, fonts, key binding, attention states, and compatibility.
+- [Getting Started](docs/en/Launcher_Getting_Started.md): choose an edition, install, complete first-run setup, and make the app your Home screen.
+- [Using Termux Launcher](docs/en/Launcher_Usage.md): dock search, status widgets, sessions, windows, panes, workspaces, and the built-in keyboard.
+- [Settings map](docs/en/Launcher_Settings.md): exact v0.2.31 settings destinations and what each controls.
+- [Troubleshooting](docs/en/Launcher_Troubleshooting.md): installation, storage, input, panes, workspaces, appearance, permissions, Shizuku, and TAI.
 - [Modern terminal guide](docs/en/Terminal_Modernization.md): panes, windows, sessions, layouts, workspaces, bindings, fonts, protocols, and diagnostics.
+- [Terminal fonts](docs/en/Terminal_Fonts.md): picker, config priority, drop-ins, fallback, symbols, ligatures, geometry, and troubleshooting.
+- [Kitty protocols](docs/en/Terminal_Kitty_Protocols.md): keyboard negotiation, multiple cursors, graphics, animation, Sixel, and terminal detection.
 - [Building showcase tools](docs/en/Building_Terminal_Showcase_Tools.md): reproducible Termux recipes for Sigye and animated-Kitty Fastfetch.
 - [Local AI API](docs/en/LauncherCtl_API.md): OpenAI/Ollama-compatible localhost endpoint, app launch, model management, auth, and route tables.
 - [Termux AI](docs/en/Termux_AI.md): local model setup, `tai`, OpenAI-compatible clients, and troubleshooting.
 - [Developer Docs](docs/en/Developer_Docs.md): advanced API routes, runtime notes, helper scripts, and security details.
-
-## Quick Shell Example
-
-Check the on-device AI runtime from the terminal:
-
-```sh
-tai status
-tai models
-```
-
-Point an OpenAI-compatible client at the local endpoint:
-
-```sh
-export OPENAI_BASE_URL="$(cat ~/.launcherctl/endpoint)/v1"
-export OPENAI_API_KEY="$(cat ~/.launcherctl/token)"
-```
-
-## Known Limitations
-
-- When Termux is set as the home launcher and the last terminal shell exits, Android may recreate the activity before Termux can exit cleanly. Run `termux-reload-settings` if the terminal slows down or feels stale.
-
-## Screenshots
-
-<table>
-  <tr>
-    <td align="center"><img src="screenshots/1.png" alt="sigye terminal clock" width="240"><br><sub>sigye</sub></td>
-    <td align="center"><img src="screenshots/2.png" alt="Sixel image in the launcher terminal" width="240"><br><sub>Sixel image</sub></td>
-    <td align="center"><img src="screenshots/3.png" alt="kew music player in the launcher terminal" width="240"><br><sub>kew</sub></td>
-    <td align="center"><img src="screenshots/4.png" alt="btop system monitor" width="240"><br><sub>btop</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="screenshots/5.png" alt="In-app keyboard preferences" width="240"><br><sub>In-app keyboard</sub></td>
-    <td align="center"><img src="screenshots/6.png" alt="Termux Launcher settings" width="240"><br><sub>Settings</sub></td>
-    <td align="center"><img src="screenshots/7.png" alt="Quick reply from a pinned app notification" width="240"><br><sub>Quick Reply</sub></td>
-    <td align="center"><img src="screenshots/8.png" alt="Glass customization panel" width="240"><br><sub>Glass Customization</sub></td>
-  </tr>
-</table>
 
 ## Upstream Base
 

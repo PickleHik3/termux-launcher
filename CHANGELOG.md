@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.2.32-vaj
+
+VAJ edition (`io.vaj.tl`), pinned to the verified aarch64 APT bootstrap and the signed `https://repo.pathayam.xyz stable main` repository.
+
+### Changed
+
+- **Fresh installs land on the showcase keyboard setup.** The terminal extra-keys row now
+  defaults to the launcher tool row — soft-keyboard toggle (paste on long-press), workspace
+  picker and save, window previous/next, pane move-to-edge (next-layout on long-press), and
+  the scratchpad (float on long-press) — matching the shipped `termux.properties` example. The
+  in-app keyboard's default extra-key selection becomes tab, esc, capslock, copy, paste, cut,
+  and alt: the clipboard keys are on out of the box, and the navigation keys the extra-keys bar
+  already covers stay off. Any explicit selection or `extra-keys` property overrides both, so
+  existing setups do not move.
+- **`setup-launcher` slimmed down.** The quick-start script no longer downloads fonts — the
+  in-app font picker (Settings › Terminal › Font) owns those now — and fzf and unzip leave its
+  package list (the shipped config never wired fzf). The README gained a Quick start section
+  for the script.
+- The `io.vaj.tl` edition is now presented as a side-by-side **demo edition** in the README and
+  on the website, steering daily use to the `com.termux` edition.
+
+### Fixed
+
+- **The CPU card's process list no longer sits stale after returning to the launcher.** With the
+  A-Z screen-lock method set to Shizuku, every resume tore down the healthy Shizuku backend and
+  rebuilt it, so privileged access read as unavailable for the first seconds after each
+  home-return — exactly when the card gets opened — and the process list silently kept its last
+  snapshot. A ready backend is now left alone (a dead binder still re-initializes), and the
+  card's stale marker now shows when the unprivileged fallback cannot read `/proc/stat`, as on
+  hardened builds, instead of presenting a frozen reading as fresh.
+
 ## 0.2.31-hotfix.1-vaj
 
 VAJ edition (`io.vaj.tl`), pinned to the verified aarch64 APT bootstrap and the signed `https://repo.pathayam.xyz stable main` repository.
