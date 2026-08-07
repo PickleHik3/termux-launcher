@@ -105,6 +105,14 @@ public class PrivilegedBackendManager {
     public CompletableFuture<Boolean> initializeShizukuOnly(Context context) {
         this.applicationContext = context.getApplicationContext();
         shizukuOnlyMode = true;
+        // A healthy backend is left alone. This runs on every activity resume (and every
+        // Shizuku lock press); tearing down a READY backend to rebuild the same one made
+        // isPrivilegedAvailable() read false for the first seconds after each home-return,
+        // which silently starved every privileged consumer — most visibly the CPU card's
+        // process list. isAvailable() pings the binder, so a dead Shizuku still re-initializes.
+        if (currentBackend instanceof ShizukuBackend && isPrivilegedAvailable()) {
+            return CompletableFuture.completedFuture(true);
+        }
         updateState(BackendState.INITIALIZING, StatusReason.UNAVAILABLE, "Initializing Shizuku");
         return CompletableFuture.supplyAsync(() -> {
             boolean initialized = attemptShizukuInitialization(applicationContext);

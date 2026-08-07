@@ -107,10 +107,6 @@ Fonts are not part of the script — the in-app font picker (**Settings › Term
 - [Termux AI](docs/en/Termux_AI.md): local model setup, `tai`, OpenAI-compatible clients, and troubleshooting.
 - [Developer Docs](docs/en/Developer_Docs.md): advanced API routes, runtime notes, helper scripts, and security details.
 
-## Known bugs
-
-- **CPU widget card: process list is often stale right after returning to the launcher, while the percentages stay live.** The process list is sampled only through the privileged backend (Shizuku). With the A-Z screen-lock method set to Shizuku, every resume of the launcher tears down the healthy Shizuku backend and re-initializes it from scratch (`refreshShizukuLockBackendIfNeeded` → `initializeShizukuOnly`), and privileged access reads as unavailable for the first seconds after each home-return — exactly when the card is usually opened. Stats ticks in that window silently fall back to direct `/proc` reads, which hardened Android builds deny (`EACCES`), so the CPU percentage freezes too while the RAM reading keeps updating through Android APIs, and the card keeps the last process list — sometimes minutes old — with its `stale` marker unset. Workaround: close and reopen the card a few seconds after returning to the launcher. (Code notes: the resume path should skip re-initialization while the backend is already `READY`; `SystemStatsController.readDirectFallback` publishes with `stale = false`; `mergeProcessRows` keeps previous rows with no age cap.)
-
 ## Upstream Base
 
 - [termux-app](https://github.com/termux/termux-app)
