@@ -18,7 +18,13 @@ Termux Launcher is a terminal-first Android home launcher inspired by [TEL](http
 
 > **Two editions are available.** The **`com.termux`** build is the **recommended** version — it stays fully compatible with the upstream Termux package ecosystem. The **`io.vaj.tl`** build installs side-by-side with a stock Termux, but it runs off my own custom APT repository, which I maintain by hand — so it is updated manually and less often. See [Editions](#editions).
 
-<img src="screenshots/demo.gif" alt="Launcher demo" width="360">
+<p align="center">
+  <img src="screenshots/banner.png" alt="Termux Launcher hero showing terminal-first Android features and five device screenshots" width="100%">
+</p>
+
+<p align="center">
+  <img src="screenshots/demo.gif" alt="Termux Launcher demo showing the command palette, workspace command restart, split panes, and live pane resizing" width="360">
+</p>
 
 ## About
 
@@ -67,19 +73,24 @@ Download the latest APK of your chosen [edition](#editions) from [Releases](http
 
 Recommended setup:
 
-- [Unexpected Keyboard](https://github.com/Julow/Unexpected-Keyboard) for terminal and tmux-heavy use
 - [Shizuku](https://github.com/rikkaapps/shizuku) only if you want optional privileged features
-- Optional [termux-launcher-tmux](https://github.com/PickleHik3/termux-launcher-tmux) theme plugin, installed through the [Getting Started](docs/en/Launcher_Getting_Started.md) flow, for Material colors, CPU/RAM/weather widgets, extra keys, `kew`, and rish-backed `btop`
 - Matching companion forks when using Termux add-ons (pick the release matching your [edition](#editions): plain tag for `com.termux`, `-vaj` tag for `io.vaj.tl`):
   - [Termux:API](https://github.com/PickleHik3/termux-api/releases)
   - [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases)
 
+The built-in terminal keyboard is enabled on fresh installs; an external keyboard app is optional.
 See [Getting Started](docs/en/Launcher_Getting_Started.md) for the setup flow.
 
 ## Documentation
 
-- [Getting Started](docs/en/Launcher_Getting_Started.md): install, launcher basics, tmux setup, rish setup, Extra Keys, and troubleshooting.
+- [What’s new in v0.2.31](docs/en/Whats_New_0.2.31.md): onboarding, landscape, workspace command restart, per-pane zoom, fonts, key binding, attention states, and compatibility.
+- [Getting Started](docs/en/Launcher_Getting_Started.md): choose an edition, install, complete first-run setup, and make the app your Home screen.
+- [Using Termux Launcher](docs/en/Launcher_Usage.md): dock search, status widgets, sessions, windows, panes, workspaces, and the built-in keyboard.
+- [Settings map](docs/en/Launcher_Settings.md): exact v0.2.31 settings destinations and what each controls.
+- [Troubleshooting](docs/en/Launcher_Troubleshooting.md): installation, storage, input, panes, workspaces, appearance, permissions, Shizuku, and TAI.
 - [Modern terminal guide](docs/en/Terminal_Modernization.md): panes, windows, sessions, layouts, workspaces, bindings, fonts, protocols, and diagnostics.
+- [Terminal fonts](docs/en/Terminal_Fonts.md): picker, config priority, drop-ins, fallback, symbols, ligatures, geometry, and troubleshooting.
+- [Kitty protocols](docs/en/Terminal_Kitty_Protocols.md): keyboard negotiation, multiple cursors, graphics, animation, Sixel, and terminal detection.
 - [Building showcase tools](docs/en/Building_Terminal_Showcase_Tools.md): reproducible Termux recipes for Sigye and animated-Kitty Fastfetch.
 - [Local AI API](docs/en/LauncherCtl_API.md): OpenAI/Ollama-compatible localhost endpoint, app launch, model management, auth, and route tables.
 - [Termux AI](docs/en/Termux_AI.md): local model setup, `tai`, OpenAI-compatible clients, and troubleshooting.
@@ -109,16 +120,16 @@ export OPENAI_API_KEY="$(cat ~/.launcherctl/token)"
 
 <table>
   <tr>
-    <td align="center"><img src="screenshots/1.png" alt="sigye terminal clock" width="240"><br><sub>sigye</sub></td>
-    <td align="center"><img src="screenshots/2.png" alt="Sixel image in the launcher terminal" width="240"><br><sub>Sixel image</sub></td>
-    <td align="center"><img src="screenshots/3.png" alt="kew music player in the launcher terminal" width="240"><br><sub>kew</sub></td>
-    <td align="center"><img src="screenshots/4.png" alt="btop system monitor" width="240"><br><sub>btop</sub></td>
+    <td align="center"><img src="screenshots/1.png" alt="Termux Launcher home with its terminal, dock, and built-in keyboard" width="240"><br><sub>Launcher home</sub></td>
+    <td align="center"><img src="screenshots/2.png" alt="Searchable terminal command palette showing workspace actions" width="240"><br><sub>Command palette</sub></td>
+    <td align="center"><img src="screenshots/3.png" alt="Asymmetrically resized split panes with a Kitty Fastfetch graphic" width="240"><br><sub>Per-pane resize</sub></td>
+    <td align="center"><img src="screenshots/4.png" alt="Animated Kitty graphics protocol output in Fastfetch" width="240"><br><sub>Kitty graphics</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="screenshots/5.png" alt="In-app keyboard preferences" width="240"><br><sub>In-app keyboard</sub></td>
-    <td align="center"><img src="screenshots/6.png" alt="Termux Launcher settings" width="240"><br><sub>Settings</sub></td>
-    <td align="center"><img src="screenshots/7.png" alt="Quick reply from a pinned app notification" width="240"><br><sub>Quick Reply</sub></td>
-    <td align="center"><img src="screenshots/8.png" alt="Glass customization panel" width="240"><br><sub>Glass Customization</sub></td>
+    <td align="center"><img src="screenshots/5.png" alt="Terminal font catalog with Nerd Font, ligature, and variable-weight controls" width="240"><br><sub>Terminal fonts</sub></td>
+    <td align="center"><img src="screenshots/6.png" alt="Current Termux Launcher settings categories" width="240"><br><sub>Settings</sub></td>
+    <td align="center"><img src="screenshots/7.png" alt="Save workspace dialog with the option to record running pane commands" width="240"><br><sub>Workspace restart</sub></td>
+    <td align="center"><img src="screenshots/8.png" alt="Termux Launcher landscape layout with compact dock and keyboard" width="240"><br><sub>Landscape layout</sub></td>
   </tr>
 </table>
 
