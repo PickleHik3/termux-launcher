@@ -22,15 +22,15 @@ Termux Launcher is a terminal-first Android home launcher inspired by [TEL](http
   <img src="screenshots/banner.png" alt="Termux Launcher hero showing terminal-first Android features and five device screenshots" width="100%">
 </p>
 
-<p align="center">
-  <img src="screenshots/demo.gif" alt="Termux Launcher demo showing the command palette, workspace command restart, split panes, and live pane resizing" width="360">
-</p>
-
 ## About
 
 Designed to be a Terminal/TUI Android home launcher.
 What started out as me just wanting sixel image drawing in [TEL](https://github.com/t-e-l/tel) spiralled out of scope to what this project is today.
 All credits go to the amazing developers and contributors of Termux, TEL, and Termux:Monet.
+
+<p align="center">
+  <img src="screenshots/demo.gif" alt="Termux Launcher walkthrough showing the command palette, Kitty graphics, split panes, media, and keyboard shortcuts" width="360">
+</p>
 
 ## Features
 
@@ -115,23 +115,6 @@ export OPENAI_API_KEY="$(cat ~/.launcherctl/token)"
 ## Known Limitations
 
 - When Termux is set as the home launcher and the last terminal shell exits, Android may recreate the activity before Termux can exit cleanly. Run `termux-reload-settings` if the terminal slows down or feels stale.
-
-## Screenshots
-
-<table>
-  <tr>
-    <td align="center"><img src="screenshots/1.png" alt="Termux Launcher home with its terminal, dock, and built-in keyboard" width="240"><br><sub>Launcher home</sub></td>
-    <td align="center"><img src="screenshots/2.png" alt="Searchable terminal command palette showing workspace actions" width="240"><br><sub>Command palette</sub></td>
-    <td align="center"><img src="screenshots/3.png" alt="Asymmetrically resized split panes with a Kitty Fastfetch graphic" width="240"><br><sub>Per-pane resize</sub></td>
-    <td align="center"><img src="screenshots/4.png" alt="Animated Kitty graphics protocol output in Fastfetch" width="240"><br><sub>Kitty graphics</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="screenshots/5.png" alt="Terminal font catalog with Nerd Font, ligature, and variable-weight controls" width="240"><br><sub>Terminal fonts</sub></td>
-    <td align="center"><img src="screenshots/6.png" alt="Current Termux Launcher settings categories" width="240"><br><sub>Settings</sub></td>
-    <td align="center"><img src="screenshots/7.png" alt="Save workspace dialog with the option to record running pane commands" width="240"><br><sub>Workspace restart</sub></td>
-    <td align="center"><img src="screenshots/8.png" alt="Termux Launcher landscape layout with compact dock and keyboard" width="240"><br><sub>Landscape layout</sub></td>
-  </tr>
-</table>
 
 ## Upstream Base
 
