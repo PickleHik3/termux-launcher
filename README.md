@@ -107,6 +107,10 @@ Fonts are not part of the script — the in-app font picker (**Settings › Term
 - [Termux AI](docs/en/Termux_AI.md): local model setup, `tai`, OpenAI-compatible clients, and troubleshooting.
 - [Developer Docs](docs/en/Developer_Docs.md): advanced API routes, runtime notes, helper scripts, and security details.
 
+## Known bugs
+
+- **CPU widget card: process list goes stale while the percentages stay live.** The process list is sampled only through the privileged backend (Shizuku). When that binding drops or is still reconnecting, the card silently keeps the last successful list — sometimes minutes old — while the RAM reading continues to update through Android APIs, so the card looks alive. Hardened Android builds also deny the app's direct `/proc/stat` fallback read (`EACCES`), freezing the CPU percentage in that state too, and the card's `stale` marker is not set on the fallback path, so nothing indicates the list is old. On opening the card there can additionally be a several-second gap before the first process sample, because a slow in-flight bar-cadence read blocks the faster card-cadence one until it times out. Workaround: make sure Shizuku is running and authorized, then close and reopen the card. (Code notes: `SystemStatsController.readDirectFallback` publishes with `stale = false`; `mergeProcessRows` keeps previous rows with no age cap; `sampleTimeoutMs` lets a wedged request block the retuned cadence.)
+
 ## Upstream Base
 
 - [termux-app](https://github.com/termux/termux-app)
