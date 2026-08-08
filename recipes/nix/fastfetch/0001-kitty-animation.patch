@@ -1,0 +1,248 @@
+diff --git a/src/logo/image/image.c b/src/logo/image/image.c
+index bc33e67f7..3863dc451 100644
+--- a/src/logo/image/image.c
++++ b/src/logo/image/image.c
+@@ -347,8 +347,8 @@ static bool printImageKittyDirect(bool printError) {
+     #define FF_CACHE_FILE_HEIGHT "height"
+     #define FF_CACHE_FILE_WIDTH "width"
+     #define FF_CACHE_FILE_SIXEL "sixel"
+-    #define FF_CACHE_FILE_KITTY_COMPRESSED "kittyc"
+-    #define FF_CACHE_FILE_KITTY_UNCOMPRESSED "kittyu"
++    #define FF_CACHE_FILE_KITTY_COMPRESSED "kittyc2"
++    #define FF_CACHE_FILE_KITTY_UNCOMPRESSED "kittyu2"
+     #define FF_CACHE_FILE_CHAFA "chafa"
+
+     #include <string.h>
+@@ -403,6 +403,8 @@ typedef struct ImageData {
+     FF_LIBRARY_SYMBOL(CopyMagickString)
+     FF_LIBRARY_SYMBOL(ImageToBlob)
+     FF_LIBRARY_SYMBOL(Base64Encode)
++    FF_LIBRARY_SYMBOL(CoalesceImages)
++    FF_LIBRARY_SYMBOL(DestroyImage)
+
+     ImageInfo* imageInfo;
+     Image* image;
+@@ -463,7 +465,7 @@ static void printImagePixels(FFLogoRequestData* requestData, const FFstrbuf* res
+     fflush(stdout);
+     ffWriteFDBuffer(FFUnixFD2NativeFD(STDOUT_FILENO), result);
+
+-    if (options->position != FF_LOGO_POSITION_TOP) {
++    if (options->position != FF_LOGO_POSITION_TOP && !(requestData->type == FF_LOGO_TYPE_IMAGE_KITTY && options->position == FF_LOGO_POSITION_LEFT)) {
+         // Go to upper left corner
+         printf("\e[1G\e[%uA", instance.state.logoHeight);
+     }
+@@ -492,11 +494,14 @@ static bool printImageSixel(FFLogoRequestData* requestData, const ImageData* ima
+     return true;
+ }
+
+-static void appendKittyChunk(FFstrbuf* result, const char** blob, size_t* length, bool printEscapeCode) {
++static void appendKittyChunk(FFstrbuf* result, const char** blob, size_t* length, bool printEscapeCode, bool animationFrame) {
+     uint32_t chunkSize = *length > FF_KITTY_MAX_CHUNK_SIZE ? FF_KITTY_MAX_CHUNK_SIZE : (uint32_t) *length;
+
+     if (printEscapeCode) {
+         ffStrbufAppendS(result, "\033_G");
++        if (animationFrame) {
++            ffStrbufAppendS(result, "a=f,");
++        }
+     } else {
+         ffStrbufAppendC(result, ',');
+     }
+@@ -509,19 +514,27 @@ static void appendKittyChunk(FFstrbuf* result, const char** blob, size_t* length
+     *blob += chunkSize;
+ }
+
+-static bool printImageKitty(FFLogoRequestData* requestData, const ImageData* imageData) {
++static bool appendImageKitty(
++    FFstrbuf* result,
++    const FFLogoRequestData* requestData,
++    const ImageData* imageData,
++    Image* image,
++    bool animationFrame,
++    uint32_t frameDelay,
++    bool* compressed
++) {
+     imageData->ffCopyMagickString(imageData->imageInfo->magick, "RGBA", 5);
+
+     size_t length;
+-    void* blob = imageData->ffImageToBlob(imageData->imageInfo, imageData->image, &length, imageData->exceptionInfo);
++    void* blob = imageData->ffImageToBlob(imageData->imageInfo, image, &length, imageData->exceptionInfo);
+     if (!checkAllocationResult(blob, length)) {
+         return false;
+     }
+
+     #ifdef FF_HAVE_ZLIB
+-    bool isCompressed = compressBlob(&blob, &length);
++    *compressed = compressBlob(&blob, &length);
+     #else
+-    bool isCompressed = false;
++    *compressed = false;
+     #endif
+
+     char* chars = imageData->ffBase64Encode(blob, length, &length);
+@@ -530,26 +543,83 @@ static bool printImageKitty(FFLogoRequestData* requestData, const ImageData* ima
+         return false;
+     }
+
+-    FF_STRBUF_AUTO_DESTROY result = ffStrbufCreateA((uint32_t) (length + 1024));
+-
+     const char* currentPos = chars;
+     size_t remainingLength = length;
+
+-    ffStrbufAppendF(&result, "\033_Ga=T,f=32,s=%u,v=%u", requestData->logoPixelWidth, requestData->logoPixelHeight);
+-    if (isCompressed) {
+-        ffStrbufAppendS(&result, ",o=z");
++    if (animationFrame) {
++        ffStrbufAppendF(result, "\033_Ga=f,I=1,q=2,f=32,s=%u,v=%u,z=%u,X=1", requestData->logoPixelWidth, requestData->logoPixelHeight, frameDelay);
++    } else {
++        ffStrbufAppendF(result, "\033_Ga=T,I=1,q=2,f=32,s=%u,v=%u,c=%u,r=%u", requestData->logoPixelWidth, requestData->logoPixelHeight, requestData->logoCharacterWidth, requestData->logoCharacterHeight);
++        if (instance.config.logo.position == FF_LOGO_POSITION_LEFT) {
++            ffStrbufAppendS(result, ",C=1");
++        }
+     }
+-    appendKittyChunk(&result, &currentPos, &remainingLength, false);
++    if (*compressed) {
++        ffStrbufAppendS(result, ",o=z");
++    }
++    appendKittyChunk(result, &currentPos, &remainingLength, false, animationFrame);
+     while (remainingLength > 0) {
+-        appendKittyChunk(&result, &currentPos, &remainingLength, true);
++        appendKittyChunk(result, &currentPos, &remainingLength, true, animationFrame);
+     }
+
+-    printImagePixels(requestData, &result, isCompressed ? FF_CACHE_FILE_KITTY_COMPRESSED : FF_CACHE_FILE_KITTY_UNCOMPRESSED);
+-
+     free(chars);
+     return true;
+ }
+
++static uint32_t getFrameDelayMs(const Image* image) {
++    if (image->delay == 0) {
++        return 40;
++    }
++
++    if (image->ticks_per_second > 0) {
++        uint64_t delay = (uint64_t) image->delay * 1000 / (uint64_t) image->ticks_per_second;
++        return delay > UINT32_MAX ? UINT32_MAX : (uint32_t) delay;
++    }
++
++    return (uint32_t) image->delay * 10;
++}
++
++static bool printImageKitty(FFLogoRequestData* requestData, const ImageData* imageData, const FFIMData* imData) {
++    FF_STRBUF_AUTO_DESTROY result = ffStrbufCreate();
++    Image* frame = imageData->image;
++    uint32_t frameIndex = 0;
++    uint32_t firstFrameDelay = 40;
++    bool allCompressed = true;
++
++    while (frame) {
++        Image* resized = imData->resizeFunc(frame, requestData->logoPixelWidth, requestData->logoPixelHeight, imageData->exceptionInfo);
++        if (resized == nullptr) {
++            return false;
++        }
++
++        uint32_t frameDelay = getFrameDelayMs(frame);
++        bool compressed = false;
++        bool appended = appendImageKitty(&result, requestData, imageData, resized, frameIndex > 0, frameDelay, &compressed);
++        imageData->ffDestroyImage(resized);
++        if (!appended) {
++            return false;
++        }
++
++        allCompressed = allCompressed && compressed;
++        if (frameIndex == 0) {
++            firstFrameDelay = frameDelay;
++        }
++
++        ++frameIndex;
++        frame = frame->next;
++    }
++
++    if (frameIndex > 1) {
++        // The base frame has no delay by default. Set it explicitly, then let the
++        // terminal loop the uploaded frames after fastfetch has exited.
++        ffStrbufAppendF(&result, "\033_Ga=a,I=1,q=2,r=1,z=%u\033\\", firstFrameDelay);
++        ffStrbufAppendS(&result, "\033_Ga=a,I=1,q=2,s=3,v=1\033\\");
++    }
++
++    printImagePixels(requestData, &result, allCompressed ? FF_CACHE_FILE_KITTY_COMPRESSED : FF_CACHE_FILE_KITTY_UNCOMPRESSED);
++    return true;
++}
++
+     #ifdef FF_HAVE_CHAFA
+         #include <chafa.h>
+ static bool printImageChafa(FFLogoRequestData* requestData, const ImageData* imageData) {
+@@ -661,10 +731,12 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
+     FF_LIBRARY_LOAD_SYMBOL(imData->library, DestroyImage, FF_LOGO_IMAGE_RESULT_INIT_ERROR)
+
+     ImageData imageData;
++    imageData.ffDestroyImage = ffDestroyImage;
+
+     FF_LIBRARY_LOAD_SYMBOL_VAR(imData->library, imageData, CopyMagickString, FF_LOGO_IMAGE_RESULT_INIT_ERROR)
+     FF_LIBRARY_LOAD_SYMBOL_VAR(imData->library, imageData, ImageToBlob, FF_LOGO_IMAGE_RESULT_INIT_ERROR)
+     FF_LIBRARY_LOAD_SYMBOL_VAR(imData->library, imageData, Base64Encode, FF_LOGO_IMAGE_RESULT_INIT_ERROR)
++    FF_LIBRARY_LOAD_SYMBOL_VAR(imData->library, imageData, CoalesceImages, FF_LOGO_IMAGE_RESULT_INIT_ERROR)
+
+     ffMagickCoreGenesis(nullptr, MagickFalse);
+
+@@ -692,6 +764,18 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
+         return FF_LOGO_IMAGE_RESULT_RUN_ERROR;
+     }
+
++    if (requestData->type == FF_LOGO_TYPE_IMAGE_KITTY && imageData.image->next != nullptr) {
++        Image* coalesced = imageData.ffCoalesceImages(imageData.image, imageData.exceptionInfo);
++        if (coalesced == nullptr) {
++            ffDestroyImage(imageData.image);
++            ffDestroyExceptionInfo(imageData.exceptionInfo);
++            ffMagickCoreTerminus();
++            return FF_LOGO_IMAGE_RESULT_RUN_ERROR;
++        }
++        ffDestroyImage(imageData.image);
++        imageData.image = coalesced;
++    }
++
+     if (requestData->logoPixelWidth == 0 && requestData->logoPixelHeight == 0) {
+         requestData->logoPixelWidth = (uint32_t) imageData.image->columns;
+         requestData->logoPixelHeight = (uint32_t) imageData.image->rows;
+@@ -711,14 +795,16 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
+         return FF_LOGO_IMAGE_RESULT_RUN_ERROR;
+     }
+
+-    Image* resized = imData->resizeFunc(imageData.image, requestData->logoPixelWidth, requestData->logoPixelHeight, imageData.exceptionInfo);
+-    ffDestroyImage(imageData.image);
+-    if (resized == nullptr) {
+-        ffDestroyExceptionInfo(imageData.exceptionInfo);
+-        ffMagickCoreTerminus();
+-        return FF_LOGO_IMAGE_RESULT_RUN_ERROR;
++    if (requestData->type != FF_LOGO_TYPE_IMAGE_KITTY) {
++        Image* resized = imData->resizeFunc(imageData.image, requestData->logoPixelWidth, requestData->logoPixelHeight, imageData.exceptionInfo);
++        ffDestroyImage(imageData.image);
++        if (resized == nullptr) {
++            ffDestroyExceptionInfo(imageData.exceptionInfo);
++            ffMagickCoreTerminus();
++            return FF_LOGO_IMAGE_RESULT_RUN_ERROR;
++        }
++        imageData.image = resized;
+     }
+-    imageData.image = resized;
+
+     imageData.imageInfo = ffAcquireImageInfo();
+     if (imageData.imageInfo == nullptr) {
+@@ -734,7 +820,7 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
+         printSuccessful = printImageChafa(requestData, &imageData);
+     #endif
+     } else if (requestData->type == FF_LOGO_TYPE_IMAGE_KITTY) {
+-        printSuccessful = printImageKitty(requestData, &imageData);
++        printSuccessful = printImageKitty(requestData, &imageData, imData);
+     } else if (requestData->type == FF_LOGO_TYPE_IMAGE_SIXEL) {
+         printSuccessful = printImageSixel(requestData, &imageData);
+     }
+@@ -865,7 +951,7 @@ static bool printCachedPixel(FFLogoRequestData* requestData) {
+     instance.state.logoWidth = requestData->logoCharacterWidth + options->paddingLeft + options->paddingRight;
+     instance.state.logoHeight = requestData->logoCharacterHeight + options->paddingTop;
+
+-    if (options->position != FF_LOGO_POSITION_TOP) {
++    if (options->position != FF_LOGO_POSITION_TOP && !(requestData->type == FF_LOGO_TYPE_IMAGE_KITTY && options->position == FF_LOGO_POSITION_LEFT)) {
+         // Go to upper left corner
+         printf("\e[1G\e[%uA", instance.state.logoHeight);
+     }
