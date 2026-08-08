@@ -8,6 +8,10 @@ set -q EDITOR; or set -gx EDITOR nvim
 
 fish_add_path "$HOME/.local/bin" "$HOME/.termux/bin"
 
+# Nix edition: launcherctl/tai live in the proot /bin, which the generated
+# PATH does not include. Append (not prepend) so nix binaries keep priority.
+test -d /nix; and fish_add_path --append /bin
+
 # Load wallpaper-generated Material colors when available. The launcher writes
 # them to ~/.termux/material-colors.sh (and .properties as a fallback).
 function __load_termux_material_colors
