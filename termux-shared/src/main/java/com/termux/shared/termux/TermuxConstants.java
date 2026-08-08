@@ -329,7 +329,7 @@ public final class TermuxConstants {
      * Termux GitHub organization name
      */
     // Default: "termux"
-    public static final String TERMUX_GITHUB_ORGANIZATION_NAME = "termux";
+    public static final String TERMUX_GITHUB_ORGANIZATION_NAME = "PickleHik3";
 
     /**
      * Termux GitHub organization url
@@ -356,13 +356,13 @@ public final class TermuxConstants {
      * Termux package name
      */
     // Default: "com.termux"
-    public static final String TERMUX_PACKAGE_NAME = "com.termux";
+    public static final String TERMUX_PACKAGE_NAME = "com.termux.launcher.nix";
 
     /**
      * Termux GitHub repo name
      */
     // Default: "termux-app"
-    public static final String TERMUX_GITHUB_REPO_NAME = "termux-app";
+    public static final String TERMUX_GITHUB_REPO_NAME = "termux-launcher";
 
     /**
      * Termux GitHub repo url

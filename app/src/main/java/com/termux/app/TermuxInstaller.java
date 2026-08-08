@@ -10,6 +10,7 @@ import android.os.Environment;
 import android.system.Os;
 import android.util.Pair;
 import android.view.WindowManager;
+import com.termux.BuildConfig;
 import com.termux.R;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.shell.command.ExecutionCommand;
@@ -151,6 +152,7 @@ final class TermuxInstaller {
                     Logger.logInfo(LOG_TAG, "Extracting bootstrap zip to prefix staging directory \"" + TERMUX_STAGING_PREFIX_DIR_PATH + "\".");
                     final byte[] buffer = new byte[8096];
                     final List<Pair<String, String>> symlinks = new ArrayList<>(50);
+                    final List<String> executables = new ArrayList<>(128);
                     final URL zipUrl = determineZipUrl();
                     try (ZipInputStream zipInput = new ZipInputStream(zipUrl.openStream())) {
                         ZipEntry zipEntry;
@@ -170,6 +172,12 @@ final class TermuxInstaller {
                                         showBootstrapErrorDialog(activity, whenDone, Error.getErrorMarkdownString(error));
                                         return;
                                     }
+                                }
+                            } else if (zipEntry.getName().equals("EXECUTABLES.txt")) {
+                                BufferedReader executablesReader = new BufferedReader(new InputStreamReader(zipInput));
+                                String line;
+                                while ((line = executablesReader.readLine()) != null) {
+                                    executables.add(line);
                                 }
                             } else {
                                 String zipEntryName = zipEntry.getName();
@@ -193,6 +201,16 @@ final class TermuxInstaller {
                                         Os.chmod(targetFile.getAbsolutePath(), 0700);
                                     }
                                 }
+                            }
+                        }
+                    }
+                    if (!executables.isEmpty()) {
+                        for (String executable : executables) {
+                            //noinspection OctalInteger
+                            try {
+                                Os.chmod(TERMUX_STAGING_PREFIX_DIR + "/" + executable, 0700);
+                            } catch (Throwable t) {
+                                Logger.logError(LOG_TAG, "EXECUTABLES error: " + TERMUX_STAGING_PREFIX_DIR + "/" + executable + t);
                             }
                         }
                     }
@@ -362,7 +380,12 @@ final class TermuxInstaller {
 
     private static URL determineZipUrl() throws MalformedURLException {
         String archName = determineTermuxArchName();
-        String url = "https://github.com/termux/termux-packages/releases/latest/download/bootstrap-" + archName + ".zip";
+        String url;
+        if (BuildConfig.TERMUX_PACKAGE_VARIANT.equals("nix")) {
+            url = "https://github.com/PickleHik3/termux-launcher/releases/latest/download/bootstrap-nix-" + archName + ".zip";
+        } else {
+            url = "https://github.com/termux/termux-packages/releases/latest/download/bootstrap-" + archName + ".zip";
+        }
         return new URL(url);
     }
 

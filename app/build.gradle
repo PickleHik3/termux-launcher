@@ -8,7 +8,7 @@ ext {
     // crash at startup.
     // Bootstrap of a different variant must not be manually installed by the user after app installation
     // by replacing $PREFIX since app code is dependent on the variant used to build the APK.
-    // Currently supported values are: ["apt-android-7", "apt-android-5"]
+    // Currently supported values are: ["apt-android-7", "apt-android-5", "nix"]
     packageVariant = System.getenv("TERMUX_PACKAGE_VARIANT") ?: "apt-android-7" // Default: "apt-android-7"
 }
 
@@ -27,11 +27,12 @@ android {
     def hasReleaseSigningConfig = releaseStoreFilePath && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
 
     defaultConfig {
+        applicationId "com.termux.launcher.nix"
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         versionCode 1020 // Always keep the same versionCode as Termux Upstream to allow users to swap between termux installations.
-        versionName "0.2.32"
+        versionName "0.2.32-nix"
 
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)
@@ -39,8 +40,8 @@ android {
         buildConfigField "String", "TERMUX_PACKAGE_VARIANT", "\"" + project.ext.packageVariant + "\"" // Used by TermuxApplication class
 
         manifestPlaceholders = [
-            TERMUX_PACKAGE_NAME    : "com.termux",
-            TERMUX_APP_NAME        : "Termux:Monet",
+            TERMUX_PACKAGE_NAME    : "com.termux.launcher.nix",
+            TERMUX_APP_NAME        : "Termux Launcher",
             TERMUX_API_APP_NAME    : "Termux:API",
             TERMUX_GUI_APP_NAME    : "Termux:GUI",
             TERMUX_BOOT_APP_NAME   : "Termux:Boot",
@@ -318,6 +319,8 @@ task downloadBootstraps() {
             downloadBootstrap("arm", "26bfb45304c946170db69108e5eb6e3641aad751406ce106c80df80cad2eccf8", version)
             downloadBootstrap("i686", "46dcfeb5eef67ba765498db9fe4c50dc4690805139aa0dd141a9d8ee0693cd27", version)
             downloadBootstrap("x86_64", "615b590679ee6cd885b7fd2ff9473c845e920f9b422f790bb158c63fe42b8481", version)
+        } else if (packageVariant == "nix") {
+            // The Nix bootstrap is downloaded by TermuxInstaller on first run.
         } else {
             throw new GradleException("Unsupported TERMUX_PACKAGE_VARIANT \"" + packageVariant + "\"")
         }
