@@ -382,7 +382,7 @@ final class TermuxInstaller {
         String archName = determineTermuxArchName();
         String url;
         if (BuildConfig.TERMUX_PACKAGE_VARIANT.equals("nix")) {
-            url = "https://github.com/PickleHik3/termux-launcher/releases/latest/download/bootstrap-nix-" + archName + ".zip";
+            url = "https://github.com/PickleHik3/termux-launcher/releases/download/nix-bootstrap/bootstrap-nix-" + archName + ".zip";
         } else {
             url = "https://github.com/termux/termux-packages/releases/latest/download/bootstrap-" + archName + ".zip";
         }
