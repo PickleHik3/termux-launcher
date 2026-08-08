@@ -67,4 +67,28 @@
             </aapt:attr>
         </path>
     </group>
+
+    <!-- Nix edition badge: official NixOS snowflake (nixos-artwork),
+         flattened and scaled into a 20dp mark over a punch-out disc. -->
+    <path
+        android:pathData="M74,74m-13,0a13,13 0,1 1,26 0a13,13 0,1 1,-26 0"
+        android:fillColor="#E1E7F2"/>
+    <path
+        android:pathData="m 72.24,77.48 l 9.75,0.00 l -1.10,1.95 l -2.61,-0.01 l 1.30,2.26 l -0.56,0.96 l -1.14,0.00 l -1.85,-3.22 l -2.66,-0.01 z"
+        android:fillColor="#5277C3"/>
+    <path
+        android:pathData="m 70.10,74.21 l 4.87,8.44 l -2.24,0.02 l -1.30,-2.27 l -1.31,2.26 l -1.11,-0.00 l -0.57,-0.98 l 1.87,-3.21 l -1.32,-2.31 z"
+        android:fillColor="#5277C3"/>
+    <path
+        android:pathData="m 71.86,70.74 l -4.87,8.44 l -1.14,-1.93 l 1.31,-2.26 l -2.61,-0.01 l -0.56,-0.96 l 0.57,-0.99 l 3.71,0.01 l 1.33,-2.30 z"
+        android:fillColor="#5277C3"/>
+    <path
+        android:pathData="m 77.91,73.79 l -4.87,-8.44 l 2.24,-0.02 l 1.30,2.27 l 1.31,-2.26 l 1.11,0.00 l 0.57,0.98 l -1.87,3.21 l 1.32,2.31 z"
+        android:fillColor="#5277C3"/>
+    <path
+        android:pathData="m 75.76,70.50 l -9.75,-0.00 l 1.10,-1.95 l 2.61,0.01 l -1.30,-2.26 l 0.56,-0.96 l 1.14,-0.00 l 1.85,3.22 l 2.66,0.01 z"
+        android:fillColor="#5277C3"/>
+    <path
+        android:pathData="m 76.14,77.26 l 4.87,-8.44 l 1.14,1.93 l -1.31,2.26 l 2.61,0.01 l 0.56,0.96 l -0.57,0.99 l -3.71,-0.01 l -1.33,2.30 z"
+        android:fillColor="#5277C3"/>
 </vector>
