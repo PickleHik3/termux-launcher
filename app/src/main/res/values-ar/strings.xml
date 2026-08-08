@@ -103,8 +103,8 @@
     <string name="termux_background_image_enabled_title">عرض صورة الخلفية</string>
     <string name="termux_background_image_enabled_on">سيتم تمكين صورة الخلفية.</string>
     <string name="termux_api_preferences_summary">تفضيلات &amp;TERMUX_API_APP_NAME؛ برنامج</string>
-    <string name="termux_monet_background_enabled_title">خلفية مونيه (غير مستقرة)</string>
-    <string name="termux_monet_background_enabled_on">سيتم تمكين خلفية مونيه.</string>
+    <string name="termux_monet_background_enabled_title">خلفية Material (غير مستقرة)</string>
+    <string name="termux_monet_background_enabled_on">سيتم تمكين خلفية Material.</string>
     <string name="termux_extrakeys_blur_enabled_off">سيتم تعطيل الخلفية غير الواضحة للمفاتيح الإضافية. يضيف خلفية شفافة وغير واضحة إلى المفاتيح الإضافية. (قد يؤثر على الأداء) (افتراضي)</string>
     <string name="termux_sessions_header">قائمة الجلسات</string>
     <string name="termux_sessions_blur_enabled_title">جلسات خلفية غير واضحة</string>
@@ -131,7 +131,7 @@
     <string name="termux_terminal_view_view_header">عرض</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_title">ضبط هوامش الترمنل</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_on">‎سيتم تمكين ضبط هوامش الترمنل. يجب تمكينه لمحاولة إصلاح المشكلة التي تؤدي إلى تغطية لوحة المفاتيح الناعمة لجزء من المفاتيح الإضافية/عرض الترمنل. إذا تسبب في وميض الشاشة على أجهزتكم، فعليكم بتعطيله. (الافتراضي)</string>
-    <string name="termux_monet_background_enabled_off">سيتم تعطيل خلفية محطة Monet. تحويل الخلفية الطرفية إلى مونيه (افتراضي)</string>
+    <string name="termux_monet_background_enabled_off">سيتم تعطيل خلفية محطة Material. تحويل الخلفية الطرفية إلى Material (افتراضي)</string>
     <string name="termux_extrakeys_blur_enabled_title">مفاتيح إضافية خلفية غير واضحة</string>
     <string name="termux_background_image_enabled_off">سيتم تعطيل صورة الخلفية. لتمكينه، تأكد من وجود ملفات عمودية وأفقية مناسبة. إذا كنت تريد تعيين خلفية جديدة، فاضبطها من قائمة السياق بالنقر لفترة طويلة على الترمنل. (تقصير)</string>
     <string name="termux_extrakeys_blur_enabled_on">سيتم تمكين الخلفية غير الواضحة لـ ExtraKeys.</string>

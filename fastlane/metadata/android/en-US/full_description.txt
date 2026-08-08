@@ -1,6 +1,6 @@
-Termux-Monet is a unofficial, modified fork of Termux, an Android terminal application and Linux environment, with Monet Implementation and other features developed by the community such as:
+Termux Launcher is an unofficial, modified fork of Termux (based on Termux:Monet), an Android terminal application and Linux environment, with Material You theming and other features developed by the community such as:
 
-* Monet Theming
+* Material You Theming
 * User-defined Background Images on Terminal
 * In-terminal image display support with Sixel and iTerm2
 * Run commands on Termux from ADB
@@ -16,7 +16,7 @@ Termux-Monet is a unofficial, modified fork of Termux, an Android terminal appli
 * Run text-based games with frotz.
 * Many upcoming features and bug fixes.
 
-⚠️ Termux Monet is only Compatible with Android 8+
+⚠️ Termux Launcher is only Compatible with Android 8+
 
 At first start a small base system is being configured. The GNU Bash, Coreutils, Findutils and other core utilities are available out-of-box. Additionally, is provided more than 1000 other packages installable by using the 'pkg' utility which currently is a frontend for the 'apt' package manager.
 

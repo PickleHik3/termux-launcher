@@ -1373,12 +1373,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int resolveAccessoryGlassBaseColor() {
         if (isNightThemeActive()) {
-            return resolveMonetDarkBackgroundColor();
+            return resolveMaterialDarkBackgroundColor();
         }
         return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh, R.color.termux_surface_panel_high);
     }
 
-    private int resolveMonetDarkBackgroundColor() {
+    private int resolveMaterialDarkBackgroundColor() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             int colorResId = getResources().getIdentifier("system_neutral1_900", "color", "android");
             if (colorResId != 0) {
@@ -1392,7 +1392,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOutlineVariant, R.color.termux_outline_variant);
     }
 
-    /** Wallpaper-derived accent (Monet primary) used across the dock's reactive glass treatment. */
+    /** Wallpaper-derived accent (Material You primary) used across the dock's reactive glass treatment. */
     private int resolveDockAccentColor() {
         return MaterialColors.getColor(this, com.google.android.material.R.attr.colorPrimary,
             ContextCompat.getColor(this, R.color.termux_primary));
@@ -5451,15 +5451,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Set<Character> letters = new LinkedHashSet<>(mSuggestionBarView.getAvailableAzLetters());
         mAzScrubRowView.setVisibleLetters(letters);
         int base = resolveAzGestureAccentColor();
-        int muted = mutedMonetShade(base);
+        int muted = mutedMaterialShade(base);
         if (mAzScrubRowView.getCurrentTextColor() != muted) {
             mAzScrubRowView.setTextColor(muted);
         }
         mAzScrubRowView.setInteractionAccentColor(base);
         mAzScrubRowView.setInteractionMode(AzScrubRowView.InteractionMode.WAVE_TRACK);
         mAzScrubRowView.setLockedInlineLetter(null);
-        int orbColor = brightMonetShade(base);
-        int edgeColor = edgeMonetVariant(base);
+        int orbColor = brightMaterialShade(base);
+        int edgeColor = edgeMaterialVariant(base);
         if (mLauncherAzGestureFxUnderlayView != null) {
             mLauncherAzGestureFxUnderlayView.setColors(orbColor, edgeColor);
             mLauncherAzGestureFxUnderlayView.setDarkThemeActive(isNightThemeActive());
@@ -6130,7 +6130,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ContextCompat.getColor(this, R.color.termux_primary));
     }
 
-    private int mutedMonetShade(int color) {
+    private int mutedMaterialShade(int color) {
         float[] hsv = new float[3];
         Color.colorToHSV(color, hsv);
         hsv[1] = Math.max(0f, Math.min(1f, hsv[1] * 0.92f));
@@ -6138,7 +6138,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return Color.HSVToColor(0xF4, hsv);
     }
 
-    private int brightMonetShade(int color) {
+    private int brightMaterialShade(int color) {
         float[] hsv = new float[3];
         Color.colorToHSV(color, hsv);
         hsv[1] = Math.max(0f, Math.min(1f, hsv[1] * 1.28f));
@@ -6146,7 +6146,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return Color.HSVToColor(0xF6, hsv);
     }
 
-    private int edgeMonetVariant(int color) {
+    private int edgeMaterialVariant(int color) {
         float[] hsv = new float[3];
         Color.colorToHSV(color, hsv);
         hsv[0] = (hsv[0] + 24f) % 360f;
