@@ -96,6 +96,46 @@ the switch fails with `error: attribute 'hm' missing` /
 "option `home' does not exist". System options and home options live in
 different files by design.
 
+### Neovim / LazyVim
+
+The template installs LazyVim along with everything `:checkhealth lazyvim`
+asks for. If your config predates that — `nvim` reporting a missing
+`tree-sitter (CLI)`, `fzf` or `lazygit` — add them to `home.nix` yourself
+and switch:
+
+```nix
+home.packages = with pkgs; [
+  tree-sitter   # error without it: treesitter cannot install grammars
+  fzf           # pickers
+  lazygit       # the <leader>gg keymap
+  python3       # lazy.nvim's hererocks builds luarocks with it
+  imagemagick   # snacks.image renders more than plain PNGs; optional
+];
+```
+
+Two environment fixes belong with it. Nothing in the bootstrap sets a
+locale, so glibc runs in the `C` locale and neovim reports "Locale does not
+support UTF-8" — which also mangles box-drawing glyphs everywhere else in
+the shell. And `xdg-open` does not exist inside the proot, so `gx` and
+anything else opening a URL silently fails, even though Android can handle
+it:
+
+```nix
+home.sessionVariables.LANG = "C.UTF-8";   # built into glibc, no locale archive needed
+
+home.file.".local/bin/xdg-open" = {
+  executable = true;
+  text = ''
+    #!/bin/sh
+    exec termux-open "$@"
+  '';
+};
+home.sessionPath = [ "$HOME/.local/bin" ];
+```
+
+Clipboard integration has no fix here: no clipboard tool exists inside the
+proot, so neovim's `"+` and `"*` registers stay unavailable.
+
 ### Animated fastfetch logo
 
 `home.nix` already installs fastfetch and the config expects a GIF at
