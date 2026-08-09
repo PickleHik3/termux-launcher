@@ -3691,20 +3691,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /**
+     * The prompt is worth showing only when the wallpaper read has already failed, the bands are
+     * actually sourcing the wallpaper, the permission is the thing standing in the way, and the
+     * user has not been asked before.
+     */
+    static boolean shouldPromptForWallpaperRead(boolean readDenied, boolean wallpaperPassthrough,
+                                                boolean permissionGranted, boolean alreadyPrompted) {
+        return readDenied && wallpaperPassthrough && !permissionGranted && !alreadyPrompted;
+    }
+
     private void maybeRequestWallpaperReadPermission() {
-        if (!mWallpaperReadPermissionDenied || !mIsVisible || mPreferences == null
-            || isFinishing() || isDestroyed() || !shouldUseWallpaperPassthroughMode()) {
+        if (!mIsVisible || mPreferences == null || isFinishing() || isDestroyed()) {
             return;
         }
-        if (androidx.core.content.ContextCompat.checkSelfPermission(this,
-                android.Manifest.permission.READ_EXTERNAL_STORAGE)
-                == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        boolean permissionGranted = androidx.core.content.ContextCompat.checkSelfPermission(this,
+            android.Manifest.permission.READ_EXTERNAL_STORAGE)
+            == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        if (permissionGranted) {
             // Already granted and the read still failed: the refusal is not about this permission,
             // so a prompt would only nag.
             mWallpaperReadPermissionDenied = false;
             return;
         }
-        if (mWallpaperReadPermissionPromptShowing || mPreferences.isWallpaperReadPermissionPrompted()) {
+        if (mWallpaperReadPermissionPromptShowing
+            || !shouldPromptForWallpaperRead(mWallpaperReadPermissionDenied,
+                shouldUseWallpaperPassthroughMode(), false,
+                mPreferences.isWallpaperReadPermissionPrompted())) {
             return;
         }
         mWallpaperReadPermissionPromptShowing = true;

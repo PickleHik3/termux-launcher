@@ -33,6 +33,20 @@ public class TermuxActivityTest {
     }
 
     @Test
+    public void testWallpaperReadPromptOnlyAfterAFailedReadThatThePermissionExplains() {
+        // The one case worth a dialog: bands want the wallpaper, the read failed, no permission yet.
+        Assert.assertTrue(TermuxActivity.shouldPromptForWallpaperRead(true, true, false, false));
+        // Never asked before a read has actually failed.
+        Assert.assertFalse(TermuxActivity.shouldPromptForWallpaperRead(false, true, false, false));
+        // Bands are not sourcing the wallpaper, so the permission buys nothing.
+        Assert.assertFalse(TermuxActivity.shouldPromptForWallpaperRead(true, false, false, false));
+        // Held already: whatever refused the read, it was not this.
+        Assert.assertFalse(TermuxActivity.shouldPromptForWallpaperRead(true, true, true, false));
+        // Asked once, answered; do not nag.
+        Assert.assertFalse(TermuxActivity.shouldPromptForWallpaperRead(true, true, false, true));
+    }
+
+    @Test
     public void testDockGlassOpacityHasLiteralEndpoints() {
         Assert.assertEquals(0, TermuxActivity.dockGlassBaseAlpha(0f));
         Assert.assertEquals(128, TermuxActivity.dockGlassBaseAlpha(0.5f));
