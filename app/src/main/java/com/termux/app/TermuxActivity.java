@@ -276,6 +276,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mStatusBarTerminalResizeGeneration;
     private static final int REQUEST_CODE_WEATHER_LOCATION = 4711;
     private static final int REQUEST_CODE_VOICE_TYPING = 4712;
+    private static final int REQUEST_CODE_WALLPAPER_READ_PERMISSION = 4713;
     @Nullable private TerminalSession mVoiceTypingTargetSession;
     /** Drawer-visible sessions = service sessions minus secondary panes. Backs the list adapter. */
     public final java.util.List<com.termux.shared.termux.shell.command.runner.terminal.TermuxSession> mDrawerSessions = new java.util.ArrayList<>();
@@ -632,6 +633,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Keeps the under-pill glass covering stale close geometry until dock-only layout settles. */
     private boolean mPendingInAppKeyboardCloseGeometry;
     private boolean mAccessoryBackdropDirty = true;
+    /** Set when {@link WallpaperManager#getDrawable()} threw for want of the storage permission. */
+    private boolean mWallpaperReadPermissionDenied;
+    private boolean mWallpaperReadPermissionPromptShowing;
     private int mLastAccessoryBackdropBlurRadiusDp = -1;
     private boolean mLastAccessoryBackdropManagedSource;
     @NonNull private final Rect mLastAccessoryBackdropTargetRect = new Rect();
@@ -3666,6 +3670,59 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return "nothing".equalsIgnoreCase(Build.MANUFACTURER) ? 1.10f : 1f;
     }
 
+    /**
+     * The glass bands blur a crop of the system wallpaper read through {@link WallpaperManager}.
+     * Where the platform still gates that read behind the legacy storage permission, an install
+     * that never ran {@code termux-setup-storage} and never set its wallpaper through the in-app
+     * picker (which keeps a managed copy and needs no permission) gets a {@link SecurityException}
+     * instead, and every band renders flat with nothing but a log line to say why. Ask at the
+     * point the read actually fails rather than up front, so devices that can read the wallpaper
+     * are never prompted at all.
+     */
+    private void onSystemWallpaperReadDenied() {
+        if (mWallpaperReadPermissionDenied) {
+            return;
+        }
+        mWallpaperReadPermissionDenied = true;
+        // Called from inside a render pass; do not put up a dialog mid-draw.
+        View root = findViewById(R.id.activity_termux_root_view);
+        if (root != null) {
+            root.post(this::maybeRequestWallpaperReadPermission);
+        }
+    }
+
+    private void maybeRequestWallpaperReadPermission() {
+        if (!mWallpaperReadPermissionDenied || !mIsVisible || mPreferences == null
+            || isFinishing() || isDestroyed() || !shouldUseWallpaperPassthroughMode()) {
+            return;
+        }
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this,
+                android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            // Already granted and the read still failed: the refusal is not about this permission,
+            // so a prompt would only nag.
+            mWallpaperReadPermissionDenied = false;
+            return;
+        }
+        if (mWallpaperReadPermissionPromptShowing || mPreferences.isWallpaperReadPermissionPrompted()) {
+            return;
+        }
+        mWallpaperReadPermissionPromptShowing = true;
+        new MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.title_wallpaper_read_permission)
+            .setMessage(R.string.msg_wallpaper_read_permission)
+            .setPositiveButton(R.string.action_wallpaper_read_permission_allow, (dialog, which) -> {
+                mPreferences.setWallpaperReadPermissionPrompted(true);
+                androidx.core.app.ActivityCompat.requestPermissions(this,
+                    new String[] {android.Manifest.permission.READ_EXTERNAL_STORAGE},
+                    REQUEST_CODE_WALLPAPER_READ_PERMISSION);
+            })
+            .setNegativeButton(R.string.action_wallpaper_read_permission_dismiss, (dialog, which) ->
+                mPreferences.setWallpaperReadPermissionPrompted(true))
+            .setOnDismissListener(dialog -> mWallpaperReadPermissionPromptShowing = false)
+            .show();
+    }
+
     @Nullable
     private Bitmap createWallpaperBackdropBitmapForRect(@NonNull Rect targetRect, @NonNull View wallpaperFrame) {
         if (shouldUseManagedWallpaperBlurSource()) {
@@ -3681,8 +3738,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             wallpaper = wallpaperManager.getDrawable();
         } catch (SecurityException e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Cannot read system wallpaper for accessory backdrop", e);
+            onSystemWallpaperReadDenied();
             return null;
         }
+        mWallpaperReadPermissionDenied = false;
         if (wallpaper == null) {
             return null;
         }
@@ -9755,6 +9814,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (grantResults.length > 0
                 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 ensureWeatherController().forceRefresh();
+            }
+        } else if (requestCode == REQUEST_CODE_WALLPAPER_READ_PERMISSION) {
+            if (grantResults.length > 0
+                && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                mWallpaperReadPermissionDenied = false;
+                clearCachedAccessoryWallpaperBlur();
+                scheduleAccessoryRenderSync("wallpaper:permission");
             }
         }
     }
