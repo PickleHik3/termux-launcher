@@ -190,6 +190,10 @@ of minutes. Let it run foregrounded, or drop the override.
 **A switch failed with an option error.** You almost certainly edited the wrong file — see the
 table above.
 
+**`nvim` complains in `:checkhealth`.** If your config was created before the template shipped the
+full neovim toolchain, a few packages are missing — see
+[Neovim / LazyVim](Nix_Package_Management.md#neovim--lazyvim) for the exact lines to add.
+
 **The glass bars are not blurred.** Unrelated to Nix: the launcher needs permission to read your
 wallpaper. **Settings › Services & permissions › Wallpaper access**, or set a wallpaper from inside
 the launcher, which needs no permission at all.
