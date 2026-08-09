@@ -18,6 +18,17 @@ package manager and a minimal shell. Every session then runs inside a
 directory to `/nix`, so unmodified upstream binaries (glibc, not Android
 libc) run as-is and the official binary cache applies.
 
+**No emulation is involved** — this is not QEMU. Every binary is native
+`aarch64` code executing directly on the CPU. proot is a
+ptrace-based supervisor that intercepts syscalls only to rewrite
+*paths*: nixpkgs binaries hardcode `/nix/store/...` locations that an
+Android app cannot own, so proot translates `/nix`, `/bin`, `/etc` and
+`/usr` to the app's private directory on the fly (the real Android
+system stays visible at `/android`). The cost is a small
+syscall-interception overhead — noticeable in `fork`/`exec`-heavy
+workloads, irrelevant for compute — not the instruction-translation
+cost of an emulator.
+
 ## Getting started (first launch)
 
 1. Install the nix-edition APK and open it. The app downloads and
@@ -64,6 +75,21 @@ The template's layout — **which file owns what matters**:
 | `home.nix` | home-manager module | `home.packages`, dotfiles (`xdg.configFile`), activation hooks |
 | `config/` | plain files | the actual `config.fish`, oh-my-posh themes, `fastfetch/config.jsonc` |
 
+The split exists because two different configuration systems are wired
+together. `nix-on-droid.nix` is evaluated by nix-on-droid's own module
+set and manages the *environment* — everything outside your home
+directory: the login shell, `/etc`, base packages every script assumes,
+Android glue like `termux-setup-storage`. `home.nix` is evaluated by
+[home-manager](https://github.com/nix-community/home-manager) (embedded
+via the `home-manager.config` bridge in `flake.nix`) and manages *your
+user*: dotfiles, per-user packages, activation hooks, session
+variables.
+
+Rule of thumb: a file under `~/.config` or a tool only you invoke →
+`home.nix`; the login shell, a base CLI everything expects (git, curl,
+sed), or Android integration → `nix-on-droid.nix`. `flake.nix` is where
+the two meet — it owns the inputs, the overlays, and the wiring.
+
 Do **not** paste `home.nix` contents into `nix-on-droid.nix` or vice
 versa: `home.*` options and `lib.hm` only exist inside home-manager, so
 the switch fails with `error: attribute 'hm' missing` /
@@ -82,6 +108,35 @@ the overlay from
 the flake's `pkgs = import nixpkgs { ... overlays = [ ... ]; }`). It
 compiles on the device — serial build, roughly 20–50 minutes depending
 on the phone, app foregrounded.
+
+### SSH into the phone
+
+The template ships a small sshd toolset (`sshd-tools.nix`), declarative
+where it matters and manual where you want control:
+
+```sh
+sshd-start            # start (idempotent); generates the host key on first use
+sshd-stop             # stop
+sshd-status           # running state, port, autostart arming
+sshd-autostart on|off # arm/disarm starting it with new interactive sessions
+```
+
+Nothing starts unless you run `sshd-start` yourself or explicitly arm
+`sshd-autostart on`. Details:
+
+- Port **8023** by default (the Termux edition's sshd conventionally
+  owns 8022 on the same device); override by writing a number to
+  `~/.config/sshd/port`.
+- Key-only auth. Append your client's public key to
+  `~/.ssh/authorized_keys`, then `ssh -p 8023 nix-on-droid@<phone-ip>`.
+- The ed25519 host key lives in `~/.ssh/hostkeys` — generated on
+  device, never part of the nix store.
+- Server log: `~/.config/sshd/log`. The server does not survive a
+  reboot or an app force-stop; reopen the app and it comes back with
+  the next session if autostart is armed.
+- If you run sshd by hand instead: it must be invoked by absolute path
+  (it re-execs itself), needs `-o StrictModes=no` on Android, and a
+  port above 1024.
 
 ### After a switch
 
