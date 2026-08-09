@@ -121,6 +121,9 @@
     <string name="settings_termux_api_install_summary">Not installed · Open the install page.</string>
     <string name="settings_permissions_header">Permissions</string>
     <string name="settings_files_media_title">Files and media</string>
+    <string name="settings_wallpaper_access_title">Wallpaper access</string>
+    <string name="settings_wallpaper_access_allowed_summary">The glass bars can read your wallpaper to blur it.</string>
+    <string name="settings_wallpaper_access_fix_summary">Glass bars render flat · Tap to allow reading the wallpaper.</string>
     <string name="settings_accessibility_service_title">Accessibility service</string>
     <string name="settings_app_notifications_title">App notifications</string>
     <string name="settings_other_permissions_title">Other app permissions</string>
