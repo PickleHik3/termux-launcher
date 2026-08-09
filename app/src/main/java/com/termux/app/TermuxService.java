@@ -831,7 +831,11 @@ void logd(String l){
     public synchronized void setVisibleSessionCount(int count) {
         if (mVisibleSessionCount == count) return;
         mVisibleSessionCount = count;
-        updateNotification();
+        // Refresh the text only while something keeps the service alive. The activity pushes this
+        // during startup before the first session exists — entering updateNotification()'s empty
+        // state there would requestStopService() and tear the whole app down mid-launch.
+        if (!mShellManager.mTermuxSessions.isEmpty() || !mShellManager.mTermuxTasks.isEmpty() || mWakeLock != null)
+            updateNotification();
     }
 
     private Notification buildNotification() {
