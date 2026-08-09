@@ -18,6 +18,79 @@ package manager and a minimal shell. Every session then runs inside a
 directory to `/nix`, so unmodified upstream binaries (glibc, not Android
 libc) run as-is and the official binary cache applies.
 
+## Getting started (first launch)
+
+1. Install the nix-edition APK and open it. The app downloads and
+   unpacks the bootstrap (~38 MB) on its own — no interaction needed.
+2. The first terminal session asks:
+
+   ```
+   Do you want to set it up with flakes? (y/N)
+   ```
+
+   Answer **`y`**. Flakes are what the shell template below uses, and
+   the flake setup is the tested path.
+3. The first generation now builds on the device. Expect minutes on a
+   recent phone and up to ~35 minutes on an old one. The
+   `evaluating derivation ...` phase prints nothing for a long time —
+   that is normal, it is not stuck. Keep the app in the foreground
+   (Android cuts the app's network in the background).
+4. You have a `bash-5.3$` prompt when it finishes. That is the stock
+   environment; continue below to get the full shell setup.
+
+## Shell environment (fish, oh-my-posh, eza/zoxide/yazi, LazyVim, fastfetch)
+
+The fork ships a ready-made flake template that recreates the launcher's
+reference shell — the same fish config, oh-my-posh Material themes, and
+CLI stack the examples in this wiki use. Replace the minimal first-boot
+files with it:
+
+```sh
+cd ~/.config/nix-on-droid
+rm flake.nix nix-on-droid.nix        # the minimal files from first boot
+nix flake init -t github:PickleHik3/nix-on-droid/launcher-nix#launcher
+nix-on-droid switch --flake ~/.config/nix-on-droid
+```
+
+Open a new session afterwards: fish is the login shell, prompt themed,
+`eza`/`zoxide` wired in.
+
+The template's layout — **which file owns what matters**:
+
+| File | Module type | What goes here |
+|---|---|---|
+| `flake.nix` | flake wiring | inputs (nixpkgs, home-manager, the fork), overlays |
+| `nix-on-droid.nix` | system module | `environment.packages`, `user.shell`, `android-integration` |
+| `home.nix` | home-manager module | `home.packages`, dotfiles (`xdg.configFile`), activation hooks |
+| `config/` | plain files | the actual `config.fish`, oh-my-posh themes, `fastfetch/config.jsonc` |
+
+Do **not** paste `home.nix` contents into `nix-on-droid.nix` or vice
+versa: `home.*` options and `lib.hm` only exist inside home-manager, so
+the switch fails with `error: attribute 'hm' missing` /
+"option `home' does not exist". System options and home options live in
+different files by design.
+
+### Animated fastfetch logo
+
+`home.nix` already installs fastfetch and the config expects a GIF at
+`~/Pictures/gif/skel.gif` — drop any GIF there (fastfetch falls back to
+text output while it is missing). Stock nixpkgs fastfetch shows only the
+first frame; for full animation over the kitty graphics protocol, add
+the overlay from
+[`recipes/nix/fastfetch`](https://github.com/PickleHik3/termux-launcher/tree/dev/recipes/nix/fastfetch)
+(copy `overlay.nix` and the patch next to `flake.nix`, register it in
+the flake's `pkgs = import nixpkgs { ... overlays = [ ... ]; }`). It
+compiles on the device — serial build, roughly 20–50 minutes depending
+on the phone, app foregrounded.
+
+### After a switch
+
+- Open a **new session** to pick up the new login shell and PATH.
+- `launcherctl` and `tai` live in the proot's `/bin`; the template's
+  `config.fish` puts that on the PATH for fish sessions.
+- Something broke? `nix-on-droid rollback` restores the previous
+  generation.
+
 ## Everyday commands
 
 Quick, imperative package management:
