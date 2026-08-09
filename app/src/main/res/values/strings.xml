@@ -299,6 +299,10 @@
     <string name="wallpaper_target_home_screen">Home Screen</string>
     <string name="wallpaper_target_lock_screen">Lock Screen</string>
     <string name="wallpaper_target_home_and_lock_screen">Home &amp; Lock Screen</string>
+    <string name="title_wallpaper_read_permission">Blur needs the wallpaper</string>
+    <string name="msg_wallpaper_read_permission">The glass status bar, dock and keyboard blur a crop of your wallpaper, and this device won\'t hand it over without storage access. Allow it to turn the blur on. Setting a wallpaper from within the launcher works without this permission.</string>
+    <string name="action_wallpaper_read_permission_allow">Allow</string>
+    <string name="action_wallpaper_read_permission_dismiss">Not now</string>
     <string name="action_open_settings">Settings</string>
     <string name="action_glass_lab">Edit surfaces</string>
     <string name="msg_generating_report">Generating Report</string>

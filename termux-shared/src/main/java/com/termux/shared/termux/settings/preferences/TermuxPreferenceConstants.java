@@ -679,6 +679,15 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_USE_SYSTEM_WALLPAPER = "use_system_wallpaper";
 
         public static final boolean DEFAULT_VALUE_USE_SYSTEM_WALLPAPER = true;
+
+        /**
+         * Defines the key for whether the wallpaper-read storage permission prompt has been shown.
+         * Asked at most once, and only after a wallpaper read actually failed.
+         */
+        public static final String KEY_WALLPAPER_READ_PERMISSION_PROMPTED =
+            "wallpaper_read_permission_prompted";
+
+        public static final boolean DEFAULT_VALUE_WALLPAPER_READ_PERMISSION_PROMPTED = false;
     }
 
     /**
