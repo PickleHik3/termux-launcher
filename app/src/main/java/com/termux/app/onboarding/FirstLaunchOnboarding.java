@@ -240,23 +240,26 @@ public final class FirstLaunchOnboarding {
                 R.string.onboarding_page_two_title,
                 R.string.onboarding_page_three_title
             };
+            // Page one talks package management, which differs per edition: the Nix
+            // edition has no pkg/APT, and its first session installs Nix itself.
+            private final boolean nix = com.termux.shared.termux.TermuxBootstrap.isAppPackageVariantNIX();
             private final int[] bodies = {
-                R.string.onboarding_page_one_body,
+                nix ? R.string.onboarding_page_one_body_nix : R.string.onboarding_page_one_body,
                 R.string.onboarding_page_two_body,
                 R.string.onboarding_page_three_body
             };
             private final int[] firstTips = {
-                R.string.onboarding_page_one_tip_one,
+                nix ? R.string.onboarding_page_one_tip_one_nix : R.string.onboarding_page_one_tip_one,
                 R.string.onboarding_page_two_tip_one,
                 R.string.onboarding_page_three_tip_one
             };
             private final int[] secondTips = {
-                R.string.onboarding_page_one_tip_two,
+                nix ? R.string.onboarding_page_one_tip_two_nix : R.string.onboarding_page_one_tip_two,
                 R.string.onboarding_page_two_tip_two,
                 R.string.onboarding_page_three_tip_two
             };
             private final int[] footers = {
-                R.string.onboarding_page_one_footer,
+                nix ? R.string.onboarding_page_one_footer_nix : R.string.onboarding_page_one_footer,
                 R.string.onboarding_page_two_footer,
                 R.string.onboarding_page_three_footer
             };

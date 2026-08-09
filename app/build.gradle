@@ -32,7 +32,7 @@ android {
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         versionCode 1020 // Always keep the same versionCode as Termux Upstream to allow users to swap between termux installations.
-        versionName "0.2.32-nix"
+        versionName "0.2.33-nix"
 
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)
@@ -59,7 +59,13 @@ android {
                 enable ((gradle.startParameter.taskNames.any { it.contains("Debug") } && splitAPKsForDebugBuilds == "1") ||
                     (gradle.startParameter.taskNames.any { it.contains("Release") } && splitAPKsForReleaseBuilds == "1"))
                 reset()
-                include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
+                if (project.ext.packageVariant == "nix") {
+                    // nix-on-droid supports aarch64 and x86_64 only — no 32-bit bootstraps
+                    // exist, so shipping those ABIs would just fail at bootstrap download.
+                    include 'x86_64', 'arm64-v8a'
+                } else {
+                    include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
+                }
                 universalApk true
             }
         }

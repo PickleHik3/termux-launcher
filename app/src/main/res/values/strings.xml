@@ -1517,6 +1517,13 @@
     <string name="onboarding_page_one_tip_two">termux-setup-storage</string>
     <string name="onboarding_page_one_footer">Run these in your first terminal</string>
 
+    <!-- Page one, Nix edition: the first session installs Nix itself, and packages come
+         from nixpkgs instead of pkg/APT. Selected at runtime by the package variant. -->
+    <string name="onboarding_page_one_body_nix">Your first session sets up the Nix package manager — answer y to use flakes. Then give command-line tools access to shared storage.</string>
+    <string name="onboarding_page_one_tip_one_nix">termux-setup-storage</string>
+    <string name="onboarding_page_one_tip_two_nix">nix profile install nixpkgs#ripgrep</string>
+    <string name="onboarding_page_one_footer_nix">Run these once Nix has finished setting up</string>
+
     <string name="onboarding_page_two_eyebrow">APPS, WITHOUT DETOURS</string>
     <string name="onboarding_page_two_title">Find and launch anything.</string>
     <string name="onboarding_page_two_body">Use the dock as an app launcher. Search by typing a percent sign, or scrub the alphabet row to jump through installed apps.</string>

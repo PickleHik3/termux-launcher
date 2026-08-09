@@ -105,7 +105,7 @@ jobs:
           fi
 
           echo "Validating APKs"
-          for abi in universal arm64-v8a armeabi-v7a x86_64 x86; do
+          for abi in universal arm64-v8a x86_64; do
             if ! test -f "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_$abi.apk"; then
               files_found="$(ls "$APK_DIR_PATH")"
               exit_on_error "Failed to find built APK at '$APK_DIR_PATH/${APK_BASENAME_PREFIX}_$abi.apk'. Files found: "$'\n'"$files_found"
@@ -116,9 +116,7 @@ jobs:
           if ! (cd "$APK_DIR_PATH"; sha256sum \
             "${APK_BASENAME_PREFIX}_universal.apk" \
             "${APK_BASENAME_PREFIX}_arm64-v8a.apk" \
-            "${APK_BASENAME_PREFIX}_armeabi-v7a.apk" \
             "${APK_BASENAME_PREFIX}_x86_64.apk" \
-            "${APK_BASENAME_PREFIX}_x86.apk" \
             > "${APK_BASENAME_PREFIX}_sha256sums"); then
             exit_on_error "Generate sha25sums failed for '$APK_VERSION_TAG' release."
           fi
@@ -127,9 +125,7 @@ jobs:
           ASSETS_TO_UPLOAD=(
             "${APK_BASENAME_PREFIX}_universal.apk"
             "${APK_BASENAME_PREFIX}_arm64-v8a.apk"
-            "${APK_BASENAME_PREFIX}_armeabi-v7a.apk"
             "${APK_BASENAME_PREFIX}_x86_64.apk"
-            "${APK_BASENAME_PREFIX}_x86.apk"
             "${APK_BASENAME_PREFIX}_sha256sums"
           )
 
@@ -145,9 +141,7 @@ jobs:
           if ! gh release upload "$RELEASE_VERSION_NAME" \
             "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_universal.apk" \
             "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_arm64-v8a.apk" \
-            "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_armeabi-v7a.apk" \
             "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_x86_64.apk" \
-            "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_x86.apk" \
             "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_sha256sums"; then
             exit_on_error "Attach APKs to release failed for '$APK_VERSION_TAG' release."
           fi
