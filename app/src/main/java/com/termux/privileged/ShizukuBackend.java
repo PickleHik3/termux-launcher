@@ -25,6 +25,7 @@ import rikka.sui.Sui;
 public class ShizukuBackend implements PrivilegedBackend {
     private static final String TAG = "ShizukuBackend";
     private static final long COMMAND_TIMEOUT_SECONDS = 30;
+    private static final long PUMP_DRAIN_TIMEOUT_MS = 2_000L;
     
     public static final int PERMISSION_REQUEST_CODE = 1001;
     
@@ -438,14 +439,28 @@ public class ShizukuBackend implements PrivilegedBackend {
             }
 
             Process process = (Process) processObject;
+
+            // Both pipes are drained on their own threads BEFORE anything waits on the process.
+            // Reading them after the wait deadlocks as soon as the child writes more than the
+            // pipe buffer holds (the stats card's ps+top output does): the child blocks on a
+            // full pipe while this thread waits for it to exit, until the timeout fires and the
+            // sample is thrown away as "stale".
+            ProcessOutputPump stdout = ProcessOutputPump.start(
+                "shizuku-stdout", process.getInputStream());
+            ProcessOutputPump stderr = ProcessOutputPump.start(
+                "shizuku-stderr", process.getErrorStream());
+
             boolean finished = waitForProcessExit(process, COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             if (!finished) {
+                // Forcibly killing the child closes its pipes, which is what lets the pumps finish.
                 process.destroyForcibly();
+                stdout.await(PUMP_DRAIN_TIMEOUT_MS);
+                stderr.await(PUMP_DRAIN_TIMEOUT_MS);
                 return "Error: command timed out";
             }
 
-            String output = readStream(process.getInputStream());
-            String errorOutput = readStream(process.getErrorStream());
+            String output = stdout.await(PUMP_DRAIN_TIMEOUT_MS);
+            String errorOutput = stderr.await(PUMP_DRAIN_TIMEOUT_MS);
             int exitCode = process.exitValue();
             if (exitCode != 0) {
                 String errorMessage = errorOutput.isEmpty() ? ("Exit code: " + exitCode) : errorOutput;
