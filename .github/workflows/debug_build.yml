@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - dev
+      - nix-edition
 
 
 concurrency:
@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package_variant: [ apt-android-7 ]
+        package_variant: [ nix ]
 
     steps:
       - name: Clone repository

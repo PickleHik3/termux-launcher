@@ -415,8 +415,9 @@ public final class TermuxConstants {
     /**
      * Termux:API F-Droid package url
      */
-    // Default: "https://f-droid.org/en/packages/com.termux.api"
-    public static final String TERMUX_API_FDROID_PACKAGE_URL = FDROID_PACKAGES_BASE_URL + "/" + TERMUX_API_PACKAGE_NAME;
+    // Nix edition: no F-Droid page exists for com.termux.launcher.nix.api — send users to the
+    // fork's releases page where the CI-built APKs live.
+    public static final String TERMUX_API_FDROID_PACKAGE_URL = TERMUX_API_GITHUB_REPO_URL + "/releases";
 
     /**
      * Termux:Boot app name
@@ -523,8 +524,9 @@ public final class TermuxConstants {
     /**
      * Termux:Styling F-Droid package url
      */
-    // Default: "https://f-droid.org/en/packages/com.termux.styling"
-    public static final String TERMUX_STYLING_FDROID_PACKAGE_URL = FDROID_PACKAGES_BASE_URL + "/" + TERMUX_STYLING_PACKAGE_NAME;
+    // Nix edition: no F-Droid page exists for com.termux.launcher.nix.styling — send users to the
+    // fork's releases page where the CI-built APKs live.
+    public static final String TERMUX_STYLING_FDROID_PACKAGE_URL = TERMUX_STYLING_GITHUB_REPO_URL + "/releases";
 
     /**
      * Termux:Tasker app name
@@ -637,9 +639,11 @@ public final class TermuxConstants {
     /*
      * Termux plugin apps lists.
      */
-    public static final List<String> TERMUX_PLUGIN_APP_NAMES_LIST = Arrays.asList(TERMUX_API_APP_NAME, TERMUX_BOOT_APP_NAME, TERMUX_FLOAT_APP_NAME, TERMUX_STYLING_APP_NAME, TERMUX_TASKER_APP_NAME, TERMUX_WIDGET_APP_NAME, TERMUX_GUI_APP_NAME);
+    // Nix edition: only the API and Styling companions exist in the com.termux.launcher.nix
+    // package family — keep diagnostics honest instead of probing five apps that cannot exist.
+    public static final List<String> TERMUX_PLUGIN_APP_NAMES_LIST = Arrays.asList(TERMUX_API_APP_NAME, TERMUX_STYLING_APP_NAME);
 
-    public static final List<String> TERMUX_PLUGIN_APP_PACKAGE_NAMES_LIST = Arrays.asList(TERMUX_API_PACKAGE_NAME, TERMUX_BOOT_PACKAGE_NAME, TERMUX_FLOAT_PACKAGE_NAME, TERMUX_STYLING_PACKAGE_NAME, TERMUX_TASKER_PACKAGE_NAME, TERMUX_WIDGET_PACKAGE_NAME, TERMUX_GUI_PACKAGE_NAME);
+    public static final List<String> TERMUX_PLUGIN_APP_PACKAGE_NAMES_LIST = Arrays.asList(TERMUX_API_PACKAGE_NAME, TERMUX_STYLING_PACKAGE_NAME);
 
     /*
      * Termux APK releases.

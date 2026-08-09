@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package_variant: [ apt-android-7 ]
+        package_variant: [ nix ]
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
