@@ -818,6 +818,20 @@ void logd(String l){
             return;
         for (int i = 0; i < mShellManager.mTermuxSessions.size(); i++) mShellManager.mTermuxSessions.get(i).getTerminalSession().updateTerminalSessionClient(mTermuxTerminalSessionServiceClient);
         mTermuxTerminalSessionActivityClient = null;
+        mVisibleSessionCount = -1;
+    }
+
+    /**
+     * The number of sessions the activity's session list shows (one per tmux-style session, not
+     * per window/pane/scratchpad shell). Pushed by the activity; -1 while no activity is attached,
+     * in which case the notification falls back to the raw shell count.
+     */
+    private int mVisibleSessionCount = -1;
+
+    public synchronized void setVisibleSessionCount(int count) {
+        if (mVisibleSessionCount == count) return;
+        mVisibleSessionCount = count;
+        updateNotification();
     }
 
     private Notification buildNotification() {
@@ -827,8 +841,10 @@ void logd(String l){
         PendingIntent contentIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE);
 
 
-        // Set notification text
-        int sessionCount = getTermuxSessionsSize();
+        // Set notification text. Prefer the activity-reported session-list count: the raw shell
+        // list has one entry per window/pane/scratchpad shell, which is not what users call a
+        // "session".
+        int sessionCount = mVisibleSessionCount >= 0 ? mVisibleSessionCount : getTermuxSessionsSize();
         int taskCount = mShellManager.mTermuxTasks.size();
         String notificationText = sessionCount + " session" + (sessionCount == 1 ? "" : "s");
         if (taskCount > 0) {
