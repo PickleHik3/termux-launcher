@@ -12,6 +12,8 @@
 - [Modern terminal guide](Terminal_Modernization.md)
 - [Terminal fonts](Terminal_Fonts.md)
 - [Kitty protocols](Terminal_Kitty_Protocols.md)
+- [Nix package management](Nix_Package_Management.md)
+- [Nix fork differences](Nix_Fork_Differences.md)
 - [Showcase tools](Building_Terminal_Showcase_Tools.md)
 
 ## Local AI
