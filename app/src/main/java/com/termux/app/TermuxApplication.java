@@ -55,15 +55,14 @@ public class TermuxApplication extends Application {
         boolean isTermuxFilesDirectoryAccessible = error == null;
         if (isTermuxFilesDirectoryAccessible) {
             Logger.logInfo(LOG_TAG, "Termux files directory is accessible");
-            /*
             error = TermuxFileUtils.isAppsTermuxAppDirectoryAccessible(true, true);
             if (error != null) {
                 Logger.logErrorExtended(LOG_TAG, "Create apps/termux-app directory failed\n" + error);
                 return;
             }
-            // Setup termux-am-socket server
+            // Setup termux-am-socket server; the nix edition's termux-am/termux-setup-storage
+            // clients depend on it, and the run-termux-am-socket-server property defaults true.
             TermuxAmSocketServer.setupTermuxAmSocketServer(context);
-             */
         } else {
             Logger.logErrorExtended(LOG_TAG, "Termux files directory is not accessible\n" + error);
         }

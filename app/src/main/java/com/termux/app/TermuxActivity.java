@@ -5209,7 +5209,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private boolean shouldShowInRecents() {
         return mPreferences != null
-            && shouldShowInRecents(mPreferences.isRemoveTaskOnActivityFinishEnabled(), isDefaultHomeApp());
+            && shouldShowInRecents(mPreferences.isShowInRecentsWhenNotDefaultEnabled(), isDefaultHomeApp());
     }
 
     private void syncRecentsVisibilityPolicy() {

@@ -271,7 +271,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 scheduleTermuxActivityStylingSync(false);
                 break;
             case "show_in_recents_when_not_default":
-                mPreferences.setRemoveTaskOnActivityFinishEnabled(!value);
+                mPreferences.setShowInRecentsWhenNotDefaultEnabled(value);
                 break;
             case "app_launcher_apps_row_enabled":
                 mPreferences.setAppLauncherAppsRowEnabled(value);
@@ -324,7 +324,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_launcher_bw_icons":
                 return mPreferences.isAppLauncherBwIconsEnabled();
             case "show_in_recents_when_not_default":
-                return !mPreferences.isRemoveTaskOnActivityFinishEnabled();
+                return mPreferences.isShowInRecentsWhenNotDefaultEnabled();
             case "app_launcher_apps_row_enabled":
                 return mPreferences.isAppLauncherAppsRowEnabled();
             case "app_launcher_display_app_names":
