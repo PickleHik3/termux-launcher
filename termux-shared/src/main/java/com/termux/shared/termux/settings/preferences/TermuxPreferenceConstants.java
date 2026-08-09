@@ -463,6 +463,15 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_KEY_ACTIVITY_FINISH_REMOVE_TASK = true;
 
         /**
+         * Defines the key for whether the launcher stays visible in the recents screen while it is
+         * not the default home app. Distinct from {@link #KEY_ACTIVITY_FINISH_REMOVE_TASK}: that
+         * one governs task removal on finish, this one governs recents visibility while running.
+         */
+        public static final String KEY_SHOW_IN_RECENTS_WHEN_NOT_DEFAULT = "show_in_recents_when_not_default";
+
+        public static final boolean DEFAULT_VALUE_KEY_SHOW_IN_RECENTS_WHEN_NOT_DEFAULT = true;
+
+        /**
          * Defines the key for whether to always keep screen on.
          */
         public static final String KEY_KEEP_SCREEN_ON = "screen_always_on";
