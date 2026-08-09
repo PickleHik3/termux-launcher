@@ -10710,6 +10710,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mTermuxSessionListViewController != null)
             mTermuxSessionListViewController.notifyDataSetChanged();
+        if (mTermuxService != null)
+            mTermuxService.setVisibleSessionCount(mDrawerSessions.size());
         refreshTerminalWindowBar();
         refreshSessionsPanel();
     }
