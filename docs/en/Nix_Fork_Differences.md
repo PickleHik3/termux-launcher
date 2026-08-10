@@ -17,6 +17,14 @@ bootstrap store paths, the login script, `/etc` defaults, and the
 at the fork so a fresh device never pulls upstream definitions with the
 wrong paths.
 
+> **Reusing an existing nix-on-droid flake?** A flake written for
+> upstream pins `github:nix-community/nix-on-droid` as its
+> `nix-on-droid` input. Used unchanged on this edition it rebuilds the
+> login chain for `com.termux.nix` and breaks the app on the next
+> session start. Repoint the input to
+> `github:PickleHik3/nix-on-droid/launcher-nix` before the first
+> `nix-on-droid switch`.
+
 ## Compatibility patches
 
 - **termios2 ioctl translation in proot**
