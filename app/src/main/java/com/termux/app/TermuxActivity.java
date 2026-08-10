@@ -306,6 +306,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mSurfaceTuningDockHeightDragStartScale;
     private boolean mDockTuningMode;
     private boolean mDockTuningRestoreExpandedStatus;
+    /** The status section expanded a collapsed pane for its preview, so closing gives it back. */
+    private boolean mSurfaceEditorExpandedStatusPane;
     private ViewTreeObserver.OnGlobalLayoutListener mDockTuningLayoutListener;
 
     /**
@@ -6916,8 +6918,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void showSurfaceTuningPanel(int checkedId) {
         // The status section tunes the expanded top pane: show the clock face while it is open so
         // the sliders preview against it, and give the space back when another section takes over.
-        if (mDockTuningMode)
-            setTopStatusBarCollapsed(checkedId != R.id.surface_tuning_section_status, true);
+        if (mDockTuningMode) {
+            boolean collapse = checkedId != R.id.surface_tuning_section_status;
+            mSurfaceEditorExpandedStatusPane = !collapse && mPreferences != null
+                && mPreferences.isTopPaneClockCollapsed();
+            setTopStatusBarCollapsed(collapse, true);
+        }
         View dock = findViewById(R.id.surface_tuning_dock_panel);
         View dockContinuation = findViewById(R.id.surface_tuning_dock_continuation_panel);
         View keyboard = findViewById(R.id.surface_tuning_keyboard_panel);
@@ -8085,10 +8091,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             controls.setVisibility(View.GONE);
         restoreExpandedStatusAfterSurfaceEditor();
         mDockTuningRestoreExpandedStatus = false;
+        mSurfaceEditorExpandedStatusPane = false;
     }
 
     private void restoreExpandedStatusAfterSurfaceEditor() {
         if (mPreferences == null)
+            return;
+        // Only the editor's own temporary change is undone here. onStop() also calls this, and
+        // without the guard an expanded pane was collapsed — and the collapse persisted — every
+        // time the user left the app, so the clock never came back.
+        if (!mDockTuningRestoreExpandedStatus && !mSurfaceEditorExpandedStatusPane)
             return;
         if (mDockTuningRestoreExpandedStatus && mPreferences.isTopPaneClockCollapsed()) {
             setTopStatusBarCollapsed(false, false);
