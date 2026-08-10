@@ -463,6 +463,15 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_KEY_ACTIVITY_FINISH_REMOVE_TASK = true;
 
         /**
+         * Defines the key for whether the launcher stays visible in the recents screen while it is
+         * not the default home app. Distinct from {@link #KEY_ACTIVITY_FINISH_REMOVE_TASK}: that
+         * one governs task removal on finish, this one governs recents visibility while running.
+         */
+        public static final String KEY_SHOW_IN_RECENTS_WHEN_NOT_DEFAULT = "show_in_recents_when_not_default";
+
+        public static final boolean DEFAULT_VALUE_KEY_SHOW_IN_RECENTS_WHEN_NOT_DEFAULT = true;
+
+        /**
          * Defines the key for whether to always keep screen on.
          */
         public static final String KEY_KEEP_SCREEN_ON = "screen_always_on";
@@ -670,6 +679,15 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_USE_SYSTEM_WALLPAPER = "use_system_wallpaper";
 
         public static final boolean DEFAULT_VALUE_USE_SYSTEM_WALLPAPER = true;
+
+        /**
+         * Defines the key for whether the wallpaper-read storage permission prompt has been shown.
+         * Asked at most once, and only after a wallpaper read actually failed.
+         */
+        public static final String KEY_WALLPAPER_READ_PERMISSION_PROMPTED =
+            "wallpaper_read_permission_prompted";
+
+        public static final boolean DEFAULT_VALUE_WALLPAPER_READ_PERMISSION_PROMPTED = false;
     }
 
     /**

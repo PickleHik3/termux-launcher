@@ -130,9 +130,9 @@
 \n%1$s.</string>
     <string name="termux_extrakeys_blur_enabled_off">Экстра клавиши с размытым фоном будут отключены. Добавляет прозрачный и размытый фон к дополнительным клавишам. (Может повлиять на производительность) (По умолчанию)</string>
     <string name="action_autofill_username">Автозаполнение имени пользователя</string>
-    <string name="termux_monet_background_enabled_off">Терминальный фон Monet будет отключен. Превращает фон терминала в моне (По умолчанию)</string>
-    <string name="termux_monet_background_enabled_title">Фон Моне (нестабильный)</string>
-    <string name="termux_monet_background_enabled_on">Будет включен фон Monet Background.</string>
+    <string name="termux_monet_background_enabled_off">Терминальный фон Material будет отключен. Превращает фон терминала в Material (По умолчанию)</string>
+    <string name="termux_monet_background_enabled_title">Фон Material (нестабильный)</string>
+    <string name="termux_monet_background_enabled_on">Будет включен фон Material.</string>
     <string name="termux_extrakeys_blur_enabled_title">Дополнительные клавиши Размытый фон</string>
     <string name="termux_extrakeys_blur_enabled_on">ExtraKeys Размытый фон будет включен.</string>
     <string name="termux_sessions_blur_enabled_title">Сессии Размытый фон</string>

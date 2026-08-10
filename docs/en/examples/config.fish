@@ -1,5 +1,11 @@
 set -g fish_greeting ""
 
+# Non-login shells (sshd, scripts) arrive without the profile on PATH — everything
+# below assumes coreutils. No-op where the profile does not exist (apt editions).
+if test -d "$HOME/.nix-profile/bin"; and not contains -- "$HOME/.nix-profile/bin" $PATH
+    fish_add_path --prepend "$HOME/.nix-profile/bin"
+end
+
 set -gx TMPDIR "$HOME/.tmp"
 mkdir -p "$TMPDIR"
 
@@ -7,6 +13,10 @@ set -q COLORTERM; or set -gx COLORTERM truecolor
 set -q EDITOR; or set -gx EDITOR nvim
 
 fish_add_path "$HOME/.local/bin" "$HOME/.termux/bin"
+
+# Nix edition: launcherctl/tai live in the proot /bin, which the generated
+# PATH does not include. Append (not prepend) so nix binaries keep priority.
+test -d /nix; and fish_add_path --append /bin
 
 # Load wallpaper-generated Material colors when available. The launcher writes
 # them to ~/.termux/material-colors.sh (and .properties as a fallback).
@@ -141,6 +151,11 @@ end
 #   test -r ~/.config/fish/secrets.fish; and source ~/.config/fish/secrets.fish
 
 if status is-interactive
+    # Nix edition: start the declarative sshd only when armed via `sshd-autostart on`.
+    if test -e ~/.config/sshd/autostart; and type -q sshd-start
+        sshd-start --quiet
+    end
+
     function fish_greeting
         command clear
         __move_cursor_to_bottom

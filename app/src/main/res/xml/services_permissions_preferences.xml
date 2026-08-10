@@ -19,6 +19,7 @@
     </PreferenceCategory>
     <PreferenceCategory app:title="@string/settings_permissions_header">
         <com.termux.app.fragments.settings.StatusActionPreference app:key="app_launcher_storage_access" app:icon="@drawable/ic_symbol_folder" app:title="@string/settings_files_media_title" />
+        <com.termux.app.fragments.settings.StatusActionPreference app:key="app_launcher_wallpaper_access" app:icon="@drawable/ic_symbol_wallpaper" app:title="@string/settings_wallpaper_access_title" />
         <com.termux.app.fragments.settings.StatusActionPreference app:key="app_launcher_notification_access" app:icon="@drawable/ic_symbol_notifications" app:title="@string/termux_app_launcher_notification_access_settings_title" />
         <com.termux.app.fragments.settings.StatusActionPreference app:key="app_launcher_accessibility_lock_access" app:icon="@drawable/ic_symbol_accessibility_new" app:title="@string/settings_accessibility_service_title" />
         <com.termux.app.fragments.settings.StatusActionPreference app:key="app_launcher_notification_settings" app:icon="@drawable/ic_symbol_notification_settings" app:title="@string/settings_app_notifications_title" />

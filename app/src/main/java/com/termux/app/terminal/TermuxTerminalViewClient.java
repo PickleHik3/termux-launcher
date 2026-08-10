@@ -388,6 +388,14 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      * <p>One intentional change: matching is now on key code rather than
      * {@code getUnicodeChar}, so the binds keep working on non-Latin layouts where
      * the legacy chain quietly did nothing.
+     *
+     * <p>Known limitation, deliberately not worked around: this needs a real key
+     * code and metaState, so it is reachable from the hardware route only. An IME
+     * that emits Ctrl combinations as raw control characters lands in
+     * {@link #onCodePoint} instead, where only the legacy session shortcuts match;
+     * Alt is not recoverable from text at all. Synthesizing key events from
+     * committed text would be guesswork, so the registry binds simply do not fire
+     * from such a keyboard.
      */
     private boolean handleRegistryKeybinds(KeyEvent e) {
         TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
@@ -635,6 +643,20 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     @Override
     public boolean onCodePoint(final int codePoint, boolean ctrlDown, TerminalSession session) {
+        TerminalKeyInspector inspector = TerminalKeyInspector.active();
+        if (inspector != null)
+            inspector.recordCodePoint(codePoint, ctrlDown);
+        // The twin of the palette hook in onKeyDown, and checked first for the same reason. A
+        // system IME commits ordinary characters through the input connection without ever sending
+        // a key event, so this is the only route by which typing reaches the overlay from one.
+        if (mActivity.handleCommandPaletteCodePoint(codePoint, ctrlDown))
+            return true;
+        // The AOSP keyboard and its descendants send ⏎ as text rather than as KEYCODE_ENTER — see
+        // TerminalView#sendTextToTerminal — so the key-code-only app-search hook needs this twin
+        // too. Only a consumed enter is claimed; an unconsumed one still reaches the shell.
+        if ((codePoint == '\r' || codePoint == '\n')
+            && mActivity.handleTerminalAppSearchKey(KeyEvent.KEYCODE_ENTER))
+            return true;
         if (mVirtualFnKeyDown) {
             int resultingKeyCode = -1;
             int resultingCodePoint = -1;

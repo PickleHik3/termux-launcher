@@ -168,7 +168,7 @@
     <string name="termux_terminal_view_activity_remove_on">Amint az összes terminál munkamenetet bezárta, &TERMUX_APP_NAME; bezáródik, és nem marad látható a legutóbbi alkalmazásoknál. (Default)</string>
     <string name="termux_background_image_enabled_title">Háttérkép megjelenítése</string>
     <string name="termux_background_image_enabled_off">A háttérkép le van tiltva. Az engedélyezéshez győződjön meg arról, hogy léteznek megfelelő álló és fekvő képek. Új hátteret a kontextusmenüből tud beállítani, amit a Terminálon való hosszú érintéssel tud előhozni. (Alapértelmezett)</string>
-    <string name="termux_monet_background_enabled_title">Monet Háttérkép (Instabil)</string>
-    <string name="termux_monet_background_enabled_off">A Terminal Monet Háttérkép funkció letiltja a terminál háttérképet, és monet stílusúvá teszi (alapértelmett).</string>
-    <string name="termux_monet_background_enabled_on">A Monet Háttérkép engedélyezve lesz</string>
+    <string name="termux_monet_background_enabled_title">Material Háttérkép (Instabil)</string>
+    <string name="termux_monet_background_enabled_off">A Terminal Material Háttérkép funkció letiltja a terminál háttérképet, és Material stílusúvá teszi (alapértelmett).</string>
+    <string name="termux_monet_background_enabled_on">A Material Háttérkép engedélyezve lesz</string>
 </resources>

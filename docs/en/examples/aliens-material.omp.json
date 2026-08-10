@@ -13,7 +13,7 @@
           ],
           "leading_diamond": "\ue0b6",
           "style": "diamond",
-          "template": "{{ if not .Executed }}󰚩{{ else if eq .Code 0 }}{{ if eq (mod .PromptCount 3) 0 }}󱚥{{ else if eq (mod .PromptCount 3) 1 }}󱚣{{ else }}󱜙{{ end }}{{ else if eq .Code 1 }}󱚟{{ else if eq .Code 2 }}󱚝{{ else if or (eq .Code 126) (eq .Code 127) }}󱚡{{ else if ge .Code 128 }}󱚡{{ else }}󱚝{{ end }} ",
+          "template": "{{ if le .PromptCount 1 }}󰚩{{ else if eq .Code 0 }}{{ if eq (mod .PromptCount 3) 0 }}󱚥{{ else if eq (mod .PromptCount 3) 1 }}󱚣{{ else }}󱜙{{ end }}{{ else if eq .Code 1 }}󱚟{{ else if eq .Code 2 }}󱚝{{ else if or (eq .Code 126) (eq .Code 127) }}󱚡{{ else if ge .Code 128 }}󱚡{{ else }}󱚝{{ end }} ",
           "trailing_diamond": "",
           "type": "session"
         },

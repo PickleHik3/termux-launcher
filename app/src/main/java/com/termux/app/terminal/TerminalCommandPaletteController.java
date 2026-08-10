@@ -167,6 +167,12 @@ public final class TerminalCommandPaletteController
     @NonNull private String mCaptureStroke = "";
     /** Tool already holding the captured stroke, shown as a warning rather than a refusal. */
     @Nullable private String mCaptureConflict;
+    /**
+     * Set when a system IME committed text while capturing. Committed text carries no key code and
+     * no modifier state, so there is nothing to capture from it; the notice row says so instead of
+     * leaving the user pressing keys at a surface that never answers.
+     */
+    private boolean mCaptureNeedsKeyEvent;
     private String mQuery = "";
     /** Caret position inside {@link #mQuery}, clamped to [0, length]. */
     private int mQueryCursor;
@@ -491,9 +497,7 @@ public final class TerminalCommandPaletteController
                 mRowEntries.add(null);
                 break;
             case CAPTURE:
-                rows.add(CommandPaletteView.Row.notice(mCaptureConflict == null
-                    ? mActivity.getString(R.string.palette_capture_notice, mCrumb)
-                    : mActivity.getString(R.string.palette_capture_conflict, mCaptureConflict)));
+                rows.add(CommandPaletteView.Row.notice(captureNotice()));
                 mRowEntries.add(null);
                 break;
             case CHOICES:
@@ -512,6 +516,16 @@ public final class TerminalCommandPaletteController
         mView.setQueryCursor(clampedQueryCursor());
         mHeight.target = targetHeight();
         kick();
+    }
+
+    /** The capture row's single line of guidance: the dead end first, then a conflict warning. */
+    @NonNull
+    private String captureNotice() {
+        if (mCaptureNeedsKeyEvent)
+            return mActivity.getString(R.string.palette_capture_needs_key_event);
+        return mCaptureConflict == null
+            ? mActivity.getString(R.string.palette_capture_notice, mCrumb)
+            : mActivity.getString(R.string.palette_capture_conflict, mCaptureConflict);
     }
 
     private void buildChoiceRows(@NonNull List<CommandPaletteView.Row> rows) {
@@ -746,6 +760,30 @@ public final class TerminalCommandPaletteController
         return true;
     }
 
+    /**
+     * Text committed by a system IME, claimed before the terminal writes it. The twin of
+     * {@link #handleHardwareKey}: a third-party keyboard sends the overlay no key events at all, so
+     * without this the palette opens on a modifier chord and then ignores everything typed into it.
+     *
+     * <p>The decision itself is in {@link CommandPaletteSoftKeyDecision}; only routing is here.
+     */
+    public boolean handleSoftKeyboardCodePoint(int codePoint, boolean ctrlDown) {
+        CommandPaletteSoftKeyDecision.Action action = CommandPaletteSoftKeyDecision.decide(
+            mOpen, mMode == Mode.CAPTURE, codePoint, ctrlDown);
+        switch (action) {
+            case IGNORE: return false;
+            case APPEND: appendText(new String(Character.toChars(codePoint))); return true;
+            case COMMIT: commit(); return true;
+            case BACKSPACE: backspace(); return true;
+            case COLLAPSE: collapse(); return true;
+            case SWALLOW:
+            default:
+                // Capture is the one mode where swallowing silently would read as a broken palette.
+                if (mMode == Mode.CAPTURE) noteCaptureNeedsKeyEvent();
+                return true;
+        }
+    }
+
     private boolean handleKeyCode(int keyCode) {
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_UP: moveFocus(-1); return true;
@@ -845,6 +883,7 @@ public final class TerminalCommandPaletteController
         mQueryCursor = 0;
         mCaptureStroke = "";
         mCaptureConflict = null;
+        mCaptureNeedsKeyEvent = false;
         mFocus = -1;
         applyCaptureRow();
         rebuildRows();
@@ -936,7 +975,18 @@ public final class TerminalCommandPaletteController
     private void clearCapture() {
         mCaptureStroke = "";
         mCaptureConflict = null;
+        mCaptureNeedsKeyEvent = false;
         applyCaptureRow();
+        rebuildRows();
+    }
+
+    /**
+     * Committed IME text reached a capture. Recorded on the notice row rather than as a toast: the
+     * user is holding a keyboard that will repeat this on every keystroke, and the row says it once.
+     */
+    private void noteCaptureNeedsKeyEvent() {
+        if (mCaptureNeedsKeyEvent) return;
+        mCaptureNeedsKeyEvent = true;
         rebuildRows();
     }
 
@@ -945,6 +995,7 @@ public final class TerminalCommandPaletteController
         if (stroke == null || stroke.isEmpty()) return;
         mCaptureStroke = stroke;
         mCaptureConflict = conflictFor(stroke);
+        mCaptureNeedsKeyEvent = false;
         applyCaptureRow();
         rebuildRows();
         playTick();

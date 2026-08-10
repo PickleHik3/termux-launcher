@@ -121,6 +121,9 @@
     <string name="settings_termux_api_install_summary">Not installed · Open the install page.</string>
     <string name="settings_permissions_header">Permissions</string>
     <string name="settings_files_media_title">Files and media</string>
+    <string name="settings_wallpaper_access_title">Wallpaper access</string>
+    <string name="settings_wallpaper_access_allowed_summary">The glass bars can read your wallpaper to blur it.</string>
+    <string name="settings_wallpaper_access_fix_summary">Glass bars render flat · Tap to allow reading the wallpaper.</string>
     <string name="settings_accessibility_service_title">Accessibility service</string>
     <string name="settings_app_notifications_title">App notifications</string>
     <string name="settings_other_permissions_title">Other app permissions</string>
@@ -299,6 +302,10 @@
     <string name="wallpaper_target_home_screen">Home Screen</string>
     <string name="wallpaper_target_lock_screen">Lock Screen</string>
     <string name="wallpaper_target_home_and_lock_screen">Home &amp; Lock Screen</string>
+    <string name="title_wallpaper_read_permission">Blur needs the wallpaper</string>
+    <string name="msg_wallpaper_read_permission">The glass status bar, dock and keyboard blur a crop of your wallpaper, and this device won\'t hand it over without storage access. Allow it to turn the blur on. Setting a wallpaper from within the launcher works without this permission.</string>
+    <string name="action_wallpaper_read_permission_allow">Allow</string>
+    <string name="action_wallpaper_read_permission_dismiss">Not now</string>
     <string name="action_open_settings">Settings</string>
     <string name="action_glass_lab">Edit surfaces</string>
     <string name="msg_generating_report">Generating Report</string>
@@ -1194,6 +1201,7 @@
     <string name="palette_capture_placeholder">waiting for a key</string>
     <string name="palette_capture_conflict">Already bound to %1$s · saving replaces it</string>
     <string name="palette_capture_needs_modifier">Add Ctrl, Alt or Shift — a bare key would swallow typing</string>
+    <string name="palette_capture_needs_key_event">This keyboard sends text, not keys — capture with the in-app or a hardware keyboard</string>
     <string name="palette_capture_saved">%1$s bound to %2$s</string>
     <string name="palette_capture_failed">Could not save the binding: %1$s</string>
     <string name="palette_meta_awaiting_key">press key</string>

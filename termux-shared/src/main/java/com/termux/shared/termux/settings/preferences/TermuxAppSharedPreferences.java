@@ -860,6 +860,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_ACTIVITY_FINISH_REMOVE_TASK, value, false);
     }
 
+    public boolean isShowInRecentsWhenNotDefaultEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_SHOW_IN_RECENTS_WHEN_NOT_DEFAULT, TERMUX_APP.DEFAULT_VALUE_KEY_SHOW_IN_RECENTS_WHEN_NOT_DEFAULT);
+    }
+
+    public void setShowInRecentsWhenNotDefaultEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_SHOW_IN_RECENTS_WHEN_NOT_DEFAULT, value, false);
+    }
+
     public boolean shouldKeepScreenOn() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_KEEP_SCREEN_ON, TERMUX_APP.DEFAULT_VALUE_KEEP_SCREEN_ON);
     }
@@ -1072,6 +1080,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setUseSystemWallpaperEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_USE_SYSTEM_WALLPAPER, value, false);
+    }
+
+    public boolean isWallpaperReadPermissionPrompted() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_READ_PERMISSION_PROMPTED, TERMUX_APP.DEFAULT_VALUE_WALLPAPER_READ_PERMISSION_PROMPTED);
+    }
+
+    public void setWallpaperReadPermissionPrompted(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_READ_PERMISSION_PROMPTED, value, false);
     }
 
     public int getTerminalBackgroundOpacity() {
