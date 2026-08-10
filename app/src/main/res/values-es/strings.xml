@@ -179,9 +179,9 @@
     <string name="termux_gui_preferences_summary">Preferencias para &TERMUX_GUI_APP_NAME; aplicación</string>
     <string name="termux_gui_preferences_title">&TERMUX_GUI_APP_NAME;</string>
     <string name="termux_sessions_blur_enabled_off">El fondo desenfocado del menú de ventanas está deshabilitado. Añade un fondo transparente y desenfocado al Menú de sesiones. (Puede afectar el rendimiento) (Defecto)</string>
-    <string name="termux_monet_background_enabled_title">Fondo estilo Monet (no estable)</string>
-    <string name="termux_monet_background_enabled_on">El fondo estilo Monet será habilitado.</string>
-    <string name="termux_monet_background_enabled_off">El fondo de la terminal estilo Monet está deshabilitado. Convierte el estilo del fondo de la terminal en Monet. (Defecto)</string>
+    <string name="termux_monet_background_enabled_title">Fondo estilo Material (no estable)</string>
+    <string name="termux_monet_background_enabled_on">El fondo estilo Material será habilitado.</string>
+    <string name="termux_monet_background_enabled_off">El fondo de la terminal estilo Material está deshabilitado. Convierte el estilo del fondo de la terminal en Material. (Defecto)</string>
     <string name="termux_extrakeys_blur_enabled_title">Fondo desenfocado de las teclas adicionales</string>
     <string name="termux_extrakeys_blur_enabled_off">El fondo desenfocado de las teclas adicionales está deshabilitado. Añade un fondo transparente y desenfocado a las teclas extra. (Puede afectar el rendimiento) (Defecto)</string>
     <string name="termux_extrakeys_blur_enabled_on">El fondo desenfocado de las teclas adicionales será habilitado.</string>

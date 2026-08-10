@@ -53,7 +53,7 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
     private static final String NOTIFICATION_LISTENER_SETTINGS_ACTION =
         "android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS";
     private static final String NOTIFICATION_LISTENER_HINT =
-        "Enable notification access for Termux:Monet to populate notifications and media endpoints.";
+        "Enable notification access for Termux Launcher to populate notifications and media endpoints.";
     private static final ConcurrentHashMap<String, JSONObject> NOTIFICATIONS = new ConcurrentHashMap<>();
     private static final int MAX_ART_BYTES = 512 * 1024;
 

@@ -306,6 +306,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mSurfaceTuningDockHeightDragStartScale;
     private boolean mDockTuningMode;
     private boolean mDockTuningRestoreExpandedStatus;
+    /** The status section expanded a collapsed pane for its preview, so closing gives it back. */
+    private boolean mSurfaceEditorExpandedStatusPane;
     private ViewTreeObserver.OnGlobalLayoutListener mDockTuningLayoutListener;
 
     /**
@@ -1377,12 +1379,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int resolveAccessoryGlassBaseColor() {
         if (isNightThemeActive()) {
-            return resolveMonetDarkBackgroundColor();
+            return resolveMaterialDarkBackgroundColor();
         }
         return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh, R.color.termux_surface_panel_high);
     }
 
-    private int resolveMonetDarkBackgroundColor() {
+    private int resolveMaterialDarkBackgroundColor() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             int colorResId = getResources().getIdentifier("system_neutral1_900", "color", "android");
             if (colorResId != 0) {
@@ -1396,7 +1398,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOutlineVariant, R.color.termux_outline_variant);
     }
 
-    /** Wallpaper-derived accent (Monet primary) used across the dock's reactive glass treatment. */
+    /** Wallpaper-derived accent (Material You primary) used across the dock's reactive glass treatment. */
     private int resolveDockAccentColor() {
         return MaterialColors.getColor(this, com.google.android.material.R.attr.colorPrimary,
             ContextCompat.getColor(this, R.color.termux_primary));
@@ -5523,15 +5525,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Set<Character> letters = new LinkedHashSet<>(mSuggestionBarView.getAvailableAzLetters());
         mAzScrubRowView.setVisibleLetters(letters);
         int base = resolveAzGestureAccentColor();
-        int muted = mutedMonetShade(base);
+        int muted = mutedMaterialShade(base);
         if (mAzScrubRowView.getCurrentTextColor() != muted) {
             mAzScrubRowView.setTextColor(muted);
         }
         mAzScrubRowView.setInteractionAccentColor(base);
         mAzScrubRowView.setInteractionMode(AzScrubRowView.InteractionMode.WAVE_TRACK);
         mAzScrubRowView.setLockedInlineLetter(null);
-        int orbColor = brightMonetShade(base);
-        int edgeColor = edgeMonetVariant(base);
+        int orbColor = brightMaterialShade(base);
+        int edgeColor = edgeMaterialVariant(base);
         if (mLauncherAzGestureFxUnderlayView != null) {
             mLauncherAzGestureFxUnderlayView.setColors(orbColor, edgeColor);
             mLauncherAzGestureFxUnderlayView.setDarkThemeActive(isNightThemeActive());
@@ -6202,7 +6204,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ContextCompat.getColor(this, R.color.termux_primary));
     }
 
-    private int mutedMonetShade(int color) {
+    private int mutedMaterialShade(int color) {
         float[] hsv = new float[3];
         Color.colorToHSV(color, hsv);
         hsv[1] = Math.max(0f, Math.min(1f, hsv[1] * 0.92f));
@@ -6210,7 +6212,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return Color.HSVToColor(0xF4, hsv);
     }
 
-    private int brightMonetShade(int color) {
+    private int brightMaterialShade(int color) {
         float[] hsv = new float[3];
         Color.colorToHSV(color, hsv);
         hsv[1] = Math.max(0f, Math.min(1f, hsv[1] * 1.28f));
@@ -6218,7 +6220,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return Color.HSVToColor(0xF6, hsv);
     }
 
-    private int edgeMonetVariant(int color) {
+    private int edgeMaterialVariant(int color) {
         float[] hsv = new float[3];
         Color.colorToHSV(color, hsv);
         hsv[0] = (hsv[0] + 24f) % 360f;
@@ -6916,8 +6918,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void showSurfaceTuningPanel(int checkedId) {
         // The status section tunes the expanded top pane: show the clock face while it is open so
         // the sliders preview against it, and give the space back when another section takes over.
-        if (mDockTuningMode)
-            setTopStatusBarCollapsed(checkedId != R.id.surface_tuning_section_status, true);
+        if (mDockTuningMode) {
+            boolean collapse = checkedId != R.id.surface_tuning_section_status;
+            mSurfaceEditorExpandedStatusPane = !collapse && mPreferences != null
+                && mPreferences.isTopPaneClockCollapsed();
+            setTopStatusBarCollapsed(collapse, true);
+        }
         View dock = findViewById(R.id.surface_tuning_dock_panel);
         View dockContinuation = findViewById(R.id.surface_tuning_dock_continuation_panel);
         View keyboard = findViewById(R.id.surface_tuning_keyboard_panel);
@@ -8085,10 +8091,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             controls.setVisibility(View.GONE);
         restoreExpandedStatusAfterSurfaceEditor();
         mDockTuningRestoreExpandedStatus = false;
+        mSurfaceEditorExpandedStatusPane = false;
     }
 
     private void restoreExpandedStatusAfterSurfaceEditor() {
         if (mPreferences == null)
+            return;
+        // Only the editor's own temporary change is undone here. onStop() also calls this, and
+        // without the guard an expanded pane was collapsed — and the collapse persisted — every
+        // time the user left the app, so the clock never came back.
+        if (!mDockTuningRestoreExpandedStatus && !mSurfaceEditorExpandedStatusPane)
             return;
         if (mDockTuningRestoreExpandedStatus && mPreferences.isTopPaneClockCollapsed()) {
             setTopStatusBarCollapsed(false, false);
@@ -9596,6 +9608,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * Routes in-app keyboard values to the palette while it is open. The palette owns the
      * interceptor slot on the keyboard's own handler, so nothing forks the key pipeline.
+     *
+     * <p>This is only one of three ways typing reaches a focusless overlay, and any new one must
+     * wire all three or it will look dead on somebody's keyboard:
+     *
+     * <ul>
+     *   <li>hardware and external keyboards, as key events through
+     *       {@link #handleCommandPaletteKey};
+     *   <li>the in-app keyboard, as resolved key values through this interceptor;
+     *   <li>system IMEs, as committed text through {@link #handleCommandPaletteCodePoint} — those
+     *       send no key events at all for ordinary characters.
+     * </ul>
      */
     public void setCommandPaletteInterceptorActive(boolean active) {
         if (mInAppKeyboard == null)
@@ -9611,6 +9634,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Hardware and external-keyboard strokes claimed by the open palette. */
     public boolean handleCommandPaletteKey(int keyCode, @NonNull KeyEvent event) {
         return mCommandPalette != null && mCommandPalette.handleHardwareKey(keyCode, event);
+    }
+
+    /**
+     * Text committed by a system IME, claimed by the open palette. Third-party keyboards commit
+     * characters through the input connection instead of sending key events, so without this they
+     * would type straight into the shell behind the overlay.
+     */
+    public boolean handleCommandPaletteCodePoint(int codePoint, boolean ctrlDown) {
+        return mCommandPalette != null
+            && mCommandPalette.handleSoftKeyboardCodePoint(codePoint, ctrlDown);
     }
 
     @SuppressLint("RtlHardcoded")

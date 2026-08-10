@@ -519,7 +519,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         Properties properties = loadTermuxProperties();
         String currentValue = properties.getProperty(TermuxPropertyConstants.KEY_BACKGROUND_OVERLAY_COLOR);
         int baseColor = baseColorOverride != null ? baseColorOverride : TermuxSharedProperties.getBackgroundOverlayInternalPropertyValueFromValue(currentValue);
-        baseColor = getMonetSurfaceColor(baseColor);
+        baseColor = getMaterialSurfaceColor(baseColor);
         int newColor = (baseColor & 0x00FFFFFF) | (alpha << 24);
         writeTermuxPropertyToProperties(TermuxPropertyConstants.KEY_BACKGROUND_OVERLAY_COLOR,
             String.format("#%08X", newColor));
@@ -573,14 +573,14 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
     }
 
     @ColorInt
-    private int getMonetSurfaceColor(@ColorInt int fallbackColor) {
+    private int getMaterialSurfaceColor(@ColorInt int fallbackColor) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 return ThemeUtils.getSystemAttrColor(mContext, com.termux.shared.R.attr.termuxColorSurfaceBase, fallbackColor);
             }
             return ThemeUtils.getSystemAttrColor(mContext, com.termux.shared.R.attr.termuxColorSurfaceBase, fallbackColor);
         } catch (Exception e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to resolve Monet surface color", e);
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to resolve Material surface color", e);
             return fallbackColor;
         }
     }
