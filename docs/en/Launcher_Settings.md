@@ -82,7 +82,8 @@ Keyboard height is remembered separately for portrait and landscape.
 This page reports real availability and offers the appropriate fix or manage action:
 
 - **TAI · Termux AI:** local AI service, model catalog, runtime, endpoint, and token settings.
-- **Shizuku:** optional privileged backend connection.
+- **Shizuku:** optional privileged backend connection. See the [Shizuku guide](Shizuku.md) for
+  setup, feature fallbacks, and troubleshooting.
 - **Termux:API:** configuration appears when the matching add-on is installed.
 - **Files and media**, **Notification access**, **Accessibility service**, **App notifications**, and
   **Other app permissions**.

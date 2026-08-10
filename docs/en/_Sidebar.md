@@ -5,6 +5,7 @@
 - [Getting started](Launcher_Getting_Started.md)
 - [Using the launcher](Launcher_Usage.md)
 - [Settings map](Launcher_Settings.md)
+- [Shizuku](Shizuku.md)
 - [Troubleshooting](Launcher_Troubleshooting.md)
 
 ## Terminal
