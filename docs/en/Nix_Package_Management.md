@@ -133,8 +133,25 @@ home.file.".local/bin/xdg-open" = {
 home.sessionPath = [ "$HOME/.local/bin" ];
 ```
 
+One more, in `~/.config/nvim/lua/config/lazy.lua` — that file is yours, not
+the template's, so an existing install needs it by hand:
+
+```lua
+require("lazy").setup({
+  rocks = { enabled = false },
+  -- ...
+})
+```
+
+lazy.nvim's own health check says "no plugins require `luarocks`, so you can
+ignore any warnings below" and then reports an error anyway, because with
+rocks on it still wants to build hererocks on the phone. Turning them off
+removes both.
+
 Clipboard integration has no fix here: no clipboard tool exists inside the
-proot, so neovim's `"+` and `"*` registers stay unavailable.
+proot, so neovim's `"+` and `"*` registers stay unavailable. `trash`, `gs`,
+`tectonic` and `mmdc` are likewise absent — snacks.image degrades to the
+formats it can render itself, and deletions are permanent.
 
 ### Animated fastfetch logo
 
