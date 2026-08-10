@@ -494,10 +494,14 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private void applyAppIconColorFilter(@NonNull ImageView imageView) {
-        if (appIconColorFilter == null)
-            imageView.clearColorFilter();
-        else
+        if (appIconColorFilter != null) {
             imageView.setColorFilter(appIconColorFilter);
+            return;
+        }
+        imageView.clearColorFilter();
+        Drawable iconDrawable = imageView.getDrawable();
+        if (iconDrawable != null) iconDrawable.clearColorFilter();
+        imageView.invalidate();
     }
 
     private void invalidateRenderedIconCaches() {

@@ -1,1 +1,1 @@
-A fork of Termux-App with monet implementation and other features
+A fork of Termux-App with Material You theming and other features

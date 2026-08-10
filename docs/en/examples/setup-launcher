@@ -3,9 +3,11 @@
 #
 # Installs the current, secret-free templates derived from the live
 # development setup: fish + Oh My Posh with wallpaper Material colors,
-# zoxide/eza/fzf, the launcher terminal configs in ~/.termux, and (optionally)
-# the Maple Mono font family the terminal's ligature support was tuned
-# against.
+# zoxide/eza, and the launcher terminal configs in ~/.termux.
+#
+# Fonts are no longer handled here: the in-app font picker (Settings >
+# Terminal > Font) downloads and wires up curated families, Nerd Font
+# builds included.
 #
 # tmux, btop, and Shizuku are no longer part of this setup. The old installer
 # that handled them is kept as docs/en/examples/setup-tmux-btop for existing
@@ -18,12 +20,10 @@
 set -eu
 
 RAW_BASE="${TERMUX_LAUNCHER_RAW_BASE:-https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples}"
-MAPLE_BASE="${MAPLE_FONT_BASE:-https://github.com/subframe7536/maple-font/releases/latest/download}"
 
 FISH_CONFIG="${FISH_CONFIG:-$HOME/.config/fish/config.fish}"
 OMP_DIR="${OMP_DIR:-$HOME/.config/ohmyposh}"
 TERMUX_DIR="$HOME/.termux"
-FONTS_DIR="$TERMUX_DIR/fonts"
 
 log() { printf '%s\n' "$*"; }
 warn() { printf 'setup-launcher: %s\n' "$*" >&2; }
@@ -86,11 +86,11 @@ install_packages() {
     log "== Packages =="
     # Everything the shipped configs actually use, and nothing else:
     #   fish + oh-my-posh   the shell and prompt
-    #   zoxide, eza, fzf    cd/ls/history upgrades wired into config.fish
+    #   zoxide, eza         cd/ls upgrades wired into config.fish
     #   yazi                the `y` file-manager helper
     #   neovim              default $EDITOR in the config
-    #   git, curl, unzip    used by this script and the prompt's git segment
-    packages="fish oh-my-posh zoxide eza fzf yazi neovim git curl unzip"
+    #   git, curl           used by this script and the prompt's git segment
+    packages="fish oh-my-posh zoxide eza yazi neovim git curl"
 
     if command -v pacman >/dev/null 2>&1; then
         log "Using pacman."
@@ -151,60 +151,6 @@ install_terminal_configs() {
 }
 
 # ----------------------------------------------------------------------------
-# Maple Mono fonts
-# ----------------------------------------------------------------------------
-
-install_maple_fonts() {
-    log ""
-    log "== Maple Mono fonts =="
-    log "Downloads the variable text faces plus the static Nerd Font build"
-    log "from $MAPLE_BASE"
-    log "and wires them up through ~/.termux/fonts.conf, enabling the"
-    log "terminal's programming ligatures (->, =>, !=, ...) and NF icons."
-
-    require_cmd unzip
-    mkdir -p "$FONTS_DIR"
-    workdir=$(mktemp -d "${TMPDIR:-$HOME/.tmp}/maple-font.XXXXXX")
-    trap 'rm -rf "$workdir"' EXIT
-
-    log "Downloading MapleMono-Variable.zip ..."
-    curl -fsSL -o "$workdir/variable.zip" "$MAPLE_BASE/MapleMono-Variable.zip" \
-        || fail "font download failed"
-    log "Downloading MapleMono-NF.zip ..."
-    curl -fsSL -o "$workdir/nf.zip" "$MAPLE_BASE/MapleMono-NF.zip" \
-        || fail "font download failed"
-
-    unzip -o -q "$workdir/variable.zip" -d "$workdir/variable"
-    unzip -o -q "$workdir/nf.zip" -d "$workdir/nf"
-
-    for font in 'MapleMono[wght].ttf' 'MapleMono-Italic[wght].ttf'; do
-        [ -f "$workdir/variable/$font" ] || fail "missing $font in MapleMono-Variable.zip"
-        cp "$workdir/variable/$font" "$FONTS_DIR/$font"
-    done
-    for font in MapleMono-NF-Regular.ttf MapleMono-NF-Bold.ttf \
-                MapleMono-NF-Italic.ttf MapleMono-NF-BoldItalic.ttf; do
-        [ -f "$workdir/nf/$font" ] || fail "missing $font in MapleMono-NF.zip"
-        cp "$workdir/nf/$font" "$FONTS_DIR/$font"
-    done
-    log "  fonts placed in $FONTS_DIR"
-
-    # Legacy single-font path, used when fonts.conf is absent and by plain
-    # Termux: the static NF regular/italic pair.
-    backup_existing "$TERMUX_DIR/font.ttf"
-    cp "$FONTS_DIR/MapleMono-NF-Regular.ttf" "$TERMUX_DIR/font.ttf"
-    backup_existing "$TERMUX_DIR/font-italic.ttf"
-    cp "$FONTS_DIR/MapleMono-NF-Italic.ttf" "$TERMUX_DIR/font-italic.ttf"
-
-    fetch fonts.conf "$TERMUX_DIR/fonts.conf"
-
-    if command -v termux-reload-settings >/dev/null 2>&1; then
-        termux-reload-settings || true
-    fi
-    log "Maple Mono active. Weight, ligature policy, and alternate glyphs are"
-    log "all tunable in ~/.termux/fonts.conf (documented inline)."
-}
-
-# ----------------------------------------------------------------------------
 # Menu
 # ----------------------------------------------------------------------------
 
@@ -216,8 +162,10 @@ Termux Launcher setup
   1) Everything below
   2) Packages + fish/Oh My Posh shell configs
   3) Terminal configs (~/.termux: properties, keyboard layout)
-  4) Maple Mono fonts (ligatures + Nerd Font icons)
   q) Quit
+
+Fonts (ligatures + Nerd Font icons) are installed from the in-app font
+picker: Settings > Terminal > Font.
 
 Every existing config gets a timestamped .bak before being replaced.
 EOF
@@ -235,7 +183,6 @@ main() {
             install_packages
             install_shell_configs
             install_terminal_configs
-            install_maple_fonts
             ;;
         2)
             install_packages
@@ -243,9 +190,6 @@ main() {
             ;;
         3)
             install_terminal_configs
-            ;;
-        4)
-            install_maple_fonts
             ;;
         q|Q)
             exit 0

@@ -41,6 +41,12 @@ access; skip it if command-line tools do not need your shared files.
 - [Kitty protocols and terminal compatibility](Terminal_Kitty_Protocols.md)
 - [Install showcase tools](Building_Terminal_Showcase_Tools.md)
 
+## Nix edition
+
+- [Nix beginner's guide](Nix_Getting_Started.md) — start here if `nix` is new to you
+- [Nix package management](Nix_Package_Management.md)
+- [Nix fork differences](Nix_Fork_Differences.md)
+
 ## Optional local AI
 
 - [TAI / Termux AI user guide](Termux_AI.md)

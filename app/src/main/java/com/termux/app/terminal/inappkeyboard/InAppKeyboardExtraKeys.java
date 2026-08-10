@@ -82,25 +82,19 @@ public final class InAppKeyboardExtraKeys {
     }
 
     /**
-     * Whether a key is enabled when the user never chose a selection. Covers every {@code loc}
-     * key of the bundled QWERTY layout and bottom row that was previously rendered
-     * unconditionally, plus upstream's terminal-relevant defaults.
+     * Whether a key is enabled when the user never chose a selection. A terminal-first
+     * selection: the navigation keys the terminal's extra-keys bar already covers stay off,
+     * while the clipboard editing keys are on out of the box.
      */
     public static boolean defaultEnabled(String name) {
         switch (name) {
             case "tab":
             case "esc":
             case "capslock":
-            case "compose":
-            case "home":
-            case "end":
-            case "page_up":
-            case "page_down":
-            case "switch_greekmath":
-            case "meta":
+            case "copy":
+            case "paste":
+            case "cut":
             case "alt":
-            case "f11_placeholder":
-            case "f12_placeholder":
                 return true;
             default:
                 return false;

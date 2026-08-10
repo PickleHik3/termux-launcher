@@ -186,8 +186,10 @@ public final class SystemStatsController {
                 });
             });
         } else {
-            readDirectFallback();
-            mLatest.stale = false;
+            // Hardened builds deny the app's own /proc/stat read, so the fallback can fail
+            // while ActivityManager memory keeps updating — mark that honestly instead of
+            // presenting a frozen CPU reading and an old process list as fresh.
+            mLatest.stale = !readDirectFallback();
             publish();
         }
     }
@@ -517,7 +519,8 @@ public final class SystemStatsController {
         }
     }
 
-    private void readDirectFallback() {
+    /** @return true when the CPU read actually produced data; hardened builds EACCES it. */
+    private boolean readDirectFallback() {
         parseMeminfo(readFileLines("/proc/meminfo"));
         List<String> load = readFileLines("/proc/loadavg");
         if (!load.isEmpty()) parseLoad(load.get(0));
@@ -526,6 +529,7 @@ public final class SystemStatsController {
             if (l.startsWith("cpu")) stat.add(l);
         }
         parseCpu(stat);
+        return !stat.isEmpty();
     }
 
     @NonNull

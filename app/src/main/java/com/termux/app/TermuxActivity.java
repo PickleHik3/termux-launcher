@@ -276,6 +276,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mStatusBarTerminalResizeGeneration;
     private static final int REQUEST_CODE_WEATHER_LOCATION = 4711;
     private static final int REQUEST_CODE_VOICE_TYPING = 4712;
+    private static final int REQUEST_CODE_WALLPAPER_READ_PERMISSION = 4713;
     @Nullable private TerminalSession mVoiceTypingTargetSession;
     /** Drawer-visible sessions = service sessions minus secondary panes. Backs the list adapter. */
     public final java.util.List<com.termux.shared.termux.shell.command.runner.terminal.TermuxSession> mDrawerSessions = new java.util.ArrayList<>();
@@ -305,6 +306,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mSurfaceTuningDockHeightDragStartScale;
     private boolean mDockTuningMode;
     private boolean mDockTuningRestoreExpandedStatus;
+    /** The status section expanded a collapsed pane for its preview, so closing gives it back. */
+    private boolean mSurfaceEditorExpandedStatusPane;
     private ViewTreeObserver.OnGlobalLayoutListener mDockTuningLayoutListener;
 
     /**
@@ -632,6 +635,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Keeps the under-pill glass covering stale close geometry until dock-only layout settles. */
     private boolean mPendingInAppKeyboardCloseGeometry;
     private boolean mAccessoryBackdropDirty = true;
+    /** Set when {@link WallpaperManager#getDrawable()} threw for want of the storage permission. */
+    private boolean mWallpaperReadPermissionDenied;
+    private boolean mWallpaperReadPermissionPromptShowing;
     private int mLastAccessoryBackdropBlurRadiusDp = -1;
     private boolean mLastAccessoryBackdropManagedSource;
     @NonNull private final Rect mLastAccessoryBackdropTargetRect = new Rect();
@@ -1373,12 +1379,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int resolveAccessoryGlassBaseColor() {
         if (isNightThemeActive()) {
-            return resolveMonetDarkBackgroundColor();
+            return resolveMaterialDarkBackgroundColor();
         }
         return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh, R.color.termux_surface_panel_high);
     }
 
-    private int resolveMonetDarkBackgroundColor() {
+    private int resolveMaterialDarkBackgroundColor() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             int colorResId = getResources().getIdentifier("system_neutral1_900", "color", "android");
             if (colorResId != 0) {
@@ -1392,7 +1398,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOutlineVariant, R.color.termux_outline_variant);
     }
 
-    /** Wallpaper-derived accent (Monet primary) used across the dock's reactive glass treatment. */
+    /** Wallpaper-derived accent (Material You primary) used across the dock's reactive glass treatment. */
     private int resolveDockAccentColor() {
         return MaterialColors.getColor(this, com.google.android.material.R.attr.colorPrimary,
             ContextCompat.getColor(this, R.color.termux_primary));
@@ -3666,6 +3672,72 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return "nothing".equalsIgnoreCase(Build.MANUFACTURER) ? 1.10f : 1f;
     }
 
+    /**
+     * The glass bands blur a crop of the system wallpaper read through {@link WallpaperManager}.
+     * Where the platform still gates that read behind the legacy storage permission, an install
+     * that never ran {@code termux-setup-storage} and never set its wallpaper through the in-app
+     * picker (which keeps a managed copy and needs no permission) gets a {@link SecurityException}
+     * instead, and every band renders flat with nothing but a log line to say why. Ask at the
+     * point the read actually fails rather than up front, so devices that can read the wallpaper
+     * are never prompted at all.
+     */
+    private void onSystemWallpaperReadDenied() {
+        if (mWallpaperReadPermissionDenied) {
+            return;
+        }
+        mWallpaperReadPermissionDenied = true;
+        // Called from inside a render pass; do not put up a dialog mid-draw.
+        View root = findViewById(R.id.activity_termux_root_view);
+        if (root != null) {
+            root.post(this::maybeRequestWallpaperReadPermission);
+        }
+    }
+
+    /**
+     * The prompt is worth showing only when the wallpaper read has already failed, the bands are
+     * actually sourcing the wallpaper, the permission is the thing standing in the way, and the
+     * user has not been asked before.
+     */
+    static boolean shouldPromptForWallpaperRead(boolean readDenied, boolean wallpaperPassthrough,
+                                                boolean permissionGranted, boolean alreadyPrompted) {
+        return readDenied && wallpaperPassthrough && !permissionGranted && !alreadyPrompted;
+    }
+
+    private void maybeRequestWallpaperReadPermission() {
+        if (!mIsVisible || mPreferences == null || isFinishing() || isDestroyed()) {
+            return;
+        }
+        boolean permissionGranted = androidx.core.content.ContextCompat.checkSelfPermission(this,
+            android.Manifest.permission.READ_EXTERNAL_STORAGE)
+            == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        if (permissionGranted) {
+            // Already granted and the read still failed: the refusal is not about this permission,
+            // so a prompt would only nag.
+            mWallpaperReadPermissionDenied = false;
+            return;
+        }
+        if (mWallpaperReadPermissionPromptShowing
+            || !shouldPromptForWallpaperRead(mWallpaperReadPermissionDenied,
+                shouldUseWallpaperPassthroughMode(), false,
+                mPreferences.isWallpaperReadPermissionPrompted())) {
+            return;
+        }
+        mWallpaperReadPermissionPromptShowing = true;
+        new MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.title_wallpaper_read_permission)
+            .setMessage(R.string.msg_wallpaper_read_permission)
+            .setPositiveButton(R.string.action_wallpaper_read_permission_allow, (dialog, which) -> {
+                mPreferences.setWallpaperReadPermissionPrompted(true);
+                androidx.core.app.ActivityCompat.requestPermissions(this,
+                    new String[] {android.Manifest.permission.READ_EXTERNAL_STORAGE},
+                    REQUEST_CODE_WALLPAPER_READ_PERMISSION);
+            })
+            .setNegativeButton(R.string.action_wallpaper_read_permission_dismiss, (dialog, which) ->
+                mPreferences.setWallpaperReadPermissionPrompted(true))
+            .setOnDismissListener(dialog -> mWallpaperReadPermissionPromptShowing = false)
+            .show();
+    }
+
     @Nullable
     private Bitmap createWallpaperBackdropBitmapForRect(@NonNull Rect targetRect, @NonNull View wallpaperFrame) {
         if (shouldUseManagedWallpaperBlurSource()) {
@@ -3681,8 +3753,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             wallpaper = wallpaperManager.getDrawable();
         } catch (SecurityException e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Cannot read system wallpaper for accessory backdrop", e);
+            onSystemWallpaperReadDenied();
             return null;
         }
+        mWallpaperReadPermissionDenied = false;
         if (wallpaper == null) {
             return null;
         }
@@ -5209,7 +5283,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private boolean shouldShowInRecents() {
         return mPreferences != null
-            && shouldShowInRecents(mPreferences.isRemoveTaskOnActivityFinishEnabled(), isDefaultHomeApp());
+            && shouldShowInRecents(mPreferences.isShowInRecentsWhenNotDefaultEnabled(), isDefaultHomeApp());
     }
 
     private void syncRecentsVisibilityPolicy() {
@@ -5451,15 +5525,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Set<Character> letters = new LinkedHashSet<>(mSuggestionBarView.getAvailableAzLetters());
         mAzScrubRowView.setVisibleLetters(letters);
         int base = resolveAzGestureAccentColor();
-        int muted = mutedMonetShade(base);
+        int muted = mutedMaterialShade(base);
         if (mAzScrubRowView.getCurrentTextColor() != muted) {
             mAzScrubRowView.setTextColor(muted);
         }
         mAzScrubRowView.setInteractionAccentColor(base);
         mAzScrubRowView.setInteractionMode(AzScrubRowView.InteractionMode.WAVE_TRACK);
         mAzScrubRowView.setLockedInlineLetter(null);
-        int orbColor = brightMonetShade(base);
-        int edgeColor = edgeMonetVariant(base);
+        int orbColor = brightMaterialShade(base);
+        int edgeColor = edgeMaterialVariant(base);
         if (mLauncherAzGestureFxUnderlayView != null) {
             mLauncherAzGestureFxUnderlayView.setColors(orbColor, edgeColor);
             mLauncherAzGestureFxUnderlayView.setDarkThemeActive(isNightThemeActive());
@@ -6130,7 +6204,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ContextCompat.getColor(this, R.color.termux_primary));
     }
 
-    private int mutedMonetShade(int color) {
+    private int mutedMaterialShade(int color) {
         float[] hsv = new float[3];
         Color.colorToHSV(color, hsv);
         hsv[1] = Math.max(0f, Math.min(1f, hsv[1] * 0.92f));
@@ -6138,7 +6212,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return Color.HSVToColor(0xF4, hsv);
     }
 
-    private int brightMonetShade(int color) {
+    private int brightMaterialShade(int color) {
         float[] hsv = new float[3];
         Color.colorToHSV(color, hsv);
         hsv[1] = Math.max(0f, Math.min(1f, hsv[1] * 1.28f));
@@ -6146,7 +6220,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return Color.HSVToColor(0xF6, hsv);
     }
 
-    private int edgeMonetVariant(int color) {
+    private int edgeMaterialVariant(int color) {
         float[] hsv = new float[3];
         Color.colorToHSV(color, hsv);
         hsv[0] = (hsv[0] + 24f) % 360f;
@@ -6844,8 +6918,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void showSurfaceTuningPanel(int checkedId) {
         // The status section tunes the expanded top pane: show the clock face while it is open so
         // the sliders preview against it, and give the space back when another section takes over.
-        if (mDockTuningMode)
-            setTopStatusBarCollapsed(checkedId != R.id.surface_tuning_section_status, true);
+        if (mDockTuningMode) {
+            boolean collapse = checkedId != R.id.surface_tuning_section_status;
+            mSurfaceEditorExpandedStatusPane = !collapse && mPreferences != null
+                && mPreferences.isTopPaneClockCollapsed();
+            setTopStatusBarCollapsed(collapse, true);
+        }
         View dock = findViewById(R.id.surface_tuning_dock_panel);
         View dockContinuation = findViewById(R.id.surface_tuning_dock_continuation_panel);
         View keyboard = findViewById(R.id.surface_tuning_keyboard_panel);
@@ -8013,10 +8091,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             controls.setVisibility(View.GONE);
         restoreExpandedStatusAfterSurfaceEditor();
         mDockTuningRestoreExpandedStatus = false;
+        mSurfaceEditorExpandedStatusPane = false;
     }
 
     private void restoreExpandedStatusAfterSurfaceEditor() {
         if (mPreferences == null)
+            return;
+        // Only the editor's own temporary change is undone here. onStop() also calls this, and
+        // without the guard an expanded pane was collapsed — and the collapse persisted — every
+        // time the user left the app, so the clock never came back.
+        if (!mDockTuningRestoreExpandedStatus && !mSurfaceEditorExpandedStatusPane)
             return;
         if (mDockTuningRestoreExpandedStatus && mPreferences.isTopPaneClockCollapsed()) {
             setTopStatusBarCollapsed(false, false);
@@ -9524,6 +9608,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * Routes in-app keyboard values to the palette while it is open. The palette owns the
      * interceptor slot on the keyboard's own handler, so nothing forks the key pipeline.
+     *
+     * <p>This is only one of three ways typing reaches a focusless overlay, and any new one must
+     * wire all three or it will look dead on somebody's keyboard:
+     *
+     * <ul>
+     *   <li>hardware and external keyboards, as key events through
+     *       {@link #handleCommandPaletteKey};
+     *   <li>the in-app keyboard, as resolved key values through this interceptor;
+     *   <li>system IMEs, as committed text through {@link #handleCommandPaletteCodePoint} — those
+     *       send no key events at all for ordinary characters.
+     * </ul>
      */
     public void setCommandPaletteInterceptorActive(boolean active) {
         if (mInAppKeyboard == null)
@@ -9539,6 +9634,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Hardware and external-keyboard strokes claimed by the open palette. */
     public boolean handleCommandPaletteKey(int keyCode, @NonNull KeyEvent event) {
         return mCommandPalette != null && mCommandPalette.handleHardwareKey(keyCode, event);
+    }
+
+    /**
+     * Text committed by a system IME, claimed by the open palette. Third-party keyboards commit
+     * characters through the input connection instead of sending key events, so without this they
+     * would type straight into the shell behind the overlay.
+     */
+    public boolean handleCommandPaletteCodePoint(int codePoint, boolean ctrlDown) {
+        return mCommandPalette != null
+            && mCommandPalette.handleSoftKeyboardCodePoint(codePoint, ctrlDown);
     }
 
     @SuppressLint("RtlHardcoded")
@@ -9755,6 +9860,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (grantResults.length > 0
                 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 ensureWeatherController().forceRefresh();
+            }
+        } else if (requestCode == REQUEST_CODE_WALLPAPER_READ_PERMISSION) {
+            if (grantResults.length > 0
+                && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                mWallpaperReadPermissionDenied = false;
+                clearCachedAccessoryWallpaperBlur();
+                scheduleAccessoryRenderSync("wallpaper:permission");
             }
         }
     }
@@ -10710,6 +10822,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mTermuxSessionListViewController != null)
             mTermuxSessionListViewController.notifyDataSetChanged();
+        if (mTermuxService != null)
+            mTermuxService.setVisibleSessionCount(mDrawerSessions.size());
         refreshTerminalWindowBar();
         refreshSessionsPanel();
     }

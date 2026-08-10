@@ -166,6 +166,6 @@
     <string name="termux_background_image_enabled_title">显示背景图片</string>
     <string name="termux_background_image_enabled_on">背景图片已启用。</string>
     <string name="termux_background_image_enabled_off">背景图像已被禁用。要启用它，请确保存在适当的纵向和横向文件。如果要设置新的背景图片，请通过长按终端从上下文菜单中进行设置。 （默认）</string>
-    <string name="termux_monet_background_enabled_title">Monet 背景（不稳定）</string>
-    <string name="termux_monet_background_enabled_off">终端 Monet 背景将被禁用。将终端背景变为 monet（默认）</string>
+    <string name="termux_monet_background_enabled_title">Material 背景（不稳定）</string>
+    <string name="termux_monet_background_enabled_off">终端 Material 背景将被禁用。将终端背景变为 Material（默认）</string>
 </resources>

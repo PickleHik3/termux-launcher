@@ -16,7 +16,7 @@ Termux Launcher is a terminal-first Android home launcher inspired by [TEL](http
 
 **[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | [Download builds](https://github.com/PickleHik3/termux-launcher/releases) | [Getting Started](docs/en/Launcher_Getting_Started.md) | [Modern terminal](docs/en/Terminal_Modernization.md) | [Local AI API](docs/en/LauncherCtl_API.md) | [Termux AI](docs/en/Termux_AI.md) | [Changelog](CHANGELOG.md)
 
-> **Two editions are available.** The **`com.termux`** build is the **recommended** version — it stays fully compatible with the upstream Termux package ecosystem. The **`io.vaj.tl`** build installs side-by-side with a stock Termux, but it runs off my own custom APT repository, which I maintain by hand — so it is updated manually and less often. See [Editions](#editions).
+> **Three editions are available.** The **`com.termux`** build is the **recommended** version — it stays fully compatible with the upstream Termux package ecosystem. The new **`com.termux.launcher.nix`** build swaps APT for the **[Nix](https://nixos.org) package manager**: it installs side-by-side with a stock Termux and pulls prebuilt packages straight from the official `nixpkgs` binary cache — see [Nix package management](docs/en/Nix_Package_Management.md). The **`io.vaj.tl`** build is a legacy **demo edition** on a small hand-maintained APT repository, kept only for preview installs. See [Editions](#editions).
 
 <p align="center">
   <img src="screenshots/banner.png" alt="Termux Launcher hero showing terminal-first Android features and five device screenshots" width="100%">
@@ -50,22 +50,23 @@ All credits go to the amazing developers and contributors of Termux, TEL, and Te
 
 ## Editions
 
-Every release ships two APK sets. They are the same launcher built from the same source; the only difference is the Android package identity and the package ecosystem they use.
+Every release ships the same launcher built from the same source; the editions differ only in Android package identity and the package ecosystem they use.
 
-| | Termux edition | VAJ edition |
-|---|---|---|
-| Package name | `com.termux` | `io.vaj.tl` |
-| Release tag | `vX.Y.Z` | `vX.Y.Z-vaj` |
-| Alongside official Termux? | ❌ No — same package name, replaces it | ✅ Yes — installs side by side |
-| Package repository | official Termux repos | VAJ APT repo (`https://repo.pathayam.xyz`) |
-| Architectures | arm64-v8a, armeabi-v7a, x86_64, x86 | arm64-v8a (aarch64) only, bootstrap embedded |
-| Companion add-ons | [Termux:API](https://github.com/PickleHik3/termux-api/releases) / [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases) (plain tags) | same forks, `-vaj` tagged releases |
+| | Termux edition | Nix edition | VAJ demo edition |
+|---|---|---|---|
+| Package name | `com.termux` | `com.termux.launcher.nix` | `io.vaj.tl` |
+| Release tag | `vX.Y.Z` | `vX.Y.Z-nix` | `vX.Y.Z-vaj` |
+| Alongside official Termux? | ❌ No — same package name, replaces it | ✅ Yes — installs side by side | ✅ Yes — installs side by side |
+| Package manager | `pkg` / APT | [Nix](https://nixos.org) ([guide](docs/en/Nix_Package_Management.md)) | `pkg` / APT |
+| Package repository | official Termux repos | official `nixpkgs` binary cache | small VAJ APT repo (`https://repo.pathayam.xyz`) |
+| Architectures | arm64-v8a, armeabi-v7a, x86_64, x86 | arm64-v8a (aarch64), bootstrap downloaded on first run | arm64-v8a (aarch64) only, bootstrap downloaded on first run |
+| Companion add-ons | [Termux:API](https://github.com/PickleHik3/termux-api/releases) / [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases) (plain tags) | not published yet | same forks, `-vaj` tagged releases |
 
-Pick the **Termux edition** if you want the launcher as your only Termux, fully compatible with the upstream Termux package ecosystem. This is the **recommended** edition for most users. Pick the **VAJ edition** if you want to keep your existing official Termux app untouched and run the launcher next to it with its own isolated prefix, data, and APT repository.
+Pick the **Termux edition** for the classic Termux experience — the launcher as your Termux, fully compatible with the upstream Termux package ecosystem. Pick the **Nix edition** if you want the entire `nixpkgs` collection, declarative configs, and rollbacks next to an existing Termux install — it is built on a [Nix-on-Droid](https://github.com/nix-community/nix-on-droid)-style environment; new to Nix? start with the [beginner's guide](docs/en/Nix_Getting_Started.md), then the [package management reference](docs/en/Nix_Package_Management.md). The **VAJ edition is a legacy demo**: it predates the Nix edition as the side-by-side option and is kept only for preview installs.
 
-> ⚠️ The VAJ edition depends on my manually maintained custom APT repo (`https://repo.pathayam.xyz`), so its packages and `-vaj` releases are updated **less frequently** than the `com.termux` edition. If you want the most up-to-date builds and the broadest package compatibility, use the Termux (`com.termux`) edition.
+> ⚠️ The VAJ demo edition runs off my manually maintained custom APT repo (`https://repo.pathayam.xyz`), which carries only a small fraction of the Termux package set and is updated **less frequently** — many packages you rely on will simply not be installable there. If you want a side-by-side install, prefer the Nix edition.
 
-In both cases, companion add-ons must be the matching builds from this project's forks (they share the launcher's signing key and package family); official F-Droid add-ons will not pair with either edition.
+Companion add-ons must be the matching builds from this project's forks (they share the launcher's signing key and package family); official F-Droid add-ons will not pair with any edition. Nix-edition companion builds are not published yet.
 
 ## Installation
 
@@ -81,6 +82,17 @@ Recommended setup:
 The built-in terminal keyboard is enabled on fresh installs; an external keyboard app is optional.
 See [Getting Started](docs/en/Launcher_Getting_Started.md) for the setup flow.
 
+### Quick start script
+
+[`setup-launcher`](docs/en/examples/setup-launcher) turns a fresh install into the full showcase shell in one run — fish + Oh My Posh with wallpaper Material colors, zoxide/eza/yazi/neovim, and the launcher terminal configs in `~/.termux`. It is interactive, and every config it replaces gets a timestamped `.bak` first:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-launcher
+sh setup-launcher
+```
+
+Fonts are not part of the script — the in-app font picker (**Settings › Terminal › Font**) downloads and wires up curated families, Nerd Font builds included.
+
 ## Documentation
 
 - [What’s new in v0.2.31](docs/en/Whats_New_0.2.31.md): onboarding, landscape, workspace command restart, per-pane zoom, fonts, key binding, attention states, and compatibility.
@@ -91,6 +103,8 @@ See [Getting Started](docs/en/Launcher_Getting_Started.md) for the setup flow.
 - [Modern terminal guide](docs/en/Terminal_Modernization.md): panes, windows, sessions, layouts, workspaces, bindings, fonts, protocols, and diagnostics.
 - [Terminal fonts](docs/en/Terminal_Fonts.md): picker, config priority, drop-ins, fallback, symbols, ligatures, geometry, and troubleshooting.
 - [Kitty protocols](docs/en/Terminal_Kitty_Protocols.md): keyboard negotiation, multiple cursors, graphics, animation, Sixel, and terminal detection.
+- [Nix beginner's guide](docs/en/Nix_Getting_Started.md): the Nix edition's first hour — first launch, the shell template, installing packages, undoing changes, and the vocabulary.
+- [Nix package management](docs/en/Nix_Package_Management.md): the Nix edition's package manager — everyday commands, declarative setup, rollbacks, and caveats.
 - [Building showcase tools](docs/en/Building_Terminal_Showcase_Tools.md): reproducible Termux recipes for Sigye and animated-Kitty Fastfetch.
 - [Local AI API](docs/en/LauncherCtl_API.md): OpenAI/Ollama-compatible localhost endpoint, app launch, model management, auth, and route tables.
 - [Termux AI](docs/en/Termux_AI.md): local model setup, `tai`, OpenAI-compatible clients, and troubleshooting.
