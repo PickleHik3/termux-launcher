@@ -9596,6 +9596,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * Routes in-app keyboard values to the palette while it is open. The palette owns the
      * interceptor slot on the keyboard's own handler, so nothing forks the key pipeline.
+     *
+     * <p>This is only one of three ways typing reaches a focusless overlay, and any new one must
+     * wire all three or it will look dead on somebody's keyboard:
+     *
+     * <ul>
+     *   <li>hardware and external keyboards, as key events through
+     *       {@link #handleCommandPaletteKey};
+     *   <li>the in-app keyboard, as resolved key values through this interceptor;
+     *   <li>system IMEs, as committed text through {@link #handleCommandPaletteCodePoint} — those
+     *       send no key events at all for ordinary characters.
+     * </ul>
      */
     public void setCommandPaletteInterceptorActive(boolean active) {
         if (mInAppKeyboard == null)
@@ -9611,6 +9622,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Hardware and external-keyboard strokes claimed by the open palette. */
     public boolean handleCommandPaletteKey(int keyCode, @NonNull KeyEvent event) {
         return mCommandPalette != null && mCommandPalette.handleHardwareKey(keyCode, event);
+    }
+
+    /**
+     * Text committed by a system IME, claimed by the open palette. Third-party keyboards commit
+     * characters through the input connection instead of sending key events, so without this they
+     * would type straight into the shell behind the overlay.
+     */
+    public boolean handleCommandPaletteCodePoint(int codePoint, boolean ctrlDown) {
+        return mCommandPalette != null
+            && mCommandPalette.handleSoftKeyboardCodePoint(codePoint, ctrlDown);
     }
 
     @SuppressLint("RtlHardcoded")

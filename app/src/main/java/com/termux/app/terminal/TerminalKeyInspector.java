@@ -164,6 +164,28 @@ public final class TerminalKeyInspector implements TerminalView.KeyInputProbe {
         mPendingWrote = false;
     }
 
+    /**
+     * Start a row for text committed by an IME. Most third party keyboards send their output through
+     * the input connection as code points rather than as key events, so without this the panel stays
+     * empty for exactly the keyboard someone opened it to debug.
+     */
+    public void recordCodePoint(int codePoint, boolean ctrlDown) {
+        flushPending();
+        StringBuilder row = new StringBuilder(96);
+        row.append("ime    text ");
+        // A code point out of range can only come from a broken IME, and must not crash the probe.
+        row.append(Character.isValidCodePoint(codePoint) ? describeCodePoint(codePoint) : "(invalid)");
+        row.append(" code=").append(codePoint);
+        if (ctrlDown)
+            row.append(" ctrl+(").append(1 + KittyKeyEncoder.MOD_CTRL).append(')');
+        row.append(" via=IME commitText");
+        int flags = keyboardFlags();
+        if (flags != 0)
+            row.append(" kitty=").append(flags);
+        mPending = row;
+        mPendingWrote = false;
+    }
+
     /** Report which registry binding claimed the stroke, or that an unbound one was swallowed. */
     public void recordBinding(@Nullable String stroke, @Nullable String toolName) {
         if (mPending == null)
