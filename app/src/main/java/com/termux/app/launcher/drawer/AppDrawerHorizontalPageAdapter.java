@@ -87,6 +87,18 @@ public final class AppDrawerHorizontalPageAdapter
         return position >= 0 && position < mItems.size() ? mItems.get(position) : null;
     }
 
+    @Nullable
+    public AppDrawerItem itemOnPageByStableId(int page, @NonNull String stableId) {
+        int capacity = itemsPerPage();
+        int start = AppDrawerPageModel.startForPage(page, mItems.size(), capacity);
+        int end = AppDrawerPageModel.endForPage(page, mItems.size(), capacity);
+        for (int i = start; i < end; i++) {
+            AppDrawerItem item = mItems.get(i);
+            if (stableId.equals(item.stableId)) return item;
+        }
+        return null;
+    }
+
     public int itemsPerPage() {
         return mMetrics == null ? 1 : mMetrics.itemsPerPage;
     }

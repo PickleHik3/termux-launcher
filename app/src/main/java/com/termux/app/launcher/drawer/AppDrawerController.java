@@ -452,11 +452,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     /** Applies a launcher preference reload without rebuilding the activity or drawer tree. */
     public void onPreferencesReloaded() {
-        if (mEngaged || mOpen) closeImmediate();
         TermuxAppSharedPreferences preferences = mActivity.getPreferences();
         AppDrawerLayoutConfig config = preferences == null ? AppDrawerLayoutConfig.defaults()
             : AppDrawerLayoutConfig.from(preferences);
         if (config.equals(mLayoutConfig)) return;
+        if (mEngaged || mOpen) closeImmediate();
         mLayoutConfig = config;
         applyLayoutConfig();
     }

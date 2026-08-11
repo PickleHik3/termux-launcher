@@ -488,6 +488,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_PINNED_ITEMS_SCHEMA_VERSION, version, true);
     }
 
+    /** Commits the normalized launcher payload and its schema marker as one durable transaction. */
+    public boolean commitAppLauncherPinnedItems(String value, int version) {
+        return mSharedPreferences.edit()
+            .putString(TERMUX_APP.KEY_APP_LAUNCHER_PINNED_ITEMS_V2, value)
+            .putInt(TERMUX_APP.KEY_APP_LAUNCHER_PINNED_ITEMS_SCHEMA_VERSION, version)
+            .commit();
+    }
+
     public boolean isAppLauncherAppsRowEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_APPS_ROW_ENABLED,
             TERMUX_APP.DEFAULT_APP_LAUNCHER_APPS_ROW_ENABLED);

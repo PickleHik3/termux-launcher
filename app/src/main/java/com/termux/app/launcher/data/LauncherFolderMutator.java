@@ -13,6 +13,8 @@ import java.util.Map;
 
 /** Pure folder membership and collapse rules shared by migration, dock and drawer mutations. */
 public final class LauncherFolderMutator {
+    public enum AppendResult { APPLIED, DUPLICATE, CAPACITY, MISSING }
+
     private LauncherFolderMutator() {}
 
     public static boolean append(@NonNull PinnedFolderItem folder,
@@ -20,6 +22,23 @@ public final class LauncherFolderMutator {
         if (!folder.canAdd(app.appRef)) return false;
         folder.apps.add(app);
         return true;
+    }
+
+    /** Appends first, removing the top-level source only after the append succeeds. */
+    @NonNull
+    public static AppendResult moveTopLevelAppIntoFolder(@NonNull List<PinnedItem> dockItems,
+                                                          int sourceIndex,
+                                                          @NonNull PinnedFolderItem folder,
+                                                          @NonNull PinnedAppItem app) {
+        if (sourceIndex < 0 || sourceIndex >= dockItems.size()
+            || !(dockItems.get(sourceIndex) instanceof PinnedAppItem)
+            || !((PinnedAppItem) dockItems.get(sourceIndex)).appRef.stableId()
+                .equals(app.appRef.stableId())) return AppendResult.MISSING;
+        if (folder.containsApp(app.appRef)) return AppendResult.DUPLICATE;
+        if (folder.apps.size() >= PinnedFolderItem.MAX_APPS) return AppendResult.CAPACITY;
+        folder.apps.add(app);
+        dockItems.remove(sourceIndex);
+        return AppendResult.APPLIED;
     }
 
     @NonNull

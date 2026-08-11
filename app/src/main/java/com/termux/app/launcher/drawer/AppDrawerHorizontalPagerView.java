@@ -21,6 +21,10 @@ public final class AppDrawerHorizontalPagerView extends RecyclerView
         void onPageSelected(int page);
     }
 
+    public interface ClaimGate {
+        boolean claim(@NonNull AppDrawerDragPolicy.Claim claim);
+    }
+
     private final AppDrawerGestureArbiter mArbiter = new AppDrawerGestureArbiter();
     private final LockableLayoutManager mLayoutManager;
     private final PagerSnapHelper mSnapHelper = new PagerSnapHelper();
@@ -28,12 +32,15 @@ public final class AppDrawerHorizontalPagerView extends RecyclerView
     private final float mMinimumFlingVelocityPx;
     private final int[] mNestedConsumed = new int[2];
     @Nullable private PageSelectionListener mPageSelectionListener;
+    @Nullable private ClaimGate mClaimGate;
     @Nullable private VelocityTracker mVelocityTracker;
     private boolean mCloseNestedActive;
     private boolean mSuppressCellClick;
     private boolean mSuppressCellClickDuringTerminalDispatch;
     private float mLastRawY;
     private int mSelectedPage;
+    private boolean mPageClaimAccepted;
+    private boolean mCloseClaimAccepted;
 
     public AppDrawerHorizontalPagerView(@NonNull Context context) {
         super(context);
@@ -64,6 +71,10 @@ public final class AppDrawerHorizontalPagerView extends RecyclerView
         mPageSelectionListener = listener;
     }
 
+    public void setClaimGate(@Nullable ClaimGate gate) {
+        mClaimGate = gate;
+    }
+
     public int getSelectedPage() {
         return mSelectedPage;
     }
@@ -90,7 +101,7 @@ public final class AppDrawerHorizontalPagerView extends RecyclerView
     }
 
     public boolean isCloseClaimed() {
-        return mArbiter.isDrawerDrag();
+        return mArbiter.isDrawerDrag() && mCloseClaimAccepted;
     }
 
     public boolean isHorizontalScrollLocked() {
@@ -156,12 +167,20 @@ public final class AppDrawerHorizontalPagerView extends RecyclerView
         float deltaRawY = ev.getRawY() - mLastRawY;
         mLastRawY = ev.getRawY();
         if (claim == AppDrawerGestureArbiter.Claim.PAGE_SWIPE) {
-            if (before != AppDrawerGestureArbiter.Claim.PAGE_SWIPE)
+            if (before != AppDrawerGestureArbiter.Claim.PAGE_SWIPE) {
+                mPageClaimAccepted = mClaimGate == null
+                    || mClaimGate.claim(AppDrawerDragPolicy.Claim.PAGE_OR_TILE);
+                if (!mPageClaimAccepted) return;
                 mLayoutManager.setHorizontalEnabled(true);
+            }
+            if (!mPageClaimAccepted) return;
             return;
         }
         if (claim != AppDrawerGestureArbiter.Claim.DRAWER_DRAG) return;
         if (before != AppDrawerGestureArbiter.Claim.DRAWER_DRAG) {
+            mCloseClaimAccepted = mClaimGate == null
+                || mClaimGate.claim(AppDrawerDragPolicy.Claim.CLOSE);
+            if (!mCloseClaimAccepted) return;
             mLayoutManager.setHorizontalEnabled(false);
             mSuppressCellClick = true;
             cancelLongPress();
@@ -172,6 +191,7 @@ public final class AppDrawerHorizontalPagerView extends RecyclerView
             mCloseNestedActive = startNestedScroll(ViewCompat.SCROLL_AXIS_VERTICAL,
                 ViewCompat.TYPE_TOUCH);
         }
+        if (!mCloseClaimAccepted) return;
         if (mCloseNestedActive) {
             mNestedConsumed[0] = 0;
             mNestedConsumed[1] = 0;
@@ -184,6 +204,8 @@ public final class AppDrawerHorizontalPagerView extends RecyclerView
         mArbiter.reset();
         mCloseNestedActive = false;
         mSuppressCellClick = false;
+        mPageClaimAccepted = false;
+        mCloseClaimAccepted = false;
         mLayoutManager.setHorizontalEnabled(true);
         if (mVelocityTracker != null) {
             mVelocityTracker.recycle();

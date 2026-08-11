@@ -7,19 +7,26 @@ final class TestLauncherStore implements LauncherConfigRepository.PreferencesSto
     int writes;
     boolean failPayload;
     boolean failSchema;
+    boolean failCommit;
 
     @Override public String getPinnedItemsV2() { return raw; }
-    @Override public void setPinnedItemsV2(String value) {
+    @Override public int getPinnedItemsSchemaVersion() { return schema; }
+    @Override public boolean commitPinnedItems(String value, int version) {
         if (failPayload) throw new IllegalStateException("payload");
-        raw = value;
-        writes++;
-    }
-    @Override public void setPinnedItemsSchemaVersion(int value) {
+        if (failCommit) {
+            failCommit = false;
+            raw = value;
+            schema = version;
+            return false;
+        }
         if (failSchema) {
             failSchema = false;
             throw new IllegalStateException("schema");
         }
-        schema = value;
+        raw = value;
+        schema = version;
+        writes++;
+        return true;
     }
     @Override public String getLegacyDefaultButtons() { return legacy; }
 }

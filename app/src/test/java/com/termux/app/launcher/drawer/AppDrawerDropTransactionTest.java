@@ -38,8 +38,10 @@ public class AppDrawerDropTransactionTest {
     private static final class Store implements LauncherConfigRepository.PreferencesStore {
         String raw = ""; int writes;
         @Override public String getPinnedItemsV2() { return raw; }
-        @Override public void setPinnedItemsV2(String value) { raw = value; writes++; }
-        @Override public void setPinnedItemsSchemaVersion(int version) {}
+        @Override public int getPinnedItemsSchemaVersion() { return 0; }
+        @Override public boolean commitPinnedItems(String value, int version) {
+            raw = value; writes++; return true;
+        }
         @Override public String getLegacyDefaultButtons() { return ""; }
     }
 }

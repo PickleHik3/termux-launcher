@@ -9,6 +9,17 @@ public final class AppDrawerDragPolicy {
 
     public enum Claim { PENDING, CHILD_SCROLL, CLOSE, PAGE_OR_TILE, CONTEXT, DRAG }
 
+    /** Disables horizontal drops from dwell start until the pager reports a settled page. */
+    public static final class HorizontalDropGate {
+        private boolean settled = true;
+        public void onNavigationStarted() { settled = false; }
+        public void onScrollStateChanged(int state) {
+            if (state == androidx.recyclerview.widget.RecyclerView.SCROLL_STATE_IDLE) settled = true;
+        }
+        public boolean canDrop() { return settled; }
+        public void reset() { settled = true; }
+    }
+
     public static final class FrozenDown {
         public final AppDrawerViewType viewType;
         public final boolean interactive;
@@ -38,7 +49,7 @@ public final class AppDrawerDragPolicy {
     public Claim claim() { return claim; }
     public FrozenDown frozenDown() { return down; }
 
-    public boolean claim(Claim next) {
+    public synchronized boolean claim(Claim next) {
         if (next == Claim.PENDING) return false;
         // The stationary long-press first owns CONTEXT; only its deliberate lift may refine that
         // one state to DRAG. Every other settled claim remains irreversible.

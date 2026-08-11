@@ -32,13 +32,15 @@ public class LauncherConfigRepositoryTest {
         }
 
         @Override
-        public void setPinnedItemsV2(String value) {
-            pinnedItemsV2 = value;
+        public int getPinnedItemsSchemaVersion() {
+            return schemaVersion;
         }
 
         @Override
-        public void setPinnedItemsSchemaVersion(int version) {
+        public boolean commitPinnedItems(String value, int version) {
+            pinnedItemsV2 = value;
             schemaVersion = version;
+            return true;
         }
 
         @Override

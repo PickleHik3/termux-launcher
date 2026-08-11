@@ -1,5 +1,7 @@
 package com.termux.app.launcher.data;
 
+import android.content.Context;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -25,10 +27,13 @@ import java.util.Set;
 public final class LauncherConfigRepository {
     public static final int SCHEMA_VERSION = 5;
 
+    @Nullable private static LauncherConfigRepository processInstance;
+    @Nullable private static Context processApplicationContext;
+
     public interface PreferencesStore {
         String getPinnedItemsV2();
-        void setPinnedItemsV2(String value);
-        void setPinnedItemsSchemaVersion(int version);
+        int getPinnedItemsSchemaVersion();
+        boolean commitPinnedItems(String value, int version);
         String getLegacyDefaultButtons();
     }
 
@@ -50,9 +55,11 @@ public final class LauncherConfigRepository {
     public LauncherConfigRepository(@NonNull TermuxAppSharedPreferences preferences) {
         this(new PreferencesStore() {
             @Override public String getPinnedItemsV2() { return preferences.getAppLauncherPinnedItemsV2(); }
-            @Override public void setPinnedItemsV2(String value) { preferences.setAppLauncherPinnedItemsV2(value); }
-            @Override public void setPinnedItemsSchemaVersion(int version) {
-                preferences.setAppLauncherPinnedItemsSchemaVersion(version);
+            @Override public int getPinnedItemsSchemaVersion() {
+                return preferences.getAppLauncherPinnedItemsSchemaVersion();
+            }
+            @Override public boolean commitPinnedItems(String value, int version) {
+                return preferences.commitAppLauncherPinnedItems(value, version);
             }
             @Override public String getLegacyDefaultButtons() { return preferences.getAppLauncherDefaultButtons(); }
         });
@@ -60,6 +67,20 @@ public final class LauncherConfigRepository {
 
     public LauncherConfigRepository(@NonNull PreferencesStore preferences) {
         this.preferences = preferences;
+    }
+
+    /** One process-live cache shared by every production launcher config reader and writer. */
+    @NonNull
+    public static synchronized LauncherConfigRepository getInstance(@NonNull Context context) {
+        Context appContext = context.getApplicationContext();
+        if (processInstance == null || processApplicationContext != appContext) {
+            TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(appContext, false);
+            if (preferences == null)
+                throw new IllegalStateException("Unable to open launcher preferences");
+            processInstance = new LauncherConfigRepository(preferences);
+            processApplicationContext = appContext;
+        }
+        return processInstance;
     }
 
     public synchronized void addListener(@NonNull Listener listener) {
@@ -420,7 +441,7 @@ public final class LauncherConfigRepository {
                           @NonNull Map<String, PinnedFolderItem> folders,
                           @NonNull JSONArray overrides) {
         String previous = preferences.getPinnedItemsV2();
-        boolean payloadWritten = false;
+        int previousSchema = preferences.getPinnedItemsSchemaVersion();
         JSONObject root = new JSONObject();
         JSONArray items = new JSONArray();
         JSONArray folderArray = new JSONArray();
@@ -444,17 +465,12 @@ public final class LauncherConfigRepository {
             root.put("folders", folderArray);
             root.put("appIconOverrides", overrides);
             String encoded = root.toString(); // Build completely before touching persistent state.
-            preferences.setPinnedItemsV2(encoded);
-            payloadWritten = true;
-            preferences.setPinnedItemsSchemaVersion(SCHEMA_VERSION);
-            return true;
+            if (preferences.commitPinnedItems(encoded, SCHEMA_VERSION)) return true;
+            preferences.commitPinnedItems(previous == null ? "" : previous, previousSchema);
+            return false;
         } catch (JSONException | RuntimeException ignored) {
-            // The preference facade exposes two legacy setters rather than one transaction. Restore
-            // the payload if the schema marker write fails so a migration never leaves half-v5 data.
-            if (payloadWritten) {
-                try { preferences.setPinnedItemsV2(previous == null ? "" : previous); }
-                catch (RuntimeException rollbackFailure) { /* The original durable value still wins. */ }
-            }
+            try { preferences.commitPinnedItems(previous == null ? "" : previous, previousSchema); }
+            catch (RuntimeException rollbackFailure) { /* Preserve the original failure result. */ }
             return false;
         }
     }

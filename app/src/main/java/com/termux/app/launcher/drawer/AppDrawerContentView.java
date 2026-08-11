@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.os.SystemClock;
 import android.view.Choreographer;
+import android.view.DragEvent;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -188,17 +189,22 @@ public final class AppDrawerContentView extends FrameLayout
     private boolean mDragActive;
     private boolean mGestureDragEligible;
     @Nullable private String mGestureDragStableId;
+    @Nullable private AppDrawerDragPolicy mDragPolicy;
     private int mDragEdgeDirection;
     private boolean mDragEdgeConsumed;
     private float mDragAutoscrollVelocity;
     private final int[] mDragLocation = new int[2];
     private final Runnable mDragEdgeDwell = this::onDragEdgeDwell;
+    private final AppDrawerDragPolicy.HorizontalDropGate mHorizontalDropGate =
+        new AppDrawerDragPolicy.HorizontalDropGate();
 
     private void onDragEdgeDwell() {
         if (!mDragActive || mDragEdgeDirection == 0 || mDragEdgeConsumed) return;
         int next = mHorizontalPager.getSelectedPage() + mDragEdgeDirection;
-        if (next >= 0 && next < mHorizontalAdapter.getItemCount())
+        if (next >= 0 && next < mHorizontalAdapter.getItemCount()) {
+            mHorizontalDropGate.onNavigationStarted();
             mHorizontalPager.setSelectedPage(next, true);
+        }
         mDragEdgeConsumed = true;
     }
     private final Runnable mDragAutoscroll = new Runnable() {
@@ -273,12 +279,18 @@ public final class AppDrawerContentView extends FrameLayout
         mHorizontalPager = new AppDrawerHorizontalPagerView(context);
         mPageIndicator = new AppDrawerPageIndicatorView(context);
         mHorizontalPager.setAdapter(mHorizontalAdapter);
+        mHorizontalPager.setClaimGate(this::claimDrawerGesture);
         mHorizontalAdapter.setClickGate(mHorizontalPager);
         mHorizontalPager.setPageSelectionListener(page -> mPageIndicator.setSelectedPage(page));
         mHorizontalPager.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
                 if (dx != 0 || dy != 0) dismissContextPopups();
+            }
+
+            @Override public void onScrollStateChanged(@NonNull RecyclerView recyclerView,
+                                                       int newState) {
+                mHorizontalDropGate.onScrollStateChanged(newState);
             }
         });
         LayoutParams pagerParams = new LayoutParams(LayoutParams.MATCH_PARENT,
@@ -312,6 +324,27 @@ public final class AppDrawerContentView extends FrameLayout
         columnParams.topMargin = gridParams.topMargin;
         columnParams.bottomMargin = gridParams.bottomMargin;
         addView(mColumn, columnParams);
+
+        setOnDragListener((view, event) -> {
+            AppDrawerDragController controller = mDragController;
+            if (controller == null || !controller.owns(event.getLocalState())) return false;
+            switch (event.getAction()) {
+                case DragEvent.ACTION_DRAG_STARTED:
+                    return true;
+                case DragEvent.ACTION_DRAG_LOCATION:
+                    onContentDragLocation(event.getX(), event.getY());
+                    return true;
+                case DragEvent.ACTION_DRAG_EXITED:
+                    onDragTargetExited();
+                    return true;
+                case DragEvent.ACTION_DRAG_ENDED:
+                    onDragTargetExited();
+                    controller.onHostDragEnded(event);
+                    return true;
+                default:
+                    return true;
+            }
+        });
         mDragOverlay = new AppDrawerDragOverlayView(context);
         mDragOverlay.setVisibility(INVISIBLE);
         addView(mDragOverlay, new LayoutParams(LayoutParams.MATCH_PARENT,
@@ -1205,6 +1238,9 @@ public final class AppDrawerContentView extends FrameLayout
             mGestureDragEligible = mInteractive && !hasQuery()
                 && mViewType != AppDrawerViewType.CATEGORIES
                 && downItem != null && downItem.kind == AppDrawerItem.Kind.APP;
+            mDragPolicy = new AppDrawerDragPolicy(new AppDrawerDragPolicy.FrozenDown(
+                mGestureViewType, mInteractive, !hasQuery(), mGestureDragEligible,
+                mGestureDragStableId));
             if (region == AppDrawerTouchRegions.Region.COLUMN) {
                 // The column owns this stream from here to its UP. onNestedPreScroll is already
                 // gated on mDownOverGrid, so a scrub can never report a close with no change to it.
@@ -1289,21 +1325,36 @@ public final class AppDrawerContentView extends FrameLayout
         return mGestureDragEligible && stableId.equals(mGestureDragStableId);
     }
 
+    private boolean claimDrawerGesture(@NonNull AppDrawerDragPolicy.Claim claim) {
+        AppDrawerDragPolicy policy = mDragPolicy;
+        return policy != null && policy.claim(claim);
+    }
+
+    @Override public boolean claimPickupContext(@NonNull String stableId) {
+        return isFrozenPickupEligible(stableId)
+            && claimDrawerGesture(AppDrawerDragPolicy.Claim.CONTEXT);
+    }
+
+    @Override public boolean claimPickupDrag(@NonNull String stableId) {
+        return isFrozenPickupEligible(stableId)
+            && claimDrawerGesture(AppDrawerDragPolicy.Claim.DRAG);
+    }
+
     @Override public void armTerminalDispatchDragLatch() {
         mSuppressCellClickDuringTerminalDispatch = true;
     }
 
     @Override public void onDragStateChanged(boolean dragging) {
         mDragActive = dragging;
-        if (dragging) mDragOverlay.setVisibility(VISIBLE);
+        if (dragging) {
+            mDragOverlay.setVisibility(VISIBLE);
+            mHorizontalDropGate.reset();
+        }
         mHorizontalPager.setDragLocked(dragging
             && mGestureViewType == AppDrawerViewType.HORIZONTAL);
         if (!dragging) {
-            removeCallbacks(mDragEdgeDwell);
-            removeCallbacks(mDragAutoscroll);
-            mDragEdgeDirection = 0;
-            mDragEdgeConsumed = false;
-            mDragAutoscrollVelocity = 0f;
+            cancelDragNavigation();
+            mHorizontalDropGate.reset();
         }
     }
 
@@ -1318,6 +1369,14 @@ public final class AppDrawerContentView extends FrameLayout
         getLocationOnScreen(mDragLocation);
         float x = rawX - mDragLocation[0];
         float y = rawY - mDragLocation[1];
+        onContentDragLocation(x, y);
+    }
+
+    private void onContentDragLocation(float x, float y) {
+        if (drawerItemAt(x, y) == null) {
+            cancelDragNavigation();
+            return;
+        }
         if (mGestureViewType == AppDrawerViewType.HORIZONTAL) {
             int direction = AppDrawerDragPolicy.edgeDirection(x, getWidth(), mDensity);
             if (direction == 0) {
@@ -1340,6 +1399,35 @@ public final class AppDrawerContentView extends FrameLayout
                 if (velocity != 0f) postOnAnimation(mDragAutoscroll);
             }
         }
+    }
+
+    @Override public void onDragTargetExited() {
+        cancelDragNavigation();
+    }
+
+    private void cancelDragNavigation() {
+        removeCallbacks(mDragEdgeDwell);
+        removeCallbacks(mDragAutoscroll);
+        mDragEdgeDirection = 0;
+        mDragEdgeConsumed = false;
+        mDragAutoscrollVelocity = 0f;
+    }
+
+    @Override public boolean canDropOnCurrentTarget() {
+        return mGestureViewType != AppDrawerViewType.HORIZONTAL || mHorizontalDropGate.canDrop();
+    }
+
+    @Nullable @Override
+    public AppDrawerItem resolveCurrentDropTarget(@NonNull String stableId) {
+        if (mGestureViewType == AppDrawerViewType.HORIZONTAL) {
+            return mHorizontalAdapter.itemOnPageByStableId(
+                mHorizontalPager.getSelectedPage(), stableId);
+        }
+        for (int i = 0; i < mAdapter.getItemCount(); i++) {
+            AppDrawerItem item = mAdapter.itemAt(i);
+            if (item != null && stableId.equals(item.stableId)) return item;
+        }
+        return null;
     }
 
     private void beginClosePolicy(@NonNull RecyclerView recycler) {

@@ -5316,7 +5316,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mLauncherAppDataProvider = LauncherAppDataProvider.getInstance(this);
             }
             if (mLauncherConfigRepository == null) {
-                mLauncherConfigRepository = new LauncherConfigRepository(mPreferences);
+                mLauncherConfigRepository = LauncherConfigRepository.getInstance(this);
             }
         }
 
@@ -5618,7 +5618,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mLauncherAppDataProvider = LauncherAppDataProvider.getInstance(this);
         }
         if (mLauncherConfigRepository == null) {
-            mLauncherConfigRepository = new LauncherConfigRepository(mPreferences);
+            mLauncherConfigRepository = LauncherConfigRepository.getInstance(this);
         }
         int iconPreferencesSignature = computeLauncherIconPreferencesSignature();
         if (mLastLauncherIconPreferencesSignature != Integer.MIN_VALUE

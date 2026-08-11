@@ -23,9 +23,14 @@ import com.termux.app.launcher.model.LauncherAppEntry;
 public final class AppDrawerDragController implements AppDrawerPickupDelegate {
     public interface Host {
         boolean isFrozenPickupEligible(@NonNull String stableId);
+        boolean claimPickupContext(@NonNull String stableId);
+        boolean claimPickupDrag(@NonNull String stableId);
         void armTerminalDispatchDragLatch();
         void onDragStateChanged(boolean dragging);
         void onDragLocation(@NonNull View target, float localX, float localY);
+        void onDragTargetExited();
+        boolean canDropOnCurrentTarget();
+        @Nullable AppDrawerItem resolveCurrentDropTarget(@NonNull String stableId);
         @NonNull AppDrawerViewType frozenSourceViewType();
     }
 
@@ -43,12 +48,18 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
         this.host = host;
     }
 
+    @Override public boolean claimContext(@NonNull View source, @NonNull LauncherAppEntry entry) {
+        return host.claimPickupContext(entry.appRef.stableId());
+    }
+
     @Override public boolean startPickup(@NonNull View source, @NonNull LauncherAppEntry entry) {
         if (!host.isFrozenPickupEligible(entry.appRef.stableId())) return false;
+        if (!host.claimPickupDrag(entry.appRef.stableId())) return false;
         LauncherConfigSnapshot snapshot = dock.getLauncherConfigSnapshot();
-        int size = Math.max(1, source.getWidth() > 0 ? Math.min(source.getWidth(), source.getHeight()) : 48);
-        Drawable drawable = dock.getRenderedIcon(entry, size);
-        if (drawable == null) return false;
+        PickupArtwork artwork = pickupArtwork(source);
+        if (artwork == null) return false;
+        int size = artwork.sizePx;
+        Drawable drawable = artwork.drawable;
         host.armTerminalDispatchDragLatch();
         Rect bounds = new Rect();
         source.getGlobalVisibleRect(bounds);
@@ -67,11 +78,37 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
         return started;
     }
 
+    @Nullable
+    static PickupArtwork pickupArtwork(@NonNull View source) {
+        if (!(source instanceof AppDrawerAppCellView)) return null;
+        AppDrawerAppCellView cell = (AppDrawerAppCellView) source;
+        Drawable drawable = cell.icon.getDrawable();
+        if (drawable == null) return null;
+        int width = cell.icon.getWidth();
+        int height = cell.icon.getHeight();
+        if (width <= 0 || height <= 0) {
+            android.view.ViewGroup.LayoutParams params = cell.icon.getLayoutParams();
+            width = params == null ? 0 : params.width;
+            height = params == null ? 0 : params.height;
+        }
+        int size = Math.min(width, height);
+        if (size <= 0) size = Math.min(drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight());
+        return size <= 0 ? null : new PickupArtwork(drawable, size);
+    }
+
+    static final class PickupArtwork {
+        @NonNull final Drawable drawable;
+        final int sizePx;
+        PickupArtwork(@NonNull Drawable drawable, int sizePx) {
+            this.drawable = drawable;
+            this.sizePx = sizePx;
+        }
+    }
+
     public void bindTarget(@NonNull View view, @NonNull AppDrawerItem item) {
         view.setOnDragListener((target, event) -> {
             if (event.getLocalState() == active && (event.getAction() == DragEvent.ACTION_DRAG_ENTERED
                 || event.getAction() == DragEvent.ACTION_DRAG_LOCATION)) {
-                host.onDragLocation(target, event.getX(), event.getY());
                 overlay.moveTo(target, event.getX(), event.getY(),
                     item.kind == AppDrawerItem.Kind.FOLDER);
             }
@@ -86,11 +123,13 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
             case DragEvent.ACTION_DRAG_ENTERED:
                 return true;
             case DragEvent.ACTION_DROP:
-                if (active.sourceStableId.equals(target.stableId)) return false;
-                LauncherConfigRepository.MutationResult result = target.kind == AppDrawerItem.Kind.FOLDER
-                    ? dock.addDrawerAppToFolder(active.revision, target.stableId,
+                if (!host.canDropOnCurrentTarget()) return false;
+                AppDrawerItem resolved = host.resolveCurrentDropTarget(target.stableId);
+                if (resolved == null || active.sourceStableId.equals(resolved.stableId)) return false;
+                LauncherConfigRepository.MutationResult result = resolved.kind == AppDrawerItem.Kind.FOLDER
+                    ? dock.addDrawerAppToFolder(active.revision, resolved.stableId,
                         active.sourceStableId)
-                    : dock.createDrawerFolder(active.revision, target.app,
+                    : dock.createDrawerFolder(active.revision, resolved.app,
                         active.sourceStableId);
                 active.accepted = result == LauncherConfigRepository.MutationResult.APPLIED;
                 if (result == LauncherConfigRepository.MutationResult.CAPACITY) {
@@ -101,6 +140,7 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
                 return active.accepted;
             case DragEvent.ACTION_DRAG_EXITED:
                 overlay.setFolderHover(false);
+                host.onDragTargetExited();
                 return true;
             case DragEvent.ACTION_DRAG_ENDED:
                 cleanup();
@@ -110,6 +150,14 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
     }
 
     public boolean isDragging() { return active != null; }
+
+    public boolean owns(@Nullable Object localState) {
+        return active != null && localState == active;
+    }
+
+    public void onHostDragEnded(@NonNull DragEvent event) {
+        if (owns(event.getLocalState())) cleanup();
+    }
 
     public void cancel() { cleanup(); }
 

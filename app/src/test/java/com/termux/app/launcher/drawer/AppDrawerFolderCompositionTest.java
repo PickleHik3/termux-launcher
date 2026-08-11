@@ -35,8 +35,10 @@ public class AppDrawerFolderCompositionTest {
     private static final class Store implements LauncherConfigRepository.PreferencesStore {
         String raw;
         @Override public String getPinnedItemsV2() { return raw; }
-        @Override public void setPinnedItemsV2(String value) { raw = value; }
-        @Override public void setPinnedItemsSchemaVersion(int version) {}
+        @Override public int getPinnedItemsSchemaVersion() { return 0; }
+        @Override public boolean commitPinnedItems(String value, int version) {
+            raw = value; return true;
+        }
         @Override public String getLegacyDefaultButtons() { return ""; }
     }
 }

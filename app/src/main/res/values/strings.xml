@@ -212,6 +212,7 @@
     <string name="settings_app_drawer_category_columns_title">Category tile columns</string>
     <string name="settings_app_drawer_settings_description">Drawer settings</string>
     <string name="folder_capacity_reached">Folder is full</string>
+    <string name="folder_already_contains_app">App is already in this folder</string>
     <string name="app_drawer_category_suggestions">Suggestions</string>
     <string name="app_drawer_category_recently_added">Recently Added</string>
     <string name="app_drawer_category_social">Social</string>
