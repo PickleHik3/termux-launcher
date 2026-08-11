@@ -278,6 +278,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private android.animation.ValueAnimator mStatusBarCollapseAnimator;
     private int mStatusBarTerminalResizeGeneration;
     @Nullable private com.termux.app.statusbar.FullStatusBarController mFullStatusBarController;
+    private final com.termux.app.statusbar.StatusBarSurfaceOutlineProvider
+        mStatusBarSurfaceOutline =
+            new com.termux.app.statusbar.StatusBarSurfaceOutlineProvider();
     private int mFullStatusBarResizeGeneration;
     private boolean mRestoreFullStatusBar;
     @NonNull private com.termux.app.statusbar.TopStatusBarState mRestoredFullPrior =
@@ -2451,22 +2454,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ((com.termux.app.statusbar.StatusBarSwipeLayout) host).setCollapsed(collapsed);
             }
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            if (capsule) {
-                final float radius = resolveStatusBarCapsuleCornerRadiusPx(targetStatusBarHeightPx(
-                    true, collapsed));
-                host.setOutlineProvider(new ViewOutlineProvider() {
-                    @Override
-                    public void getOutline(View view, android.graphics.Outline outline) {
-                        outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
-                    }
-                });
-                host.setClipToOutline(true);
-            } else {
-                host.setOutlineProvider(ViewOutlineProvider.BOUNDS);
-                host.setClipToOutline(false);
-            }
-        }
+        applyFullStatusBarOutline(host, isFullStatusBarEngaged()
+            ? mStatusBarSurfaceOutline.fullProgress() : 0f);
+    }
+
+    /**
+     * One outline clips every status-pane layer, including live blur and wallpaper frost. Normal
+     * Rounded keeps its capsule radius; normal Default remains square. FULL converges on the same
+     * status radius used by the existing top-pane/dock language instead of introducing a second
+     * radius, and its bottom edge therefore rounds continuously with the height spring.
+     */
+    private void applyFullStatusBarOutline(@NonNull View host, float fullProgress) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return;
+        boolean capsule = isRoundedDockStyle();
+        boolean collapsed = mPreferences != null && mPreferences.isTopPaneClockCollapsed();
+        float fullRadius = resolveStatusBarCapsuleCornerRadiusPx(
+            targetStatusBarHeightPx(true, collapsed));
+        mStatusBarSurfaceOutline.setFrame(capsule ? fullRadius : 0f, fullRadius, fullProgress);
+        if (host.getOutlineProvider() != mStatusBarSurfaceOutline)
+            host.setOutlineProvider(mStatusBarSurfaceOutline);
+        host.setClipToOutline(mStatusBarSurfaceOutline.clipsCorners());
+        host.invalidateOutline();
     }
 
     /**
@@ -11378,6 +11386,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (host == null) return;
                     applyTopStatusBarInteractiveHeight(host,
                         findViewById(R.id.terminal_top_widget_area), height, isRoundedDockStyle());
+                    applyFullStatusBarOutline(host, fullProgress);
                     View top = findViewById(R.id.terminal_top_widget_area);
                     if (top instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
                         ((com.termux.app.statusbar.TopPaneWidgetSlot) top)

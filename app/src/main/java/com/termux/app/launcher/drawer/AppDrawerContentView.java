@@ -8,6 +8,7 @@ import android.view.DragEvent;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewOutlineProvider;
 import android.view.ViewParent;
 import android.widget.FrameLayout;
 
@@ -248,7 +249,13 @@ public final class AppDrawerContentView extends FrameLayout
         // Positions change wholesale on every query, so item animations would cross-fade one app
         // into another. There is nothing to animate between two unrelated lists.
         mGrid.setItemAnimator(null);
-        mGrid.setClipToPadding(false);
+        // This recycler is a margin-inset sibling of the fixed search pill. Its parent must keep
+        // clipChildren=false for the rope lean and the full-plane drag overlay, so the recycler has
+        // to establish its own hard draw boundary. With clipToPadding=false a partially visible
+        // leading row can paint above this view during a fling and into the pill rectangle.
+        mGrid.setClipToPadding(true);
+        mGrid.setOutlineProvider(ViewOutlineProvider.BOUNDS);
+        mGrid.setClipToOutline(true);
         mGrid.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
@@ -342,9 +349,8 @@ public final class AppDrawerContentView extends FrameLayout
         mDragOverlay.setVisibility(INVISIBLE);
         addView(mDragOverlay, new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT));
-        // Chrome is composited last. The RecyclerView is deliberately allowed to keep its normal
-        // nested-scrolling draw path, but a partially visible/scaled holder at its leading edge
-        // must stay behind the fixed search surface rather than painting across it.
+        // Chrome stays last for its ordinary elevation/shadow language. Content safety does not
+        // depend on that ordering: each scrolling surface clips at the top margin below the pill.
         mPill.bringToFront();
         applyViewType();
     }
@@ -1702,6 +1708,12 @@ public final class AppDrawerContentView extends FrameLayout
     @NonNull
     public RecyclerView getGrid() {
         return mGrid;
+    }
+
+    /** @return the fixed search chrome used to verify content/overlay geometry as one hierarchy */
+    @NonNull
+    public AppDrawerSearchPillView getSearchPill() {
+        return mPill;
     }
 
     @NonNull

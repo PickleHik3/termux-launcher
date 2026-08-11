@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 import android.content.Context;
+import android.graphics.Rect;
 import android.os.Build;
 import android.view.MotionEvent;
 import android.view.View;
@@ -245,6 +246,46 @@ public class AppDrawerContentViewTest {
         assertNotNull(pill);
         assertTrue("the search chrome must composite above the scrolling grid",
             content.indexOfChild(pill) > content.indexOfChild(grid));
+    }
+
+    @Test
+    public void midScrollTopmostVisibleGridItemDoesNotIntersectSearchPill() {
+        grid.scrollBy(0, 400);
+        layout();
+        assertTrue("fixture must exercise a real mid-list production layout",
+            grid.computeVerticalScrollOffset() > 0);
+
+        View topmost = null;
+        for (int i = 0; i < grid.getChildCount(); i++) {
+            View child = grid.getChildAt(i);
+            if (topmost == null || child.getTop() < topmost.getTop()) topmost = child;
+        }
+        assertNotNull(topmost);
+        assertTrue("the mid-scroll holder must straddle the production surface's leading edge",
+            topmost.getTop() < 0);
+        assertTrue("the production grid must install a hard bounds clip",
+            grid.getClipToOutline());
+        Rect visibleItem = new Rect(0, 0, topmost.getWidth(), topmost.getHeight());
+        grid.offsetDescendantRectToMyCoords(topmost, visibleItem);
+        assertTrue(visibleItem.intersect(0, 0, grid.getWidth(), grid.getHeight()));
+        content.offsetDescendantRectToMyCoords(grid, visibleItem);
+        Rect pill = new Rect(content.getSearchPill().getLeft(),
+            content.getSearchPill().getTop(), content.getSearchPill().getRight(),
+            content.getSearchPill().getBottom());
+        assertFalse("the topmost visible production holder must be clipped below the pill",
+            Rect.intersects(visibleItem, pill));
+    }
+
+    @Test
+    public void everyPillViewTypeClipsItsProductionContentSurface() {
+        assertTrue(grid.getClipToPadding());
+        assertTrue(grid.getClipToOutline());
+        assertTrue(content.getHorizontalPager().getClipToPadding());
+        assertTrue(content.getHorizontalPager().getClipToOutline());
+        assertTrue(content.getCategoryView().getClipChildren());
+        assertTrue(content.getCategoryView().getClipToOutline());
+        assertTrue(content.getCategoryView().getOverview().getClipToPadding());
+        assertTrue(content.getCategoryView().getDetailList().getClipToPadding());
     }
 
     @Test

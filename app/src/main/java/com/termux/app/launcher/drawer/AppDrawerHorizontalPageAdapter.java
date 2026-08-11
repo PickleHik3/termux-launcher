@@ -114,8 +114,10 @@ public final class AppDrawerHorizontalPageAdapter
         GridLayout page = new GridLayout(parent.getContext());
         page.setAlignmentMode(GridLayout.ALIGN_BOUNDS);
         page.setUseDefaultMargins(false);
-        page.setClipChildren(false);
-        page.setClipToPadding(false);
+        // Cells never borrow pixels from the pill or page-dot bands. Drag feedback is rendered by
+        // AppDrawerDragOverlayView, outside this clipped production page.
+        page.setClipChildren(true);
+        page.setClipToPadding(true);
         page.setLayoutParams(new RecyclerView.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         return new PageHolder(page);

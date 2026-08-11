@@ -7,6 +7,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -65,8 +66,13 @@ public final class AppDrawerCategoryView extends ViewGroup
     public AppDrawerCategoryView(@NonNull android.content.Context context,
                                  @Nullable SuggestionBarView dock) {
         super(context);
-        setClipChildren(false);
-        setClipToPadding(false);
+        // The whole category host starts below the fixed search pill. Keep its overview, detail and
+        // morph frames inside that rectangle; the drawer's drag overlay is a sibling and remains
+        // deliberately unconstrained.
+        setClipChildren(true);
+        setClipToPadding(true);
+        setOutlineProvider(ViewOutlineProvider.BOUNDS);
+        setClipToOutline(true);
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
 
         tileAdapter = new AppDrawerCategoryTileAdapter(dock);
@@ -81,7 +87,9 @@ public final class AppDrawerCategoryView extends ViewGroup
         overview.setItemViewCacheSize(0);
         overview.setItemAnimator(null);
         overview.setOverScrollMode(OVER_SCROLL_NEVER);
-        overview.setClipToPadding(false);
+        overview.setClipToPadding(true);
+        overview.setOutlineProvider(ViewOutlineProvider.BOUNDS);
+        overview.setClipToOutline(true);
         overview.addItemDecoration(tileSpacing);
         overview.addOnScrollListener(popupDismissScrollListener());
         addView(overview);
@@ -97,6 +105,9 @@ public final class AppDrawerCategoryView extends ViewGroup
         detailList.setItemViewCacheSize(0);
         detailList.setItemAnimator(null);
         detailList.setOverScrollMode(OVER_SCROLL_NEVER);
+        detailList.setClipToPadding(true);
+        detailList.setOutlineProvider(ViewOutlineProvider.BOUNDS);
+        detailList.setClipToOutline(true);
         detailList.setVisibility(INVISIBLE);
         detailList.addOnScrollListener(popupDismissScrollListener());
         addView(detailList);

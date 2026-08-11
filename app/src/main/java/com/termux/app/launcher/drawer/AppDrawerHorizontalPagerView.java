@@ -5,6 +5,7 @@ import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.ViewOutlineProvider;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -52,7 +53,12 @@ public final class AppDrawerHorizontalPagerView extends RecyclerView
         setItemViewCacheSize(1);
         setItemAnimator(null);
         setOverScrollMode(OVER_SCROLL_NEVER);
-        setClipToPadding(false);
+        // The pager is laid out below the fixed search pill. Its ancestor intentionally permits
+        // out-of-bounds rope/drag drawing, so keep page content inside this recycler's own top and
+        // bottom edges (the latter also protects the page-dot band).
+        setClipToPadding(true);
+        setOutlineProvider(ViewOutlineProvider.BOUNDS);
+        setClipToOutline(true);
         mSnapHelper.attachToRecyclerView(this);
         addOnScrollListener(new OnScrollListener() {
             @Override
