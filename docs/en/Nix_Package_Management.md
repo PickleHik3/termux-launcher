@@ -10,6 +10,77 @@ environment. Instead of `pkg install`, packages come from the official
 The launcher itself is unchanged: same terminal, palette, panes,
 keyboard, and `launcherctl`/`tai` tooling as the Termux edition.
 
+## Coming from `pkg`? Start here
+
+One idea to get used to, and the rest follows: **there is no install
+command.** You keep a list of the programs you want, and rebuild. The
+list is a file, `~/.config/nix-on-droid/home.nix`; the rebuild is
+`nix-on-droid switch`. That is why you get rollbacks and why a fresh
+phone can be made identical to this one — the list *is* the system.
+
+Two files and one command cover almost everything:
+
+| | |
+|---|---|
+| `~/.config/nix-on-droid/home.nix` | your list of programs |
+| `~/.config/nix-on-droid/flake.lock` | which exact versions (updated on demand) |
+| `nix-on-droid switch --flake ~/.config/nix-on-droid` | make it so |
+
+### Command translation
+
+| Termux | Nix edition |
+|---|---|
+| `pkg search foo` | `nix search nixpkgs foo` |
+| `pkg show foo` | `nix eval nixpkgs#foo.meta.description` |
+| `pkg install foo` | add `foo` to `home.packages` in `home.nix`, then switch |
+| `pkg uninstall foo` | remove it from `home.nix`, then switch |
+| `pkg update` | `nix flake update` (refreshes the pinned versions) |
+| `pkg upgrade` | `nix flake update` **then** switch |
+| `pkg list-installed` | read `home.nix`, or `ls ~/.nix-profile/bin` |
+| `apt clean` / `autoremove` | `nix-collect-garbage -d` |
+| *(no equivalent)* | `nix-on-droid rollback` — undo the last switch |
+| *(no equivalent)* | `nix run nixpkgs#foo` — run once, install nothing |
+
+`pkg update` and `pkg upgrade` are one operation in Termux and two here,
+and the split is the useful part: updating only moves the pins in
+`flake.lock`, and nothing on your phone changes until you switch. So you
+can check what an upgrade would do before accepting it:
+
+```sh
+cd ~/.config/nix-on-droid
+nix flake update                     # bump the pins
+nix-on-droid build --flake .         # build only, no activation
+nix-on-droid switch --flake .        # accept
+```
+
+### Installing something, start to finish
+
+```sh
+nix search nixpkgs ripgrep           # 1. find the name
+nix run nixpkgs#ripgrep -- --help    # 2. optional: try it without installing
+nvim ~/.config/nix-on-droid/home.nix # 3. add `ripgrep` to home.packages
+cd ~/.config/nix-on-droid && nix-on-droid switch --flake .
+```
+
+```nix
+home.packages = with pkgs; [
+  # ... what is already there
+  ripgrep
+];
+```
+
+If a new binary is not found afterwards, start a new shell (`exec fish`)
+— a running session is still pointing at the old generation.
+
+### The one rule
+
+Do **not** use `nix-env -i` or `nix profile install` on this setup.
+They write to the same user profile that home-manager manages, so your
+next switch removes whatever they installed, and version conflicts
+between the two are confusing to unpick. List plus switch, always.
+`nix run` and `nix shell` are the safe imperative escape hatches: they
+install nothing.
+
 ## How it works
 
 On first launch the app downloads a bootstrap that contains the Nix
@@ -179,7 +250,9 @@ sshd-autostart on|off # arm/disarm starting it with new interactive sessions
 ```
 
 Nothing starts unless you run `sshd-start` yourself or explicitly arm
-`sshd-autostart on`. Details:
+`sshd-autostart on`. The autostart check itself lives in
+`~/.config/fish/conf.d/personal.fish`, so you can delete or reshape it
+there without a switch. Details:
 
 - Port **8023** by default (the Termux edition's sshd conventionally
   owns 8022 on the same device); override by writing a number to
@@ -205,46 +278,52 @@ Nothing starts unless you run `sshd-start` yourself or explicitly arm
 
 ## Everyday commands
 
-Quick, imperative package management:
+Looking things up and trying things out — none of these change your
+system:
 
 ```sh
-# search the package set
-nix search nixpkgs ripgrep
-
-# install / remove for your user profile
-nix profile install nixpkgs#ripgrep
-nix profile remove ripgrep
-
-# list what's installed, upgrade everything
-nix profile list
-nix profile upgrade --all
-
-# try a tool without installing it
-nix run nixpkgs#cowsay -- moo
-nix shell nixpkgs#nodejs   # temporary shell with node in PATH
+nix search nixpkgs ripgrep         # find a package name
+nix eval nixpkgs#ripgrep.version   # what version you would get
+nix run nixpkgs#cowsay -- moo       # run once, install nothing
+nix shell nixpkgs#nodejs            # temporary shell with node on PATH
+nix build --dry-run nixpkgs#foo     # would it be fetched from cache, or built here?
 ```
 
-## Declarative setup (recommended)
+That last one is worth a habit. Read its output for "will be fetched"
+(prebuilt, seconds) versus "will be built" (compiles on the phone, which
+for anything large means a very long time). Checking first is cheaper
+than interrupting a switch halfway.
 
-The system environment lives in `~/.config/nix-on-droid/nix-on-droid.nix`.
-Add packages there and rebuild — the config *is* your installed system,
-reproducible and rollback-able:
+Note that `nixpkgs#...` in these commands resolves through the flake
+registry, **not** the version pinned in your `flake.lock` — so a version
+you see here can differ from what a switch installs.
+
+## Declarative setup
+
+Two files, two scopes:
+
+- `home.nix` — your user: `home.packages`, dotfiles, activation hooks.
+  This is where nearly everything you install goes.
+- `nix-on-droid.nix` — the environment outside your home: the login
+  shell, `/etc`, base packages every script assumes, Android glue.
 
 ```nix
-{ pkgs, ... }:
-{
-  environment.packages = with pkgs; [
-    fish
-    neovim
-    ripgrep
-    eza
-  ];
-
-  user.shell = "${pkgs.fish}/bin/fish";
-}
+# home.nix
+home.packages = with pkgs; [
+  fish
+  neovim
+  ripgrep
+  eza
+];
 ```
 
-Apply with:
+```nix
+# nix-on-droid.nix
+environment.packages = with pkgs; [ git curl ];
+user.shell = "${pkgs.fish}/bin/fish";
+```
+
+Apply either with:
 
 ```sh
 nix-on-droid switch --flake ~/.config/nix-on-droid
@@ -255,6 +334,33 @@ Roll back to the previous generation any time:
 ```sh
 nix-on-droid rollback
 ```
+
+## Shell config: which file to edit
+
+`~/.config/fish/config.fish` is **read-only on purpose** — it is a
+symlink into the nix store, owned by home-manager, and it carries only
+what the launcher needs (PATH to `launcherctl`/`tai`, the wallpaper
+Material palette, the themed prompt). Trying to edit it gives you a
+read-only error.
+
+Your settings go in `~/.config/fish/conf.d/personal.fish`, a normal
+writable file the template drops in on first activation. Editor,
+aliases, `sshd-autostart`, and the `ls`/`cd` helpers all live there, with
+commented-out nix shortcuts ready to uncomment. Edit it and run
+`exec fish` — no switch needed.
+
+| Want to change | Edit | Then |
+|---|---|---|
+| your aliases, editor, keybinds | `~/.config/fish/conf.d/personal.fish` | `exec fish` |
+| the launcher's own shell setup | `~/.config/nix-on-droid/config/config.fish` | switch |
+| installed programs | `~/.config/nix-on-droid/home.nix` | switch |
+
+fish reads `conf.d/*.fish` **before** `config.fish`, so a bare `set` in
+`personal.fish` cannot override something `config.fish` sets afterwards
+— use a function or an event handler for that.
+
+Deleting `personal.fish` and switching again restores a fresh copy;
+switches never overwrite it while it exists.
 
 ## Housekeeping
 
@@ -269,8 +375,8 @@ nix-collect-garbage --delete-old
 |---|---|---|
 | Package manager | `pkg` / APT | `nix` / `nix-on-droid` |
 | Package source | Termux repos (bionic builds) | official `nixpkgs` (glibc builds, via proot) |
-| Install command | `pkg install foo` | `nix profile install nixpkgs#foo` |
-| Config-as-code | — | `nix-on-droid.nix` + flakes |
+| Install command | `pkg install foo` | add to `home.nix`, then switch |
+| Config-as-code | — | `home.nix` / `nix-on-droid.nix` + flakes |
 | Rollbacks | — | `nix-on-droid rollback` |
 | Termux:API tools | native | available; some tools need the `/android` prefix for system binaries |
 
