@@ -97,6 +97,11 @@ public final class AppDrawerHorizontalPagerView extends RecyclerView
         return !mLayoutManager.isHorizontalEnabled();
     }
 
+    public void setDragLocked(boolean locked) {
+        if (locked) stopScroll();
+        mLayoutManager.setHorizontalEnabled(!locked);
+    }
+
     @Override
     public boolean suppressCellClick() {
         return mSuppressCellClick || mSuppressCellClickDuringTerminalDispatch;

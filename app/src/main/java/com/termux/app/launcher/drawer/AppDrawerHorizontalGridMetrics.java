@@ -41,10 +41,22 @@ public final class AppDrawerHorizontalGridMetrics {
                                                          float labelHeightPx,
                                                          int requestedColumns,
                                                          int requestedRows) {
+        return resolve(usableWidthPx, usableHeightPx, density, labelHeightPx, requestedColumns,
+            requestedRows, 0);
+    }
+
+    @NonNull
+    public static AppDrawerHorizontalGridMetrics resolve(float usableWidthPx,
+                                                         float usableHeightPx,
+                                                         float density,
+                                                         float labelHeightPx,
+                                                         int requestedColumns,
+                                                         int requestedRows,
+                                                         int requestedIconDp) {
         float width = Math.max(0f, finiteOrZero(usableWidthPx));
         float height = Math.max(0f, finiteOrZero(usableHeightPx));
         AppDrawerGridMetrics cells = AppDrawerGridMetrics.resolve(width, density,
-            labelHeightPx, requestedColumns);
+            labelHeightPx, requestedColumns, requestedIconDp);
         float naturalRowHeight = Math.max(1f, finiteOrOne(cells.rowHeightPx));
         int physicallyFit = Math.max(1, Math.min(MAX_ROWS,
             (int) Math.floor(height / naturalRowHeight)));

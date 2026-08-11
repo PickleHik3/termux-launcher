@@ -17,7 +17,7 @@ import com.termux.app.SuggestionBarView;
 import com.termux.app.launcher.model.LauncherAppEntry;
 
 /** The single icon-and-label implementation shared by both drawer presentations. */
-public final class AppDrawerAppCellView extends LinearLayout {
+public class AppDrawerAppCellView extends LinearLayout {
 
     /** Stream-level guard used because a nested close deliberately does not cancel its child. */
     public interface ClickGate {
@@ -57,8 +57,14 @@ public final class AppDrawerAppCellView extends LinearLayout {
 
     public void bind(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
                      @Nullable AppDrawerGridMetrics metrics, @NonNull ClickGate clickGate) {
+        bind(dock, entry, metrics, clickGate, null);
+    }
+
+    public void bind(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
+                     @Nullable AppDrawerGridMetrics metrics, @NonNull ClickGate clickGate,
+                     @Nullable AppDrawerPickupDelegate pickupDelegate) {
         bindInternal(dock, entry, metrics == null ? 0f : metrics.iconPx,
-            metrics == null ? 0f : metrics.rowHeightPx, clickGate);
+            metrics == null ? 0f : metrics.rowHeightPx, clickGate, pickupDelegate);
     }
 
     public void bind(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
@@ -73,9 +79,21 @@ public final class AppDrawerAppCellView extends LinearLayout {
         bindInternal(dock, entry, iconPx, rowHeightPx, clickGate);
     }
 
+    void bind(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
+              int iconPx, int rowHeightPx, @NonNull ClickGate clickGate,
+              @Nullable AppDrawerPickupDelegate pickupDelegate) {
+        bindInternal(dock, entry, iconPx, rowHeightPx, clickGate, pickupDelegate);
+    }
+
     private void bindInternal(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
                               float iconSize, float rowHeight,
                               @NonNull ClickGate clickGate) {
+        bindInternal(dock, entry, iconSize, rowHeight, clickGate, null);
+    }
+
+    private void bindInternal(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
+                              float iconSize, float rowHeight, @NonNull ClickGate clickGate,
+                              @Nullable AppDrawerPickupDelegate pickupDelegate) {
         int iconPx = iconSize > 0f ? Math.max(1, Math.round(iconSize)) : 0;
         applyGeometry(rowHeight, iconPx);
         Drawable artwork = dock != null && iconPx > 0 ? dock.getRenderedIcon(entry, iconPx) : null;
@@ -90,10 +108,10 @@ public final class AppDrawerAppCellView extends LinearLayout {
             if (!clickGate.suppressCellClick() && dock != null)
                 dock.launchEntryFromDrawer(icon, entry);
         });
-        if (dock != null) dock.bindDrawerAppContextLongPress(this, entry);
+        if (dock != null) dock.bindDrawerAppContextLongPress(this, entry, pickupDelegate);
     }
 
-    private void applyGeometry(float rowHeightPx, int iconPx) {
+    protected void applyGeometry(float rowHeightPx, int iconPx) {
         if (rowHeightPx <= 0f) return;
         ViewGroup.LayoutParams cellParams = getLayoutParams();
         int rowHeight = Math.max(1, Math.round(rowHeightPx));

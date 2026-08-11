@@ -9,6 +9,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewParent;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -24,6 +25,7 @@ import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
 import com.termux.app.launcher.model.LauncherAppEntry;
+import com.termux.app.launcher.model.AppRef;
 
 import java.util.Collections;
 import java.util.List;
@@ -70,7 +72,8 @@ import java.io.IOException;
 public final class AppDrawerContentView extends FrameLayout
     implements NestedScrollingParent3, Choreographer.FrameCallback,
     AppDrawerPlaneView.CloseDragGate, AppDrawerSearchController.ResultsListener,
-    AppDrawerSearchPillView.Callbacks, AppDrawerRopeColumnView.Callbacks {
+    AppDrawerSearchPillView.Callbacks, AppDrawerRopeColumnView.Callbacks,
+    AppDrawerDragController.Host {
 
     /** Raw close-drag reports, in the plane's own vocabulary. The controller interprets them. */
     public interface Callbacks {
@@ -84,6 +87,8 @@ public final class AppDrawerContentView extends FrameLayout
         void onContentCloseDragEnd(float velocityPxPerSec);
 
         void onContentCloseDragCancel();
+
+        default void onDrawerSettingsRequested() {}
     }
 
     /** Ceiling on the damped overpull, in dp. The raw pull is unbounded; the travel is not. */
@@ -105,6 +110,8 @@ public final class AppDrawerContentView extends FrameLayout
     private final AppDrawerPageIndicatorView mPageIndicator;
     private final AppDrawerCategoryView mCategoryView;
     private final AppDrawerRopeColumnView mColumn;
+    private final AppDrawerDragOverlayView mDragOverlay;
+    private final ImageButton mSettingsButton;
     private final GridLayoutManager mLayoutManager;
     private final AppDrawerAppsAdapter mAdapter;
     private final AppDrawerHorizontalPageAdapter mHorizontalAdapter;
@@ -129,6 +136,7 @@ public final class AppDrawerContentView extends FrameLayout
     private final float[] mPlaneOffset = new float[2];
 
     @Nullable private SuggestionBarView mDock;
+    @Nullable private AppDrawerDragController mDragController;
     @Nullable private Callbacks mCallbacks;
     @Nullable private LauncherAppDataProvider mProvider;
     @Nullable private AppDrawerSearchController mSearch;
@@ -176,6 +184,31 @@ public final class AppDrawerContentView extends FrameLayout
      * attached child on every frame to tell it what it already is.
      */
     private boolean mHighlightWritten;
+    private boolean mSuppressCellClickDuringTerminalDispatch;
+    private boolean mDragActive;
+    private boolean mGestureDragEligible;
+    @Nullable private String mGestureDragStableId;
+    private int mDragEdgeDirection;
+    private boolean mDragEdgeConsumed;
+    private float mDragAutoscrollVelocity;
+    private final int[] mDragLocation = new int[2];
+    private final Runnable mDragEdgeDwell = this::onDragEdgeDwell;
+
+    private void onDragEdgeDwell() {
+        if (!mDragActive || mDragEdgeDirection == 0 || mDragEdgeConsumed) return;
+        int next = mHorizontalPager.getSelectedPage() + mDragEdgeDirection;
+        if (next >= 0 && next < mHorizontalAdapter.getItemCount())
+            mHorizontalPager.setSelectedPage(next, true);
+        mDragEdgeConsumed = true;
+    }
+    private final Runnable mDragAutoscroll = new Runnable() {
+        @Override public void run() {
+            if (!mDragActive || mGestureViewType != AppDrawerViewType.VERTICAL
+                || mDragAutoscrollVelocity == 0f) return;
+            mGrid.scrollBy(0, Math.round(mDragAutoscrollVelocity / 60f));
+            postOnAnimation(this);
+        }
+    };
 
     public AppDrawerContentView(@NonNull Context context) {
         this(context, null);
@@ -279,10 +312,30 @@ public final class AppDrawerContentView extends FrameLayout
         columnParams.topMargin = gridParams.topMargin;
         columnParams.bottomMargin = gridParams.bottomMargin;
         addView(mColumn, columnParams);
+        mDragOverlay = new AppDrawerDragOverlayView(context);
+        mDragOverlay.setVisibility(INVISIBLE);
+        addView(mDragOverlay, new LayoutParams(LayoutParams.MATCH_PARENT,
+            LayoutParams.MATCH_PARENT));
+        mSettingsButton = new ImageButton(context);
+        mSettingsButton.setImageResource(com.termux.R.drawable.ic_settings);
+        mSettingsButton.setContentDescription(context.getString(
+            com.termux.R.string.settings_app_drawer_settings_description));
+        mSettingsButton.setFocusable(true);
+        mSettingsButton.setClickable(true);
+        mSettingsButton.setOnClickListener(view -> {
+            Callbacks callbacks = mCallbacks;
+            if (callbacks != null) callbacks.onDrawerSettingsRequested();
+        });
+        LayoutParams settingsParams = new LayoutParams(dp(48f), dp(48f),
+            Gravity.BOTTOM | Gravity.START);
+        settingsParams.leftMargin = dp(8f);
+        settingsParams.bottomMargin = dp(8f);
+        addView(mSettingsButton, settingsParams);
         // Chrome is composited last. The RecyclerView is deliberately allowed to keep its normal
         // nested-scrolling draw path, but a partially visible/scaled holder at its leading edge
         // must stay behind the fixed search surface rather than painting across it.
         mPill.bringToFront();
+        mSettingsButton.bringToFront();
         applyViewType();
     }
 
@@ -315,6 +368,12 @@ public final class AppDrawerContentView extends FrameLayout
         // The column borrows the dock's text colour and its row-haptics preference, so it has to be
         // told about a dock that arrived after the content was built.
         mColumn.setDock(dock);
+        if (dock != null && mDragController == null) {
+            mDragController = new AppDrawerDragController(dock, mDragOverlay, this);
+            mAdapter.setDragController(mDragController, this::suppressCellClick);
+            mHorizontalAdapter.setClickGate(this::suppressCellClick);
+            mHorizontalAdapter.setDragController(mDragController);
+        }
     }
 
     /**
@@ -359,6 +418,7 @@ public final class AppDrawerContentView extends FrameLayout
         if (mInteractive == interactive) return;
         mInteractive = interactive;
         if (!interactive) {
+            if (mDragController != null) mDragController.cancel();
             cancelCellLongPresses();
             switch (mViewType) {
                 case VERTICAL:
@@ -682,16 +742,24 @@ public final class AppDrawerContentView extends FrameLayout
     }
 
     private void submitVisibleResults(boolean resetPosition) {
+        boolean pickupEnabled = !hasQuery()
+            && (mViewType == AppDrawerViewType.VERTICAL
+                || mViewType == AppDrawerViewType.HORIZONTAL);
+        mAdapter.setPickupEnabled(pickupEnabled);
+        mHorizontalAdapter.setPickupEnabled(pickupEnabled);
+        List<AppDrawerItem> mixed = mixedItems();
         switch (mViewType) {
             case VERTICAL:
-                mAdapter.submit(mVisibleResults, mSectionIndex);
+                AppDrawerSectionIndex mixedIndex = AppDrawerSectionIndex.build(indexEntries(mixed));
+                mSectionIndex = mixedIndex;
+                mAdapter.submitItems(mixed, mixedIndex);
                 applyColumnLetters();
                 if (resetPosition) mGrid.scrollToPosition(0);
                 return;
             case HORIZONTAL:
                 int page = resetPosition ? 0 : mHorizontalPager.getSelectedPage();
                 mHorizontalPager.stopScroll();
-                mHorizontalAdapter.submit(mVisibleResults);
+                mHorizontalAdapter.submitItems(mixed);
                 mHorizontalPager.setSelectedPage(page, false);
                 updatePageIndicator();
                 return;
@@ -706,6 +774,26 @@ public final class AppDrawerContentView extends FrameLayout
                 applyViewType();
                 return;
         }
+    }
+
+    @NonNull
+    private List<AppDrawerItem> mixedItems() {
+        SuggestionBarView dock = mDock;
+        if (dock == null || hasQuery() || mViewType == AppDrawerViewType.CATEGORIES)
+            return AppDrawerItemComposer.appsOnly(mVisibleResults);
+        return AppDrawerItemComposer.compose(mVisibleResults, dock.getLauncherConfigSnapshot(),
+            true, mViewType);
+    }
+
+    @NonNull
+    private static List<LauncherAppEntry> indexEntries(@NonNull List<AppDrawerItem> items) {
+        List<LauncherAppEntry> entries = new java.util.ArrayList<>(items.size());
+        for (AppDrawerItem item : items) {
+            if (item.app != null) entries.add(item.app);
+            else entries.add(new LauncherAppEntry(new AppRef("folder." + item.stableId, ""),
+                item.folder == null ? "Folder" : item.folder.title, null));
+        }
+        return entries;
     }
 
     /** Drops every attached, cached and pooled search holder before category previews bind. */
@@ -739,6 +827,20 @@ public final class AppDrawerContentView extends FrameLayout
     private void dismissContextPopups() {
         SuggestionBarView dock = mDock;
         if (dock != null) dock.dismissContextPopups();
+    }
+
+    /** Live-layout apply cancels all B-6 state before changing managers or adapters. */
+    public void cancelTransientFolderState() {
+        cancelCellLongPresses();
+        dismissContextPopups();
+        cancelNestedClose();
+        mHorizontalPager.stopForModeChange();
+        if (mDragController != null) mDragController.cancel();
+    }
+
+    /** One post-config list submission against the existing adapters/content tree. */
+    public void rebindCurrentResults() {
+        submitVisibleResults(false);
     }
 
     /**
@@ -1005,14 +1107,17 @@ public final class AppDrawerContentView extends FrameLayout
         switch (mViewType) {
             case VERTICAL:
                 return AppDrawerTouchRegions.resolve(localX, localY, boundsOf(mGrid),
-                    boundsOf(mColumn), mInteractive, isColumnActive());
+                    boundsOf(mColumn), boundsOf(mSettingsButton), mInteractive, isColumnActive());
             case HORIZONTAL:
                 return AppDrawerTouchRegions.resolve(localX, localY, boundsOf(mHorizontalPager),
-                    null, mInteractive, false);
+                    null, boundsOf(mSettingsButton), mInteractive, false);
             case CATEGORIES:
                 if (hasQuery())
                     return AppDrawerTouchRegions.resolve(localX, localY, boundsOf(mGrid), null,
-                        mInteractive, false);
+                        boundsOf(mSettingsButton), mInteractive, false);
+                if (localX >= mSettingsButton.getLeft() && localX < mSettingsButton.getRight()
+                    && localY >= mSettingsButton.getTop() && localY < mSettingsButton.getBottom())
+                    return AppDrawerTouchRegions.Region.CONTROL;
                 float x = localX - mCategoryView.getLeft();
                 float y = localY - mCategoryView.getTop();
                 return AppDrawerCategoryTouchRegions.isContentOwned(mCategoryView.touchPart(x, y))
@@ -1054,6 +1159,17 @@ public final class AppDrawerContentView extends FrameLayout
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
+        int terminalAction = ev.getActionMasked();
+        boolean terminal = terminalAction == MotionEvent.ACTION_UP
+            || terminalAction == MotionEvent.ACTION_CANCEL;
+        try {
+            return dispatchTouchEventObserved(ev);
+        } finally {
+            if (terminal) mSuppressCellClickDuringTerminalDispatch = false;
+        }
+    }
+
+    private boolean dispatchTouchEventObserved(@NonNull MotionEvent ev) {
         // An observer, never an interceptor. The close drag is measured against raw screen Y, which
         // only the raw stream carries; claiming here instead is what would take the scroll away
         // from the grid and reintroduce the slop race this whole design exists to avoid.
@@ -1084,6 +1200,11 @@ public final class AppDrawerContentView extends FrameLayout
             mGestureRecycler = null;
             mOverpullSurface = null;
             AppDrawerTouchRegions.Region region = regionAt(ev.getX(), ev.getY());
+            AppDrawerItem downItem = drawerItemAt(ev.getX(), ev.getY());
+            mGestureDragStableId = downItem == null ? null : downItem.stableId;
+            mGestureDragEligible = mInteractive && !hasQuery()
+                && mViewType != AppDrawerViewType.CATEGORIES
+                && downItem != null && downItem.kind == AppDrawerItem.Kind.APP;
             if (region == AppDrawerTouchRegions.Region.COLUMN) {
                 // The column owns this stream from here to its UP. onNestedPreScroll is already
                 // gated on mDownOverGrid, so a scrub can never report a close with no change to it.
@@ -1130,6 +1251,95 @@ public final class AppDrawerContentView extends FrameLayout
             }
         }
         return handled;
+    }
+
+    @Nullable
+    private AppDrawerItem drawerItemAt(float x, float y) {
+        if (mViewType == AppDrawerViewType.VERTICAL) {
+            View child = mGrid.findChildViewUnder(x - mGrid.getLeft(), y - mGrid.getTop());
+            if (child == null) return null;
+            return mAdapter.itemAt(mGrid.getChildAdapterPosition(child));
+        }
+        if (mViewType != AppDrawerViewType.HORIZONTAL) return null;
+        View pageView = mHorizontalPager.findChildViewUnder(x - mHorizontalPager.getLeft(),
+            y - mHorizontalPager.getTop());
+        if (pageView == null) return null;
+        RecyclerView.ViewHolder raw = mHorizontalPager.getChildViewHolder(pageView);
+        if (!(raw instanceof AppDrawerHorizontalPageAdapter.PageHolder)) return null;
+        AppDrawerHorizontalPageAdapter.PageHolder page =
+            (AppDrawerHorizontalPageAdapter.PageHolder) raw;
+        float localX = x - mHorizontalPager.getLeft() - pageView.getLeft();
+        float localY = y - mHorizontalPager.getTop() - pageView.getTop();
+        for (int i = 0; i < page.cells.size(); i++) {
+            View cell = page.cells.get(i);
+            if (localX >= cell.getLeft() && localX < cell.getRight()
+                && localY >= cell.getTop() && localY < cell.getBottom()) {
+                return mHorizontalAdapter.itemAt(raw.getAdapterPosition()
+                    * mHorizontalAdapter.itemsPerPage() + i);
+            }
+        }
+        return null;
+    }
+
+    private boolean suppressCellClick() {
+        return mSuppressCellClickDuringTerminalDispatch || mDragActive;
+    }
+
+    @Override public boolean isFrozenPickupEligible(@NonNull String stableId) {
+        return mGestureDragEligible && stableId.equals(mGestureDragStableId);
+    }
+
+    @Override public void armTerminalDispatchDragLatch() {
+        mSuppressCellClickDuringTerminalDispatch = true;
+    }
+
+    @Override public void onDragStateChanged(boolean dragging) {
+        mDragActive = dragging;
+        if (dragging) mDragOverlay.setVisibility(VISIBLE);
+        mHorizontalPager.setDragLocked(dragging
+            && mGestureViewType == AppDrawerViewType.HORIZONTAL);
+        if (!dragging) {
+            removeCallbacks(mDragEdgeDwell);
+            removeCallbacks(mDragAutoscroll);
+            mDragEdgeDirection = 0;
+            mDragEdgeConsumed = false;
+            mDragAutoscrollVelocity = 0f;
+        }
+    }
+
+    @NonNull @Override public AppDrawerViewType frozenSourceViewType() {
+        return mGestureViewType;
+    }
+
+    @Override public void onDragLocation(@NonNull View target, float localX, float localY) {
+        target.getLocationOnScreen(mDragLocation);
+        int rawX = Math.round(mDragLocation[0] + localX);
+        int rawY = Math.round(mDragLocation[1] + localY);
+        getLocationOnScreen(mDragLocation);
+        float x = rawX - mDragLocation[0];
+        float y = rawY - mDragLocation[1];
+        if (mGestureViewType == AppDrawerViewType.HORIZONTAL) {
+            int direction = AppDrawerDragPolicy.edgeDirection(x, getWidth(), mDensity);
+            if (direction == 0) {
+                removeCallbacks(mDragEdgeDwell);
+                mDragEdgeDirection = 0;
+                mDragEdgeConsumed = false;
+            } else if (direction != mDragEdgeDirection) {
+                removeCallbacks(mDragEdgeDwell);
+                mDragEdgeDirection = direction;
+                mDragEdgeConsumed = false;
+                postDelayed(mDragEdgeDwell, AppDrawerDragPolicy.HORIZONTAL_DWELL_MS);
+            }
+            return;
+        }
+        if (mGestureViewType == AppDrawerViewType.VERTICAL) {
+            float velocity = AppDrawerDragPolicy.verticalAutoscrollVelocity(y, getHeight(), mDensity);
+            if (velocity != mDragAutoscrollVelocity) {
+                mDragAutoscrollVelocity = velocity;
+                removeCallbacks(mDragAutoscroll);
+                if (velocity != 0f) postOnAnimation(mDragAutoscroll);
+            }
+        }
     }
 
     private void beginClosePolicy(@NonNull RecyclerView recycler) {

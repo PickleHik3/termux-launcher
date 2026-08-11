@@ -175,13 +175,14 @@ public class LauncherConfigRepositoryTest {
             new AppRef("com.example.custom", "Main"),
             new PinnedIconOverride(PinnedIconOverride.SOURCE_ICON_PACK, "pack.example", "ic_custom", "Custom")
         ));
+        folder.apps.add(new PinnedAppItem(new AppRef("com.example.second", "Main")));
         items.add(folder);
 
         repository.savePinnedItems(items);
         List<PinnedItem> loaded = repository.loadPinnedItems();
 
         PinnedFolderItem loadedFolder = (PinnedFolderItem) loaded.get(0);
-        assertEquals(1, loadedFolder.apps.size());
+        assertEquals(2, loadedFolder.apps.size());
         PinnedAppItem folderApp = loadedFolder.apps.get(0);
         assertEquals("com.example.custom", folderApp.appRef.packageName);
         assertEquals("pack.example", folderApp.iconOverride.iconPackPackage);
@@ -253,6 +254,7 @@ public class LauncherConfigRepositoryTest {
         pins.add(new PinnedAppItem(new AppRef("com.example.invalid", "Main"), missing));
         PinnedFolderItem folder = new PinnedFolderItem("folder-prune", "Folder");
         folder.apps.add(new PinnedAppItem(new AppRef("com.example.folder", "Main"), missing));
+        folder.apps.add(new PinnedAppItem(new AppRef("com.example.folder.second", "Main")));
         pins.add(folder);
         repository.savePinnedItems(pins);
 

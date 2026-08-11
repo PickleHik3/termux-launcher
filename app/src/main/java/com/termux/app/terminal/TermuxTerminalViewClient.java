@@ -576,6 +576,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         // Swallow the release of a stroke the palette consumed on the way down.
         if (mActivity.isCommandPaletteOpen())
             return true;
+        if (mActivity.isFolderRenameActive())
+            return true;
         // Same for the drawer: onKeyDown claimed the press, and a release let through on its own
         // would reach the shell behind a full-screen plane.
         if (mActivity.isAppDrawerOpen())

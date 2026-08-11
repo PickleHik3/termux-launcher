@@ -39,7 +39,7 @@ public class LauncherDrawerViewTypePreferenceTest {
         manager.setPreferenceDataStore(TermuxStylePreferencesDataStore.getInstance(
             RuntimeEnvironment.getApplication()));
         PreferenceScreen screen = manager.inflateFromResource(
-            RuntimeEnvironment.getApplication(), R.xml.launcher_preferences, null);
+            RuntimeEnvironment.getApplication(), R.xml.app_drawer_preferences, null);
         Preference found = screen.findPreference("app_launcher_drawer_view_type");
         assertTrue(found instanceof ListPreference);
         ListPreference list = (ListPreference) found;
@@ -61,10 +61,8 @@ public class LauncherDrawerViewTypePreferenceTest {
         List<Intent> broadcasts = Shadows.shadowOf(app).getBroadcastIntents();
         assertTrue(broadcasts.size() > before);
         Intent styling = broadcasts.get(broadcasts.size() - 1);
-        assertEquals(TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.ACTION_RELOAD_STYLE,
+        assertEquals(TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.ACTION_RELOAD_APP_DRAWER,
             styling.getAction());
-        assertFalse(styling.getBooleanExtra(
-            TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.EXTRA_RECREATE_ACTIVITY, true));
     }
 
     @Test public void categoriesPersistsThroughTheExistingDataStore() {

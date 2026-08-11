@@ -212,6 +212,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
     private final TermuxAppSharedPreferences mPreferences;
     private boolean mPendingRecreateActivity;
     private final Runnable mStyleSyncRunnable;
+    private final Runnable mDrawerSyncRunnable;
 
     private static TermuxStylePreferencesDataStore mInstance;
     private static final String LOG_TAG = "TermuxStylePreferences";
@@ -224,6 +225,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             mPendingRecreateActivity = false;
             TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, recreateActivity);
         };
+        mDrawerSyncRunnable = () -> TermuxActivity.requestAppDrawerReloadOnNextResume(mContext);
     }
 
     public static synchronized TermuxStylePreferencesDataStore getInstance(Context context) {
@@ -237,6 +239,11 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         mPendingRecreateActivity = mPendingRecreateActivity || recreateActivity;
         MAIN_HANDLER.removeCallbacks(mStyleSyncRunnable);
         MAIN_HANDLER.postDelayed(mStyleSyncRunnable, STYLE_SYNC_DEBOUNCE_MS);
+    }
+
+    private void scheduleAppDrawerSync() {
+        MAIN_HANDLER.removeCallbacks(mDrawerSyncRunnable);
+        MAIN_HANDLER.postDelayed(mDrawerSyncRunnable, STYLE_SYNC_DEBOUNCE_MS);
     }
 
     @Override
@@ -390,6 +397,26 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherDockCornerRadius(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
+            case "app_launcher_drawer_icon_size_dp":
+                mPreferences.setAppLauncherDrawerIconSizeDp(value);
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_grid_columns_vertical":
+                mPreferences.setAppLauncherDrawerGridColumnsVertical(value);
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_grid_columns_horizontal":
+                mPreferences.setAppLauncherDrawerGridColumnsHorizontal(value);
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_grid_rows_horizontal":
+                mPreferences.setAppLauncherDrawerGridRowsHorizontal(value);
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_grid_columns_categories":
+                mPreferences.setAppLauncherDrawerGridColumnsCategories(value);
+                scheduleAppDrawerSync();
+                break;
             default:
                 break;
         }
@@ -422,6 +449,16 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_launcher_dock_corner_radius":
                 int radius = mPreferences.getAppLauncherDockCornerRadius();
                 return radius < 0 ? 28 : radius;
+            case "app_launcher_drawer_icon_size_dp":
+                return mPreferences.getAppLauncherDrawerIconSizeDp();
+            case "app_launcher_drawer_grid_columns_vertical":
+                return mPreferences.getAppLauncherDrawerGridColumnsVertical();
+            case "app_launcher_drawer_grid_columns_horizontal":
+                return mPreferences.getAppLauncherDrawerGridColumnsHorizontal();
+            case "app_launcher_drawer_grid_rows_horizontal":
+                return mPreferences.getAppLauncherDrawerGridRowsHorizontal();
+            case "app_launcher_drawer_grid_columns_categories":
+                return mPreferences.getAppLauncherDrawerGridColumnsCategories();
             default:
                 return defValue;
         }
@@ -460,7 +497,27 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 break;
             case "app_launcher_drawer_view_type":
                 mPreferences.setAppLauncherDrawerViewType(value);
-                scheduleTermuxActivityStylingSync(false);
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_icon_size_dp":
+                mPreferences.setAppLauncherDrawerIconSizeDp(DataUtils.getIntFromString(value, 0));
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_grid_columns_vertical":
+                mPreferences.setAppLauncherDrawerGridColumnsVertical(DataUtils.getIntFromString(value, 0));
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_grid_columns_horizontal":
+                mPreferences.setAppLauncherDrawerGridColumnsHorizontal(DataUtils.getIntFromString(value, 0));
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_grid_rows_horizontal":
+                mPreferences.setAppLauncherDrawerGridRowsHorizontal(DataUtils.getIntFromString(value, 0));
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_grid_columns_categories":
+                mPreferences.setAppLauncherDrawerGridColumnsCategories(DataUtils.getIntFromString(value, 0));
+                scheduleAppDrawerSync();
                 break;
             case "app_launcher_default_buttons":
                 mPreferences.setAppLauncherDefaultButtons(value);
@@ -513,6 +570,16 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getAppLauncherDockStyle();
             case "app_launcher_drawer_view_type":
                 return mPreferences.getAppLauncherDrawerViewType();
+            case "app_launcher_drawer_icon_size_dp":
+                return Integer.toString(mPreferences.getAppLauncherDrawerIconSizeDp());
+            case "app_launcher_drawer_grid_columns_vertical":
+                return Integer.toString(mPreferences.getAppLauncherDrawerGridColumnsVertical());
+            case "app_launcher_drawer_grid_columns_horizontal":
+                return Integer.toString(mPreferences.getAppLauncherDrawerGridColumnsHorizontal());
+            case "app_launcher_drawer_grid_rows_horizontal":
+                return Integer.toString(mPreferences.getAppLauncherDrawerGridRowsHorizontal());
+            case "app_launcher_drawer_grid_columns_categories":
+                return Integer.toString(mPreferences.getAppLauncherDrawerGridColumnsCategories());
             case "app_launcher_default_buttons":
                 return mPreferences.getAppLauncherDefaultButtons();
             case "app_launcher_icon_pack_package":

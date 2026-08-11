@@ -54,6 +54,8 @@ public class AppDrawerControllerCategoriesTest {
         preferences.setAppLauncherDrawerViewType("categories");
         preferences.setAppLauncherDrawerGridColumnsVertical(6);
         preferences.setAppLauncherDrawerGridColumnsHorizontal(6);
+        ReflectionHelpers.setField(controller, "mLayoutConfig",
+            AppDrawerLayoutConfig.from(preferences));
         invokePrepare();
         AppDrawerCategoryGridMetrics metrics = content.getCategoryView().getMetrics();
         assertEquals(AppDrawerViewType.CATEGORIES, content.getViewType());
@@ -92,6 +94,10 @@ public class AppDrawerControllerCategoriesTest {
         content.getCategoryView().onExpandRequested(bucket, (AppDrawerCategoryTileView)
             content.getCategoryView().getOverview().getChildAt(0));
         content.advanceDrawerFx(1, 1f / 60f, true);
+
+        preferences.setAppLauncherDrawerViewType("categories");
+        ReflectionHelpers.setField(controller, "mLayoutConfig",
+            AppDrawerLayoutConfig.from(preferences));
 
         ReflectionHelpers.setField(controller, "mPlane", plane);
         ReflectionHelpers.setField(controller, "mEngaged", true);

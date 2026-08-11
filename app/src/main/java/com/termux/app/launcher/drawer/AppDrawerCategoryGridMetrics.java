@@ -76,6 +76,14 @@ public final class AppDrawerCategoryGridMetrics {
     public static AppDrawerCategoryGridMetrics resolve(float usableWidthPx, float viewportHeightPx,
         float density, float headingHeightPx, float appLabelHeightPx, float drawerRadiusPx,
         int cacheBudgetBytes) {
+        return resolve(usableWidthPx, viewportHeightPx, density, headingHeightPx, appLabelHeightPx,
+            drawerRadiusPx, cacheBudgetBytes, 0, 0);
+    }
+
+    @NonNull
+    public static AppDrawerCategoryGridMetrics resolve(float usableWidthPx, float viewportHeightPx,
+        float density, float headingHeightPx, float appLabelHeightPx, float drawerRadiusPx,
+        int cacheBudgetBytes, int requestedColumns, int requestedIconDp) {
         float d = finitePositive(density, 1f);
         float width = finiteNonNegative(usableWidthPx);
         float viewport = finiteNonNegative(viewportHeightPx);
@@ -86,6 +94,7 @@ public final class AppDrawerCategoryGridMetrics {
         // breathing room inside that body and is accounted for when the exact span is resolved.
         int columns = (int) Math.floor((width + gap) / (MIN_TILE_DP * d + gap));
         columns = Math.max(1, Math.min(3, columns));
+        if (requestedColumns >= 1 && requestedColumns <= 3) columns = requestedColumns;
         float span = Math.max(0f, (available - (columns - 1) * gap) / columns);
         float inset = Math.min(TILE_HORIZONTAL_INSET_DP * d, span / 2f);
         float tile = Math.max(0f, span - 2f * inset);
@@ -101,7 +110,11 @@ public final class AppDrawerCategoryGridMetrics {
         double allowed = Math.max(0d, cacheBudgetBytes) * PREVIEW_BUDGET_FRACTION;
         int budgetIcon = (int) Math.floor(Math.sqrt(allowed / (32d * attached)));
         int geometryIcon = (int) Math.floor(largeSlot * 0.80f);
-        int icon = Math.max(0, Math.min(Math.min(Math.round(MAX_ICON_DP * d), geometryIcon),
+        int requestedIconPx = requestedIconDp == 36 || requestedIconDp == 40
+            || requestedIconDp == 44 || requestedIconDp == 48
+            ? Math.round(requestedIconDp * d) : Math.round(MAX_ICON_DP * d);
+        int icon = Math.max(0, Math.min(Math.min(Math.min(Math.round(MAX_ICON_DP * d),
+            requestedIconPx), geometryIcon),
             Math.max(0, budgetIcon)));
         int detailColumns = AppDrawerGridMetrics.resolveColumns(width / d);
         float detailCell = detailColumns == 0 ? 0f : width / detailColumns;

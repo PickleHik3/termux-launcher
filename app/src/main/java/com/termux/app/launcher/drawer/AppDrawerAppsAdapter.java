@@ -44,6 +44,7 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
 
     @Nullable private SuggestionBarView mDock;
     @NonNull private List<LauncherAppEntry> mEntries = new ArrayList<>();
+    @NonNull private List<AppDrawerItem> mItems = new ArrayList<>();
     /**
      * The section index's per-position letters, cached parallel to {@link #mEntries}. The scrub's
      * per-frame walk goes from an attached child's adapter position to its letter through this array
@@ -51,6 +52,9 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
      */
     @NonNull private char[] mPositionLetters = NO_LETTERS;
     @Nullable private AppDrawerGridMetrics mMetrics;
+    @Nullable private AppDrawerDragController mDragController;
+    private boolean mPickupEnabled;
+    @NonNull private AppDrawerAppCellView.ClickGate mClickGate = AppDrawerAppCellView.ALLOW_CLICKS;
     /** The letter under the finger, or 0. Written every frame of a scrub and never notified on. */
     private char mScrubLetter = '\0';
     private float mScrubStrength;
@@ -67,6 +71,16 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
         notifyDataSetChanged();
     }
 
+    public void setDragController(@Nullable AppDrawerDragController controller,
+                                  @NonNull AppDrawerAppCellView.ClickGate clickGate) {
+        mDragController = controller;
+        mClickGate = clickGate;
+        notifyDataSetChanged();
+    }
+
+    /** Set immediately before a list submission, so the submission remains the sole rebind. */
+    public void setPickupEnabled(boolean enabled) { mPickupEnabled = enabled; }
+
     /**
      * Replaces the visible list. Called with the full catalogue, sorted by label, for an empty query
      * and with the ranked results otherwise.
@@ -82,6 +96,20 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
     public void submit(@NonNull List<LauncherAppEntry> entries,
                        @Nullable AppDrawerSectionIndex index) {
         mEntries = new ArrayList<>(entries);
+        mItems = AppDrawerItemComposer.appsOnly(entries);
+        mPositionLetters = index == null ? NO_LETTERS : index.copyPositionLetters();
+        notifyDataSetChanged();
+    }
+
+    public void submitItems(@NonNull List<AppDrawerItem> items) {
+        submitItems(items, null);
+    }
+
+    public void submitItems(@NonNull List<AppDrawerItem> items,
+                            @Nullable AppDrawerSectionIndex index) {
+        mItems = new ArrayList<>(items);
+        mEntries = new ArrayList<>();
+        for (AppDrawerItem item : items) if (item.app != null) mEntries.add(item.app);
         mPositionLetters = index == null ? NO_LETTERS : index.copyPositionLetters();
         notifyDataSetChanged();
     }
@@ -129,7 +157,7 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
 
     @Nullable
     public LauncherAppEntry entryAt(int position) {
-        return position >= 0 && position < mEntries.size() ? mEntries.get(position) : null;
+        return position >= 0 && position < mItems.size() ? mItems.get(position).app : null;
     }
 
     @NonNull
@@ -137,15 +165,25 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
         return mEntries;
     }
 
+    @Nullable public AppDrawerItem itemAt(int position) {
+        return position >= 0 && position < mItems.size() ? mItems.get(position) : null;
+    }
+
     @Override
     public int getItemCount() {
-        return mEntries.size();
+        return mItems.size();
+    }
+
+    @Override public int getItemViewType(int position) {
+        return mItems.get(position).kind == AppDrawerItem.Kind.FOLDER ? 1 : 0;
     }
 
     @NonNull
     @Override
     public Cell onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        AppDrawerAppCellView root = new AppDrawerAppCellView(parent.getContext());
+        AppDrawerAppCellView root = viewType == 1
+            ? new AppDrawerFolderCellView(parent.getContext())
+            : new AppDrawerAppCellView(parent.getContext());
         root.setLayoutParams(new RecyclerView.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return new Cell(root);
@@ -153,9 +191,13 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
 
     @Override
     public void onBindViewHolder(@NonNull Cell holder, int position) {
-        LauncherAppEntry entry = mEntries.get(position);
+        AppDrawerItem item = mItems.get(position);
         AppDrawerGridMetrics metrics = mMetrics;
-        holder.cell.bind(mDock, entry, metrics, AppDrawerAppCellView.ALLOW_CLICKS);
+        if (item.kind == AppDrawerItem.Kind.FOLDER)
+            ((AppDrawerFolderCellView) holder.cell).bindFolder(mDock, item.folder, metrics, mClickGate);
+        else holder.cell.bind(mDock, item.app, metrics, mClickGate,
+            mPickupEnabled ? mDragController : null);
+        if (mPickupEnabled && mDragController != null) mDragController.bindTarget(holder.cell, item);
 
         // Last, and not optional. A cell the auto-scroll binds mid-scrub has to arrive already
         // dimmed; a cell bound with no scrub in progress is set to exactly 1 and 1, which is what

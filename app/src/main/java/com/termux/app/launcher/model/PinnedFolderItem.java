@@ -7,6 +7,8 @@ import java.util.List;
 
 public final class PinnedFolderItem implements PinnedItem {
     public static final int MAX_GRID = 6;
+    /** A 6x6 folder is the largest persisted and rendered folder. */
+    public static final int MAX_APPS = MAX_GRID * MAX_GRID;
     public static final int DEFAULT_ROWS = 3;
     public static final int DEFAULT_COLS = 3;
 
@@ -26,6 +28,18 @@ public final class PinnedFolderItem implements PinnedItem {
         this.tintOverrideEnabled = false;
         this.tintColor = 0xFF202020;
         this.apps = new ArrayList<>();
+    }
+
+    public boolean containsApp(@NonNull AppRef appRef) {
+        String stableId = appRef.stableId();
+        for (PinnedAppItem app : apps) {
+            if (app != null && stableId.equals(app.appRef.stableId())) return true;
+        }
+        return false;
+    }
+
+    public boolean canAdd(@NonNull AppRef appRef) {
+        return apps.size() < MAX_APPS && !containsApp(appRef);
     }
 
     @Override

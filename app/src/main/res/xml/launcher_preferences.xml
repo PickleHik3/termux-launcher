@@ -59,13 +59,10 @@
             app:title="@string/settings_app_drawer_enabled_title"
             app:summary="@string/settings_app_drawer_enabled_summary"
             android:defaultValue="true" />
-        <ListPreference
-            app:key="app_launcher_drawer_view_type"
+        <Preference
+            app:key="app_launcher_drawer_layout"
             app:title="@string/settings_app_drawer_view_type_title"
-            android:defaultValue="vertical"
-            app:entries="@array/app_launcher_drawer_view_type_entries"
-            app:entryValues="@array/app_launcher_drawer_view_type_values"
-            app:useSimpleSummaryProvider="true" />
+            app:fragment="com.termux.app.fragments.settings.termux.AppDrawerPreferencesFragment" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_launcher_search_header">

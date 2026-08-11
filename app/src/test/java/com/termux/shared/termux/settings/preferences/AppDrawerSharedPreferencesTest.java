@@ -46,8 +46,8 @@ public class AppDrawerSharedPreferencesTest {
         preferences.setAppLauncherDrawerGridColumnsHorizontal(99);
         preferences.setAppLauncherDrawerGridRowsHorizontal(1);
         assertEquals(5, preferences.getAppLauncherDrawerGridColumnsVertical());
-        assertEquals(6, preferences.getAppLauncherDrawerGridColumnsHorizontal());
-        assertEquals(2, preferences.getAppLauncherDrawerGridRowsHorizontal());
+        assertEquals(0, preferences.getAppLauncherDrawerGridColumnsHorizontal());
+        assertEquals(0, preferences.getAppLauncherDrawerGridRowsHorizontal());
     }
 
     @Test public void horizontalColumnsNeverChangeVerticalColumns() {

@@ -30,6 +30,7 @@ import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
 import com.termux.shared.android.PermissionUtils;
 import com.termux.shared.termux.TermuxConstants;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
 @Keep
 public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
@@ -51,6 +52,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         SettingsLayoutUtils.applyScreenLayout(this);
         configurePermissionActions(context);
         updatePermissionSummaries(context);
+        updateDrawerLayoutSummary();
         Preference customizeDock = findPreference("customize_dock_surface");
         if (customizeDock != null) customizeDock.setOnPreferenceClickListener(preference -> {
             Intent intent = new Intent(context, TermuxActivity.class);
@@ -135,6 +137,20 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         }
     }
 
+    private void updateDrawerLayoutSummary() {
+        Preference layout = findPreference("app_launcher_drawer_layout");
+        if (layout == null || getContext() == null) return;
+        String value = TermuxStylePreferencesDataStore.getInstance(getContext()).getString(
+            TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_VIEW_TYPE);
+        int summary = TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL.equals(value)
+            ? R.string.settings_app_drawer_view_type_horizontal
+            : TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_CATEGORIES.equals(value)
+                ? R.string.settings_app_drawer_view_type_categories
+                : R.string.settings_app_drawer_view_type_vertical;
+        layout.setSummary(summary);
+    }
+
     @Override
     public void onResume() {
         super.onResume();
@@ -144,6 +160,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
             getActivity().setTitle(R.string.settings_destination_launcher_apps);
         }
         updatePermissionSummaries(context);
+        updateDrawerLayoutSummary();
         SwitchPreferenceCompat notificationDotsPreference = findPreference("app_launcher_notification_dots");
         if (notificationDotsPreference != null) {
             updateNotificationDotsSummary(context, notificationDotsPreference);

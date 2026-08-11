@@ -21,9 +21,12 @@ public final class AppDrawerHorizontalPageAdapter
 
     @Nullable private SuggestionBarView mDock;
     @NonNull private List<LauncherAppEntry> mEntries = new ArrayList<>();
+    @NonNull private List<AppDrawerItem> mItems = new ArrayList<>();
     @Nullable private AppDrawerHorizontalGridMetrics mMetrics;
     @NonNull private AppDrawerAppCellView.ClickGate mClickGate =
         AppDrawerAppCellView.ALLOW_CLICKS;
+    @Nullable private AppDrawerDragController mDragController;
+    private boolean mPickupEnabled;
 
     public AppDrawerHorizontalPageAdapter(@Nullable SuggestionBarView dock) {
         mDock = dock;
@@ -39,6 +42,14 @@ public final class AppDrawerHorizontalPageAdapter
         mClickGate = clickGate;
     }
 
+    public void setDragController(@Nullable AppDrawerDragController controller) {
+        mDragController = controller;
+        notifyDataSetChanged();
+    }
+
+    /** Set immediately before a list submission, so the submission remains the sole rebind. */
+    public void setPickupEnabled(boolean enabled) { mPickupEnabled = enabled; }
+
     public void setMetrics(@NonNull AppDrawerHorizontalGridMetrics metrics) {
         mMetrics = metrics;
         notifyDataSetChanged();
@@ -51,6 +62,14 @@ public final class AppDrawerHorizontalPageAdapter
 
     public void submit(@NonNull List<LauncherAppEntry> entries) {
         mEntries = new ArrayList<>(entries);
+        mItems = AppDrawerItemComposer.appsOnly(entries);
+        notifyDataSetChanged();
+    }
+
+    public void submitItems(@NonNull List<AppDrawerItem> items) {
+        mItems = new ArrayList<>(items);
+        mEntries = new ArrayList<>();
+        for (AppDrawerItem item : items) if (item.app != null) mEntries.add(item.app);
         notifyDataSetChanged();
     }
 
@@ -64,13 +83,17 @@ public final class AppDrawerHorizontalPageAdapter
         return position >= 0 && position < mEntries.size() ? mEntries.get(position) : null;
     }
 
+    @Nullable public AppDrawerItem itemAt(int position) {
+        return position >= 0 && position < mItems.size() ? mItems.get(position) : null;
+    }
+
     public int itemsPerPage() {
         return mMetrics == null ? 1 : mMetrics.itemsPerPage;
     }
 
     @Override
     public int getItemCount() {
-        return AppDrawerPageModel.pageCount(mEntries.size(), itemsPerPage());
+        return AppDrawerPageModel.pageCount(mItems.size(), itemsPerPage());
     }
 
     @NonNull
@@ -106,8 +129,8 @@ public final class AppDrawerHorizontalPageAdapter
         holder.page.setRowCount(rows);
         holder.ensureCapacity(capacity);
 
-        int start = AppDrawerPageModel.startForPage(pagePosition, mEntries.size(), capacity);
-        int end = AppDrawerPageModel.endForPage(pagePosition, mEntries.size(), capacity);
+        int start = AppDrawerPageModel.startForPage(pagePosition, mItems.size(), capacity);
+        int end = AppDrawerPageModel.endForPage(pagePosition, mItems.size(), capacity);
         int cellWidth = metrics == null ? 1 : Math.max(1, Math.round(metrics.cellWidthPx));
         int cellHeight = metrics == null ? 1 : Math.max(1, Math.round(metrics.rowHeightPx));
         for (int i = 0; i < holder.cells.size(); i++) {
@@ -120,9 +143,26 @@ public final class AppDrawerHorizontalPageAdapter
             cell.setLayoutParams(params);
             int entryIndex = start + i;
             if (entryIndex < end) {
+                AppDrawerItem item = mItems.get(entryIndex);
+                boolean wantsFolder = item.kind == AppDrawerItem.Kind.FOLDER;
+                if (wantsFolder != (cell instanceof AppDrawerFolderCellView)) {
+                    int cellIndex = i;
+                    holder.page.removeView(cell);
+                    cell.unbind();
+                    cell = wantsFolder ? new AppDrawerFolderCellView(holder.page.getContext())
+                        : new AppDrawerAppCellView(holder.page.getContext());
+                    holder.cells.set(cellIndex, cell);
+                    holder.page.addView(cell, cellIndex);
+                    cell.setLayoutParams(params);
+                }
                 cell.setVisibility(View.VISIBLE);
                 cell.setClickable(true);
-                cell.bind(mDock, mEntries.get(entryIndex), metrics, mClickGate);
+                if (wantsFolder) ((AppDrawerFolderCellView) cell).bindFolder(mDock, item.folder,
+                    metrics, mClickGate);
+                else cell.bind(mDock, item.app, metrics == null ? 0 : Math.round(metrics.iconPx),
+                    metrics == null ? 0 : Math.round(metrics.rowHeightPx), mClickGate,
+                    mPickupEnabled ? mDragController : null);
+                if (mPickupEnabled && mDragController != null) mDragController.bindTarget(cell, item);
                 cell.setScrubAppearance('\0', '\0', 0f);
             } else {
                 cell.unbind();
@@ -143,7 +183,7 @@ public final class AppDrawerHorizontalPageAdapter
         RecyclerView.ViewHolder holder = pager.findViewHolderForAdapterPosition(0);
         if (!(holder instanceof PageHolder)) return null;
         PageHolder page = (PageHolder) holder;
-        return page.cells.isEmpty() || mEntries.isEmpty() ? null : page.cells.get(0).icon;
+        return page.cells.isEmpty() || mItems.isEmpty() ? null : page.cells.get(0).icon;
     }
 
     public static final class PageHolder extends RecyclerView.ViewHolder {

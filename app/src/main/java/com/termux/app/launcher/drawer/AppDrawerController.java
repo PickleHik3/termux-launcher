@@ -131,6 +131,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      */
     private final Spring mReveal = new Spring(0f, STIFFNESS, DAMPING);
     private final AppDrawerSearchController mSearch = new AppDrawerSearchController();
+    @NonNull private AppDrawerLayoutConfig mLayoutConfig = AppDrawerLayoutConfig.defaults();
 
     private final int[] mHostLocation = new int[2];
     private final int[] mViewLocation = new int[2];
@@ -195,6 +196,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // answered once a RecyclerView existed would silently let the first keystrokes through to
         // the shell. isSearchActive() reads mOpen, so an unbuilt drawer still claims nothing.
         mSearch.setHost(this);
+        TermuxAppSharedPreferences preferences = activity.getPreferences();
+        if (preferences != null) mLayoutConfig = AppDrawerLayoutConfig.from(preferences);
     }
 
     // ------------------------------------------------------------------ state
@@ -396,6 +399,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (mPlane != null) mPlane.cancelCloseDragFromContent();
     }
 
+    @Override public void onDrawerSettingsRequested() {
+        closeImmediate();
+        mActivity.openAppDrawerSettings();
+    }
+
     // ------------------------------------------------------------------ search
 
     /** The intake the activity's three channels route into. */
@@ -445,11 +453,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     /** Applies a launcher preference reload without rebuilding the activity or drawer tree. */
     public void onPreferencesReloaded() {
         if (mEngaged || mOpen) closeImmediate();
-        AppDrawerContentView content = mContent;
-        if (content == null) return;
         TermuxAppSharedPreferences preferences = mActivity.getPreferences();
-        content.setViewType(AppDrawerViewType.fromPreference(preferences == null ? null
-            : preferences.getAppLauncherDrawerViewType()));
+        AppDrawerLayoutConfig config = preferences == null ? AppDrawerLayoutConfig.defaults()
+            : AppDrawerLayoutConfig.from(preferences);
+        if (config.equals(mLayoutConfig)) return;
+        mLayoutConfig = config;
+        applyLayoutConfig();
     }
 
     /**
@@ -774,27 +783,21 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         content.setDock(mActivity.getSuggestionBarView());
         plane.setContentInsets(openRect);
         content.setSurfaceRadiusPx(mOpenRadiusPx);
-        TermuxAppSharedPreferences preferences = mActivity.getPreferences();
-        AppDrawerViewType viewType = AppDrawerViewType.fromPreference(preferences == null ? null
-            : preferences.getAppLauncherDrawerViewType());
+        AppDrawerLayoutConfig config = mLayoutConfig;
+        AppDrawerViewType viewType = config.viewType;
         content.setViewType(viewType);
         float labelHeightPx = resolveCellLabelHeightPx();
         switch (viewType) {
             case VERTICAL:
                 float columnWidthPx = AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity);
-                int verticalColumns = preferences == null ? 0
-                    : preferences.getAppLauncherDrawerGridColumnsVertical();
                 content.setVerticalMetrics(AppDrawerGridMetrics.resolve(
-                    openRect.width() - columnWidthPx, mDensity, labelHeightPx, verticalColumns));
+                    openRect.width() - columnWidthPx, mDensity, labelHeightPx,
+                    config.verticalColumns, config.iconSizeDp));
                 break;
             case HORIZONTAL:
-                int horizontalColumns = preferences == null ? 0
-                    : preferences.getAppLauncherDrawerGridColumnsHorizontal();
-                int horizontalRows = preferences == null ? 0
-                    : preferences.getAppLauncherDrawerGridRowsHorizontal();
                 content.setHorizontalMetrics(AppDrawerHorizontalGridMetrics.resolve(openRect.width(),
                     content.horizontalPagerUsableHeight(openRect.height()), mDensity, labelHeightPx,
-                    horizontalColumns, horizontalRows));
+                    config.horizontalColumns, config.horizontalRows, config.iconSizeDp));
                 break;
             case CATEGORIES:
                 SuggestionBarView dock = mActivity.getSuggestionBarView();
@@ -803,10 +806,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 // Category search temporarily reuses the shipped vertical grid at full width. It
                 // gets AUTO geometry here and deliberately reads no vertical grid preference.
                 content.setVerticalMetrics(AppDrawerGridMetrics.resolve(openRect.width(),
-                    mDensity, labelHeightPx, 0));
+                    mDensity, labelHeightPx, 0, config.iconSizeDp));
                 content.setCategoryMetrics(AppDrawerCategoryGridMetrics.resolve(openRect.width(),
                     content.horizontalPagerUsableHeight(openRect.height()), mDensity,
-                    resolveCategoryTileHeadingHeightPx(), labelHeightPx, mOpenRadiusPx, budget));
+                    resolveCategoryTileHeadingHeightPx(), labelHeightPx, mOpenRadiusPx, budget,
+                    config.categoryColumns, config.iconSizeDp));
                 break;
         }
         content.bind(LauncherAppDataProvider.getInstance(mActivity), mSearch);
@@ -815,6 +819,40 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // this hidden until the sprout has actually reached it.
         content.setVisibility(View.VISIBLE);
         retargetReveal();
+    }
+
+    /** Reconfigures the existing content tree; never enters styling/accessory/activity paths. */
+    private void applyLayoutConfig() {
+        AppDrawerContentView content = mContent;
+        Frame openRect = mOpenRect;
+        if (content == null || openRect == null) return;
+        content.cancelTransientFolderState();
+        content.setViewType(mLayoutConfig.viewType);
+        float labelHeightPx = resolveCellLabelHeightPx();
+        switch (mLayoutConfig.viewType) {
+            case VERTICAL:
+                content.setVerticalMetrics(AppDrawerGridMetrics.resolve(openRect.width()
+                    - AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity), mDensity, labelHeightPx,
+                    mLayoutConfig.verticalColumns, mLayoutConfig.iconSizeDp));
+                break;
+            case HORIZONTAL:
+                content.setHorizontalMetrics(AppDrawerHorizontalGridMetrics.resolve(openRect.width(),
+                    content.horizontalPagerUsableHeight(openRect.height()), mDensity, labelHeightPx,
+                    mLayoutConfig.horizontalColumns, mLayoutConfig.horizontalRows,
+                    mLayoutConfig.iconSizeDp));
+                break;
+            case CATEGORIES:
+                SuggestionBarView dock = mActivity.getSuggestionBarView();
+                int budget = dock == null ? 6 * 1024 * 1024 : dock.getRenderedIconCacheBudgetBytes();
+                content.setVerticalMetrics(AppDrawerGridMetrics.resolve(openRect.width(), mDensity,
+                    labelHeightPx, 0, mLayoutConfig.iconSizeDp));
+                content.setCategoryMetrics(AppDrawerCategoryGridMetrics.resolve(openRect.width(),
+                    content.horizontalPagerUsableHeight(openRect.height()), mDensity,
+                    resolveCategoryTileHeadingHeightPx(), labelHeightPx, mOpenRadiusPx, budget,
+                    mLayoutConfig.categoryColumns, mLayoutConfig.iconSizeDp));
+                break;
+        }
+        content.rebindCurrentResults();
     }
 
     /**

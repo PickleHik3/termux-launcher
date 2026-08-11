@@ -52,6 +52,8 @@ public class AppDrawerControllerHorizontalTest {
     @Test public void verticalSubtractsRopeButHorizontalUsesFullWidthAndOwnKeys() {
         preferences.setAppLauncherDrawerViewType("vertical");
         preferences.setAppLauncherDrawerGridColumnsVertical(5);
+        ReflectionHelpers.setField(controller, "mLayoutConfig",
+            AppDrawerLayoutConfig.from(preferences));
         invokePrepare();
         assertEquals(AppDrawerViewType.VERTICAL, content.getViewType());
         assertEquals(5, ((AppDrawerAppsAdapter) content.getGrid().getAdapter())
@@ -60,6 +62,8 @@ public class AppDrawerControllerHorizontalTest {
         preferences.setAppLauncherDrawerViewType("horizontal");
         preferences.setAppLauncherDrawerGridColumnsHorizontal(6);
         preferences.setAppLauncherDrawerGridRowsHorizontal(2);
+        ReflectionHelpers.setField(controller, "mLayoutConfig",
+            AppDrawerLayoutConfig.from(preferences));
         invokePrepare();
         AppDrawerHorizontalGridMetrics metrics = content.getHorizontalAdapter().getMetrics();
         assertEquals(AppDrawerViewType.HORIZONTAL, content.getViewType());

@@ -77,6 +77,14 @@ public final class AppDrawerGridMetrics {
     @NonNull
     public static AppDrawerGridMetrics resolve(float contentWidthPx, float density,
                                                float labelHeightPx, int requestedColumns) {
+        return resolve(contentWidthPx, density, labelHeightPx, requestedColumns, 0);
+    }
+
+    /** Explicit icon target is applied before the established cell-width and 48dp clamps. */
+    @NonNull
+    public static AppDrawerGridMetrics resolve(float contentWidthPx, float density,
+                                               float labelHeightPx, int requestedColumns,
+                                               int requestedIconDp) {
         // A zero density would take the column count to NaN and the row height with it; the drawer
         // is rebuilt on every configuration change, so a degenerate frame must degrade, not poison.
         float d = density > 0f ? density : 1f;
@@ -85,7 +93,10 @@ public final class AppDrawerGridMetrics {
             ? resolveColumns(width / d)
             : Math.max(MIN_COLUMNS, Math.min(MAX_COLUMNS, requestedColumns));
         float cellWidthPx = width / columns;
-        float iconPx = Math.min(MAX_ICON_DP * d, cellWidthPx * ICON_CELL_FRACTION);
+        float iconTargetPx = requestedIconDp == 36 || requestedIconDp == 40
+            || requestedIconDp == 44 || requestedIconDp == 48
+            ? requestedIconDp * d : MAX_ICON_DP * d;
+        float iconPx = Math.min(iconTargetPx, cellWidthPx * ICON_CELL_FRACTION);
         float rowHeightPx = iconPx + (LABEL_GAP_DP * d)
             + Math.max(0f, labelHeightPx) + (ROW_BOTTOM_DP * d);
         return new AppDrawerGridMetrics(columns, cellWidthPx, iconPx, rowHeightPx);

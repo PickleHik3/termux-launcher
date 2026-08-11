@@ -94,6 +94,9 @@ import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
 import com.termux.app.launcher.animation.LauncherTransitionController;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherConfigRepository;
+import com.termux.app.launcher.folder.FolderRenameController;
+import com.termux.app.launcher.folder.FolderRenameModel;
+import com.termux.app.launcher.folder.FolderRenameTitleView;
 import com.termux.app.launcher.LauncherLockAccessibilityAccess;
 import com.termux.app.launcher.LockAccessibilityService;
 import com.termux.app.launcher.TerminalAppSearchKeyDecision;
@@ -346,6 +349,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private LauncherAppDataProvider mLauncherAppDataProvider;
     private LauncherConfigRepository mLauncherConfigRepository;
+    private final FolderRenameController mFolderRenameController = new FolderRenameController();
     private LauncherTransitionController mLauncherTransitionController;
     private int mLastLauncherIconPreferencesSignature = Integer.MIN_VALUE;
 
@@ -587,6 +591,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int ACCESSORY_BLUR_DOWNSAMPLE_FACTOR = 4;
     private static final long ACCESSORY_BLUR_BACKSTOP_MS = 300_000L;
     private static volatile boolean sPendingStyleReloadOnNextResume = false;
+    private static volatile boolean sPendingAppDrawerReloadOnNextResume = false;
 
     private static final int SUGGESTION_BAR_MIN_BUTTON_DP = 56;
     private static final int SUGGESTION_BAR_MAX_INPUT_CHARS = 10;
@@ -1018,6 +1023,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             reloadActivityStyling(recreateActivity);
             return;
         }
+        if (sPendingAppDrawerReloadOnNextResume) {
+            sPendingAppDrawerReloadOnNextResume = false;
+            if (mAppDrawerController != null) mAppDrawerController.onPreferencesReloaded();
+        }
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onResume();
         if (mTermuxTerminalSessionActivityClient != null)
@@ -1052,6 +1061,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // notification with the crash details if it did
         TermuxCrashUtils.notifyAppCrashFromCrashLogFile(this, LOG_TAG);
         mIsOnResumeAfterOnCreate = false;
+    }
+
+    @Override
+    protected void onPause() {
+        // Rename owns the in-app-keyboard interceptor only while this activity is visible.
+        mFolderRenameController.onActivityPaused();
+        super.onPause();
     }
 
     private void applyTerminalSurfaceAppearance() {
@@ -4184,6 +4200,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 state.blurEnabled ? resolveAccessorySurfaceColor(state.barAlpha) : Color.TRANSPARENT
             );
         }
+        // Invalidate platform/local drag state while its source view is still attached and visible.
+        // Alphabet and extra-key row state is deliberately not part of this cancellation decision.
+        if (!state.appsRowEnabled && mSuggestionBarView != null)
+            mSuggestionBarView.cancelActiveDockDrag();
         if (!state.toolbarShown) {
             if (accessoryContainer != null) {
                 accessoryContainer.setVisibility(
@@ -9633,6 +9653,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 R.string.termux_style_preferences_title));
     }
 
+    public void openAppDrawerSettings() {
+        ActivityUtils.startActivity(this, SettingsActivity.createFragmentIntent(this,
+            com.termux.app.fragments.settings.termux.AppDrawerPreferencesFragment.class,
+            R.string.settings_app_drawer_view_type_title));
+    }
+
     private void openAppsBarSettings() {
         ActivityUtils.startActivity(this,
             SettingsActivity.createFragmentIntent(this,
@@ -9901,13 +9927,58 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void setAppDrawerInterceptorActive(boolean active) {
         if (mInAppKeyboard == null)
             return;
+        // A close/mode reset can be re-entered from terminal dispatch while rename is active. The
+        // rename interceptor is a stronger, independently owned latch and cannot be cleared by the
+        // drawer search lifecycle; its own single finish path restores the previous owner.
+        if (mFolderRenameController.isActive()) {
+            mInAppKeyboard.setKeyValueInterceptor(mFolderRenameController);
+            return;
+        }
         mInAppKeyboard.setKeyValueInterceptor(
             active && mAppDrawerController != null
                 ? mAppDrawerController.getSearchController() : null);
     }
 
+    /** Installs focusless rename ahead of drawer search while TerminalView retains InputConnection. */
+    public void beginFolderRename(long revision, @NonNull String folderId, @NonNull String title,
+                                  @NonNull FolderRenameTitleView titleView) {
+        mFolderRenameController.begin(revision, folderId, title,
+            new FolderRenameController.Host() {
+                @NonNull
+                @Override public LauncherConfigRepository.MutationResult commit(long expected,
+                    @NonNull String id, @NonNull String value) {
+                    if (mLauncherConfigRepository == null)
+                        return LauncherConfigRepository.MutationResult.MISSING;
+                    return mLauncherConfigRepository.renameFolder(expected, id, value);
+                }
+
+                @Override public void onDraftChanged(@NonNull FolderRenameModel model) {
+                    titleView.bind(model, true);
+                }
+
+                @Override public void onRenameEnded(boolean committed) {
+                    com.termux.app.launcher.model.PinnedFolderItem latest =
+                        mLauncherConfigRepository == null ? null
+                            : mLauncherConfigRepository.loadSnapshot().folder(folderId);
+                    titleView.bind(new FolderRenameModel(latest == null ? title : latest.title), false);
+                    if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(
+                        isAppDrawerOpen() && mAppDrawerController != null
+                            ? mAppDrawerController.getSearchController() : null);
+                }
+            });
+        if (mInAppKeyboard != null)
+            mInAppKeyboard.setKeyValueInterceptor(mFolderRenameController);
+        onSystemImeRequested();
+        KeyboardUtils.showSoftKeyboard(this, mTerminalView);
+    }
+
+    public void cancelFolderRename() { mFolderRenameController.cancel(); }
+
+    public boolean isFolderRenameActive() { return mFolderRenameController.isActive(); }
+
     /** Hardware and external-keyboard strokes claimed by the open app drawer's search. */
     public boolean handleAppDrawerKey(int keyCode, @NonNull KeyEvent event) {
+        if (mFolderRenameController.handleKeyDown(keyCode, event)) return true;
         return mAppDrawerController != null
             && mAppDrawerController.handleSearchKey(keyCode, event);
     }
@@ -9918,6 +9989,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * ordinary characters reach it rather than the shell behind the plane.
      */
     public boolean handleAppDrawerCodePoint(int codePoint, boolean ctrlDown) {
+        if (mFolderRenameController.handleCodePoint(codePoint, ctrlDown)) return true;
         return mAppDrawerController != null
             && mAppDrawerController.handleSearchCodePoint(codePoint, ctrlDown);
     }
@@ -12627,6 +12699,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateTermuxActivityStyling(context, recreateActivity);
     }
 
+    public static void requestAppDrawerReloadOnNextResume(Context context) {
+        sPendingAppDrawerReloadOnNextResume = true;
+        context.sendBroadcast(new Intent(TERMUX_ACTIVITY.ACTION_RELOAD_APP_DRAWER));
+    }
+
     private static boolean consumePendingStyleReloadRecreateActivity() {
         if (!sPendingStyleReloadOnNextResume) {
             return true;
@@ -12641,6 +12718,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(TERMUX_ACTIVITY.ACTION_NOTIFY_APP_CRASH);
         intentFilter.addAction(TERMUX_ACTIVITY.ACTION_RELOAD_STYLE);
+        intentFilter.addAction(TERMUX_ACTIVITY.ACTION_RELOAD_APP_DRAWER);
         intentFilter.addAction(TERMUX_ACTIVITY.ACTION_REQUEST_PERMISSIONS);
         intentFilter.addAction(Intent.ACTION_DATE_CHANGED);
         intentFilter.addAction(Intent.ACTION_TIME_CHANGED);
@@ -13067,6 +13145,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         sPendingStyleReloadOnNextResume = false;
                         sPendingStyleReloadRecreateActivity = true;
                         reloadActivityStyling(intent.getBooleanExtra(TERMUX_ACTIVITY.EXTRA_RECREATE_ACTIVITY, true));
+                        return;
+                    case TERMUX_ACTIVITY.ACTION_RELOAD_APP_DRAWER:
+                        sPendingAppDrawerReloadOnNextResume = false;
+                        if (mAppDrawerController != null)
+                            mAppDrawerController.onPreferencesReloaded();
                         return;
                     case TERMUX_ACTIVITY.ACTION_REQUEST_PERMISSIONS:
                         Logger.logDebug(LOG_TAG, "Received intent to request storage permissions");

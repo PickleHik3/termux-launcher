@@ -93,6 +93,8 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
+import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.github.mmin18.widget.RealtimeBlurView;
 import com.google.android.material.color.MaterialColors;
@@ -103,6 +105,10 @@ import com.termux.app.launcher.LauncherAppLauncher;
 import com.termux.app.launcher.PinnedAppsEditor;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherConfigRepository;
+import com.termux.app.launcher.data.LauncherConfigSnapshot;
+import com.termux.app.launcher.folder.FolderRenameModel;
+import com.termux.app.launcher.folder.FolderRenameTitleView;
+import com.termux.app.launcher.folder.LauncherFolderPopupController;
 import com.termux.app.launcher.data.IconPack;
 import com.termux.app.launcher.data.IconPackDrawableItem;
 import com.termux.app.launcher.data.IconPackRepository;
@@ -111,6 +117,7 @@ import com.termux.app.launcher.notifications.LauncherNotificationBadgeStore;
 import com.termux.app.launcher.data.LauncherRankingEngine;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.drawer.AppDrawerController;
+import com.termux.app.launcher.drawer.AppDrawerPickupDelegate;
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry;
 import com.termux.app.launcher.model.IconPackInfo;
@@ -301,6 +308,10 @@ public final class SuggestionBarView extends GridLayout
     private List<SuggestionBarButton> injectedSuggestionButtons;
 
     private PopupWindow folderPopupWindow;
+    private final LauncherFolderPopupController sharedFolderPopup =
+        new LauncherFolderPopupController();
+    @Nullable private View activePinnedDragSourceView;
+    @Nullable private PinnedDragState activePinnedDragState;
     private PopupWindow appContextPopupWindow;
     private PopupWindow shortcutsPopupWindow;
     private PopupWindow notificationPopupWindow;
@@ -388,6 +399,12 @@ public final class SuggestionBarView extends GridLayout
     private int lastAzResolvedSlot = -1;
     @Nullable private LauncherUsageStatsStore usageStatsStore;
     @Nullable private Runnable appCatalogChangedListener;
+    private final LauncherConfigRepository.Listener configListener = snapshot -> post(() -> {
+        pinnedItems = new ArrayList<>(snapshot.dockItems);
+        invalidateRenderedIconCaches();
+        reloadWithInput("", lastTerminalView);
+        if (appCatalogChangedListener != null) appCatalogChangedListener.run();
+    });
     @Nullable private OverflowInteractionListener overflowInteractionListener;
     private final ExecutorService searchExecutor = newIdleFriendlyExecutor();
     private int searchGeneration = 0;
@@ -823,10 +840,65 @@ public final class SuggestionBarView extends GridLayout
     }
 
     public void setConfigRepository(@Nullable LauncherConfigRepository configRepository) {
+        if (this.configRepository != null) this.configRepository.removeListener(configListener);
         this.configRepository = configRepository;
         if (this.configRepository != null) {
+            this.configRepository.addListener(configListener);
             this.pinnedItems = this.configRepository.loadPinnedItems();
         }
+    }
+
+    @NonNull
+    public LauncherConfigSnapshot getLauncherConfigSnapshot() {
+        if (configRepository != null) return configRepository.loadSnapshot();
+        // Tests may construct the row without persistence; use an empty in-memory store.
+        return new LauncherConfigRepository(new LauncherConfigRepository.PreferencesStore() {
+            private String value = "{\"schemaVersion\":5,\"items\":[],\"folders\":[]}";
+            @Override public String getPinnedItemsV2() { return value; }
+            @Override public void setPinnedItemsV2(String next) { value = next; }
+            @Override public void setPinnedItemsSchemaVersion(int version) {}
+            @Override public String getLegacyDefaultButtons() { return ""; }
+        }).loadSnapshot();
+    }
+
+    public void openFolderFromDrawer(@NonNull String folderId, @Nullable View anchor) {
+        if (configRepository == null) return;
+        PinnedFolderItem folder = configRepository.loadSnapshot().folder(folderId);
+        if (folder != null) showFolderPopup(folder, anchor);
+    }
+
+    @Nullable
+    public LauncherAppEntry resolveFolderMemberForDrawer(@NonNull PinnedAppItem member) {
+        return resolvePinnedApp(member);
+    }
+
+    @NonNull
+    public LauncherConfigRepository.MutationResult createDrawerFolder(long revision,
+        @Nullable LauncherAppEntry target, @NonNull String sourceStableId) {
+        if (configRepository == null || target == null)
+            return LauncherConfigRepository.MutationResult.MISSING;
+        LauncherAppEntry source = findDrawerEntry(sourceStableId);
+        if (source == null) return LauncherConfigRepository.MutationResult.MISSING;
+        return configRepository.createFolder(revision, UUID.randomUUID().toString(),
+            new PinnedAppItem(target.appRef), new PinnedAppItem(source.appRef));
+    }
+
+    @NonNull
+    public LauncherConfigRepository.MutationResult addDrawerAppToFolder(long revision,
+        @NonNull String folderId, @NonNull String sourceStableId) {
+        if (configRepository == null) return LauncherConfigRepository.MutationResult.MISSING;
+        LauncherAppEntry source = findDrawerEntry(sourceStableId);
+        if (source == null) return LauncherConfigRepository.MutationResult.MISSING;
+        return configRepository.addAppToFolder(revision, folderId,
+            new PinnedAppItem(source.appRef));
+    }
+
+    @Nullable
+    private LauncherAppEntry findDrawerEntry(@NonNull String stableId) {
+        if (allApps == null) return null;
+        for (LauncherAppEntry entry : allApps)
+            if (stableId.equals(entry.appRef.stableId())) return entry;
+        return null;
     }
 
     public void setAppDataProvider(@Nullable LauncherAppDataProvider appDataProvider) {
@@ -3411,7 +3483,7 @@ public final class SuggestionBarView extends GridLayout
             LauncherAppEntry e = resolvePinnedApp(folderApp);
             if (e == null || e.icon == null) continue;
             ImageView mini = new ImageView(getContext());
-            mini.setImageDrawable(e.icon);
+            mini.setImageDrawable(getRenderedIcon(e, miniSize));
             mini.setScaleType(ImageView.ScaleType.FIT_CENTER);
             GridLayout.LayoutParams params = new GridLayout.LayoutParams();
             params.width = miniSize;
@@ -3421,6 +3493,18 @@ public final class SuggestionBarView extends GridLayout
             mini.setLayoutParams(params);
             miniGrid.addView(mini);
             placed++;
+        }
+        if (folder.apps.size() > 4) {
+            TextView overflow = new TextView(getContext());
+            overflow.setText("+" + (folder.apps.size() - 3));
+            overflow.setTextColor(Color.WHITE);
+            overflow.setTextSize(8f);
+            overflow.setGravity(Gravity.CENTER);
+            overflow.setBackgroundColor(0xB8000000);
+            FrameLayout.LayoutParams badge = new FrameLayout.LayoutParams(miniSize, miniSize,
+                Gravity.END | Gravity.BOTTOM);
+            badge.setMargins(0, 0, pinnedFolderMiniIconMarginPx(), pinnedFolderMiniIconMarginPx());
+            iconShell.addView(overflow, badge);
         }
         iconShell.addView(miniGrid, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
         root.addView(iconShell, new FrameLayout.LayoutParams(shellSize, shellSize, Gravity.CENTER));
@@ -3917,10 +4001,6 @@ public final class SuggestionBarView extends GridLayout
         title.setTextSize(14f);
         title.setPadding(0, 0, 0, dp(8));
 
-        EditText nameInput = new EditText(getContext());
-        nameInput.setHint("Folder name");
-        nameInput.setText(TextUtils.isEmpty(folder.title) ? "Folder" : folder.title);
-
         final int[] rowsValue = new int[] {clamp(folder.rows, 1, PinnedFolderItem.MAX_GRID)};
         final int[] colsValue = new int[] {clamp(folder.cols, 1, PinnedFolderItem.MAX_GRID)};
         LinearLayout rowsControl = buildStepperRow("Rows", rowsValue, 1, PinnedFolderItem.MAX_GRID);
@@ -3948,7 +4028,6 @@ public final class SuggestionBarView extends GridLayout
         buttons.addView(save);
 
         layout.addView(title);
-        layout.addView(nameInput, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         layout.addView(rowsControl, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         layout.addView(colsControl, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         layout.addView(colorInput, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -3960,8 +4039,6 @@ public final class SuggestionBarView extends GridLayout
 
         cancel.setOnClickListener(v -> dialog.dismiss());
         save.setOnClickListener(v -> {
-            String newName = stringValue(nameInput.getText()).trim();
-            folder.title = newName.isEmpty() ? "Folder" : newName;
             folder.rows = rowsValue[0];
             folder.cols = colsValue[0];
             String color = stringValue(colorInput.getText()).trim();
@@ -3988,10 +4065,20 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private void showFolderPopup(PinnedFolderItem folder, @Nullable View anchor) {
+        showFolderPopup(folder, anchor, false);
+    }
+
+    private void showFolderPopup(PinnedFolderItem folder, @Nullable View anchor,
+                                 boolean beginRename) {
         dismissFolderPopup();
         dismissAppContextPopup();
         dismissShortcutsPopup();
 
+        LauncherConfigSnapshot snapshot = configRepository == null ? null
+            : configRepository.loadSnapshot();
+        PinnedFolderItem resolvedFolder = snapshot == null ? folder : snapshot.folder(folder.id);
+        if (resolvedFolder == null) return;
+        folder = resolvedFolder;
         List<LauncherAppEntry> folderEntries = new ArrayList<>();
         for (PinnedAppItem folderApp : folder.apps) {
             LauncherAppEntry entry = resolvePinnedApp(folderApp);
@@ -4003,30 +4090,40 @@ public final class SuggestionBarView extends GridLayout
 
         int rows = clamp(folder.rows, 1, PinnedFolderItem.MAX_GRID);
         int cols = clamp(folder.cols, 1, PinnedFolderItem.MAX_GRID);
-        int cellCount = rows * cols;
         int screenW = getResources().getDisplayMetrics().widthPixels;
         int screenH = getResources().getDisplayMetrics().heightPixels;
         int popupIconSize = computeFolderPopupIconSize(rows, cols, screenW, screenH);
 
-        GridLayout grid = new GridLayout(getContext());
-        grid.setColumnCount(cols);
-        grid.setRowCount(rows);
-        grid.setPadding(dp(3), dp(3), dp(3), dp(3));
-        grid.setUseDefaultMargins(false);
-        grid.setAlignmentMode(GridLayout.ALIGN_BOUNDS);
+        RecyclerView grid = new RecyclerView(getContext());
+        grid.setLayoutManager(new GridLayoutManager(getContext(), cols));
+        grid.setOverScrollMode(OVER_SCROLL_NEVER);
+        grid.setItemAnimator(null);
+        final PinnedFolderItem popupFolder = folder;
+        grid.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+            @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(
+                @NonNull ViewGroup parent, int viewType) {
+                FrameLayout holder = new FrameLayout(parent.getContext());
+                holder.setLayoutParams(new RecyclerView.LayoutParams(popupIconSize + dp(8),
+                    popupIconSize + dp(8)));
+                return new RecyclerView.ViewHolder(holder) {};
+            }
 
-        for (int i = 0; i < folderEntries.size() && i < cellCount; i++) {
-            LauncherAppEntry entry = folderEntries.get(i);
-            View btn = createPopupEntryButton(entry, popupIconSize, folder);
-            GridLayout.LayoutParams params = new GridLayout.LayoutParams();
-            params.width = popupIconSize;
-            params.height = popupIconSize;
-            params.columnSpec = GridLayout.spec(i % cols);
-            params.rowSpec = GridLayout.spec(i / cols);
-            params.setMargins(dp(4), dp(4), dp(4), dp(4));
-            btn.setLayoutParams(params);
-            grid.addView(btn);
-        }
+            @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder,
+                                                   int position) {
+                ViewGroup root = (ViewGroup) holder.itemView;
+                root.removeAllViews();
+                View button = createPopupEntryButton(folderEntries.get(position), popupIconSize,
+                    popupFolder);
+                root.addView(button, new FrameLayout.LayoutParams(popupIconSize, popupIconSize,
+                    Gravity.CENTER));
+            }
+
+            @Override public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder) {
+                ((ViewGroup) holder.itemView).removeAllViews();
+            }
+
+            @Override public int getItemCount() { return folderEntries.size(); }
+        });
 
         LinearLayout shell = new LinearLayout(getContext());
         shell.setOrientation(LinearLayout.VERTICAL);
@@ -4037,16 +4134,17 @@ public final class SuggestionBarView extends GridLayout
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(4), dp(2), dp(4), dp(4));
 
-        TextView title = new TextView(getContext());
-        title.setText(TextUtils.isEmpty(folder.title) ? "Folder" : folder.title);
-        title.setTextColor(resolveLauncherTextColor());
-        title.setTextSize(12f);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
+        FolderRenameTitleView title = new FolderRenameTitleView(getContext());
+        title.bind(new FolderRenameModel(TextUtils.isEmpty(folder.title) ? "Folder" : folder.title),
+            false);
         title.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         title.setClickable(true);
+        final long popupRevision = snapshot == null ? -1L : snapshot.revision;
         title.setOnClickListener(v -> {
-            dismissFolderPopup();
-            showRenameFolderDialog(folder);
+            Context context = getContext();
+            if (context instanceof TermuxActivity && popupRevision >= 0L)
+                ((TermuxActivity) context).beginFolderRename(popupRevision, popupFolder.id,
+                    popupFolder.title, title);
         });
 
         ImageButton gear = new ImageButton(getContext());
@@ -4055,24 +4153,33 @@ public final class SuggestionBarView extends GridLayout
         int gearSize = dp(24);
         gear.setOnClickListener(v -> {
             dismissFolderPopup();
-            int folderIndex = findPinnedFolderIndex(folder);
+            int folderIndex = findPinnedFolderIndex(popupFolder);
             if (folderIndex >= 0) {
-                showFolderContentsEditor(folderIndex, folder);
+                showFolderContentsEditor(folderIndex, popupFolder);
             }
         });
 
         header.addView(title);
         header.addView(gear, new LinearLayout.LayoutParams(gearSize, gearSize));
         shell.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        shell.addView(grid, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        int visibleRows = Math.max(1, Math.min(rows,
+            (int) Math.ceil(folderEntries.size() / (float) cols)));
+        shell.addView(grid, new LinearLayout.LayoutParams(
+            Math.min(screenW, cols * (popupIconSize + dp(8))),
+            visibleRows * (popupIconSize + dp(8))));
 
         int overlayBase = folder.tintOverrideEnabled ? (folder.tintColor & 0x00FFFFFF) : (inheritedTintColor & 0x00FFFFFF);
-        folderPopupWindow = buildPopupWindow(shell, overlayBase, true, () -> {
+        folderPopupWindow = buildPopupWindow(shell, overlayBase, true, null);
+        final PopupWindow shownPopup = folderPopupWindow;
+        sharedFolderPopup.show(shownPopup, folder.id, () -> showPopupAtAnchorWithoutAnimation(
+            shownPopup, anchor), () -> {
+            if (getContext() instanceof TermuxActivity)
+                ((TermuxActivity) getContext()).cancelFolderRename();
             if (folderPopupWindow != null && !folderPopupWindow.isShowing()) {
                 folderPopupWindow = null;
             }
         });
-        showPopupAtAnchor(folderPopupWindow, anchor);
+        if (beginRename) title.post(title::performClick);
     }
 
     private void removePinnedAt(int index) {
@@ -4095,11 +4202,10 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private void dismissFolderPopup() {
+        if (getContext() instanceof TermuxActivity)
+            ((TermuxActivity) getContext()).cancelFolderRename();
         if (folderPopupWindow != null) {
-            final PopupWindow popup = folderPopupWindow;
-            dismissPopupWindowAnimated(popup, () -> {
-                if (folderPopupWindow == popup) folderPopupWindow = null;
-            });
+            sharedFolderPopup.dismiss();
         }
     }
 
@@ -4111,22 +4217,6 @@ public final class SuggestionBarView extends GridLayout
             }
         }
         return out;
-    }
-
-    private void showRenameFolderDialog(@NonNull PinnedFolderItem folder) {
-        EditText titleInput = new EditText(getContext());
-        titleInput.setHint("Folder name");
-        titleInput.setText(TextUtils.isEmpty(folder.title) ? "Folder" : folder.title);
-        new MaterialAlertDialogBuilder(getContext())
-            .setTitle("Rename folder")
-            .setView(titleInput)
-            .setPositiveButton("Save", (dialog, which) -> {
-                String updated = stringValue(titleInput.getText()).trim();
-                folder.title = updated.isEmpty() ? "Folder" : updated;
-                persistPinsAndReload();
-            })
-            .setNegativeButton("Cancel", null)
-            .show();
     }
 
     @NonNull
@@ -4169,10 +4259,16 @@ public final class SuggestionBarView extends GridLayout
      * for an already-pinned app still gets the Unpin shape.
      */
     public void bindDrawerAppContextLongPress(@NonNull View pressTarget, @NonNull LauncherAppEntry entry) {
+        bindDrawerAppContextLongPress(pressTarget, entry, null);
+    }
+
+    public void bindDrawerAppContextLongPress(@NonNull View pressTarget,
+                                              @NonNull LauncherAppEntry entry,
+                                              @Nullable AppDrawerPickupDelegate pickupDelegate) {
         bindContextLongPressGesture(pressTarget, -1, false, () -> {
             dismissShortcutsPopup();
             showAppContextPopup(new AppMenuContext(entry, pressTarget, -1, null, null));
-        }, null, null);
+        }, null, null, pickupDelegate, entry);
     }
 
     private void bindFolderContextLongPress(
@@ -4194,6 +4290,20 @@ public final class SuggestionBarView extends GridLayout
         @NonNull Runnable showContextPopup,
         @Nullable Runnable notificationSwipeAction,
         @Nullable String notificationPackage
+    ) {
+        bindContextLongPressGesture(pressTarget, pinnedIndex, allowDragPickup, showContextPopup,
+            notificationSwipeAction, notificationPackage, null, null);
+    }
+
+    private void bindContextLongPressGesture(
+        @NonNull View pressTarget,
+        int pinnedIndex,
+        boolean allowDragPickup,
+        @NonNull Runnable showContextPopup,
+        @Nullable Runnable notificationSwipeAction,
+        @Nullable String notificationPackage,
+        @Nullable AppDrawerPickupDelegate drawerPickup,
+        @Nullable LauncherAppEntry drawerPickupEntry
     ) {
         pressTarget.setLongClickable(true);
         pressTarget.setOnLongClickListener(v -> {
@@ -4266,13 +4376,17 @@ public final class SuggestionBarView extends GridLayout
                         && !state.definitiveYMovement
                         && absDx >= xPickupThreshold
                         && pinnedIndex >= 0;
+                    if (drawerPickup != null) shouldStartPickup = withinPickupWindow
+                        && !state.definitiveYMovement && absDx >= xPickupThreshold;
 
                     if (shouldStartPickup) {
                         state.dragStarted = true;
                         clearMenuHighlight();
                         dismissAppContextPopup();
                         dismissFolderPopup();
-                        startPinnedDrag(pressTarget, pinnedIndex);
+                        if (drawerPickup != null && drawerPickupEntry != null)
+                            drawerPickup.startPickup(pressTarget, drawerPickupEntry);
+                        else startPinnedDrag(pressTarget, pinnedIndex);
                         activeLongPressPickupState = null;
                         return true;
                     }
@@ -4577,11 +4691,11 @@ public final class SuggestionBarView extends GridLayout
 
         TextView renameRow = addPopupActionRow(shell, "Rename", tintBase, () -> {
             dismissAppContextPopup();
-            showRenameFolderDialog(folder);
+            showFolderPopup(folder, anchor, true);
         });
         appContextRows.add(new MenuActionRow(renameRow, () -> {
             dismissAppContextPopup();
-            showRenameFolderDialog(folder);
+            showFolderPopup(folder, anchor, true);
         }, false));
 
         TextView chooseAppsRow = addPopupActionRow(shell, "Choose apps", tintBase, () -> {
@@ -5355,6 +5469,16 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private void showPopupAtAnchor(@NonNull PopupWindow popupWindow, @Nullable View anchor) {
+        showPopupAtAnchorInternal(popupWindow, anchor, true);
+    }
+
+    private void showPopupAtAnchorWithoutAnimation(@NonNull PopupWindow popupWindow,
+                                                    @Nullable View anchor) {
+        showPopupAtAnchorInternal(popupWindow, anchor, false);
+    }
+
+    private void showPopupAtAnchorInternal(@NonNull PopupWindow popupWindow,
+                                           @Nullable View anchor, boolean animate) {
         int screenW = getResources().getDisplayMetrics().widthPixels;
         int screenH = getResources().getDisplayMetrics().heightPixels;
         Rect visibleFrame = new Rect(0, 0, screenW, screenH);
@@ -5398,7 +5522,7 @@ public final class SuggestionBarView extends GridLayout
             popupWindow.showAtLocation(this, Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM, 0, getHeight() + gap);
         }
         View root = popupWindow.getContentView();
-        if (root != null) {
+        if (root != null && animate) {
             root.setAlpha(0f);
             root.setTranslationY(dp(8));
             root.animate()
@@ -6397,6 +6521,7 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private boolean addPinnedAppToFolderIfMissing(@NonNull PinnedFolderItem folder, @NonNull PinnedAppItem app) {
+        if (folder.apps.size() >= PinnedFolderItem.MAX_APPS) return false;
         AppRef resolved = resolveForSelectionRef(app.appRef);
         for (PinnedAppItem existing : folder.apps) {
             if (resolveForSelectionRef(existing.appRef).stableId().equals(resolved.stableId())) {
@@ -6416,7 +6541,11 @@ public final class SuggestionBarView extends GridLayout
     private boolean startPinnedDrag(@NonNull View view, int sourceIndex) {
         ClipData clip = ClipData.newPlainText("pinned-item", Integer.toString(sourceIndex));
         PinnedDragState dragState = new PinnedDragState(sourceIndex);
-        View.DragShadowBuilder shadow = createRaisedDragShadow(view);
+        Drawable ghost = renderedDragGhost(sourceIndex, Math.max(1, iconSizePx()));
+        if (ghost == null) return false;
+        View.DragShadowBuilder shadow = createRaisedDragShadow(ghost, Math.max(1, iconSizePx()));
+        activePinnedDragSourceView = view;
+        activePinnedDragState = dragState;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             view.startDragAndDrop(clip, shadow, dragState, 0);
         } else {
@@ -6426,16 +6555,44 @@ public final class SuggestionBarView extends GridLayout
     }
 
     @NonNull
-    private View.DragShadowBuilder createRaisedDragShadow(@NonNull View view) {
-        return new View.DragShadowBuilder(view) {
+    private Drawable renderedDragGhost(int sourceIndex, int sizePx) {
+        if (sourceIndex < 0 || sourceIndex >= pinnedItems.size()) return null;
+        PinnedItem item = pinnedItems.get(sourceIndex);
+        PinnedAppItem app = item instanceof PinnedAppItem ? (PinnedAppItem) item
+            : item instanceof PinnedFolderItem && !((PinnedFolderItem) item).apps.isEmpty()
+                ? ((PinnedFolderItem) item).apps.get(0) : null;
+        LauncherAppEntry entry = app == null ? null : resolvePinnedApp(app);
+        return entry == null ? null : getRenderedIcon(entry, sizePx);
+    }
+
+    @NonNull
+    private View.DragShadowBuilder createRaisedDragShadow(@NonNull Drawable drawable, int sizePx) {
+        return new View.DragShadowBuilder() {
             @Override
             public void onProvideShadowMetrics(@NonNull Point outShadowSize, @NonNull Point outShadowTouchPoint) {
-                super.onProvideShadowMetrics(outShadowSize, outShadowTouchPoint);
-                if (outShadowSize.y > 1) {
-                    outShadowTouchPoint.y = Math.min(outShadowSize.y - 1, Math.round(outShadowSize.y * 0.86f));
-                }
+                outShadowSize.set(sizePx, sizePx);
+                outShadowTouchPoint.set(sizePx / 2, Math.min(sizePx - 1, Math.round(sizePx * 0.86f)));
+            }
+
+            @Override public void onDrawShadow(@NonNull Canvas canvas) {
+                Rect previous = new Rect(drawable.getBounds());
+                drawable.setBounds(0, 0, sizePx, sizePx);
+                drawable.draw(canvas);
+                drawable.setBounds(previous);
             }
         };
+    }
+
+    /** Invalidates pickup/local state before the dock row is hidden. */
+    public void cancelActiveDockDrag() {
+        PinnedDragState state = activePinnedDragState;
+        if (state != null) state.cancelled = true;
+        View source = activePinnedDragSourceView;
+        if (source != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) source.cancelDragAndDrop();
+        activePinnedDragSourceView = null;
+        activePinnedDragState = null;
+        activeLongPressPickupState = null;
+        clearFolderDragInsertionPreview();
     }
 
     private boolean handlePinnedBarDragEvent(@NonNull View targetView, @NonNull DragEvent event) {
@@ -6480,6 +6637,8 @@ public final class SuggestionBarView extends GridLayout
             case DragEvent.ACTION_DRAG_ENDED:
                 targetView.setAlpha(1f);
                 clearFolderDragInsertionPreview();
+                activePinnedDragSourceView = null;
+                activePinnedDragState = null;
                 return true;
             default:
                 return false;
@@ -6487,6 +6646,7 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private boolean applyPinnedDrop(@NonNull PinnedDragState dragState, int targetIndex, @Nullable PinnedItem targetItem, float dropXRatio) {
+        if (dragState.cancelled) return false;
         if (dragState.sourceIndex < 0 || dragState.sourceIndex >= pinnedItems.size()) return false;
         if (targetIndex < 0 || targetIndex > pinnedItems.size()) return false;
 
@@ -6622,6 +6782,7 @@ public final class SuggestionBarView extends GridLayout
 
     private static final class PinnedDragState {
         final int sourceIndex;
+        boolean cancelled;
 
         PinnedDragState(int sourceIndex) {
             this.sourceIndex = sourceIndex;
