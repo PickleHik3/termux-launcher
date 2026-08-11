@@ -50,6 +50,14 @@
             android:defaultValue="false" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="@string/settings_app_drawer_header">
+        <SwitchPreferenceCompat
+            app:key="app_launcher_drawer_enabled"
+            app:title="@string/settings_app_drawer_enabled_title"
+            app:summary="@string/settings_app_drawer_enabled_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/settings_launcher_search_header">
         <EditTextPreference
             app:key="app_launcher_input_char"

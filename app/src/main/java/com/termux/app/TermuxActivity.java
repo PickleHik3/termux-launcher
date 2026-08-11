@@ -422,6 +422,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final java.util.Set<Integer> mAttentionShellPids = new java.util.HashSet<>();
     private final Runnable mBackgroundProcessResync = this::syncBackgroundProcessStack;
     @Nullable private com.termux.app.terminal.TerminalCommandPaletteController mCommandPalette;
+    @Nullable private com.termux.app.launcher.drawer.AppDrawerController mAppDrawerController;
 
     /**
      * If between onResume() and onStop(). Note that only one session is in the foreground of the terminal view at the
@@ -676,6 +677,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final Rect mLastWindowBarFrostRect = new Rect();
     private final Rect mLastCommandPaletteFrostRect = new Rect();
     private int mLastCommandPaletteFrostRadiusDp = -1;
+    private final Rect mLastAppDrawerFrostRect = new Rect();
+    private int mLastAppDrawerFrostRadiusDp = -1;
+    /**
+     * Set when accessory geometry was suppressed because the app drawer plane owns the stack's
+     * transforms. Flushed by {@link #flushPendingAccessoryGeometry()} on drawer close and on every
+     * {@link #onStart()} — a suppression that is never flushed freezes the dock until recreate.
+     */
+    private boolean mAppDrawerGeometryFreezePending;
     @Nullable private WallpaperManager.OnColorsChangedListener mWallpaperColorsChangedListener;
     private final Handler mAccessoryRenderHandler = new Handler(Looper.getMainLooper());
     private final Runnable mInAppKeyboardPreviewGeometrySyncRunnable = () -> {
@@ -836,6 +845,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mLauncherTransitionController.maybeHandleGestureContract(intent, mSuggestionBarView);
         }
         if (isLauncherHomeIntent(intent)) {
+            // Before resetTransientVisualState(): that call stomps every dock child's alpha, scale
+            // and translation, so a drawer left open across HOME would strand faded pinned icons.
+            closeAppDrawerImmediate();
             if (mSuggestionBarView != null) {
                 mSuggestionBarView.resetTransientVisualState();
             }
@@ -881,6 +893,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         addAccessoryKeyboardLayoutListener();
         addAccessoryLayoutChangeListeners();
+        // Unconditional: if a close threw, or the process was stopped mid-drag, the accessory
+        // geometry is still frozen and the dock would stay deaf to style changes until recreate.
+        flushPendingAccessoryGeometry();
 
         syncTerminalWallpaperRenderingMode();
         applySeamlessStatusBackgroundModeIfNeeded();
@@ -923,6 +938,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void feedDockPlank(MotionEvent ev) {
         DockPlankController controller = mDockPlankController;
         if (controller == null) {
+            return;
+        }
+        // The drawer's open drag starts on the dock; letting the plank keep tilting under it would
+        // put two owners on the same views' transforms.
+        if (isAppDrawerEngaged()) {
             return;
         }
         switch (ev.getActionMasked()) {
@@ -2255,7 +2275,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    private boolean isRoundedDockStyle() {
+    public boolean isRoundedDockStyle() {
         return mPreferences != null
             && TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED.equals(
                 mPreferences.getAppLauncherDockStyle()
@@ -2421,6 +2441,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return resolveSurfaceHorizontalInsetPx(mPreferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET
             : mPreferences.getDockHorizontalInset(), isRoundedDockStyle());
+    }
+
+    /** The dock's outer screen margin, shared with the app drawer plane's seed rect. */
+    public int getDockHorizontalInsetPx() {
+        return resolveDockHorizontalInsetPx();
     }
 
     private int resolveInAppKeyboardHorizontalInsetPx() {
@@ -3897,7 +3922,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Bitmap evicted = eldest.next();
             eldest.remove();
             if (evicted != null && !evicted.isRecycled()
-                && evicted != mInAppKeyboardBackdropBitmap) {
+                && evicted != mInAppKeyboardBackdropBitmap
+                && !isSharedWallpaperBlurFrameInUse(evicted)) {
                 evicted.recycle();
             }
         }
@@ -3909,7 +3935,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return blurredBitmap;
     }
 
-    /** Crops the shared full-frame blur in screen coordinates, clamping any overscan at its edges. */
+    /**
+     * Crops the shared full-frame blur in screen coordinates, clamping any overscan at its edges.
+     *
+     * <p>A full-screen surface (the command palette glass, the app drawer plane) asks for exactly
+     * the cached frame's rect, and copying it would allocate a second full-screen ARGB_8888 bitmap
+     * — ~10MB on a 1080x2400 panel, on the first frame of the open gesture. That request is
+     * answered with the cached frame itself; the returned bitmap is then shared, so
+     * {@link #clearCachedAccessoryWallpaperBlur()} detaches it from the glass frosts before
+     * recycling.</p>
+     */
     @Nullable
     private Bitmap createCachedAccessoryWallpaperBlurCrop(int blurRadiusDp,
                                                            @NonNull Rect targetRect,
@@ -3917,6 +3952,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Bitmap fullBlur = obtainCachedAccessoryWallpaperBlur(blurRadiusDp, wallpaperFrame);
         if (fullBlur == null) {
             return null;
+        }
+        if (targetRect.equals(mCachedAccessoryWallpaperBlurFrameRect)) {
+            return fullBlur;
         }
         int width = Math.max(1, targetRect.width());
         int height = Math.max(1, targetRect.height());
@@ -3934,10 +3972,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return crop;
     }
 
+    /**
+     * True while a full-screen glass frost is displaying this exact frame through the identity fast
+     * path in {@link #createCachedAccessoryWallpaperBlurCrop}. Recycling a bitmap an ImageView still
+     * holds crashes on its next draw, so such a frame is dropped from the cache without recycling
+     * and left to the collector.
+     */
+    private boolean isSharedWallpaperBlurFrameInUse(@Nullable Bitmap frame) {
+        if (frame == null) {
+            return false;
+        }
+        int[] frostIds = {R.id.command_palette_wallpaper_backdrop, R.id.app_drawer_wallpaper_backdrop};
+        for (int frostId : frostIds) {
+            ImageView frost = findViewById(frostId);
+            Drawable drawable = frost != null ? frost.getDrawable() : null;
+            if (drawable instanceof BitmapDrawable
+                && ((BitmapDrawable) drawable).getBitmap() == frame) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void clearCachedAccessoryWallpaperBlur() {
         for (Bitmap cached : mCachedAccessoryWallpaperBlurByRadius.values()) {
             if (cached != null && !cached.isRecycled()
-                && cached != mInAppKeyboardBackdropBitmap) {
+                && cached != mInAppKeyboardBackdropBitmap
+                && !isSharedWallpaperBlurFrameInUse(cached)) {
                 cached.recycle();
             }
         }
@@ -4609,6 +4670,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastStatusFrostRect.setEmpty();
         mLastWindowBarFrostRect.setEmpty();
         mLastCommandPaletteFrostRect.setEmpty();
+        mLastAppDrawerFrostRect.setEmpty();
         mLastTopPaneFrostRadiusDp = -1;
     }
 
@@ -4683,6 +4745,51 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         mLastCommandPaletteFrostRect.set(targetRect);
         mLastCommandPaletteFrostRadiusDp = blurRadiusDp;
+        frost.setImageBitmap(crop);
+        frost.setColorFilter(glassFrostFilter());
+        frost.setVisibility(View.VISIBLE);
+        return true;
+    }
+
+    /**
+     * Wallpaper frost for the app drawer plane's glass, the same blind-spot fix the palette needs:
+     * over the home wallpaper the plane's RealtimeBlurView can only blur the window's own dim
+     * scrim. Unlike the palette this follows {@link #getEffectiveExtraKeysBlurRadius()} directly
+     * rather than {@link #resolveTopGlassFrostRadiusDp()} — the plane grows out of the dock, so it
+     * has to be cut from the dock's radius or the two would read as different materials mid-handoff
+     * (and a fourth radius would evict the dock's own entry from the pre-blur LRU). Returns true
+     * when a frost crop was installed and the live blur should rest; the crop spans the full glass
+     * pane and the plane's animated outline clips it.
+     */
+    public boolean applyAppDrawerWallpaperFrost(@NonNull ImageView frost) {
+        int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
+        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+        View glass = frost.getParent() instanceof View ? (View) frost.getParent() : null;
+        if (!shouldUseWallpaperPassthroughMode() || blurRadiusDp <= 0 || wallpaperFrame == null
+            || glass == null || glass.getWidth() <= 0 || glass.getHeight() <= 0) {
+            frost.setImageDrawable(null);
+            frost.setVisibility(View.GONE);
+            return false;
+        }
+        glass.getLocationOnScreen(mTmpViewLocation);
+        Rect targetRect = new Rect(mTmpViewLocation[0], mTmpViewLocation[1],
+            mTmpViewLocation[0] + glass.getWidth(), mTmpViewLocation[1] + glass.getHeight());
+        // The plane re-applies its frost on every open; without this guard each open re-cut a
+        // full-screen crop.
+        if (!mTopPaneFrostDirty && targetRect.equals(mLastAppDrawerFrostRect)
+            && mLastAppDrawerFrostRadiusDp == blurRadiusDp && frost.getDrawable() != null) {
+            frost.setVisibility(View.VISIBLE);
+            return true;
+        }
+        Bitmap crop = createCachedAccessoryWallpaperBlurCrop(blurRadiusDp, targetRect, wallpaperFrame);
+        if (crop == null) {
+            frost.setImageDrawable(null);
+            frost.setVisibility(View.GONE);
+            mLastAppDrawerFrostRect.setEmpty();
+            return false;
+        }
+        mLastAppDrawerFrostRect.set(targetRect);
+        mLastAppDrawerFrostRadiusDp = blurRadiusDp;
         frost.setImageBitmap(crop);
         frost.setColorFilter(glassFrostFilter());
         frost.setVisibility(View.VISIBLE);
@@ -4840,6 +4947,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mCommandPalette != null)
             mCommandPalette.dismissImmediately();
+        closeAppDrawerImmediate();
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onStop();
         if (mTermuxTerminalViewClient != null)
@@ -5216,6 +5324,52 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             });
         mSuggestionBarView.setLaunchRippleListener(this::playAppLaunchRipple);
+        mSuggestionBarView.setAppDrawerGestureListener(
+            new SuggestionBarView.AppDrawerGestureListener() {
+                @Override
+                public boolean isAppDrawerEnabled() {
+                    return mPreferences != null && mPreferences.isAppLauncherDrawerEnabled();
+                }
+
+                @Override
+                public boolean isDockTuningActive() {
+                    return mDockTuningMode;
+                }
+
+                @Override
+                public boolean isCommandPaletteOpen() {
+                    return TermuxActivity.this.isCommandPaletteOpen();
+                }
+
+                @Override
+                public boolean isAppDrawerEngaged() {
+                    return TermuxActivity.this.isAppDrawerEngaged();
+                }
+
+                @Override
+                public void onDrawerDragBegin(float downRawY) {
+                    getAppDrawerController().beginDrag(downRawY);
+                }
+
+                @Override
+                public void onDrawerDrag(float rawY) {
+                    getAppDrawerController().updateDrag(rawY);
+                }
+
+                @Override
+                public void onDrawerDragEnd(float velocityPxPerSec) {
+                    getAppDrawerController().endDrag(velocityPxPerSec);
+                }
+
+                @Override
+                public void onDrawerDragCancel() {
+                    getAppDrawerController().cancelDrag();
+                }
+            });
+        // Only when the controller already exists: the row is also registered by the lazy accessor
+        // itself, so an install that never pulls the drawer down still never builds one.
+        if (mAppDrawerController != null)
+            mAppDrawerController.setDockChoreographyTarget(mSuggestionBarView);
         applySuggestionBarPreferences();
         applyDockLayoutMetrics(buildDockLayoutMetrics(0));
         if (isSuggestionBarEnabled()) {
@@ -5393,6 +5547,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void applyAccessoryGeometryIfNeeded(boolean force, @NonNull String reason) {
+        // Same freeze as setTerminalToolbarHeight: while the drawer plane owns the stack every
+        // band moves by translation/clip only, and a relayout here would fight it. Replayed on close.
+        if (isAppDrawerEngaged()) {
+            mAppDrawerGeometryFreezePending = true;
+            return;
+        }
         long now = SystemClock.uptimeMillis();
         if (!force && (now - mLastAccessoryGeometryApplyUptimeMs) < 120L) {
             scheduleAccessoryRenderSync(reason + ":skip");
@@ -8686,6 +8846,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void setTerminalToolbarHeight(boolean requestTerminalResize) {
+        // Frozen while the app drawer plane is engaged: this path resizes the toolbar and the
+        // terminal, and driving it per animation frame is a SIGWINCH storm. Replayed on close.
+        if (isAppDrawerEngaged()) {
+            mAppDrawerGeometryFreezePending = true;
+            return;
+        }
         final ViewPager terminalToolbarViewPager = getTerminalToolbarViewPager();
         View accessoryStackContainer = findViewById(R.id.accessory_stack_container);
         if (terminalToolbarViewPager == null || accessoryStackContainer == null)
@@ -9600,6 +9766,74 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mCommandPalette != null && mCommandPalette.isOpen();
     }
 
+    /**
+     * The launcher row, or null before it is built. Exposed for the drawer's grid, whose cells
+     * borrow their icons, tint, launch ladder and context menu from it rather than owning a second
+     * copy of any of them.
+     */
+    @Nullable
+    public SuggestionBarView getSuggestionBarView() {
+        return mSuggestionBarView;
+    }
+
+    /**
+     * The app drawer plane, created on first use. Like the palette it lives in the activity rather
+     * than in a window of its own, and binds its views lazily, so an install that never pulls the
+     * drawer down never pays for it.
+     */
+    @NonNull
+    public com.termux.app.launcher.drawer.AppDrawerController getAppDrawerController() {
+        if (mAppDrawerController == null) {
+            mAppDrawerController = new com.termux.app.launcher.drawer.AppDrawerController(this);
+            // Registered here rather than in setSuggestionBarView() so the accessor stays lazy: the
+            // only thing that builds a controller is a drag, and a drag comes from the row itself,
+            // which therefore already exists by the time this runs.
+            mAppDrawerController.setDockChoreographyTarget(mSuggestionBarView);
+        }
+        return mAppDrawerController;
+    }
+
+    /**
+     * True while the app drawer plane owns the accessory stack's transforms — open, or mid open/
+     * close drag. Every accessory-geometry seam gates on this: while the plane is engaged the stack
+     * must not relayout, because that runs the flush-padding solver and a terminal resize (SIGWINCH)
+     * per frame.
+     */
+    private boolean isAppDrawerEngaged() {
+        return mAppDrawerController != null && mAppDrawerController.isEngaged();
+    }
+
+    /**
+     * Closes the app drawer plane with no animation. Called from the lifecycle and HOME paths, where
+     * a settling spring would otherwise be resumed against stale geometry.
+     *
+     * <p>Deliberately does not go through {@link #getAppDrawerController()}: a drawer that was never
+     * opened has nothing to close, and building the controller here would defeat the lazy accessor.
+     */
+    private void closeAppDrawerImmediate() {
+        try {
+            if (mAppDrawerController != null) mAppDrawerController.closeImmediate();
+        } finally {
+            flushPendingAccessoryGeometry();
+        }
+    }
+
+    /**
+     * Re-applies the accessory geometry that {@link #isAppDrawerEngaged()} suppressed. Called on
+     * drawer close and unconditionally from {@link #onStart()}: a suppression that is never flushed
+     * leaves the dock deaf to style and height changes until the activity is recreated.
+     *
+     * <p>Public because {@code AppDrawerController} calls it from the {@code finally} of its own
+     * teardown: the flush must run even if restoring the plane's transforms throws.
+     */
+    public void flushPendingAccessoryGeometry() {
+        if (!mAppDrawerGeometryFreezePending || isAppDrawerEngaged()) {
+            return;
+        }
+        mAppDrawerGeometryFreezePending = false;
+        applyAccessoryGeometryIfNeeded(true, "appDrawer:flush");
+    }
+
     /** Row-level haptic ticks, shared by the dock rows and the palette's focus movement. */
     public boolean isRowHapticsEnabled() {
         return mPreferences != null && mPreferences.isAppLauncherRowHapticsEnabled();
@@ -9631,6 +9865,62 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mInAppKeyboard != null && mInAppKeyboard.getSpaceBarRectOnScreen(out);
     }
 
+    /**
+     * Routes in-app keyboard values to the app drawer's search while it is open.
+     *
+     * <p>Shares the single interceptor slot with the palette, which is safe in exactly one
+     * direction: {@code TerminalCommandPaletteController.show()} closes the drawer before it
+     * installs its own interceptor, and the drawer's close releases this one on the way. The drawer
+     * cannot open over the palette — the dock's arbiter vetoes a drawer drag while it is up — so the
+     * two are never both claiming.
+     *
+     * <p>Guarded on the field rather than the lazy accessor: deactivating a drawer that was never
+     * opened must not build one.
+     */
+    public void setAppDrawerInterceptorActive(boolean active) {
+        if (mInAppKeyboard == null)
+            return;
+        mInAppKeyboard.setKeyValueInterceptor(
+            active && mAppDrawerController != null
+                ? mAppDrawerController.getSearchController() : null);
+    }
+
+    /** Hardware and external-keyboard strokes claimed by the open app drawer's search. */
+    public boolean handleAppDrawerKey(int keyCode, @NonNull KeyEvent event) {
+        return mAppDrawerController != null
+            && mAppDrawerController.handleSearchKey(keyCode, event);
+    }
+
+    /**
+     * Text committed by a system IME, claimed by the open app drawer's search. The drawer has no
+     * focused text field by design, so this is the only route by which a third-party keyboard's
+     * ordinary characters reach it rather than the shell behind the plane.
+     */
+    public boolean handleAppDrawerCodePoint(int codePoint, boolean ctrlDown) {
+        return mAppDrawerController != null
+            && mAppDrawerController.handleSearchCodePoint(codePoint, ctrlDown);
+    }
+
+    /** True while the drawer plane is up — what the key-release swallow asks. */
+    public boolean isAppDrawerOpen() {
+        return mAppDrawerController != null && mAppDrawerController.isOpen();
+    }
+
+    /**
+     * Summons the system IME for the drawer's search, with <b>no focus change</b>.
+     *
+     * <p>The obvious call here would be {@code beginExternalTextInput()}, and it is exactly wrong:
+     * it runs {@code requestAccessoryGeometrySync()}, and the accessory stack's geometry is frozen
+     * for the life of the drawer transition. Thawing it mid-reveal relayouts the stack under an open
+     * plane and the dock visibly jumps on close. Focus stays on the terminal view, which keeps
+     * owning the input connection; the committed text reaches the drawer through
+     * {@link #handleAppDrawerCodePoint}.
+     */
+    public void requestAppDrawerSearchKeyboard() {
+        onSystemImeRequested();
+        KeyboardUtils.showSoftKeyboard(this, mTerminalView);
+    }
+
     /** Hardware and external-keyboard strokes claimed by the open palette. */
     public boolean handleCommandPaletteKey(int keyCode, @NonNull KeyEvent event) {
         return mCommandPalette != null && mCommandPalette.handleHardwareKey(keyCode, event);
@@ -9646,11 +9936,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && mCommandPalette.handleSoftKeyboardCodePoint(codePoint, ctrlDown);
     }
 
+    /**
+     * Back consumers, in order.
+     *
+     * <p>The palette stays first: it is transient and can be summoned over anything, including the
+     * drawer. The drawer comes next because it is a full-screen plane, and both of the consumers
+     * below it — dock tuning and the navigation drawer — are conceptually behind it; a back press
+     * that skipped past it would dismiss something the user cannot even see.
+     */
     @SuppressLint("RtlHardcoded")
     @Override
     public void onBackPressed() {
         if (isCommandPaletteOpen()) {
             mCommandPalette.collapse();
+        } else if (mAppDrawerController != null && mAppDrawerController.isOpen()) {
+            // A back press with something typed is spent on the query and the drawer stays up. The
+            // branch still consumes it either way: falling through to dock tuning because the query
+            // absorbed it would dismiss something behind a full-screen plane.
+            if (!mAppDrawerController.onBackPressedInDrawer())
+                mAppDrawerController.close(true);
         } else if (mDockTuningMode) {
             exitDockTuningMode();
         } else if (getDrawer().isDrawerOpen(Gravity.LEFT)) {
@@ -12417,6 +12721,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void refreshSuggestionBarFromPackageState(boolean forceCatalogRefresh) {
+        // Above the guard on purpose. The drawer's catalogue is not the dock's: it must refresh even
+        // with the suggestion bar disabled or its view not yet built, and it must re-drive
+        // warmAsync itself, because LauncherAppDataProvider.invalidate() clears pending refresh
+        // callbacks and a one-shot registration made just before a package change is dropped.
+        // Guarded on the field so a session that never opened the drawer still never builds one.
+        if (mAppDrawerController != null) {
+            mAppDrawerController.onAppCatalogChanged();
+        }
         if (!isSuggestionBarEnabled() || mSuggestionBarView == null) {
             return;
         }

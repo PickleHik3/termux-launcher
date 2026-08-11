@@ -341,6 +341,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         // in-app keyboard's interceptor sits at. Checked first so nothing else can consume esc.
         if (mActivity.handleCommandPaletteKey(keyCode, e))
             return true;
+        // After the palette (which can be summoned over the drawer and therefore outranks it) and
+        // before the app-search hook, which reads the terminal's own input line — a line nothing
+        // typed into the drawer ever reaches.
+        if (mActivity.handleAppDrawerKey(keyCode, e))
+            return true;
         if (mActivity.handleTerminalAppSearchKey(keyCode))
             return true;
         if (mSuggestionBarCallback != null && mActivity.shouldProcessSuggestionBarKeyEvent(keyCode)) {
@@ -571,6 +576,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         // Swallow the release of a stroke the palette consumed on the way down.
         if (mActivity.isCommandPaletteOpen())
             return true;
+        // Same for the drawer: onKeyDown claimed the press, and a release let through on its own
+        // would reach the shell behind a full-screen plane.
+        if (mActivity.isAppDrawerOpen())
+            return true;
         // If emulator is not set, like if bootstrap installation failed and user dismissed the error
         // dialog, then just exit the activity, otherwise they will be stuck in a broken state.
         if (keyCode == KeyEvent.KEYCODE_BACK && mActivity.getTerminalView().mEmulator == null) {
@@ -650,6 +659,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         // system IME commits ordinary characters through the input connection without ever sending
         // a key event, so this is the only route by which typing reaches the overlay from one.
         if (mActivity.handleCommandPaletteCodePoint(codePoint, ctrlDown))
+            return true;
+        // The drawer's twin of the same hook, in the same order as onKeyDown: after the palette,
+        // before the enter-only app-search hook below.
+        if (mActivity.handleAppDrawerCodePoint(codePoint, ctrlDown))
             return true;
         // The AOSP keyboard and its descendants send ⏎ as text rather than as KEYCODE_ENTER — see
         // TerminalView#sendTextToTerminal — so the key-code-only app-search hook needs this twin

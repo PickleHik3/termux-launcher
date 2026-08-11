@@ -188,6 +188,31 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             false);
     }
 
+    public boolean isAppLauncherDrawerEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ENABLED,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_ENABLED);
+    }
+
+    public void setAppLauncherDrawerEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ENABLED, value, false);
+    }
+
+    public int getAppLauncherDrawerCornerRadius() {
+        int value = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_CORNER_RADIUS,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_CORNER_RADIUS);
+        if (value < 0) return TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_CORNER_RADIUS;
+        return Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DRAWER_CORNER_RADIUS, value);
+    }
+
+    public void setAppLauncherDrawerCornerRadius(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_CORNER_RADIUS,
+            value < 0 ? TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_CORNER_RADIUS
+                : Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DRAWER_CORNER_RADIUS, value),
+            false);
+    }
+
     public int getStatusBarBlurRadius() {
         int fallback = mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS)
             ? TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS : getExtraKeysBlurRadius();

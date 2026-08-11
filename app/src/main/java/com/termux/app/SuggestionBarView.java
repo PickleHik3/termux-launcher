@@ -8,6 +8,7 @@ import android.animation.ArgbEvaluator;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.app.Dialog;
 import android.app.Notification;
@@ -18,6 +19,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
@@ -108,6 +110,9 @@ import com.termux.app.launcher.data.LauncherIconResolver;
 import com.termux.app.launcher.notifications.LauncherNotificationBadgeStore;
 import com.termux.app.launcher.data.LauncherRankingEngine;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
+import com.termux.app.launcher.drawer.AppDrawerController;
+import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
+import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry;
 import com.termux.app.launcher.model.IconPackInfo;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
@@ -137,11 +142,52 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-public final class SuggestionBarView extends GridLayout {
+public final class SuggestionBarView extends GridLayout
+    implements AppDrawerController.AppDrawerDockChoreographyTarget {
 
     public interface LaunchRippleListener {
         void onLaunchRipple(@NonNull String packageName, @Nullable Drawable icon,
                             @Nullable View sourceView);
+    }
+
+    /**
+     * The dock's half of the app-drawer pull-down gesture.
+     *
+     * <p>The row arbitrates the touch stream — it is the only view that sees the whole gesture from
+     * {@code ACTION_DOWN} — but it knows nothing about the plane. Everything the claim depends on
+     * that lives outside the row (the preference, dock tuning, the palette, the drawer's own state)
+     * is asked for through this listener, and the claimed drag is handed straight back to
+     * {@code AppDrawerController} through it.
+     *
+     * <p>The four state queries are read once each, at {@code ACTION_DOWN}, into an
+     * {@link AppDrawerGestureArbiter.Eligibility} snapshot: half of them flip <em>because of</em>
+     * the gesture in flight, and re-reading them mid-drag would revoke the claim under a finger
+     * that is already dragging the plane.
+     */
+    public interface AppDrawerGestureListener {
+
+        /** The {@code app_launcher_drawer_enabled} preference. */
+        boolean isAppDrawerEnabled();
+
+        /** Dock tuning owns drags on the dock itself while it is up. */
+        boolean isDockTuningActive();
+
+        /** The command palette is a full-screen overlay of its own; it must not stack with one. */
+        boolean isCommandPaletteOpen();
+
+        /** True while the plane is open, dragging or still settling. */
+        boolean isAppDrawerEngaged();
+
+        /** @param downRawY the gesture's {@code ACTION_DOWN} raw screen Y */
+        void onDrawerDragBegin(float downRawY);
+
+        /** @param rawY the current raw screen Y; the plane tracks this 1:1 */
+        void onDrawerDrag(float rawY);
+
+        /** @param velocityPxPerSec release velocity, positive downwards */
+        void onDrawerDragEnd(float velocityPxPerSec);
+
+        void onDrawerDragCancel();
     }
 
     private static final String LOG_TAG = "SuggestionBarView";
@@ -161,6 +207,23 @@ public final class SuggestionBarView extends GridLayout {
     private static final int PINNED_FOLDER_FILL_COLOR = 0x26FFFFFF;
     private static final int PINNED_FOLDER_STROKE_COLOR = 0x33FFFFFF;
 
+    /** Nothing owns the stream yet; the claim tests are still live. */
+    private static final int GESTURE_CLAIM_PENDING = 0;
+    /** The horizontal page swipe owns it. */
+    private static final int GESTURE_CLAIM_PAGE_SWIPE = 1;
+    /** The app drawer's pull-down owns it; every other branch stands down. */
+    private static final int GESTURE_CLAIM_DRAWER_DRAG = 2;
+    /** A child took it first — a shown context menu, a notification swipe, a pickup drag. */
+    private static final int GESTURE_CLAIM_CHILD_OWNED = 3;
+
+    /** Pinned icons leave in a wave; past this many the stagger stops growing. */
+    private static final int DRAWER_ICON_STAGGER_CAP = 8;
+    private static final float DRAWER_ICON_STAGGER_STEP = 0.012f;
+    private static final float DRAWER_ICON_FADE_START = 0.02f;
+    private static final float DRAWER_ICON_FADE_END = 0.30f;
+    private static final float DRAWER_ICON_EXIT_SCALE = 0.92f;
+    private static final float DRAWER_ICON_EXIT_LIFT_DP = 6f;
+
     private List<LauncherAppEntry> allApps = new ArrayList<>();
     @Nullable private LaunchRippleListener launchRippleListener;
     private final List<LauncherAppEntry> terminalSearchEntries = new ArrayList<>();
@@ -172,8 +235,29 @@ public final class SuggestionBarView extends GridLayout {
     @Nullable private ColorFilter appIconColorFilter;
     private static final int ICON_RENDER_PIPELINE_VERSION = 2;
     private static final int ICON_SHADOW_COLOR = 0x47000000;
-    /** Cache of harmonized icon drawables so resting and swipe-preview icons are identical (no size jump) and we don't rebuild bitmaps per frame. */
-    private final LruCache<String, Drawable> normalizedIconCache = new LruCache<>(96);
+    /** Smallest icon budget we will hand out, even on a memory-starved device: two dozen 192px pairs. */
+    private static final int ICON_CACHE_MIN_BYTES = 6 * 1024 * 1024;
+    /** Ceiling regardless of how generous the heap is — the drawer scrolls a whole catalogue past this cache. */
+    private static final int ICON_CACHE_MAX_BYTES = 16 * 1024 * 1024;
+    /** Fraction of the per-app heap the rendered-icon cache may hold (1/12th). */
+    private static final int ICON_CACHE_HEAP_DIVISOR = 12;
+    /**
+     * Cache of harmonized icon drawables so resting and swipe-preview icons are identical (no size
+     * jump) and we don't rebuild bitmaps per frame.
+     *
+     * <p>Budgeted in bytes rather than entries: keys carry {@code "@" + sizePx}, so the dock's 48dp
+     * icons and the drawer's grid icons share one cache at several sizes at once, and a count-based
+     * cap admits wildly different amounts of pixel data depending on which sizes happen to be live.
+     * A {@link RenderedIconDrawable} costs twice its display bitmap because it retains the clean
+     * pre-shadow artwork alongside it.
+     */
+    private final LruCache<String, Drawable> normalizedIconCache =
+        new LruCache<String, Drawable>(resolveIconCacheBudgetBytes(iconCacheMemoryClassMb(getContext()))) {
+            @Override
+            protected int sizeOf(String key, Drawable value) {
+                return renderedIconCacheEntrySize(value);
+            }
+        };
     /** Visible alpha bounds per drawable; avoids rescanning custom/icon-pack artwork on every drag event. */
     private final Map<Drawable, RectF> drawableVisibleBoundsCache = new WeakHashMap<>();
     private final Map<Drawable, FocusOutlineRenderer.Visual> focusOutlineVisualCache = new WeakHashMap<>();
@@ -240,6 +324,24 @@ public final class SuggestionBarView extends GridLayout {
     private int pinnedItemsPerPage = 1;
     private float swipeDownX = 0f;
     private float swipeDownY = 0f;
+    /**
+     * The gesture's down point in screen coordinates. The drawer runs on raw values rather than the
+     * local ones the page swipe uses because the row's own parent is translated while the plane is
+     * dragging: local Y would then be measured against a moving origin.
+     */
+    private float swipeDownRawX = 0f;
+    private float swipeDownRawY = 0f;
+    private final AppDrawerGestureArbiter gestureArbiter = new AppDrawerGestureArbiter();
+    /**
+     * The latched owner of the current stream, mirrored from {@link #gestureArbiter} at the two
+     * points it is consulted. Replaces the {@code horizontalIntent} boolean the move handler used to
+     * recompute from scratch on every event — recomputation is what let one drag hand ownership
+     * back and forth, and fire both the page swipe and the drawer.
+     */
+    private int gestureClaim = GESTURE_CLAIM_PENDING;
+    @Nullable private AppDrawerGestureListener appDrawerGestureListener;
+    /** Last progress handed down by {@code AppDrawerController}; 0 means no transition on screen. */
+    private float drawerTransitionProgress = 0f;
     private float swipePagePosition = 0f;
     private boolean swipePageDragging = false;
     private float swipeVisualOffsetX = 0f;
@@ -348,6 +450,45 @@ public final class SuggestionBarView extends GridLayout {
             super(resources, display);
             this.cleanArtwork = cleanArtwork;
         }
+    }
+
+    /** Per-app heap ceiling in MB, or a conservative stand-in when the service is unavailable. */
+    private static int iconCacheMemoryClassMb(@Nullable Context context) {
+        try {
+            ActivityManager activityManager = context == null
+                ? null : (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+            if (activityManager != null) {
+                return activityManager.getMemoryClass();
+            }
+        } catch (Throwable ignored) {
+            // Fall through to the floor below; an unusable service is not a reason to render nothing.
+        }
+        return 0;
+    }
+
+    /** One twelfth of the per-app heap, clamped into [6MB, 16MB]. */
+    static int resolveIconCacheBudgetBytes(int memoryClassMb) {
+        long heapBytes = (long) Math.max(0, memoryClassMb) * 1024L * 1024L;
+        long budget = heapBytes / ICON_CACHE_HEAP_DIVISOR;
+        if (budget < ICON_CACHE_MIN_BYTES) budget = ICON_CACHE_MIN_BYTES;
+        if (budget > ICON_CACHE_MAX_BYTES) budget = ICON_CACHE_MAX_BYTES;
+        return (int) budget;
+    }
+
+    /**
+     * Byte cost of one cached icon. A {@link RenderedIconDrawable} retains its clean pre-shadow
+     * artwork at the same dimensions as the display bitmap, so it is charged twice. Anything without
+     * a bitmap (a placeholder, a vector) still costs 1 so that {@code size()} tracks occupancy and
+     * {@code evictAll()} returns to zero.
+     */
+    static int renderedIconCacheEntrySize(@Nullable Drawable value) {
+        if (!(value instanceof BitmapDrawable)) return 1;
+        Bitmap bitmap = ((BitmapDrawable) value).getBitmap();
+        if (bitmap == null) return 1;
+        boolean hasCleanArtwork = value instanceof RenderedIconDrawable;
+        long bytes = (long) bitmap.getAllocationByteCount() * (1 + (hasCleanArtwork ? 1 : 0));
+        if (bytes < 1L) return 1;
+        return bytes > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) bytes;
     }
 
     public interface OverflowInteractionListener {
@@ -504,6 +645,14 @@ public final class SuggestionBarView extends GridLayout {
         imageView.invalidate();
     }
 
+    /**
+     * Applies the dock's current icon tint treatment (monochrome mode included) to a view the dock
+     * does not own, so drawer cells never drift from the row above them.
+     */
+    public void applyIconColorFilter(@NonNull ImageView imageView) {
+        applyAppIconColorFilter(imageView);
+    }
+
     private void invalidateRenderedIconCaches() {
         normalizedIconCache.evictAll();
         drawableVisibleBoundsCache.clear();
@@ -579,6 +728,11 @@ public final class SuggestionBarView extends GridLayout {
     private int resolveLauncherTextColor() {
         return MaterialColors.getColor(this, com.google.android.material.R.attr.colorOnSurface,
             ContextCompat.getColor(getContext(), R.color.termux_on_surface));
+    }
+
+    /** The launcher's on-surface text colour, for surfaces rendered outside this view. */
+    public int getLauncherTextColor() {
+        return resolveLauncherTextColor();
     }
 
     private static int resolveLauncherTextColor(@NonNull View view) {
@@ -1538,22 +1692,47 @@ public final class SuggestionBarView extends GridLayout {
             if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
             swipeDownX = event.getX();
             swipeDownY = event.getY();
+            swipeDownRawX = event.getRawX();
+            swipeDownRawY = event.getRawY();
+            gestureClaim = GESTURE_CLAIM_PENDING;
+            gestureArbiter.begin(swipeDownRawX, swipeDownRawY, captureDrawerEligibility());
         } else if (action == MotionEvent.ACTION_MOVE) {
             setRowInteractionActive(true);
             if (swipeVelocityTracker != null) swipeVelocityTracker.addMovement(event);
             if (activeAzLetter != null) {
                 scheduleAzResetTimeout();
             }
+            if (gestureClaim == GESTURE_CLAIM_DRAWER_DRAG) {
+                if (appDrawerGestureListener != null)
+                    appDrawerGestureListener.onDrawerDrag(event.getRawY());
+                return true;
+            }
+            // The drawer test is inside evaluate() and runs before the page test; a child that has
+            // already taken the stream latches first so neither can steal it back.
+            if (isGestureOwnedByChild()) {
+                gestureClaim = toGestureClaim(gestureArbiter.claimChild());
+            } else {
+                int slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+                gestureClaim = toGestureClaim(
+                    gestureArbiter.evaluate(event.getRawX(), event.getRawY(), slop));
+            }
+            if (gestureClaim == GESTURE_CLAIM_DRAWER_DRAG) {
+                beginDrawerDrag(event);
+                return true;
+            }
             float dx = event.getX() - swipeDownX;
-            float dy = event.getY() - swipeDownY;
-            int slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
-            boolean horizontalIntent = Math.abs(dx) >= slop && Math.abs(dx) > (Math.abs(dy) * 1.1f);
-            if (horizontalIntent && TextUtils.isEmpty(lastInput.trim())) {
+            if (gestureClaim == GESTURE_CLAIM_PAGE_SWIPE && TextUtils.isEmpty(lastInput.trim())) {
                 suppressContextLongPressForSwipe = true;
                 cancelPendingContextLongPresses();
                 applySwipePageDragFeedback(dx);
             }
         } else if (action == MotionEvent.ACTION_UP) {
+            int claim = gestureClaim;
+            resetGestureClaim();
+            if (claim == GESTURE_CLAIM_DRAWER_DRAG) {
+                finishDrawerDrag(event, false);
+                return true;
+            }
             if (activeAzLetter != null) {
                 scheduleAzResetTimeout();
             }
@@ -1570,8 +1749,9 @@ public final class SuggestionBarView extends GridLayout {
                 && Math.abs(vx) > PAGE_SWIPE_FLING_VELOCITY_PX_PER_SEC
                 && Math.signum(dx) == Math.signum(vx);
             boolean swipeQualified = distanceCommit || velocityCommit;
-            if (swipeQualified && Math.abs(dx) > Math.abs(dy) * 1.2f &&
-                TextUtils.isEmpty(lastInput.trim())) {
+            if (claim == GESTURE_CLAIM_PAGE_SWIPE && swipeQualified
+                && Math.abs(dx) > Math.abs(dy) * 1.2f
+                && TextUtils.isEmpty(lastInput.trim())) {
                 int pageDelta = dx < 0 ? 1 : -1;
                 if (activeAzLetter != null) {
                     int totalPages = getAzPagesCount();
@@ -1615,6 +1795,12 @@ public final class SuggestionBarView extends GridLayout {
             }
             setRowInteractionActive(false);
         } else if (action == MotionEvent.ACTION_CANCEL) {
+            int claim = gestureClaim;
+            resetGestureClaim();
+            if (claim == GESTURE_CLAIM_DRAWER_DRAG) {
+                finishDrawerDrag(event, true);
+                return true;
+            }
             ViewParent parent = getParent();
             if (parent != null) parent.requestDisallowInterceptTouchEvent(false);
             if (swipeVelocityTracker != null) {
@@ -1626,8 +1812,163 @@ public final class SuggestionBarView extends GridLayout {
                 animateSwipePageDragBack();
             }
             setRowInteractionActive(false);
+        } else if (gestureClaim == GESTURE_CLAIM_DRAWER_DRAG) {
+            // Extra pointers during a claimed drag: swallowed rather than forwarded, so a second
+            // finger cannot start a second interaction on children this stream has already
+            // cancelled.
+            return true;
         }
         return super.dispatchTouchEvent(event);
+    }
+
+    public void setAppDrawerGestureListener(@Nullable AppDrawerGestureListener listener) {
+        appDrawerGestureListener = listener;
+    }
+
+    /**
+     * The dock row's bounds in screen coordinates — the rectangle the drawer's pull-down starts
+     * from, and the one the plane's seed rect has to agree with.
+     */
+    public void getAppsRowScreenRect(@NonNull Rect out) {
+        int[] location = new int[2];
+        getLocationOnScreen(location);
+        out.set(location[0], location[1], location[0] + getWidth(), location[1] + getHeight());
+    }
+
+    /**
+     * The eight vetoes, read once at {@code ACTION_DOWN}. Four are the row's own state and four come
+     * from the host through {@link AppDrawerGestureListener}; with no listener wired the drawer can
+     * never claim, which is what keeps every test and every non-launcher host on the old behaviour.
+     */
+    @NonNull
+    private AppDrawerGestureArbiter.Eligibility captureDrawerEligibility() {
+        AppDrawerGestureListener listener = appDrawerGestureListener;
+        boolean portrait = getResources().getConfiguration().orientation
+            != Configuration.ORIENTATION_LANDSCAPE;
+        // A pickup state or a folder-drag hover left over from the previous gesture means the row is
+        // still mid-interaction; the drawer stays out of it.
+        boolean noActivePickup = activeLongPressPickupState == null && folderDragHoverIndex < 0;
+        return new AppDrawerGestureArbiter.Eligibility(
+            listener != null && listener.isAppDrawerEnabled(),
+            TextUtils.isEmpty(lastInput.trim()),
+            activeAzLetter == null,
+            portrait,
+            listener != null && !listener.isDockTuningActive(),
+            listener != null && !listener.isCommandPaletteOpen(),
+            noActivePickup,
+            listener != null && !listener.isAppDrawerEngaged());
+    }
+
+    /** The child-owned cases, read live: all three begin <em>during</em> the stream, not before it. */
+    private boolean isGestureOwnedByChild() {
+        LongPressPickupState state = activeLongPressPickupState;
+        return state != null
+            && (state.menuShown || state.notificationSwipeStarted || state.dragStarted);
+    }
+
+    private static int toGestureClaim(@NonNull AppDrawerGestureArbiter.Claim claim) {
+        switch (claim) {
+            case PAGE_SWIPE: return GESTURE_CLAIM_PAGE_SWIPE;
+            case DRAWER_DRAG: return GESTURE_CLAIM_DRAWER_DRAG;
+            case CHILD_OWNED: return GESTURE_CLAIM_CHILD_OWNED;
+            case PENDING:
+            default: return GESTURE_CLAIM_PENDING;
+        }
+    }
+
+    private void resetGestureClaim() {
+        gestureClaim = GESTURE_CLAIM_PENDING;
+        gestureArbiter.reset();
+    }
+
+    /**
+     * Hands the stream to the drawer. The order here is not cosmetic:
+     *
+     * <ol>
+     *   <li>the long-press suppression flag goes up and the pending long-presses are cancelled, so
+     *       the context menu cannot open under the plane;
+     *   <li>any popup already on screen is dismissed — it is a window of its own and would outlive
+     *       the row it was anchored to;
+     *   <li><b>exactly one</b> synthetic {@code ACTION_CANCEL} goes down to the children. Every
+     *       later event of this stream is consumed here without reaching {@code super}, so without
+     *       it the pressed icon never sees an UP: {@code animateLaunchReleaseBounce} never runs and
+     *       {@code activeLongPressPickupState} is left pointing at a permanently pressed view. The
+     *       one-way latch is what guarantees "exactly one" — this method runs on the transition into
+     *       {@link #GESTURE_CLAIM_DRAWER_DRAG}, and the claim can never re-enter it;
+     *   <li>only then does the drag begin, from the <em>down</em> point rather than the current one,
+     *       so the plane's progress starts at zero.
+     * </ol>
+     */
+    private void beginDrawerDrag(@NonNull MotionEvent event) {
+        suppressContextLongPressForSwipe = true;
+        cancelPendingContextLongPresses();
+        dismissAppContextPopup();
+        dismissFolderPopup();
+        dismissShortcutsPopup();
+        MotionEvent cancel = MotionEvent.obtain(event);
+        cancel.setAction(MotionEvent.ACTION_CANCEL);
+        try {
+            super.dispatchTouchEvent(cancel);
+        } finally {
+            cancel.recycle();
+        }
+        if (appDrawerGestureListener != null)
+            appDrawerGestureListener.onDrawerDragBegin(swipeDownRawY);
+    }
+
+    /**
+     * Ends a drawer drag and — the part that is easy to lose — clears
+     * {@code suppressContextLongPressForSwipe}. The two places that used to clear it live further
+     * down the UP and CANCEL branches, which this path returns before reaching, and a flag left up
+     * makes every later long-press on the dock silently do nothing.
+     */
+    private void finishDrawerDrag(@NonNull MotionEvent event, boolean cancelled) {
+        float velocityPxPerSec = 0f;
+        if (swipeVelocityTracker != null) {
+            if (!cancelled) {
+                swipeVelocityTracker.addMovement(event);
+                swipeVelocityTracker.computeCurrentVelocity(1000);
+                velocityPxPerSec = swipeVelocityTracker.getYVelocity();
+            }
+            swipeVelocityTracker.recycle();
+            swipeVelocityTracker = null;
+        }
+        ViewParent parent = getParent();
+        if (parent != null) parent.requestDisallowInterceptTouchEvent(false);
+        suppressContextLongPressForSwipe = false;
+        setRowInteractionActive(false);
+        AppDrawerGestureListener listener = appDrawerGestureListener;
+        if (listener == null) return;
+        if (cancelled) listener.onDrawerDragCancel();
+        else listener.onDrawerDragEnd(velocityPxPerSec);
+    }
+
+    /**
+     * The pinned icons' exit, staggered by slot so the row empties as a wave rather than a block.
+     * Each icon's ramp is offset by its index, capped at {@link #DRAWER_ICON_STAGGER_CAP} so a long
+     * dock does not push the last icon's fade past the end of the transition.
+     *
+     * <p>This is the only thing the drawer's controller asks of the row, and the row is the only
+     * writer of these properties while a transition is on screen — see
+     * {@link #resetTransientVisualState()}.
+     */
+    @Override
+    public void setDrawerTransitionProgress(float progress) {
+        float p = clamp01(progress);
+        drawerTransitionProgress = p;
+        float lift = dp(DRAWER_ICON_EXIT_LIFT_DP);
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (child == null) continue;
+            float stagger = DRAWER_ICON_STAGGER_STEP * Math.min(i, DRAWER_ICON_STAGGER_CAP);
+            float r = AppDrawerTransitionGeometry.ramp(p,
+                DRAWER_ICON_FADE_START + stagger, DRAWER_ICON_FADE_END + stagger);
+            float scale = 1f + ((DRAWER_ICON_EXIT_SCALE - 1f) * r);
+            child.setAlpha(1f - r);
+            child.setScaleX(scale);
+            child.setScaleY(scale);
+            child.setTranslationY(lift * r);
+        }
     }
 
     void reloadWithInput(String input, final TerminalView terminalView) {
@@ -1989,6 +2330,15 @@ public final class SuggestionBarView extends GridLayout {
         rowHapticsEnabled = enabled;
     }
 
+    /**
+     * Whether row haptics are on, so a letter tick raised by a surface the dock does not own — the
+     * drawer's A-Z column — honours the same preference as the dock's own A-Z row instead of keeping
+     * a second copy of it.
+     */
+    public boolean isRowHapticsEnabled() {
+        return rowHapticsEnabled;
+    }
+
     public boolean launchFocusedTerminalSearchEntry() {
         int index = terminalSearchFocusIndex;
         if (index < 0 || index >= terminalSearchEntries.size()) return false;
@@ -2286,6 +2636,16 @@ public final class SuggestionBarView extends GridLayout {
         return built != null ? built : raw;
     }
 
+    /**
+     * The same rendered, cached icon the dock draws, at an arbitrary size. Sharing the cache is the
+     * point: keys already carry the pixel size, so a drawer cell and a dock icon of the same size
+     * are literally the same drawable instance.
+     */
+    @Nullable
+    public Drawable getRenderedIcon(@NonNull LauncherAppEntry entry, int sizePx) {
+        return iconForDisplay(entry, sizePx);
+    }
+
     private Drawable normalizeIcon(@Nullable Drawable src, int sizePx, boolean tuneSaturation,
                                    boolean cloneBadge) {
         if (src == null || sizePx <= 0) {
@@ -2547,6 +2907,26 @@ public final class SuggestionBarView extends GridLayout {
         } else {
             postDelayed(launch, launchDelay);
         }
+    }
+
+    /**
+     * Launches an entry on behalf of a surface the dock does not own (the app drawer grid).
+     *
+     * <p>Deliberately routed through {@link #launchEntryFromTouch} so the drawer inherits the whole
+     * ladder — clone/work-profile branch, activity fallbacks, launch transition, ripple, usage
+     * recording, popup dismissal — rather than a second, drifting copy of it.
+     *
+     * <p>It must <em>not</em> call {@code registerLaunchTarget}: those entries index the dock's
+     * launch-animation targets by component, and a drawer cell registering itself would redirect the
+     * dock's own return animation to a view that no longer exists once the drawer closes.
+     *
+     * @return true when the request was dispatched (the launch itself may still be deferred by the
+     *     touch-launch animation delay).
+     */
+    public boolean launchEntryFromDrawer(@Nullable View sourceView, @Nullable LauncherAppEntry entry) {
+        if (entry == null) return false;
+        launchEntryFromTouch(sourceView != null ? sourceView : this, entry, lastTerminalView);
+        return true;
     }
 
     public void setLaunchRippleListener(@Nullable LaunchRippleListener listener) {
@@ -3772,6 +4152,24 @@ public final class SuggestionBarView extends GridLayout {
         }, notificationSwipeAction, entry.appRef.packageName);
     }
 
+    /**
+     * Binds the dock's app context menu onto a view the dock does not own (an app drawer cell).
+     *
+     * <p>This delegates to the one gesture implementation rather than reproducing any part of it:
+     * press-down animation, pickup state, slide-to-select, drag-back-to-cancel and the release
+     * bounce all come from {@link #bindContextLongPressGesture}, which is already parameterised for
+     * an unpinned, non-draggable target ({@code pinnedIndex = -1}, {@code allowDragPickup = false},
+     * no notification-swipe action) — exactly the configuration the A-Z preview and folder-popup
+     * icons use. {@code showAppContextPopup} recomputes the pinned index itself, so a drawer cell
+     * for an already-pinned app still gets the Unpin shape.
+     */
+    public void bindDrawerAppContextLongPress(@NonNull View pressTarget, @NonNull LauncherAppEntry entry) {
+        bindContextLongPressGesture(pressTarget, -1, false, () -> {
+            dismissShortcutsPopup();
+            showAppContextPopup(new AppMenuContext(entry, pressTarget, -1, null, null));
+        }, null, null);
+    }
+
     private void bindFolderContextLongPress(
         @NonNull View pressTarget,
         @NonNull PinnedFolderItem folder,
@@ -4979,6 +5377,15 @@ public final class SuggestionBarView extends GridLayout {
                 x = anchorCenterX - (popupWidth / 2);
             }
             int y = location[1] - popupHeight - gap;
+            // Upward is the dock's placement and stays the default: a dock icon sits at the bottom
+            // of the screen and always has room above it, so this guard is unreachable for every
+            // dock call site and their coordinates are unchanged. An anchor near the top of the
+            // screen — an app drawer cell in the first row — has no room above, and the clamp below
+            // would otherwise drop the menu straight on top of the icon it belongs to. Flip it under
+            // the anchor first, then clamp as before.
+            if (y < visibleFrame.top) {
+                y = location[1] + anchor.getHeight() + gap;
+            }
             x = clamp(x, visibleFrame.left, Math.max(visibleFrame.left, visibleFrame.right - popupWidth));
             y = clamp(y, visibleFrame.top, Math.max(visibleFrame.top, visibleFrame.bottom - popupHeight));
             popupWindow.showAtLocation(this, Gravity.NO_GRAVITY, x, y);
@@ -5077,6 +5484,17 @@ public final class SuggestionBarView extends GridLayout {
                 }
             });
         }
+    }
+
+    /**
+     * Closes every context surface anchored to a launcher icon. Surfaces outside this view (the app
+     * drawer) call this when their own anchors go away — a recycled or scrolled-away cell would
+     * otherwise leave a menu floating over nothing.
+     */
+    public void dismissContextPopups() {
+        dismissAppContextPopup();
+        dismissFolderPopup();
+        dismissShortcutsPopup();
     }
 
     private void showNotificationPopup(
@@ -7121,7 +7539,22 @@ public final class SuggestionBarView extends GridLayout {
         }
     }
 
+    /**
+     * Puts every transient transform on the row and its children back to rest.
+     *
+     * <p>Refuses to run while the app drawer's transition is on screen, and re-applies the current
+     * progress instead. Three callers reach here for reasons that have nothing to do with the drawer
+     * — {@code onAttachedToWindow}, a window turning visible, and the HOME intent — and each of them
+     * would otherwise reset the pinned icons to alpha 1 in the middle of a fade the controller is
+     * still driving, or, worse, land after the last frame and leave them at the alpha the
+     * <em>transition</em> wanted forever. The controller's own close path calls back with progress 0,
+     * which is what actually restores them.
+     */
     public void resetTransientVisualState() {
+        if (drawerTransitionProgress > 0f) {
+            setDrawerTransitionProgress(drawerTransitionProgress);
+            return;
+        }
         animate().cancel();
         cancelSwipePreviewRebound();
         swipePageDragging = false;

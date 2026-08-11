@@ -1631,6 +1631,44 @@
                 android:gravity="center_horizontal" />
         </ScrollView>
 
+        <!-- App drawer overlay plane. A full-bleed sibling of the padded content root, so it paints
+             over the whole accessory stack while still losing to the command palette in z. It is
+             deliberately NOT part of the accessory stack: the drawer animates with transforms only,
+             never through the flush-padding solver or a terminal resize. INVISIBLE rather than gone
+             so the host stays measured and the blur can gate its own work on isShown().
+             AppDrawerController drives it and clips the glass to the animated rounded rect. -->
+        <FrameLayout
+            android:id="@+id/app_drawer_host"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:visibility="invisible">
+
+            <FrameLayout
+                android:id="@+id/app_drawer_glass"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <!-- Wallpaper-mode frost: shows the shared pre-blurred wallpaper frame, clipped by
+                     the plane's animated outline, replacing the live blur that can only see the
+                     window's own (mostly transparent) content there. -->
+                <ImageView
+                    android:id="@+id/app_drawer_wallpaper_backdrop"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitXY"
+                    android:importantForAccessibility="no"
+                    android:visibility="gone" />
+
+                <com.github.mmin18.widget.RealtimeBlurView
+                    android:id="@+id/app_drawer_blur"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    app:realtimeBlurRadius="10dp"
+                    app:realtimeOverlayColor="@android:color/transparent" />
+            </FrameLayout>
+        </FrameLayout>
+
         <!-- Command palette overlay. Last child of the content root so the palette can sprout
              from the in-app keyboard's space bar and land over the terminal without a Dialog
              window - a dialog would take focus and summon the system IME, which embedded-keyboard

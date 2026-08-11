@@ -184,6 +184,19 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS = 40;
 
         /**
+         * Defines the key for enabling the full-screen app launcher drawer.
+         */
+        public static final String KEY_APP_LAUNCHER_DRAWER_ENABLED = "app_launcher_drawer_enabled";
+
+        public static final boolean DEFAULT_APP_LAUNCHER_DRAWER_ENABLED = true;
+
+        /** Custom drawer corner radius in dp, or -1 to follow the shared rounded-surface token. */
+        public static final String KEY_APP_LAUNCHER_DRAWER_CORNER_RADIUS =
+            "app_launcher_drawer_corner_radius";
+        public static final int DEFAULT_APP_LAUNCHER_DRAWER_CORNER_RADIUS = -1;
+        public static final int MAX_APP_LAUNCHER_DRAWER_CORNER_RADIUS = 40;
+
+        /**
          * Radius every Rounded-style surface takes when its own radius is left on -1 (follow the
          * style): the dock capsule, the status surface and the terminal border all read this, so
          * "Rounded" is one shape rather than three that drifted apart.
