@@ -120,7 +120,7 @@ cost of an emulator.
 4. You have a `bash-5.3$` prompt when it finishes. That is the stock
    environment; continue below to get the full shell setup.
 
-## Shell environment (fish, oh-my-posh, eza/zoxide/yazi, LazyVim, fastfetch)
+## Shell environment (fish, oh-my-posh, eza/zoxide/yazi, Neovim, fastfetch)
 
 The fork ships a ready-made flake template that recreates the launcher's
 reference shell — the same fish config, oh-my-posh Material themes, and
@@ -167,10 +167,52 @@ the switch fails with `error: attribute 'hm' missing` /
 "option `home' does not exist". System options and home options live in
 different files by design.
 
-### Neovim / LazyVim
+### Neovim: `setup-nvim`
 
-The template installs LazyVim along with everything `:checkhealth lazyvim`
-asks for. If your config predates that — `nvim` reporting a missing
+Neovim starts with no configuration, and the template does not pick a distro
+for you. Run the chooser when you want one:
+
+```sh
+setup-nvim
+```
+
+```
+  1) NvChad     + wallpaper-matched colourscheme, searchable cheatsheet (<leader>ch)
+  2) LazyVim    batteries included, many plugins
+  3) kickstart  one readable init.lua you own and edit
+  4) stock      no distro; just clipboard + line wrap
+  5) quit
+```
+
+Whatever you choose also gets the launcher integrations: OSC 52 clipboard so
+yanks reach the Android clipboard, and always-on line wrap for a
+phone-width screen. They land in `lua/launcher/` inside your config,
+copied once and yours to edit or delete afterwards.
+
+Non-interactive forms, for a scripted setup:
+
+```sh
+setup-nvim --distro nvchad
+setup-nvim --distro nvchad --appname nvchad   # side by side; NVIM_APPNAME=nvchad nvim
+setup-nvim --integrations-only                # add clipboard + wrap to a config you already have
+```
+
+**An existing `~/.config/nvim` is never overwritten.** If one exists,
+`setup-nvim` offers to install alongside it under `NVIM_APPNAME`, to add
+only the integrations, or to replace it — and replacing needs you to type
+`REPLACE`. Earlier revisions of the template cloned the LazyVim starter
+automatically on first activation; if that is what you have, it stays exactly
+as it is, and you can try something else side by side without losing it.
+
+On NvChad, the colourscheme is generated from the launcher's wallpaper
+palette (`~/.termux/material-colors.sh`) and retints itself when you change
+wallpaper. Syntax colours come from the terminal's ANSI set so code keeps its
+hue separation, UI chrome comes from the Material roles, and contrast is
+clamped so comments stay legible — including a fallback to a fixed palette
+when a greyscale wallpaper cannot supply usable hues. `:MaterialThemeInfo`
+reports what it decided.
+
+If your config predates the toolchain packages — `nvim` reporting a missing
 `tree-sitter (CLI)`, `fzf` or `lazygit` — add them to `home.nix` yourself
 and switch:
 
@@ -204,8 +246,9 @@ home.file.".local/bin/xdg-open" = {
 home.sessionPath = [ "$HOME/.local/bin" ];
 ```
 
-One more, in `~/.config/nvim/lua/config/lazy.lua` — that file is yours, not
-the template's, so an existing install needs it by hand:
+One more, for LazyVim specifically, in `~/.config/nvim/lua/config/lazy.lua` —
+that file is yours, not the template's, so an existing install needs it by hand
+(`setup-nvim` applies it for you on a fresh LazyVim install):
 
 ```lua
 require("lazy").setup({
