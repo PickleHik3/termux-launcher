@@ -1023,7 +1023,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         scheduleAccessoryRenderSync("wallpaper:resume");
         restartAccessoryBlurHeartbeat();
         scheduleAccessoryBlurRecovery();
-        refreshShizukuLockBackendIfNeeded();
+        refreshPrivilegedBackendIfNeeded();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.post(this::updateAzOverflowAffordance);
         }
@@ -6241,17 +6241,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    private void refreshShizukuLockBackendIfNeeded() {
+    private void refreshPrivilegedBackendIfNeeded() {
         if (mPreferences == null) {
             return;
         }
         String method = mPreferences.getAppLauncherAzLockMethod();
-        if (!TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_SHIZUKU.equals(method)) {
+        if (TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_SHIZUKU.equals(method)) {
+            // A-Z lock needs Shizuku specifically, so it keeps the shizuku-only mode rather than
+            // letting the manager settle on su/rish.
+            PrivilegedBackendManager.getInstance().initializeShizukuOnly(this)
+                .exceptionally(throwable -> {
+                    Logger.logWarn(LOG_TAG, "A-Z Shizuku backend refresh failed: " + throwable.getMessage());
+                    return false;
+                });
             return;
         }
-        PrivilegedBackendManager.getInstance().initializeShizukuOnly(this)
+        // Everything else that needs privileges (the CPU card's ticks and process list, the
+        // foreground-window resolver) only ever *reads* isPrivilegedAvailable(), so without this
+        // the backend stayed UNINITIALIZED on every start unless the A-Z lock happened to be set
+        // to Shizuku or the user opened the privileged-access settings screen and pressed Connect.
+        // Initializing here also registers the Shizuku binder-received listener, which is what
+        // lets a later Shizuku start recover on its own.
+        PrivilegedBackendManager.getInstance().initializeIfNeeded(this)
             .exceptionally(throwable -> {
-                Logger.logWarn(LOG_TAG, "A-Z Shizuku backend refresh failed: " + throwable.getMessage());
+                Logger.logWarn(LOG_TAG, "Privileged backend refresh failed: " + throwable.getMessage());
                 return false;
             });
     }
