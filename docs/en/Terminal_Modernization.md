@@ -714,6 +714,55 @@ and `ftps` can be opened. Other schemes, including `file`, can only be copied.
 The implementation bounds URI length and link-pool size. If the pool is exhausted, new links degrade
 to ordinary text instead of consuming unbounded memory.
 
+### Copy to the system clipboard from a program
+
+Applications may write the Android clipboard with an OSC 52 sequence, so a program running in the
+terminal — including one on the far side of an `ssh` session into the device — can copy without any
+helper tool installed. This matters most on the Nix edition, where no `termux-clipboard-set` exists.
+
+The terminal decodes the base64 payload and hands the text to the app's clipboard. Support is
+**write-only**: the clipboard cannot be read back, because a query form would let any program that
+can write to your terminal exfiltrate whatever you last copied. Pasting stays a user action — the
+paste key, or the terminal's own paste.
+
+A shell function is the whole client:
+
+```sh
+# fish
+function clip --description 'pipe stdin to the Android clipboard'
+    printf '\e]52;c;%s\a' (base64 -w0)
+end
+
+# bash / zsh
+clip() { printf '\e]52;c;%s\a' "$(base64 -w0)"; }
+```
+
+Then `echo hello | clip`, or `clip < file`.
+
+Neovim 0.10 and later ship an OSC 52 clipboard provider. Point `vim.g.clipboard` at it and yanks
+reach the Android clipboard, with `paste` wired to Neovim's own register because the terminal does
+not answer clipboard queries:
+
+```lua
+local osc52 = require("vim.ui.clipboard.osc52")
+vim.g.clipboard = {
+  name = "OSC 52",
+  copy = {
+    ["+"] = osc52.copy("+"),
+    ["*"] = osc52.copy("*"),
+  },
+  paste = {
+    ["+"] = function() return vim.split(vim.fn.getreg('"'), "\n") end,
+    ["*"] = function() return vim.split(vim.fn.getreg('"'), "\n") end,
+  },
+}
+```
+
+With `clipboard=unnamedplus` — the LazyVim default — a plain `y` then copies to Android.
+
+Inside `tmux` or GNU `screen`, the multiplexer swallows the sequence unless it is configured to pass
+it through (`set -g set-clipboard on` for tmux).
+
 ### Jump between shell prompts
 
 The palette actions **Jump to previous prompt** and **Jump to next prompt** use OSC 133 shell marks.
@@ -740,6 +789,8 @@ The terminal supports these application-facing capabilities without user configu
   order, ZWJ emoji, regional-indicator flags, and programming ligatures;
 - Kitty keyboard protocol negotiation, including disambiguation, event reporting, alternate keys,
   all-keys reporting, and associated text;
+- OSC 52 clipboard writes, so programs copy to the Android clipboard with no helper tool (write-only
+  by design — see [Copy to the system clipboard from a program](#copy-to-the-system-clipboard-from-a-program));
 - Kitty multiple-cursors protocol, including point/rectangle cursors, shapes, and colors;
 - Kitty graphics through the Tier 2 core: direct PNG and raw RGB/RGBA pixel transmission (including
   zlib-compressed raw data), chunking, stored images (`a=t`) with image ids and numbers, placements
