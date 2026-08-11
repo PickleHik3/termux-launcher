@@ -2,6 +2,7 @@ package com.termux.app.launcher.drawer;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -229,6 +230,22 @@ public class AppDrawerContentViewTest {
     }
 
     // ------------------------------------------------------------------ ownership
+
+    @Test
+    public void searchPillDrawsAfterTheGridSoScrolledIconsCannotCoverIt() {
+        AppDrawerSearchPillView pill = null;
+        for (int i = 0; i < content.getChildCount(); i++) {
+            View child = content.getChildAt(i);
+            if (child instanceof AppDrawerSearchPillView) {
+                pill = (AppDrawerSearchPillView) child;
+                break;
+            }
+        }
+
+        assertNotNull(pill);
+        assertTrue("the search chrome must composite above the scrolling grid",
+            content.indexOfChild(pill) > content.indexOfChild(grid));
+    }
 
     @Test
     public void onlyTheGridOwnsItsPoints() {

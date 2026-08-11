@@ -1,0 +1,4 @@
+# schema=1
+# package_name,category_slug
+com.example.bank,finance
+com.example.reader,information_reading

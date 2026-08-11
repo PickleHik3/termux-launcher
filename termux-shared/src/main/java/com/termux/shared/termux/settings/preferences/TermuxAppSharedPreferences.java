@@ -245,9 +245,11 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     private static String normalizeAppLauncherDrawerViewType(String value) {
-        return TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL.equals(value)
-            ? TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL
-            : TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL;
+        if (TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL.equals(value))
+            return TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL;
+        if (TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_CATEGORIES.equals(value))
+            return TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_CATEGORIES;
+        return TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL;
     }
 
     private static int sanitizeDrawerColumns(int value) {
@@ -463,9 +465,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setAppLauncherAppsRowEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_APPS_ROW_ENABLED, value, false);
-        if (!value) {
-            setAppLauncherAzRowEnabled(false);
-        }
+    }
+
+    public boolean isAppLauncherExtraKeysRowEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_EXTRA_KEYS_ROW_ENABLED,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_EXTRA_KEYS_ROW_ENABLED);
+    }
+
+    public void setAppLauncherExtraKeysRowEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_EXTRA_KEYS_ROW_ENABLED, value, false);
     }
 
     public boolean isAppLauncherNotificationDotsEnabled() {
@@ -493,7 +503,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public boolean isAppLauncherAzRowEnabled() {
-        return isAppLauncherAppsRowEnabled() && SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_AZ_ROW_ENABLED,
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_AZ_ROW_ENABLED,
             TERMUX_APP.DEFAULT_APP_LAUNCHER_AZ_ROW_ENABLED);
     }
 

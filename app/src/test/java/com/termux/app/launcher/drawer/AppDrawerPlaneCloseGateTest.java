@@ -1,13 +1,16 @@
 package com.termux.app.launcher.drawer;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 import android.content.Context;
 import android.os.Build;
 import android.view.MotionEvent;
+import android.view.View;
 import android.view.ViewConfiguration;
+import android.widget.FrameLayout;
 
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
 
@@ -79,6 +82,28 @@ public class AppDrawerPlaneCloseGateTest {
     }
 
     // ------------------------------------------------------------------ gated
+
+    @Test
+    public void aDownBelowThePaintedPlaneFallsThroughToTheKeyboardSibling() {
+        plane.setFrame(new Frame(0f, 0f, WIDTH, HEIGHT * 0.6f), 0f, 1f);
+        View fullSizeContent = new View(RuntimeEnvironment.getApplication());
+        fullSizeContent.setOnTouchListener((view, event) -> true);
+        plane.getContentHost().addView(fullSizeContent, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        plane.measure(
+            View.MeasureSpec.makeMeasureSpec(Math.round(WIDTH), View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(Math.round(HEIGHT), View.MeasureSpec.EXACTLY));
+        plane.layout(0, 0, Math.round(WIDTH), Math.round(HEIGHT));
+
+        MotionEvent down = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN,
+            WIDTH * 0.5f, HEIGHT * 0.8f, 0);
+        try {
+            assertFalse("the invisible drawer grid must not consume a keyboard-area down",
+                plane.dispatchTouchEvent(down));
+        } finally {
+            down.recycle();
+        }
+    }
 
     @Test
     public void aGateThatOwnsThePointStopsThePlaneClaimingAnything() {

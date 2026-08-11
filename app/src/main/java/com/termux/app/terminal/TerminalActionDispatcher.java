@@ -624,7 +624,8 @@ public final class TerminalActionDispatcher {
                     }
                     // Same bookkeeping the suggestion bar does, so a launch from a
                     // binding or the palette also shapes the usage ranking.
-                    new LauncherUsageStatsStore(activity).recordLaunch(app.appRef.stableId());
+                    LauncherUsageStatsStore.getInstance(activity)
+                        .recordLaunch(app.appRef.stableId());
                     return ok().put("package", app.appRef.packageName).put("label", app.label);
                 }
                 case TOOL_APP_KEY_INSPECTOR:

@@ -143,6 +143,14 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_APP_LAUNCHER_APPS_ROW_ENABLED = true;
 
         /**
+         * Defines the key for enabling the terminal extra-keys dock row.
+         */
+        public static final String KEY_APP_LAUNCHER_EXTRA_KEYS_ROW_ENABLED =
+            "app_launcher_extra_keys_row_enabled";
+
+        public static final boolean DEFAULT_APP_LAUNCHER_EXTRA_KEYS_ROW_ENABLED = true;
+
+        /**
          * Defines the key for showing active-notification dots on apps bar icons.
          */
         public static final String KEY_APP_LAUNCHER_NOTIFICATION_DOTS = "app_launcher_notification_dots";
@@ -194,6 +202,7 @@ public final class TermuxPreferenceConstants {
             "app_launcher_drawer_view_type";
         public static final String APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL = "vertical";
         public static final String APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL = "horizontal";
+        public static final String APP_LAUNCHER_DRAWER_VIEW_TYPE_CATEGORIES = "categories";
         public static final String DEFAULT_APP_LAUNCHER_DRAWER_VIEW_TYPE =
             APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL;
 

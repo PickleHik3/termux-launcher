@@ -42,7 +42,7 @@ public class AppDrawerOverlayHierarchyTest {
         assertFalse(isDescendant(accessory, host));
     }
 
-    @Test public void pagerAndDotsAreCreatedOnlyInsideThePlanesContentHost() {
+    @Test public void pagerDotsAndCategoriesAreCreatedOnlyInsideThePlanesContentHost() {
         TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
         activity.setContentView(R.layout.activity_termux);
         AppDrawerController controller = activity.getAppDrawerController();
@@ -52,7 +52,32 @@ public class AppDrawerOverlayHierarchyTest {
         assertSame(plane.getContentHost(), content.getParent());
         assertSame(content, content.getHorizontalPager().getParent());
         assertSame(content, content.getPageIndicator().getParent());
+        assertSame(content, content.getCategoryView().getParent());
+        assertSame(content.getCategoryView(), content.getCategoryView().getOverview().getParent());
+        assertSame(content.getCategoryView(), content.getCategoryView().getDetailList().getParent());
         assertEquals(1, plane.getContentHost().getChildCount());
+    }
+
+    @Test public void categorySourcesContainNoAccessoryTerminalSecondClockOrEditText() throws Exception {
+        String[] files = {
+            "AppDrawerCategoryView.java", "AppDrawerCategoryTileView.java",
+            "AppDrawerCategoryTileAdapter.java", "AppDrawerCategoryDetailAdapter.java",
+            "AppDrawerCategoryMorphView.java", "AppDrawerCategoryGridMetrics.java"
+        };
+        for (String file : files) {
+            java.nio.file.Path root = Paths.get(System.getProperty("user.dir"));
+            java.nio.file.Path sourcePath = root.resolve(
+                "src/main/java/com/termux/app/launcher/drawer/" + file);
+            if (!Files.exists(sourcePath)) sourcePath = root.resolve(
+                "app/src/main/java/com/termux/app/launcher/drawer/" + file);
+            String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+            assertFalse(file, source.contains("updateSize("));
+            assertFalse(file, source.contains("computeCombinedHeight("));
+            assertFalse(file, source.contains("setTerminalToolbarHeight("));
+            assertFalse(file, source.contains("androidx.dynamicanimation"));
+            assertFalse(file, source.contains("new Choreographer"));
+            assertFalse(file, source.contains("EditText"));
+        }
     }
 
     @Test public void horizontalClassesContainNoTerminalOrAccessorySizingCalls() throws Exception {

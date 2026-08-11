@@ -62,18 +62,15 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         });
 
         SwitchPreferenceCompat appsRowPreference = findPreference("app_launcher_apps_row_enabled");
-        SwitchPreferenceCompat azRowPreference = findPreference("app_launcher_az_row_enabled");
         SwitchPreferenceCompat notificationDotsPreference = findPreference("app_launcher_notification_dots");
-        if (appsRowPreference != null && azRowPreference != null) {
-            updateAppsBarDependentPreferences(appsRowPreference, azRowPreference, notificationDotsPreference);
+        if (appsRowPreference != null) {
+            updateAppsBarDependentPreferences(appsRowPreference, notificationDotsPreference);
             appsRowPreference.setOnPreferenceChangeListener((preference, newValue) -> {
                 boolean appsRowEnabled = Boolean.TRUE.equals(newValue);
-                azRowPreference.setEnabled(appsRowEnabled);
                 if (notificationDotsPreference != null) {
                     notificationDotsPreference.setEnabled(appsRowEnabled);
                 }
                 if (!appsRowEnabled) {
-                    azRowPreference.setChecked(false);
                     if (notificationDotsPreference != null) {
                         notificationDotsPreference.setChecked(false);
                     }
@@ -128,7 +125,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
                     .setTitle(R.string.termux_app_launcher_reset_usage_ranking_confirm_title)
                     .setMessage(R.string.termux_app_launcher_reset_usage_ranking_confirm_message)
                     .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                        new LauncherUsageStatsStore(ctx).clear();
+                        LauncherUsageStatsStore.getInstance(ctx).clear();
                         Toast.makeText(ctx, R.string.termux_app_launcher_reset_usage_ranking_done, Toast.LENGTH_SHORT).show();
                     })
                     .setNegativeButton(android.R.string.cancel, null)
@@ -214,11 +211,9 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
 
     private void updateAppsBarDependentPreferences(
         SwitchPreferenceCompat appsRowPreference,
-        SwitchPreferenceCompat azRowPreference,
         SwitchPreferenceCompat notificationDotsPreference
     ) {
         boolean appsRowEnabled = appsRowPreference.isChecked();
-        azRowPreference.setEnabled(appsRowEnabled);
         if (notificationDotsPreference != null) {
             notificationDotsPreference.setEnabled(appsRowEnabled);
         }

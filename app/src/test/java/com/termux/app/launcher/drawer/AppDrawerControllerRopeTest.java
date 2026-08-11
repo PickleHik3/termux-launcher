@@ -93,6 +93,20 @@ public class AppDrawerControllerRopeTest {
         assertFalse(controller.isOpen());
     }
 
+    @Test
+    public void teardownDoesNotResurrectAUserDisabledExtraKeysRow() {
+        View extraKeys = activity.findViewById(R.id.terminal_toolbar_view_pager);
+        extraKeys.setVisibility(View.GONE);
+        ReflectionHelpers.setField(controller, "mExtraKeysView", extraKeys);
+        engage(false, 0f);
+        ReflectionHelpers.setField(controller, "mDragging", false);
+
+        controller.doFrame(FRAME_NANOS);
+
+        assertEquals(View.GONE, extraKeys.getVisibility());
+        assertFalse(controller.isEngaged());
+    }
+
     // ------------------------------------------------------------------ the kicks
 
     @Test

@@ -96,6 +96,20 @@ public class AppDrawerAppCellViewTest {
         assertEquals(1f, cell.getScaleY(), 0f);
     }
 
+    @Test public void categoryRawGeometryUsesTheSameBinderAndClickGate() {
+        int[] gateChecks = {0};
+        AppDrawerAppCellView cell = cell();
+        LauncherAppEntry entry = entry("Category");
+        cell.bind(null, entry, 37, 91, () -> { gateChecks[0]++; return true; });
+        assertSame(entry.icon, cell.icon.getDrawable());
+        assertEquals("Category", cell.label.getText().toString());
+        assertEquals(37, cell.icon.getLayoutParams().width);
+        assertEquals(37, cell.icon.getLayoutParams().height);
+        assertEquals(91, cell.getLayoutParams().height);
+        assertTrue(cell.performClick());
+        assertEquals(1, gateChecks[0]);
+    }
+
     private static AppDrawerAppCellView cell() {
         AppDrawerAppCellView cell = new AppDrawerAppCellView(RuntimeEnvironment.getApplication());
         cell.setLayoutParams(new ViewGroup.LayoutParams(100, 100));

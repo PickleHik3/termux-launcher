@@ -34,7 +34,7 @@ import java.util.concurrent.TimeUnit;
 @ConscryptMode(ConscryptMode.Mode.OFF)
 public class LauncherDrawerViewTypePreferenceTest {
 
-    @Test public void xmlExposesExactlyVerticalAndHorizontalWithSimpleSummary() {
+    @Test public void xmlExposesExactlyAllThreeModesWithSimpleSummary() {
         PreferenceManager manager = new PreferenceManager(RuntimeEnvironment.getApplication());
         manager.setPreferenceDataStore(TermuxStylePreferencesDataStore.getInstance(
             RuntimeEnvironment.getApplication()));
@@ -43,9 +43,12 @@ public class LauncherDrawerViewTypePreferenceTest {
         Preference found = screen.findPreference("app_launcher_drawer_view_type");
         assertTrue(found instanceof ListPreference);
         ListPreference list = (ListPreference) found;
-        assertArrayEquals(new CharSequence[] {"vertical", "horizontal"}, list.getEntryValues());
-        list.setValue("horizontal");
-        assertEquals("Horizontal pages", list.getSummary().toString());
+        assertArrayEquals(new CharSequence[] {"Vertical", "Horizontal pages", "Categories"},
+            list.getEntries());
+        assertArrayEquals(new CharSequence[] {"vertical", "horizontal", "categories"},
+            list.getEntryValues());
+        list.setValue("categories");
+        assertEquals("Categories", list.getSummary().toString());
     }
 
     @Test public void dataStorePersistsAndSchedulesANonRecreatingReload() {
@@ -62,5 +65,14 @@ public class LauncherDrawerViewTypePreferenceTest {
             styling.getAction());
         assertFalse(styling.getBooleanExtra(
             TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY.EXTRA_RECREATE_ACTIVITY, true));
+    }
+
+    @Test public void categoriesPersistsThroughTheExistingDataStore() {
+        Application app = RuntimeEnvironment.getApplication();
+        TermuxStylePreferencesDataStore store = TermuxStylePreferencesDataStore.getInstance(app);
+        store.putString("app_launcher_drawer_view_type", "categories");
+        assertEquals("categories", store.getString("app_launcher_drawer_view_type", "vertical"));
+        store.putString("app_launcher_drawer_view_type", "corrupt-future-value");
+        assertEquals("vertical", store.getString("app_launcher_drawer_view_type", "horizontal"));
     }
 }

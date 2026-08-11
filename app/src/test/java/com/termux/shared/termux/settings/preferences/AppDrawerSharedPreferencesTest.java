@@ -37,6 +37,8 @@ public class AppDrawerSharedPreferencesTest {
         assertEquals("vertical", preferences.getAppLauncherDrawerViewType());
         preferences.setAppLauncherDrawerViewType("horizontal");
         assertEquals("horizontal", preferences.getAppLauncherDrawerViewType());
+        preferences.setAppLauncherDrawerViewType("categories");
+        assertEquals("categories", preferences.getAppLauncherDrawerViewType());
     }
 
     @Test public void threeGridKeysRoundTripAndClampIndependently() {

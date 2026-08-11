@@ -17,6 +17,11 @@
             app:title="@string/settings_show_pinned_apps_title"
             app:summary="@string/settings_show_pinned_apps_summary"
             android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="app_launcher_extra_keys_row_enabled"
+            app:title="@string/settings_show_extra_keys_row_title"
+            app:summary="@string/settings_show_extra_keys_row_summary"
+            android:defaultValue="true" />
         <Preference
             app:key="app_launcher_default_buttons"
             app:title="@string/settings_edit_pinned_apps_title"
@@ -28,13 +33,11 @@
             app:key="app_launcher_az_row_enabled"
             app:title="@string/settings_show_az_index_title"
             app:summary="@string/settings_show_az_index_summary"
-            app:dependency="app_launcher_apps_row_enabled"
             android:defaultValue="true" />
         <SwitchPreferenceCompat
             app:key="app_launcher_row_haptics"
             app:title="@string/settings_app_index_haptics_title"
             app:summary="@string/settings_app_index_haptics_summary"
-            app:dependency="app_launcher_apps_row_enabled"
             android:defaultValue="true" />
         <SwitchPreferenceCompat
             app:key="app_launcher_notification_dots"

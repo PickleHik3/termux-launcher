@@ -277,6 +277,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     public void rootCappedKeyboardStaysExactInsideShorterAccessoryStackWithoutTopGap() {
         TermuxAppSharedPreferences preferences = prepareActivity(true);
         preferences.setShowTerminalToolbar(true);
+        preferences.setAppLauncherExtraKeysRowEnabled(true);
         preferences.setAppLauncherAppsRowEnabled(true);
         preferences.setAppLauncherAzRowEnabled(false);
         preferences.setTerminalFlushDockEnabled(false);
@@ -314,6 +315,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     public void keyboardAndDockCombinedHeightDefinesTerminalBounds() {
         TermuxAppSharedPreferences preferences = prepareActivity(true);
         preferences.setShowTerminalToolbar(true);
+        preferences.setAppLauncherExtraKeysRowEnabled(true);
         preferences.setAppLauncherAppsRowEnabled(true);
         preferences.setAppLauncherAzRowEnabled(false);
         preferences.setTerminalFlushDockEnabled(true);
@@ -496,6 +498,8 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         preferences.setInAppKeyboardEnabled(keyboardEnabled);
         preferences.setShowTerminalToolbar(false);
         preferences.setAppLauncherAppsRowEnabled(false);
+        preferences.setAppLauncherAzRowEnabled(false);
+        preferences.setAppLauncherExtraKeysRowEnabled(false);
         preferences.setTerminalFlushDockEnabled(false);
 
         // Production creates this dynamically through TerminalPaneController during onCreate.

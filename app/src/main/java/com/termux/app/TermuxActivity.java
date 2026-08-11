@@ -2617,18 +2617,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final boolean blurEnabled;
         final boolean appsRowEnabled;
         final boolean azRowEnabled;
+        final boolean extraKeysRowEnabled;
         final float barAlpha;
         final int blurRadiusDp;
 
         AccessoryRenderState(boolean toolbarShown, boolean keyboardShown, int keyboardHeight,
                              boolean blurEnabled, boolean appsRowEnabled, boolean azRowEnabled,
-                             float barAlpha, int blurRadiusDp) {
+                             boolean extraKeysRowEnabled, float barAlpha, int blurRadiusDp) {
             this.toolbarShown = toolbarShown;
             this.keyboardShown = keyboardShown;
             this.keyboardHeight = Math.max(0, keyboardHeight);
             this.blurEnabled = blurEnabled;
             this.appsRowEnabled = appsRowEnabled;
             this.azRowEnabled = azRowEnabled;
+            this.extraKeysRowEnabled = extraKeysRowEnabled;
             this.barAlpha = barAlpha;
             this.blurRadiusDp = blurRadiusDp;
         }
@@ -2647,13 +2649,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             this.interRowGapPx = Math.max(0, interRowGapPx);
         }
 
-        int combinedHeight(int toolbarHeightPx) {
+        int combinedHeight(int toolbarHeightPx, boolean extraKeysRowEnabled) {
             return AccessoryStackLayoutPolicy.computeCombinedHeight(
-                toolbarHeightPx,
+                appsBarHeightPx > 0,
+                azRowHeightPx > 0,
+                extraKeysRowEnabled,
                 appsBarHeightPx,
                 azRowHeightPx,
-                indicatorBandHeightPx
-            );
+                toolbarHeightPx,
+                indicatorBandHeightPx);
         }
     }
 
@@ -2663,22 +2667,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int keyboardHeight = keyboardShown ? measureInAppKeyboardHeight() : 0;
         if (mPreferences == null) {
             return new AccessoryRenderState(false, keyboardShown, keyboardHeight,
-                false, false, false, 1.0f, 0);
+                false, false, false, false, 1.0f, 0);
         }
         // Mirror the metrics-side collapse: zero-height dock rows still paint at full size through
         // the stack's clipChildren=false chain, so the render state must hide them outright. The
         // landscape launcher surface is the left dock rail instead.
         boolean appsRowEnabled = mPreferences.isAppLauncherAppsRowEnabled()
             && !isLandscapeOrientation();
+        boolean azRowEnabled = mPreferences.isAppLauncherAzRowEnabled()
+            && !isLandscapeOrientation();
+        boolean extraKeysRowEnabled = mPreferences.isAppLauncherExtraKeysRowEnabled()
+            && mPreferences.shouldShowTerminalToolbar();
+        boolean dockShown = appsRowEnabled || azRowEnabled || extraKeysRowEnabled;
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
         float barAlpha = mPreferences.getAppBarOpacity() / 100f;
         return new AccessoryRenderState(
-            mPreferences.shouldShowTerminalToolbar(),
+            dockShown,
             keyboardShown,
             keyboardHeight,
             dockBlurEnabled(blurRadiusDp),
             appsRowEnabled,
-            appsRowEnabled && mPreferences.isAppLauncherAzRowEnabled(),
+            azRowEnabled,
+            extraKeysRowEnabled,
             barAlpha,
             blurRadiusDp
         );
@@ -4241,7 +4251,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             indicatorBand.setVisibility(state.azRowEnabled ? View.VISIBLE : View.GONE);
         }
         if (terminalToolbarViewPager != null) {
-            terminalToolbarViewPager.setVisibility(View.VISIBLE);
+            terminalToolbarViewPager.setVisibility(
+                state.extraKeysRowEnabled ? View.VISIBLE : View.GONE);
         }
         if (azRow != null) {
             azRow.setVisibility(state.azRowEnabled ? View.VISIBLE : View.GONE);
@@ -4276,7 +4287,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         configureAccessoryTopEdgeFx(true, state.barAlpha);
         // Thin material hairline at the seam between the A–Z row and the extra-keys row.
-        configureExtraKeysDivider(state.appsRowEnabled, state.barAlpha);
+        configureExtraKeysDivider(
+            state.extraKeysRowEnabled && (state.appsRowEnabled || state.azRowEnabled),
+            state.barAlpha);
         applyDecorNavBarSurfaceState(state);
         applyInAppKeyboardSurfaceState(state);
         // Wallpaper passthrough feeds every glass surface from the shared pre-blurred wallpaper, so
@@ -5372,11 +5385,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mAppDrawerController.setDockChoreographyTarget(mSuggestionBarView);
         applySuggestionBarPreferences();
         applyDockLayoutMetrics(buildDockLayoutMetrics(0));
-        if (isSuggestionBarEnabled()) {
+        if (isLauncherCatalogEnabled()) {
             mSuggestionBarView.reload();
         }
         mSuggestionBarView.post(() -> {
-            if (mSuggestionBarView == null || !mIsVisible || !isSuggestionBarEnabled()) {
+            if (mSuggestionBarView == null || !mIsVisible || !isLauncherCatalogEnabled()) {
                 return;
             }
             scheduleLauncherCatalogWarmup();
@@ -5488,7 +5501,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private boolean isAzRowEnabled() {
-        return isSuggestionBarEnabled() && mPreferences.isAppLauncherAzRowEnabled();
+        return mPreferences != null && mPreferences.isAppLauncherAzRowEnabled();
+    }
+
+    private boolean isLauncherCatalogEnabled() {
+        return isSuggestionBarEnabled() || isAzRowEnabled();
     }
 
     public boolean shouldProcessSuggestionBarKeyEvent(int keyCode) {
@@ -5631,7 +5648,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mLauncherTransitionController != null) {
             mLauncherTransitionController.onAnimationPreferenceUpdated();
         }
-        if (!isSuggestionBarEnabled()) {
+        if (!isLauncherCatalogEnabled()) {
             mSuggestionBarExplicitSearchActive = false;
             resetAzGestureState(false, true);
             resetAzOverflowAffordanceState();
@@ -6059,7 +6076,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void updateAzOverflowAffordance() {
-        if (!isSuggestionBarEnabled()) {
+        if (!isLauncherCatalogEnabled()) {
             resetAzOverflowAffordanceState();
             return;
         }
@@ -6305,7 +6322,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void scheduleAzOverflowRefresh() {
-        if (!isSuggestionBarEnabled()) {
+        if (!isAzRowEnabled()) {
             return;
         }
         cancelAzOverflowRefresh();
@@ -8863,15 +8880,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             matrix = mTermuxTerminalExtraKeys.getExtraKeysInfo().getMatrix().length;
         }
 
-        int toolbarHeightPx = AccessoryStackLayoutPolicy.computeTerminalToolbarHeightPx(
+        int measuredToolbarHeightPx = AccessoryStackLayoutPolicy.computeTerminalToolbarHeightPx(
             Math.round(mTerminalToolbarDefaultHeight),
             matrix,
             mProperties.getTerminalToolbarHeightScaleFactor()
         );
+        AccessoryRenderState state = buildAccessoryRenderState();
+        int toolbarHeightPx = state.extraKeysRowEnabled ? measuredToolbarHeightPx : 0;
         toolbarLayoutParams.height = toolbarHeightPx;
         terminalToolbarViewPager.setLayoutParams(toolbarLayoutParams);
 
-        AccessoryRenderState state = buildAccessoryRenderState();
         DockLayoutMetrics dockMetrics = buildDockLayoutMetrics(0);
         int accessoryBottomMarginPx = resolveAccessoryStackBottomMarginPx(state);
         // The stack has no natural ceiling: dock rows + keyboard can otherwise consume the whole
@@ -8880,21 +8898,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // cap bounds the rest.
         int maxAccessoryStackPx = computeMaxAccessoryStackHeightPx(accessoryBottomMarginPx);
         int projectedStackPx = computeAccessoryStackHeight(
-            dockMetrics.combinedHeight(toolbarHeightPx), 0, state.keyboardHeight);
+            dockMetrics.combinedHeight(toolbarHeightPx, state.extraKeysRowEnabled),
+            0, state.keyboardHeight);
         if (projectedStackPx > maxAccessoryStackPx) {
             dockMetrics = buildDockLayoutMetrics(-(projectedStackPx - maxAccessoryStackPx));
         }
         applyDockLayoutMetrics(dockMetrics);
-        // Preserve the legacy (GONE) toolbar-only layout params byte-for-byte when no embedded
-        // keyboard is present. Once the keyboard is shown, hidden toolbar rows contribute zero.
-        int dockContentHeightPx = state.keyboardShown && !state.toolbarShown
-            ? 0 : dockMetrics.combinedHeight(toolbarHeightPx);
+        int dockContentHeightPx = state.toolbarShown
+            ? dockMetrics.combinedHeight(toolbarHeightPx, state.extraKeysRowEnabled) : 0;
         int accessoryContentHeightPx = computeAccessoryStackHeight(
             dockContentHeightPx, 0, state.keyboardHeight);
         // The embedded keyboard suspends flush absorption: its height is user-scaled and its
         // surface defines its own boundary, so the split remainder halves would surface as
         // wallpaper bands above the gesture-navigation inset instead of hiding in dock glass.
-        int terminalFlushPaddingPx = state.keyboardShown ? 0
+        int terminalFlushPaddingPx = state.keyboardShown || !state.toolbarShown ? 0
             : resolveTerminalFlushDockPaddingPx(accessoryContentHeightPx, accessoryBottomMarginPx);
         mAppliedTerminalFlushPaddingPx = terminalFlushPaddingPx;
         int combinedHeight = computeAccessoryStackHeight(
@@ -8991,6 +9008,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private int resolveAccessoryStackBottomMarginPx(@NonNull AccessoryRenderState state) {
+        if (!state.toolbarShown && !state.keyboardShown)
+            return 0;
         // The embedded keyboard is an ordinary bottom child. Root/decor inset policy already keeps
         // it above navigation bars, so a floating-dock gap must not be inserted beneath it.
         if (state.keyboardShown)
@@ -9118,9 +9137,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 Math.max(0, additionalAppsBarHeightPx))
             : 0;
 
-        boolean azEnabled = appsRowEnabled && mPreferences.isAppLauncherAzRowEnabled();
+        boolean azEnabled = mPreferences.isAppLauncherAzRowEnabled()
+            && !isLandscapeOrientation();
         int azRowHeightPx = AccessoryStackLayoutPolicy.computeAzRowHeightPx(azEnabled, density);
-        int indicatorBandHeightPx = AccessoryStackLayoutPolicy.computePageIndicatorBandHeightPx(azEnabled, density);
+        int indicatorBandHeightPx = AccessoryStackLayoutPolicy.computePageIndicatorBandHeightPx(
+            appsRowEnabled && azEnabled, density);
 
         int interRowGapPx = indicatorBandHeightPx;
 
@@ -12729,7 +12750,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mAppDrawerController != null) {
             mAppDrawerController.onAppCatalogChanged();
         }
-        if (!isSuggestionBarEnabled() || mSuggestionBarView == null) {
+        if (!isLauncherCatalogEnabled() || mSuggestionBarView == null) {
             return;
         }
         if (forceCatalogRefresh) {
@@ -12910,7 +12931,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void scheduleSuggestionBarPackageRefresh(boolean immediate, boolean forceCatalogRefresh) {
-        if (!isSuggestionBarEnabled()) {
+        if (!isLauncherCatalogEnabled()) {
             mPackageRefreshForceCatalogReload = false;
             mAzGestureHandler.removeCallbacks(mPackageRefreshRunnable);
             return;
@@ -12927,7 +12948,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void refreshSuggestionBarIfLauncherCatalogChanged() {
-        if (!isSuggestionBarEnabled() || mSuggestionBarView == null) {
+        if (!isLauncherCatalogEnabled() || mSuggestionBarView == null) {
             return;
         }
         int signature = computeLauncherCatalogSignature();
@@ -12978,13 +12999,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void scheduleLauncherCatalogWarmup() {
         mAzGestureHandler.removeCallbacks(mLauncherCatalogWarmRunnable);
-        if (mIsVisible && isSuggestionBarEnabled() && mSuggestionBarView != null) {
+        if (mIsVisible && isLauncherCatalogEnabled() && mSuggestionBarView != null) {
             mAzGestureHandler.postDelayed(mLauncherCatalogWarmRunnable, LAUNCHER_CATALOG_WARM_DELAY_MS);
         }
     }
 
     private void runLauncherCatalogWarmup() {
-        if (!mIsVisible || !isSuggestionBarEnabled() || mSuggestionBarView == null) {
+        if (!mIsVisible || !isLauncherCatalogEnabled() || mSuggestionBarView == null) {
             return;
         }
         mSuggestionBarView.reloadAllApps();

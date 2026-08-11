@@ -190,7 +190,7 @@ public final class TerminalCommandPaletteController
         mActivity = activity;
         mStats = new CommandPaletteActionStats(activity);
         mAppProvider = LauncherAppDataProvider.getInstance(activity);
-        mAppUsageStats = new LauncherUsageStatsStore(activity);
+        mAppUsageStats = LauncherUsageStatsStore.getInstance(activity);
         mDensity = activity.getResources().getDisplayMetrics().density;
     }
 

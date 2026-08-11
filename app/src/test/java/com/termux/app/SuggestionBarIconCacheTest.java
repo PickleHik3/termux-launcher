@@ -80,6 +80,8 @@ public class SuggestionBarIconCacheTest {
     public void theLiveCacheBudget_staysInsideTheClamp() {
         assertTrue(renderedIconCache.maxSize() >= 6 * 1024 * 1024);
         assertTrue(renderedIconCache.maxSize() <= 16 * 1024 * 1024);
+        assertEquals(renderedIconCache.maxSize(),
+            suggestionBarView.getRenderedIconCacheBudgetBytes());
     }
 
     @Test

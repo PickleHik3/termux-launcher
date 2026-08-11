@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.LauncherActivityInfo;
 import android.content.pm.LauncherApps;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.drawable.Drawable;
@@ -215,6 +216,9 @@ public final class LauncherAppDataProvider {
         List<ResolveInfo> launchables = packageManager.queryIntentActivities(main, 0);
         Collections.sort(launchables, new ResolveInfo.DisplayNameComparator(packageManager));
         Map<String, ComponentName> defaultComponentsByPackage = new HashMap<>();
+        // One package lookup feeds every launcher activity in that package. This load runs on the
+        // provider worker; category tiles never touch PackageManager while binding.
+        FirstInstallTimeCache firstInstallTimesByPackage = new FirstInstallTimeCache();
 
         Snapshot snapshot = new Snapshot();
         for (ResolveInfo resolveInfo : launchables) {
@@ -225,7 +229,13 @@ public final class LauncherAppDataProvider {
             AppRef ref = new AppRef(info.packageName, info.name);
             LauncherIconResolver.ResolvedIcon resolvedIcon = iconResolver.resolveDetailed(ref, null, null);
             Drawable icon = resolvedIcon.drawable;
-            LauncherAppEntry entry = new LauncherAppEntry(ref, label, icon, resolvedIcon.iconPackArtwork);
+            int category = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                && info.applicationInfo != null
+                ? info.applicationInfo.category : android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED;
+            long firstInstallTime = firstInstallTimesByPackage.valueFor(ref.packageName,
+                packageName -> readFirstInstallTime(packageManager, packageName));
+            LauncherAppEntry entry = new LauncherAppEntry(ref, label, icon,
+                resolvedIcon.iconPackArtwork, category, firstInstallTime);
             snapshot.apps.add(entry);
             snapshot.byId.put(ref.stableId(), entry);
             if (!snapshot.firstByPackage.containsKey(ref.packageName)) {
@@ -326,11 +336,70 @@ public final class LauncherAppDataProvider {
                 // LauncherApps-provided profile icon as the system fallback.
                 LauncherIconResolver.ResolvedIcon resolvedIcon = iconResolver.resolveDetailed(ref, null, icon);
                 icon = resolvedIcon.drawable;
+                EntryMetadata metadata = readProfileMetadata(activity, Build.VERSION.SDK_INT);
                 addEntry(snapshot, packageManager, defaultComponentsByPackage,
-                    new LauncherAppEntry(ref, label, icon, resolvedIcon.iconPackArtwork));
+                    new LauncherAppEntry(ref, label, icon, resolvedIcon.iconPackArtwork,
+                        metadata.applicationCategory, metadata.firstInstallTimeEpochMs));
             }
         } catch (SecurityException ignored) {
         } catch (Throwable ignored) {
+        }
+    }
+
+    private static long readFirstInstallTime(@NonNull PackageManager packageManager,
+                                             @NonNull String packageName) {
+        try {
+            PackageInfo info = packageManager.getPackageInfo(packageName, 0);
+            return info == null ? 0L : Math.max(0L, info.firstInstallTime);
+        } catch (Throwable ignored) {
+            return 0L;
+        }
+    }
+
+    @NonNull
+    static EntryMetadata readProfileMetadata(@NonNull LauncherActivityInfo activity, int sdkInt) {
+        int category = android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED;
+        if (sdkInt >= Build.VERSION_CODES.O) {
+            try {
+                android.content.pm.ApplicationInfo applicationInfo =
+                    activity.getApplicationInfo();
+                if (applicationInfo != null) category = applicationInfo.category;
+            } catch (Throwable ignored) {
+            }
+        }
+        long firstInstallTime = 0L;
+        try {
+            firstInstallTime = Math.max(0L, activity.getFirstInstallTime());
+        } catch (Throwable ignored) {
+        }
+        return new EntryMetadata(category, firstInstallTime);
+    }
+
+    static final class EntryMetadata {
+        final int applicationCategory;
+        final long firstInstallTimeEpochMs;
+        EntryMetadata(int applicationCategory, long firstInstallTimeEpochMs) {
+            this.applicationCategory = applicationCategory;
+            this.firstInstallTimeEpochMs = firstInstallTimeEpochMs;
+        }
+    }
+
+    interface InstallTimeReader { long read(@NonNull String packageName); }
+
+    /** Worker-local package cache; multiple launcher activities pay one PackageInfo lookup. */
+    static final class FirstInstallTimeCache {
+        private final Map<String, Long> values = new HashMap<>();
+        long valueFor(@NonNull String packageName, @NonNull InstallTimeReader reader) {
+            Long value = values.get(packageName);
+            if (value != null || values.containsKey(packageName)) return value == null ? 0L : value;
+            long loaded;
+            try {
+                loaded = Math.max(0L, reader.read(packageName));
+            } catch (Throwable ignored) {
+                loaded = 0L;
+            }
+            values.put(packageName, loaded);
+            return loaded;
         }
     }
 

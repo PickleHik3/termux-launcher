@@ -90,7 +90,7 @@ public final class PinnedAppsEditor {
         this.context = context;
         this.onSaved = onSaved;
         this.repository = new LauncherConfigRepository(TermuxAppSharedPreferences.build(context, false));
-        this.usageStats = new LauncherUsageStatsStore(context);
+        this.usageStats = LauncherUsageStatsStore.getInstance(context);
         this.density = context.getResources().getDisplayMetrics().density;
         this.colorText = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurface, 0xFFECEFF4);
         this.colorSubtle = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant, 0xFF9AA3B2);

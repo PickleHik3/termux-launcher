@@ -116,21 +116,22 @@ public final class AppDrawerAccessoryChoreography {
     }
 
     /**
-     * Blends one frame's band results back toward the untouched accessory stack as the search
-     * keyboard is revealed.
+     * Blends only the keyboard band back toward its untouched state as drawer search is revealed.
      *
      * <p>The reveal is a second transition running independently of the drawer's own: the drawer is
      * already open, its progress pinned at 1, when a keystroke brings the keyboard up
-     * <em>through</em> the plane. So the bands the open drawer pushed out of the way have to come
-     * back without {@code p} moving at all, which is what this is — the drawer's answer, walked back
-     * by {@code k}.
+     * <em>through</em> the plane. The keyboard has to come back without {@code p} moving at all;
+     * terminal extra keys do not belong to app search and remain at the drawer choreography's
+     * original result. This is temporary render state only — no toolbar preference is read or
+     * written here — and {@code k == 0} restores that original result exactly.
      *
      * <p>Two endpoints matter. At {@code k == 0} the result is the input bit for bit — every term is
      * a multiply by one or an add of zero — which is what lets the controller pipe every frame
      * through here unconditionally rather than branching on whether a keyboard exists, and is why
      * the four cases pinning {@link #resolve} still describe what the drawer does. At {@code k == 1}
-     * the bands are untouched again: nothing translated, nothing clipped, full alpha, and each
-     * visible top back at the band's captured top.
+     * the keyboard is untouched again: nothing translated, nothing clipped, full alpha, and its
+     * visible top back at the band's captured top. Every extra-keys field remains the input field
+     * bit for bit at every reveal value.
      *
      * <p>The visible <em>height</em> is the clipped pixels handed back rather than a recomputed
      * rectangle, because {@link Result} floors it at zero and a band the rounded style has swallowed
@@ -147,11 +148,11 @@ public final class AppDrawerAccessoryChoreography {
         // A clip is a band's top edge pushed down by exactly that many pixels, so giving the pixels
         // back moves the visible top up and the visible height down by the same amount.
         return new Result(
-            result.extraKeysTranslationY * keep,
-            result.extraKeysClipTopPx * keep,
-            result.extraKeysVisibleTopPx - (result.extraKeysClipTopPx * k),
-            result.extraKeysVisibleHeightPx + (result.extraKeysClipTopPx * k),
-            lerp(result.extraKeysAlpha, 1f, k),
+            result.extraKeysTranslationY,
+            result.extraKeysClipTopPx,
+            result.extraKeysVisibleTopPx,
+            result.extraKeysVisibleHeightPx,
+            result.extraKeysAlpha,
             result.keyboardTranslationY * keep,
             result.keyboardClipTopPx * keep,
             result.keyboardVisibleTopPx - (result.keyboardClipTopPx * k),

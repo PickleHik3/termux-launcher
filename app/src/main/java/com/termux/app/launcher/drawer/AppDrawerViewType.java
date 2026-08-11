@@ -6,7 +6,8 @@ import androidx.annotation.Nullable;
 /** The app drawer's persisted presentation mode. */
 public enum AppDrawerViewType {
     VERTICAL("vertical"),
-    HORIZONTAL("horizontal");
+    HORIZONTAL("horizontal"),
+    CATEGORIES("categories");
 
     @NonNull public final String preferenceValue;
 
@@ -18,6 +19,7 @@ public enum AppDrawerViewType {
     @NonNull
     public static AppDrawerViewType fromPreference(@Nullable String value) {
         if (HORIZONTAL.preferenceValue.equals(value)) return HORIZONTAL;
+        if (CATEGORIES.preferenceValue.equals(value)) return CATEGORIES;
         return VERTICAL;
     }
 }

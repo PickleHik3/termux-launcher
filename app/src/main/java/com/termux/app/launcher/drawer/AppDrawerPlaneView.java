@@ -225,6 +225,20 @@ public final class AppDrawerPlaneView extends FrameLayout {
     // ------------------------------------------------------------------ touch
 
     @Override
+    public boolean dispatchTouchEvent(@NonNull MotionEvent ev) {
+        if (ev.getActionMasked() == MotionEvent.ACTION_DOWN
+            && !containsInFrame(ev.getX(), ev.getY())) {
+            // clipToOutline clips pixels, not hit testing. The content remains laid out for the
+            // full open rectangle while search shortens the painted plane above the keyboard; if
+            // this DOWN reached super, that invisible part of the grid would become the touch
+            // target before the lower accessory sibling had a chance to dispatch to its keys.
+            // Reject only at DOWN so ownership can never change midway through a nested scroll.
+            return false;
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+
+    @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
         // Children (B-2's grid) see the stream until the downward drag actually claims it, at which
         // point the platform sends them the ACTION_CANCEL for us.
@@ -266,7 +280,7 @@ public final class AppDrawerPlaneView extends FrameLayout {
     private boolean beginTracking(@NonNull MotionEvent ev) {
         float x = ev.getX();
         float y = ev.getY();
-        mTracking = x >= mFrame.left && x <= mFrame.right && y >= mFrame.top && y <= mFrame.bottom;
+        mTracking = containsInFrame(x, y);
         if (!mTracking) return false;
         CloseDragGate gate = mCloseDragGate;
         // Sampled once, at DOWN, and never re-read: ownership of a stream cannot change halfway
@@ -279,6 +293,10 @@ public final class AppDrawerPlaneView extends FrameLayout {
         mVelocityTracker.clear();
         mVelocityTracker.addMovement(ev);
         return true;
+    }
+
+    private boolean containsInFrame(float x, float y) {
+        return x >= mFrame.left && x <= mFrame.right && y >= mFrame.top && y <= mFrame.bottom;
     }
 
     /** @return true once the close drag owns the stream. */

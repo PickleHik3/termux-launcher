@@ -98,27 +98,57 @@ public class AppDrawerAccessoryChoreographyTest {
     }
 
     @Test
-    public void blendAtFullRevealRestoresTheUntouchedBands() {
+    public void blendAtFullRevealRestoresTheKeyboardWithoutRevivingExtraKeys() {
         for (float p : new float[] {0f, 0.5f, 1f}) {
             for (boolean rounded : new boolean[] {true, false}) {
-                Result r = AppDrawerAccessoryChoreography.blendTowardIdentity(
-                    AppDrawerAccessoryChoreography.resolve(
-                        rounded, p, EXTRA_KEYS, KEYBOARD, CAPTURED_GAP, planeBottom(p)),
-                    1f);
+                Result original = AppDrawerAccessoryChoreography.resolve(
+                    rounded, p, EXTRA_KEYS, KEYBOARD, CAPTURED_GAP, planeBottom(p));
+                Result r = AppDrawerAccessoryChoreography.blendTowardIdentity(original, 1f);
                 String at = "p=" + p + " rounded=" + rounded;
-                assertEquals(at, 0f, r.extraKeysTranslationY, 0f);
+                assertEquals(at, original.extraKeysTranslationY, r.extraKeysTranslationY, 0f);
                 assertEquals(at, 0f, r.keyboardTranslationY, 0f);
-                assertEquals(at, 0f, r.extraKeysClipTopPx, 0f);
+                assertEquals(at, original.extraKeysClipTopPx, r.extraKeysClipTopPx, 0f);
                 assertEquals(at, 0f, r.keyboardClipTopPx, 0f);
-                assertEquals(at, 1f, r.extraKeysAlpha, 0f);
+                assertEquals(at, original.extraKeysAlpha, r.extraKeysAlpha, 0f);
                 assertEquals(at, 1f, r.keyboardAlpha, 0f);
-                assertEquals(at, EXTRA_KEYS.topPx, r.extraKeysVisibleTopPx, EPS);
+                assertEquals(at, original.extraKeysVisibleTopPx, r.extraKeysVisibleTopPx, 0f);
                 assertEquals(at, KEYBOARD.topPx, r.keyboardVisibleTopPx, EPS);
-                // At least the whole band: the rounded style swallows the extra-keys row outright,
-                // and a swallowed band cannot report the height it no longer has.
-                assertTrue(at, r.extraKeysVisibleHeightPx >= EXTRA_KEYS.heightPx - EPS);
                 assertTrue(at, r.keyboardVisibleHeightPx >= KEYBOARD.heightPx - EPS);
             }
+        }
+    }
+
+    @Test
+    public void drawerSearchRevealRestoresOnlyTheKeyboardAndKeepsExtraKeysSuppressed() {
+        for (boolean rounded : new boolean[] {true, false}) {
+            Result hidden = AppDrawerAccessoryChoreography.resolve(
+                rounded, 1f, EXTRA_KEYS, KEYBOARD, CAPTURED_GAP, planeBottom(1f));
+            Result revealed = AppDrawerAccessoryChoreography.blendTowardIdentity(hidden, 1f);
+            String at = "rounded=" + rounded;
+
+            assertEquals(at, hidden.extraKeysTranslationY, revealed.extraKeysTranslationY, 0f);
+            assertEquals(at, hidden.extraKeysClipTopPx, revealed.extraKeysClipTopPx, 0f);
+            assertEquals(at, hidden.extraKeysAlpha, revealed.extraKeysAlpha, 0f);
+            assertEquals(at, 0f, revealed.keyboardTranslationY, 0f);
+            assertEquals(at, 0f, revealed.keyboardClipTopPx, 0f);
+            assertEquals(at, 1f, revealed.keyboardAlpha, 0f);
+        }
+    }
+
+    @Test
+    public void userDisabledExtraKeysBandStaysCollapsedThroughSearchReveal() {
+        Band disabledExtraKeys = new Band(KEYBOARD.topPx, 0f);
+        for (boolean rounded : new boolean[] {true, false}) {
+            Result hidden = AppDrawerAccessoryChoreography.resolve(
+                rounded, 1f, disabledExtraKeys, KEYBOARD, 0f, planeBottom(1f));
+            Result revealed = AppDrawerAccessoryChoreography.blendTowardIdentity(hidden, 1f);
+            String at = "rounded=" + rounded;
+            assertEquals(at, 0f, hidden.extraKeysVisibleHeightPx, 0f);
+            assertEquals(at, 0f, revealed.extraKeysVisibleHeightPx, 0f);
+            assertEquals(at, hidden.extraKeysTranslationY, revealed.extraKeysTranslationY, 0f);
+            assertEquals(at, hidden.extraKeysAlpha, revealed.extraKeysAlpha, 0f);
+            assertEquals(at, 0f, revealed.keyboardTranslationY, 0f);
+            assertEquals(at, 1f, revealed.keyboardAlpha, 0f);
         }
     }
 

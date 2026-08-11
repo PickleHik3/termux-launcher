@@ -867,7 +867,7 @@ public final class SuggestionBarView extends GridLayout
 
     private LauncherUsageStatsStore getUsageStatsStore() {
         if (usageStatsStore == null) {
-            usageStatsStore = new LauncherUsageStatsStore(getContext());
+            usageStatsStore = LauncherUsageStatsStore.getInstance(getContext());
         }
         return usageStatsStore;
     }
@@ -2644,6 +2644,11 @@ public final class SuggestionBarView extends GridLayout
     @Nullable
     public Drawable getRenderedIcon(@NonNull LauncherAppEntry entry, int sizePx) {
         return iconForDisplay(entry, sizePx);
+    }
+
+    /** Read-only budget shared by dock and drawer rendered icons. */
+    public int getRenderedIconCacheBudgetBytes() {
+        return normalizedIconCache.maxSize();
     }
 
     private Drawable normalizeIcon(@Nullable Drawable src, int sizePx, boolean tuneSaturation,

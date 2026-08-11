@@ -6,6 +6,7 @@ import android.os.Handler;
 import android.os.Looper;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.shared.termux.TermuxConstants;
@@ -30,6 +31,7 @@ public final class LauncherUsageStatsStore {
     private static final String FIELD_COUNT = "count";
     private static final String FIELD_LAST = "last";
     private static final long PERSIST_DEBOUNCE_MS = 750L;
+    @Nullable private static LauncherUsageStatsStore processInstance;
     private static final Comparator<RankedEntry> USAGE_RANKING_COMPARATOR = (a, b) -> {
         int countComparison = Integer.compare(b.count, a.count);
         if (countComparison != 0) return countComparison;
@@ -37,8 +39,18 @@ public final class LauncherUsageStatsStore {
         if (labelComparison != 0) return labelComparison;
         return 0; // Collections.sort is stable, so identical labels retain source order.
     };
+    private static final Comparator<RankedEntry> SUGGESTION_RANKING_COMPARATOR = (a, b) -> {
+        int countComparison = Integer.compare(b.count, a.count);
+        if (countComparison != 0) return countComparison;
+        int lastComparison = Long.compare(b.lastLaunchEpochMs, a.lastLaunchEpochMs);
+        if (lastComparison != 0) return lastComparison;
+        int labelComparison = safeLabel(a.entry).compareToIgnoreCase(safeLabel(b.entry));
+        if (labelComparison != 0) return labelComparison;
+        return a.entry.appRef.stableId().compareTo(b.entry.appRef.stableId());
+    };
 
     private final SharedPreferences sharedPreferences;
+    @NonNull private final Context applicationContext;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Map<String, UsageStat> usageByStableId = new HashMap<>();
     private final Runnable persistRunnable = this::persist;
@@ -46,10 +58,20 @@ public final class LauncherUsageStatsStore {
 
     public LauncherUsageStatsStore(@NonNull Context context) {
         Context appContext = context.getApplicationContext();
+        this.applicationContext = appContext;
         this.sharedPreferences = appContext.getSharedPreferences(
             TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
             Context.MODE_PRIVATE
         );
+    }
+
+    /** One process-live cache shared by every launcher usage reader and writer. */
+    @NonNull
+    public static synchronized LauncherUsageStatsStore getInstance(@NonNull Context context) {
+        Context appContext = context.getApplicationContext();
+        if (processInstance == null || processInstance.applicationContext != appContext)
+            processInstance = new LauncherUsageStatsStore(appContext);
+        return processInstance;
     }
 
     public synchronized void recordLaunch(@NonNull String stableId) {
@@ -84,6 +106,23 @@ public final class LauncherUsageStatsStore {
             ranked.add(new RankedEntry(entry, stat == null ? 0 : stat.count));
         }
         Collections.sort(ranked, USAGE_RANKING_COMPARATOR);
+        List<LauncherAppEntry> sorted = new ArrayList<>(ranked.size());
+        for (RankedEntry item : ranked) sorted.add(item.entry);
+        return sorted;
+    }
+
+    /** Positive-use entries only, ordered by count, recency, label and profile-aware stable id. */
+    @NonNull
+    public synchronized List<LauncherAppEntry> rankForSuggestions(
+        @NonNull List<LauncherAppEntry> entries) {
+        ensureLoaded();
+        List<RankedEntry> ranked = new ArrayList<>(entries.size());
+        for (LauncherAppEntry entry : entries) {
+            UsageStat stat = usageByStableId.get(entry.appRef.stableId());
+            if (stat == null || stat.count <= 0) continue;
+            ranked.add(new RankedEntry(entry, stat.count, stat.lastLaunchEpochMs));
+        }
+        Collections.sort(ranked, SUGGESTION_RANKING_COMPARATOR);
         List<LauncherAppEntry> sorted = new ArrayList<>(ranked.size());
         for (RankedEntry item : ranked) sorted.add(item.entry);
         return sorted;
@@ -139,10 +178,16 @@ public final class LauncherUsageStatsStore {
     private static final class RankedEntry {
         final LauncherAppEntry entry;
         final int count;
+        final long lastLaunchEpochMs;
 
         RankedEntry(@NonNull LauncherAppEntry entry, int count) {
+            this(entry, count, 0L);
+        }
+
+        RankedEntry(@NonNull LauncherAppEntry entry, int count, long lastLaunchEpochMs) {
             this.entry = entry;
             this.count = count;
+            this.lastLaunchEpochMs = lastLaunchEpochMs;
         }
     }
 }

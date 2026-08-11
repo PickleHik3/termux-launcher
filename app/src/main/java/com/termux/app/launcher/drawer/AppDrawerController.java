@@ -20,6 +20,7 @@ import com.google.android.material.color.MaterialColors;
 
 import com.termux.R;
 import com.termux.app.Spring;
+import com.termux.app.SuggestionBarView;
 import com.termux.app.TermuxActivity;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
@@ -459,7 +460,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      */
     public boolean onBackPressedInDrawer() {
         AppDrawerContentView content = mContent;
-        return content != null && content.clearQueryIfPresent();
+        return content != null && content.handleBackInDrawer();
     }
 
     // ------------------------------------------------------------------ motion
@@ -778,21 +779,35 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             : preferences.getAppLauncherDrawerViewType());
         content.setViewType(viewType);
         float labelHeightPx = resolveCellLabelHeightPx();
-        if (viewType == AppDrawerViewType.VERTICAL) {
-            // The A-Z rope belongs only to the shipped vertical surface.
-            float columnWidthPx = AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity);
-            int requestedColumns = preferences == null ? 0
-                : preferences.getAppLauncherDrawerGridColumnsVertical();
-            content.setVerticalMetrics(AppDrawerGridMetrics.resolve(
-                openRect.width() - columnWidthPx, mDensity, labelHeightPx, requestedColumns));
-        } else {
-            int requestedColumns = preferences == null ? 0
-                : preferences.getAppLauncherDrawerGridColumnsHorizontal();
-            int requestedRows = preferences == null ? 0
-                : preferences.getAppLauncherDrawerGridRowsHorizontal();
-            content.setHorizontalMetrics(AppDrawerHorizontalGridMetrics.resolve(openRect.width(),
-                content.horizontalPagerUsableHeight(openRect.height()), mDensity, labelHeightPx,
-                requestedColumns, requestedRows));
+        switch (viewType) {
+            case VERTICAL:
+                float columnWidthPx = AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity);
+                int verticalColumns = preferences == null ? 0
+                    : preferences.getAppLauncherDrawerGridColumnsVertical();
+                content.setVerticalMetrics(AppDrawerGridMetrics.resolve(
+                    openRect.width() - columnWidthPx, mDensity, labelHeightPx, verticalColumns));
+                break;
+            case HORIZONTAL:
+                int horizontalColumns = preferences == null ? 0
+                    : preferences.getAppLauncherDrawerGridColumnsHorizontal();
+                int horizontalRows = preferences == null ? 0
+                    : preferences.getAppLauncherDrawerGridRowsHorizontal();
+                content.setHorizontalMetrics(AppDrawerHorizontalGridMetrics.resolve(openRect.width(),
+                    content.horizontalPagerUsableHeight(openRect.height()), mDensity, labelHeightPx,
+                    horizontalColumns, horizontalRows));
+                break;
+            case CATEGORIES:
+                SuggestionBarView dock = mActivity.getSuggestionBarView();
+                int budget = dock == null ? 6 * 1024 * 1024
+                    : dock.getRenderedIconCacheBudgetBytes();
+                // Category search temporarily reuses the shipped vertical grid at full width. It
+                // gets AUTO geometry here and deliberately reads no vertical grid preference.
+                content.setVerticalMetrics(AppDrawerGridMetrics.resolve(openRect.width(),
+                    mDensity, labelHeightPx, 0));
+                content.setCategoryMetrics(AppDrawerCategoryGridMetrics.resolve(openRect.width(),
+                    content.horizontalPagerUsableHeight(openRect.height()), mDensity,
+                    resolveCategoryTileHeadingHeightPx(), labelHeightPx, mOpenRadiusPx, budget));
+                break;
         }
         content.bind(LauncherAppDataProvider.getInstance(mActivity), mSearch);
         // Visible, but not yet interactive: interactivity is settle()'s to grant, and it grants it
@@ -813,6 +828,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private float resolveCellLabelHeightPx() {
         Paint paint = new Paint();
         paint.setTextSize(AppDrawerAppsAdapter.LABEL_TEXT_SP
+            * mActivity.getResources().getDisplayMetrics().scaledDensity);
+        Paint.FontMetrics metrics = paint.getFontMetrics();
+        return metrics.descent - metrics.ascent;
+    }
+
+    /** The tile heading is 13sp, independently of the expanded app rows' 11sp labels. */
+    private float resolveCategoryTileHeadingHeightPx() {
+        Paint paint = new Paint();
+        paint.setTextSize(AppDrawerCategoryTileView.HEADING_TEXT_SP
             * mActivity.getResources().getDisplayMetrics().scaledDensity);
         Paint.FontMetrics metrics = paint.getFontMetrics();
         return metrics.descent - metrics.ascent;
@@ -936,13 +960,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             && mKeyboardBand.heightPx > 0f;
     }
 
-    /**
-     * The top of the captured accessory stack. {@code captureBands} pins a missing extra-keys band
-     * to whichever band is showing, so this band's top is the stack's top in every case.
-     */
+    /** The captured keyboard top; the plane covers the terminal extra-keys band above this edge. */
     private float capturedPinTopPx() {
-        AppDrawerAccessoryChoreography.Band extraKeys = mExtraKeysBand;
-        return extraKeys == null ? 0f : extraKeys.topPx;
+        AppDrawerAccessoryChoreography.Band keyboard = mKeyboardBand;
+        return keyboard == null ? 0f : keyboard.topPx;
     }
 
     private void applyAccessoryBands(float p, float planeBottomPx, float reveal) {

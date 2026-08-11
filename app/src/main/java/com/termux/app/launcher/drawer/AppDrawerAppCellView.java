@@ -68,6 +68,11 @@ public final class AppDrawerAppCellView extends LinearLayout {
             metrics == null ? 0f : metrics.rowHeightPx, clickGate);
     }
 
+    void bind(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
+              int iconPx, int rowHeightPx, @NonNull ClickGate clickGate) {
+        bindInternal(dock, entry, iconPx, rowHeightPx, clickGate);
+    }
+
     private void bindInternal(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
                               float iconSize, float rowHeight,
                               @NonNull ClickGate clickGate) {
