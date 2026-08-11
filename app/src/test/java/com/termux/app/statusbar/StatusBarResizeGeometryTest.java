@@ -30,4 +30,19 @@ public class StatusBarResizeGeometryTest {
         assertEquals(73, expanded.clockClipBottom);
         assertEquals(1f, expanded.expansion, .001f);
     }
+
+    @Test
+    public void fullKeepsTopSlotVisibleAndRowOnMovingLowerEdge() {
+        StatusBarResizeGeometry.Row full = StatusBarResizeGeometry.calculateFull(
+            500, 102, 600, 26, 3);
+        assertEquals(26, full.height);
+        assertEquals(471, full.top);
+        assertEquals(1f, full.expansion, 0f);
+        assertEquals(1f, full.topSlotAlpha, 0f);
+        assertTrue(Float.isFinite(full.fullExpansion));
+
+        StatusBarResizeGeometry.Row invalid = StatusBarResizeGeometry.calculateFull(
+            0, 0, 0, 0, 0);
+        assertTrue(Float.isFinite(invalid.fullExpansion));
+    }
 }

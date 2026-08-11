@@ -187,6 +187,9 @@ public final class SuggestionBarView extends GridLayout
         /** True while the plane is open, dragging or still settling. */
         boolean isAppDrawerEngaged();
 
+        /** FULL status geometry is modal relative to the drawer. */
+        default boolean isFullStatusPaneClosed() { return true; }
+
         /** @param downRawY the gesture's {@code ACTION_DOWN} raw screen Y */
         void onDrawerDragBegin(float downRawY);
 
@@ -1935,7 +1938,8 @@ public final class SuggestionBarView extends GridLayout
             listener != null && !listener.isDockTuningActive(),
             listener != null && !listener.isCommandPaletteOpen(),
             noActivePickup,
-            listener != null && !listener.isAppDrawerEngaged());
+            listener != null && !listener.isAppDrawerEngaged(),
+            listener != null && listener.isFullStatusPaneClosed());
     }
 
     /** The child-owned cases, read live: all three begin <em>during</em> the stream, not before it. */

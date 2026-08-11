@@ -209,6 +209,7 @@ public final class TerminalCommandPaletteController
 
     public void show() {
         if (!bindViews()) return;
+        mActivity.closeFullStatusBarImmediate();
         // Two full-screen glass surfaces must never stack: the palette is transient and summonable
         // over anything, so the drawer is the one that yields. Immediate rather than animated —
         // a plane springing shut behind a palette sprouting open reads as a glitch, not a handoff.

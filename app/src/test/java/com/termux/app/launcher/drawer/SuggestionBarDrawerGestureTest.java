@@ -157,8 +157,8 @@ public class SuggestionBarDrawerGestureTest {
     @Test
     public void everyVetoBlocksTheDrawerAndLeavesThePageSwipeIntact() {
         List<String> failures = new ArrayList<>();
-        for (String veto : new String[] {"pref", "dockTuning", "palette", "engaged", "searchText",
-            "azLetter", "landscape", "activePickup", "noListener"}) {
+        for (String veto : new String[] {"pref", "dockTuning", "palette", "engaged", "full",
+            "searchText", "azLetter", "landscape", "activePickup", "noListener"}) {
             setUp();
             applyVeto(veto);
 
@@ -184,6 +184,7 @@ public class SuggestionBarDrawerGestureTest {
             case "dockTuning": listener.dockTuning = true; break;
             case "palette": listener.paletteOpen = true; break;
             case "engaged": listener.drawerEngaged = true; break;
+            case "full": listener.fullStatusPaneClosed = false; break;
             case "searchText": ReflectionHelpers.setField(row, "lastInput", "ls "); break;
             case "azLetter":
                 ReflectionHelpers.setField(row, "activeAzLetter", Character.valueOf('A'));
@@ -300,6 +301,7 @@ public class SuggestionBarDrawerGestureTest {
         boolean dockTuning = false;
         boolean paletteOpen = false;
         boolean drawerEngaged = false;
+        boolean fullStatusPaneClosed = true;
 
         int begins;
         int drags;
@@ -325,6 +327,11 @@ public class SuggestionBarDrawerGestureTest {
         @Override
         public boolean isAppDrawerEngaged() {
             return drawerEngaged;
+        }
+
+        @Override
+        public boolean isFullStatusPaneClosed() {
+            return fullStatusPaneClosed;
         }
 
         @Override

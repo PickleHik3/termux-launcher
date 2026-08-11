@@ -62,10 +62,20 @@ public final class AppDrawerGestureArbiter {
         public final boolean noActivePickup;
         /** The drawer is neither open nor already animating. */
         public final boolean drawerIdle;
+        /** The transient FULL status pane is neither open nor transitioning. */
+        public final boolean fullStatusPaneClosed;
 
         public Eligibility(boolean drawerEnabled, boolean searchEmpty, boolean azInactive,
                            boolean portrait, boolean notDockTuning, boolean paletteClosed,
                            boolean noActivePickup, boolean drawerIdle) {
+            this(drawerEnabled, searchEmpty, azInactive, portrait, notDockTuning, paletteClosed,
+                noActivePickup, drawerIdle, true);
+        }
+
+        public Eligibility(boolean drawerEnabled, boolean searchEmpty, boolean azInactive,
+                           boolean portrait, boolean notDockTuning, boolean paletteClosed,
+                           boolean noActivePickup, boolean drawerIdle,
+                           boolean fullStatusPaneClosed) {
             this.drawerEnabled = drawerEnabled;
             this.searchEmpty = searchEmpty;
             this.azInactive = azInactive;
@@ -74,24 +84,26 @@ public final class AppDrawerGestureArbiter {
             this.paletteClosed = paletteClosed;
             this.noActivePickup = noActivePickup;
             this.drawerIdle = drawerIdle;
+            this.fullStatusPaneClosed = fullStatusPaneClosed;
         }
 
         /** Every veto clear, for an already-open plane or its full-width pager. */
         @NonNull
         public static Eligibility allClear() {
-            return new Eligibility(true, true, true, true, true, true, true, true);
+            return new Eligibility(true, true, true, true, true, true, true, true, true);
         }
 
         /** @return true when every veto is clear and the drawer may claim a vertical drag. */
         public boolean drawerEligible() {
             return drawerEnabled && searchEmpty && azInactive && portrait
-                && notDockTuning && paletteClosed && noActivePickup && drawerIdle;
+                && notDockTuning && paletteClosed && noActivePickup && drawerIdle
+                && fullStatusPaneClosed;
         }
     }
 
     /** Every veto set, used before the first {@link #begin} so a stray move can never claim. */
     private static final Eligibility INELIGIBLE =
-        new Eligibility(false, false, false, false, false, false, false, false);
+        new Eligibility(false, false, false, false, false, false, false, false, false);
 
     private Claim mClaim = Claim.PENDING;
     @NonNull private Eligibility mEligibility = INELIGIBLE;

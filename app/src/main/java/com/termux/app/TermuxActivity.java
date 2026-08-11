@@ -277,9 +277,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         new com.termux.app.statusbar.StatusCardHost();
     @Nullable private android.animation.ValueAnimator mStatusBarCollapseAnimator;
     private int mStatusBarTerminalResizeGeneration;
+    @Nullable private com.termux.app.statusbar.FullStatusBarController mFullStatusBarController;
+    private int mFullStatusBarResizeGeneration;
+    private boolean mRestoreFullStatusBar;
+    @NonNull private com.termux.app.statusbar.TopStatusBarState mRestoredFullPrior =
+        com.termux.app.statusbar.TopStatusBarState.EXPANDED;
+    @Nullable private com.termux.app.launcher.widget.LauncherWidgetHostController mWidgetHostController;
     private static final int REQUEST_CODE_WEATHER_LOCATION = 4711;
     private static final int REQUEST_CODE_VOICE_TYPING = 4712;
     private static final int REQUEST_CODE_WALLPAPER_READ_PERMISSION = 4713;
+    private static final int REQUEST_CODE_WIDGET_BIND = 4714;
+    private static final int REQUEST_CODE_WIDGET_CONFIGURE = 4715;
     @Nullable private TerminalSession mVoiceTypingTargetSession;
     /** Drawer-visible sessions = service sessions minus secondary panes. Backs the list adapter. */
     public final java.util.List<com.termux.shared.termux.shell.command.runner.terminal.TermuxSession> mDrawerSessions = new java.util.ArrayList<>();
@@ -579,6 +587,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final String ARG_ACTIVITY_RECREATED = "activity_recreated";
     private static final String ARG_PANE_LAYOUT = "pane_layout";
+    private static final String ARG_FULL_STATUS_BAR = "full_status_bar";
+    private static final String ARG_FULL_STATUS_BAR_PRIOR = "full_status_bar_prior";
     private static final String PANE_STATE_SESSIONS = "sessions";
     private static final String PANE_STATE_WINDOWS = "windows";
     private static final String PANE_STATE_CURRENT_WINDOW = "current_window";
@@ -680,6 +690,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mLastTopPaneFrostRadiusDp = -1;
     private final Rect mLastStatusFrostRect = new Rect();
     private final Rect mLastWindowBarFrostRect = new Rect();
+    private final Matrix mFullStatusFrostMatrix = new Matrix();
     private final Rect mLastCommandPaletteFrostRect = new Rect();
     private int mLastCommandPaletteFrostRadiusDp = -1;
     private final Rect mLastAppDrawerFrostRect = new Rect();
@@ -744,6 +755,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (savedInstanceState != null) {
             mIsActivityRecreated = savedInstanceState.getBoolean(ARG_ACTIVITY_RECREATED, false);
             mPendingPaneLayoutState = savedInstanceState.getBundle(ARG_PANE_LAYOUT);
+            mRestoreFullStatusBar = savedInstanceState.getBoolean(ARG_FULL_STATUS_BAR, false);
+            try {
+                mRestoredFullPrior = com.termux.app.statusbar.TopStatusBarState.valueOf(
+                    savedInstanceState.getString(ARG_FULL_STATUS_BAR_PRIOR,
+                        com.termux.app.statusbar.TopStatusBarState.EXPANDED.name()));
+            } catch (IllegalArgumentException ignored) {
+                mRestoredFullPrior = com.termux.app.statusbar.TopStatusBarState.EXPANDED;
+            }
         }
         // Delete ReportInfo serialized object files from cache older than 14 days
         ReportActivity.deleteReportInfoFilesOlderThanXDays(this, 14, false);
@@ -758,6 +777,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setActivityThemeAndWindow();
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_termux);
+        mWidgetHostController = new com.termux.app.launcher.widget.LauncherWidgetHostController(this);
         // Load termux shared preferences
         // This will also fail if TermuxConstants.TERMUX_PACKAGE_NAME does not equal applicationId
         if (mPreferences == null) {
@@ -794,6 +814,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         registerWallpaperActivityResultLaunchers();
         mLastLaunchWasLauncherEntry = isLauncherHomeIntent(getIntent());
         setTermuxTerminalViewAndClients();
+        createFullStatusBarController();
         setTerminalWindowBar();
         setTerminalToolbarView(savedInstanceState);
         updateDockRailView();
@@ -803,6 +824,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (savedInstanceState == null) {
             handleInAppKeyboardHeightAdjustIntent(getIntent());
             handleDockTuningIntent(getIntent());
+        }
+        if (mRestoreFullStatusBar) {
+            View fullHost = findViewById(R.id.terminal_window_bar_host);
+            if (fullHost != null) fullHost.post(() -> {
+                if (mFullStatusBarController != null && mRestoreFullStatusBar) {
+                    mRestoreFullStatusBar = false;
+                    mFullStatusBarController.restoreFullImmediate(mRestoredFullPrior);
+                }
+            });
         }
         setSettingsButtonView();
         setNewSessionButtonView();
@@ -867,6 +897,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logDebug(LOG_TAG, "onStart");
     
         if (mIsInvalidState) return;
+
+        if (mWidgetHostController != null) mWidgetHostController.onStart();
 
         mTerminalFrameMetricsMonitor.start(getWindow());
 
@@ -2316,11 +2348,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int targetHeight = targetStatusBarHeightPx(capsule, collapsed);
             if (mlp.leftMargin != hMargin || mlp.rightMargin != hMargin
                 || mlp.topMargin != topMargin
-                || (mStatusBarCollapseAnimator == null && mlp.height != targetHeight)) {
+                || (mStatusBarCollapseAnimator == null && !isFullStatusBarEngaged()
+                    && mlp.height != targetHeight)) {
                 mlp.leftMargin = hMargin;
                 mlp.rightMargin = hMargin;
                 mlp.topMargin = topMargin;
-                if (mStatusBarCollapseAnimator == null) mlp.height = targetHeight;
+                if (mStatusBarCollapseAnimator == null && !isFullStatusBarEngaged()) {
+                    mlp.height = targetHeight;
+                }
                 host.setLayoutParams(mlp);
             }
             View topWidgets = findViewById(R.id.terminal_top_widget_area);
@@ -2331,7 +2366,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     widgetParams.height = targetWidgetHeight;
                     topWidgets.setLayoutParams(widgetParams);
                 }
-                if (mStatusBarCollapseAnimator == null) {
+                if (mStatusBarCollapseAnimator == null && !isFullStatusBarEngaged()) {
                     topWidgets.setAlpha(1f);
                     topWidgets.setTranslationY(0f);
                     topWidgets.setVisibility(collapsed ? View.GONE : View.VISIBLE);
@@ -4008,7 +4043,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (frame == null) {
             return false;
         }
-        int[] frostIds = {R.id.command_palette_wallpaper_backdrop, R.id.app_drawer_wallpaper_backdrop};
+        int[] frostIds = {R.id.command_palette_wallpaper_backdrop,
+            R.id.app_drawer_wallpaper_backdrop, R.id.terminal_window_bar_wallpaper_backdrop};
         for (int frostId : frostIds) {
             ImageView frost = findViewById(frostId);
             Drawable drawable = frost != null ? frost.getDrawable() : null;
@@ -4665,6 +4701,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             clearTopPaneWallpaperFrost();
             return;
         }
+        if (isFullStatusBarEngaged()) {
+            alignFullStatusBarWallpaperFrost();
+            return;
+        }
         // Rounded style: the pane is a floating capsule already clipped to its outline, so it takes
         // frost like any surface; the inset band above it shows raw wallpaper by design. This used
         // to bail out for the whole style, which left the capsule with no blur at all — its live
@@ -4705,6 +4745,57 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastCommandPaletteFrostRect.setEmpty();
         mLastAppDrawerFrostRect.setEmpty();
         mLastTopPaneFrostRadiusDp = -1;
+    }
+
+    /**
+     * FULL displays the already cached screen-sized status-radius frame through the existing pane
+     * backdrop. Only its matrix changes as layout moves; no target-sized bitmap is allocated per
+     * spring frame and no new blur-radius cache key exists.
+     */
+    private void alignFullStatusBarWallpaperFrost() {
+        if (!isFullStatusBarEngaged() || !shouldUseWallpaperPassthroughMode()) return;
+        int radiusDp = getEffectiveStatusBarBlurRadius();
+        if (radiusDp <= 0) return;
+        ImageView frost = findViewById(R.id.terminal_window_bar_wallpaper_backdrop);
+        View host = findViewById(R.id.terminal_window_bar_host);
+        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+        if (frost == null || host == null || wallpaperFrame == null) return;
+        Bitmap full = obtainCachedAccessoryWallpaperBlur(radiusDp, wallpaperFrame);
+        if (full == null || full.isRecycled()) return;
+        host.getLocationOnScreen(mTmpViewLocation);
+        float scaleX = mCachedAccessoryWallpaperBlurFrameRect.width()
+            / (float) Math.max(1, full.getWidth());
+        float scaleY = mCachedAccessoryWallpaperBlurFrameRect.height()
+            / (float) Math.max(1, full.getHeight());
+        mFullStatusFrostMatrix.reset();
+        mFullStatusFrostMatrix.setScale(scaleX, scaleY);
+        mFullStatusFrostMatrix.postTranslate(
+            mCachedAccessoryWallpaperBlurFrameRect.left - mTmpViewLocation[0],
+            mCachedAccessoryWallpaperBlurFrameRect.top - mTmpViewLocation[1]);
+        if (!(frost.getDrawable() instanceof BitmapDrawable)
+            || ((BitmapDrawable) frost.getDrawable()).getBitmap() != full) {
+            frost.setImageBitmap(full);
+        }
+        frost.setScaleType(ImageView.ScaleType.MATRIX);
+        frost.setImageMatrix(mFullStatusFrostMatrix);
+        frost.setColorFilter(glassFrostFilter());
+        frost.setVisibility(View.VISIBLE);
+        View liveBlur = findViewById(R.id.terminal_window_bar_blur);
+        if (liveBlur != null) liveBlur.setVisibility(View.GONE);
+        mLastWindowBarFrostRect.set(mCachedAccessoryWallpaperBlurFrameRect);
+        mLastTopPaneFrostRadiusDp = radiusDp;
+        mTopPaneFrostDirty = false;
+    }
+
+    private void releaseFullStatusBarWallpaperFrost() {
+        ImageView frost = findViewById(R.id.terminal_window_bar_wallpaper_backdrop);
+        if (frost != null) {
+            frost.setImageDrawable(null);
+            frost.setScaleType(ImageView.ScaleType.FIT_XY);
+        }
+        mLastWindowBarFrostRect.setEmpty();
+        mTopPaneFrostDirty = true;
+        updateTopPaneWallpaperFrost();
     }
 
     /** Installs one frost crop matching {@code boundsView}'s screen rect; false hides the frost. */
@@ -4974,7 +5065,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mBarMemorySmoother.reset();
         if (mIsInvalidState)
             return;
+        if (mWidgetHostController != null) mWidgetHostController.onStop();
         mIsVisible = false;
+        if (mFullStatusBarController != null) mFullStatusBarController.closeImmediateToPrior();
         if (mDockPlankController != null) {
             mDockPlankController.reset();
         }
@@ -5061,6 +5154,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mInAppKeyboard != null)
             mInAppKeyboard.onSaveInstanceState(savedInstanceState);
         savedInstanceState.putBoolean(ARG_ACTIVITY_RECREATED, true);
+        if (mFullStatusBarController != null && mFullStatusBarController.isEngaged()) {
+            savedInstanceState.putBoolean(ARG_FULL_STATUS_BAR, true);
+            savedInstanceState.putString(ARG_FULL_STATUS_BAR_PRIOR,
+                mFullStatusBarController.priorState().name());
+        }
         Bundle paneLayout = savePaneLayoutState();
         if (paneLayout != null) savedInstanceState.putBundle(ARG_PANE_LAYOUT, paneLayout);
     }
@@ -5377,6 +5475,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override
                 public boolean isAppDrawerEngaged() {
                     return TermuxActivity.this.isAppDrawerEngaged();
+                }
+
+                @Override
+                public boolean isFullStatusPaneClosed() {
+                    return !TermuxActivity.this.isFullStatusBarEngaged();
                 }
 
                 @Override
@@ -6604,6 +6707,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void enterDockTuningMode(@Nullable String initialSection) {
+        if (isFullStatusBarEngaged()) return;
         if (mPreferences == null)
             return;
         View controls = findViewById(R.id.dock_tuning_controls);
@@ -10032,15 +10136,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * Back consumers, in order.
      *
-     * <p>The palette stays first: it is transient and can be summoned over anything, including the
-     * drawer. The drawer comes next because it is a full-screen plane, and both of the consumers
+     * <p>FULL stays first, including while its exit spring is settling, so repeated Back cannot
+     * fall through into another surface. The palette follows, then the drawer because it is a
+     * full-screen plane, and both of the consumers
      * below it — dock tuning and the navigation drawer — are conceptually behind it; a back press
      * that skipped past it would dismiss something the user cannot even see.
      */
     @SuppressLint("RtlHardcoded")
     @Override
     public void onBackPressed() {
-        if (isCommandPaletteOpen()) {
+        if (mFullStatusBarController != null && mFullStatusBarController.onBackPressed()) {
+            return;
+        } else if (isCommandPaletteOpen()) {
             mCommandPalette.collapse();
         } else if (mAppDrawerController != null && mAppDrawerController.isOpen()) {
             // A back press with something typed is spent on the query and the drawer stays up. The
@@ -10198,8 +10305,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
         Logger.logVerbose(LOG_TAG, "onActivityResult: requestCode: " + requestCode + ", resultCode: " + resultCode + ", data: " + IntentUtils.getIntentString(data));
+        if ((requestCode == REQUEST_CODE_WIDGET_BIND || requestCode == REQUEST_CODE_WIDGET_CONFIGURE)
+            && mWidgetHostController != null
+            && mWidgetHostController.handleActivityResult(requestCode, resultCode, data)) {
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == PermissionUtils.REQUEST_GRANT_STORAGE_PERMISSION) {
             requestStoragePermission(true);
         } else if (requestCode == REQUEST_CODE_VOICE_TYPING) {
@@ -11226,6 +11338,125 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** Wire the app-owned window strip. Window chips are indicators and direct switch targets. */
+    private void createFullStatusBarController() {
+        mFullStatusBarController = new com.termux.app.statusbar.FullStatusBarController(
+            new com.termux.app.statusbar.FullStatusBarController.Host() {
+                private View paneHost() { return findViewById(R.id.terminal_window_bar_host); }
+                private ViewGroup contentColumn() {
+                    View view = findViewById(R.id.terminal_content_column);
+                    return view instanceof ViewGroup ? (ViewGroup) view : null;
+                }
+
+                @Override public int currentHeight() {
+                    View host = paneHost();
+                    return host == null ? 0 : currentTopStatusBarHeight(host);
+                }
+                @Override public int normalHeight(@NonNull com.termux.app.statusbar.TopStatusBarState state) {
+                    return targetStatusBarHeightPx(isRoundedDockStyle(), state.toCollapsedPreference());
+                }
+                @Override public int parentMeasuredHeight() {
+                    ViewGroup column = contentColumn();
+                    return column == null ? 0 : column.getMeasuredHeight();
+                }
+                @Override public int parentPaddingTop() {
+                    ViewGroup column = contentColumn();
+                    return column == null ? 0 : column.getPaddingTop();
+                }
+                @Override public int parentPaddingBottom() {
+                    ViewGroup column = contentColumn();
+                    return column == null ? 0 : column.getPaddingBottom();
+                }
+                @Override public int hostTopMargin() {
+                    View host = paneHost();
+                    ViewGroup.LayoutParams params = host == null ? null : host.getLayoutParams();
+                    return params instanceof ViewGroup.MarginLayoutParams
+                        ? ((ViewGroup.MarginLayoutParams) params).topMargin : 0;
+                }
+                @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
+                @Override public void cancelNormalAnimatorKeepingCurrent() {
+                    if (mStatusBarCollapseAnimator != null) mStatusBarCollapseAnimator.cancel();
+                }
+                @Override public void beginTerminalResize() {
+                    mFullStatusBarResizeGeneration = beginStatusBarTerminalResize();
+                }
+                @Override public void applyFrame(int height, float fullProgress) {
+                    View host = paneHost();
+                    if (host == null) return;
+                    applyTopStatusBarInteractiveHeight(host,
+                        findViewById(R.id.terminal_top_widget_area), height, isRoundedDockStyle());
+                    View top = findViewById(R.id.terminal_top_widget_area);
+                    if (top instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
+                        ((com.termux.app.statusbar.TopPaneWidgetSlot) top)
+                            .setFullExpansionProgress(fullProgress);
+                    }
+                    alignFullStatusBarWallpaperFrost();
+                }
+                @Override public void finishTerminalResizeAfterLayout() {
+                    View host = paneHost();
+                    if (host != null) finishStatusBarTerminalResizeAfterLayout(host,
+                        mFullStatusBarResizeGeneration);
+                }
+                @Override public void applyNormalState(
+                        @NonNull com.termux.app.statusbar.TopStatusBarState state) {
+                    applyFullStatusBarPriorState(state);
+                }
+                @Override public void onEngagementChanged(boolean engaged,
+                        @NonNull com.termux.app.statusbar.TopStatusBarState normalTarget) {
+                    View view = paneHost();
+                    if (view instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
+                        ((com.termux.app.statusbar.StatusBarSwipeLayout) view).setStatusState(
+                            engaged ? com.termux.app.statusbar.TopStatusBarState.FULL : normalTarget,
+                            normalTarget);
+                    }
+                    if (!engaged) releaseFullStatusBarWallpaperFrost();
+                }
+            });
+        View contentColumn = findViewById(R.id.terminal_content_column);
+        if (contentColumn != null) contentColumn.addOnLayoutChangeListener(
+            (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                if (mFullStatusBarController != null && (right - left != oldRight - oldLeft
+                    || bottom - top != oldBottom - oldTop)) {
+                    mFullStatusBarController.onParentLayoutChanged();
+                }
+            });
+    }
+
+    private void openFullStatusBar(@NonNull com.termux.app.statusbar.TopStatusBarState prior) {
+        if (mFullStatusBarController == null) return;
+        if (mAppDrawerController != null) mAppDrawerController.closeImmediate();
+        if (mSuggestionBarView != null) mSuggestionBarView.dismissContextPopups();
+        mFullStatusBarController.open(prior);
+    }
+
+    public boolean isFullStatusBarEngaged() {
+        return mFullStatusBarController != null && mFullStatusBarController.isEngaged();
+    }
+
+    /** Palette takeover is immediate so two modal glass surfaces never stack. */
+    public void closeFullStatusBarImmediate() {
+        if (mFullStatusBarController != null) mFullStatusBarController.closeImmediateToPrior();
+    }
+
+    private void applyFullStatusBarPriorState(
+            @NonNull com.termux.app.statusbar.TopStatusBarState state) {
+        boolean collapsed = state.toCollapsedPreference();
+        if (mPreferences != null) mPreferences.setTopPaneClockCollapsed(collapsed);
+        View topWidgets = findViewById(R.id.terminal_top_widget_area);
+        if (topWidgets != null) {
+            topWidgets.setClipBounds(null);
+            topWidgets.setAlpha(1f);
+            topWidgets.setTranslationY(0f);
+            topWidgets.setVisibility(collapsed ? View.GONE : View.VISIBLE);
+        }
+        View host = findViewById(R.id.terminal_window_bar_host);
+        if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
+            ((com.termux.app.statusbar.StatusBarSwipeLayout) host).setCollapsed(collapsed);
+        }
+        com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
+        if (bar != null) bar.setStatusBarCollapsed(collapsed);
+        refreshTerminalWindowBar();
+    }
+
     private void setTerminalWindowBar() {
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar == null) return;
@@ -11249,7 +11480,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 (com.termux.app.statusbar.StatusBarSwipeLayout) statusBarHost;
             swipeHost.setCollapsed(mPreferences != null
                 && mPreferences.isTopPaneClockCollapsed());
-            swipeHost.setListener(collapsed -> setTopStatusBarCollapsed(collapsed, true));
+            swipeHost.setListener(new com.termux.app.statusbar.StatusBarSwipeLayout.Listener() {
+                @Override public void onCollapsedStateRequested(boolean collapsed) {
+                    setTopStatusBarCollapsed(collapsed, true);
+                }
+                @Override public void onFullStateRequested(
+                        @NonNull com.termux.app.statusbar.TopStatusBarState priorState) {
+                    openFullStatusBar(priorState);
+                }
+                @Override public boolean isStatusGestureBlocked() {
+                    // A normal COMPACT/EXPANDED animator is deliberately eligible for takeover;
+                    // FullStatusBarController freezes its current height before cancelling it.
+                    return isCommandPaletteOpen() || isAppDrawerEngaged() || mDockTuningMode;
+                }
+            });
         }
         bar.setStatusBarCollapsed(mPreferences != null
             && mPreferences.isTopPaneClockCollapsed());
@@ -11291,9 +11535,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int expandedRowHeight = Math.round(dpToPx(24));
         int expandedBottomMargin = Math.round(dpToPx(capsule ? 3 : 2));
         com.termux.app.statusbar.StatusBarResizeGeometry.Row geometry =
-            com.termux.app.statusbar.StatusBarResizeGeometry.calculate(surfaceHeight,
-                collapsedHeight, expandedHeight, collapsedRowHeight, expandedRowHeight,
-                expandedBottomMargin);
+            isFullStatusBarEngaged()
+                ? com.termux.app.statusbar.StatusBarResizeGeometry.calculateFull(surfaceHeight,
+                    expandedHeight, Math.max(expandedHeight,
+                        com.termux.app.statusbar.FullStatusBarGeometry.resolveFullHeight(
+                            findViewById(R.id.terminal_content_column) == null ? 0
+                                : findViewById(R.id.terminal_content_column).getMeasuredHeight(),
+                            findViewById(R.id.terminal_content_column) == null ? 0
+                                : findViewById(R.id.terminal_content_column).getPaddingTop(),
+                            findViewById(R.id.terminal_content_column) == null ? 0
+                                : findViewById(R.id.terminal_content_column).getPaddingBottom(),
+                            0)), expandedRowHeight, expandedBottomMargin)
+                : com.termux.app.statusbar.StatusBarResizeGeometry.calculate(surfaceHeight,
+                    collapsedHeight, expandedHeight, collapsedRowHeight, expandedRowHeight,
+                    expandedBottomMargin);
 
         View statusRow = findViewById(R.id.terminal_status_row);
         if (statusRow != null && statusRow.getLayoutParams() instanceof FrameLayout.LayoutParams) {
@@ -11357,13 +11612,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The posted resume runs after the requested terminal-surface layout. Each pane then sends
         // exactly one final row/column update instead of a SIGWINCH for every animation frame.
         host.post(() -> {
-            if (generation != mStatusBarTerminalResizeGeneration) return;
             if (mPaneController != null) mPaneController.finishHostSurfaceResizeKeepingBottom();
         });
     }
 
     private void setTopStatusBarCollapsed(boolean collapsed, boolean animate) {
         if (mPreferences == null) return;
+        if (isFullStatusBarEngaged()) {
+            // FULL's captured prior remains authoritative; ordinary two-state requests cannot
+            // write geometry or start a competing animator until FULL has settled closed.
+            return;
+        }
         View host = findViewById(R.id.terminal_window_bar_host);
         View topWidgets = findViewById(R.id.terminal_top_widget_area);
         com.termux.app.statusbar.StatusBarSwipeLayout swipeHost = host instanceof
@@ -12825,6 +13084,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // warmAsync itself, because LauncherAppDataProvider.invalidate() clears pending refresh
         // callbacks and a one-shot registration made just before a package change is dropped.
         // Guarded on the field so a session that never opened the drawer still never builds one.
+        if (mWidgetHostController != null) {
+            mWidgetHostController.reconcileProviders();
+        }
         if (mAppDrawerController != null) {
             mAppDrawerController.onAppCatalogChanged();
         }
@@ -12887,9 +13149,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return;
             }
             if (v.getId() == R.id.terminal_pane_host) {
+                if (isFullStatusBarEngaged()) return;
                 // Never mutate accessory layout params from inside this layout pass.
                 v.post(() -> {
-                    if (!isFinishing() && !isDestroyed())
+                    if (!isFinishing() && !isDestroyed() && !isFullStatusBarEngaged())
                         applyAccessoryGeometryIfNeeded(true, "terminal:layout");
                 });
                 return;

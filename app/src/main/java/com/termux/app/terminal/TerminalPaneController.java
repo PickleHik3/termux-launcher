@@ -223,6 +223,9 @@ public class TerminalPaneController {
     private final Map<Leaf, FloatingPaneContainer> mFloatContainers = new HashMap<>();
     private final PaneInteractionOverlay mInteractionOverlay;
 
+    /** Nested controller-wide lease covering every source of transient host geometry. */
+    private int mHostSurfaceResizeDepth;
+
     @Nullable private Window mActiveWindow;
     @Nullable private Leaf mMaximizedLeaf;
 
@@ -617,15 +620,19 @@ public class TerminalPaneController {
 
     /** Coalesce a host-surface animation into one final PTY resize. */
     public void beginHostSurfaceResize() {
-        setPaneSizeUpdatesPaused(true);
+        mHostSurfaceResizeDepth++;
+        if (mHostSurfaceResizeDepth == 1) setAllPaneSizeUpdatesPaused(true, false);
     }
 
     /** Finish a host resize while keeping prompt/content attached to the bottom edge. */
     public void finishHostSurfaceResizeKeepingBottom() {
-        for (TerminalView view : getVisiblePaneViews()) {
-            view.setTerminalSizeUpdatesPaused(false, true);
-        }
+        if (mHostSurfaceResizeDepth == 0) return;
+        mHostSurfaceResizeDepth--;
+        if (mHostSurfaceResizeDepth == 0) setAllPaneSizeUpdatesPaused(false, true);
     }
+
+    /** True while any host surface owns transient terminal geometry. */
+    public boolean isHostSurfaceResizeInProgress() { return mHostSurfaceResizeDepth > 0; }
 
     /** The pane view showing {@code session}, if it is a leaf of the active window. */
     @Nullable public TerminalView getViewForSession(@Nullable TerminalSession session) {
@@ -1608,6 +1615,7 @@ public class TerminalPaneController {
         if (frame == null) {
             frame = (FrameLayout) mInflater.inflate(R.layout.view_terminal_pane, mHostView, false);
             TerminalView view = frame.findViewById(R.id.terminal_view);
+            if (mHostSurfaceResizeDepth > 0) view.setTerminalSizeUpdatesPaused(true);
             mHost.configurePaneView(view);
             view.setOnTouchListener((v, ev) -> {
                 if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
@@ -1744,9 +1752,16 @@ public class TerminalPaneController {
         return activeCandidate >= 0 ? activeCandidate : nearest;
     }
 
-    private void setPaneSizeUpdatesPaused(boolean paused) {
-        for (TerminalView view : getVisiblePaneViews()) {
-            view.setTerminalSizeUpdatesPaused(paused);
+    private void setAllPaneSizeUpdatesPaused(boolean paused, boolean keepBottom) {
+        if (paused) {
+            for (TerminalView view : mPaneViews.values())
+                view.setTerminalSizeUpdatesPaused(true, false);
+            return;
+        }
+        java.util.HashSet<TerminalView> visible = new java.util.HashSet<>(getVisiblePaneViews());
+        for (TerminalView view : mPaneViews.values()) {
+            if (visible.contains(view)) view.setTerminalSizeUpdatesPaused(false, keepBottom);
+            else view.resumeTerminalSizeUpdatesDiscardingPending();
         }
     }
 
@@ -1846,7 +1861,7 @@ public class TerminalPaneController {
                     if (mBorderTapLeaf == null) mBorderTapLeaf = leafAtOrNearest(x, y);
                     if (mXSplit != null || mYSplit != null) {
                         mDraggingDivider = true;
-                        setPaneSizeUpdatesPaused(true);
+                        beginHostSurfaceResize();
                         if (mXSplit != null) {
                             mXWeightA = mXSplit.weightA;
                             mXWeightB = mXSplit.weightB;
@@ -1927,7 +1942,7 @@ public class TerminalPaneController {
                             snapSplitToCellGrid(mXSplit);
                             snapSplitToCellGrid(mYSplit);
                         }
-                        if (mDraggingDivider) setPaneSizeUpdatesPaused(false);
+                        if (mDraggingDivider) finishHostSurfaceResizeKeepingBottom();
                         resetTouchState();
                         showControls(leaf);
                         if (resized) mHost.onTreesChanged();
@@ -1936,7 +1951,7 @@ public class TerminalPaneController {
                     return false;
 
                 case MotionEvent.ACTION_CANCEL:
-                    if (mDraggingDivider) setPaneSizeUpdatesPaused(false);
+                    if (mDraggingDivider) finishHostSurfaceResizeKeepingBottom();
                     resetTouchState();
                     invalidate();
                     return true;
@@ -2631,8 +2646,8 @@ public class TerminalPaneController {
 
         /** Coalesce the resize drag into one final PTY resize, like divider drags do. */
         private void setSizeUpdatesPaused(boolean paused) {
-            TerminalView view = mPaneViews.get(mLeaf.session);
-            if (view != null) view.setTerminalSizeUpdatesPaused(paused);
+            if (paused) beginHostSurfaceResize();
+            else finishHostSurfaceResizeKeepingBottom();
         }
 
         private int dragModeAt(float x, float y) {
