@@ -6,6 +6,7 @@ import androidx.annotation.NonNull;
 public final class AppDrawerHorizontalGridMetrics {
 
     public static final int MIN_ROWS = 2;
+    /** Largest explicit row preference; AUTO remains bounded by the usable page height. */
     public static final int MAX_ROWS = 6;
 
     public final int columns;
@@ -58,8 +59,7 @@ public final class AppDrawerHorizontalGridMetrics {
         AppDrawerGridMetrics cells = AppDrawerGridMetrics.resolve(width, density,
             labelHeightPx, requestedColumns, requestedIconDp);
         float naturalRowHeight = Math.max(1f, finiteOrOne(cells.rowHeightPx));
-        int physicallyFit = Math.max(1, Math.min(MAX_ROWS,
-            (int) Math.floor(height / naturalRowHeight)));
+        int physicallyFit = Math.max(1, (int) Math.floor(height / naturalRowHeight));
         int rows;
         if (requestedRows == 0) {
             rows = physicallyFit;

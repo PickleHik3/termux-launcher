@@ -248,13 +248,13 @@ public class AppDrawerContentViewTest {
     }
 
     @Test
-    public void onlyTheGridOwnsItsPoints() {
+    public void gridOwnsItsPointsIncludingTheFormerCogBand() {
         // The name reads backwards on purpose: true means the *content* owns the point and the
         // plane must defer. Every piece of chrome answers false so the plane's close drag runs.
         assertTrue(content.ownsPoint(WIDTH * 0.5f, gridY()));
         assertFalse("the pill must not swallow a close drag",
             content.ownsPoint(WIDTH * 0.5f, 8f * density));
-        assertFalse("the reserved bottom band is chrome",
+        assertTrue("vertical content must reclaim the removed cog's bottom band",
             content.ownsPoint(WIDTH * 0.5f, HEIGHT - (8f * density)));
     }
 

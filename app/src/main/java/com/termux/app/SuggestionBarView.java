@@ -1995,8 +1995,14 @@ public final class SuggestionBarView extends GridLayout
         } finally {
             cancel.recycle();
         }
-        if (appDrawerGestureListener != null)
+        if (appDrawerGestureListener != null) {
             appDrawerGestureListener.onDrawerDragBegin(swipeDownRawY);
+            // The move that crossed the claim threshold is already drawer travel. This matters on
+            // the cold path: building the selected drawer content can occupy the rest of the input
+            // frame, leaving UP as the next delivered event. Dropping this move then releases at
+            // progress zero and makes that first otherwise-valid pull look swallowed.
+            appDrawerGestureListener.onDrawerDrag(event.getRawY());
+        }
     }
 
     /**

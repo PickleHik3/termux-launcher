@@ -34,6 +34,23 @@ import java.util.concurrent.TimeUnit;
 @ConscryptMode(ConscryptMode.Mode.OFF)
 public class LauncherDrawerViewTypePreferenceTest {
 
+    @Test public void normalSettingsTreeLinksLauncherAndAppsToDrawerSettings() {
+        Application app = RuntimeEnvironment.getApplication();
+        PreferenceManager manager = new PreferenceManager(app);
+        PreferenceScreen root = manager.inflateFromResource(app, R.xml.root_preferences, null);
+        Preference launcher = root.findPreference("launcher_apps");
+        assertEquals("Launcher & apps", launcher.getTitle().toString());
+        assertEquals(LauncherPreferencesFragment.class.getName(), launcher.getFragment());
+
+        manager = new PreferenceManager(app);
+        manager.setPreferenceDataStore(TermuxStylePreferencesDataStore.getInstance(app));
+        PreferenceScreen launcherScreen = manager.inflateFromResource(
+            app, R.xml.launcher_preferences, null);
+        Preference drawer = launcherScreen.findPreference("app_launcher_drawer_layout");
+        assertEquals("Drawer layout", drawer.getTitle().toString());
+        assertEquals(AppDrawerPreferencesFragment.class.getName(), drawer.getFragment());
+    }
+
     @Test public void xmlExposesExactlyAllThreeModesWithSimpleSummary() {
         PreferenceManager manager = new PreferenceManager(RuntimeEnvironment.getApplication());
         manager.setPreferenceDataStore(TermuxStylePreferencesDataStore.getInstance(

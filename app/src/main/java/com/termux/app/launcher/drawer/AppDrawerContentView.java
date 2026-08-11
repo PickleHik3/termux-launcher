@@ -10,7 +10,6 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewParent;
 import android.widget.FrameLayout;
-import android.widget.ImageButton;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -89,7 +88,6 @@ public final class AppDrawerContentView extends FrameLayout
 
         void onContentCloseDragCancel();
 
-        default void onDrawerSettingsRequested() {}
     }
 
     /** Ceiling on the damped overpull, in dp. The raw pull is unbounded; the travel is not. */
@@ -98,12 +96,8 @@ public final class AppDrawerContentView extends FrameLayout
     private static final float PILL_MARGIN_H_DP = 16f;
     private static final float PILL_MARGIN_TOP_DP = 12f;
     private static final float PILL_TO_GRID_DP = 10f;
-    /**
-     * Strip kept clear at the bottom for B-5's settings affordance. It is chrome, not grid: a drag
-     * that starts there closes the drawer, which is what keeps a close gesture reachable even when
-     * the grid is armed against one.
-     */
-    private static final float BOTTOM_BAND_DP = 64f;
+    /** Bottom strip occupied by horizontal paging dots. */
+    private static final float PAGE_INDICATOR_BAND_DP = 64f;
 
     private final AppDrawerSearchPillView mPill;
     private final RecyclerView mGrid;
@@ -112,7 +106,6 @@ public final class AppDrawerContentView extends FrameLayout
     private final AppDrawerCategoryView mCategoryView;
     private final AppDrawerRopeColumnView mColumn;
     private final AppDrawerDragOverlayView mDragOverlay;
-    private final ImageButton mSettingsButton;
     private final GridLayoutManager mLayoutManager;
     private final AppDrawerAppsAdapter mAdapter;
     private final AppDrawerHorizontalPageAdapter mHorizontalAdapter;
@@ -268,7 +261,7 @@ public final class AppDrawerContentView extends FrameLayout
         LayoutParams gridParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT);
         gridParams.topMargin = pillParams.topMargin + pillParams.height + dp(PILL_TO_GRID_DP);
-        gridParams.bottomMargin = dp(BOTTOM_BAND_DP);
+        gridParams.bottomMargin = 0;
         // The letters are not an overlay: the grid gives up exactly the strip's width so no cell
         // ever sits under one, and the column count the controller resolves is computed from the
         // same subtraction.
@@ -296,7 +289,7 @@ public final class AppDrawerContentView extends FrameLayout
         LayoutParams pagerParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT);
         pagerParams.topMargin = gridParams.topMargin;
-        pagerParams.bottomMargin = gridParams.bottomMargin;
+        pagerParams.bottomMargin = dp(PAGE_INDICATOR_BAND_DP);
         mHorizontalPager.setVisibility(GONE);
         addView(mHorizontalPager, pagerParams);
 
@@ -306,12 +299,12 @@ public final class AppDrawerContentView extends FrameLayout
         LayoutParams categoryParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT);
         categoryParams.topMargin = gridParams.topMargin;
-        categoryParams.bottomMargin = gridParams.bottomMargin;
+        categoryParams.bottomMargin = 0;
         mCategoryView.setVisibility(GONE);
         addView(mCategoryView, categoryParams);
 
         LayoutParams indicatorParams = new LayoutParams(LayoutParams.MATCH_PARENT,
-            dp(BOTTOM_BAND_DP), Gravity.BOTTOM);
+            dp(PAGE_INDICATOR_BAND_DP), Gravity.BOTTOM);
         addView(mPageIndicator, indicatorParams);
 
         mColumn = new AppDrawerRopeColumnView(context);
@@ -322,7 +315,7 @@ public final class AppDrawerContentView extends FrameLayout
         LayoutParams columnParams = new LayoutParams(Math.round(mColumnWidthPx),
             LayoutParams.MATCH_PARENT, Gravity.END);
         columnParams.topMargin = gridParams.topMargin;
-        columnParams.bottomMargin = gridParams.bottomMargin;
+        columnParams.bottomMargin = 0;
         addView(mColumn, columnParams);
 
         setOnDragListener((view, event) -> {
@@ -349,26 +342,10 @@ public final class AppDrawerContentView extends FrameLayout
         mDragOverlay.setVisibility(INVISIBLE);
         addView(mDragOverlay, new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT));
-        mSettingsButton = new ImageButton(context);
-        mSettingsButton.setImageResource(com.termux.R.drawable.ic_settings);
-        mSettingsButton.setContentDescription(context.getString(
-            com.termux.R.string.settings_app_drawer_settings_description));
-        mSettingsButton.setFocusable(true);
-        mSettingsButton.setClickable(true);
-        mSettingsButton.setOnClickListener(view -> {
-            Callbacks callbacks = mCallbacks;
-            if (callbacks != null) callbacks.onDrawerSettingsRequested();
-        });
-        LayoutParams settingsParams = new LayoutParams(dp(48f), dp(48f),
-            Gravity.BOTTOM | Gravity.START);
-        settingsParams.leftMargin = dp(8f);
-        settingsParams.bottomMargin = dp(8f);
-        addView(mSettingsButton, settingsParams);
         // Chrome is composited last. The RecyclerView is deliberately allowed to keep its normal
         // nested-scrolling draw path, but a partially visible/scaled holder at its leading edge
         // must stay behind the fixed search surface rather than painting across it.
         mPill.bringToFront();
-        mSettingsButton.bringToFront();
         applyViewType();
     }
 
@@ -1116,9 +1093,9 @@ public final class AppDrawerContentView extends FrameLayout
      *
      * @param x the plane's local X
      * @param y the plane's local Y
-     * @return true when the grid or the column owns it; false for chrome — the pill, the margins, the
-     *     strip below the grid, the reserved bottom band, and the column's strip while it is
-     *     inactive — where the plane's own close drag runs exactly as it did in B-1
+     * @return true when the grid or the column owns it; false for chrome — the pill, the margins,
+     *     the horizontal pager's bottom band, and the column's strip while it is inactive — where
+     *     the plane's own close drag runs exactly as it did in B-1
      */
     @Override
     public boolean ownsPoint(float x, float y) {
@@ -1140,17 +1117,14 @@ public final class AppDrawerContentView extends FrameLayout
         switch (mViewType) {
             case VERTICAL:
                 return AppDrawerTouchRegions.resolve(localX, localY, boundsOf(mGrid),
-                    boundsOf(mColumn), boundsOf(mSettingsButton), mInteractive, isColumnActive());
+                    boundsOf(mColumn), mInteractive, isColumnActive());
             case HORIZONTAL:
                 return AppDrawerTouchRegions.resolve(localX, localY, boundsOf(mHorizontalPager),
-                    null, boundsOf(mSettingsButton), mInteractive, false);
+                    null, mInteractive, false);
             case CATEGORIES:
                 if (hasQuery())
                     return AppDrawerTouchRegions.resolve(localX, localY, boundsOf(mGrid), null,
-                        boundsOf(mSettingsButton), mInteractive, false);
-                if (localX >= mSettingsButton.getLeft() && localX < mSettingsButton.getRight()
-                    && localY >= mSettingsButton.getTop() && localY < mSettingsButton.getBottom())
-                    return AppDrawerTouchRegions.Region.CONTROL;
+                        mInteractive, false);
                 float x = localX - mCategoryView.getLeft();
                 float y = localY - mCategoryView.getTop();
                 return AppDrawerCategoryTouchRegions.isContentOwned(mCategoryView.touchPart(x, y))

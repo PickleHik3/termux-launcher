@@ -19,7 +19,9 @@ import org.robolectric.Robolectric;
 import org.robolectric.annotation.Config;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -59,16 +61,19 @@ public class StatusBarSwipeLayoutTest {
     }
 
     @Test
-    public void emptyTap_hasNoExpansionAction() {
+    public void emptyTap_performsClickWithoutExpansionAction() {
         StatusBarSwipeLayout view = createView();
         List<Boolean> requests = new ArrayList<>();
+        AtomicInteger clicks = new AtomicInteger();
         view.setCollapsed(true);
         view.setListener(requests::add);
+        view.setOnClickListener(ignored -> clicks.incrementAndGet());
 
         view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100f, 40f));
         view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 100f, 40f));
 
         assertEquals(0, requests.size());
+        assertEquals(1, clicks.get());
     }
 
     @Test
@@ -80,19 +85,51 @@ public class StatusBarSwipeLayoutTest {
     }
 
     @Test
-    public void gestureStartingInsideWindowBarIsNeverIntercepted() {
+    public void longPressOnEmptyWindowBarBackgroundRequestsFull() {
         StatusBarSwipeLayout view = createView();
-        TerminalWindowBar bar = new TerminalWindowBar(view.getContext(), null);
-        bar.setId(R.id.terminal_window_bar);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(160, 30);
-        params.leftMargin = 20;
-        params.topMargin = 30;
-        view.addView(bar, params);
-        bar.layout(20, 30, 180, 60);
+        TerminalWindowBar bar = addWindowBar(view, false);
+        List<TopStatusBarState> full = new ArrayList<>();
+        view.setListener(new StatusBarSwipeLayout.Listener() {
+            @Override public void onCollapsedStateRequested(boolean value) { }
+            @Override public void onFullStateRequested(TopStatusBarState prior) { full.add(prior); }
+        });
 
-        assertFalse(view.onInterceptTouchEvent(event(MotionEvent.ACTION_DOWN, 40f, 40f)));
-        assertFalse(view.onInterceptTouchEvent(event(MotionEvent.ACTION_MOVE, 170f, 40f)));
-        assertFalse(view.onInterceptTouchEvent(event(MotionEvent.ACTION_UP, 170f, 40f)));
+        float x = bar.getRight() - 10f;
+        float y = (bar.getTop() + bar.getBottom()) / 2f;
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, x, y));
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(
+            Duration.ofMillis(android.view.ViewConfiguration.getLongPressTimeout() + 1));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, x, y));
+
+        assertEquals(Collections.singletonList(TopStatusBarState.EXPANDED), full);
+    }
+
+    @Test
+    public void longPressOnWindowChipOrAddButtonRemainsChildOwned() {
+        for (int targetIndex = 0; targetIndex < 2; targetIndex++) {
+            StatusBarSwipeLayout view = createView();
+            TerminalWindowBar bar = addWindowBar(view, true);
+            List<View> controls = new ArrayList<>();
+            collectClickableDescendants(bar, controls);
+            assertEquals(2, controls.size());
+            View target = controls.get(targetIndex);
+            int[] location = new int[2];
+            target.getLocationOnScreen(location);
+            float x = location[0] + target.getWidth() / 2f;
+            float y = location[1] + target.getHeight() / 2f;
+            List<TopStatusBarState> full = new ArrayList<>();
+            view.setListener(new StatusBarSwipeLayout.Listener() {
+                @Override public void onCollapsedStateRequested(boolean value) { }
+                @Override public void onFullStateRequested(TopStatusBarState prior) {
+                    full.add(prior);
+                }
+            });
+
+            view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, x, y));
+            Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(Duration.ofSeconds(1));
+            assertTrue(full.isEmpty());
+            view.dispatchTouchEvent(event(MotionEvent.ACTION_CANCEL, x, y));
+        }
     }
 
     @Test
@@ -221,6 +258,32 @@ public class StatusBarSwipeLayoutTest {
         view.measure(exact(200), exact(80));
         view.layout(0, 0, 200, 80);
         return view;
+    }
+
+    private static TerminalWindowBar addWindowBar(StatusBarSwipeLayout view,
+                                                   boolean includeWindowChip) {
+        TerminalWindowBar bar = new TerminalWindowBar(view.getContext(), null);
+        bar.setId(R.id.terminal_window_bar);
+        if (includeWindowChip) {
+            bar.setWindows(Collections.singletonList(
+                new TerminalWindowBar.WindowItem("shell", "shell")), 0);
+        }
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(160, 30);
+        params.leftMargin = 20;
+        params.topMargin = 30;
+        view.addView(bar, params);
+        bar.measure(exact(160), exact(30));
+        bar.layout(20, 30, 180, 60);
+        return bar;
+    }
+
+    private static void collectClickableDescendants(View view, List<View> result) {
+        if (view.isClickable()) result.add(view);
+        if (!(view instanceof android.view.ViewGroup)) return;
+        android.view.ViewGroup group = (android.view.ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            collectClickableDescendants(group.getChildAt(i), result);
+        }
     }
 
     private static void swipe(StatusBarSwipeLayout view, float startX, float endX,

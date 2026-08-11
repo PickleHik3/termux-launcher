@@ -9757,12 +9757,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 R.string.termux_style_preferences_title));
     }
 
-    public void openAppDrawerSettings() {
-        ActivityUtils.startActivity(this, SettingsActivity.createFragmentIntent(this,
-            com.termux.app.fragments.settings.termux.AppDrawerPreferencesFragment.class,
-            R.string.settings_app_drawer_view_type_title));
-    }
-
     private void openAppsBarSettings() {
         ActivityUtils.startActivity(this,
             SettingsActivity.createFragmentIntent(this,

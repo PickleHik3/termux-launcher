@@ -44,7 +44,7 @@ public final class StatusBarGesturePolicy {
         }
 
         public boolean eligible() {
-            return state.allowsNormalSwipe() && !insideWindowBar && !insideInteractiveChild
+            return state.allowsNormalSwipe() && !insideInteractiveChild
                 && !nestedChildOwned && !anotherSurfaceEngaged;
         }
     }

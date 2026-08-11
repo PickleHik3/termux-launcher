@@ -12,9 +12,11 @@ public class StatusBarGesturePolicyTest {
             100, state, TopStatusBarState.EXPANDED, bar, interactive, nested, overlay, 8, 7));
     }
 
-    @Test public void everyFrozenChildOrSurfaceVetoIsImmediate() {
-        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED,
-            policy(true, false, false, false, TopStatusBarState.EXPANDED).claim());
+    @Test public void windowBarBackgroundIsEligibleButFrozenChildOrSurfaceVetoesAreImmediate() {
+        StatusBarGesturePolicy windowBar = policy(true, false, false, false,
+            TopStatusBarState.EXPANDED);
+        assertEquals(StatusBarGesturePolicy.Claim.PENDING, windowBar.claim());
+        assertEquals(StatusBarGesturePolicy.Claim.LONG_PRESS, windowBar.timeout(7));
         assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED,
             policy(false, true, false, false, TopStatusBarState.EXPANDED).claim());
         assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED,

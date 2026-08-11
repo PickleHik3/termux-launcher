@@ -217,8 +217,17 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         for (int i = parent.getChildCount() - 1; i >= 0; i--) {
             View child = parent.getChildAt(i);
             if (child.getVisibility() != VISIBLE || !isInsideView(child, event)) continue;
-            if (child.getId() == R.id.terminal_window_bar || child instanceof AppWidgetHostView
-                || child.isClickable() || child.isLongClickable() || child.isFocusable()) return true;
+            // The window bar is the documented long-press surface, so the scrolling container is
+            // transparent to this hit test. Its actual controls are still found recursively: a
+            // session chip or the add button remains child-owned, while space between/after them
+            // can arm the status gesture.
+            if (child.getId() == R.id.terminal_window_bar) {
+                if (child instanceof ViewGroup
+                    && isInsideInteractiveChild((ViewGroup) child, event)) return true;
+                continue;
+            }
+            if (child instanceof AppWidgetHostView || child.isClickable()
+                || child.isLongClickable() || child.isFocusable()) return true;
             if (child instanceof ViewGroup
                 && isInsideInteractiveChild((ViewGroup) child, event)) return true;
         }

@@ -90,8 +90,9 @@ public class SuggestionBarDrawerGestureTest {
         assertEquals(1, listener.begins);
         assertEquals(1, listener.ends);
         assertEquals(0, listener.cancels);
-        // The claiming move begins the drag from the down point; the two after it drive it.
-        assertEquals(2, listener.drags);
+        // The claiming move begins the drag from the down point and contributes its own travel;
+        // the two after it continue driving it.
+        assertEquals(3, listener.drags);
         assertEquals(1, child.countOf(MotionEvent.ACTION_CANCEL));
         // The drag is anchored to where the finger went down, not to where the claim landed.
         assertEquals(20f, listener.downRawY, 0.01f);

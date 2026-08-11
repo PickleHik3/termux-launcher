@@ -399,11 +399,6 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (mPlane != null) mPlane.cancelCloseDragFromContent();
     }
 
-    @Override public void onDrawerSettingsRequested() {
-        closeImmediate();
-        mActivity.openAppDrawerSettings();
-    }
-
     // ------------------------------------------------------------------ search
 
     /** The intake the activity's three channels route into. */
