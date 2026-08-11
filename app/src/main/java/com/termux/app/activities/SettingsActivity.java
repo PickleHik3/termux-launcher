@@ -90,8 +90,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         }
         AppCompatActivityUtils.setToolbar(this, com.termux.shared.R.id.toolbar);
         AppCompatActivityUtils.setShowBackButtonInActionBar(this, true);
-        int titleResId = getIntent().getIntExtra(EXTRA_INITIAL_TITLE_RES, R.string.title_activity_termux_settings);
-        setTitle(titleResId);
+        setTitleFromIntent(getIntent());
     }
 
     @Override
@@ -108,8 +107,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         getSupportFragmentManager().beginTransaction()
             .replace(R.id.settings, buildInitialFragment())
             .commit();
-        setTitle(intent.getIntExtra(EXTRA_INITIAL_TITLE_RES,
-            R.string.title_activity_termux_settings));
+        setTitleFromIntent(intent);
     }
 
     /**
@@ -172,7 +170,29 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         if (fragmentClassName == null || fragmentClassName.isEmpty()) {
             return new RootPreferencesFragment();
         }
-        return getSupportFragmentManager().getFragmentFactory().instantiate(getClassLoader(), fragmentClassName);
+        try {
+            return getSupportFragmentManager().getFragmentFactory()
+                .instantiate(getClassLoader(), fragmentClassName);
+        } catch (Fragment.InstantiationException e) {
+            // A Settings task, shortcut, or rebroadcast Intent may outlive an in-place APK upgrade.
+            // Fragment class names carried by that old Intent are not guaranteed to exist in the
+            // newly installed build, so return to the stable root screen instead of crashing.
+            if (e.getCause() instanceof ClassNotFoundException)
+                return new RootPreferencesFragment();
+            throw e;
+        }
+    }
+
+    private void setTitleFromIntent(@NonNull Intent intent) {
+        int titleResId = intent.getIntExtra(EXTRA_INITIAL_TITLE_RES,
+            R.string.title_activity_termux_settings);
+        try {
+            setTitle(titleResId != 0 ? titleResId : R.string.title_activity_termux_settings);
+        } catch (android.content.res.Resources.NotFoundException e) {
+            // Resource IDs are build-local integers. A Settings task, shortcut, or rebroadcast
+            // Intent retained across an in-place APK upgrade can therefore carry a dangling ID.
+            setTitle(R.string.title_activity_termux_settings);
+        }
     }
 
     @Override
