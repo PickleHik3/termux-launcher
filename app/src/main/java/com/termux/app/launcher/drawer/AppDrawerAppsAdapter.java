@@ -1,14 +1,8 @@
 package com.termux.app.launcher.drawer;
 
-import android.graphics.Color;
-import android.graphics.drawable.Drawable;
-import android.text.TextUtils;
-import android.util.TypedValue;
-import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -48,7 +42,7 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
 
     private static final char[] NO_LETTERS = new char[0];
 
-    @Nullable private final SuggestionBarView mDock;
+    @Nullable private SuggestionBarView mDock;
     @NonNull private List<LauncherAppEntry> mEntries = new ArrayList<>();
     /**
      * The section index's per-position letters, cached parallel to {@link #mEntries}. The scrub's
@@ -66,6 +60,11 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
         // Positions are the ranked list's own order and change wholesale on every query, so stable
         // ids would claim a continuity that does not exist.
         setHasStableIds(false);
+    }
+
+    public void setDock(@Nullable SuggestionBarView dock) {
+        mDock = dock;
+        notifyDataSetChanged();
     }
 
     /**
@@ -146,57 +145,17 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
     @NonNull
     @Override
     public Cell onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        LinearLayout root = new LinearLayout(parent.getContext());
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.setClickable(true);
-        root.setClipChildren(false);
-        root.setClipToPadding(false);
+        AppDrawerAppCellView root = new AppDrawerAppCellView(parent.getContext());
         root.setLayoutParams(new RecyclerView.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        ImageView icon = new ImageView(parent.getContext());
-        icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        icon.setAdjustViewBounds(true);
-        icon.setPadding(0, 0, 0, 0);
-        icon.setDuplicateParentStateEnabled(true);
-        root.addView(icon, new LinearLayout.LayoutParams(0, 0));
-
-        TextView label = new TextView(parent.getContext());
-        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, LABEL_TEXT_SP);
-        label.setSingleLine(true);
-        label.setMaxLines(1);
-        label.setEllipsize(TextUtils.TruncateAt.END);
-        label.setGravity(Gravity.CENTER_HORIZONTAL);
-        label.setIncludeFontPadding(false);
-        root.addView(label, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        return new Cell(root, icon, label);
+        return new Cell(root);
     }
 
     @Override
     public void onBindViewHolder(@NonNull Cell holder, int position) {
         LauncherAppEntry entry = mEntries.get(position);
         AppDrawerGridMetrics metrics = mMetrics;
-        int iconPx = metrics != null ? Math.max(1, Math.round(metrics.iconPx)) : 0;
-        applyGeometry(holder, metrics, iconPx);
-
-        Drawable artwork = mDock != null && iconPx > 0 ? mDock.getRenderedIcon(entry, iconPx) : null;
-        holder.icon.setImageDrawable(artwork != null ? artwork : entry.icon);
-        if (mDock != null) mDock.applyIconColorFilter(holder.icon);
-        holder.icon.setContentDescription(entry.label);
-
-        holder.label.setText(entry.label);
-        holder.label.setTextColor(mDock != null ? mDock.getLauncherTextColor() : Color.WHITE);
-
-        holder.itemView.setContentDescription(entry.label);
-        holder.itemView.setOnClickListener(view -> {
-            // The icon, not the cell, is the launch source: the dock's ripple and launch transition
-            // read their artwork off an ImageView and fall back to a plain fade without one.
-            if (mDock != null) mDock.launchEntryFromDrawer(holder.icon, entry);
-        });
-        if (mDock != null) mDock.bindDrawerAppContextLongPress(holder.itemView, entry);
+        holder.cell.bind(mDock, entry, metrics, AppDrawerAppCellView.ALLOW_CLICKS);
 
         // Last, and not optional. A cell the auto-scroll binds mid-scrub has to arrive already
         // dimmed; a cell bound with no scrub in progress is set to exactly 1 and 1, which is what
@@ -206,33 +165,7 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
 
     private void applyScrubHighlight(@NonNull Cell holder, int position) {
         char letter = letterForPosition(position);
-        holder.itemView.setAlpha(
-            AppDrawerScrubHighlight.alphaFor(letter, mScrubLetter, mScrubStrength));
-        float scale = AppDrawerScrubHighlight.scaleFor(letter, mScrubLetter, mScrubStrength);
-        holder.itemView.setScaleX(scale);
-        holder.itemView.setScaleY(scale);
-    }
-
-    private void applyGeometry(@NonNull Cell holder, @Nullable AppDrawerGridMetrics metrics,
-                               int iconPx) {
-        if (metrics == null) return;
-        ViewGroup.LayoutParams cellParams = holder.itemView.getLayoutParams();
-        int rowHeight = Math.max(1, Math.round(metrics.rowHeightPx));
-        if (cellParams != null && cellParams.height != rowHeight) {
-            cellParams.height = rowHeight;
-            holder.itemView.setLayoutParams(cellParams);
-        }
-        ViewGroup.LayoutParams iconParams = holder.icon.getLayoutParams();
-        if (iconParams != null && (iconParams.width != iconPx || iconParams.height != iconPx)) {
-            iconParams.width = iconPx;
-            iconParams.height = iconPx;
-            holder.icon.setLayoutParams(iconParams);
-        }
-        // The gap between icon and label is the metrics' own, applied as label padding so the two
-        // views stay flush and the cell's height keeps matching what the metrics computed.
-        int gap = Math.round(AppDrawerGridMetrics.LABEL_GAP_DP
-            * holder.itemView.getResources().getDisplayMetrics().density);
-        holder.label.setPadding(0, gap, 0, 0);
+        holder.cell.setScrubAppearance(letter, mScrubLetter, mScrubStrength);
     }
 
     @Override
@@ -240,18 +173,7 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
         super.onViewRecycled(holder);
         // A recycled cell must not keep a rendered icon alive, and must not answer a long press for
         // the app it used to show — the dock's gesture state is keyed by the view instance.
-        holder.itemView.cancelLongPress();
-        holder.itemView.setOnClickListener(null);
-        holder.itemView.setOnLongClickListener(null);
-        holder.itemView.setOnTouchListener(null);
-        holder.itemView.setLongClickable(false);
-        holder.icon.setImageDrawable(null);
-        // A holder that left the screen part way through a scrub goes back to the pool at 0.28
-        // alpha, and the next position to reuse it would be a permanently dim cell — silent until
-        // the drawer is closed and reopened.
-        holder.itemView.setAlpha(1f);
-        holder.itemView.setScaleX(1f);
-        holder.itemView.setScaleY(1f);
+        holder.cell.unbind();
     }
 
     /** Icon over label. Held rather than looked up, so binding costs no {@code findViewById}. */
@@ -259,11 +181,13 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
 
         @NonNull public final ImageView icon;
         @NonNull public final TextView label;
+        @NonNull final AppDrawerAppCellView cell;
 
-        Cell(@NonNull View itemView, @NonNull ImageView icon, @NonNull TextView label) {
-            super(itemView);
-            this.icon = icon;
-            this.label = label;
+        Cell(@NonNull AppDrawerAppCellView cell) {
+            super(cell);
+            this.cell = cell;
+            this.icon = cell.icon;
+            this.label = cell.label;
         }
     }
 }

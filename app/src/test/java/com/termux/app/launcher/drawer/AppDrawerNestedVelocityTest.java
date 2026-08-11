@@ -53,6 +53,15 @@ public class AppDrawerNestedVelocityTest {
         assertFalse(armsWith(AppDrawerCloseArmingPolicy.closeVelocityForNestedFling(threshold)));
     }
 
+    @Test
+    public void pagerRelayNegatesDownwardFingerVelocityExactlyOnce() {
+        float fingerVelocity = 1800f;
+        float nestedVelocity = -fingerVelocity;
+        float controllerVelocity =
+            AppDrawerCloseArmingPolicy.closeVelocityForNestedFling(nestedVelocity);
+        assertEquals(fingerVelocity, controllerVelocity, 0f);
+    }
+
     private static boolean armsWith(float velocityPxPerSec) {
         AppDrawerCloseArmingPolicy policy = new AppDrawerCloseArmingPolicy();
         policy.begin(new AppDrawerCloseArmingPolicy.Down(true, true, true), 1000L);

@@ -452,6 +452,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherDockStyle(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
+            case "app_launcher_drawer_view_type":
+                mPreferences.setAppLauncherDrawerViewType(value);
+                scheduleTermuxActivityStylingSync(false);
+                break;
             case "app_launcher_default_buttons":
                 mPreferences.setAppLauncherDefaultButtons(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -501,6 +505,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getAppLauncherAzLockMethod();
             case "app_launcher_dock_style":
                 return mPreferences.getAppLauncherDockStyle();
+            case "app_launcher_drawer_view_type":
+                return mPreferences.getAppLauncherDrawerViewType();
             case "app_launcher_default_buttons":
                 return mPreferences.getAppLauncherDefaultButtons();
             case "app_launcher_icon_pack_package":

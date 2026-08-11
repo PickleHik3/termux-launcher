@@ -287,6 +287,34 @@ public class AppDrawerContentColumnTest {
     }
 
     @Test
+    public void aHorizontalRoundTripRestoresScrubCellsAndVerticalColumnGeometry() {
+        pressOnColumn(letterIndex('A'));
+        layout();
+        assertNotEquals(1f, dimmestChildAlpha(), 0.001f);
+
+        content.setHorizontalMetrics(AppDrawerHorizontalGridMetrics.resolve(WIDTH,
+            content.horizontalPagerUsableHeight(HEIGHT), density, LABEL_HEIGHT_PX, 4, 2));
+        content.setViewType(AppDrawerViewType.HORIZONTAL);
+        assertEquals(View.GONE, column.getVisibility());
+        assertFalse(content.isColumnActive());
+        for (int i = 0; i < grid.getChildCount(); i++) {
+            View child = grid.getChildAt(i);
+            assertEquals(1f, child.getAlpha(), 0f);
+            assertEquals(1f, child.getScaleX(), 0f);
+            assertEquals(1f, child.getScaleY(), 0f);
+        }
+
+        content.setViewType(AppDrawerViewType.VERTICAL);
+        content.setVerticalMetrics(AppDrawerGridMetrics.resolve(
+            WIDTH - content.getColumnWidthPx(), density, LABEL_HEIGHT_PX));
+        layout();
+        assertEquals(View.VISIBLE, column.getVisibility());
+        assertTrue(content.isColumnActive());
+        assertEquals(Math.round(content.getColumnWidthPx()),
+            ((android.widget.FrameLayout.LayoutParams) grid.getLayoutParams()).rightMargin);
+    }
+
+    @Test
     public void theLettersAreTheVisibleSetAndTwoAreNeededForAColumnAtAll() {
         assertEquals(26, column.letterCount());
 

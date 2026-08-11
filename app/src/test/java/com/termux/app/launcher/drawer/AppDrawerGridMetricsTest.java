@@ -88,4 +88,26 @@ public class AppDrawerGridMetricsTest {
             AppDrawerGridMetrics.resolve(1080f, DENSITY, -20f);
         assertEquals(192f, unmeasuredLabel.rowHeightPx, EPS);
     }
+
+    @Test
+    public void threeArgumentResolutionIsFieldForFieldTheAutoOverload() {
+        AppDrawerGridMetrics oldEntry = AppDrawerGridMetrics.resolve(1080f, DENSITY, LABEL_HEIGHT);
+        AppDrawerGridMetrics auto = AppDrawerGridMetrics.resolve(1080f, DENSITY, LABEL_HEIGHT, 0);
+        assertEquals(oldEntry.columns, auto.columns);
+        assertEquals(oldEntry.cellWidthPx, auto.cellWidthPx, 0f);
+        assertEquals(oldEntry.iconPx, auto.iconPx, 0f);
+        assertEquals(oldEntry.rowHeightPx, auto.rowHeightPx, 0f);
+    }
+
+    @Test
+    public void explicitVerticalColumnsOnlyChangeColumnsAndDerivedCellGeometry() {
+        AppDrawerGridMetrics four = AppDrawerGridMetrics.resolve(1080f, DENSITY, LABEL_HEIGHT, 4);
+        AppDrawerGridMetrics six = AppDrawerGridMetrics.resolve(1080f, DENSITY, LABEL_HEIGHT, 6);
+        assertEquals(4, four.columns);
+        assertEquals(6, six.columns);
+        assertEquals(270f, four.cellWidthPx, EPS);
+        assertEquals(180f, six.cellWidthPx, EPS);
+        assertEquals(144f, four.iconPx, EPS);
+        assertEquals(104.4f, six.iconPx, EPS);
+    }
 }

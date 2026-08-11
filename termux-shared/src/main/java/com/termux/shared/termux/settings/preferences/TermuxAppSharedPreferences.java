@@ -197,6 +197,71 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ENABLED, value, false);
     }
 
+    public String getAppLauncherDrawerViewType() {
+        return normalizeAppLauncherDrawerViewType(SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_VIEW_TYPE, true));
+    }
+
+    public void setAppLauncherDrawerViewType(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE,
+            normalizeAppLauncherDrawerViewType(value), false);
+    }
+
+    public int getAppLauncherDrawerGridColumnsVertical() {
+        return sanitizeDrawerColumns(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_VERTICAL,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_GRID_COLUMNS_VERTICAL));
+    }
+
+    public void setAppLauncherDrawerGridColumnsVertical(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_VERTICAL,
+            sanitizeDrawerColumns(value), false);
+    }
+
+    public int getAppLauncherDrawerGridColumnsHorizontal() {
+        return sanitizeDrawerColumns(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_HORIZONTAL,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_GRID_COLUMNS_HORIZONTAL));
+    }
+
+    public void setAppLauncherDrawerGridColumnsHorizontal(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_HORIZONTAL,
+            sanitizeDrawerColumns(value), false);
+    }
+
+    public int getAppLauncherDrawerGridRowsHorizontal() {
+        return sanitizeDrawerRows(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL));
+    }
+
+    public void setAppLauncherDrawerGridRowsHorizontal(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL,
+            sanitizeDrawerRows(value), false);
+    }
+
+    private static String normalizeAppLauncherDrawerViewType(String value) {
+        return TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL.equals(value)
+            ? TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL
+            : TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL;
+    }
+
+    private static int sanitizeDrawerColumns(int value) {
+        if (value <= 0) return 0;
+        return Math.max(TERMUX_APP.MIN_APP_LAUNCHER_DRAWER_GRID_COLUMNS,
+            Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DRAWER_GRID_COLUMNS, value));
+    }
+
+    private static int sanitizeDrawerRows(int value) {
+        if (value <= 0) return 0;
+        return Math.max(TERMUX_APP.MIN_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL,
+            Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL, value));
+    }
+
     public int getAppLauncherDrawerCornerRadius() {
         int value = SharedPreferenceUtils.getInt(mSharedPreferences,
             TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_CORNER_RADIUS,

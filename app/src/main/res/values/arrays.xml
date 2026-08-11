@@ -38,6 +38,14 @@
         <item>default</item>
         <item>rounded</item>
     </string-array>
+    <string-array name="app_launcher_drawer_view_type_entries">
+        <item>@string/settings_app_drawer_view_type_vertical</item>
+        <item>@string/settings_app_drawer_view_type_horizontal</item>
+    </string-array>
+    <string-array name="app_launcher_drawer_view_type_values">
+        <item>vertical</item>
+        <item>horizontal</item>
+    </string-array>
     <string-array name="termux_top_pane_clock_style_entries">
         <item>@string/termux_top_pane_clock_style_flip</item>
         <item>@string/termux_top_pane_clock_style_lcd</item>

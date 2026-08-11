@@ -199,7 +199,11 @@
     <string name="settings_app_drawer_header">App drawer</string>
     <string name="settings_app_drawer_enabled_title">Swipe down for app drawer</string>
     <string name="settings_app_drawer_enabled_summary">Swipe down on the pinned apps row to open the full-screen app drawer.</string>
+    <string name="settings_app_drawer_view_type_title">Drawer layout</string>
+    <string name="settings_app_drawer_view_type_vertical">Vertical</string>
+    <string name="settings_app_drawer_view_type_horizontal">Horizontal pages</string>
     <string name="app_drawer_search_hint">Search apps</string>
+    <string name="app_drawer_page_description">Page %1$d of %2$d</string>
     <string name="settings_launcher_search_header">Search</string>
     <string name="settings_app_search_prefix_title">App search prefix</string>
     <string name="settings_app_search_prefix_summary">Type this character in the terminal to start app search.</string>

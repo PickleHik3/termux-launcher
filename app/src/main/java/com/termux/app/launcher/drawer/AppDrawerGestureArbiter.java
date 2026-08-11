@@ -76,6 +76,12 @@ public final class AppDrawerGestureArbiter {
             this.drawerIdle = drawerIdle;
         }
 
+        /** Every veto clear, for an already-open plane or its full-width pager. */
+        @NonNull
+        public static Eligibility allClear() {
+            return new Eligibility(true, true, true, true, true, true, true, true);
+        }
+
         /** @return true when every veto is clear and the drawer may claim a vertical drag. */
         public boolean drawerEligible() {
             return drawerEnabled && searchEmpty && azInactive && portrait

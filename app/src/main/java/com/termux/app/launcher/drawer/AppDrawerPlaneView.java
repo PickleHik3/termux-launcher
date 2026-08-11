@@ -85,7 +85,7 @@ public final class AppDrawerPlaneView extends FrameLayout {
      * and dominance test, which is the part being reused.
      */
     private static final AppDrawerGestureArbiter.Eligibility PLANE_ELIGIBILITY =
-        new AppDrawerGestureArbiter.Eligibility(true, true, true, true, true, true, true, true);
+        AppDrawerGestureArbiter.Eligibility.allClear();
 
     /** Content fades in behind the leading edge of the sprout, as the palette's body does. */
     private static final float CONTENT_FADE_START = 0.22f;

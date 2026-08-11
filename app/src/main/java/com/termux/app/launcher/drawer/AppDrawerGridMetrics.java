@@ -65,11 +65,25 @@ public final class AppDrawerGridMetrics {
     @NonNull
     public static AppDrawerGridMetrics resolve(float contentWidthPx, float density,
                                                float labelHeightPx) {
+        return resolve(contentWidthPx, density, labelHeightPx, 0);
+    }
+
+    /**
+     * Resolves the grid with an optional explicit column count.
+     *
+     * @param requestedColumns {@code 0} keeps the shipped width-based AUTO calculation; any other
+     *     value is clamped to {@link #MIN_COLUMNS}..{@link #MAX_COLUMNS}
+     */
+    @NonNull
+    public static AppDrawerGridMetrics resolve(float contentWidthPx, float density,
+                                               float labelHeightPx, int requestedColumns) {
         // A zero density would take the column count to NaN and the row height with it; the drawer
         // is rebuilt on every configuration change, so a degenerate frame must degrade, not poison.
         float d = density > 0f ? density : 1f;
         float width = Math.max(0f, contentWidthPx);
-        int columns = resolveColumns(width / d);
+        int columns = requestedColumns == 0
+            ? resolveColumns(width / d)
+            : Math.max(MIN_COLUMNS, Math.min(MAX_COLUMNS, requestedColumns));
         float cellWidthPx = width / columns;
         float iconPx = Math.min(MAX_ICON_DP * d, cellWidthPx * ICON_CELL_FRACTION);
         float rowHeightPx = iconPx + (LABEL_GAP_DP * d)

@@ -131,6 +131,33 @@ public class AppDrawerPlaneCloseGateTest {
         assertEquals(1, callbacks.begins);
     }
 
+    @Test
+    public void horizontalPagerIncludingTheFormerColumnDefersWhileChromeStillClaims() {
+        AppDrawerContentView content = new AppDrawerContentView(
+            RuntimeEnvironment.getApplication());
+        content.setViewType(AppDrawerViewType.HORIZONTAL);
+        content.setHorizontalMetrics(AppDrawerHorizontalGridMetrics.resolve(WIDTH, HEIGHT,
+            1f, 11f, 4, 2));
+        content.setInteractive(true);
+        content.measure(
+            android.view.View.MeasureSpec.makeMeasureSpec(Math.round(WIDTH),
+                android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(Math.round(HEIGHT),
+                android.view.View.MeasureSpec.EXACTLY));
+        content.layout(0, 0, Math.round(WIDTH), Math.round(HEIGHT));
+        plane.setCloseDragGate(content);
+
+        float pagerY = content.getHorizontalPager().getTop() + 20f;
+        sendAt(MotionEvent.ACTION_DOWN, WIDTH - 1f, pagerY);
+        sendAt(MotionEvent.ACTION_MOVE, WIDTH - 1f, pagerY + (slop * 4f));
+        sendAt(MotionEvent.ACTION_CANCEL, WIDTH - 1f, pagerY);
+        assertEquals(0, callbacks.begins);
+
+        sendAt(MotionEvent.ACTION_DOWN, WIDTH * 0.5f, 1f);
+        sendAt(MotionEvent.ACTION_MOVE, WIDTH * 0.5f, 1f + (slop * 4f));
+        assertEquals(1, callbacks.begins);
+    }
+
     // ------------------------------------------------------------------ the content's own claim
 
     @Test
@@ -182,7 +209,11 @@ public class AppDrawerPlaneCloseGateTest {
     }
 
     private void send(int action, float y) {
-        MotionEvent event = MotionEvent.obtain(0L, 0L, action, WIDTH * 0.5f, y, 0);
+        sendAt(action, WIDTH * 0.5f, y);
+    }
+
+    private void sendAt(int action, float x, float y) {
+        MotionEvent event = MotionEvent.obtain(0L, 0L, action, x, y, 0);
         try {
             plane.onInterceptTouchEvent(event);
         } finally {

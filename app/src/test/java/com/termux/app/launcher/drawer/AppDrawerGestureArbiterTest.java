@@ -100,6 +100,31 @@ public class AppDrawerGestureArbiterTest {
     }
 
     @Test
+    public void pagerUsesTheExactAsymmetricThresholdsAndOneWayLatch() {
+        AppDrawerGestureArbiter vertical = new AppDrawerGestureArbiter();
+        vertical.begin(0f, 0f, Eligibility.allClear());
+        assertEquals(Claim.PENDING, vertical.evaluate(0f, SLOP * 1.14f, SLOP));
+        assertEquals(Claim.DRAWER_DRAG, vertical.evaluate(0f, SLOP * 1.15f, SLOP));
+        assertEquals(Claim.DRAWER_DRAG, vertical.evaluate(SLOP * 10f, SLOP * 1.15f, SLOP));
+
+        AppDrawerGestureArbiter horizontal = new AppDrawerGestureArbiter();
+        horizontal.begin(0f, 0f, Eligibility.allClear());
+        assertEquals(Claim.PAGE_SWIPE, horizontal.evaluate(SLOP, 0f, SLOP));
+        assertEquals(Claim.PAGE_SWIPE, horizontal.evaluate(SLOP, SLOP * 10f, SLOP));
+    }
+
+    @Test
+    public void pagerNeutralDiagonalAndUpwardMotionNeverClose() {
+        AppDrawerGestureArbiter diagonal = new AppDrawerGestureArbiter();
+        diagonal.begin(0f, 0f, Eligibility.allClear());
+        assertEquals(Claim.PENDING, diagonal.evaluate(SLOP * 4f, SLOP * 4f, SLOP));
+
+        AppDrawerGestureArbiter upward = new AppDrawerGestureArbiter();
+        upward.begin(0f, 0f, Eligibility.allClear());
+        assertEquals(Claim.PENDING, upward.evaluate(0f, -SLOP * 5f, SLOP));
+    }
+
+    @Test
     public void everyEligibilityVetoBlocksTheDrawerButNotThePage() {
         for (int i = 0; i < VETO_NAMES.length; i++) {
             Eligibility vetoed = eligibleExcept(i);

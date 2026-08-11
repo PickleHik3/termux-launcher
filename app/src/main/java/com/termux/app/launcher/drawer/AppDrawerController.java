@@ -441,6 +441,16 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (content != null) content.onAppCatalogChanged();
     }
 
+    /** Applies a launcher preference reload without rebuilding the activity or drawer tree. */
+    public void onPreferencesReloaded() {
+        if (mEngaged || mOpen) closeImmediate();
+        AppDrawerContentView content = mContent;
+        if (content == null) return;
+        TermuxAppSharedPreferences preferences = mActivity.getPreferences();
+        content.setViewType(AppDrawerViewType.fromPreference(preferences == null ? null
+            : preferences.getAppLauncherDrawerViewType()));
+    }
+
     /**
      * Back, while the drawer is open.
      *
@@ -763,13 +773,27 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         content.setDock(mActivity.getSuggestionBarView());
         plane.setContentInsets(openRect);
         content.setSurfaceRadiusPx(mOpenRadiusPx);
-        // The grid is sized for the plane minus the A-Z strip, never for the whole plane: the column
-        // is a sibling that the grid gives real width up to, not an overlay, so a cell can never sit
-        // under a letter. The same subtraction is what B-4/B-5's horizontal and category views will
-        // have to make.
-        float columnWidthPx = AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity);
-        content.setMetrics(AppDrawerGridMetrics.resolve(openRect.width() - columnWidthPx, mDensity,
-            resolveCellLabelHeightPx()));
+        TermuxAppSharedPreferences preferences = mActivity.getPreferences();
+        AppDrawerViewType viewType = AppDrawerViewType.fromPreference(preferences == null ? null
+            : preferences.getAppLauncherDrawerViewType());
+        content.setViewType(viewType);
+        float labelHeightPx = resolveCellLabelHeightPx();
+        if (viewType == AppDrawerViewType.VERTICAL) {
+            // The A-Z rope belongs only to the shipped vertical surface.
+            float columnWidthPx = AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity);
+            int requestedColumns = preferences == null ? 0
+                : preferences.getAppLauncherDrawerGridColumnsVertical();
+            content.setVerticalMetrics(AppDrawerGridMetrics.resolve(
+                openRect.width() - columnWidthPx, mDensity, labelHeightPx, requestedColumns));
+        } else {
+            int requestedColumns = preferences == null ? 0
+                : preferences.getAppLauncherDrawerGridColumnsHorizontal();
+            int requestedRows = preferences == null ? 0
+                : preferences.getAppLauncherDrawerGridRowsHorizontal();
+            content.setHorizontalMetrics(AppDrawerHorizontalGridMetrics.resolve(openRect.width(),
+                content.horizontalPagerUsableHeight(openRect.height()), mDensity, labelHeightPx,
+                requestedColumns, requestedRows));
+        }
         content.bind(LauncherAppDataProvider.getInstance(mActivity), mSearch);
         // Visible, but not yet interactive: interactivity is settle()'s to grant, and it grants it
         // from mOpen alone. The plane's own alpha-driven visibility flip on the content host keeps

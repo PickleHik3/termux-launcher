@@ -308,6 +308,33 @@ public class AppDrawerContentViewTest {
             ViewCompat.TYPE_TOUCH));
     }
 
+    @Test
+    public void returningFromHorizontalRestoresVerticalGeometryAndTwoPullPolicy() {
+        content.setHorizontalMetrics(AppDrawerHorizontalGridMetrics.resolve(WIDTH,
+            content.horizontalPagerUsableHeight(HEIGHT), density, LABEL_HEIGHT_PX, 4, 2));
+        content.setViewType(AppDrawerViewType.HORIZONTAL);
+        content.setViewType(AppDrawerViewType.VERTICAL);
+        content.setVerticalMetrics(AppDrawerGridMetrics.resolve(
+            WIDTH - content.getColumnWidthPx(), density, LABEL_HEIGHT_PX));
+        layout();
+
+        assertEquals(View.VISIBLE, grid.getVisibility());
+        assertEquals(View.VISIBLE, content.getRopeColumn().getVisibility());
+        assertEquals(Math.round(content.getColumnWidthPx()),
+            ((android.widget.FrameLayout.LayoutParams) grid.getLayoutParams()).rightMargin);
+
+        pressOnGrid();
+        assertEquals(0, preScroll(-Math.round(pull)));
+        assertEquals(-Math.round(pull), unconsumed(-Math.round(pull)));
+        assertEquals(0, callbacks.begins);
+        content.onStopNestedScroll(grid, ViewCompat.TYPE_TOUCH);
+        driveFrames();
+
+        pressOnGrid();
+        assertEquals(-30, preScroll(-30));
+        assertEquals(1, callbacks.begins);
+    }
+
     // ------------------------------------------------------------------ search
 
     @Test

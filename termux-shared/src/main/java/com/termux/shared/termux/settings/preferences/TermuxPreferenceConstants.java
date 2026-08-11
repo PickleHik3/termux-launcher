@@ -190,6 +190,27 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_APP_LAUNCHER_DRAWER_ENABLED = true;
 
+        public static final String KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE =
+            "app_launcher_drawer_view_type";
+        public static final String APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL = "vertical";
+        public static final String APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL = "horizontal";
+        public static final String DEFAULT_APP_LAUNCHER_DRAWER_VIEW_TYPE =
+            APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL;
+
+        public static final String KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_VERTICAL =
+            "app_launcher_drawer_grid_columns_vertical";
+        public static final String KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_HORIZONTAL =
+            "app_launcher_drawer_grid_columns_horizontal";
+        public static final String KEY_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL =
+            "app_launcher_drawer_grid_rows_horizontal";
+        public static final int DEFAULT_APP_LAUNCHER_DRAWER_GRID_COLUMNS_VERTICAL = 0;
+        public static final int DEFAULT_APP_LAUNCHER_DRAWER_GRID_COLUMNS_HORIZONTAL = 0;
+        public static final int DEFAULT_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL = 0;
+        public static final int MIN_APP_LAUNCHER_DRAWER_GRID_COLUMNS = 4;
+        public static final int MAX_APP_LAUNCHER_DRAWER_GRID_COLUMNS = 6;
+        public static final int MIN_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL = 2;
+        public static final int MAX_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL = 6;
+
         /** Custom drawer corner radius in dp, or -1 to follow the shared rounded-surface token. */
         public static final String KEY_APP_LAUNCHER_DRAWER_CORNER_RADIUS =
             "app_launcher_drawer_corner_radius";

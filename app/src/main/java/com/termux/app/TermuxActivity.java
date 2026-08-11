@@ -13079,6 +13079,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mSuggestionBarView != null) {
             mSuggestionBarView.resetTransientVisualState();
         }
+        if (mAppDrawerController != null)
+            mAppDrawerController.onPreferencesReloaded();
         applySuggestionBarInputChar();
         mAccessoryBackdropDirty = true;
         mDecorNavBarBackdropDirty = true;
