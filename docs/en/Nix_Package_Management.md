@@ -177,12 +177,15 @@ setup-nvim
 ```
 
 ```
-  1) NvChad     + wallpaper-matched colourscheme, searchable cheatsheet (<leader>ch)
-  2) LazyVim    batteries included, many plugins
-  3) kickstart  one readable init.lua you own and edit
-  4) stock      no distro; just clipboard + line wrap
-  5) quit
+  1) AstroNvim  + wallpaper-matched colourscheme, which-key hints
+  2) NvChad     + wallpaper-matched colourscheme, searchable cheatsheet (<leader>ch)
+  3) LazyVim    batteries included, many plugins
+  4) kickstart  one readable init.lua you own and edit
+  5) stock      no distro; just clipboard + line wrap
+  6) quit
 ```
+
+Enter takes AstroNvim.
 
 Whatever you choose also gets the launcher integrations: OSC 52 clipboard so
 yanks reach the Android clipboard, and always-on line wrap for a
@@ -192,8 +195,8 @@ copied once and yours to edit or delete afterwards.
 Non-interactive forms, for a scripted setup:
 
 ```sh
-setup-nvim --distro nvchad
-setup-nvim --distro nvchad --appname nvchad   # side by side; NVIM_APPNAME=nvchad nvim
+setup-nvim --distro astronvim
+setup-nvim --distro astronvim --appname astro   # side by side; NVIM_APPNAME=astro nvim
 setup-nvim --integrations-only                # add clipboard + wrap to a config you already have
 ```
 
@@ -204,13 +207,22 @@ only the integrations, or to replace it — and replacing needs you to type
 automatically on first activation; if that is what you have, it stays exactly
 as it is, and you can try something else side by side without losing it.
 
-On NvChad, the colourscheme is generated from the launcher's wallpaper
-palette (`~/.termux/material-colors.sh`) and retints itself when you change
-wallpaper. Syntax colours come from the terminal's ANSI set so code keeps its
-hue separation, UI chrome comes from the Material roles, and contrast is
-clamped so comments stay legible — including a fallback to a fixed palette
-when a greyscale wallpaper cannot supply usable hues. `:MaterialThemeInfo`
-reports what it decided.
+On AstroNvim and NvChad, the colourscheme is generated from the launcher's
+wallpaper palette (`~/.termux/material-colors.sh`) and retints itself when you
+change wallpaper. Syntax colours come from the terminal's ANSI set so code keeps
+its hue separation, UI chrome comes from the Material surface roles, and contrast
+is clamped so comments stay legible — including a fallback to a fixed palette
+when a greyscale wallpaper cannot supply usable hues. Diagnostics are pinned to
+Material's `ERROR` role and pushed apart in chroma when a red-tinted wallpaper
+would otherwise make a warning look like a keyword. `:MaterialThemeInfo` reports
+what it decided.
+
+`:MaterialTransparent` toggles a transparent background (off by default). A
+terminal cell has no alpha channel, so this is on/off in Neovim: it makes the
+buffer inherit the terminal's own background, and the *degree* then comes from
+the launcher's terminal opacity setting. Chrome — statusline, sidebar, floats,
+pickers — deliberately stays solid, because that is where small dense text over
+a wallpaper stops being readable.
 
 If your config predates the toolchain packages — `nvim` reporting a missing
 `tree-sitter (CLI)`, `fzf` or `lazygit` — add them to `home.nix` yourself
