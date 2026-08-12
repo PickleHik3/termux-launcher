@@ -52,8 +52,11 @@ public final class StatusBarResizeGeometry {
         int range = Math.max(1, fullSurfaceHeight - expandedSurfaceHeight);
         float fullExpansion = finiteClamp(
             (surfaceHeight - expandedSurfaceHeight) / (float) range);
-        int clampedSurface = Math.max(0, Math.min(Math.max(0, fullSurfaceHeight), surfaceHeight));
-        int top = Math.max(0, clampedSurface - Math.max(0, expandedBottomMargin)
+        // The spring-written surface height is the row's authoritative moving edge. The resolved
+        // FULL target can briefly be stale while parent/accessory relayout is being delivered; it
+        // is useful for normalized progress but must never clamp real child geometry.
+        int actualSurface = Math.max(0, surfaceHeight);
+        int top = Math.max(0, actualSurface - Math.max(0, expandedBottomMargin)
             - Math.max(0, expandedRowHeight));
         return new Row(Math.max(0, expandedRowHeight), top, 1f, fullExpansion, 1f);
     }

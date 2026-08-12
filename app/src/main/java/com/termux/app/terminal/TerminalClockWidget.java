@@ -74,6 +74,7 @@ public final class TerminalClockWidget extends View {
     private final Runnable mSyncTicker = this::syncTicker;
 
     private String mStyle = TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_STYLE;
+    private String mAlignment = TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_ALIGNMENT;
     private TopPaneClockForm mForm = TopPaneClockForm.FULL;
     private ClockSnapshot mSnapshot;
     private boolean mTickerRunning;
@@ -121,6 +122,27 @@ public final class TerminalClockWidget extends View {
     @NonNull
     String getStyle() {
         return mStyle;
+    }
+
+    /** Horizontal placement of the FULL-form time band and date text; compact forms ignore it. */
+    public void setAlignment(@Nullable String alignment) {
+        String normalized = isKnownAlignment(alignment)
+            ? alignment : TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_LEFT;
+        if (normalized.equals(mAlignment)) return;
+        mAlignment = normalized;
+        requestLayout();
+        invalidate();
+    }
+
+    private static boolean isKnownAlignment(@Nullable String alignment) {
+        return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_LEFT.equals(alignment)
+            || TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_CENTER.equals(alignment)
+            || TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_RIGHT.equals(alignment);
+    }
+
+    @NonNull
+    String getAlignment() {
+        return mAlignment;
     }
 
     /** Which grid form renders. Changing it re-measures, since the content width changes with it. */
@@ -253,41 +275,56 @@ public final class TerminalClockWidget extends View {
     }
 
     private float fullContentWidth() {
-        float timeRow;
+        float timeRow = fullTimeRowWidth();
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(mStyle)) {
+            // The tape folds its date onto the time row instead of using the date row below.
+            timeRow += dp(10f) + spacedTextWidth(mSnapshot.date, Typeface.MONOSPACE, 9f, .2f);
+        }
         float dateRow;
         switch (mStyle) {
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD:
-                timeRow = dp(94f) + dp(6f)
-                    + metaWidth(12f, 7f, 4f, Typeface.MONOSPACE, Typeface.MONOSPACE, .16f, true);
                 dateRow = spacedTextWidth(mSnapshot.date, Typeface.MONOSPACE, 9.5f, .2f);
                 break;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL:
-                timeRow = spacedTextWidth(timeText(), thinTypeface(), 38f, -.02f) + dp(6f)
-                    + metaWidth(15f, 7.5f, 6f, lightTypeface(), mediumTypeface(), .18f, false);
                 dateRow = spacedTextWidth(mSnapshot.date, Typeface.DEFAULT, 9.5f, .22f);
                 break;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED:
-                timeRow = dotTextWidth(timeText(), dp(3.4f)) + dp(7f) + ledMetaWidth(1.6f, 6.5f, 4f);
                 dateRow = dotTextWidth(mSnapshot.date, dp(1.3f));
                 break;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
-                timeRow = spacedTextWidth(timeText(), Typeface.MONOSPACE, 28f, -.02f) + dp(5f)
-                    + metaWidth(11f, 7f, 5f, Typeface.MONOSPACE, Typeface.MONOSPACE, .16f, false)
-                    + dp(10f) + spacedTextWidth(mSnapshot.date, Typeface.MONOSPACE, 9f, .2f);
                 dateRow = spacedTextWidth(trackLabelText(), Typeface.MONOSPACE, 6f, .2f);
                 break;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB:
-                timeRow = spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 39f, -.045f) + dp(6f)
-                    + stackedMetaWidth(11f, 7f, mediumTypeface(), Typeface.DEFAULT_BOLD, .16f);
                 dateRow = spacedTextWidth(mSnapshot.date, Typeface.DEFAULT_BOLD, 8.5f, .26f);
                 break;
             default:
-                timeRow = dp(94f) + dp(5f)
-                    + metaWidth(13f, 7.5f, 4f, Typeface.DEFAULT, mediumTypeface(), .16f, true);
                 dateRow = spacedTextWidth(mSnapshot.date, mediumTypeface(), 9.5f, .22f);
                 break;
         }
         return Math.max(timeRow, dateRow + dp(RULE_GAP_DP) + dp(24f));
+    }
+
+    /** Unscaled width the FULL time band (digits plus folded meta) actually paints. */
+    private float fullTimeRowWidth() {
+        switch (mStyle) {
+            case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD:
+                return dp(94f) + dp(6f)
+                    + metaWidth(12f, 7f, 4f, Typeface.MONOSPACE, Typeface.MONOSPACE, .16f, true);
+            case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL:
+                return spacedTextWidth(timeText(), thinTypeface(), 38f, -.02f) + dp(6f)
+                    + metaWidth(15f, 7.5f, 6f, lightTypeface(), mediumTypeface(), .18f, false);
+            case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED:
+                return dotTextWidth(timeText(), dp(3.4f)) + dp(7f) + ledMetaWidth(1.6f, 6.5f, 4f);
+            case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
+                return spacedTextWidth(timeText(), Typeface.MONOSPACE, 28f, -.02f) + dp(5f)
+                    + metaWidth(11f, 7f, 5f, Typeface.MONOSPACE, Typeface.MONOSPACE, .16f, false);
+            case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB:
+                return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 39f, -.045f) + dp(6f)
+                    + stackedMetaWidth(11f, 7f, mediumTypeface(), Typeface.DEFAULT_BOLD, .16f);
+            default:
+                return dp(94f) + dp(5f)
+                    + metaWidth(13f, 7.5f, 4f, Typeface.DEFAULT, mediumTypeface(), .16f, true);
+        }
     }
 
     private float compactContentWidth() {
@@ -384,27 +421,76 @@ public final class TerminalClockWidget extends View {
         float dateTop = dp(bandDp + dateGapDp);
         // The hairline and the tape track run to the pane gutter, so they need the unscaled edge.
         float right = getWidth() / Math.max(.01f, scale);
+        float bandDx = fullBandDx(right);
         switch (mStyle) {
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD:
-                drawFullLcd(canvas, now, dateTop, right);
+                drawFullLcd(canvas, now, dateTop, right, bandDx);
                 break;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL:
-                drawFullMinimal(canvas, now, dateTop, right);
+                drawFullMinimal(canvas, now, dateTop, right, bandDx);
                 break;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED:
-                drawFullLed(canvas, now, dateTop, right);
+                drawFullLed(canvas, now, dateTop, right, bandDx);
                 break;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
-                drawFullTape(canvas, now, dateTop, right);
+                drawFullTape(canvas, now, dateTop, right, bandDx);
                 break;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB:
-                drawFullSlab(canvas, now, dateTop, right);
+                drawFullSlab(canvas, now, dateTop, right, bandDx);
                 break;
             default:
-                drawFullFlip(canvas, now, dateTop, right);
+                drawFullFlip(canvas, now, dateTop, right, bandDx);
                 break;
         }
         canvas.restore();
+    }
+
+    /**
+     * Center Y, in view pixels, of the FULL-form date hairline — for the slot's edge-to-edge
+     * extensions. -1 when the current form/style draws no hairline (compact forms, tape).
+     */
+    public float fullRuleCenterYPx() {
+        if (mForm != TopPaneClockForm.FULL || getHeight() <= 0) return -1f;
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(mStyle)) {
+            return -1f;
+        }
+        float bandDp = fullBandHeightDp();
+        float dateGapDp = fullDateGapDp();
+        float columnDp = bandDp + dateGapDp + fullDateBlockDp();
+        float scale = Math.min(1f, getHeight() / dp(columnDp));
+        float translate = Math.max(0f, (getHeight() - dp(columnDp) * scale) / 2f);
+        return translate + dp(bandDp + dateGapDp + DATE_ROW_DP / 2f) * scale;
+    }
+
+    /** The FULL-form hairline's half thickness in view pixels, matching drawRule's 0.5dp. */
+    public float fullRuleHalfThicknessPx() {
+        float columnDp = fullBandHeightDp() + fullDateGapDp() + fullDateBlockDp();
+        float scale = getHeight() <= 0 ? 1f : Math.min(1f, getHeight() / dp(columnDp));
+        return dp(.5f) * scale;
+    }
+
+    /** The FULL-form hairline colour, for the slot's edge-to-edge extensions. */
+    public int fullRuleColor() { return mRuleColor; }
+
+    /** Horizontal offset placing a run of {@code width} against {@code right} per the alignment. */
+    private float alignmentDx(float right, float width) {
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_CENTER.equals(mAlignment))
+            return Math.max(0f, (right - width) / 2f);
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_RIGHT.equals(mAlignment))
+            return Math.max(0f, right - width);
+        return 0f;
+    }
+
+    /** Offset for the FULL time band; tape stops short of its right-pinned inline date label. */
+    private float fullBandDx(float right) {
+        float band = fullTimeRowWidth();
+        float dx = alignmentDx(right, band);
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(mStyle)) {
+            float limit = right - spacedTextWidth(mSnapshot.date, Typeface.MONOSPACE, 9f, .2f)
+                - dp(10f) - band;
+            dx = Math.min(dx, Math.max(0f, limit));
+        }
+        return dx;
     }
 
     private void drawCompact(Canvas canvas, long now) {
@@ -486,10 +572,13 @@ public final class TerminalClockWidget extends View {
 
     // ---- Split-flap -------------------------------------------------------
 
-    private void drawFullFlip(Canvas canvas, long now, float dateTop, float right) {
+    private void drawFullFlip(Canvas canvas, long now, float dateTop, float right, float bandDx) {
+        canvas.save();
+        canvas.translate(bandDx, 0f);
         float x = drawFlipCards(canvas, now, 22f, 34f, 27f, 2f);
         drawMetaRow(canvas, x + dp(5f), dp(29f), 13f, 7.5f, 4f, Typeface.DEFAULT, mediumTypeface(),
             .16f, true, now, FLIP_DURATION_MS);
+        canvas.restore();
         drawDateRow(canvas, dateTop, right, mSnapshot.date, mediumTypeface(), 9.5f, .22f);
     }
 
@@ -577,10 +666,13 @@ public final class TerminalClockWidget extends View {
 
     // ---- LCD --------------------------------------------------------------
 
-    private void drawFullLcd(Canvas canvas, long now, float dateTop, float right) {
+    private void drawFullLcd(Canvas canvas, long now, float dateTop, float right, float bandDx) {
+        canvas.save();
+        canvas.translate(bandDx, 0f);
         float x = drawLcdDigits(canvas, now, 19f, 34f, 3f, 3f, 6f, 17f, 4f, 1.75f);
         drawMetaRow(canvas, x + dp(6f), dp(30f), 12f, 7f, 4f, Typeface.MONOSPACE,
             Typeface.MONOSPACE, .16f, true, now, LCD_DURATION_MS);
+        canvas.restore();
         drawDateRow(canvas, dateTop, right, mSnapshot.date, Typeface.MONOSPACE, 9.5f, .2f);
     }
 
@@ -675,11 +767,14 @@ public final class TerminalClockWidget extends View {
 
     // ---- Minimal ----------------------------------------------------------
 
-    private void drawFullMinimal(Canvas canvas, long now, float dateTop, float right) {
+    private void drawFullMinimal(Canvas canvas, long now, float dateTop, float right, float bandDx) {
         float baseline = baseline(0f, dp(34f), thinTypeface(), 38f);
+        canvas.save();
+        canvas.translate(bandDx, 0f);
         float x = drawFadingTime(canvas, now, thinTypeface(), 38f, -.02f, baseline);
         drawMetaRow(canvas, x + dp(6f), baseline, 15f, 7.5f, 6f, lightTypeface(), mediumTypeface(),
             .18f, false, now, TEXT_DURATION_MS);
+        canvas.restore();
         drawDateRow(canvas, dateTop, right, mSnapshot.date, Typeface.DEFAULT, 9.5f, .22f);
     }
 
@@ -692,11 +787,14 @@ public final class TerminalClockWidget extends View {
 
     // ---- Slab -------------------------------------------------------------
 
-    private void drawFullSlab(Canvas canvas, long now, float dateTop, float right) {
+    private void drawFullSlab(Canvas canvas, long now, float dateTop, float right, float bandDx) {
         float baseline = baseline(0f, dp(34f), Typeface.DEFAULT_BOLD, 39f);
+        canvas.save();
+        canvas.translate(bandDx, 0f);
         float x = drawFadingTime(canvas, now, Typeface.DEFAULT_BOLD, 39f, -.045f, baseline);
         drawStackedMetaColumn(canvas, x + dp(6f), baseline, 11f, 7f, mediumTypeface(),
             Typeface.DEFAULT_BOLD, .16f, now, TEXT_DURATION_MS);
+        canvas.restore();
         drawDateRow(canvas, dateTop, right, mSnapshot.date, Typeface.DEFAULT_BOLD, 8.5f, .26f);
     }
 
@@ -709,13 +807,16 @@ public final class TerminalClockWidget extends View {
 
     // ---- Tape -------------------------------------------------------------
 
-    private void drawFullTape(Canvas canvas, long now, float trackTop, float right) {
+    private void drawFullTape(Canvas canvas, long now, float trackTop, float right, float bandDx) {
         float baseline = baseline(0f, dp(22f), Typeface.MONOSPACE, 28f);
+        canvas.save();
+        canvas.translate(bandDx, 0f);
         float x = drawFadingTime(canvas, now, Typeface.MONOSPACE, 28f, -.02f, baseline);
         drawMetaRow(canvas, x + dp(5f), baseline, 11f, 7f, 5f, Typeface.MONOSPACE,
             Typeface.MONOSPACE, .16f, false, now, TEXT_DURATION_MS);
+        canvas.restore();
         float dateWidth = spacedTextWidth(mSnapshot.date, Typeface.MONOSPACE, 9f, .2f);
-        drawLabel(canvas, mSnapshot.date, Math.max(x, right - dateWidth), baseline, 9f,
+        drawLabel(canvas, mSnapshot.date, Math.max(x + bandDx, right - dateWidth), baseline, 9f,
             Typeface.MONOSPACE, .2f, mDateInk);
         drawMinuteTrack(canvas, trackTop, right, 1.5f);
         drawLabel(canvas, trackLabelText(), 0f,
@@ -747,15 +848,21 @@ public final class TerminalClockWidget extends View {
 
     // ---- LED matrix -------------------------------------------------------
 
-    private void drawFullLed(Canvas canvas, long now, float dateTop, float right) {
+    private void drawFullLed(Canvas canvas, long now, float dateTop, float right, float bandDx) {
+        canvas.save();
+        canvas.translate(bandDx, 0f);
         float x = drawLedTime(canvas, now, 3.4f);
         drawLedMeta(canvas, now, x + dp(7f), 26f, 1.6f, 6.5f, 4f);
+        canvas.restore();
         float dateCell = dp(1.3f);
         int dateColor = alpha(mOnSurface, .6f);
-        drawLedText(canvas, mSnapshot.date, 0f, dateTop + (dp(DATE_ROW_DP) - dateCell * 7f) / 2f,
-            dateCell, dateColor);
-        drawRule(canvas, dotTextWidth(mSnapshot.date, dateCell) + dp(RULE_GAP_DP),
-            dateTop + dp(DATE_ROW_DP / 2f), right, mRuleColor);
+        float dateWidth = dotTextWidth(mSnapshot.date, dateCell);
+        float textX = alignmentDx(right, dateWidth);
+        drawLedText(canvas, mSnapshot.date, textX,
+            dateTop + (dp(DATE_ROW_DP) - dateCell * 7f) / 2f, dateCell, dateColor);
+        float ruleY = dateTop + dp(DATE_ROW_DP / 2f);
+        drawRule(canvas, 0f, ruleY, textX - dp(RULE_GAP_DP), mRuleColor);
+        drawRule(canvas, textX + dateWidth + dp(RULE_GAP_DP), ruleY, right, mRuleColor);
     }
 
     private void drawCompactLed(Canvas canvas, long now) {
@@ -1009,13 +1116,20 @@ public final class TerminalClockWidget extends View {
         return x;
     }
 
-    /** Date text plus the hairline that carries it out to the right gutter. */
+    /**
+     * Date text plus the hairline(s) carrying it out to the pane gutter: trailing when the text
+     * leads, leading when it trails, both when centred. {@link #drawRule} drops any side whose run
+     * would be non-positive, so left keeps only the trailing rule and right only the leading one.
+     */
     private void drawDateRow(Canvas canvas, float top, float right, String text, Typeface typeface,
                              float textDp, float letterSpacing) {
-        drawLabel(canvas, text, 0f, baseline(top, dp(DATE_ROW_DP), typeface, textDp), textDp,
+        float textWidth = spacedTextWidth(text, typeface, textDp, letterSpacing);
+        float textX = alignmentDx(right, textWidth);
+        drawLabel(canvas, text, textX, baseline(top, dp(DATE_ROW_DP), typeface, textDp), textDp,
             typeface, letterSpacing, mDateInk);
-        drawRule(canvas, spacedTextWidth(text, typeface, textDp, letterSpacing) + dp(RULE_GAP_DP),
-            top + dp(DATE_ROW_DP / 2f), right, mRuleColor);
+        float ruleY = top + dp(DATE_ROW_DP / 2f);
+        drawRule(canvas, 0f, ruleY, textX - dp(RULE_GAP_DP), mRuleColor);
+        drawRule(canvas, textX + textWidth + dp(RULE_GAP_DP), ruleY, right, mRuleColor);
     }
 
     private void drawLabel(Canvas canvas, String text, float x, float baseline, float textDp,

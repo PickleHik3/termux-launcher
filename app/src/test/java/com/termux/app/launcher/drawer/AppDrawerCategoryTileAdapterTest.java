@@ -74,8 +74,11 @@ public class AppDrawerCategoryTileAdapterTest {
         assertTrue(overview.getChildCount() > 0);
         Frame bounds = view.getTileAdapter().selectedTileBounds(overview, "social", view);
         assertNotNull(bounds);
-        assertEquals(view.getTileAdapter().getMetrics().tileSidePx, bounds.width(), 1f);
-        assertEquals(view.getTileAdapter().getMetrics().tileSidePx, bounds.height(), 1f);
+        AppDrawerCategoryGridMetrics metrics = view.getTileAdapter().getMetrics();
+        assertEquals(metrics.tileSidePx, bounds.width(), 1f);
+        // The tile is a folder card now: label band + icon square.
+        assertEquals(metrics.tileSidePx + metrics.headingGapPx + metrics.headingHeightPx,
+            bounds.height(), 1f);
         assertTrue(bounds.left >= 0 && bounds.right <= view.getWidth());
     }
 

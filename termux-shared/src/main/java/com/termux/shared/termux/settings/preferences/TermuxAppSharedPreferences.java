@@ -1044,6 +1044,27 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP;
     }
 
+    public String getTopPaneClockAlignment() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_TOP_PANE_CLOCK_ALIGNMENT,
+            TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_ALIGNMENT, true);
+        return normalizeTopPaneClockAlignment(value);
+    }
+
+    public void setTopPaneClockAlignment(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_TOP_PANE_CLOCK_ALIGNMENT,
+            normalizeTopPaneClockAlignment(value), false);
+    }
+
+    private static String normalizeTopPaneClockAlignment(String value) {
+        if (TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_CENTER.equals(value)
+            || TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_RIGHT.equals(value)) {
+            return value;
+        }
+        return TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_LEFT;
+    }
+
     public boolean isTopPaneClockAmPmEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_TOP_PANE_CLOCK_AM_PM, TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_AM_PM);

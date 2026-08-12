@@ -45,4 +45,13 @@ public class StatusBarResizeGeometryTest {
             0, 0, 0, 0, 0);
         assertTrue(Float.isFinite(invalid.fullExpansion));
     }
+
+    @Test
+    public void fullRowUsesActualSurfaceEdgeWhenResolvedTargetIsStale() {
+        StatusBarResizeGeometry.Row row = StatusBarResizeGeometry.calculateFull(
+            600, 102, 300, 26, 3);
+        assertEquals(571, row.top);
+        assertEquals(600 - 3, row.top + row.height);
+        assertEquals(1f, row.fullExpansion, 0f);
+    }
 }

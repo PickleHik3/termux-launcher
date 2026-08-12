@@ -4,7 +4,6 @@ import android.graphics.Color;
 import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
-import android.widget.GridLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
 
@@ -48,14 +47,16 @@ public final class AppDrawerFolderCellView extends AppDrawerAppCellView {
         unbind();
         iconPx = Math.max(1, iconPx);
         applyGeometry(rowHeightPx, iconPx);
+        // Explicit 2x2 geometry: two 42% minis plus a 6% gap leave 5% of quiet border on every
+        // side, so the mosaic reads centered at any icon size instead of riding GridLayout's
+        // wrap-content whims.
         int miniPx = Math.max(1, Math.round(iconPx * 0.42f));
+        int gapPx = Math.max(1, Math.round(iconPx * 0.06f));
+        int padPx = Math.max(0, (iconPx - 2 * miniPx - gapPx) / 2);
         ViewGroup.LayoutParams mosaicParams = mosaic.getLayoutParams();
         mosaicParams.width = iconPx;
         mosaicParams.height = iconPx;
         mosaic.setLayoutParams(mosaicParams);
-        GridLayout grid = new GridLayout(getContext());
-        grid.setColumnCount(2);
-        grid.setRowCount(2);
         int shown = 0;
         for (PinnedAppItem member : folder.apps) {
             if (shown >= 4 || dock == null) break;
@@ -64,16 +65,14 @@ public final class AppDrawerFolderCellView extends AppDrawerAppCellView {
             ImageView mini = new ImageView(getContext());
             mini.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
             mini.setImageDrawable(dock.getRenderedIcon(entry, miniPx));
-            GridLayout.LayoutParams params = new GridLayout.LayoutParams(
-                GridLayout.spec(shown / 2), GridLayout.spec(shown % 2));
-            params.width = miniPx;
-            params.height = miniPx;
-            mini.setLayoutParams(params);
-            grid.addView(mini);
+            dock.applyIconColorFilter(mini);
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(miniPx, miniPx,
+                Gravity.TOP | Gravity.START);
+            params.leftMargin = padPx + (shown % 2) * (miniPx + gapPx);
+            params.topMargin = padPx + (shown / 2) * (miniPx + gapPx);
+            mosaic.addView(mini, params);
             shown++;
         }
-        mosaic.addView(grid, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
         if (folder.apps.size() > 4) {
             TextView count = new TextView(getContext());
             count.setText("+" + (folder.apps.size() - 3));
@@ -81,8 +80,11 @@ public final class AppDrawerFolderCellView extends AppDrawerAppCellView {
             count.setTextSize(8f);
             count.setGravity(Gravity.CENTER);
             count.setBackgroundColor(0xB8000000);
-            mosaic.addView(count, new FrameLayout.LayoutParams(miniPx, miniPx,
-                Gravity.END | Gravity.BOTTOM));
+            FrameLayout.LayoutParams countParams = new FrameLayout.LayoutParams(miniPx, miniPx,
+                Gravity.TOP | Gravity.START);
+            countParams.leftMargin = padPx + miniPx + gapPx;
+            countParams.topMargin = padPx + miniPx + gapPx;
+            mosaic.addView(count, countParams);
         }
         label.setText(folder.title);
         label.setTextColor(dock == null ? Color.WHITE : dock.getLauncherTextColor());

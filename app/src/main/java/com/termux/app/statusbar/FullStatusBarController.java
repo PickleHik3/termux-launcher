@@ -8,7 +8,14 @@ import com.termux.app.Spring;
 
 /** One-spring controller for real FULL pane geometry and settle-only terminal resize delivery. */
 public final class FullStatusBarController {
-    public enum Motion { IDLE, OPENING, FULL, CLOSING }
+    public enum Motion { IDLE, OPENING, FULL, CLOSING, DRAGGING }
+
+    /** Fraction of the full travel past which a released drag commits to FULL. */
+    public static final float DRAG_COMMIT_PROGRESS = 0.35f;
+    /** Release velocity, as full-travels per second, that commits regardless of progress. */
+    public static final float DRAG_COMMIT_VELOCITY_TRAVELS = 2.0f;
+    /** Upward release velocity, as full-travels per second, that dismisses regardless. */
+    public static final float DRAG_DISMISS_VELOCITY_TRAVELS = 1.0f;
 
     public interface Host {
         int currentHeight();
@@ -24,6 +31,7 @@ public final class FullStatusBarController {
         void finishTerminalResizeAfterLayout();
         void applyNormalState(@NonNull TopStatusBarState state);
         void onEngagementChanged(boolean engaged, @NonNull TopStatusBarState normalTarget);
+        default void onFullSettled(boolean settled) { }
     }
 
     public interface FrameScheduler {
@@ -41,6 +49,7 @@ public final class FullStatusBarController {
     @NonNull private TopStatusBarState prior = TopStatusBarState.EXPANDED;
     private int segmentStartHeight;
     private int segmentTargetHeight;
+    private int dragStartHeight;
     private long lastFrameNanos;
     private boolean framePosted;
     private boolean resizeOpen;
@@ -74,6 +83,78 @@ public final class FullStatusBarController {
         return true;
     }
 
+    /**
+     * A pull-down owns the pane 1:1: the bar's height tracks the finger until release, when
+     * {@link #dragEnd} springs it to FULL or back to the captured prior form.
+     */
+    public boolean dragBegin(@NonNull TopStatusBarState capturedPrior) {
+        if (isEngaged() || capturedPrior == TopStatusBarState.FULL) return false;
+        prior = capturedPrior;
+        dragStartHeight = Math.max(0, host.currentHeight());
+        motion = Motion.DRAGGING;
+        host.onEngagementChanged(true, prior);
+        host.cancelNormalAnimatorKeepingCurrent();
+        beginResizeIfNeeded();
+        cancelFrame();
+        return true;
+    }
+
+    public void dragUpdate(float dragPx) {
+        if (motion != Motion.DRAGGING) return;
+        int full = resolveFullHeight();
+        int normal = host.normalHeight(prior);
+        int floor = Math.min(normal, dragStartHeight);
+        int height = Math.max(floor, Math.min(full,
+            Math.round(dragStartHeight + (Float.isFinite(dragPx) ? dragPx : 0f))));
+        FullStatusBarGeometry.Frame geometry = FullStatusBarGeometry.calculate(normal,
+            host.parentMeasuredHeight(), host.parentPaddingTop(), host.parentPaddingBottom(),
+            host.hostTopMargin(), FullStatusBarGeometry.progressForHeight(height, normal, full));
+        host.applyFrame(height < normal ? height : geometry.height, geometry.progress);
+    }
+
+    public void dragEnd(float velocityPxPerSec) {
+        if (motion != Motion.DRAGGING) return;
+        int full = resolveFullHeight();
+        int normal = host.normalHeight(prior);
+        float travel = Math.max(1f, full - normal);
+        float progress = FullStatusBarGeometry.progressForHeight(host.currentHeight(),
+            normal, full);
+        float velocity = Float.isFinite(velocityPxPerSec) ? velocityPxPerSec : 0f;
+        boolean flingOpen = velocity > travel * DRAG_COMMIT_VELOCITY_TRAVELS;
+        boolean flingClose = velocity < -travel * DRAG_DISMISS_VELOCITY_TRAVELS;
+        boolean commit = !flingClose && (flingOpen || progress >= DRAG_COMMIT_PROGRESS);
+        segmentStartHeight = Math.max(0, host.currentHeight());
+        if (commit) {
+            segmentTargetHeight = full;
+            motion = Motion.OPENING;
+        } else {
+            segmentTargetHeight = normal;
+            motion = Motion.CLOSING;
+            host.onFullSettled(false);
+        }
+        startSegment();
+    }
+
+    /** With FULL settled, a pull-up owns the close 1:1; {@link #dragEnd} decides at release. */
+    public boolean dragBeginClose() {
+        if (motion != Motion.FULL) return false;
+        dragStartHeight = Math.max(0, host.currentHeight());
+        motion = Motion.DRAGGING;
+        host.onFullSettled(false);
+        beginResizeIfNeeded();
+        cancelFrame();
+        return true;
+    }
+
+    public void dragCancel() {
+        if (motion != Motion.DRAGGING) return;
+        segmentStartHeight = Math.max(0, host.currentHeight());
+        segmentTargetHeight = host.normalHeight(prior);
+        motion = Motion.CLOSING;
+        host.onFullSettled(false);
+        startSegment();
+    }
+
     /** FULL is the first Back consumer, including repeated Back while closing. */
     public boolean onBackPressed() {
         if (!isEngaged()) return false;
@@ -81,6 +162,7 @@ public final class FullStatusBarController {
         segmentStartHeight = Math.max(0, host.currentHeight());
         segmentTargetHeight = host.normalHeight(prior);
         motion = Motion.CLOSING;
+        host.onFullSettled(false);
         beginResizeIfNeeded();
         startSegment();
         return true;
@@ -109,16 +191,20 @@ public final class FullStatusBarController {
         host.onEngagementChanged(true, prior);
         beginResizeIfNeeded();
         host.applyFrame(resolveFullHeight(), 1f);
+        host.onFullSettled(true);
         finishResizeIfNeeded();
     }
 
     public void closeImmediateToPrior() {
         if (!isEngaged()) return;
+        host.onFullSettled(false);
         cancelFrame();
         beginResizeIfNeeded();
         host.applyFrame(host.normalHeight(prior), 0f);
-        host.applyNormalState(prior);
+        // Disengage before the normal-state restore: the normal-state writers it re-runs are
+        // gated off while FULL is engaged, so they must observe IDLE to re-anchor the status row.
         motion = Motion.IDLE;
+        host.applyNormalState(prior);
         finishResizeIfNeeded();
         host.onEngagementChanged(false, prior);
     }
@@ -164,11 +250,13 @@ public final class FullStatusBarController {
         if (motion == Motion.OPENING) {
             host.applyFrame(resolveFullHeight(), 1f);
             motion = Motion.FULL;
+            host.onFullSettled(true);
             finishResizeIfNeeded();
         } else if (motion == Motion.CLOSING) {
             host.applyFrame(host.normalHeight(prior), 0f);
-            host.applyNormalState(prior);
+            // Disengage before the normal-state restore (see closeImmediateToPrior()).
             motion = Motion.IDLE;
+            host.applyNormalState(prior);
             finishResizeIfNeeded();
             host.onEngagementChanged(false, prior);
         }

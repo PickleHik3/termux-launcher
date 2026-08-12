@@ -103,7 +103,7 @@ public final class AppDrawerCategoryTileAdapter
             float left = tileLocation[0] - parentLocation[0] + tileHolder.tile.tileLeft();
             float top = tileLocation[1] - parentLocation[1] + tileHolder.tile.tileTop();
             return new Frame(left, top, left + tileHolder.tile.tileSide(),
-                top + tileHolder.tile.tileSide());
+                top + tileHolder.tile.tileHeight());
         }
         return null;
     }

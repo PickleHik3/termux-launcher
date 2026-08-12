@@ -51,10 +51,13 @@ public final class WidgetProviderReconcilePolicy {
         if (nowMillis - pending.startedAtMillis >= PENDING_MAX_AGE_MS) {
             return Decision.EXPIRE_PENDING_AND_DELETE_ID;
         }
+        if (!boundAndMatching && (pending.stage == WidgetAddTransaction.Stage.ALLOCATED
+            || pending.stage == WidgetAddTransaction.Stage.WAITING_FOR_BIND_CONSENT)) {
+            return Decision.EXPIRE_PENDING_AND_DELETE_ID;
+        }
         if (boundAndMatching && (pending.stage == WidgetAddTransaction.Stage.ALLOCATED
             || pending.stage == WidgetAddTransaction.Stage.WAITING_FOR_BIND_CONSENT
-            || pending.stage == WidgetAddTransaction.Stage.BOUND
-            || pending.stage == WidgetAddTransaction.Stage.WAITING_FOR_CONFIGURATION)) {
+            || pending.stage == WidgetAddTransaction.Stage.BOUND)) {
             return Decision.RESUME_CONFIGURATION;
         }
         return Decision.RETAIN_PENDING;

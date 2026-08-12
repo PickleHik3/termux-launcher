@@ -110,6 +110,17 @@
                         android:layout_width="match_parent"
                         android:layout_height="match_parent" />
 
+                    <!-- FULL-pane ownership rule: StatusBarSwipeLayout measures the body from the
+                         laid-out bottom of the top slot to the laid-out top of the status row.
+                         These margins deliberately do not approximate either chrome band. The
+                         hard clips remain a redundant containment boundary for provider content. -->
+                    <com.termux.app.launcher.widget.WidgetPaneView
+                        android:id="@id/widget_pane"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:clipChildren="true"
+                        android:clipToPadding="true" />
+
                     <!-- Stable modular slot: clocks render only here. A later widget editor can
                          resize/reorder this host without coupling widget code to the pane. The slot
                          owns the clock / media / pinned-notification contention; the pane height
@@ -170,8 +181,8 @@
                         android:gravity="center_vertical"
                         android:elevation="6dp"
                         android:outlineProvider="none"
-                        android:clipChildren="false"
-                        android:clipToPadding="false">
+                        android:clipChildren="true"
+                        android:clipToPadding="true">
 
                         <com.termux.app.statusbar.SessionsIndicatorView
                             android:id="@+id/terminal_sessions_indicator"

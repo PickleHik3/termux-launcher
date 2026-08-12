@@ -135,7 +135,9 @@ public final class SafeLauncherAppWidgetHostView extends AppWidgetHostView {
 
     private void probe(String phase) {
         BoundaryProbe probe = boundaryProbe;
-        if (probe != null && !showingLocalError) probe.before(phase);
+        // Frames stay on the static local tile after a failure. A new RemoteViews delivery is the
+        // one boundary allowed to try again and recover it.
+        if (probe != null && (!showingLocalError || "update".equals(phase))) probe.before(phase);
     }
 
     private void postReplaceWithError(String phase) {

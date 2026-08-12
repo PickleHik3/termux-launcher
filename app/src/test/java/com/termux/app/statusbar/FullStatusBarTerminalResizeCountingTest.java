@@ -80,6 +80,22 @@ public class FullStatusBarTerminalResizeCountingTest {
             accessoryBaseline, ReflectionHelpers.<Long>getField(fixture.activity,
                 "mLastAccessoryGeometryApplyUptimeMs").longValue());
 
+        // A-3 child operations while FULL is settled must not enter either resize path.
+        fixture.viewUpdates.set(0);
+        fixture.firstSessionUpdates.set(0);
+        fixture.secondSessionUpdates.set(0);
+        com.termux.app.launcher.widget.WidgetPaneView widgetPane =
+            fixture.activity.findViewById(R.id.widget_pane);
+        widgetPane.setFullProgress(1f);
+        widgetPane.picker().setReducedMotion(true);
+        widgetPane.picker().open();
+        widgetPane.picker().close();
+        fixture.layout(); fixture.idle();
+        assertEquals(0, fixture.viewUpdates.get());
+        assertEquals(0, fixture.firstSessionUpdates.get() + fixture.secondSessionUpdates.get());
+        assertEquals(accessoryBaseline, ReflectionHelpers.<Long>getField(fixture.activity,
+            "mLastAccessoryGeometryApplyUptimeMs").longValue());
+
         fixture.viewUpdates.set(0);
         fixture.firstSessionUpdates.set(0);
         fixture.secondSessionUpdates.set(0);

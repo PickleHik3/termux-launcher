@@ -20,6 +20,7 @@ import androidx.preference.Preference;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
+import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
 import com.termux.app.statusbar.EssentialNotificationRule;
@@ -39,6 +40,19 @@ public final class TerminalStatusPreferencesFragment extends MaterialPreferenceF
         manager.setPreferenceDataStore(new TerminalStatusDataStore(context));
         setPreferencesFromResource(R.xml.terminal_status_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
+        SegmentedPillPreference alignment = findPreference("top_pane_clock_alignment");
+        if (alignment != null) alignment.setSegments(
+            new String[]{
+                com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                    .TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_LEFT,
+                com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                    .TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_CENTER,
+                com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                    .TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_RIGHT},
+            new int[]{
+                R.string.settings_clock_alignment_left,
+                R.string.settings_clock_alignment_center,
+                R.string.settings_clock_alignment_right});
         Preference customize = findPreference("customize_status_surface");
         if (customize != null) customize.setOnPreferenceClickListener(preference -> {
             openSurfaceEditor(context, "status");

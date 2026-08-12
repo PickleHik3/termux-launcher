@@ -29,6 +29,7 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
         void onDragStateChanged(boolean dragging);
         void onDragLocation(@NonNull View target, float localX, float localY);
         void onDragTargetExited();
+        void onAcceptedDrop();
         boolean canDropOnCurrentTarget();
         @Nullable AppDrawerItem resolveCurrentDropTarget(@NonNull String stableId);
         @NonNull AppDrawerViewType frozenSourceViewType();
@@ -126,17 +127,8 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
                 if (!host.canDropOnCurrentTarget()) return false;
                 AppDrawerItem resolved = host.resolveCurrentDropTarget(target.stableId);
                 if (resolved == null || active.sourceStableId.equals(resolved.stableId)) return false;
-                LauncherConfigRepository.MutationResult result = resolved.kind == AppDrawerItem.Kind.FOLDER
-                    ? dock.addDrawerAppToFolder(active.revision, resolved.stableId,
-                        active.sourceStableId)
-                    : dock.createDrawerFolder(active.revision, resolved.app,
-                        active.sourceStableId);
-                active.accepted = result == LauncherConfigRepository.MutationResult.APPLIED;
-                if (result == LauncherConfigRepository.MutationResult.CAPACITY) {
-                    overlay.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
-                    Toast.makeText(overlay.getContext(), com.termux.R.string.folder_capacity_reached,
-                        Toast.LENGTH_SHORT).show();
-                }
+                active.accepted = applyDropMutation(active.sourceStableId, active.revision,
+                    resolved);
                 return active.accepted;
             case DragEvent.ACTION_DRAG_EXITED:
                 overlay.setFolderHover(false);
@@ -147,6 +139,26 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
                 return true;
             default: return true;
         }
+    }
+
+    /** The exact repository-and-visible-host seam used by the platform ACTION_DROP path. */
+    boolean applyDropMutation(@NonNull String sourceStableId, long revision,
+                              @NonNull AppDrawerItem target) {
+        LauncherConfigRepository.MutationResult result = target.kind == AppDrawerItem.Kind.FOLDER
+            ? dock.addDrawerAppToFolder(revision, target.stableId, sourceStableId)
+            : dock.createDrawerFolder(revision, target.app, sourceStableId);
+        boolean accepted = result == LauncherConfigRepository.MutationResult.APPLIED;
+        if (accepted) {
+            // Repository listeners update persistence consumers, but the open pickup surface also
+            // needs an explicit end-of-drag recompose. Otherwise the mutation remains invisible
+            // until the drawer is closed and rebound.
+            host.onAcceptedDrop();
+        } else if (result == LauncherConfigRepository.MutationResult.CAPACITY) {
+            overlay.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+            Toast.makeText(overlay.getContext(), com.termux.R.string.folder_capacity_reached,
+                Toast.LENGTH_SHORT).show();
+        }
+        return accepted;
     }
 
     public boolean isDragging() { return active != null; }

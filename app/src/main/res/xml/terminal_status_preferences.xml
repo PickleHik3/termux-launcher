@@ -39,6 +39,11 @@
             app:entryValues="@array/termux_top_pane_clock_style_values"
             app:defaultValue="flip"
             app:useSimpleSummaryProvider="true" />
+        <com.termux.app.fragments.settings.SegmentedPillPreference
+            app:key="top_pane_clock_alignment"
+            app:title="@string/settings_clock_alignment_title"
+            app:summary="@string/settings_clock_alignment_summary"
+            app:defaultValue="left" />
         <SwitchPreferenceCompat
             app:key="top_pane_clock_am_pm"
             app:title="@string/settings_use_12_hour_title"

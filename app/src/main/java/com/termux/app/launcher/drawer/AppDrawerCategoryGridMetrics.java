@@ -8,11 +8,12 @@ public final class AppDrawerCategoryGridMetrics {
     public static final float SIDE_PADDING_DP = 8f;
     public static final float TILE_GAP_DP = 8f;
     public static final float TILE_HORIZONTAL_INSET_DP = 4f;
-    public static final float TILE_INNER_PADDING_DP = 12f;
+    public static final float TILE_INNER_PADDING_DP = 10f;
     public static final float SLOT_GAP_DP = 8f;
+    public static final float SMALL_BLOCK_GAP_DP = 4f;
     public static final float HEADING_GAP_DP = 8f;
     public static final float ITEM_BOTTOM_GAP_DP = 12f;
-    public static final float MAX_ICON_DP = 40f;
+    public static final float MAX_ICON_DP = 48f;
     public static final float EMPTY_TOP_MIN_DP = 32f;
     public static final float HEADER_LIST_GAP_DP = 12f;
     public static final float PREVIEW_BUDGET_FRACTION = 0.60f;
@@ -31,6 +32,7 @@ public final class AppDrawerCategoryGridMetrics {
     public final float slotGapPx;
     public final float largeSlotPx;
     public final float smallCellPx;
+    public final float smallBlockGapPx;
     public final int largeIconPx;
     public final int smallIconPx;
     public final int estimatedAttachedTiles;
@@ -44,7 +46,8 @@ public final class AppDrawerCategoryGridMetrics {
     private AppDrawerCategoryGridMetrics(int columns, float sidePaddingPx, float itemGapPx,
         float spanWidthPx, float tileHorizontalInsetPx, float tileSidePx, float itemHeightPx,
         float headingGapPx, float headingHeightPx, float itemBottomGapPx, float innerPaddingPx,
-        float slotGapPx, float largeSlotPx, int largeIconPx, int estimatedAttachedTiles,
+        float slotGapPx, float largeSlotPx, float smallBlockGapPx, int largeIconPx,
+        int estimatedAttachedTiles,
         int expandedColumns, float expandedRowHeightPx, float radiusPx, float collapseTravelPx,
         float emptyTopMinPx, float headerListGapPx) {
         this.columns = columns;
@@ -60,7 +63,8 @@ public final class AppDrawerCategoryGridMetrics {
         this.innerPaddingPx = innerPaddingPx;
         this.slotGapPx = slotGapPx;
         this.largeSlotPx = largeSlotPx;
-        this.smallCellPx = largeSlotPx / 2f;
+        this.smallBlockGapPx = Math.min(Math.max(0f, smallBlockGapPx), largeSlotPx);
+        this.smallCellPx = Math.max(0f, (largeSlotPx - this.smallBlockGapPx) / 2f);
         this.largeIconPx = largeIconPx;
         this.smallIconPx = Math.max(0, largeIconPx / 2);
         this.estimatedAttachedTiles = estimatedAttachedTiles;
@@ -124,8 +128,10 @@ public final class AppDrawerCategoryGridMetrics {
         float detailRow = icon + AppDrawerGridMetrics.LABEL_GAP_DP * d
             + finiteNonNegative(appLabelHeightPx)
             + AppDrawerGridMetrics.ROW_BOTTOM_DP * d;
+        float smallBlockGap = Math.min(SMALL_BLOCK_GAP_DP * d, largeSlot);
         return new AppDrawerCategoryGridMetrics(columns, side, gap, span, inset, tile,
-            itemHeight, headingGap, heading, bottom, inner, slotGap, largeSlot, icon, attached,
+            itemHeight, headingGap, heading, bottom, inner, slotGap, largeSlot, smallBlockGap,
+            icon, attached,
             detailColumns, detailRow, Math.min(finiteNonNegative(drawerRadiusPx), tile / 2f),
             Math.max(1f, viewport), EMPTY_TOP_MIN_DP * d, HEADER_LIST_GAP_DP * d);
     }

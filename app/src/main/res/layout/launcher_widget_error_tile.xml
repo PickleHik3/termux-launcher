@@ -12,6 +12,7 @@
     android:tag="launcher_widget_error_tile">
 
     <ImageView
+        android:id="@+id/launcher_widget_error_icon"
         android:layout_width="32dp"
         android:layout_height="32dp"
         android:src="@drawable/ic_widget_error"

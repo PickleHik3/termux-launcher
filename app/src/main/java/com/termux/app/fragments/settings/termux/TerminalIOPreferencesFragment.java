@@ -108,6 +108,8 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
         if (mPreferences == null || key == null) return;
         if ("top_pane_clock_style".equals(key)) {
             mPreferences.setTopPaneClockStyle(value);
+        } else if ("top_pane_clock_alignment".equals(key)) {
+            mPreferences.setTopPaneClockAlignment(value);
         }
     }
 
@@ -116,6 +118,9 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
         if (mPreferences == null || key == null) return defValue;
         if ("top_pane_clock_style".equals(key)) {
             return mPreferences.getTopPaneClockStyle();
+        }
+        if ("top_pane_clock_alignment".equals(key)) {
+            return mPreferences.getTopPaneClockAlignment();
         }
         return defValue;
     }

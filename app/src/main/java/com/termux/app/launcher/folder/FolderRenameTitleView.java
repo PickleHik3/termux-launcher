@@ -18,9 +18,20 @@ public final class FolderRenameTitleView extends View {
         super(context);
         paint.setTypeface(Typeface.DEFAULT_BOLD);
         paint.setTextSize(12f * getResources().getDisplayMetrics().scaledDensity);
+        // Popups draw on a dark glass; the Paint default of black would vanish into it.
+        paint.setColor(0xFFFFFFFF);
         setClickable(true);
         setFocusable(false);
         setMinimumHeight(Math.round(40f * getResources().getDisplayMetrics().density));
+    }
+
+    public void setTextColor(int color) {
+        paint.setColor(color);
+        invalidate();
+    }
+
+    int currentTextColor() {
+        return paint.getColor();
     }
 
     public void bind(@NonNull FolderRenameModel model, boolean editing) {

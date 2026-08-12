@@ -40,7 +40,14 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         DECLINED,
         CONFIGURATION_UNAVAILABLE,
         FAILED,
+        NO_SPACE,
+        REMOVED,
+        REMOVE_FAILED,
         IGNORED
+    }
+
+    public interface Listener {
+        void onWidgetRepositoryChanged(@NonNull AddResult result);
     }
 
     /** Injectable platform boundary used by deterministic lifecycle and cleanup tests. */
@@ -71,6 +78,7 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
     private final Map<Integer, AppWidgetHostView> hostViews = new HashMap<>();
     private final Set<String> resumedPendingTokens = new HashSet<>();
     private boolean listening;
+    @Nullable private Listener listener;
 
     public LauncherWidgetHostController(@NonNull Activity activity) {
         this(activity, LauncherWidgetRepository.create(activity), null);
@@ -96,6 +104,38 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
     @NonNull public Capability capability() { return capability; }
     @NonNull public LauncherWidgetRepository repository() { return repository; }
     @NonNull public LauncherAppWidgetHost host() { return host; }
+    public void setListener(@Nullable Listener value) { listener = value; }
+
+    private void notifyChanged(@NonNull AddResult result) {
+        if (listener != null) listener.onWidgetRepositoryChanged(result);
+    }
+
+    /**
+     * User-driven per-ID removal through A-1's durable tombstone path. The activity-owned host is
+     * deliberately retained; only this allocation is released.
+     */
+    @NonNull
+    public AddResult removeWidget(int appWidgetId) {
+        if (repository.get(appWidgetId) == null) return AddResult.IGNORED;
+        if (!repository.beginRecordDeletion(appWidgetId)) {
+            notifyChanged(AddResult.REMOVE_FAILED);
+            return AddResult.REMOVE_FAILED;
+        }
+        try {
+            platform.deleteAppWidgetId(appWidgetId);
+            hostViews.remove(appWidgetId);
+            if (!repository.completeDeletion(appWidgetId, null)) {
+                notifyChanged(AddResult.REMOVE_FAILED);
+                return AddResult.REMOVE_FAILED;
+            }
+        } catch (RuntimeException exception) {
+            // Reconciliation resumes the persisted DELETING record; the ID never becomes orphaned.
+            notifyChanged(AddResult.REMOVE_FAILED);
+            return AddResult.REMOVE_FAILED;
+        }
+        notifyChanged(AddResult.REMOVED);
+        return AddResult.REMOVED;
+    }
 
     public void onStart() {
         if (capability == Capability.UNSUPPORTED || listening) return;
@@ -129,8 +169,19 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
     @NonNull
     public AddResult beginAdd(@NonNull AppWidgetProviderInfo selected,
                               @Nullable Bundle initialOptions) {
+        WidgetGridPlacementPolicy.Result placement = WidgetGridPlacementPolicy.findPlacement(
+            repository.gridDefinition(), repository.records(), 1, 1);
+        if (placement.outcome != WidgetGridPlacementPolicy.Outcome.PLACED) return AddResult.NO_SPACE;
+        return beginAdd(selected, placement.rect, repository.revision(), initialOptions, null);
+    }
+
+    @NonNull
+    public AddResult beginAdd(@NonNull AppWidgetProviderInfo selected,
+                              @NonNull WidgetCellRect reservedCell, long expectedGridRevision,
+                              @Nullable Bundle initialOptions, @Nullable String originToken) {
         if (capability == Capability.UNSUPPORTED) return AddResult.UNSUPPORTED;
         if (repository.pending() != null) return AddResult.BUSY;
+        if (!repository.canReserve(expectedGridRevision, reservedCell)) return AddResult.NO_SPACE;
         ComponentName provider = selected.provider;
         UserHandle profile = selected.getProfile() == null ? Process.myUserHandle() : selected.getProfile();
         long profileSerial;
@@ -147,11 +198,12 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
             return AddResult.FAILED;
         }
         WidgetAddTransaction transaction = new WidgetAddTransaction(UUID.randomUUID().toString(),
-            id, provider, profileSerial, WidgetAddTransaction.Stage.ALLOCATED, options,
-            System.currentTimeMillis());
-        if (!repository.setPending(transaction)) {
+            id, provider, profileSerial, WidgetAddTransaction.Stage.ALLOCATED, reservedCell,
+            expectedGridRevision, originToken, options, System.currentTimeMillis());
+        if (!repository.reservePending(expectedGridRevision, transaction)) {
             deleteUnpersistedAllocation(id);
-            return AddResult.STORAGE_FAILURE;
+            return repository.canReserve(expectedGridRevision, reservedCell)
+                ? AddResult.STORAGE_FAILURE : AddResult.NO_SPACE;
         }
         try {
             boolean bound = platform.bindIfAllowed(id, profile, provider, options);
@@ -199,17 +251,19 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         if (decision.outcome == WidgetBindFlowPolicy.Outcome.IGNORE_FOREIGN_RESULT) return true;
         if (pending == null) return true;
         if (decision.deleteId) {
-            abandon(pending, decision.outcome == WidgetBindFlowPolicy.Outcome.DECLINED
+            AddResult result = abandon(pending, decision.outcome == WidgetBindFlowPolicy.Outcome.DECLINED
                 ? AddResult.DECLINED : AddResult.FAILED);
+            notifyChanged(result);
             return true;
         }
         WidgetAddTransaction next = pending.withStage(decision.nextStage);
         if (!repository.setPending(next)) {
-            abandon(pending, AddResult.STORAGE_FAILURE);
+            notifyChanged(abandon(pending, AddResult.STORAGE_FAILURE));
             return true;
         }
-        if (requestCode == REQUEST_BIND_APPWIDGET) continueAfterBound(next);
-        else commitActive(next);
+        AddResult result = requestCode == REQUEST_BIND_APPWIDGET
+            ? continueAfterBound(next) : commitActive(next);
+        notifyChanged(result);
         return true;
     }
 
@@ -249,7 +303,7 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         if (!repository.setPending(committing)) return abandon(transaction, AddResult.STORAGE_FAILURE);
         LauncherWidgetRecord record = new LauncherWidgetRecord(committing.appWidgetId,
             committing.provider, committing.profileSerial, LauncherWidgetRecord.State.ACTIVE,
-            committing.requestedOptions(), null);
+            committing.cell, committing.requestedOptions(), null);
         if (!repository.finalizeActive(committing.token, record)) {
             return abandon(committing, AddResult.STORAGE_FAILURE);
         }
@@ -277,6 +331,15 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
 
     private void deleteUnpersistedAllocation(int id) {
         try { platform.deleteAppWidgetId(id); } catch (RuntimeException ignored) { }
+    }
+
+    /** Best-effort provider metadata for edit affordances; null when the platform throws. */
+    @Nullable public AppWidgetProviderInfo providerInfo(int appWidgetId) {
+        try {
+            return platform.getInfo(appWidgetId);
+        } catch (RuntimeException exception) {
+            return null;
+        }
     }
 
     @Nullable
@@ -355,7 +418,7 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
                 case TOMBSTONE_AND_DELETE_ID:
                     LauncherWidgetRecord tombstone = new LauncherWidgetRecord(record.appWidgetId,
                         record.provider, record.profileSerial,
-                        LauncherWidgetRecord.State.PROVIDER_MISSING, record.sizeOptions(),
+                        LauncherWidgetRecord.State.PROVIDER_MISSING, record.cell, record.sizeOptions(),
                         record.lastRenderFailure);
                     if (repository.putRecord(tombstone)) {
                         try { platform.deleteAppWidgetId(record.appWidgetId); }
@@ -376,6 +439,33 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
                     break;
                 default:
                     break;
+            }
+        }
+        // Recover host-owned IDs omitted by a corrupt/partially migrated repository one by one.
+        Set<Integer> represented = new HashSet<>();
+        for (LauncherWidgetRecord record : repository.records()) represented.add(record.appWidgetId);
+        WidgetAddTransaction representedPending = repository.pending();
+        if (representedPending != null) represented.add(representedPending.appWidgetId);
+        java.util.ArrayList<Integer> recoverableOwned = new java.util.ArrayList<>(owned);
+        java.util.Collections.sort(recoverableOwned);
+        for (int id : recoverableOwned) {
+            if (represented.contains(id)) continue;
+            AppWidgetProviderInfo info;
+            try { info = platform.getInfo(id); }
+            catch (RuntimeException exception) { continue; }
+            if (info == null) {
+                try { platform.deleteAppWidgetId(id); } catch (RuntimeException ignored) { }
+                continue;
+            }
+            WidgetGridPlacementPolicy.Result placement = WidgetGridPlacementPolicy.findPlacement(
+                repository.gridDefinition(), repository.records(), 1, 1);
+            if (placement.outcome != WidgetGridPlacementPolicy.Outcome.PLACED) continue;
+            try {
+                long serial = platform.profileSerial(info.getProfile());
+                repository.putRecord(new LauncherWidgetRecord(id, info.provider, serial,
+                    LauncherWidgetRecord.State.ACTIVE, placement.rect, new Bundle(), null));
+            } catch (RuntimeException ignored) {
+                // Keep the allocation owned and retry recovery on the next reconciliation.
             }
         }
         WidgetAddTransaction pending = repository.pending();
@@ -413,10 +503,13 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
     @Override
     public void onProviderChanged(int appWidgetId, @NonNull AppWidgetProviderInfo info) {
         reconcileProviders(appWidgetId);
+        notifyChanged(AddResult.IGNORED);
     }
 
-    @Override public void onProvidersChanged() { reconcileProviders(); }
-    @Override public void onAppWidgetRemoved(int appWidgetId) { reconcileProviders(appWidgetId); }
+    @Override public void onProvidersChanged() { reconcileProviders(); notifyChanged(AddResult.IGNORED); }
+    @Override public void onAppWidgetRemoved(int appWidgetId) {
+        reconcileProviders(appWidgetId); notifyChanged(AddResult.IGNORED);
+    }
 
     @Override
     public void onRenderFailure(int appWidgetId, @NonNull String phase) {

@@ -746,7 +746,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerPlaneView plane = mPlane;
         if (host == null || glass == null || plane == null) return;
         TermuxAppSharedPreferences preferences = mActivity.getPreferences();
-        float opacity = preferences == null ? 0.5f : preferences.getAppBarOpacity() / 100f;
+        // Capped below the user's dock opacity so the drawer glass always stays see-through:
+        // the terminal keeps running visibly behind the open drawer.
+        float opacity = Math.min(0.45f,
+            preferences == null ? 0.5f : preferences.getAppBarOpacity() / 100f);
         int grain = preferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN
             : preferences.getDockGlassGrain();
@@ -919,7 +922,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (blur == null) return;
         TermuxAppSharedPreferences preferences = mActivity.getPreferences();
         boolean wallpaperMode = preferences != null && preferences.isUseSystemWallpaperEnabled();
-        blur.setVisibility(!frosted && !wallpaperMode ? View.VISIBLE : View.GONE);
+        // Frosted wallpaper mode keeps the live blur ON TOP of the frost: the blur can see the
+        // window's own content (the running terminal), so it ghosts through the glass while the
+        // frost keeps covering the wallpaper the blur cannot see. Only the unfrosted live
+        // wallpaper case still drops the blur (grey mud).
+        blur.setVisibility(frosted || !wallpaperMode ? View.VISIBLE : View.GONE);
     }
 
     // ------------------------------------------------------------------ per-frame
@@ -951,6 +958,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mOpenRadiusPx, p);
         plane.setFrame(frame, mCurrentRadiusPx, p);
         if (mGlass != null) mGlass.invalidateOutline();
+
+        // Inverted standardized dim: the scene behind the drawer (terminal, dock) darkens with
+        // the drawer's own spring while the glass keeps its opacity. setBackgroundColor reuses
+        // the host's ColorDrawable after the first frame, so this stays allocation-free.
+        mHost.setBackgroundColor(com.termux.app.GlassBackdropTint.colorFor(p));
 
         // Glass handoff: the host carries the fade so the frost/blur pane and the painted slab
         // cross over as one surface.

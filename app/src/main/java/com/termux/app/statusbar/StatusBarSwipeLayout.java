@@ -25,6 +25,15 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         void onCollapsedStateRequested(boolean collapsed);
         default void onFullStateRequested(@NonNull TopStatusBarState priorState) { }
         default boolean isStatusGestureBlocked() { return false; }
+        /** A pull-down claimed the stream; return true to drive the FULL pane from this drag. */
+        default boolean onFullDragBegin(@NonNull TopStatusBarState priorState) { return false; }
+        /** FULL is open and a pull-up claimed the stream; return true to drag it closed. */
+        default boolean onFullCloseDragBegin() { return false; }
+        /** @param dragPx finger travel since the DOWN, positive downward */
+        default void onFullDrag(float dragPx) { }
+        /** @param velocityPxPerSec vertical release velocity, positive downward */
+        default void onFullDragEnd(float velocityPxPerSec) { }
+        default void onFullDragCancel() { }
     }
 
     private final int mTouchSlop;
@@ -40,7 +49,13 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     private boolean mFullCallbackDelivered;
     private boolean mDispatchInProgress;
     private boolean mDeferredReset;
+    private boolean mFullDragActive;
+    @Nullable private android.view.VelocityTracker mVelocityTracker;
+    private int mFullStatusRowBottomInset;
     private final Runnable mLongPress = this::commitLongPress;
+    @Nullable private com.termux.app.GlassRimRenderer mRim;
+    private float mRimRadiusPx;
+    private float mRimProgress;
 
     public StatusBarSwipeLayout(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -62,28 +77,127 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         mState = state;
         mNormalTarget = normalTarget == TopStatusBarState.FULL
             ? TopStatusBarState.EXPANDED : normalTarget;
+        if (state != TopStatusBarState.FULL) mFullStatusRowBottomInset = 0;
         requestStructuralReset();
     }
 
+    /** The parent is the final FULL row-position authority; the inset comes from the existing style. */
+    public void setFullStatusRowBottomInset(int bottomInsetPx) {
+        int resolved = Math.max(0, bottomInsetPx);
+        if (resolved == mFullStatusRowBottomInset) return;
+        mFullStatusRowBottomInset = resolved;
+        requestLayout();
+    }
+
     public void setAnotherSurfaceEngaged(boolean engaged) { mAnotherSurfaceEngaged = engaged; }
+
+    /**
+     * Glass rim over the FULL pane's outline: fades in with the expansion, shimmers while the
+     * transition (or the pull-down drag) is live, and disappears entirely in the normal forms.
+     */
+    public void setGlassRim(float radiusPx, float fullProgress) {
+        float progress = Float.isFinite(fullProgress)
+            ? Math.max(0f, Math.min(1f, fullProgress)) : 0f;
+        if (progress == mRimProgress && radiusPx == mRimRadiusPx) return;
+        mRimRadiusPx = Math.max(0f, radiusPx);
+        mRimProgress = progress;
+        invalidate();
+    }
+
+    @Override protected void dispatchDraw(@NonNull android.graphics.Canvas canvas) {
+        super.dispatchDraw(canvas);
+        if (mRimProgress <= 0f) return;
+        if (mRim == null) {
+            mRim = new com.termux.app.GlassRimRenderer(
+                getResources().getDisplayMetrics().density);
+        }
+        float shimmerPhase = mRimProgress < 1f ? mRimProgress : -1f;
+        mRim.draw(canvas, 0f, 0f, getWidth(), getHeight(), mRimRadiusPx, shimmerPhase,
+            mRimProgress);
+    }
+
+    /**
+     * FULL has three measured vertical bands. The top slot and status row are the chrome owners;
+     * the widget pane owns exactly the half-open rectangle between their laid-out bounds. Keeping
+     * this in their common parent prevents a body child from guessing either band's dp geometry.
+     */
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+        layoutFullStatusRowAtMovingBottom();
+        layoutFullBodyBetweenChrome();
+    }
+
+    private void layoutFullStatusRowAtMovingBottom() {
+        if (mState != TopStatusBarState.FULL) return;
+        View statusRow = findViewById(R.id.terminal_status_row);
+        if (statusRow == null || statusRow.getVisibility() == GONE) return;
+        int rowBottom = Math.max(getPaddingTop(), getHeight() - getPaddingBottom()
+            - mFullStatusRowBottomInset);
+        int rowTop = Math.max(getPaddingTop(), rowBottom - statusRow.getMeasuredHeight());
+        int rowLeft = getPaddingLeft();
+        int rowRight = Math.max(rowLeft, getWidth() - getPaddingRight());
+        statusRow.layout(rowLeft, rowTop, rowRight, rowBottom);
+    }
+
+    private void layoutFullBodyBetweenChrome() {
+        if (mState != TopStatusBarState.FULL) return;
+        View body = findViewById(R.id.widget_pane);
+        View topSlot = findViewById(R.id.terminal_top_widget_area);
+        View statusRow = findViewById(R.id.terminal_status_row);
+        if (body == null || topSlot == null || statusRow == null) return;
+
+        int bodyLeft = getPaddingLeft();
+        int bodyRight = Math.max(bodyLeft, getWidth() - getPaddingRight());
+        int bodyTop = Math.max(getPaddingTop(), topSlot.getBottom());
+        int bodyBottom = Math.max(bodyTop,
+            Math.min(getHeight() - getPaddingBottom(), statusRow.getTop()));
+        int bodyWidth = bodyRight - bodyLeft;
+        int bodyHeight = bodyBottom - bodyTop;
+        if (body.getMeasuredWidth() != bodyWidth || body.getMeasuredHeight() != bodyHeight) {
+            body.measure(MeasureSpec.makeMeasureSpec(bodyWidth, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(bodyHeight, MeasureSpec.EXACTLY));
+        }
+        body.layout(bodyLeft, bodyTop, bodyRight, bodyBottom);
+    }
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
         mDispatchInProgress = true;
         try {
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN) {
+                // With the widgets pane open, the status row is display-only: window switching,
+                // stat/weather popups and the sessions chip all pause until the pane closes. The
+                // stream is still observed, so the pull-up works from the row too.
+                mMuteChildStream = mState == TopStatusBarState.FULL
+                    && isInsideView(findViewById(R.id.terminal_status_row), event);
+            }
             observe(event);
-            return super.dispatchTouchEvent(event);
+            boolean handled = mMuteChildStream || super.dispatchTouchEvent(event);
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                mMuteChildStream = false;
+            }
+            return handled;
         } finally {
             mDispatchInProgress = false;
             if (mDeferredReset) {
                 mDeferredReset = false;
-                clearTracking();
+                if (!mFullDragActive) clearTracking();
             }
         }
     }
 
-    /** Child streams are never stolen; ownership is frozen at DOWN. */
-    @Override public boolean onInterceptTouchEvent(MotionEvent event) { return false; }
+    private boolean mMuteChildStream;
+
+    /**
+     * Child streams are frozen at DOWN with one exception: a claimed pull-down takes over — the
+     * platform then delivers the children their CANCEL, exactly like a scroll container would.
+     */
+    @Override public boolean onInterceptTouchEvent(MotionEvent event) {
+        StatusBarGesturePolicy gesture = mGesture;
+        return gesture != null && mFullDragActive && isFullDragClaim(gesture.claim());
+    }
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
@@ -96,6 +210,8 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
             case PENDING:
             case HORIZONTAL_SWIPE:
             case LONG_PRESS:
+            case PULL_DOWN:
+            case PULL_UP:
                 return true;
             default:
                 return false;
@@ -105,6 +221,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     @Override public boolean performClick() { return super.performClick(); }
 
     private void observe(@NonNull MotionEvent event) {
+        if (mVelocityTracker != null) mVelocityTracker.addMovement(event);
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 begin(event);
@@ -115,16 +232,26 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
                     StatusBarGesturePolicy.Claim after = mGesture.move(event.getX(), event.getY());
                     if (before == StatusBarGesturePolicy.Claim.PENDING
                         && after != StatusBarGesturePolicy.Claim.PENDING) cancelLongPressTimer();
+                    if (before == StatusBarGesturePolicy.Claim.PENDING
+                        && (after == StatusBarGesturePolicy.Claim.PULL_DOWN
+                            || after == StatusBarGesturePolicy.Claim.PULL_UP)) {
+                        beginFullDrag(after == StatusBarGesturePolicy.Claim.PULL_UP);
+                    }
+                    if (mFullDragActive && isFullDragClaim(after) && mListener != null) {
+                        mListener.onFullDrag(event.getRawY() - mGesture.down().rawY);
+                    }
                 }
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
-                if (mGesture != null) mGesture.secondPointer();
+                if (mGesture != null && !mFullDragActive) mGesture.secondPointer();
                 cancelLongPressTimer();
                 break;
             case MotionEvent.ACTION_UP:
                 finish(event);
                 break;
             case MotionEvent.ACTION_CANCEL:
+                if (mFullDragActive && mListener != null) mListener.onFullDragCancel();
+                mFullDragActive = false;
                 if (mGesture != null) mGesture.cancel();
                 cancelLongPressTimer();
                 requestStructuralReset();
@@ -132,6 +259,29 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
             default:
                 break;
         }
+    }
+
+    private void beginFullDrag(boolean closing) {
+        cancelLongPressTimer();
+        Listener listener = mListener;
+        StatusBarGesturePolicy gesture = mGesture;
+        if (listener == null || gesture == null) return;
+        // Guarded BEFORE the callback: beginning the drag re-enters setStatusState (engagement
+        // flips the pane), whose structural reset would otherwise kill this live stream.
+        mFullDragActive = true;
+        boolean accepted = closing ? listener.onFullCloseDragBegin()
+            : listener.onFullDragBegin(gesture.down().normalTarget);
+        mFullDragActive = accepted;
+        if (accepted) {
+            performHapticFeedback(HapticFeedbackConstants.GESTURE_START);
+        } else {
+            gesture.cancel();
+        }
+    }
+
+    private static boolean isFullDragClaim(@NonNull StatusBarGesturePolicy.Claim claim) {
+        return claim == StatusBarGesturePolicy.Claim.PULL_DOWN
+            || claim == StatusBarGesturePolicy.Claim.PULL_UP;
     }
 
     private void begin(MotionEvent event) {
@@ -143,13 +293,32 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         Listener listener = mListener;
         boolean blocked = mAnotherSurfaceEngaged
             || (listener != null && listener.isStatusGestureBlocked());
+        // Pull-down works along the bar's whole length. In the EXPANDED form only the bar itself
+        // arms it — the top widget slot above (clock, notifications, media) keeps its own touch.
+        boolean inTopSlot = isInsideView(findViewById(R.id.terminal_top_widget_area), event);
+        boolean pullDownEligible = !blocked && mState != TopStatusBarState.FULL
+            && !(mState == TopStatusBarState.EXPANDED && inTopSlot);
+        // With FULL open, an upward drag anywhere on the pane drags it closed — mirroring the
+        // pull-down. Only live drag owners veto it: a provider's own nested scroll, the widget
+        // edit overlay, and the picker sheet.
+        View editOverlay = findViewById(R.id.widget_edit_overlay);
+        boolean editActive = editOverlay != null && editOverlay.getVisibility() == VISIBLE;
+        View picker = findViewById(R.id.widget_picker_sheet);
+        boolean pickerOpen = picker instanceof com.termux.app.launcher.widget.WidgetPickerSheetView
+            && ((com.termux.app.launcher.widget.WidgetPickerSheetView) picker).isOpen();
+        boolean pullUpEligible = !blocked && mState == TopStatusBarState.FULL
+            && !nestedChildOwned && !editActive && !pickerOpen;
         StatusBarGesturePolicy.Down down = new StatusBarGesturePolicy.Down(
             event.getPointerId(0), event.getRawX(), event.getRawY(), event.getX(), event.getY(),
             event.getEventTime(), mState, mNormalTarget, inWindowBar, interactive, nestedChildOwned,
-            blocked, mTouchSlop, token);
+            blocked, pullDownEligible, pullUpEligible, mTouchSlop, token);
         mGesture = new StatusBarGesturePolicy(down);
         mFullCallbackDelivered = false;
-        if (mGesture.claim() == StatusBarGesturePolicy.Claim.PENDING) {
+        mFullDragActive = false;
+        if (mVelocityTracker == null) mVelocityTracker = android.view.VelocityTracker.obtain();
+        mVelocityTracker.clear();
+        mVelocityTracker.addMovement(event);
+        if (mGesture.claim() == StatusBarGesturePolicy.Claim.PENDING && down.eligible()) {
             mPostedToken = token;
             postDelayed(mLongPress, mLongPressTimeout);
         }
@@ -158,7 +327,18 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     private void finish(MotionEvent event) {
         StatusBarGesturePolicy gesture = mGesture;
         cancelLongPressTimer();
-        if (gesture != null && gesture.claim() == StatusBarGesturePolicy.Claim.HORIZONTAL_SWIPE) {
+        if (gesture != null && isFullDragClaim(gesture.claim())) {
+            if (mFullDragActive && mListener != null) {
+                float velocity = 0f;
+                if (mVelocityTracker != null) {
+                    mVelocityTracker.computeCurrentVelocity(1000);
+                    velocity = mVelocityTracker.getYVelocity();
+                }
+                mListener.onFullDragEnd(velocity);
+            }
+            mFullDragActive = false;
+        } else if (gesture != null
+            && gesture.claim() == StatusBarGesturePolicy.Claim.HORIZONTAL_SWIPE) {
             boolean collapsed = gesture.horizontalDelta() < 0f;
             if (collapsed != (gesture.down().normalTarget == TopStatusBarState.COMPACT)
                 && mListener != null) {
@@ -186,8 +366,13 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         mPostedToken = 0L;
     }
 
-    /** Reentrant FULL callbacks cannot clear the dispatch latch until dispatchTouchEvent returns. */
+    /**
+     * Reentrant FULL callbacks cannot clear the dispatch latch until dispatchTouchEvent returns.
+     * A live pull-down owns its stream outright: state flips it causes (engagement → FULL) must
+     * not reset the tracking that is driving them; the drag resets itself at UP/CANCEL.
+     */
     private void requestStructuralReset() {
+        if (mFullDragActive) return;
         cancelLongPressTimer();
         if (mDispatchInProgress) mDeferredReset = true;
         else clearTracking();
@@ -197,6 +382,11 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         cancelLongPressTimer();
         mGesture = null;
         mFullCallbackDelivered = false;
+        mFullDragActive = false;
+        if (mVelocityTracker != null) {
+            mVelocityTracker.recycle();
+            mVelocityTracker = null;
+        }
     }
 
     @Override protected void onDetachedFromWindow() {

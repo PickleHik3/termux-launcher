@@ -18,7 +18,7 @@ public class AppDrawerMetricsPreferenceTest {
         AppDrawerCategoryGridMetrics categories = AppDrawerCategoryGridMetrics.resolve(
             1080, 1600, 3, 40, 33, 60, 8 * 1024 * 1024, 2, 44);
         assertEquals(2, categories.columns);
-        assertTrue(categories.largeIconPx <= 40 * 3);
+        assertTrue(categories.largeIconPx <= Math.round(AppDrawerCategoryGridMetrics.MAX_ICON_DP) * 3);
         assertTrue(categories.expandedColumns >= 4 && categories.expandedColumns <= 6);
     }
 }

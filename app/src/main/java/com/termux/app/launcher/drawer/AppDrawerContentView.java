@@ -181,6 +181,8 @@ public final class AppDrawerContentView extends FrameLayout
     private boolean mHighlightWritten;
     private boolean mSuppressCellClickDuringTerminalDispatch;
     private boolean mDragActive;
+    /** A config mutation that landed mid-drag; the recompose replays once the drag ends. */
+    private boolean mPendingDockConfigRefresh;
     private boolean mGestureDragEligible;
     @Nullable private String mGestureDragStableId;
     @Nullable private AppDrawerDragPolicy mDragPolicy;
@@ -221,6 +223,7 @@ public final class AppDrawerContentView extends FrameLayout
     public AppDrawerContentView(@NonNull Context context, @Nullable SuggestionBarView dock) {
         super(context);
         mDock = dock;
+        if (dock != null) dock.setDrawerConfigChangedListener(this::onDockConfigChanged);
         mDensity = context.getResources().getDisplayMetrics().density;
         mUsageStats = LauncherUsageStatsStore.getInstance(context);
         mCategoryClassifier = new AppDrawerCategoryClassifier(loadCuratedMap(context.getResources()));
@@ -377,7 +380,9 @@ public final class AppDrawerContentView extends FrameLayout
      * the drawer's data path.
      */
     public void setDock(@Nullable SuggestionBarView dock) {
+        if (mDock != null && mDock != dock) mDock.setDrawerConfigChangedListener(null);
         mDock = dock;
+        if (dock != null) dock.setDrawerConfigChangedListener(this::onDockConfigChanged);
         mAdapter.setDock(dock);
         mHorizontalAdapter.setDock(dock);
         mCategoryView.setDock(dock);
@@ -615,6 +620,26 @@ public final class AppDrawerContentView extends FrameLayout
         if (provider == null) return;
         pushCatalogue();
         provider.warmAsync(mCatalogueCallback);
+    }
+
+    /**
+     * A pin or folder mutation landed in the repository. The catalogue itself is untouched, but the
+     * mixed list is composed against the config snapshot, so an open drawer must recompose in place
+     * — this is what makes a drag-created folder appear under the finger rather than on reopen.
+     * Deferred while a drag is live: the recompose rebinds every cell, and yanking the source cell
+     * out from under the platform drag would end it mid-flight.
+     */
+    private void onDockConfigChanged() {
+        if (!isShown()) return; // a closed drawer recomposes when it opens
+        if (mDragActive) {
+            mPendingDockConfigRefresh = true;
+            return;
+        }
+        mPendingDockConfigRefresh = false;
+        // A folder/pin mutation does not change the catalogue. Re-submit the already-live search
+        // result so this works even while the provider is between warm-up generations and updates
+        // both pickup-capable adapters through their common composition path.
+        submitVisibleResults(false);
     }
 
     private void pushCatalogue() {
@@ -1335,6 +1360,11 @@ public final class AppDrawerContentView extends FrameLayout
         if (!dragging) {
             cancelDragNavigation();
             mHorizontalDropGate.reset();
+            // Posted, not inline: the drag's own cleanup (overlay settle, ENDED dispatch) must
+            // finish before the recompose rebinds the cells it is animating over.
+            if (mPendingDockConfigRefresh) post(() -> {
+                if (mPendingDockConfigRefresh) onDockConfigChanged();
+            });
         }
     }
 
@@ -1383,6 +1413,12 @@ public final class AppDrawerContentView extends FrameLayout
 
     @Override public void onDragTargetExited() {
         cancelDragNavigation();
+    }
+
+    @Override public void onAcceptedDrop() {
+        // Keep the source holder stable through ACTION_DRAG_ENDED, then recompose both pickup
+        // adapters from the repository snapshot even if its asynchronous listener is delayed.
+        mPendingDockConfigRefresh = true;
     }
 
     private void cancelDragNavigation() {

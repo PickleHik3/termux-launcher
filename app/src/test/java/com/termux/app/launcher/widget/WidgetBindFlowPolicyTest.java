@@ -48,15 +48,15 @@ public class WidgetBindFlowPolicyTest {
         }
     }
 
-    @Test public void canceledExpectedResultIgnoresStrayReturnedIdAndDeletesDurableId() {
+    @Test public void lateCanceledOlderIdsDoNotAbandonNewerPendingWidget() {
         WidgetBindFlowPolicy.Decision bind = WidgetBindFlowPolicy.onBindResult(
             tx(WidgetAddTransaction.Stage.WAITING_FOR_BIND_CONSENT), 8, 99, false, false);
-        assertEquals(WidgetBindFlowPolicy.Outcome.DECLINED, bind.outcome);
-        assertTrue(bind.deleteId);
+        assertEquals(WidgetBindFlowPolicy.Outcome.IGNORE_FOREIGN_RESULT, bind.outcome);
+        assertFalse(bind.deleteId);
         WidgetBindFlowPolicy.Decision configure = WidgetBindFlowPolicy.onConfigureResult(
             tx(WidgetAddTransaction.Stage.WAITING_FOR_CONFIGURATION), 8, 99, false, false);
-        assertEquals(WidgetBindFlowPolicy.Outcome.DECLINED, configure.outcome);
-        assertTrue(configure.deleteId);
+        assertEquals(WidgetBindFlowPolicy.Outcome.IGNORE_FOREIGN_RESULT, configure.outcome);
+        assertFalse(configure.deleteId);
     }
 
     private static WidgetAddTransaction tx(WidgetAddTransaction.Stage stage) {

@@ -34,7 +34,7 @@ public class WidgetProviderReconcilePolicyTest {
         WidgetAddTransaction pending = new WidgetAddTransaction("t", 3,
             new ComponentName("pkg", "Provider"), 0,
             WidgetAddTransaction.Stage.WAITING_FOR_BIND_CONSENT, new Bundle(), 100);
-        assertEquals(WidgetProviderReconcilePolicy.Decision.RETAIN_PENDING,
+        assertEquals(WidgetProviderReconcilePolicy.Decision.EXPIRE_PENDING_AND_DELETE_ID,
             WidgetProviderReconcilePolicy.forPending(pending, false, 200));
         assertEquals(WidgetProviderReconcilePolicy.Decision.RESUME_CONFIGURATION,
             WidgetProviderReconcilePolicy.forPending(pending, true, 200));

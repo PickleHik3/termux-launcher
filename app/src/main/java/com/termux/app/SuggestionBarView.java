@@ -375,6 +375,8 @@ public final class SuggestionBarView extends GridLayout
     private boolean stableLayoutRerenderPosted = false;
     private boolean childLayoutPending = true;
     private long stableLayoutSuppressedSinceUptimeMs = 0L;
+    private static final int MAX_DEFERRED_RENDER_ATTEMPTS = 8;
+    private int deferredRenderAttempts;
     private int lastSurfaceRenderSignature = 0;
     private boolean pendingPinnedMutationFeedback = false;
     private boolean suppressContextLongPressForSwipe = false;
@@ -404,11 +406,18 @@ public final class SuggestionBarView extends GridLayout
     private int lastAzResolvedSlot = -1;
     @Nullable private LauncherUsageStatsStore usageStatsStore;
     @Nullable private Runnable appCatalogChangedListener;
+    @Nullable private Runnable drawerConfigChangedListener;
+    /** A config change that landed while the folder popup was up; replayed when it closes. */
+    private boolean pendingDrawerConfigRefresh;
     private final LauncherConfigRepository.Listener configListener = snapshot -> post(() -> {
         pinnedItems = new ArrayList<>(snapshot.dockItems);
         invalidateRenderedIconCaches();
         reloadWithInput("", lastTerminalView);
         if (appCatalogChangedListener != null) appCatalogChangedListener.run();
+        // Recomposing the drawer dismisses its popups, so a change made from inside the folder
+        // popup (a rename, a removal) must not tear the popup down under the finger.
+        if (sharedFolderPopup.isShowing()) pendingDrawerConfigRefresh = true;
+        else notifyDrawerConfigChanged();
     });
     @Nullable private OverflowInteractionListener overflowInteractionListener;
     private final ExecutorService searchExecutor = newIdleFriendlyExecutor();
@@ -622,6 +631,9 @@ public final class SuggestionBarView extends GridLayout
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
+        // A genuine layout pass is new information: the bounded defer in renderButtons may try
+        // its full budget again.
+        if (changed) deferredRenderAttempts = 0;
         scheduleStableDrawReleaseIfPossible();
     }
 
@@ -917,6 +929,16 @@ public final class SuggestionBarView extends GridLayout
 
     public void setAppCatalogChangedListener(@Nullable Runnable appCatalogChangedListener) {
         this.appCatalogChangedListener = appCatalogChangedListener;
+    }
+
+    /** The drawer's recompose hook for pin/folder mutations, which never touch the app catalog. */
+    public void setDrawerConfigChangedListener(@Nullable Runnable drawerConfigChangedListener) {
+        this.drawerConfigChangedListener = drawerConfigChangedListener;
+    }
+
+    private void notifyDrawerConfigChanged() {
+        pendingDrawerConfigRefresh = false;
+        if (drawerConfigChangedListener != null) drawerConfigChangedListener.run();
     }
 
     public void setOverflowInteractionListener(@Nullable OverflowInteractionListener listener) {
@@ -2144,6 +2166,13 @@ public final class SuggestionBarView extends GridLayout
             if (pendingDeferredRender) {
                 return;
             }
+            // Bounded, not clock-bounded: a dock that can never stabilize (hidden, or measured
+            // 1x1 in a test fixture) must stop reposting, or the main queue never drains and
+            // Robolectric's idle() livelocks. The next real reload or size change retries.
+            if (deferredRenderAttempts >= MAX_DEFERRED_RENDER_ATTEMPTS) {
+                return;
+            }
+            deferredRenderAttempts++;
             pendingDeferredRender = true;
             final List<LauncherAppEntry> deferredEntries = new ArrayList<>(entries);
             final boolean deferredAzPreview = azPreview;
@@ -2157,6 +2186,7 @@ public final class SuggestionBarView extends GridLayout
             return;
         }
         pendingDeferredRender = false;
+        deferredRenderAttempts = 0;
         int buttonCount = Math.max(1, maxButtonCount);
         int renderStartCol = 0;
         List<PinnedItem> pinnedForSlots = new ArrayList<>();
@@ -4162,6 +4192,7 @@ public final class SuggestionBarView extends GridLayout
         header.setPadding(dp(4), dp(2), dp(4), dp(4));
 
         FolderRenameTitleView title = new FolderRenameTitleView(getContext());
+        title.setTextColor(getLauncherTextColor());
         title.bind(new FolderRenameModel(TextUtils.isEmpty(folder.title) ? "Folder" : folder.title),
             false);
         title.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -4209,6 +4240,7 @@ public final class SuggestionBarView extends GridLayout
             if (folderPopupWindow != null && !folderPopupWindow.isShowing()) {
                 folderPopupWindow = null;
             }
+            if (pendingDrawerConfigRefresh) notifyDrawerConfigChanged();
         });
         if (beginRename) title.post(title::performClick);
     }
@@ -5504,6 +5536,9 @@ public final class SuggestionBarView extends GridLayout
         int alpha = clamp(Math.max(appBarOpacity, minimumOpacityPercent), 0, 100);
         int overlayColor = (((int) (255f * (alpha / 100f))) << 24) | (tintBase & 0x00FFFFFF);
         panelBg.setColor(overlayColor);
+        // Glass rim: the same hairline the drawer plane and FULL pane draw, so every elevated
+        // surface reads as the one material family.
+        panelBg.setStroke(Math.max(1, Math.round(dp(1.25f))), 0x3DFFFFFF);
         popupRoot.setBackground(panelBg);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             popupRoot.setClipToOutline(true);

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="widget_pane" type="id" />
+    <item name="widget_grid" type="id" />
+    <item name="widget_add_large" type="id" />
+    <item name="widget_add_compact" type="id" />
+    <item name="widget_grid_settings" type="id" />
+    <item name="widget_empty_message" type="id" />
+    <item name="widget_pane_notice" type="id" />
+    <item name="widget_picker_sheet" type="id" />
+    <item name="widget_edit_overlay" type="id" />
+</resources>

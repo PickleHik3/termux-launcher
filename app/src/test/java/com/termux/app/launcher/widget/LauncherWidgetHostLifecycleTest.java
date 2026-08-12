@@ -3,6 +3,7 @@ package com.termux.app.launcher.widget;
 import android.app.Activity;
 import android.app.Application;
 import android.os.Build;
+import android.os.Bundle;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -69,6 +70,27 @@ public class LauncherWidgetHostLifecycleTest {
             controller.beginAdd(WidgetTestFixtures.info(false), null));
         assertEquals(0, platform.starts);
         assertEquals(0, platform.allocations);
+    }
+
+    @Test public void unboundAllocatedOrBindConsentReservationIsDeletedAndDoesNotLockAdds() {
+        for (WidgetAddTransaction.Stage stage : new WidgetAddTransaction.Stage[] {
+            WidgetAddTransaction.Stage.ALLOCATED,
+            WidgetAddTransaction.Stage.WAITING_FOR_BIND_CONSENT
+        }) {
+            Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+            LauncherWidgetRepository repository = WidgetTestFixtures.repository();
+            WidgetAddTransaction pending = new WidgetAddTransaction("reserved", 19,
+                WidgetTestFixtures.PROVIDER, 0, stage, new Bundle(), 100);
+            repository.setPending(pending);
+            WidgetTestFixtures.Platform platform = new WidgetTestFixtures.Platform(activity);
+            LauncherWidgetHostController controller = new LauncherWidgetHostController(activity,
+                repository, platform);
+            controller.onStart();
+            assertEquals(stage.name(), null, repository.pending());
+            assertEquals(stage.name(), java.util.Collections.singletonList(19), platform.deleted);
+            assertEquals(stage.name(), LauncherWidgetHostController.AddResult.STARTED,
+                controller.beginAdd(WidgetTestFixtures.info(false), null));
+        }
     }
 
     @Test

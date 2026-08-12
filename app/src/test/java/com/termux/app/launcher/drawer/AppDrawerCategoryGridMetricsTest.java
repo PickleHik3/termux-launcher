@@ -25,7 +25,7 @@ public class AppDrawerCategoryGridMetricsTest {
         assertEquals(m.spanWidthPx - 2f * m.tileHorizontalInsetPx, m.tileSidePx, EPS);
         assertEquals(m.tileSidePx + m.headingGapPx + m.headingHeightPx
             + m.itemBottomGapPx, m.itemHeightPx, EPS);
-        assertEquals(m.largeSlotPx, m.smallCellPx * 2f, EPS);
+        assertEquals(m.largeSlotPx, m.smallCellPx * 2f + m.smallBlockGapPx, EPS);
         assertTrue(m.radiusPx <= m.tileSidePx / 2f);
         assertTrue(m.chargedPreviewBytes() <= Math.floor(BUDGET * 0.60d));
     }

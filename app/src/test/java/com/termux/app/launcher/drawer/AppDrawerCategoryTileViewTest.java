@@ -9,6 +9,8 @@ import static org.junit.Assert.assertTrue;
 import android.app.Activity;
 import android.app.Application;
 import android.graphics.Color;
+import android.graphics.RectF;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.view.View;
@@ -38,14 +40,53 @@ public class AppDrawerCategoryTileViewTest {
         AppDrawerCategoryGridMetrics m = metrics();
         AppDrawerCategoryTileView tile = tile(null, bucket(7), m, new int[1]);
         assertEquals(m.tileSidePx, tile.tileSide(), 1f);
-        assertTrue(tile.heading.getTop() >= Math.round(tile.tileSide() + m.headingGapPx) - 1);
-        assertTrue(tile.heading.getTop() >= tile.tileTop() + tile.tileSide());
+        // Folder-card layout: label band inside the tile top, icon square below it, tile taller
+        // than wide by exactly the band.
+        assertEquals(m.tileSidePx + m.headingGapPx + m.headingHeightPx, tile.tileHeight(), 1f);
+        assertTrue(tile.heading.getTop() < m.innerPaddingPx + 1f);
+        assertTrue(tile.heading.getBottom() <= tile.tileHeight());
+        assertTrue(tile.icons[0].getTop() >= m.headingGapPx + m.headingHeightPx);
         assertEquals(m.largeIconPx, tile.icons[0].getWidth());
         assertEquals(m.largeIconPx, tile.icons[2].getHeight());
         assertEquals(m.smallIconPx, tile.icons[3].getWidth());
         assertEquals(m.smallIconPx, tile.icons[6].getHeight());
         assertEquals(Math.round(m.largeSlotPx), tile.expandTarget.getWidth());
         assertEquals(Math.round(m.largeSlotPx), tile.expandTarget.getHeight());
+    }
+
+    @Test public void smallSubCellsAreCenteredEvenlyGuttedAndContainedByParentSlot() {
+        RectF parent = new RectF(37.5f, 91.25f, 142.5f, 196.25f);
+        float gap = 9f;
+        RectF[] cells = AppDrawerCategoryTileView.smallCellRects(parent, gap);
+
+        assertEquals(4, cells.length);
+        for (RectF cell : cells) {
+            assertTrue(parent.contains(cell));
+            assertEquals((parent.width() - gap) / 2f, cell.width(), 0.001f);
+            assertEquals((parent.height() - gap) / 2f, cell.height(), 0.001f);
+        }
+        assertEquals(gap, cells[1].left - cells[0].right, 0.001f);
+        assertEquals(gap, cells[2].top - cells[0].bottom, 0.001f);
+        assertEquals(parent.centerX(), (cells[0].left + cells[1].right) / 2f, 0.001f);
+        assertEquals(parent.centerY(), (cells[0].top + cells[2].bottom) / 2f, 0.001f);
+        assertEquals(parent.right, cells[3].right, 0f);
+        assertEquals(parent.bottom, cells[3].bottom, 0f);
+    }
+
+    @Test public void smallPreviewsUseTheirOwnPixelSizedCacheEntriesWithoutViewScaling() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        SuggestionBarView dock = new SuggestionBarView(activity, null);
+        AppDrawerCategoryGridMetrics metrics = metrics();
+        AppDrawerCategoryTileView tile = tile(dock, bucket(7), metrics, new int[1]);
+
+        assertEquals(android.widget.ImageView.ScaleType.CENTER, tile.icons[3].getScaleType());
+        assertTrue(tile.icons[0].getDrawable() instanceof BitmapDrawable);
+        assertTrue(tile.icons[3].getDrawable() instanceof BitmapDrawable);
+        BitmapDrawable large = (BitmapDrawable) tile.icons[0].getDrawable();
+        BitmapDrawable small = (BitmapDrawable) tile.icons[3].getDrawable();
+        assertEquals(metrics.largeIconPx, large.getBitmap().getWidth());
+        assertEquals(metrics.smallIconPx, small.getBitmap().getWidth());
+        assertEquals(metrics.smallIconPx, tile.icons[3].getWidth());
     }
 
     @Test public void firstThreeAreDirectActionsAndSmallBlockAndHeadingOnlyExpand() {

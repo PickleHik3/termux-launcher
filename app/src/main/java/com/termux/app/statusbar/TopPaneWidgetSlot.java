@@ -57,6 +57,34 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         super(context, attrs);
         setClipChildren(true);
         setClipToPadding(true);
+        setWillNotDraw(false);
+    }
+
+    private final android.graphics.Paint mRuleExtensionPaint = new android.graphics.Paint();
+
+    /**
+     * The clock's own date hairline stops at its view edges, one gutter short of the pane. These
+     * two segments carry it to the slot's edges so the line reads as spanning the whole plane.
+     */
+    @Override
+    protected void dispatchDraw(@NonNull android.graphics.Canvas canvas) {
+        super.dispatchDraw(canvas);
+        TerminalClockWidget clock = mClock;
+        if (clock == null || clock.getVisibility() != VISIBLE || clock.getAlpha() <= 0f) return;
+        float ruleY = clock.fullRuleCenterYPx();
+        if (ruleY < 0f) return;
+        float y = clock.getTop() + clock.getTranslationY() + ruleY;
+        float half = clock.fullRuleHalfThicknessPx();
+        int color = clock.fullRuleColor();
+        mRuleExtensionPaint.setColor(color);
+        mRuleExtensionPaint.setAlpha(Math.round(android.graphics.Color.alpha(color)
+            * clock.getAlpha()));
+        float left = clock.getLeft() + clock.getTranslationX();
+        float right = left + clock.getWidth();
+        if (left > 0f) canvas.drawRect(0f, y - half, left, y + half, mRuleExtensionPaint);
+        if (right < getWidth()) {
+            canvas.drawRect(right, y - half, getWidth(), y + half, mRuleExtensionPaint);
+        }
     }
 
     @Override
@@ -173,12 +201,15 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
             clock.setForm(form);
             return;
         }
+        // The update listeners keep the slot's hairline extensions tracking the clock's alpha.
         mClockFade = clock.animate().alpha(0f).setDuration(MEDIA_TRANSITION_MS / 2)
             .setInterpolator(INTERPOLATOR)
+            .setUpdateListener(animation -> invalidate())
             .withEndAction(() -> {
                 clock.setForm(form);
                 mClockFade = clock.animate().alpha(1f).setDuration(MEDIA_TRANSITION_MS / 2)
-                    .setInterpolator(INTERPOLATOR);
+                    .setInterpolator(INTERPOLATOR)
+                    .setUpdateListener(animation -> invalidate());
                 mClockFade.start();
             });
         mClockFade.start();

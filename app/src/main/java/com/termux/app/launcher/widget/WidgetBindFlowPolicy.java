@@ -43,9 +43,9 @@ public final class WidgetBindFlowPolicy {
             || pending.appWidgetId != persistedId) {
             return decision(Outcome.IGNORE_FOREIGN_RESULT, null, false);
         }
-        if (!resultOk) return decision(Outcome.DECLINED, null, true);
         if (returnedId > 0 && returnedId != persistedId)
             return decision(Outcome.IGNORE_FOREIGN_RESULT, null, false);
+        if (!resultOk) return decision(Outcome.DECLINED, null, true);
         if (!providerMatches) return decision(Outcome.FAILED_DELETE_ID, null, true);
         return continueAt(WidgetAddTransaction.Stage.BOUND);
     }
@@ -70,9 +70,9 @@ public final class WidgetBindFlowPolicy {
             || pending.appWidgetId != persistedId) {
             return decision(Outcome.IGNORE_FOREIGN_RESULT, null, false);
         }
-        if (!resultOk) return decision(Outcome.DECLINED, null, true);
         if (returnedId > 0 && returnedId != persistedId)
             return decision(Outcome.IGNORE_FOREIGN_RESULT, null, false);
+        if (!resultOk) return decision(Outcome.DECLINED, null, true);
         if (!providerMatches) return decision(Outcome.FAILED_DELETE_ID, null, true);
         return decision(Outcome.READY, WidgetAddTransaction.Stage.COMMITTING, false);
     }

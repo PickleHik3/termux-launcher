@@ -63,6 +63,27 @@ public class LauncherWidgetConfigureRoutingTest {
         }
     }
 
+    @Test public void recreatedOnStartBeforeConfigureResultDoesNotRelaunchConfiguration() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetTestFixtures.Platform platform = new WidgetTestFixtures.Platform(activity);
+        LauncherWidgetRepository repository = WidgetTestFixtures.repository();
+        LauncherWidgetHostController first = new LauncherWidgetHostController(activity,
+            repository, platform);
+        assertEquals(LauncherWidgetHostController.AddResult.STARTED,
+            first.beginAdd(WidgetTestFixtures.info(true), null));
+        platform.info.put(20, WidgetTestFixtures.info(true));
+        first.handleActivityResult(4714, Activity.RESULT_OK, null);
+        assertEquals(1, platform.configureLaunches);
+
+        LauncherWidgetHostController recreated = new LauncherWidgetHostController(activity,
+            repository, platform);
+        recreated.onStart();
+        assertEquals(1, platform.configureLaunches);
+        recreated.handleActivityResult(4715, Activity.RESULT_CANCELED, null);
+        assertNull(repository.pending());
+        assertEquals(1, platform.deleted.size());
+    }
+
     @Test public void configureAvailabilityUsesProviderProfile() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         WidgetTestFixtures.Platform platform = new WidgetTestFixtures.Platform(activity);

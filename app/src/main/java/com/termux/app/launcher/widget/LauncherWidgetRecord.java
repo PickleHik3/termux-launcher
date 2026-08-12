@@ -14,6 +14,7 @@ public final class LauncherWidgetRecord {
     @NonNull public final ComponentName provider;
     public final long profileSerial;
     @NonNull public final State state;
+    @NonNull public final WidgetCellRect cell;
     @NonNull private final Bundle sizeOptions;
     @Nullable public final String lastRenderFailure;
 
@@ -21,11 +22,20 @@ public final class LauncherWidgetRecord {
                                 long profileSerial, @NonNull State state,
                                 @Nullable Bundle sizeOptions,
                                 @Nullable String lastRenderFailure) {
+        this(appWidgetId, provider, profileSerial, state, new WidgetCellRect(0, 0, 1, 1),
+            sizeOptions, lastRenderFailure);
+    }
+
+    public LauncherWidgetRecord(int appWidgetId, @NonNull ComponentName provider,
+                                long profileSerial, @NonNull State state,
+                                @NonNull WidgetCellRect cell, @Nullable Bundle sizeOptions,
+                                @Nullable String lastRenderFailure) {
         if (appWidgetId <= 0) throw new IllegalArgumentException("appWidgetId must be positive");
         this.appWidgetId = appWidgetId;
         this.provider = provider;
         this.profileSerial = profileSerial;
         this.state = state;
+        this.cell = cell;
         this.sizeOptions = sizeOptions == null ? new Bundle() : new Bundle(sizeOptions);
         this.lastRenderFailure = lastRenderFailure;
     }
@@ -36,18 +46,23 @@ public final class LauncherWidgetRecord {
     @NonNull
     public LauncherWidgetRecord withState(@NonNull State value) {
         return new LauncherWidgetRecord(appWidgetId, provider, profileSerial, value,
-            sizeOptions, lastRenderFailure);
+            cell, sizeOptions, lastRenderFailure);
     }
 
     @NonNull
     public LauncherWidgetRecord withSizeOptions(@NonNull Bundle value) {
         return new LauncherWidgetRecord(appWidgetId, provider, profileSerial, state,
-            value, lastRenderFailure);
+            cell, value, lastRenderFailure);
     }
 
     @NonNull
     public LauncherWidgetRecord withRenderFailure(@Nullable String value) {
         return new LauncherWidgetRecord(appWidgetId, provider, profileSerial, state,
-            sizeOptions, value);
+            cell, sizeOptions, value);
+    }
+
+    @NonNull public LauncherWidgetRecord withCell(@NonNull WidgetCellRect value) {
+        return new LauncherWidgetRecord(appWidgetId, provider, profileSerial, state,
+            value, sizeOptions, lastRenderFailure);
     }
 }

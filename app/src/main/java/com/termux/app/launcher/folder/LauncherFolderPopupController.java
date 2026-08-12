@@ -12,6 +12,9 @@ import com.termux.app.Spring;
 
 /** Shared dock/drawer popup owner with non-focusable flags and house-spring transitions. */
 public final class LauncherFolderPopupController implements Choreographer.FrameCallback {
+    /** Backdrop dim at full open; separates the folder from the drawer/dock behind it. */
+    private static final float DIM_AMOUNT = 0.32f;
+
     private final Spring spring = new Spring(0f, 420f, 41f);
     @Nullable private PopupWindow popup;
     @Nullable private String folderId;
@@ -84,6 +87,32 @@ public final class LauncherFolderPopupController implements Choreographer.FrameC
         root.setAlpha(p);
         root.setScaleX(0.94f + 0.06f * p);
         root.setScaleY(0.94f + 0.06f * p);
+        applyDimBehind(root, p);
+    }
+
+    /**
+     * Rides the popup's own window: FLAG_DIM_BEHIND on its decor dims everything below —
+     * drawer, dock, wallpaper — without touching any activity view, and the spring drives the
+     * amount so the dim breathes in and out with the popup itself.
+     */
+    private void applyDimBehind(@NonNull View root, float p) {
+        if (!(root.getParent() instanceof View)) return;
+        View decor = (View) root.getParent();
+        if (!(decor.getLayoutParams() instanceof WindowManager.LayoutParams)) return;
+        WindowManager.LayoutParams params = (WindowManager.LayoutParams) decor.getLayoutParams();
+        float amount = DIM_AMOUNT * p;
+        if ((params.flags & WindowManager.LayoutParams.FLAG_DIM_BEHIND) != 0
+            && Math.abs(params.dimAmount - amount) < 0.004f) return;
+        params.flags |= WindowManager.LayoutParams.FLAG_DIM_BEHIND;
+        params.dimAmount = amount;
+        WindowManager manager = (WindowManager)
+            decor.getContext().getSystemService(android.content.Context.WINDOW_SERVICE);
+        if (manager == null) return;
+        try {
+            manager.updateViewLayout(decor, params);
+        } catch (RuntimeException ignored) {
+            // The decor can detach mid-frame during dismiss; the dim dies with the window anyway.
+        }
     }
 
     private void postFrame() {

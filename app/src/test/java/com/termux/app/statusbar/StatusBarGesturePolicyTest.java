@@ -57,4 +57,47 @@ public class StatusBarGesturePolicyTest {
         assertEquals(StatusBarGesturePolicy.Claim.LONG_PRESS, neutral.timeout(7));
         assertEquals(StatusBarGesturePolicy.Claim.LONG_PRESS, neutral.cancel());
     }
+
+    private static StatusBarGesturePolicy pullPolicy(boolean interactive, boolean pullEligible,
+                                                     TopStatusBarState state) {
+        return new StatusBarGesturePolicy(new StatusBarGesturePolicy.Down(0, 10, 10, 10, 10,
+            100, state, TopStatusBarState.EXPANDED, false, interactive, false, false,
+            pullEligible, 8, 7));
+    }
+
+    @Test public void downwardDragClaimsPullDownEvenOverInteractiveChildren() {
+        StatusBarGesturePolicy overChip = pullPolicy(true, true, TopStatusBarState.EXPANDED);
+        assertEquals(StatusBarGesturePolicy.Claim.PENDING, overChip.claim());
+        assertEquals(StatusBarGesturePolicy.Claim.PULL_DOWN, overChip.move(12, 30));
+
+        StatusBarGesturePolicy upward = pullPolicy(true, true, TopStatusBarState.EXPANDED);
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED, upward.move(12, -30));
+
+        StatusBarGesturePolicy ineligible = pullPolicy(false, false, TopStatusBarState.EXPANDED);
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED, ineligible.move(12, 30));
+    }
+
+    private static StatusBarGesturePolicy pullUpPolicy(boolean eligible) {
+        return new StatusBarGesturePolicy(new StatusBarGesturePolicy.Down(0, 10, 100, 10, 100,
+            100, TopStatusBarState.FULL, TopStatusBarState.EXPANDED, false, false, false, false,
+            false, eligible, 8, 7));
+    }
+
+    @Test public void upwardDragWithFullOpenClaimsPullUpOnlyWhenEligible() {
+        assertEquals(StatusBarGesturePolicy.Claim.PULL_UP,
+            pullUpPolicy(true).move(12, 70));
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED,
+            pullUpPolicy(true).move(12, 130));
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED,
+            pullUpPolicy(false).move(12, 70));
+    }
+
+    @Test public void pullDownOnlyStreamsNeverLongPressOrHorizontalSwipe() {
+        StatusBarGesturePolicy hold = pullPolicy(true, true, TopStatusBarState.EXPANDED);
+        assertEquals("chip hold stays the chip's", StatusBarGesturePolicy.Claim.PENDING,
+            hold.timeout(7));
+
+        StatusBarGesturePolicy horizontal = pullPolicy(true, true, TopStatusBarState.EXPANDED);
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED, horizontal.move(30, 12));
+    }
 }

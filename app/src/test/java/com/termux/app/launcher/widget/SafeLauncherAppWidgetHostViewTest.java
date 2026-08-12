@@ -101,6 +101,39 @@ public class SafeLauncherAppWidgetHostViewTest {
         }
     }
 
+    @Test public void errorTileDoesNotRetryOnFramesAndOnlyProviderUpdateRetries() {
+        List<String> failures = new ArrayList<>();
+        SafeLauncherAppWidgetHostView view = view(failures);
+        int[] updateAttempts = {0};
+        view.setBoundaryProbeForTests(phase -> {
+            if ("update".equals(phase)) {
+                updateAttempts[0]++;
+                throw new RuntimeException("provider");
+            }
+        });
+        view.updateAppWidget(null);
+        assertEquals(1, updateAttempts[0]);
+
+        int exact = View.MeasureSpec.makeMeasureSpec(120, View.MeasureSpec.EXACTLY);
+        for (int frame = 0; frame < 5; frame++) {
+            view.measure(exact, exact);
+            view.layout(0, 0, 120, 120);
+            view.dispatchDraw(new Canvas(
+                Bitmap.createBitmap(120, 120, Bitmap.Config.ARGB_8888)));
+        }
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals("layout/draw frames must not retry RemoteViews inflation", 1,
+            updateAttempts[0]);
+
+        view.setBoundaryProbeForTests(phase -> {
+            if ("update".equals(phase)) updateAttempts[0]++;
+        });
+        view.updateAppWidget(new RemoteViews(view.getContext().getPackageName(),
+            android.R.layout.simple_list_item_1));
+        assertEquals("a genuine provider update gets one new attempt", 2, updateAttempts[0]);
+        assertFalse(view.isShowingLocalError());
+    }
+
     private static SafeLauncherAppWidgetHostView view(List<String> failures) {
         return new SafeLauncherAppWidgetHostView(ApplicationProvider.getApplicationContext(),
             new SafeLauncherAppWidgetHostView.FailureListener() {

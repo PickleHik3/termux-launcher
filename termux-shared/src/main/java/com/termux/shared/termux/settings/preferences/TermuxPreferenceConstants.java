@@ -550,6 +550,15 @@ public final class TermuxPreferenceConstants {
 
         public static final String DEFAULT_TOP_PANE_CLOCK_STYLE = TOP_PANE_CLOCK_STYLE_FLIP;
 
+        /** Horizontal alignment of the FULL-form top-pane clock inside the pane. */
+        public static final String KEY_TOP_PANE_CLOCK_ALIGNMENT = "top_pane_clock_alignment";
+
+        public static final String TOP_PANE_CLOCK_ALIGNMENT_LEFT = "left";
+        public static final String TOP_PANE_CLOCK_ALIGNMENT_CENTER = "center";
+        public static final String TOP_PANE_CLOCK_ALIGNMENT_RIGHT = "right";
+
+        public static final String DEFAULT_TOP_PANE_CLOCK_ALIGNMENT = TOP_PANE_CLOCK_ALIGNMENT_LEFT;
+
         /** Use a 12-hour top-pane clock and append the AM/PM period. */
         public static final String KEY_TOP_PANE_CLOCK_AM_PM = "top_pane_clock_am_pm";
         public static final boolean DEFAULT_TOP_PANE_CLOCK_AM_PM = false;

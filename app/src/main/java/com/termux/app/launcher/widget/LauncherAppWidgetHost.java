@@ -4,6 +4,7 @@ import android.appwidget.AppWidgetHost;
 import android.appwidget.AppWidgetHostView;
 import android.appwidget.AppWidgetProviderInfo;
 import android.content.Context;
+import android.view.ContextThemeWrapper;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -29,7 +30,14 @@ public final class LauncherAppWidgetHost extends AppWidgetHost {
     @Override
     protected AppWidgetHostView onCreateView(Context context, int appWidgetId,
                                              AppWidgetProviderInfo appWidget) {
-        return new SafeLauncherAppWidgetHostView(context, callback);
+        // AppCompat installs its view factory on the activity inflater. RemoteViews validates
+        // actions against the inflated class, so substituting AppCompatImageView for the provider's
+        // framework ImageView makes ordinary setImageBitmap actions illegal. Base this wrapper on
+        // the application inflater (which has no activity factory) while retaining the activity's
+        // exact theme for host sizing and colours. This affects provider inflation only.
+        Context remoteViewsContext = new ContextThemeWrapper(
+            context.getApplicationContext(), context.getTheme());
+        return new SafeLauncherAppWidgetHostView(remoteViewsContext, callback);
     }
 
     @Override

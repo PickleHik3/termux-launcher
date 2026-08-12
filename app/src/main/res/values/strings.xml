@@ -13,6 +13,14 @@
     ]>
 
 <resources>
+    <string name="widget_add">Add widget</string>
+    <string name="widget_empty_message">Your widgets will appear here</string>
+    <string name="widget_unsupported">Widgets aren\'t supported on this device</string>
+    <string name="widget_grid_settings">Widget grid settings</string>
+    <string name="widget_grid_summary">Grid size: %1$d rows × %2$d columns</string>
+    <string name="widget_not_added">Widget wasn\'t added</string>
+    <string name="widget_remove">Remove widget</string>
+    <string name="widget_remove_failed">Widget couldn\'t be removed</string>
     <string name="launcher_widget_error">Widget couldn\'t load</string>
     <string name="settings_search_hint">Search settings</string>
     <string name="settings_search_contains">Contains: %1$s</string>
@@ -41,6 +49,11 @@
     <string name="settings_split_pane_controls_summary">Enable window splitting and tmux-style pane shortcuts.</string>
     <string name="settings_clock_status_header">Clock and status</string>
     <string name="settings_clock_style_title">Clock style</string>
+    <string name="settings_clock_alignment_title">Clock alignment</string>
+    <string name="settings_clock_alignment_summary">Places the expanded clock at the left, center, or right of the pane.</string>
+    <string name="settings_clock_alignment_left">Left</string>
+    <string name="settings_clock_alignment_center">Center</string>
+    <string name="settings_clock_alignment_right">Right</string>
     <string name="settings_use_12_hour_title">Use 12-hour time</string>
     <string name="settings_use_12_hour_summary">Shows time with AM and PM.</string>
     <string name="settings_status_panel_style_title">Status panel style</string>

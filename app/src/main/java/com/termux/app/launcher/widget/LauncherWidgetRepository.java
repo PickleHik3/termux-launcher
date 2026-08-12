@@ -20,28 +20,37 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Synchronous durable store. Writes commit before the in-memory snapshot is replaced. */
+/** Synchronous v2 durable store. Storage commits before the in-memory snapshot changes. */
 public final class LauncherWidgetRepository {
     public interface Storage {
         @Nullable String read();
         boolean write(@NonNull String value);
     }
 
-    private static final int SCHEMA_VERSION = 1;
+    private static final int SCHEMA_VERSION = 2;
     private static final String PREFS = "launcher_widget_repository";
     private static final String KEY_STATE = "state";
 
     private final Storage storage;
     private LinkedHashMap<Integer, LauncherWidgetRecord> records = new LinkedHashMap<>();
     @Nullable private WidgetAddTransaction pending;
+    @NonNull private WidgetGridDefinition grid = WidgetGridDefinition.DEFAULT;
+    private long revision;
+    private boolean migrationWritePending;
+    private boolean readOnlyUnknownVersion;
 
     public LauncherWidgetRepository(@NonNull Storage storage) {
         this.storage = storage;
         load(storage.read());
+        // An empty grid carries no placements worth preserving: adopt the current default
+        // dimensions so a stale persisted grid (e.g. the old 6x4) cannot outlive its widgets.
+        if (records.isEmpty() && pending == null
+            && !grid.equals(WidgetGridDefinition.DEFAULT)) {
+            commitValidated(records, null, WidgetGridDefinition.DEFAULT, revision + 1);
+        }
     }
 
-    @NonNull
-    public static LauncherWidgetRepository create(@NonNull Context context) {
+    @NonNull public static LauncherWidgetRepository create(@NonNull Context context) {
         SharedPreferences preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         return new LauncherWidgetRepository(new Storage() {
             @Override public String read() { return preferences.getString(KEY_STATE, null); }
@@ -51,18 +60,20 @@ public final class LauncherWidgetRepository {
         });
     }
 
-    @NonNull
-    public synchronized List<LauncherWidgetRecord> records() {
+    @NonNull public synchronized List<LauncherWidgetRecord> records() {
         return Collections.unmodifiableList(new ArrayList<>(records.values()));
     }
-
-    @Nullable
-    public synchronized LauncherWidgetRecord get(int appWidgetId) {
+    @Nullable public synchronized LauncherWidgetRecord get(int appWidgetId) {
         return records.get(appWidgetId);
     }
+    @Nullable public synchronized WidgetAddTransaction pending() { return pending; }
+    @NonNull public synchronized WidgetGridDefinition gridDefinition() { return grid; }
+    public synchronized long revision() { return revision; }
 
-    @Nullable
-    public synchronized WidgetAddTransaction pending() { return pending; }
+    public synchronized boolean canReserve(long expectedRevision, @NonNull WidgetCellRect cell) {
+        return pending == null && expectedRevision == revision
+            && WidgetGridPlacementPolicy.canPlace(grid, records(), cell, -1);
+    }
 
     public synchronized boolean putRecord(@NonNull LauncherWidgetRecord record) {
         LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
@@ -72,16 +83,17 @@ public final class LauncherWidgetRepository {
             throw new IllegalArgumentException("app-widget ID already belongs to another provider");
         }
         next.put(record.appWidgetId, record);
-        return commit(next, pending);
+        return commitValidated(next, pending, grid, revision + 1);
     }
 
     public synchronized boolean removeRecord(int appWidgetId) {
         if (!records.containsKey(appWidgetId)) return true;
         LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
         next.remove(appWidgetId);
-        return commit(next, pending);
+        return commitValidated(next, pending, grid, revision + 1);
     }
 
+    /** Compatibility/stage-update API. Initial A-3 reservations use reservePending(). */
     public synchronized boolean setPending(@NonNull WidgetAddTransaction transaction) {
         if (pending != null && !pending.token.equals(transaction.token)) {
             throw new IllegalStateException("another widget add is pending");
@@ -90,54 +102,104 @@ public final class LauncherWidgetRepository {
         if (record != null && record.state != LauncherWidgetRecord.State.DELETING) {
             throw new IllegalArgumentException("pending ID is already active");
         }
-        return commit(records, transaction);
+        if (pending == null && !WidgetGridPlacementPolicy.canPlace(grid, records(),
+            transaction.cell, -1)) {
+            WidgetGridPlacementPolicy.Result fallback = WidgetGridPlacementPolicy.findPlacement(
+                grid, records(), transaction.cell.columnSpan(), transaction.cell.rowSpan());
+            if (fallback.outcome != WidgetGridPlacementPolicy.Outcome.PLACED) return false;
+            transaction = transaction.withCell(fallback.rect);
+        }
+        return commitValidated(records, transaction, grid, revision + 1);
+    }
+
+    /** Compare-and-commit reservation used by the real picker path before any external launch. */
+    public synchronized boolean reservePending(long expectedRevision,
+                                               @NonNull WidgetAddTransaction transaction) {
+        if (pending != null || expectedRevision != revision
+            || transaction.gridRevision != expectedRevision) return false;
+        if (!WidgetGridPlacementPolicy.canPlace(grid, records(), transaction.cell, -1)) return false;
+        return commitValidated(records, transaction, grid, revision + 1);
     }
 
     public synchronized boolean clearPending(@NonNull String token) {
         if (pending == null) return true;
         if (!pending.token.equals(token)) return false;
-        return commit(records, null);
+        return commitValidated(records, null, grid, revision + 1);
     }
 
-    /** Atomically makes the configured widget active and consumes its durable transaction. */
+    /** Atomically makes the configured widget active in its exact reservation. */
     public synchronized boolean finalizeActive(@NonNull String token,
                                                @NonNull LauncherWidgetRecord record) {
         if (pending == null || !pending.token.equals(token)
-            || pending.appWidgetId != record.appWidgetId) return false;
+            || pending.appWidgetId != record.appWidgetId || !pending.cell.equals(record.cell)) return false;
         LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
+        next.remove(record.appWidgetId); // DELETING self-record, if present, is the same reservation.
         next.put(record.appWidgetId, record);
-        return commit(next, null);
+        return commitValidated(next, null, grid, revision + 1);
     }
 
-    /** First phase of abandoning an allocated pending ID. */
     public synchronized boolean beginPendingDeletion(@NonNull WidgetAddTransaction transaction) {
         LauncherWidgetRecord deleting = new LauncherWidgetRecord(transaction.appWidgetId,
             transaction.provider, transaction.profileSerial, LauncherWidgetRecord.State.DELETING,
-            transaction.requestedOptions(), null);
+            transaction.cell, transaction.requestedOptions(), null);
         LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
         next.put(deleting.appWidgetId, deleting);
-        return commit(next, pending);
+        return commitValidated(next, pending, grid, revision + 1);
     }
 
-    /** Completes per-ID deletion and clears only the matching pending transaction. */
+    /** Durable first half of per-ID deletion for an already placed widget. */
+    public synchronized boolean beginRecordDeletion(int appWidgetId) {
+        LauncherWidgetRecord record = records.get(appWidgetId);
+        if (record == null) return false;
+        if (record.state == LauncherWidgetRecord.State.DELETING) return true;
+        LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
+        next.put(appWidgetId, record.withState(LauncherWidgetRecord.State.DELETING));
+        return commitValidated(next, pending, grid, revision + 1);
+    }
+
     public synchronized boolean completeDeletion(int appWidgetId, @Nullable String token) {
         LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
         next.remove(appWidgetId);
         WidgetAddTransaction nextPending = pending;
         if (pending != null && pending.appWidgetId == appWidgetId
             && (token == null || pending.token.equals(token))) nextPending = null;
-        return commit(next, nextPending);
+        return commitValidated(next, nextPending, grid, revision + 1);
     }
 
-    @NonNull
-    public synchronized String serialize() { return encode(records, pending); }
+    /** Atomic A-4/A-5 seam; A-3 only consumes its validation and revision semantics. */
+    public synchronized boolean updateLayout(long expectedRevision,
+                                             @NonNull WidgetGridDefinition definition,
+                                             @NonNull List<LauncherWidgetRecord> values) {
+        if (expectedRevision != revision) return false;
+        LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>();
+        for (LauncherWidgetRecord record : values) {
+            if (next.put(record.appWidgetId, record) != null) return false;
+        }
+        return commitValidated(next, pending, definition, revision + 1);
+    }
 
-    private boolean commit(Map<Integer, LauncherWidgetRecord> next,
-                           @Nullable WidgetAddTransaction nextPending) {
-        String encoded = encode(next, nextPending);
+    @NonNull public synchronized String serialize() { return encode(records, pending, grid, revision); }
+
+    private boolean commitValidated(Map<Integer, LauncherWidgetRecord> next,
+                                    @Nullable WidgetAddTransaction nextPending,
+                                    WidgetGridDefinition nextGrid, long nextRevision) {
+        if (migrationWritePending || readOnlyUnknownVersion) return false;
+        List<LauncherWidgetRecord> values = new ArrayList<>(next.values());
+        if (!WidgetGridPlacementPolicy.validate(nextGrid, values)) return false;
+        if (nextPending != null) {
+            LauncherWidgetRecord same = next.get(nextPending.appWidgetId);
+            int ignored = same != null && same.state == LauncherWidgetRecord.State.DELETING
+                ? same.appWidgetId : -1;
+            if (!WidgetGridPlacementPolicy.canPlace(nextGrid, values, nextPending.cell, ignored)) {
+                return false;
+            }
+        }
+        String encoded = encode(next, nextPending, nextGrid, nextRevision);
         if (!storage.write(encoded)) return false;
         records = new LinkedHashMap<>(next);
         pending = nextPending;
+        grid = nextGrid;
+        revision = nextRevision;
         return true;
     }
 
@@ -145,31 +207,83 @@ public final class LauncherWidgetRepository {
         if (encoded == null || encoded.trim().isEmpty()) return;
         try {
             JSONObject root = new JSONObject(encoded);
-            if (root.optInt("version", 0) != SCHEMA_VERSION) return;
-            LinkedHashMap<Integer, LauncherWidgetRecord> loaded = new LinkedHashMap<>();
-            JSONArray array = root.optJSONArray("records");
-            if (array != null) {
-                for (int i = 0; i < array.length(); i++) {
-                    LauncherWidgetRecord record = decodeRecord(array.getJSONObject(i));
-                    LauncherWidgetRecord old = loaded.put(record.appWidgetId, record);
-                    if (old != null) throw new JSONException("duplicate widget ID");
-                }
-            }
+            int version = root.optInt("version", 0);
+            if (version == 1) { migrateV1(root); return; }
+            if (version != SCHEMA_VERSION) { readOnlyUnknownVersion = true; return; }
+            WidgetGridDefinition loadedGrid = decodeGrid(root.getJSONObject("grid"));
+            LinkedHashMap<Integer, LauncherWidgetRecord> loaded = decodeRecords(root, true);
             WidgetAddTransaction loadedPending = root.has("pending")
-                ? decodeTransaction(root.getJSONObject("pending")) : null;
+                ? decodeTransaction(root.getJSONObject("pending"), true, 0, 0) : null;
+            if (!validSnapshot(loadedGrid, loaded, loadedPending)) return;
             records = loaded;
             pending = loadedPending;
+            grid = loadedGrid;
+            revision = Math.max(0, root.optLong("revision", 0));
         } catch (JSONException | IllegalArgumentException ignored) {
-            records = new LinkedHashMap<>();
-            pending = null;
+            // Preserve an empty in-memory recovery target; never overwrite an unknown/corrupt value.
         }
     }
 
+    private void migrateV1(JSONObject root) throws JSONException {
+        JSONArray array = root.optJSONArray("records");
+        int count = array == null ? 0 : array.length();
+        boolean hasPending = root.has("pending");
+        int total = count + (hasPending ? 1 : 0);
+        int rows = Math.max(WidgetGridDefinition.DEFAULT_ROWS,
+            (total + WidgetGridDefinition.DEFAULT_COLUMNS - 1) / WidgetGridDefinition.DEFAULT_COLUMNS);
+        WidgetGridDefinition migratedGrid = new WidgetGridDefinition(rows,
+            WidgetGridDefinition.DEFAULT_COLUMNS);
+        LinkedHashMap<Integer, LauncherWidgetRecord> migrated = new LinkedHashMap<>();
+        for (int i = 0; i < count; i++) {
+            LauncherWidgetRecord legacy = decodeRecord(array.getJSONObject(i), false,
+                i % migratedGrid.columns, i / migratedGrid.columns);
+            if (migrated.put(legacy.appWidgetId, legacy) != null) throw new JSONException("duplicate widget ID");
+        }
+        WidgetAddTransaction migratedPending = hasPending
+            ? decodeTransaction(root.getJSONObject("pending"), false,
+                count % migratedGrid.columns, count / migratedGrid.columns) : null;
+        if (!validSnapshot(migratedGrid, migrated, migratedPending)) throw new JSONException("invalid v1");
+        // Keep the decoded identities in memory even when the one-shot migration write fails.
+        records = migrated;
+        pending = migratedPending;
+        grid = migratedGrid;
+        revision = 0;
+        migrationWritePending = !storage.write(encode(migrated, migratedPending, migratedGrid, 0));
+    }
+
+    private static boolean validSnapshot(WidgetGridDefinition definition,
+                                         LinkedHashMap<Integer, LauncherWidgetRecord> values,
+                                         @Nullable WidgetAddTransaction transaction) {
+        List<LauncherWidgetRecord> list = new ArrayList<>(values.values());
+        if (!WidgetGridPlacementPolicy.validate(definition, list)) return false;
+        if (transaction == null) return true;
+        LauncherWidgetRecord same = values.get(transaction.appWidgetId);
+        int ignored = same != null && same.state == LauncherWidgetRecord.State.DELETING
+            ? same.appWidgetId : -1;
+        return WidgetGridPlacementPolicy.canPlace(definition, list, transaction.cell, ignored);
+    }
+
+    private static LinkedHashMap<Integer, LauncherWidgetRecord> decodeRecords(JSONObject root,
+                                                                              boolean hasCell)
+        throws JSONException {
+        LinkedHashMap<Integer, LauncherWidgetRecord> loaded = new LinkedHashMap<>();
+        JSONArray array = root.optJSONArray("records");
+        if (array == null) return loaded;
+        for (int i = 0; i < array.length(); i++) {
+            LauncherWidgetRecord record = decodeRecord(array.getJSONObject(i), hasCell, 0, 0);
+            if (loaded.put(record.appWidgetId, record) != null) throw new JSONException("duplicate widget ID");
+        }
+        return loaded;
+    }
+
     private static String encode(Map<Integer, LauncherWidgetRecord> values,
-                                 @Nullable WidgetAddTransaction transaction) {
+                                 @Nullable WidgetAddTransaction transaction,
+                                 WidgetGridDefinition definition, long revision) {
         try {
             JSONObject root = new JSONObject();
             root.put("version", SCHEMA_VERSION);
+            root.put("revision", revision);
+            root.put("grid", encodeGrid(definition));
             JSONArray array = new JSONArray();
             for (LauncherWidgetRecord record : values.values()) array.put(encodeRecord(record));
             root.put("records", array);
@@ -180,22 +294,42 @@ public final class LauncherWidgetRepository {
         }
     }
 
+    private static JSONObject encodeGrid(WidgetGridDefinition value) throws JSONException {
+        return new JSONObject().put("rows", value.rows).put("columns", value.columns);
+    }
+    private static WidgetGridDefinition decodeGrid(JSONObject value) throws JSONException {
+        return new WidgetGridDefinition(value.getInt("rows"), value.getInt("columns"));
+    }
+    private static JSONObject encodeCell(WidgetCellRect value) throws JSONException {
+        return new JSONObject().put("left", value.left).put("top", value.top)
+            .put("right", value.right).put("bottom", value.bottom);
+    }
+    private static WidgetCellRect decodeCell(JSONObject value) throws JSONException {
+        return new WidgetCellRect(value.getInt("left"), value.getInt("top"),
+            value.getInt("right"), value.getInt("bottom"));
+    }
+
     private static JSONObject encodeRecord(LauncherWidgetRecord record) throws JSONException {
         JSONObject value = new JSONObject();
         value.put("id", record.appWidgetId);
         value.put("provider", record.provider.flattenToString());
         value.put("profile", record.profileSerial);
         value.put("state", record.state.name());
+        value.put("cell", encodeCell(record.cell));
         value.put("options", encodeBundle(record.sizeOptions()));
         if (record.lastRenderFailure != null) value.put("failure", record.lastRenderFailure);
         return value;
     }
 
-    private static LauncherWidgetRecord decodeRecord(JSONObject value) throws JSONException {
+    private static LauncherWidgetRecord decodeRecord(JSONObject value, boolean hasCell,
+                                                     int legacyColumn, int legacyRow)
+        throws JSONException {
         ComponentName provider = ComponentName.unflattenFromString(value.getString("provider"));
         if (provider == null) throw new JSONException("invalid provider");
+        WidgetCellRect cell = hasCell ? decodeCell(value.getJSONObject("cell"))
+            : new WidgetCellRect(legacyColumn, legacyRow, legacyColumn + 1, legacyRow + 1);
         return new LauncherWidgetRecord(value.getInt("id"), provider, value.getLong("profile"),
-            LauncherWidgetRecord.State.valueOf(value.getString("state")),
+            LauncherWidgetRecord.State.valueOf(value.getString("state")), cell,
             decodeBundle(value.optJSONObject("options")), value.optString("failure", null));
     }
 
@@ -206,17 +340,26 @@ public final class LauncherWidgetRepository {
         out.put("provider", value.provider.flattenToString());
         out.put("profile", value.profileSerial);
         out.put("stage", value.stage.name());
+        out.put("cell", encodeCell(value.cell));
+        out.put("gridRevision", value.gridRevision);
+        if (value.originToken != null) out.put("origin", value.originToken);
         out.put("options", encodeBundle(value.requestedOptions()));
         out.put("started", value.startedAtMillis);
         return out;
     }
 
-    private static WidgetAddTransaction decodeTransaction(JSONObject value) throws JSONException {
+    private static WidgetAddTransaction decodeTransaction(JSONObject value, boolean hasCell,
+                                                          int legacyColumn, int legacyRow)
+        throws JSONException {
         ComponentName provider = ComponentName.unflattenFromString(value.getString("provider"));
         if (provider == null) throw new JSONException("invalid provider");
+        WidgetCellRect cell = hasCell ? decodeCell(value.getJSONObject("cell"))
+            : new WidgetCellRect(legacyColumn, legacyRow, legacyColumn + 1, legacyRow + 1);
         return new WidgetAddTransaction(value.getString("token"), value.getInt("id"), provider,
             value.getLong("profile"), WidgetAddTransaction.Stage.valueOf(value.getString("stage")),
-            decodeBundle(value.optJSONObject("options")), value.getLong("started"));
+            cell, hasCell ? value.optLong("gridRevision", 0) : 0,
+            value.optString("origin", null), decodeBundle(value.optJSONObject("options")),
+            value.getLong("started"));
     }
 
     private static JSONObject encodeBundle(Bundle bundle) throws JSONException {
@@ -228,8 +371,7 @@ public final class LauncherWidgetRepository {
             if (value instanceof Integer || value instanceof Long || value instanceof Double
                 || value instanceof Boolean || value instanceof String) out.put(key, value);
             else if (value instanceof Float) out.put(key, ((Float) value).doubleValue());
-            else if (AppWidgetManager.OPTION_APPWIDGET_SIZES.equals(key)
-                && value instanceof ArrayList) {
+            else if (AppWidgetManager.OPTION_APPWIDGET_SIZES.equals(key) && value instanceof ArrayList) {
                 JSONArray sizes = encodeSizeList((ArrayList<?>) value);
                 if (sizes != null) out.put(key, sizes);
             }
@@ -237,14 +379,13 @@ public final class LauncherWidgetRepository {
         return out;
     }
 
-    @Nullable
-    private static JSONArray encodeSizeList(@NonNull ArrayList<?> values) throws JSONException {
+    @Nullable private static JSONArray encodeSizeList(@NonNull ArrayList<?> values)
+        throws JSONException {
         JSONArray out = new JSONArray();
         for (Object value : values) {
             if (!(value instanceof SizeF)) return null;
             SizeF size = (SizeF) value;
-            out.put(new JSONObject().put("width", size.getWidth())
-                .put("height", size.getHeight()));
+            out.put(new JSONObject().put("width", size.getWidth()).put("height", size.getHeight()));
         }
         return out;
     }

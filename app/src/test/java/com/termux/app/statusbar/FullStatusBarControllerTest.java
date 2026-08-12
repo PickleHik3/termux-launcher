@@ -63,6 +63,121 @@ public class FullStatusBarControllerTest {
         assertEquals(1, reduced.finishCount);
     }
 
+    @Test public void dragTracksFingerCommitsPastThresholdAndOpensFull() {
+        FakeHost host = new FakeHost();
+        FakeFrames frames = new FakeFrames();
+        FullStatusBarController controller = new FullStatusBarController(host, frames);
+
+        assertTrue(controller.dragBegin(TopStatusBarState.EXPANDED));
+        assertTrue(controller.isEngaged());
+        assertSame(FullStatusBarController.Motion.DRAGGING, controller.motion());
+        controller.dragUpdate(100f);
+        assertEquals(196, host.height);
+        controller.dragUpdate(300f);
+        assertEquals(396, host.height);
+        // 300/504 travel is past the 0.35 threshold: release commits to FULL.
+        controller.dragEnd(0f);
+        assertSame(FullStatusBarController.Motion.OPENING, controller.motion());
+        frames.runToIdle();
+        assertSame(FullStatusBarController.Motion.FULL, controller.motion());
+        assertEquals(600, host.height);
+        assertEquals(1, host.finishCount);
+    }
+
+    @Test public void shortDragSpringsBackToPriorForm() {
+        FakeHost host = new FakeHost();
+        host.height = 32;
+        FakeFrames frames = new FakeFrames();
+        FullStatusBarController controller = new FullStatusBarController(host, frames);
+
+        assertTrue(controller.dragBegin(TopStatusBarState.COMPACT));
+        controller.dragUpdate(60f);
+        assertEquals(92, host.height);
+        // 60/568 travel, no fling: release springs back to the captured COMPACT form.
+        controller.dragEnd(0f);
+        assertSame(FullStatusBarController.Motion.CLOSING, controller.motion());
+        frames.runToIdle();
+        assertFalse(controller.isEngaged());
+        assertEquals(32, host.height);
+        assertFalse(host.engaged);
+    }
+
+    @Test public void fastFlingCommitsRegardlessOfProgressAndDragClampsToBounds() {
+        FakeHost host = new FakeHost();
+        FakeFrames frames = new FakeFrames();
+        FullStatusBarController controller = new FullStatusBarController(host, frames);
+
+        assertTrue(controller.dragBegin(TopStatusBarState.EXPANDED));
+        controller.dragUpdate(-50f);
+        assertEquals("drag can never shrink below the prior form", 96, host.height);
+        controller.dragUpdate(9999f);
+        assertEquals("drag can never overshoot FULL", 600, host.height);
+        controller.dragUpdate(40f);
+        // 40/504 travel but a hard downward fling: commits anyway.
+        controller.dragEnd(5000f);
+        assertSame(FullStatusBarController.Motion.OPENING, controller.motion());
+        frames.runToIdle();
+        assertSame(FullStatusBarController.Motion.FULL, controller.motion());
+
+        assertFalse("second dragBegin while engaged must be refused",
+            controller.dragBegin(TopStatusBarState.EXPANDED));
+    }
+
+    @Test public void closeDragFromFullCollapsesPastThresholdOrSpringsBackToFull() {
+        FakeHost host = new FakeHost();
+        FakeFrames frames = new FakeFrames();
+        FullStatusBarController controller = new FullStatusBarController(host, frames);
+        assertTrue(controller.open(TopStatusBarState.EXPANDED));
+        frames.runToIdle();
+        assertSame(FullStatusBarController.Motion.FULL, controller.motion());
+
+        assertTrue(controller.dragBeginClose());
+        controller.dragUpdate(-100f);
+        assertEquals(500, host.height);
+        // Still above the 0.35 commit line: release springs back to FULL.
+        controller.dragEnd(0f);
+        frames.runToIdle();
+        assertSame(FullStatusBarController.Motion.FULL, controller.motion());
+        assertEquals(600, host.height);
+
+        assertTrue(controller.dragBeginClose());
+        controller.dragUpdate(-450f);
+        assertEquals(150, host.height);
+        // 54/504 progress: release collapses to the captured prior form.
+        controller.dragEnd(0f);
+        frames.runToIdle();
+        assertFalse(controller.isEngaged());
+        assertEquals(96, host.height);
+
+        assertFalse("close drag needs a settled FULL", controller.dragBeginClose());
+    }
+
+    @Test public void closeDragUpFlingCollapsesRegardlessOfProgress() {
+        FakeHost host = new FakeHost();
+        FakeFrames frames = new FakeFrames();
+        FullStatusBarController controller = new FullStatusBarController(host, frames);
+        assertTrue(controller.open(TopStatusBarState.COMPACT));
+        frames.runToIdle();
+        assertTrue(controller.dragBeginClose());
+        controller.dragUpdate(-40f);
+        controller.dragEnd(-5000f);
+        frames.runToIdle();
+        assertFalse(controller.isEngaged());
+        assertEquals(32, host.height);
+    }
+
+    @Test public void dragCancelAlwaysSpringsBack() {
+        FakeHost host = new FakeHost();
+        FakeFrames frames = new FakeFrames();
+        FullStatusBarController controller = new FullStatusBarController(host, frames);
+        assertTrue(controller.dragBegin(TopStatusBarState.EXPANDED));
+        controller.dragUpdate(400f);
+        controller.dragCancel();
+        frames.runToIdle();
+        assertFalse(controller.isEngaged());
+        assertEquals(96, host.height);
+    }
+
     private static final class FakeHost implements FullStatusBarController.Host {
         int height = 96;
         int parentHeight = 600;

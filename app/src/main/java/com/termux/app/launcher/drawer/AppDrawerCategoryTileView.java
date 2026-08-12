@@ -3,6 +3,7 @@ package com.termux.app.launcher.drawer;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.text.TextUtils;
 import android.util.TypedValue;
@@ -20,7 +21,11 @@ import com.termux.app.launcher.model.LauncherAppEntry;
 
 import java.util.List;
 
-/** Seven-icon category preview with one exact rounded-square draw rect and an external heading. */
+/**
+ * Seven-icon category preview drawn as one rounded rect with the heading INSIDE at the top —
+ * the tile reads as a folder card (label band above a square icon area, slightly taller than
+ * wide), not as a picture with an external caption.
+ */
 public final class AppDrawerCategoryTileView extends ViewGroup {
     public static final float HEADING_TEXT_SP = 13f;
     public interface ExpansionListener {
@@ -40,6 +45,8 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
     @NonNull private AppDrawerAppCellView.ClickGate clickGate = AppDrawerAppCellView.ALLOW_CLICKS;
     private float tileLeft;
     private float tileSide;
+    /** Label band inside the tile's top: the icon square starts below it. */
+    private float headingBand;
 
     public AppDrawerCategoryTileView(@NonNull android.content.Context context) {
         super(context);
@@ -54,8 +61,10 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         strokePaint.setColor(0x38FFFFFF);
         for (int i = 0; i < icons.length; i++) {
             ImageView icon = new ImageView(context);
-            icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-            icon.setAdjustViewBounds(true);
+            // The cached drawable is rendered at this view's exact pixel size. CENTER therefore
+            // performs no second scaling pass (CENTER_INSIDE made the already-small bitmap look
+            // like a large preview squeezed into a mini view on high-density devices).
+            icon.setScaleType(ImageView.ScaleType.CENTER);
             icons[i] = icon;
             addView(icon);
         }
@@ -68,7 +77,7 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         heading.setSingleLine(true);
         heading.setMaxLines(1);
         heading.setEllipsize(TextUtils.TruncateAt.END);
-        heading.setGravity(android.view.Gravity.CENTER);
+        heading.setGravity(android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL);
         heading.setIncludeFontPadding(false);
         heading.setClickable(true);
         addView(heading);
@@ -173,8 +182,13 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         float inset = resolved == null ? 0f : resolved.tileHorizontalInsetPx;
         tileLeft = inset;
         tileSide = Math.max(0f, width - 2f * inset);
+        // The old external caption's vertical budget moves inside the tile as its label band, so
+        // the grid item height is unchanged while the tile itself grows taller than wide.
+        headingBand = resolved == null ? 0f : resolved.headingGapPx + resolved.headingHeightPx;
         int headingHeight = resolved == null ? 0 : Math.max(0, Math.round(resolved.headingHeightPx));
-        heading.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+        float inner = resolved == null ? 0f : resolved.innerPaddingPx;
+        int headingWidth = Math.max(0, Math.round(tileSide - 2f * inner));
+        heading.measure(MeasureSpec.makeMeasureSpec(headingWidth, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(headingHeight, MeasureSpec.EXACTLY));
         int large = resolved == null ? 1 : resolved.largeIconPx;
         int small = resolved == null ? 1 : resolved.smallIconPx;
@@ -186,8 +200,8 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         int block = resolved == null ? 1 : Math.max(1, Math.round(resolved.largeSlotPx));
         expandTarget.measure(MeasureSpec.makeMeasureSpec(block, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(block, MeasureSpec.EXACTLY));
-        int desired = Math.round(tileSide + (resolved == null ? 0f
-            : resolved.headingGapPx + resolved.headingHeightPx + resolved.itemBottomGapPx));
+        int desired = Math.round(headingBand + tileSide
+            + (resolved == null ? 0f : resolved.itemBottomGapPx));
         setMeasuredDimension(resolveSize(width, widthMeasureSpec), resolveSize(desired, heightMeasureSpec));
     }
 
@@ -198,23 +212,26 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         float slot = Math.max(0f, (tileSide - 2f * inner - resolved.slotGapPx) / 2f);
         float left = tileLeft + inner;
         float right = left + slot + resolved.slotGapPx;
-        float top = inner;
+        // Label band first, icon square below it — both inside the one drawn rect.
+        int headingLeft = Math.round(tileLeft + inner);
+        int headingTop = Math.round(inner * 0.75f);
+        heading.layout(headingLeft, headingTop, headingLeft + heading.getMeasuredWidth(),
+            headingTop + heading.getMeasuredHeight());
+        float top = headingBand + inner;
         float bottom = top + slot + resolved.slotGapPx;
         layoutCentered(icons[0], left, top, slot);
         layoutCentered(icons[1], right, top, slot);
         layoutCentered(icons[2], left, bottom, slot);
-        float cell = slot / 2f;
-        for (int i = 0; i < 4; i++) {
-            float cellLeft = right + (i % 2) * cell;
-            float cellTop = bottom + (i / 2) * cell;
-            layoutCentered(icons[3 + i], cellLeft, cellTop, cell);
+        RectF parentSlot = new RectF(right, bottom, right + slot, bottom + slot);
+        RectF[] smallCells = smallCellRects(parentSlot, resolved.smallBlockGapPx);
+        for (int i = 0; i < smallCells.length; i++) {
+            RectF cell = smallCells[i];
+            layoutCentered(icons[3 + i], cell.left, cell.top, cell.width());
         }
         int blockLeft = Math.round(right);
         int blockTop = Math.round(bottom);
         expandTarget.layout(blockLeft, blockTop, blockLeft + Math.round(slot),
             blockTop + Math.round(slot));
-        int headingTop = Math.round(tileSide + resolved.headingGapPx);
-        heading.layout(0, headingTop, getMeasuredWidth(), headingTop + heading.getMeasuredHeight());
     }
 
     private static void layoutCentered(@NonNull View view, float left, float top, float size) {
@@ -223,16 +240,39 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         view.layout(x, y, x + view.getMeasuredWidth(), y + view.getMeasuredHeight());
     }
 
+    /** Exact centred 2x2 geometry inside the one large-slot rectangle. */
+    @NonNull
+    static RectF[] smallCellRects(@NonNull RectF parentSlot, float requestedGapPx) {
+        float gap = Math.max(0f, Math.min(requestedGapPx,
+            Math.min(parentSlot.width(), parentSlot.height())));
+        float cellWidth = Math.max(0f, (parentSlot.width() - gap) / 2f);
+        float cellHeight = Math.max(0f, (parentSlot.height() - gap) / 2f);
+        float secondLeft = parentSlot.left + cellWidth + gap;
+        float secondTop = parentSlot.top + cellHeight + gap;
+        return new RectF[] {
+            new RectF(parentSlot.left, parentSlot.top,
+                parentSlot.left + cellWidth, parentSlot.top + cellHeight),
+            new RectF(secondLeft, parentSlot.top, parentSlot.right,
+                parentSlot.top + cellHeight),
+            new RectF(parentSlot.left, secondTop, parentSlot.left + cellWidth,
+                parentSlot.bottom),
+            new RectF(secondLeft, secondTop, parentSlot.right, parentSlot.bottom)
+        };
+    }
+
     @Override protected void onDraw(@NonNull Canvas canvas) {
         super.onDraw(canvas);
         AppDrawerCategoryGridMetrics resolved = metrics;
         float radius = resolved == null ? 0f : Math.min(resolved.radiusPx, tileSide / 2f);
-        canvas.drawRoundRect(tileLeft, 0f, tileLeft + tileSide, tileSide, radius, radius, fillPaint);
-        canvas.drawRoundRect(tileLeft, 0f, tileLeft + tileSide, tileSide, radius, radius, strokePaint);
+        float bottom = tileHeight();
+        canvas.drawRoundRect(tileLeft, 0f, tileLeft + tileSide, bottom, radius, radius, fillPaint);
+        canvas.drawRoundRect(tileLeft, 0f, tileLeft + tileSide, bottom, radius, radius, strokePaint);
     }
 
     public float tileLeft() { return tileLeft; }
     public float tileTop() { return 0f; }
     public float tileSide() { return tileSide; }
+    /** Drawn tile height: the label band plus the icon square. */
+    public float tileHeight() { return headingBand + tileSide; }
     @Nullable public AppDrawerCategoryBucket bucket() { return bucket; }
 }

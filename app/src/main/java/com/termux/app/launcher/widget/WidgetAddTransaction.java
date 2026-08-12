@@ -21,6 +21,9 @@ public final class WidgetAddTransaction {
     @NonNull public final ComponentName provider;
     public final long profileSerial;
     @NonNull public final Stage stage;
+    @NonNull public final WidgetCellRect cell;
+    public final long gridRevision;
+    @Nullable public final String originToken;
     @NonNull private final Bundle requestedOptions;
     public final long startedAtMillis;
 
@@ -28,6 +31,15 @@ public final class WidgetAddTransaction {
                                 @NonNull ComponentName provider, long profileSerial,
                                 @NonNull Stage stage, @Nullable Bundle requestedOptions,
                                 long startedAtMillis) {
+        this(token, appWidgetId, provider, profileSerial, stage, new WidgetCellRect(0, 0, 1, 1),
+            0, null, requestedOptions, startedAtMillis);
+    }
+
+    public WidgetAddTransaction(@NonNull String token, int appWidgetId,
+                                @NonNull ComponentName provider, long profileSerial,
+                                @NonNull Stage stage, @NonNull WidgetCellRect cell,
+                                long gridRevision, @Nullable String originToken,
+                                @Nullable Bundle requestedOptions, long startedAtMillis) {
         if (token.isEmpty()) throw new IllegalArgumentException("token must not be empty");
         if (appWidgetId <= 0) throw new IllegalArgumentException("appWidgetId must be positive");
         this.token = token;
@@ -35,6 +47,9 @@ public final class WidgetAddTransaction {
         this.provider = provider;
         this.profileSerial = profileSerial;
         this.stage = stage;
+        this.cell = cell;
+        this.gridRevision = gridRevision;
+        this.originToken = originToken;
         this.requestedOptions = requestedOptions == null ? new Bundle() : new Bundle(requestedOptions);
         this.startedAtMillis = startedAtMillis;
     }
@@ -45,6 +60,11 @@ public final class WidgetAddTransaction {
     @NonNull
     public WidgetAddTransaction withStage(@NonNull Stage value) {
         return new WidgetAddTransaction(token, appWidgetId, provider, profileSerial, value,
-            requestedOptions, startedAtMillis);
+            cell, gridRevision, originToken, requestedOptions, startedAtMillis);
+    }
+
+    @NonNull public WidgetAddTransaction withCell(@NonNull WidgetCellRect value) {
+        return new WidgetAddTransaction(token, appWidgetId, provider, profileSerial, stage,
+            value, gridRevision, originToken, requestedOptions, startedAtMillis);
     }
 }
