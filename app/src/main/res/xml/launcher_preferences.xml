@@ -2,6 +2,14 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <PreferenceCategory app:title="@string/settings_use_case_header">
+        <com.termux.app.fragments.settings.SegmentedPillPreference
+            app:key="app_launcher_use_case_mode"
+            app:title="@string/settings_use_case_title"
+            app:summary="@string/settings_use_case_summary"
+            app:defaultValue="launcher" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/settings_surfaces_header">
         <Preference
             app:key="customize_dock_surface"
@@ -18,6 +26,18 @@
             app:summary="@string/settings_show_pinned_apps_summary"
             android:defaultValue="true" />
         <SwitchPreferenceCompat
+            app:key="app_launcher_az_row_enabled"
+            app:title="@string/settings_show_az_index_title"
+            app:summary="@string/settings_show_az_index_summary"
+            app:dependency="app_launcher_apps_row_enabled"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="app_launcher_row_haptics"
+            app:title="@string/settings_app_index_haptics_title"
+            app:summary="@string/settings_app_index_haptics_summary"
+            app:dependency="app_launcher_apps_row_enabled"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
             app:key="app_launcher_extra_keys_row_enabled"
             app:title="@string/settings_show_extra_keys_row_title"
             app:summary="@string/settings_show_extra_keys_row_summary"
@@ -29,16 +49,6 @@
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_app_browsing_header">
-        <SwitchPreferenceCompat
-            app:key="app_launcher_az_row_enabled"
-            app:title="@string/settings_show_az_index_title"
-            app:summary="@string/settings_show_az_index_summary"
-            android:defaultValue="true" />
-        <SwitchPreferenceCompat
-            app:key="app_launcher_row_haptics"
-            app:title="@string/settings_app_index_haptics_title"
-            app:summary="@string/settings_app_index_haptics_summary"
-            android:defaultValue="true" />
         <SwitchPreferenceCompat
             app:key="app_launcher_notification_dots"
             app:title="@string/settings_notification_dots_title"
@@ -63,6 +73,14 @@
             app:key="app_launcher_drawer_layout"
             app:title="@string/settings_app_drawer_view_type_title"
             app:fragment="com.termux.app.fragments.settings.termux.AppDrawerPreferencesFragment" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_home_widgets_header">
+        <SwitchPreferenceCompat
+            app:key="app_launcher_widget_pane_enabled"
+            app:title="@string/settings_widget_pane_enabled_title"
+            app:summary="@string/settings_widget_pane_enabled_summary"
+            android:defaultValue="true" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_launcher_search_header">

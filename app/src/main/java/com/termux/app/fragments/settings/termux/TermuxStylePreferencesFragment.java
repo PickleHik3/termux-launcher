@@ -304,6 +304,23 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherAzRowEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
+            case "app_launcher_drawer_enabled":
+                mPreferences.setAppLauncherDrawerEnabled(value);
+                scheduleTermuxActivityStylingSync(false);
+                break;
+            case "extra_keys_text_all_caps":
+                // A property, not a preference: the row reads it from termux.properties, so the
+                // switch writes there and the reload picks it up like any hand edit would.
+                writeTermuxPropertyToProperties(
+                    TermuxPropertyConstants.KEY_EXTRA_KEYS_TEXT_ALL_CAPS,
+                    Boolean.toString(value));
+                scheduleTermuxActivityStylingSync(false);
+                break;
+            case "app_launcher_widget_pane_enabled":
+                mPreferences.setAppLauncherWidgetPaneEnabled(value);
+                // The pane is built once per activity, so it has to come back on a recreate.
+                scheduleTermuxActivityStylingSync(true);
+                break;
             case "app_launcher_row_haptics":
                 mPreferences.setAppLauncherRowHapticsEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -347,7 +364,18 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_launcher_most_used_page":
                 return mPreferences.isAppLauncherMostUsedPageEnabled();
             case "app_launcher_az_row_enabled":
-                return mPreferences.isAppLauncherAzRowEnabled();
+                // Raw: the switch shows what the user picked, the apps row dependency greys it.
+                return mPreferences.isAppLauncherAzRowChosen();
+            case "app_launcher_drawer_enabled":
+                return mPreferences.isAppLauncherDrawerEnabled();
+            case "app_launcher_widget_pane_enabled":
+                return mPreferences.isAppLauncherWidgetPaneEnabled();
+            case "extra_keys_text_all_caps": {
+                String stored = loadTermuxProperties().getProperty(
+                    TermuxPropertyConstants.KEY_EXTRA_KEYS_TEXT_ALL_CAPS);
+                // Absent means the documented default-true behaviour of this property.
+                return stored == null || !"false".equals(stored.trim().toLowerCase(java.util.Locale.ROOT));
+            }
             case "app_launcher_row_haptics":
                 return mPreferences.isAppLauncherRowHapticsEnabled();
             case "app_launcher_az_double_tap_lock":
@@ -491,6 +519,12 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_launcher_az_lock_method":
                 mPreferences.setAppLauncherAzLockMethod(value);
                 break;
+            case "app_launcher_use_case_mode":
+                com.termux.app.launcher.LauncherUseCaseMode.applyMode(mPreferences, value);
+                // Flips the drawer, both dock rows and the widget pane at once: recreate so every
+                // surface is rebuilt against the new state instead of restyled in place.
+                scheduleTermuxActivityStylingSync(true);
+                break;
             case "app_launcher_dock_style":
                 mPreferences.setAppLauncherDockStyle(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -566,6 +600,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getAppLauncherInputChar();
             case "app_launcher_az_lock_method":
                 return mPreferences.getAppLauncherAzLockMethod();
+            case "app_launcher_use_case_mode":
+                return com.termux.app.launcher.LauncherUseCaseMode.currentMode(mPreferences);
             case "app_launcher_dock_style":
                 return mPreferences.getAppLauncherDockStyle();
             case "app_launcher_drawer_view_type":
@@ -605,50 +641,11 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
     }
 
     private Properties loadTermuxProperties() {
-        File propertiesFile = SharedProperties.getPropertiesFileFromList(TermuxConstants.TERMUX_PROPERTIES_FILE_PATHS_LIST, LOG_TAG);
-        if (propertiesFile == null) {
-            propertiesFile = TermuxConstants.TERMUX_PROPERTIES_PRIMARY_FILE;
-        }
-        Properties properties = SharedProperties.getPropertiesFromFile(mContext, propertiesFile, null);
-        return properties == null ? new Properties() : properties;
+        return com.termux.app.settings.TermuxPropertiesFile.load(mContext);
     }
 
     private void writeTermuxPropertyToProperties(@NonNull String propertyKey, @NonNull String propertyValue) {
-        File propertiesFile = SharedProperties.getPropertiesFileFromList(TermuxConstants.TERMUX_PROPERTIES_FILE_PATHS_LIST, LOG_TAG);
-        if (propertiesFile == null) {
-            propertiesFile = TermuxConstants.TERMUX_PROPERTIES_PRIMARY_FILE;
-        }
-        File parentDir = propertiesFile.getParentFile();
-        if (parentDir != null && !parentDir.exists()) {
-            //noinspection ResultOfMethodCallIgnored
-            parentDir.mkdirs();
-        }
-        List<String> lines = new ArrayList<>();
-        boolean updated = false;
-        if (propertiesFile.exists()) {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(propertiesFile), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    String trimmed = line.trim();
-                    if (!trimmed.startsWith("#") && trimmed.matches("^\\s*" + propertyKey + "\\s*=.*$")) {
-                        lines.add(propertyKey + "=" + propertyValue);
-                        updated = true;
-                    } else {
-                        lines.add(line);
-                    }
-                }
-            } catch (Exception e) {
-                Logger.logStackTraceWithMessage(LOG_TAG, "Failed to read termux.properties", e);
-            }
-        }
-        if (!updated) {
-            lines.add(propertyKey + "=" + propertyValue);
-        }
-        StringBuilder output = new StringBuilder();
-        for (String line : lines) {
-            output.append(line).append('\n');
-        }
-        FileUtils.writeTextToFile("termux.properties", propertiesFile.getAbsolutePath(), StandardCharsets.UTF_8, output.toString(), false);
+        com.termux.app.settings.TermuxPropertiesFile.write(propertyKey, propertyValue);
     }
 
     @ColorInt

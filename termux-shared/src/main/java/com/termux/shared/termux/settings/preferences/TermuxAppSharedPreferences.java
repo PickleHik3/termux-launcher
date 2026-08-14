@@ -426,6 +426,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_WEATHER, value, false);
     }
 
+    public boolean isStatusWidgetWeatherFahrenheit() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_WEATHER_FAHRENHEIT, TERMUX_APP.DEFAULT_STATUS_WIDGET_WEATHER_FAHRENHEIT);
+    }
+
+    public void setStatusWidgetWeatherFahrenheit(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_WEATHER_FAHRENHEIT, value, false);
+    }
+
     public boolean isTerminalCursorTrailEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL, TERMUX_APP.DEFAULT_TERMINAL_CURSOR_TRAIL);
@@ -516,6 +525,50 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_APP_LAUNCHER_EXTRA_KEYS_ROW_ENABLED, value, false);
     }
 
+    public boolean isAppLauncherWidgetPaneEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_PANE_ENABLED,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_PANE_ENABLED);
+    }
+
+    public void setAppLauncherWidgetPaneEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_PANE_ENABLED, value, false);
+    }
+
+    public String getAppLauncherUseCaseMode() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_MODE,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_USE_CASE_MODE, true);
+        return TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL.equals(value)
+            ? TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL
+            : TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_LAUNCHER;
+    }
+
+    public void setAppLauncherUseCaseMode(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_MODE,
+            TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL.equals(value)
+                ? TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL
+                : TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_LAUNCHER, false);
+    }
+
+    public boolean isTerminalOnlyUseCase() {
+        return TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL.equals(getAppLauncherUseCaseMode());
+    }
+
+    public String getAppLauncherUseCaseSnapshot() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_SNAPSHOT,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_USE_CASE_SNAPSHOT, true);
+    }
+
+    public void setAppLauncherUseCaseSnapshot(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_SNAPSHOT,
+            value == null ? TERMUX_APP.DEFAULT_APP_LAUNCHER_USE_CASE_SNAPSHOT : value, false);
+    }
+
     public boolean isAppLauncherNotificationDotsEnabled() {
         return isAppLauncherAppsRowEnabled() && SharedPreferenceUtils.getBoolean(
             mSharedPreferences,
@@ -540,8 +593,19 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_MOST_USED_PAGE, value, false);
     }
 
+    /**
+     * The A-Z index scrolls the apps row, so it is meaningless on its own: with the apps row off
+     * it is a strip of letters that scrubs nothing. Coupled the same way the notification dots and
+     * most-used page are, so the stored choice survives the apps row being toggled off and back.
+     */
     public boolean isAppLauncherAzRowEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_AZ_ROW_ENABLED,
+        return isAppLauncherAppsRowEnabled() && isAppLauncherAzRowChosen();
+    }
+
+    /** The stored A-Z choice, ignoring the apps row coupling — for settings and for snapshots. */
+    public boolean isAppLauncherAzRowChosen() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_AZ_ROW_ENABLED,
             TERMUX_APP.DEFAULT_APP_LAUNCHER_AZ_ROW_ENABLED);
     }
 
@@ -980,6 +1044,23 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public static int clampInAppKeyboardKeyOpacity(int value) {
         if (value < 0) return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY;
         return Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_OPACITY, value);
+    }
+
+    public int getInAppKeyboardBackgroundOpacity() {
+        return clampInAppKeyboardBackgroundOpacity(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY));
+    }
+
+    public void setInAppKeyboardBackgroundOpacity(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY,
+            clampInAppKeyboardBackgroundOpacity(value), false);
+    }
+
+    public static int clampInAppKeyboardBackgroundOpacity(int value) {
+        return Math.max(TERMUX_APP.MIN_IN_APP_KEYBOARD_BACKGROUND_OPACITY,
+            Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKGROUND_OPACITY, value));
     }
 
     public boolean isSoftKeyboardEnabledOnlyIfNoHardware() {

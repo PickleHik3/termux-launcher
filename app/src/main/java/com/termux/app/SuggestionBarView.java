@@ -130,6 +130,7 @@ import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedFolderItem;
 import com.termux.app.launcher.model.PinnedItem;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.theme.ThemeUtils;
 import com.termux.view.TerminalView;
 import com.termux.launcherctl.LauncherCtlNotificationListener;
@@ -317,6 +318,7 @@ public final class SuggestionBarView extends GridLayout
         new LauncherFolderPopupController();
     @Nullable private View activePinnedDragSourceView;
     @Nullable private PinnedDragState activePinnedDragState;
+    @Nullable private FolderEntryDragState activeFolderEntryDragState;
     private PopupWindow appContextPopupWindow;
     private PopupWindow shortcutsPopupWindow;
     private PopupWindow notificationPopupWindow;
@@ -409,6 +411,8 @@ public final class SuggestionBarView extends GridLayout
     @Nullable private Runnable drawerConfigChangedListener;
     /** A config change that landed while the folder popup was up; replayed when it closes. */
     private boolean pendingDrawerConfigRefresh;
+    /** A catalogue swap that landed while the host was hidden; rows re-render on return. */
+    private boolean pendingCatalogRefreshRender;
     private final LauncherConfigRepository.Listener configListener = snapshot -> post(() -> {
         pinnedItems = new ArrayList<>(snapshot.dockItems);
         invalidateRenderedIconCaches();
@@ -953,6 +957,10 @@ public final class SuggestionBarView extends GridLayout
     public void setHostVisible(boolean visible) {
         hostVisible = visible;
         if (visible) {
+            if (pendingCatalogRefreshRender) {
+                pendingCatalogRefreshRender = false;
+                post(() -> reloadWithInput(lastInput, lastTerminalView));
+            }
             scheduleStableDrawReleaseIfPossible();
             return;
         }
@@ -1082,6 +1090,60 @@ public final class SuggestionBarView extends GridLayout
             appCatalogChangedListener.run();
         }
         invalidateAzRankCache();
+    }
+
+    /**
+     * Refreshes the catalogue in place after a package change: the current apps keep rendering
+     * while the provider rebuilds in the background, then everything swaps at once. This replaces
+     * the old clearAppCache()+reloadAllApps() flow on this path, whose synchronous wipe blanked
+     * the dock and drawer for the whole rebuild (seconds, every icon re-resolved).
+     *
+     * <p>{@code changedPackages} scopes the rebuild — entries of untouched packages are reused
+     * wholesale. Null forces a full rebuild. An update to the active icon pack itself widens to a
+     * full rebuild here, because reused entries would keep the pack's stale artwork.
+     */
+    void refreshAllApps(@Nullable Set<String> changedPackages) {
+        if (injectedSuggestionButtons != null
+            || appDataProvider == null || !appDataProvider.hasLoadedApps()) {
+            reloadAllApps();
+            return;
+        }
+        if (changedPackages != null && !changedPackages.isEmpty()) {
+            TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(getContext(), false);
+            if (preferences != null) {
+                String globalPack = preferences.getAppLauncherIconPackPackage();
+                String pinnedPack = preferences.getAppLauncherPinnedIconPackPackage();
+                if ((globalPack != null && changedPackages.contains(globalPack))
+                    || (pinnedPack != null && changedPackages.contains(pinnedPack))) {
+                    changedPackages = null;
+                }
+            }
+        }
+        if (changedPackages == null) {
+            // Full rebuild resolves every icon again — drop the parsed pack caches so it picks up
+            // the new pack resources instead of the 10s-TTL stale ones.
+            if (iconResolver != null) iconResolver.clearCache();
+            if (iconPackRepository != null) iconPackRepository.clearCache();
+        }
+        appDataProvider.refreshAsync(changedPackages, () -> {
+            allApps = appDataProvider.getAllApps();
+            resolvedRefCache.clear();
+            shortcutCache.clear();
+            invalidateRenderedIconCaches();
+            pruneUnavailablePinnedItems();
+            invalidateAzRankCache();
+            invalidateAzRenderState();
+            if (appCatalogChangedListener != null) {
+                appCatalogChangedListener.run();
+            }
+            if (hostVisible && isAttachedToWindow()) {
+                reloadWithInput(lastInput, lastTerminalView);
+            } else {
+                // The swap landed while the host was away; re-render the rows on return, or the
+                // dock would keep showing the pre-change catalogue with no later signal to fix it.
+                pendingCatalogRefreshRender = true;
+            }
+        });
     }
 
     /**
@@ -1954,7 +2016,10 @@ public final class SuggestionBarView extends GridLayout
         boolean noActivePickup = activeLongPressPickupState == null && folderDragHoverIndex < 0;
         return new AppDrawerGestureArbiter.Eligibility(
             listener != null && listener.isAppDrawerEnabled(),
-            TextUtils.isEmpty(lastInput.trim()),
+            // The filtered apps row used to veto the pull-down, forcing a search clear before the
+            // drawer could open. A vertical pull is unambiguous even over filtered results — the
+            // page swipe stays horizontal — so the veto slot is permanently clear.
+            true,
             activeAzLetter == null,
             portrait,
             listener != null && !listener.isDockTuningActive(),
@@ -3460,7 +3525,11 @@ public final class SuggestionBarView extends GridLayout
         delete.setContentDescription("Delete folder");
         styleIconButton(delete, dp(4));
         delete.setOnClickListener(v -> {
-            removePinnedAt(folderIndex);
+            if (folderIndex >= 0) {
+                removePinnedAt(folderIndex);
+            } else {
+                dissolveDrawerFolder(folder.id);
+            }
             dialog.dismiss();
         });
         LinearLayout.LayoutParams deleteParams = new LinearLayout.LayoutParams(dp(28), dp(28));
@@ -4215,10 +4284,10 @@ public final class SuggestionBarView extends GridLayout
             dismissFolderPopup();
             refreshPinnedItemsFromRepository();
             PinnedFolderItem latestFolder = resolveLatestFolder(popupFolderId);
-            int folderIndex = latestFolder == null ? -1 : findPinnedFolderIndex(latestFolder);
-            if (folderIndex >= 0 && latestFolder != null) {
-                showFolderContentsEditor(folderIndex, latestFolder);
-            }
+            if (latestFolder == null) return;
+            // Drawer-only folders have no dock index (-1); the editor persists those through the
+            // shared folder entity instead of a dock slot, so the cog must not require a pin.
+            showFolderContentsEditor(findPinnedFolderIndex(latestFolder), latestFolder);
         });
 
         header.addView(title);
@@ -4304,12 +4373,17 @@ public final class SuggestionBarView extends GridLayout
         Runnable notificationSwipeAction = pinnedIndex >= 0
             ? () -> showNotificationPopup(entry, pressTarget)
             : null;
+        // A folder member has no dock slot to drag, so its pickup starts a folder-entry drag that
+        // carries the member out of the folder instead of reordering a pinned index.
+        Runnable folderEntryPickup = sourceFolder != null && folderEntryRef != null
+            ? () -> startFolderEntryDrag(pressTarget, entry, sourceFolder.id)
+            : null;
         bindContextLongPressGesture(pressTarget, pinnedIndex, allowDragPickup, () -> {
             dismissShortcutsPopup();
             showAppContextPopup(new AppMenuContext(entry, pressTarget, pinnedIndex,
                 sourceFolder == null ? null : sourceFolder.id,
                 folderEntryRef));
-        }, notificationSwipeAction, entry.appRef.packageName);
+        }, notificationSwipeAction, entry.appRef.packageName, null, null, folderEntryPickup);
     }
 
     /**
@@ -4333,7 +4407,7 @@ public final class SuggestionBarView extends GridLayout
         bindContextLongPressGesture(pressTarget, -1, false, () -> {
             dismissShortcutsPopup();
             showAppContextPopup(new AppMenuContext(entry, pressTarget, -1, null, null));
-        }, null, null, pickupDelegate, entry);
+        }, null, null, pickupDelegate, entry, null);
     }
 
     private void bindFolderContextLongPress(
@@ -4357,7 +4431,7 @@ public final class SuggestionBarView extends GridLayout
         @Nullable String notificationPackage
     ) {
         bindContextLongPressGesture(pressTarget, pinnedIndex, allowDragPickup, showContextPopup,
-            notificationSwipeAction, notificationPackage, null, null);
+            notificationSwipeAction, notificationPackage, null, null, null);
     }
 
     private void bindContextLongPressGesture(
@@ -4368,7 +4442,8 @@ public final class SuggestionBarView extends GridLayout
         @Nullable Runnable notificationSwipeAction,
         @Nullable String notificationPackage,
         @Nullable AppDrawerPickupDelegate drawerPickup,
-        @Nullable LauncherAppEntry drawerPickupEntry
+        @Nullable LauncherAppEntry drawerPickupEntry,
+        @Nullable Runnable folderEntryPickup
     ) {
         pressTarget.setLongClickable(true);
         pressTarget.setOnLongClickListener(v -> {
@@ -4442,7 +4517,7 @@ public final class SuggestionBarView extends GridLayout
                         && withinPickupWindow
                         && !state.definitiveYMovement
                         && absDx >= xPickupThreshold
-                        && pinnedIndex >= 0;
+                        && (pinnedIndex >= 0 || folderEntryPickup != null);
                     if (drawerPickup != null) shouldStartPickup = withinPickupWindow
                         && !state.definitiveYMovement && absDx >= xPickupThreshold;
 
@@ -4450,10 +4525,18 @@ public final class SuggestionBarView extends GridLayout
                         state.dragStarted = true;
                         clearMenuHighlight();
                         dismissAppContextPopup();
-                        dismissFolderPopup();
-                        if (drawerPickup != null && drawerPickupEntry != null)
+                        if (drawerPickup != null && drawerPickupEntry != null) {
+                            dismissFolderPopup();
                             drawerPickup.startPickup(pressTarget, drawerPickupEntry);
-                        else startPinnedDrag(pressTarget, pinnedIndex);
+                        } else if (folderEntryPickup != null) {
+                            // The folder popup owns this drag's source window: start the drag
+                            // first, then hide (not dismiss) the popup so the window survives
+                            // until the drag ends (see startFolderEntryDrag).
+                            folderEntryPickup.run();
+                        } else {
+                            dismissFolderPopup();
+                            startPinnedDrag(pressTarget, pinnedIndex);
+                        }
                         activeLongPressPickupState = null;
                         return true;
                     }
@@ -6603,6 +6686,7 @@ public final class SuggestionBarView extends GridLayout
     private void applyNormalizedFolderSelection(int folderIndex, @NonNull PinnedFolderItem folder, @NonNull List<PinnedAppItem> selectedApps) {
         int resolvedIndex = folderIndex >= 0 ? folderIndex : findPinnedFolderIndex(folder);
         if (resolvedIndex < 0 || resolvedIndex >= pinnedItems.size()) {
+            applyDrawerFolderSelection(folder, selectedApps);
             return;
         }
         if (selectedApps.isEmpty()) {
@@ -6615,6 +6699,26 @@ public final class SuggestionBarView extends GridLayout
             pinnedItems.set(resolvedIndex, folder);
         }
         persistPinsAndReload();
+    }
+
+    /**
+     * Persists an edit to a drawer-only folder (one with no dock slot) by mutating the shared
+     * snapshot entity: {@code savePinnedItems} retains drawer entities and its normalize pass
+     * collapses folders left with fewer than two members.
+     */
+    private void applyDrawerFolderSelection(@NonNull PinnedFolderItem folder, @NonNull List<PinnedAppItem> selectedApps) {
+        if (configRepository == null) return;
+        PinnedFolderItem entity = resolveLatestFolder(folder.id);
+        if (entity == null) return;
+        entity.apps.clear();
+        entity.apps.addAll(selectedApps);
+        persistPinsAndReload();
+    }
+
+    /** Deletes a drawer-only folder entity; the repository publish recomposes dock and drawer. */
+    private void dissolveDrawerFolder(@NonNull String folderId) {
+        if (configRepository == null) return;
+        configRepository.dissolveFolder(configRepository.loadSnapshot().revision, folderId);
     }
 
     private boolean addPinnedAppToFolderIfMissing(@NonNull PinnedFolderItem folder, @NonNull PinnedAppItem app) {
@@ -6657,6 +6761,38 @@ public final class SuggestionBarView extends GridLayout
         return true;
     }
 
+    /**
+     * Window-level drag out of the folder popup, mirroring {@link #startPinnedDrag}: the drag
+     * carries the member's folder id + ref instead of a dock index. The popup is hidden — not
+     * dismissed — so the system drag keeps its source window; the dock's drag listener finishes
+     * the dismissal on ACTION_DRAG_ENDED.
+     */
+    private boolean startFolderEntryDrag(@NonNull View view, @NonNull LauncherAppEntry entry,
+                                         @NonNull String sourceFolderId) {
+        int sizePx = Math.max(1, iconSizePx());
+        Drawable ghost = getRenderedIcon(entry, sizePx);
+        if (ghost == null) return false;
+        FolderEntryDragState dragState = new FolderEntryDragState(sourceFolderId,
+            resolveForSelectionRef(entry.appRef));
+        ClipData clip = ClipData.newPlainText("folder-entry", dragState.appRef.stableId());
+        View.DragShadowBuilder shadow = createRaisedDragShadow(ghost, sizePx);
+        activePinnedDragSourceView = view;
+        activeFolderEntryDragState = dragState;
+        boolean started;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            started = view.startDragAndDrop(clip, shadow, dragState, 0);
+        } else {
+            started = view.startDrag(clip, shadow, dragState, 0);
+        }
+        if (!started) {
+            activePinnedDragSourceView = null;
+            activeFolderEntryDragState = null;
+            return false;
+        }
+        sharedFolderPopup.hideForDrag();
+        return true;
+    }
+
     @NonNull
     private Drawable renderedDragGhost(int sourceIndex, int sizePx) {
         if (sourceIndex < 0 || sourceIndex >= pinnedItems.size()) return null;
@@ -6690,10 +6826,16 @@ public final class SuggestionBarView extends GridLayout
     public void cancelActiveDockDrag() {
         PinnedDragState state = activePinnedDragState;
         if (state != null) state.cancelled = true;
+        FolderEntryDragState folderState = activeFolderEntryDragState;
+        if (folderState != null) {
+            folderState.cancelled = true;
+            sharedFolderPopup.dismissImmediate();
+        }
         View source = activePinnedDragSourceView;
         if (source != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) source.cancelDragAndDrop();
         activePinnedDragSourceView = null;
         activePinnedDragState = null;
+        activeFolderEntryDragState = null;
         activeLongPressPickupState = null;
         clearFolderDragInsertionPreview();
     }
@@ -6701,7 +6843,8 @@ public final class SuggestionBarView extends GridLayout
     private boolean handlePinnedBarDragEvent(@NonNull View targetView, @NonNull DragEvent event) {
         Object localState = event.getLocalState();
         boolean pinnedDrag = localState instanceof PinnedDragState;
-        if (!pinnedDrag) return false;
+        boolean folderEntryDrag = localState instanceof FolderEntryDragState;
+        if (!pinnedDrag && !folderEntryDrag) return false;
 
         int slotCount = Math.max(1, maxButtonCount);
         float width = Math.max(1f, targetView.getWidth());
@@ -6736,12 +6879,19 @@ public final class SuggestionBarView extends GridLayout
             case DragEvent.ACTION_DROP:
                 targetView.setAlpha(1f);
                 clearFolderDragInsertionPreview();
+                if (folderEntryDrag) {
+                    return applyFolderEntryDrop((FolderEntryDragState) localState, targetIndex,
+                        targetItem, dropXRatio);
+                }
                 return applyPinnedDrop((PinnedDragState) localState, targetIndex, targetItem, dropXRatio);
             case DragEvent.ACTION_DRAG_ENDED:
                 targetView.setAlpha(1f);
                 clearFolderDragInsertionPreview();
+                // A folder-entry drag left its source popup hidden but alive; finish it now.
+                if (folderEntryDrag) sharedFolderPopup.dismissImmediate();
                 activePinnedDragSourceView = null;
                 activePinnedDragState = null;
+                activeFolderEntryDragState = null;
                 return true;
             default:
                 return false;
@@ -6796,6 +6946,52 @@ public final class SuggestionBarView extends GridLayout
 
         int insertionIndex = computeInsertionIndex(targetIndex, targetItem, dropXRatio);
         return movePinnedItem(dragState.sourceIndex, insertionIndex);
+    }
+
+    /**
+     * Applies a folder-member drop onto the dock row: the member leaves its folder and lands on
+     * the hovered slot (top-level insert, or append when the slot holds another folder). Dropping
+     * back onto the source folder's own tile cancels. Folder collapse (0/1 members left) rides
+     * the repository's normalize pass during {@link #persistPinsAndReload}.
+     */
+    private boolean applyFolderEntryDrop(@NonNull FolderEntryDragState dragState, int targetIndex,
+                                         @Nullable PinnedItem targetItem, float dropXRatio) {
+        if (dragState.cancelled) return false;
+        PinnedFolderItem sourceFolder = resolveLatestFolder(dragState.folderId);
+        PinnedAppItem member = findFolderApp(sourceFolder, dragState.appRef);
+        if (sourceFolder == null || member == null) return false;
+        if (targetItem instanceof PinnedFolderItem
+            && sourceFolder.id.equals(((PinnedFolderItem) targetItem).id)) {
+            return false;
+        }
+        AppRef resolved = resolveForSelectionRef(member.appRef);
+        if (targetItem instanceof PinnedFolderItem) {
+            PinnedFolderItem destination = (PinnedFolderItem) targetItem;
+            if (destination.containsApp(resolved)) {
+                showFolderAppendRejected(LauncherFolderMutator.AppendResult.DUPLICATE);
+                return false;
+            }
+            if (destination.apps.size() >= PinnedFolderItem.MAX_APPS) {
+                showFolderAppendRejected(LauncherFolderMutator.AppendResult.CAPACITY);
+                return false;
+            }
+            destination.apps.add(new PinnedAppItem(resolved, member.iconOverride));
+            removeAppFromFolder(sourceFolder, resolved);
+            persistPinsAndReload();
+            return true;
+        }
+        if (findPinnedAppIndex(resolved) >= 0) {
+            // Already docked top-level: leaving the folder must not create a duplicate slot.
+            removeAppFromFolder(sourceFolder, resolved);
+            persistPinsAndReload();
+            return true;
+        }
+        int insertionIndex = computeInsertionIndex(targetIndex, targetItem, dropXRatio);
+        LauncherFolderMutator.AppendResult result = LauncherFolderMutator.moveFolderAppToTopLevel(
+            pinnedItems, sourceFolder, member.appRef.stableId(), insertionIndex);
+        if (result != LauncherFolderMutator.AppendResult.APPLIED) return false;
+        persistPinsAndReload();
+        return true;
     }
 
     private int computeInsertionIndex(int targetIndex, @Nullable PinnedItem targetItem, float dropXRatio) {
@@ -6895,6 +7091,18 @@ public final class SuggestionBarView extends GridLayout
 
         PinnedDragState(int sourceIndex) {
             this.sourceIndex = sourceIndex;
+        }
+    }
+
+    /** Local drag state for a member dragged out of a folder popup. */
+    private static final class FolderEntryDragState {
+        @NonNull final String folderId;
+        @NonNull final AppRef appRef;
+        boolean cancelled;
+
+        FolderEntryDragState(@NonNull String folderId, @NonNull AppRef appRef) {
+            this.folderId = folderId;
+            this.appRef = appRef;
         }
     }
 
@@ -7648,7 +7856,7 @@ public final class SuggestionBarView extends GridLayout
         button.setOnClickListener(v -> launchEntryFromTouch(v, entry, lastTerminalView));
         PinnedFolderItem sourceFolder = resolveLatestFolder(sourceFolderId);
         if (sourceFolder != null) bindAppContextLongPress(button, entry, -1, sourceFolder,
-            resolveForSelectionRef(entry.appRef), false);
+            resolveForSelectionRef(entry.appRef), true);
         button.setContentDescription(entry.label);
         registerLaunchTarget(entry.appRef, button);
         return button;

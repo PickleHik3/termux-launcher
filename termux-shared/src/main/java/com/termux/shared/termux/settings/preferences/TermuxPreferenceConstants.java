@@ -151,6 +151,36 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_APP_LAUNCHER_EXTRA_KEYS_ROW_ENABLED = true;
 
         /**
+         * Defines the key for enabling the home widget pane reached by the status bar pull-down.
+         */
+        public static final String KEY_APP_LAUNCHER_WIDGET_PANE_ENABLED =
+            "app_launcher_widget_pane_enabled";
+
+        public static final boolean DEFAULT_APP_LAUNCHER_WIDGET_PANE_ENABLED = true;
+
+        /**
+         * Defines the key for the launcher / terminal-only use case the user picked. Stored rather
+         * than derived from the surface switches: the surfaces stay individually settable after a
+         * mode is picked, and a derived mode would jump between the two the moment one is flipped.
+         */
+        public static final String KEY_APP_LAUNCHER_USE_CASE_MODE = "app_launcher_use_case_mode";
+
+        public static final String APP_LAUNCHER_USE_CASE_MODE_LAUNCHER = "launcher";
+        public static final String APP_LAUNCHER_USE_CASE_MODE_TERMINAL = "terminal";
+        public static final String DEFAULT_APP_LAUNCHER_USE_CASE_MODE =
+            APP_LAUNCHER_USE_CASE_MODE_LAUNCHER;
+
+        /**
+         * Defines the key holding the launcher surface states captured when the user switched to
+         * terminal-only mode, so switching back restores the layout they had. Encoded by
+         * {@code LauncherUseCaseMode}; an empty value means nothing was captured yet.
+         */
+        public static final String KEY_APP_LAUNCHER_USE_CASE_SNAPSHOT =
+            "app_launcher_use_case_snapshot";
+
+        public static final String DEFAULT_APP_LAUNCHER_USE_CASE_SNAPSHOT = "";
+
+        /**
          * Defines the key for showing active-notification dots on apps bar icons.
          */
         public static final String KEY_APP_LAUNCHER_NOTIFICATION_DOTS = "app_launcher_notification_dots";
@@ -279,6 +309,10 @@ public final class TermuxPreferenceConstants {
 
         public static final String KEY_STATUS_WIDGET_WEATHER = "status_widget_weather";
         public static final boolean DEFAULT_STATUS_WIDGET_WEATHER = true;
+
+        /** Show weather temperatures in Fahrenheit instead of the default Celsius. */
+        public static final String KEY_STATUS_WIDGET_WEATHER_FAHRENHEIT = "status_widget_weather_fahrenheit";
+        public static final boolean DEFAULT_STATUS_WIDGET_WEATHER_FAHRENHEIT = false;
 
         /** Animate the terminal cursor between its old and new cell instead of jumping. */
         public static final String KEY_TERMINAL_CURSOR_TRAIL = "terminal_cursor_trail";
@@ -496,6 +530,21 @@ public final class TermuxPreferenceConstants {
         public static final int MIN_IN_APP_KEYBOARD_KEY_OPACITY = 0;
 
         public static final int MAX_IN_APP_KEYBOARD_KEY_OPACITY = 100;
+
+        /**
+         * Defines the opacity in percent of the keyboard's own background surface — the glass
+         * tint, or the color-scheme background override when one is set. Independent of the key
+         * caps ({@link #KEY_IN_APP_KEYBOARD_KEY_OPACITY}); 100 keeps the surface as the theme
+         * renders it.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY =
+            "in_app_keyboard_background_opacity";
+
+        public static final int DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY = 100;
+
+        public static final int MIN_IN_APP_KEYBOARD_BACKGROUND_OPACITY = 0;
+
+        public static final int MAX_IN_APP_KEYBOARD_BACKGROUND_OPACITY = 100;
 
         /**
          * Defines the key for whether the soft keyboard will be enabled only if no hardware keyboard
