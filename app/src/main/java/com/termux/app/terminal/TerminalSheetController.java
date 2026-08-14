@@ -211,6 +211,11 @@ public final class TerminalSheetController
 
     @Nullable private FrameLayout mHost;
     @Nullable private FrameLayout mStackHost;
+    /**
+     * True once a touch has gone down on the plane outside every card, so the matching lift can be
+     * read as a tap that means "close this".
+     */
+    private boolean mOutsideDownSeen;
     /** Set by {@link #show} for the card it is about to build; read once by {@link #buildCard}. */
     @NonNull private Placement mPendingPlacement = Placement.centered();
 
@@ -285,6 +290,8 @@ public final class TerminalSheetController
             mActivity.closeFullStatusBarImmediate();
             if (mActivity.isAppDrawerOpen()) mActivity.getAppDrawerController().closeImmediate();
         }
+        // A press that is still down cannot have gone down on this plane, whatever it does next.
+        mOutsideDownSeen = false;
         View card = buildCard(title, content, fillHeight);
         if (coverPrevious && !mStack.isEmpty())
             mStack.get(mStack.size() - 1).card.setVisibility(View.GONE);
@@ -382,12 +389,25 @@ public final class TerminalSheetController
                     // Taps on the in-app keyboard are not "outside": the host covers the whole
                     // activity, keyboard included, and those keys are how the sheet is typed into.
                     // They must fall through unconsumed or the first keystroke closes the sheet.
-                    return !mActivity.isPointOnInAppKeyboard(event.getRawX(), event.getRawY());
+                    if (mActivity.isPointOnInAppKeyboard(event.getRawX(), event.getRawY()))
+                        return false;
+                    mOutsideDownSeen = true;
+                    return true;
                 case MotionEvent.ACTION_UP:
+                    // Only a tap that began on this plane closes it. The long press that opens the
+                    // action menu is still down when the menu appears, so its ACTION_UP arrives here
+                    // with no ACTION_DOWN of its own — and dismissing on that lifted the menu away
+                    // the moment the finger came off the screen.
+                    if (!mOutsideDownSeen) return true;
+                    mOutsideDownSeen = false;
                     // Dismissed on the finished tap, not on DOWN: a gesture-nav back swipe delivers
                     // its DOWN to the app before the system claims the gesture with ACTION_CANCEL,
                     // and dismissing on DOWN would turn every Back into two dismissals.
-                    dismiss();
+                    //
+                    // The whole stack goes, not one card: a tap on the terminal means "I am done
+                    // here", and popping one card at a time left the user tapping outside twice to
+                    // get out of a submenu. Back is the gesture that walks back one card.
+                    dismissAll();
                     return true;
                 default:
                     return true;

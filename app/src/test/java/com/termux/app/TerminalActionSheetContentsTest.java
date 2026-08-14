@@ -36,11 +36,11 @@ import java.util.List;
 /**
  * What the terminal long-press menu offers, and which rows it hides.
  *
- * <p>Written because <em>Style</em> — the upstream entry into Termux:Styling — had silently gone
- * missing from this fork: the string stayed, translated into eleven locales and referenced by
- * nothing, and issue #11 was someone noticing. A menu is easy to edit and hard to spot a hole in,
- * so the entries that answer a reported bug are asserted rather than left to review. Style now sits
- * under <em>More</em>, which is a place it can go missing from just as quietly.
+ * <p>A menu is easy to edit and hard to spot a hole in, so its shape is asserted rather than left to
+ * review — the more so because these rows have moved twice: <em>Style</em> was restored here after
+ * issue #11 found it missing, then dropped again at the owner's request once palettes were reachable
+ * from Settings and applying a scheme stopped needing the terminal's help. <em>Search</em> went the
+ * same way. What is left is asserted in order, including the two conditional rows.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
@@ -53,8 +53,8 @@ public class TerminalActionSheetContentsTest {
         setClipboardText(activity, "echo hi");
 
         assertEquals(Arrays.asList(string(R.string.action_select_url),
-                string(R.string.action_search_scrollback),
                 string(R.string.action_open_settings),
+                string(R.string.action_select_text),
                 string(R.string.action_paste),
                 string(R.string.action_more)),
             titles(TerminalActionMenu.buildTopRows(activity)));
@@ -89,18 +89,43 @@ public class TerminalActionSheetContentsTest {
             .contains(string(R.string.action_copy_selection)));
     }
 
+    /**
+     * Style and Search are deliberately gone, and this asserts it so neither drifts back in. Palettes
+     * live in Settings › Appearance, which applying a Termux:Styling scheme now cooperates with by
+     * itself, and the scrollback search has its own bar and keybinding.
+     */
     @Test
-    public void theSheetOffersStyle() {
-        assertTrue("the terminal long-press menu must offer Style, under More",
-            titles(TerminalActionMenu.buildMoreRows(activity(), 1234))
-                .contains(string(R.string.action_style_terminal)));
+    public void styleAndSearchAreNotOnTheMenu() {
+        TermuxActivity activity = activity();
+        List<String> all = new ArrayList<>(titles(TerminalActionMenu.buildTopRows(activity)));
+        all.addAll(titles(TerminalActionMenu.buildMoreRows(activity, 1234)));
+
+        assertFalse(string(R.string.action_style_terminal),
+            all.contains(string(R.string.action_style_terminal)));
+        assertFalse(string(R.string.action_search_scrollback),
+            all.contains(string(R.string.action_search_scrollback)));
+    }
+
+    /** Selection is a row now, because the long press that used to start it opens this menu. */
+    @Test
+    public void selectTextIsOfferedUntilThereIsASelection() {
+        assertTrue("a long press no longer starts selection, so the menu has to offer it",
+            titles(TerminalActionMenu.buildTopRows(activity()))
+                .contains(string(R.string.action_select_text)));
+    }
+
+    /** More is pushed by a row, so it can be popped by one; Back is the last row on that card. */
+    @Test
+    public void moreEndsWithABackRow() {
+        List<String> titles = titles(TerminalActionMenu.buildMoreRows(activity(), 1234));
+        assertEquals(string(R.string.action_back), titles.get(titles.size() - 1));
     }
 
     @Test
     public void moreHoldsEverythingTheTopCardDemoted() {
         List<String> titles = titles(TerminalActionMenu.buildMoreRows(activity(), 1234));
         for (int title : new int[] {R.string.action_command_palette, R.string.action_share_transcript,
-                R.string.action_style_terminal, R.string.action_set_background_image,
+                R.string.action_set_background_image,
                 R.string.action_enable_background_image, R.string.action_glass_lab,
                 R.string.action_reset_terminal}) {
             assertTrue(string(title), titles.contains(string(title)));

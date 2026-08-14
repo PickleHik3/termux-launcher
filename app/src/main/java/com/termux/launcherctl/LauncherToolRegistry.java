@@ -369,6 +369,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_TERMINAL_FONT_SIZE_DECREASE = "terminal.font_size_decrease";
     public static final String TOOL_TERMINAL_SELECT_URL = "terminal.select_url";
     public static final String TOOL_TERMINAL_HINTS = "terminal.hints";
+    public static final String TOOL_TERMINAL_SELECT_TEXT = "terminal.select_text";
     public static final String TOOL_TERMINAL_SEARCH_SCROLLBACK = "terminal.search_scrollback";
     public static final String TOOL_TERMINAL_SHARE_TRANSCRIPT = "terminal.share_transcript";
     public static final String TOOL_CLIPBOARD_PASTE = "clipboard.paste";
@@ -670,6 +671,15 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_TERMINAL, R.string.tool_terminal_select_url, R.string.tool_desc_terminal_select_url,
+            null, REQUIRES_SESSION);
+        // The long press opens the action menu, so the gesture no longer starts selection itself;
+        // this is how selection is reached, from the menu, a keybinding or the palette alike.
+        addUi(map, TOOL_TERMINAL_SELECT_TEXT,
+            "Start text selection in the focused pane.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_TERMINAL, R.string.tool_terminal_select_text,
+            R.string.tool_desc_terminal_select_text,
             null, REQUIRES_SESSION);
         addUi(map, TOOL_TERMINAL_HINTS,
             "Show keyboard labels for URLs, paths, hashes, and source line references in scrollback.",

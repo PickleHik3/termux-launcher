@@ -65,27 +65,37 @@ public final class TerminalActionMenu {
         public final int legacyActionId;
         /** True for the single row that pushes the second card instead of acting. */
         public final boolean opensMore;
+        /** True for the row that pops this card and shows the one it came from. */
+        public final boolean goesBack;
 
         private Row(@DrawableRes int iconRes, @NonNull CharSequence title,
-                    @Nullable String toolName, int legacyActionId, boolean opensMore) {
+                    @Nullable String toolName, int legacyActionId, boolean opensMore,
+                    boolean goesBack) {
             this.iconRes = iconRes;
             this.title = title;
             this.toolName = toolName;
             this.legacyActionId = legacyActionId;
             this.opensMore = opensMore;
+            this.goesBack = goesBack;
         }
 
         static Row tool(@DrawableRes int iconRes, @NonNull CharSequence title,
                         @NonNull String toolName) {
-            return new Row(iconRes, title, toolName, NO_LEGACY_ACTION, false);
+            return new Row(iconRes, title, toolName, NO_LEGACY_ACTION, false, false);
         }
 
         static Row legacy(@DrawableRes int iconRes, @NonNull CharSequence title, int actionId) {
-            return new Row(iconRes, title, null, actionId, false);
+            return new Row(iconRes, title, null, actionId, false, false);
         }
 
         static Row more(@NonNull CharSequence title) {
-            return new Row(R.drawable.ic_symbol_more_horiz, title, null, NO_LEGACY_ACTION, true);
+            return new Row(R.drawable.ic_symbol_more_horiz, title, null, NO_LEGACY_ACTION, true,
+                false);
+        }
+
+        static Row back(@NonNull CharSequence title) {
+            return new Row(R.drawable.ic_symbol_arrow_back, title, null, NO_LEGACY_ACTION, false,
+                true);
         }
 
         @NonNull
@@ -109,11 +119,16 @@ public final class TerminalActionMenu {
         List<Row> rows = new ArrayList<>();
         rows.add(Row.tool(R.drawable.ic_symbol_link, activity.getString(R.string.action_select_url),
             TerminalActionDispatcher.TOOL_TERMINAL_SELECT_URL));
-        rows.add(Row.tool(R.drawable.ic_symbol_search,
-            activity.getString(R.string.action_search_scrollback),
-            TerminalActionDispatcher.TOOL_TERMINAL_SEARCH_SCROLLBACK));
         rows.add(Row.tool(R.drawable.ic_settings, activity.getString(R.string.action_open_settings),
             TerminalActionDispatcher.TOOL_APP_OPEN_SETTINGS));
+        // The long press opens this menu now, so the gesture that used to start text selection no
+        // longer does; this row is how selection is reached. Offered only when there is nothing
+        // selected yet, because with a selection up the useful row is Copy.
+        if (!hasSelection(activity)) {
+            rows.add(Row.tool(R.drawable.ic_symbol_text_select,
+                activity.getString(R.string.action_select_text),
+                TerminalActionDispatcher.TOOL_TERMINAL_SELECT_TEXT));
+        }
         if (hasSelection(activity)) {
             rows.add(Row.tool(R.drawable.ic_symbol_content_copy,
                 activity.getString(R.string.action_copy_selection),
@@ -139,9 +154,6 @@ public final class TerminalActionMenu {
         rows.add(Row.tool(R.drawable.ic_symbol_share,
             activity.getString(R.string.action_share_transcript),
             TerminalActionDispatcher.TOOL_TERMINAL_SHARE_TRANSCRIPT));
-        rows.add(Row.legacy(R.drawable.ic_symbol_palette,
-            activity.getString(R.string.action_style_terminal),
-            TermuxActivity.CONTEXT_MENU_STYLE_ID));
         rows.add(Row.tool(R.drawable.ic_symbol_wallpaper,
             activity.getString(R.string.action_set_background_image),
             TerminalActionDispatcher.TOOL_APPEARANCE_SET_WALLPAPER));
@@ -159,6 +171,9 @@ public final class TerminalActionMenu {
         rows.add(Row.legacy(R.drawable.ic_symbol_cancel,
             activity.getString(R.string.action_kill_process, sessionPid),
             TermuxActivity.CONTEXT_MENU_KILL_PROCESS_ID));
+        // Last, and explicit: Back is a gesture on this device, and a card that was pushed by a row
+        // should be poppable by one too.
+        rows.add(Row.back(activity.getString(R.string.action_back)));
         return rows;
     }
 
@@ -265,6 +280,11 @@ public final class TerminalActionMenu {
                             @Nullable PointF anchor) {
         if (row.opensMore) {
             showMore(activity, sessionPid, anchor);
+            return;
+        }
+        if (row.goesBack) {
+            // Pops this card only, exactly as Back does; the card underneath un-hides itself.
+            activity.getTerminalSheetController().dismiss();
             return;
         }
         // Acted on before the stack is popped, because popping the menu is what clears

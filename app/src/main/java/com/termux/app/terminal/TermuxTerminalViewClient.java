@@ -676,11 +676,41 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      * More button, which carries no coordinates of its own. So the point is kept here.
      */
     @androidx.annotation.Nullable private PointF mLastLongPressOnScreen;
+    /** A copy of the long press itself, for the selection the menu's row starts from it. */
+    @androidx.annotation.Nullable private MotionEvent mLastLongPressEvent;
 
     @Override
     public boolean onLongPress(MotionEvent event) {
         mLastLongPressOnScreen = new PointF(event.getRawX(), event.getRawY());
-        return false;
+        // The long press opens the action menu itself now, rather than starting text selection and
+        // leaving the menu two taps away behind the system toolbar's More button. Selection is a row
+        // on that menu, so nothing is lost, and the point of the press is remembered either way.
+        if (mLastLongPressEvent != null) mLastLongPressEvent.recycle();
+        mLastLongPressEvent = MotionEvent.obtain(event);
+        return mActivity.showTerminalActionSheet(mLastLongPressOnScreen);
+    }
+
+    /**
+     * Starts text selection where the last long press landed, which is the press that opened the
+     * menu this is reached from. Falls back to the pane's centre when there is no remembered point —
+     * a keybinding or the palette can run this without any press at all.
+     *
+     * @return false when there is no pane to select in.
+     */
+    public boolean startTextSelection() {
+        TerminalView view = mActivity.getTerminalView();
+        if (view == null) return false;
+        MotionEvent at = mLastLongPressEvent;
+        if (at == null) {
+            long now = android.os.SystemClock.uptimeMillis();
+            at = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN,
+                view.getWidth() / 2f, view.getHeight() / 2f, 0);
+            view.startTextSelectionMode(at);
+            at.recycle();
+            return true;
+        }
+        view.startTextSelectionMode(at);
+        return true;
     }
 
     @Override
