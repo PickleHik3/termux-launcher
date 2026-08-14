@@ -15,6 +15,8 @@ public final class LauncherWidgetRecord {
     public final long profileSerial;
     @NonNull public final State state;
     @NonNull public final WidgetCellRect cell;
+    /** Zero-based pane page this widget lives on. Collision rules are per page. */
+    public final int page;
     @NonNull private final Bundle sizeOptions;
     @Nullable public final String lastRenderFailure;
 
@@ -30,12 +32,22 @@ public final class LauncherWidgetRecord {
                                 long profileSerial, @NonNull State state,
                                 @NonNull WidgetCellRect cell, @Nullable Bundle sizeOptions,
                                 @Nullable String lastRenderFailure) {
+        this(appWidgetId, provider, profileSerial, state, cell, 0, sizeOptions, lastRenderFailure);
+    }
+
+    public LauncherWidgetRecord(int appWidgetId, @NonNull ComponentName provider,
+                                long profileSerial, @NonNull State state,
+                                @NonNull WidgetCellRect cell, int page,
+                                @Nullable Bundle sizeOptions,
+                                @Nullable String lastRenderFailure) {
         if (appWidgetId <= 0) throw new IllegalArgumentException("appWidgetId must be positive");
+        if (page < 0) throw new IllegalArgumentException("page must not be negative");
         this.appWidgetId = appWidgetId;
         this.provider = provider;
         this.profileSerial = profileSerial;
         this.state = state;
         this.cell = cell;
+        this.page = page;
         this.sizeOptions = sizeOptions == null ? new Bundle() : new Bundle(sizeOptions);
         this.lastRenderFailure = lastRenderFailure;
     }
@@ -46,23 +58,28 @@ public final class LauncherWidgetRecord {
     @NonNull
     public LauncherWidgetRecord withState(@NonNull State value) {
         return new LauncherWidgetRecord(appWidgetId, provider, profileSerial, value,
-            cell, sizeOptions, lastRenderFailure);
+            cell, page, sizeOptions, lastRenderFailure);
     }
 
     @NonNull
     public LauncherWidgetRecord withSizeOptions(@NonNull Bundle value) {
         return new LauncherWidgetRecord(appWidgetId, provider, profileSerial, state,
-            cell, value, lastRenderFailure);
+            cell, page, value, lastRenderFailure);
     }
 
     @NonNull
     public LauncherWidgetRecord withRenderFailure(@Nullable String value) {
         return new LauncherWidgetRecord(appWidgetId, provider, profileSerial, state,
-            cell, sizeOptions, value);
+            cell, page, sizeOptions, value);
     }
 
     @NonNull public LauncherWidgetRecord withCell(@NonNull WidgetCellRect value) {
         return new LauncherWidgetRecord(appWidgetId, provider, profileSerial, state,
-            value, sizeOptions, lastRenderFailure);
+            value, page, sizeOptions, lastRenderFailure);
+    }
+
+    @NonNull public LauncherWidgetRecord withPage(int value) {
+        return new LauncherWidgetRecord(appWidgetId, provider, profileSerial, state,
+            cell, value, sizeOptions, lastRenderFailure);
     }
 }

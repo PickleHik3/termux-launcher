@@ -33,13 +33,12 @@ public class WidgetPickerInputFocusIntegrationTest {
         root.measure(View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY));
         root.layout(0, 0, 800, 900);
-        pane.setListener(new WidgetPaneView.Listener() {
-            @Override public void onAddRequested() { pane.picker().setReducedMotion(true); pane.picker().open(); }
-        }, item -> { });
+        pane.setListener(page -> { }, item -> { });
         assertTrue(terminal.requestFocus()); assertSame(terminal, root.findFocus());
         assertTrue(terminal.onCheckIsTextEditor());
         android.view.Window window = activity.getWindow();
-        assertTrue(pane.findViewById(R.id.widget_add_large).performClick());
+        // The long-press menu's "Add widget" action reduces to this same picker-open call.
+        pane.picker().setReducedMotion(true); pane.picker().open();
         assertTrue(pane.picker().isOpen()); assertSame(window, activity.getWindow());
         assertSame(terminal, root.findFocus()); assertFalse(hasEditor(pane.picker()));
         assertTrue(pane.onBackPressed()); assertSame(terminal, root.findFocus());

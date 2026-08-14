@@ -27,7 +27,7 @@ public class LauncherWidgetProviderRefreshIntegrationTest {
         String source = read("app/src/main/java/com/termux/app/TermuxActivity.java");
         int method = source.indexOf("private void refreshSuggestionBarFromPackageState");
         int reconcile = source.indexOf("mWidgetHostController.reconcileProviders()", method);
-        int dockGuard = source.indexOf("if (!isLauncherCatalogEnabled()", method);
+        int dockGuard = source.indexOf("if (!catalogEnabled)", method);
         assertTrue(reconcile > method && reconcile < dockGuard);
     }
 

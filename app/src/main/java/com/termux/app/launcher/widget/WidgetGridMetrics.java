@@ -66,6 +66,24 @@ public final class WidgetGridMetrics {
         return -1;
     }
 
+    // Value equality keys the catalog cache: any geometry change must miss it.
+    @Override public boolean equals(Object other) {
+        if (!(other instanceof WidgetGridMetrics)) return false;
+        WidgetGridMetrics that = (WidgetGridMetrics) other;
+        return body.equals(that.body) && grid.equals(that.grid)
+            && actionStripHeight == that.actionStripHeight && edgePadding == that.edgePadding
+            && gap == that.gap && rtl == that.rtl;
+    }
+
+    @Override public int hashCode() {
+        int result = body.hashCode();
+        result = 31 * result + grid.hashCode();
+        result = 31 * result + actionStripHeight;
+        result = 31 * result + edgePadding;
+        result = 31 * result + gap;
+        return 31 * result + (rtl ? 1 : 0);
+    }
+
     private static int edge(int pixels, int cells, int edge) {
         int base = pixels / cells;
         int remainder = pixels % cells;

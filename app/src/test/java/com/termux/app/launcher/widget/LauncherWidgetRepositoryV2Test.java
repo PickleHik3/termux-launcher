@@ -23,7 +23,7 @@ public class LauncherWidgetRepositoryV2Test {
         WidgetAddTransaction pending = transaction(20, cell, repository.revision());
         assertTrue(repository.reservePending(0, pending));
         JSONObject root = new JSONObject(storage.value);
-        assertEquals(2, root.getInt("version"));
+        assertEquals(3, root.getInt("version"));
         assertEquals(WidgetGridDefinition.DEFAULT_ROWS,
             root.getJSONObject("grid").getInt("rows"));
         LauncherWidgetRepository restored = new LauncherWidgetRepository(storage);

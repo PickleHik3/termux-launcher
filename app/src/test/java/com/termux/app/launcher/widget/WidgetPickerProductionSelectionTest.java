@@ -34,7 +34,7 @@ import static org.junit.Assert.*;
 public class WidgetPickerProductionSelectionTest {
     @Test public void realPlusAdapterCardPolicyAndA1CallProduceDurablePlacement() {
         Fixture fixture = new Fixture(false);
-        fixture.pane.findViewById(R.id.widget_add_large).performClick();
+        fixture.controller.openPicker();
         fixture.idleAndLayout();
         RecyclerView.ViewHolder card = fixture.pane.picker().list()
             .findViewHolderForAdapterPosition(1);

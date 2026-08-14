@@ -34,6 +34,9 @@ public final class WidgetProviderCatalogLoader {
     public interface Callback {
         void onCatalog(long generation, @NonNull List<WidgetAppGroup> groups);
     }
+    public interface PreviewCallback {
+        void onPreview(@NonNull WidgetProviderItem item);
+    }
     interface Boundary {
         @NonNull List<UserHandle> profiles();
         long serial(@NonNull UserHandle profile);
@@ -54,6 +57,13 @@ public final class WidgetProviderCatalogLoader {
     private final Executor worker;
     private final Handler main;
     private long generation;
+    // Session-lifetime catalog cache: reopening the picker must not re-query AppWidgetManager.
+    // All cache state is main-thread only; packageGeneration keeps a build that raced an
+    // invalidation from repopulating the cache with pre-change providers.
+    @Nullable private List<WidgetAppGroup> cachedGroups;
+    @Nullable private WidgetGridMetrics cachedMetrics;
+    private long cachedRevision;
+    private long packageGeneration;
 
     public WidgetProviderCatalogLoader(@NonNull Context context) {
         this(new AndroidBoundary(context), CATALOG_EXECUTOR,
@@ -71,13 +81,47 @@ public final class WidgetProviderCatalogLoader {
     public long load(@NonNull WidgetGridMetrics metrics, long metricsRevision,
                      @NonNull Callback callback) {
         final long token = ++generation;
+        if (cachedGroups != null && cachedRevision == metricsRevision
+            && metrics.equals(cachedMetrics)) {
+            final List<WidgetAppGroup> groups = cachedGroups;
+            main.post(() -> {
+                if (token == generation) callback.onCatalog(token, groups);
+            });
+            return token;
+        }
+        final long packageToken = packageGeneration;
         worker.execute(() -> {
             List<WidgetAppGroup> groups = build(metrics);
             main.post(() -> {
+                if (packageToken == packageGeneration) {
+                    cachedGroups = groups; cachedMetrics = metrics; cachedRevision = metricsRevision;
+                }
                 if (token == generation) callback.onCatalog(token, groups);
             });
         });
         return token;
+    }
+
+    /** Drops the cached catalog; the next load re-queries AppWidgetManager. */
+    public void invalidate() {
+        packageGeneration++;
+        cachedGroups = null; cachedMetrics = null;
+    }
+
+    /**
+     * Resolves the item's preview off the main thread on its first bind. Already resolved items
+     * answer synchronously. Not generation-gated: the result lands on the item itself, so a late
+     * arrival is still correct data and callers guard their views by item identity.
+     */
+    public void loadPreview(@NonNull WidgetProviderItem item, @NonNull PreviewCallback callback) {
+        if (item.previewResolved()) { callback.onPreview(item); return; }
+        worker.execute(() -> {
+            Drawable preview = safePreview(item.info);
+            main.post(() -> {
+                if (!item.previewResolved()) item.resolvePreview(preview);
+                callback.onPreview(item);
+            });
+        });
     }
 
     public void cancel() { generation++; }
@@ -128,9 +172,10 @@ public final class WidgetProviderCatalogLoader {
                     WidgetGridMetrics.Span minimum = metrics.spanForPixels(
                         Math.max(1, info.minResizeWidth), Math.max(1, info.minResizeHeight));
                     Drawable icon = safeProviderIcon(info);
-                    Drawable preview = safePreview(info);
-                    group.items.add(new WidgetProviderItem(info, safeProviderLabel(info), icon,
-                        preview, columns, rows, minimum.columns, minimum.rows, fits));
+                    // Previews stay deferred to loadPreview(): loadPreviewImage per provider is
+                    // the dominant cost of a full catalog build.
+                    group.items.add(new WidgetProviderItem(serial, info, safeProviderLabel(info),
+                        icon, columns, rows, minimum.columns, minimum.rows, fits));
                 } catch (RuntimeException ignored) {
                     // One broken provider must not suppress its profile or application peers.
                 }

@@ -18,7 +18,7 @@ public class LauncherWidgetRepositoryMigrationTest {
         WidgetTestFixtures.Memory storage = new WidgetTestFixtures.Memory();
         LauncherWidgetRepository repository = new LauncherWidgetRepository(storage);
         assertEquals(WidgetGridDefinition.DEFAULT, repository.gridDefinition());
-        assertEquals(2, new JSONObject(repository.serialize()).getInt("version"));
+        assertEquals(3, new JSONObject(repository.serialize()).getInt("version"));
     }
 
     @Test public void v1RecordsMigrateStableRowMajorAndExpandWithoutDroppingIds() throws Exception {
@@ -31,7 +31,7 @@ public class LauncherWidgetRepositoryMigrationTest {
         assertEquals(26, repository.records().size()); assertEquals(7, repository.gridDefinition().rows);
         assertEquals(new WidgetCellRect(0, 0, 1, 1), repository.get(1).cell);
         assertEquals(new WidgetCellRect(1, 6, 2, 7), repository.get(26).cell);
-        assertEquals(2, new JSONObject(storage.value).getInt("version"));
+        assertEquals(3, new JSONObject(storage.value).getInt("version"));
     }
 
     @Test public void pendingStageTokenAndTimeSurviveOneAtomicMigrationWrite() throws Exception {

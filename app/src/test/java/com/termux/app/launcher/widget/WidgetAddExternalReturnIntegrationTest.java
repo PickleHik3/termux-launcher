@@ -24,7 +24,7 @@ public class WidgetAddExternalReturnIntegrationTest {
         WidgetPickerProductionSelectionTest.Fixture fixture =
             new WidgetPickerProductionSelectionTest.Fixture(false);
         fixture.platform.directBind = false;
-        fixture.pane.findViewById(R.id.widget_add_large).performClick(); fixture.idleAndLayout();
+        fixture.controller.openPicker(); fixture.idleAndLayout();
         RecyclerView.ViewHolder card = fixture.pane.picker().list().findViewHolderForAdapterPosition(1);
         card.itemView.performClick();
         int id = fixture.repository.pending().appWidgetId;

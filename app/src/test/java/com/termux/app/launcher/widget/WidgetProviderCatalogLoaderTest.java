@@ -39,8 +39,58 @@ public class WidgetProviderCatalogLoaderTest {
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         assertEquals(2, result[0].size()); // same package, separate personal/work serials
         assertEquals(1, result[0].get(0).providers.size());
-        assertNull(result[0].get(0).providers.get(0).preview);
+        assertNull(result[0].get(0).providers.get(0).preview());
         assertNotNull(result[0].get(0).providers.get(0).icon);
+        // The broken preview surfaces at lazy resolution and must not break the row.
+        WidgetProviderItem broken = result[0].get(0).providers.get(0);
+        loader.loadPreview(broken, item -> {});
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertTrue(broken.previewResolved());
+        assertNull(broken.preview());
+    }
+
+    @Test public void cachedCatalogSkipsRebuildUntilKeyChangesOrInvalidated() {
+        FakeBoundary boundary = new FakeBoundary();
+        boundary.providers = Collections.singletonList(info("pkg", "Clock", true));
+        QueuedExecutor queue = new QueuedExecutor();
+        WidgetProviderCatalogLoader loader = new WidgetProviderCatalogLoader(boundary, queue,
+            new Handler(Looper.getMainLooper()), 2.625f);
+        final List<WidgetAppGroup>[] first = new List[1];
+        final List<WidgetAppGroup>[] second = new List[1];
+        loader.load(metrics(400, 600), 1, (g, groups) -> first[0] = groups);
+        queue.runAll(); Shadows.shadowOf(Looper.getMainLooper()).idle();
+        loader.load(metrics(400, 600), 1, (g, groups) -> second[0] = groups);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(1, queue.work.size()); // reopen served from cache, no re-query
+        assertSame(first[0], second[0]);
+        loader.load(metrics(800, 600), 1, (g, groups) -> {});
+        assertEquals(2, queue.work.size()); // metrics change misses
+        loader.load(metrics(400, 600), 2, (g, groups) -> {});
+        assertEquals(3, queue.work.size()); // revision change misses
+        queue.runAll(); Shadows.shadowOf(Looper.getMainLooper()).idle();
+        loader.invalidate();
+        loader.load(metrics(400, 600), 2, (g, groups) -> {});
+        assertEquals(4, queue.work.size()); // package change misses
+    }
+
+    @Test public void previewsResolveLazilyExactlyOncePerItem() {
+        FakeBoundary boundary = new FakeBoundary();
+        boundary.providers = Collections.singletonList(info("pkg", "Clock", true));
+        WidgetProviderCatalogLoader loader = loader(boundary);
+        final WidgetProviderItem[] item = new WidgetProviderItem[1];
+        loader.load(metrics(400, 600), 0,
+            (g, groups) -> item[0] = groups.get(0).providers.get(0));
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(0, boundary.previewCalls); // build never touches previews
+        assertFalse(item[0].previewResolved());
+        AtomicInteger callbacks = new AtomicInteger();
+        loader.loadPreview(item[0], it -> callbacks.incrementAndGet());
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertTrue(item[0].previewResolved());
+        assertNotNull(item[0].preview());
+        loader.loadPreview(item[0], it -> callbacks.incrementAndGet());
+        assertEquals(2, callbacks.get()); // resolved items answer synchronously
+        assertEquals(1, boundary.previewCalls);
     }
 
     @Test public void staleGenerationIsSuppressedAndMetricsRefreshChangesSpanFit() {
@@ -93,7 +143,7 @@ public class WidgetProviderCatalogLoaderTest {
     }
     private static final class FakeBoundary implements WidgetProviderCatalogLoader.Boundary {
         List<AppWidgetProviderInfo> providers = Collections.emptyList(); boolean throwPreview;
-        int serial;
+        int serial; int previewCalls;
         @Override public List<UserHandle> profiles() { return Arrays.asList(Process.myUserHandle(), Process.myUserHandle()); }
         @Override public long serial(UserHandle profile) { return serial++ * 10L; }
         @Override public List<AppWidgetProviderInfo> providers(UserHandle profile) { return providers; }
@@ -102,6 +152,7 @@ public class WidgetProviderCatalogLoaderTest {
         @Override public Drawable appIcon(AppWidgetProviderInfo info) { return new ColorDrawable(1); }
         @Override public Drawable providerIcon(AppWidgetProviderInfo info) { return new ColorDrawable(2); }
         @Override public Drawable preview(AppWidgetProviderInfo info) {
+            previewCalls++;
             if (throwPreview) throw new RuntimeException("broken preview"); return new ColorDrawable(3);
         }
         @Override public boolean enabled(AppWidgetProviderInfo info) { return true; }

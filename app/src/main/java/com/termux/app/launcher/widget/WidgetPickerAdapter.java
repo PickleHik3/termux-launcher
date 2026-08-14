@@ -9,6 +9,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
@@ -18,18 +20,26 @@ import java.util.List;
 public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     public interface Listener { void onProviderSelected(@NonNull WidgetProviderItem item); }
     public interface FitPredicate { boolean canFit(@NonNull WidgetProviderItem item); }
+    public interface PreviewLoader {
+        void loadPreview(@NonNull WidgetProviderItem item,
+                         @NonNull WidgetProviderCatalogLoader.PreviewCallback callback);
+    }
     private static final int HEADER = 0;
     private static final int PROVIDER = 1;
     private final ArrayList<Object> rows = new ArrayList<>();
     private final Listener listener;
     private FitPredicate fit = item -> item.fits;
+    @Nullable private PreviewLoader previews;
 
     public WidgetPickerAdapter(@NonNull Listener listener) { this.listener = listener; }
     public void setFitPredicate(@NonNull FitPredicate value) { fit = value; notifyDataSetChanged(); }
+    public void setPreviewLoader(@Nullable PreviewLoader value) { previews = value; }
     public void submit(@NonNull List<WidgetAppGroup> groups) {
-        rows.clear();
-        for (WidgetAppGroup group : groups) { rows.add(group); rows.addAll(group.providers); }
-        notifyDataSetChanged();
+        ArrayList<Object> next = new ArrayList<>();
+        for (WidgetAppGroup group : groups) { next.add(group); next.addAll(group.providers); }
+        DiffUtil.DiffResult diff = DiffUtil.calculateDiff(new RowDiff(rows, next));
+        rows.clear(); rows.addAll(next);
+        diff.dispatchUpdatesTo(this);
     }
     public boolean anyProviderFits() {
         for (Object row : rows) if (row instanceof WidgetProviderItem
@@ -71,6 +81,8 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
     }
     @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
         Object row = rows.get(position);
+        Holder cell = (Holder) holder;
+        cell.bound = row;
         if (row instanceof WidgetAppGroup) {
             WidgetAppGroup group = (WidgetAppGroup) row;
             ImageView icon = holder.itemView.findViewWithTag("icon");
@@ -83,10 +95,15 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         ImageView preview = holder.itemView.findViewWithTag("preview");
         TextView title = holder.itemView.findViewWithTag("title");
         TextView span = holder.itemView.findViewWithTag("span");
-        if (item.preview != null || item.icon != null) {
-            preview.setImageDrawable(item.preview != null ? item.preview : item.icon);
-        } else {
-            preview.setImageResource(android.R.drawable.ic_menu_gallery);
+        // App icon (then gallery) doubles as the placeholder while the preview resolves.
+        applyPreview(preview, item);
+        if (!item.previewResolved() && previews != null) {
+            previews.loadPreview(item, loaded -> {
+                // The holder may have been recycled onto another row by the time this lands.
+                if (cell.bound == loaded) {
+                    applyPreview(cell.itemView.findViewWithTag("preview"), loaded);
+                }
+            });
         }
         title.setText(item.label);
         String spanText = item.columnSpan + " × " + item.rowSpan + " cells";
@@ -107,5 +124,39 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         Object value = rows.get(adapterPosition);
         return value instanceof WidgetProviderItem ? (WidgetProviderItem) value : null;
     }
-    private static final class Holder extends RecyclerView.ViewHolder { Holder(View item) { super(item); } }
+    private static void applyPreview(@NonNull ImageView view, @NonNull WidgetProviderItem item) {
+        if (item.preview() != null || item.icon != null) {
+            view.setImageDrawable(item.preview() != null ? item.preview() : item.icon);
+        } else {
+            view.setImageResource(android.R.drawable.ic_menu_gallery);
+        }
+    }
+    /** Rows keyed header=profile+package, provider=profile+component; contents by identity,
+     * because a rebuilt catalog always creates fresh row objects. */
+    private static final class RowDiff extends DiffUtil.Callback {
+        final List<Object> old; final List<Object> next;
+        RowDiff(List<Object> old, List<Object> next) {
+            this.old = new ArrayList<>(old); this.next = next;
+        }
+        @Override public int getOldListSize() { return old.size(); }
+        @Override public int getNewListSize() { return next.size(); }
+        @Override public boolean areItemsTheSame(int oldPosition, int newPosition) {
+            return key(old.get(oldPosition)).equals(key(next.get(newPosition)));
+        }
+        @Override public boolean areContentsTheSame(int oldPosition, int newPosition) {
+            return old.get(oldPosition) == next.get(newPosition);
+        }
+        static String key(Object row) {
+            if (row instanceof WidgetAppGroup) {
+                WidgetAppGroup group = (WidgetAppGroup) row;
+                return "h " + group.profileSerial + " " + group.packageName;
+            }
+            WidgetProviderItem item = (WidgetProviderItem) row;
+            return "p " + item.profileSerial + " " + item.info.provider.flattenToString();
+        }
+    }
+    private static final class Holder extends RecyclerView.ViewHolder {
+        Object bound;
+        Holder(View item) { super(item); }
+    }
 }

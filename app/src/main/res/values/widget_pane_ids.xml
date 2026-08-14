@@ -2,8 +2,7 @@
 <resources>
     <item name="widget_pane" type="id" />
     <item name="widget_grid" type="id" />
-    <item name="widget_add_large" type="id" />
-    <item name="widget_add_compact" type="id" />
+    <item name="widget_page_dots" type="id" />
     <item name="widget_grid_settings" type="id" />
     <item name="widget_empty_message" type="id" />
     <item name="widget_pane_notice" type="id" />

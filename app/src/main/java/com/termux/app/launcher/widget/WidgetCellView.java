@@ -27,10 +27,18 @@ public final class WidgetCellView extends FrameLayout {
         default void onEditDragEnd(boolean canceled) { }
     }
 
+    /** Focus relay for provider text editors, so the launcher can arrange the system IME. */
+    public interface EditorFocusListener {
+        /** @param editor the focused text-editor descendant, or null when it lost focus. */
+        void onEditorFocusChanged(@Nullable View editor);
+    }
+
     private final int gutter;
     private final int touchSlop;
     private boolean touchStreamAccepted;
     @Nullable private LongPressListener longPressListener;
+    @Nullable private EditorFocusListener editorFocusListener;
+    @Nullable private View focusedEditor;
     private final Runnable longPressFire = this::fireLongPress;
     private boolean longPressPending;
     private boolean streamTakenOver;
@@ -45,11 +53,59 @@ public final class WidgetCellView extends FrameLayout {
         setClipChildren(true);
         setClipToPadding(true);
         setWillNotDraw(false);
+        // Provider text inputs must be able to take tap focus; the cell never wants it itself.
+        setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);
+        setFocusable(false);
     }
 
     public void setLongPressListener(@Nullable LongPressListener listener) {
         longPressListener = listener;
         if (listener == null) cancelLongPressWatch();
+    }
+
+    public void setEditorFocusListener(@Nullable EditorFocusListener listener) {
+        editorFocusListener = listener;
+    }
+
+    /**
+     * Focus loss has no per-subtree ancestor hook (clearChildFocus fires only on an explicit
+     * clearFocus, not when focus moves to another subtree), so the cell watches the window's
+     * global focus stream while attached. A text editor (an EditText or any view answering
+     * onCheckIsTextEditor) is reported so the activity can hand it the system IME despite the
+     * terminal's custom IME orchestration; leaving the subtree reports null.
+     */
+    private final android.view.ViewTreeObserver.OnGlobalFocusChangeListener globalFocusWatch =
+        (oldFocus, newFocus) -> {
+            boolean editor = newFocus != null && isDescendant(newFocus)
+                && (newFocus instanceof android.widget.EditText || newFocus.onCheckIsTextEditor());
+            View next = editor ? newFocus : null;
+            if (next != focusedEditor) {
+                focusedEditor = next;
+                if (editorFocusListener != null) editorFocusListener.onEditorFocusChanged(next);
+            }
+        };
+
+    private boolean isDescendant(@NonNull View view) {
+        android.view.ViewParent current = view.getParent();
+        while (current != null) {
+            if (current == this) return true;
+            current = current.getParent();
+        }
+        return false;
+    }
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        getViewTreeObserver().addOnGlobalFocusChangeListener(globalFocusWatch);
+    }
+
+    @Override protected void onDetachedFromWindow() {
+        getViewTreeObserver().removeOnGlobalFocusChangeListener(globalFocusWatch);
+        if (focusedEditor != null) {
+            focusedEditor = null;
+            if (editorFocusListener != null) editorFocusListener.onEditorFocusChanged(null);
+        }
+        super.onDetachedFromWindow();
     }
 
     public void setContent(@NonNull View child) {

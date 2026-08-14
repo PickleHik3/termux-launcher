@@ -20,14 +20,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Synchronous v2 durable store. Storage commits before the in-memory snapshot changes. */
+/** Synchronous v3 durable store. Storage commits before the in-memory snapshot changes. */
 public final class LauncherWidgetRepository {
     public interface Storage {
         @Nullable String read();
         boolean write(@NonNull String value);
     }
 
-    private static final int SCHEMA_VERSION = 2;
+    private static final int SCHEMA_VERSION = 3;
     private static final String PREFS = "launcher_widget_repository";
     private static final String KEY_STATE = "state";
 
@@ -35,6 +35,7 @@ public final class LauncherWidgetRepository {
     private LinkedHashMap<Integer, LauncherWidgetRecord> records = new LinkedHashMap<>();
     @Nullable private WidgetAddTransaction pending;
     @NonNull private WidgetGridDefinition grid = WidgetGridDefinition.DEFAULT;
+    private int pageCount = 1;
     private long revision;
     private boolean migrationWritePending;
     private boolean readOnlyUnknownVersion;
@@ -46,7 +47,7 @@ public final class LauncherWidgetRepository {
         // dimensions so a stale persisted grid (e.g. the old 6x4) cannot outlive its widgets.
         if (records.isEmpty() && pending == null
             && !grid.equals(WidgetGridDefinition.DEFAULT)) {
-            commitValidated(records, null, WidgetGridDefinition.DEFAULT, revision + 1);
+            commitValidated(records, null, WidgetGridDefinition.DEFAULT, pageCount, revision + 1);
         }
     }
 
@@ -69,10 +70,49 @@ public final class LauncherWidgetRepository {
     @Nullable public synchronized WidgetAddTransaction pending() { return pending; }
     @NonNull public synchronized WidgetGridDefinition gridDefinition() { return grid; }
     public synchronized long revision() { return revision; }
+    public synchronized int pageCount() { return pageCount; }
+
+    /** Snapshot of the records on one page; the per-page collision universe. */
+    @NonNull public synchronized List<LauncherWidgetRecord> recordsOnPage(int page) {
+        ArrayList<LauncherWidgetRecord> out = new ArrayList<>();
+        for (LauncherWidgetRecord record : records.values()) if (record.page == page) out.add(record);
+        return Collections.unmodifiableList(out);
+    }
 
     public synchronized boolean canReserve(long expectedRevision, @NonNull WidgetCellRect cell) {
+        return canReserve(expectedRevision, cell, 0);
+    }
+
+    public synchronized boolean canReserve(long expectedRevision, @NonNull WidgetCellRect cell,
+                                           int page) {
         return pending == null && expectedRevision == revision
-            && WidgetGridPlacementPolicy.canPlace(grid, records(), cell, -1);
+            && page >= 0 && page < pageCount
+            && WidgetGridPlacementPolicy.canPlace(grid, recordsOnPage(page), cell, -1);
+    }
+
+    /** Appends an empty page after the last one; returns the new page index or -1 on failure. */
+    public synchronized int addPage() {
+        int appended = pageCount;
+        return commitValidated(records, pending, grid, pageCount + 1, revision + 1)
+            ? appended : -1;
+    }
+
+    /**
+     * Removes one empty page and renumbers the pages after it. Refused for a populated page,
+     * the last remaining page, or a page holding the pending reservation.
+     */
+    public synchronized boolean removePage(int page) {
+        if (page < 0 || page >= pageCount || pageCount <= 1) return false;
+        if (!recordsOnPage(page).isEmpty()) return false;
+        if (pending != null && pending.page == page) return false;
+        LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>();
+        for (LauncherWidgetRecord record : records.values()) {
+            next.put(record.appWidgetId,
+                record.page > page ? record.withPage(record.page - 1) : record);
+        }
+        WidgetAddTransaction nextPending = pending != null && pending.page > page
+            ? pending.withPage(pending.page - 1) : pending;
+        return commitValidated(next, nextPending, grid, pageCount - 1, revision + 1);
     }
 
     public synchronized boolean putRecord(@NonNull LauncherWidgetRecord record) {
@@ -83,14 +123,14 @@ public final class LauncherWidgetRepository {
             throw new IllegalArgumentException("app-widget ID already belongs to another provider");
         }
         next.put(record.appWidgetId, record);
-        return commitValidated(next, pending, grid, revision + 1);
+        return commitValidated(next, pending, grid, pageCount, revision + 1);
     }
 
     public synchronized boolean removeRecord(int appWidgetId) {
         if (!records.containsKey(appWidgetId)) return true;
         LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
         next.remove(appWidgetId);
-        return commitValidated(next, pending, grid, revision + 1);
+        return commitValidated(next, pending, grid, pageCount, revision + 1);
     }
 
     /** Compatibility/stage-update API. Initial A-3 reservations use reservePending(). */
@@ -102,14 +142,15 @@ public final class LauncherWidgetRepository {
         if (record != null && record.state != LauncherWidgetRecord.State.DELETING) {
             throw new IllegalArgumentException("pending ID is already active");
         }
-        if (pending == null && !WidgetGridPlacementPolicy.canPlace(grid, records(),
-            transaction.cell, -1)) {
+        if (pending == null && !WidgetGridPlacementPolicy.canPlace(grid,
+            recordsOnPage(transaction.page), transaction.cell, -1)) {
             WidgetGridPlacementPolicy.Result fallback = WidgetGridPlacementPolicy.findPlacement(
-                grid, records(), transaction.cell.columnSpan(), transaction.cell.rowSpan());
+                grid, recordsOnPage(transaction.page), transaction.cell.columnSpan(),
+                transaction.cell.rowSpan());
             if (fallback.outcome != WidgetGridPlacementPolicy.Outcome.PLACED) return false;
             transaction = transaction.withCell(fallback.rect);
         }
-        return commitValidated(records, transaction, grid, revision + 1);
+        return commitValidated(records, transaction, grid, pageCount, revision + 1);
     }
 
     /** Compare-and-commit reservation used by the real picker path before any external launch. */
@@ -117,14 +158,16 @@ public final class LauncherWidgetRepository {
                                                @NonNull WidgetAddTransaction transaction) {
         if (pending != null || expectedRevision != revision
             || transaction.gridRevision != expectedRevision) return false;
-        if (!WidgetGridPlacementPolicy.canPlace(grid, records(), transaction.cell, -1)) return false;
-        return commitValidated(records, transaction, grid, revision + 1);
+        if (transaction.page >= pageCount) return false;
+        if (!WidgetGridPlacementPolicy.canPlace(grid, recordsOnPage(transaction.page),
+            transaction.cell, -1)) return false;
+        return commitValidated(records, transaction, grid, pageCount, revision + 1);
     }
 
     public synchronized boolean clearPending(@NonNull String token) {
         if (pending == null) return true;
         if (!pending.token.equals(token)) return false;
-        return commitValidated(records, null, grid, revision + 1);
+        return commitValidated(records, null, grid, pageCount, revision + 1);
     }
 
     /** Atomically makes the configured widget active in its exact reservation. */
@@ -135,16 +178,16 @@ public final class LauncherWidgetRepository {
         LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
         next.remove(record.appWidgetId); // DELETING self-record, if present, is the same reservation.
         next.put(record.appWidgetId, record);
-        return commitValidated(next, null, grid, revision + 1);
+        return commitValidated(next, null, grid, pageCount, revision + 1);
     }
 
     public synchronized boolean beginPendingDeletion(@NonNull WidgetAddTransaction transaction) {
         LauncherWidgetRecord deleting = new LauncherWidgetRecord(transaction.appWidgetId,
             transaction.provider, transaction.profileSerial, LauncherWidgetRecord.State.DELETING,
-            transaction.cell, transaction.requestedOptions(), null);
+            transaction.cell, transaction.page, transaction.requestedOptions(), null);
         LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
         next.put(deleting.appWidgetId, deleting);
-        return commitValidated(next, pending, grid, revision + 1);
+        return commitValidated(next, pending, grid, pageCount, revision + 1);
     }
 
     /** Durable first half of per-ID deletion for an already placed widget. */
@@ -154,7 +197,7 @@ public final class LauncherWidgetRepository {
         if (record.state == LauncherWidgetRecord.State.DELETING) return true;
         LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
         next.put(appWidgetId, record.withState(LauncherWidgetRecord.State.DELETING));
-        return commitValidated(next, pending, grid, revision + 1);
+        return commitValidated(next, pending, grid, pageCount, revision + 1);
     }
 
     public synchronized boolean completeDeletion(int appWidgetId, @Nullable String token) {
@@ -163,7 +206,7 @@ public final class LauncherWidgetRepository {
         WidgetAddTransaction nextPending = pending;
         if (pending != null && pending.appWidgetId == appWidgetId
             && (token == null || pending.token.equals(token))) nextPending = null;
-        return commitValidated(next, nextPending, grid, revision + 1);
+        return commitValidated(next, nextPending, grid, pageCount, revision + 1);
     }
 
     /** Atomic A-4/A-5 seam; A-3 only consumes its validation and revision semantics. */
@@ -175,32 +218,54 @@ public final class LauncherWidgetRepository {
         for (LauncherWidgetRecord record : values) {
             if (next.put(record.appWidgetId, record) != null) return false;
         }
-        return commitValidated(next, pending, definition, revision + 1);
+        return commitValidated(next, pending, definition, pageCount, revision + 1);
     }
 
-    @NonNull public synchronized String serialize() { return encode(records, pending, grid, revision); }
+    @NonNull public synchronized String serialize() {
+        return encode(records, pending, grid, pageCount, revision);
+    }
 
     private boolean commitValidated(Map<Integer, LauncherWidgetRecord> next,
                                     @Nullable WidgetAddTransaction nextPending,
-                                    WidgetGridDefinition nextGrid, long nextRevision) {
+                                    WidgetGridDefinition nextGrid, int nextPageCount,
+                                    long nextRevision) {
         if (migrationWritePending || readOnlyUnknownVersion) return false;
-        List<LauncherWidgetRecord> values = new ArrayList<>(next.values());
-        if (!WidgetGridPlacementPolicy.validate(nextGrid, values)) return false;
-        if (nextPending != null) {
-            LauncherWidgetRecord same = next.get(nextPending.appWidgetId);
-            int ignored = same != null && same.state == LauncherWidgetRecord.State.DELETING
-                ? same.appWidgetId : -1;
-            if (!WidgetGridPlacementPolicy.canPlace(nextGrid, values, nextPending.cell, ignored)) {
-                return false;
-            }
-        }
-        String encoded = encode(next, nextPending, nextGrid, nextRevision);
+        if (!validatePaged(nextGrid, next, nextPending, nextPageCount)) return false;
+        String encoded = encode(next, nextPending, nextGrid, nextPageCount, nextRevision);
         if (!storage.write(encoded)) return false;
         records = new LinkedHashMap<>(next);
         pending = nextPending;
         grid = nextGrid;
+        pageCount = nextPageCount;
         revision = nextRevision;
         return true;
+    }
+
+    /** Page-scoped snapshot validation: collisions only exist between records on one page. */
+    private static boolean validatePaged(WidgetGridDefinition definition,
+                                         Map<Integer, LauncherWidgetRecord> values,
+                                         @Nullable WidgetAddTransaction transaction,
+                                         int pages) {
+        if (pages < 1) return false;
+        LinkedHashMap<Integer, List<LauncherWidgetRecord>> byPage = new LinkedHashMap<>();
+        for (LauncherWidgetRecord record : values.values()) {
+            if (record.page < 0 || record.page >= pages) return false;
+            List<LauncherWidgetRecord> group = byPage.get(record.page);
+            if (group == null) { group = new ArrayList<>(); byPage.put(record.page, group); }
+            group.add(record);
+        }
+        for (List<LauncherWidgetRecord> group : byPage.values()) {
+            if (!WidgetGridPlacementPolicy.validate(definition, group)) return false;
+        }
+        if (transaction == null) return true;
+        if (transaction.page < 0 || transaction.page >= pages) return false;
+        LauncherWidgetRecord same = values.get(transaction.appWidgetId);
+        int ignored = same != null && same.state == LauncherWidgetRecord.State.DELETING
+            ? same.appWidgetId : -1;
+        List<LauncherWidgetRecord> group = byPage.get(transaction.page);
+        return WidgetGridPlacementPolicy.canPlace(definition,
+            group == null ? Collections.<LauncherWidgetRecord>emptyList() : group,
+            transaction.cell, ignored);
     }
 
     private void load(@Nullable String encoded) {
@@ -209,19 +274,38 @@ public final class LauncherWidgetRepository {
             JSONObject root = new JSONObject(encoded);
             int version = root.optInt("version", 0);
             if (version == 1) { migrateV1(root); return; }
+            if (version == 2) { migrateV2(root); return; }
             if (version != SCHEMA_VERSION) { readOnlyUnknownVersion = true; return; }
             WidgetGridDefinition loadedGrid = decodeGrid(root.getJSONObject("grid"));
+            int loadedPages = Math.max(1, root.optInt("pages", 1));
             LinkedHashMap<Integer, LauncherWidgetRecord> loaded = decodeRecords(root, true);
             WidgetAddTransaction loadedPending = root.has("pending")
                 ? decodeTransaction(root.getJSONObject("pending"), true, 0, 0) : null;
-            if (!validSnapshot(loadedGrid, loaded, loadedPending)) return;
+            if (!validatePaged(loadedGrid, loaded, loadedPending, loadedPages)) return;
             records = loaded;
             pending = loadedPending;
             grid = loadedGrid;
+            pageCount = loadedPages;
             revision = Math.max(0, root.optLong("revision", 0));
         } catch (JSONException | IllegalArgumentException ignored) {
             // Preserve an empty in-memory recovery target; never overwrite an unknown/corrupt value.
         }
+    }
+
+    /** v2 → v3: every record and the pending reservation land on page 0 of a one-page pane. */
+    private void migrateV2(JSONObject root) throws JSONException {
+        WidgetGridDefinition loadedGrid = decodeGrid(root.getJSONObject("grid"));
+        LinkedHashMap<Integer, LauncherWidgetRecord> loaded = decodeRecords(root, true);
+        WidgetAddTransaction loadedPending = root.has("pending")
+            ? decodeTransaction(root.getJSONObject("pending"), true, 0, 0) : null;
+        if (!validatePaged(loadedGrid, loaded, loadedPending, 1)) throw new JSONException("invalid v2");
+        // Keep the decoded identities in memory even when the one-shot migration write fails.
+        records = loaded;
+        pending = loadedPending;
+        grid = loadedGrid;
+        pageCount = 1;
+        revision = Math.max(0, root.optLong("revision", 0));
+        migrationWritePending = !storage.write(encode(loaded, loadedPending, loadedGrid, 1, revision));
     }
 
     private void migrateV1(JSONObject root) throws JSONException {
@@ -242,25 +326,16 @@ public final class LauncherWidgetRepository {
         WidgetAddTransaction migratedPending = hasPending
             ? decodeTransaction(root.getJSONObject("pending"), false,
                 count % migratedGrid.columns, count / migratedGrid.columns) : null;
-        if (!validSnapshot(migratedGrid, migrated, migratedPending)) throw new JSONException("invalid v1");
+        if (!validatePaged(migratedGrid, migrated, migratedPending, 1)) {
+            throw new JSONException("invalid v1");
+        }
         // Keep the decoded identities in memory even when the one-shot migration write fails.
         records = migrated;
         pending = migratedPending;
         grid = migratedGrid;
+        pageCount = 1;
         revision = 0;
-        migrationWritePending = !storage.write(encode(migrated, migratedPending, migratedGrid, 0));
-    }
-
-    private static boolean validSnapshot(WidgetGridDefinition definition,
-                                         LinkedHashMap<Integer, LauncherWidgetRecord> values,
-                                         @Nullable WidgetAddTransaction transaction) {
-        List<LauncherWidgetRecord> list = new ArrayList<>(values.values());
-        if (!WidgetGridPlacementPolicy.validate(definition, list)) return false;
-        if (transaction == null) return true;
-        LauncherWidgetRecord same = values.get(transaction.appWidgetId);
-        int ignored = same != null && same.state == LauncherWidgetRecord.State.DELETING
-            ? same.appWidgetId : -1;
-        return WidgetGridPlacementPolicy.canPlace(definition, list, transaction.cell, ignored);
+        migrationWritePending = !storage.write(encode(migrated, migratedPending, migratedGrid, 1, 0));
     }
 
     private static LinkedHashMap<Integer, LauncherWidgetRecord> decodeRecords(JSONObject root,
@@ -278,12 +353,13 @@ public final class LauncherWidgetRepository {
 
     private static String encode(Map<Integer, LauncherWidgetRecord> values,
                                  @Nullable WidgetAddTransaction transaction,
-                                 WidgetGridDefinition definition, long revision) {
+                                 WidgetGridDefinition definition, int pages, long revision) {
         try {
             JSONObject root = new JSONObject();
             root.put("version", SCHEMA_VERSION);
             root.put("revision", revision);
             root.put("grid", encodeGrid(definition));
+            root.put("pages", Math.max(1, pages));
             JSONArray array = new JSONArray();
             for (LauncherWidgetRecord record : values.values()) array.put(encodeRecord(record));
             root.put("records", array);
@@ -316,6 +392,7 @@ public final class LauncherWidgetRepository {
         value.put("profile", record.profileSerial);
         value.put("state", record.state.name());
         value.put("cell", encodeCell(record.cell));
+        value.put("page", record.page);
         value.put("options", encodeBundle(record.sizeOptions()));
         if (record.lastRenderFailure != null) value.put("failure", record.lastRenderFailure);
         return value;
@@ -330,6 +407,7 @@ public final class LauncherWidgetRepository {
             : new WidgetCellRect(legacyColumn, legacyRow, legacyColumn + 1, legacyRow + 1);
         return new LauncherWidgetRecord(value.getInt("id"), provider, value.getLong("profile"),
             LauncherWidgetRecord.State.valueOf(value.getString("state")), cell,
+            Math.max(0, value.optInt("page", 0)),
             decodeBundle(value.optJSONObject("options")), value.optString("failure", null));
     }
 
@@ -341,6 +419,7 @@ public final class LauncherWidgetRepository {
         out.put("profile", value.profileSerial);
         out.put("stage", value.stage.name());
         out.put("cell", encodeCell(value.cell));
+        out.put("page", value.page);
         out.put("gridRevision", value.gridRevision);
         if (value.originToken != null) out.put("origin", value.originToken);
         out.put("options", encodeBundle(value.requestedOptions()));
@@ -357,7 +436,8 @@ public final class LauncherWidgetRepository {
             : new WidgetCellRect(legacyColumn, legacyRow, legacyColumn + 1, legacyRow + 1);
         return new WidgetAddTransaction(value.getString("token"), value.getInt("id"), provider,
             value.getLong("profile"), WidgetAddTransaction.Stage.valueOf(value.getString("stage")),
-            cell, hasCell ? value.optLong("gridRevision", 0) : 0,
+            cell, Math.max(0, value.optInt("page", 0)),
+            hasCell ? value.optLong("gridRevision", 0) : 0,
             value.optString("origin", null), decodeBundle(value.optJSONObject("options")),
             value.getLong("started"));
     }

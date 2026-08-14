@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
@@ -27,6 +28,10 @@ public final class WidgetGridView extends ViewGroup {
         void onWidgetLongPressed(int appWidgetId, float rawX, float rawY);
         default void onWidgetEditDragMove(int appWidgetId, float rawX, float rawY) { }
         default void onWidgetEditDragEnd(int appWidgetId, boolean canceled) { }
+        /** Long press on cell-free grid surface (gaps, edges, empty pages). */
+        default void onEmptySpaceLongPressed(float rawX, float rawY) { }
+        /** A provider text editor gained (non-null) or lost (null) focus inside a cell. */
+        default void onWidgetEditorFocusChanged(@Nullable View editor) { }
     }
 
     @Nullable private LauncherWidgetHostController controller;
@@ -38,19 +43,28 @@ public final class WidgetGridView extends ViewGroup {
     private final Map<Integer, Long> deliveredSizes = new HashMap<>();
     private final int edgePadding;
     private final int gap;
+    private final int touchSlop;
+    private final Runnable emptyLongPressFire = this::fireEmptyLongPress;
+    private boolean emptyLongPressPending;
+    private float emptyDownX, emptyDownY;
+    private float emptyDownRawX, emptyDownRawY;
 
     public WidgetGridView(@NonNull Context context) {
         super(context);
         edgePadding = Math.round(4f * getResources().getDisplayMetrics().density);
         gap = Math.round(4f * getResources().getDisplayMetrics().density);
+        touchSlop = android.view.ViewConfiguration.get(context).getScaledTouchSlop();
         setClipChildren(true);
         setClipToPadding(true);
         setChildrenDrawingOrderEnabled(true);
+        // Focus flows to provider editors, never to the grid itself.
+        setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);
+        setFocusable(false);
     }
 
     public void bind(@NonNull LauncherWidgetHostController value) {
         controller = value;
-        refresh(value.repository().gridDefinition(), value.repository().records());
+        refresh(value.repository().gridDefinition(), value.repository().recordsOnPage(0));
     }
 
     public void setListener(@Nullable Listener value) { listener = value; }
@@ -73,6 +87,9 @@ public final class WidgetGridView extends ViewGroup {
                 addView(cell);
             }
             final int cellWidgetId = record.appWidgetId;
+            cell.setEditorFocusListener(editor -> {
+                if (listener != null) listener.onWidgetEditorFocusChanged(editor);
+            });
             cell.setLongPressListener(new WidgetCellView.LongPressListener() {
                 @Override public void onWidgetLongPress(float rawX, float rawY) {
                     if (listener != null) listener.onWidgetLongPressed(cellWidgetId, rawX, rawY);
@@ -106,6 +123,51 @@ public final class WidgetGridView extends ViewGroup {
         }
         for (int id : stale) { cells.remove(id); committedSizes.remove(id); deliveredSizes.remove(id); }
         requestLayout();
+    }
+
+    /**
+     * Cell-free surface touches end here (cells consume their own streams). The grid accepts the
+     * stream only to watch for a long press: a slop move or UP releases it, and both the pane's
+     * page swipe and the status pane's pull-up take over via the normal intercept CANCEL.
+     */
+    @Override public boolean onTouchEvent(@NonNull MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                emptyDownX = event.getX(); emptyDownY = event.getY();
+                emptyDownRawX = event.getRawX(); emptyDownRawY = event.getRawY();
+                emptyLongPressPending = true;
+                postDelayed(emptyLongPressFire,
+                    android.view.ViewConfiguration.getLongPressTimeout());
+                return true;
+            case MotionEvent.ACTION_MOVE:
+                if (emptyLongPressPending && Math.hypot(event.getX() - emptyDownX,
+                    event.getY() - emptyDownY) > touchSlop) cancelEmptyLongPress();
+                return true;
+            case MotionEvent.ACTION_POINTER_DOWN:
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                cancelEmptyLongPress();
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    private void cancelEmptyLongPress() {
+        emptyLongPressPending = false;
+        removeCallbacks(emptyLongPressFire);
+    }
+
+    private void fireEmptyLongPress() {
+        if (!emptyLongPressPending) return;
+        emptyLongPressPending = false;
+        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+        if (listener != null) listener.onEmptySpaceLongPressed(emptyDownRawX, emptyDownRawY);
+    }
+
+    @Override protected void onDetachedFromWindow() {
+        cancelEmptyLongPress();
+        super.onDetachedFromWindow();
     }
 
     @NonNull public WidgetGridMetrics metrics() {

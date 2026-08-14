@@ -107,10 +107,6 @@ public class WidgetPaneEmptyStateIntegrationTest {
         assertEquals(bodyRect, pickerRect);
         assertTrue(hostRect.contains(statusRect));
         assertTrue(bodyRect.contains(gridRect));
-        assertTrue(bodyRect.contains(boundsIn(root,
-            fixture.activity.findViewById(R.id.widget_add_large))));
-        assertTrue(bodyRect.contains(boundsIn(root,
-            fixture.activity.findViewById(R.id.widget_add_compact))));
         assertFalse("widget grid " + gridRect + " intersects status row " + statusRect,
             Rect.intersects(gridRect, statusRect));
         assertFalse("widget picker " + pickerRect + " intersects status row " + statusRect,

@@ -170,18 +170,27 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
     public AddResult beginAdd(@NonNull AppWidgetProviderInfo selected,
                               @Nullable Bundle initialOptions) {
         WidgetGridPlacementPolicy.Result placement = WidgetGridPlacementPolicy.findPlacement(
-            repository.gridDefinition(), repository.records(), 1, 1);
+            repository.gridDefinition(), repository.recordsOnPage(0), 1, 1);
         if (placement.outcome != WidgetGridPlacementPolicy.Outcome.PLACED) return AddResult.NO_SPACE;
-        return beginAdd(selected, placement.rect, repository.revision(), initialOptions, null);
+        return beginAdd(selected, placement.rect, 0, repository.revision(), initialOptions, null);
     }
 
     @NonNull
     public AddResult beginAdd(@NonNull AppWidgetProviderInfo selected,
                               @NonNull WidgetCellRect reservedCell, long expectedGridRevision,
                               @Nullable Bundle initialOptions, @Nullable String originToken) {
+        return beginAdd(selected, reservedCell, 0, expectedGridRevision, initialOptions,
+            originToken);
+    }
+
+    @NonNull
+    public AddResult beginAdd(@NonNull AppWidgetProviderInfo selected,
+                              @NonNull WidgetCellRect reservedCell, int page,
+                              long expectedGridRevision, @Nullable Bundle initialOptions,
+                              @Nullable String originToken) {
         if (capability == Capability.UNSUPPORTED) return AddResult.UNSUPPORTED;
         if (repository.pending() != null) return AddResult.BUSY;
-        if (!repository.canReserve(expectedGridRevision, reservedCell)) return AddResult.NO_SPACE;
+        if (!repository.canReserve(expectedGridRevision, reservedCell, page)) return AddResult.NO_SPACE;
         ComponentName provider = selected.provider;
         UserHandle profile = selected.getProfile() == null ? Process.myUserHandle() : selected.getProfile();
         long profileSerial;
@@ -198,7 +207,7 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
             return AddResult.FAILED;
         }
         WidgetAddTransaction transaction = new WidgetAddTransaction(UUID.randomUUID().toString(),
-            id, provider, profileSerial, WidgetAddTransaction.Stage.ALLOCATED, reservedCell,
+            id, provider, profileSerial, WidgetAddTransaction.Stage.ALLOCATED, reservedCell, page,
             expectedGridRevision, originToken, options, System.currentTimeMillis());
         if (!repository.reservePending(expectedGridRevision, transaction)) {
             deleteUnpersistedAllocation(id);
@@ -303,7 +312,7 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         if (!repository.setPending(committing)) return abandon(transaction, AddResult.STORAGE_FAILURE);
         LauncherWidgetRecord record = new LauncherWidgetRecord(committing.appWidgetId,
             committing.provider, committing.profileSerial, LauncherWidgetRecord.State.ACTIVE,
-            committing.cell, committing.requestedOptions(), null);
+            committing.cell, committing.page, committing.requestedOptions(), null);
         if (!repository.finalizeActive(committing.token, record)) {
             return abandon(committing, AddResult.STORAGE_FAILURE);
         }
@@ -418,8 +427,8 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
                 case TOMBSTONE_AND_DELETE_ID:
                     LauncherWidgetRecord tombstone = new LauncherWidgetRecord(record.appWidgetId,
                         record.provider, record.profileSerial,
-                        LauncherWidgetRecord.State.PROVIDER_MISSING, record.cell, record.sizeOptions(),
-                        record.lastRenderFailure);
+                        LauncherWidgetRecord.State.PROVIDER_MISSING, record.cell, record.page,
+                        record.sizeOptions(), record.lastRenderFailure);
                     if (repository.putRecord(tombstone)) {
                         try { platform.deleteAppWidgetId(record.appWidgetId); }
                         catch (RuntimeException ignored) { }
@@ -457,13 +466,24 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
                 try { platform.deleteAppWidgetId(id); } catch (RuntimeException ignored) { }
                 continue;
             }
-            WidgetGridPlacementPolicy.Result placement = WidgetGridPlacementPolicy.findPlacement(
-                repository.gridDefinition(), repository.records(), 1, 1);
-            if (placement.outcome != WidgetGridPlacementPolicy.Outcome.PLACED) continue;
+            // Recover onto the first page with room, in page order.
+            WidgetCellRect recovered = null;
+            int recoveredPage = 0;
+            for (int page = 0; page < repository.pageCount() && recovered == null; page++) {
+                WidgetGridPlacementPolicy.Result placement = WidgetGridPlacementPolicy
+                    .findPlacement(repository.gridDefinition(), repository.recordsOnPage(page),
+                        1, 1);
+                if (placement.outcome == WidgetGridPlacementPolicy.Outcome.PLACED) {
+                    recovered = placement.rect;
+                    recoveredPage = page;
+                }
+            }
+            if (recovered == null) continue;
             try {
                 long serial = platform.profileSerial(info.getProfile());
                 repository.putRecord(new LauncherWidgetRecord(id, info.provider, serial,
-                    LauncherWidgetRecord.State.ACTIVE, placement.rect, new Bundle(), null));
+                    LauncherWidgetRecord.State.ACTIVE, recovered, recoveredPage,
+                    new Bundle(), null));
             } catch (RuntimeException ignored) {
                 // Keep the allocation owned and retry recovery on the next reconciliation.
             }
