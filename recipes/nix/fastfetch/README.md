@@ -4,6 +4,11 @@ Nix counterpart of `recipes/termux/fastfetch`: fastfetch 2.67.0 with the
 animated Kitty graphics patch, built from nixpkgs with ImageMagick, zlib,
 and Chafa support.
 
+The `#launcher` flake template already carries this overlay as
+`overlays.nix`, gated behind `animatedFastfetchLogo` in `toolkits.nix`
+(`setup-toolkits --animated-logo`). What follows is for a config that
+does not come from the template.
+
 Usage: add `overlay.nix` (and the patch next to it) to the device's
 `~/.config/nix-on-droid/` and register it in the flake:
 

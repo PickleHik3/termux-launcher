@@ -228,6 +228,15 @@ popup action assigned to a key.
 Open **Settings → Keyboard & input** to change input method, appearance, colors, typeface, extra keys,
 feedback, and `~/.termux/keyboard/layout.xml` support.
 
+The extra keys editor gives the **Display label** and **Swipe-up label** fields a glyph picker
+(the `Ω` button) with a searchable catalogue of arrows, box drawing, blocks, shapes, Powerline
+separators, technical key symbols, and terminal marks. Key caps are drawn with the user-interface
+font, not the terminal font, so Nerd Font and Powerline private-use characters only appear in the
+picker when the system font carries them. Anything the device cannot draw is filtered out instead
+of being offered as an empty box, which is why a phone without a Nerd Font shows no Powerline
+section at all. Those glyphs still render inside the terminal itself whenever the terminal font
+provides them.
+
 When `Ctrl+Alt` is latched, keys with launcher bindings light up by action family. Pressing a lit cap
 runs the same resolved binding used by a hardware keyboard. Uppercase letters mean Shift, so
 `Ctrl+Alt+r` and `Ctrl+Alt+R` are distinct shortcuts.

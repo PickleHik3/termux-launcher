@@ -55,7 +55,8 @@ prompt theming, few tools. Continue below.
 ## Get the real shell environment
 
 The fork ships a template that recreates the shell used throughout this wiki: fish as the login
-shell, an oh-my-posh prompt, `eza`/`zoxide`/`yazi`, LazyVim, fastfetch, and a small sshd toolset.
+shell, an oh-my-posh prompt, `eza`/`zoxide`/`yazi`, Neovim, fastfetch with an animated logo, and a
+small sshd toolset.
 
 ```sh
 cd ~/.config/nix-on-droid
@@ -71,6 +72,37 @@ Then **open a new session** — the login shell only changes for sessions starte
 
 If it fails, you have lost nothing: the previous environment is still active, and the error text
 names the file and line it tripped on.
+
+## Pick what you want installed
+
+The template installs the shell, the eye candy, Neovim and a build toolchain, and leaves the
+language toolchains off. `setup-toolkits` is a checklist for changing that — it edits
+`~/.config/nix-on-droid/toolkits.nix` and switches for you:
+
+```sh
+setup-toolkits
+```
+
+```
+      1) everything            every toolkit above except the animated logo
+      2) shell essentials      shell + eye candy, nothing else
+      3) pick one by one
+      4) quit, change nothing
+```
+
+The toolkits are `shell`, `eye-candy`, `editor`, `build` (cc/make/cmake/autotools — build things
+from source), `node` (nodejs/npm/npx), `go`, `python` (python3 + uv/uvx), and `animated-logo` (a
+patched fastfetch, ~20 minutes of on-device compiling — everything else comes prebuilt from the
+cache).
+
+`npm install -g`, `go install` and `uv tool install` are wired to write into your home directory
+(`~/.npm-global`, `~/go/bin`, `~/.local/bin`), so what you install with them persists across
+switches and rollbacks. See
+[Global installs](Nix_Package_Management.md#global-installs-npm--g-go-install-uv-tool) for why that
+needs saying at all.
+
+Nothing about this is magic: the script writes booleans into a file you can edit yourself, and
+`nix-on-droid rollback` undoes the result either way.
 
 ## Installing things
 
@@ -120,6 +152,7 @@ confusing error. Three files, three jobs:
 | `flake.nix` | inputs (which `nixpkgs`, home-manager, the fork), overlays |
 | `nix-on-droid.nix` | the *environment*: login shell, `/etc`, base packages, Android integration |
 | `home.nix` | *your user*: dotfiles, per-user packages, session variables |
+| `toolkits.nix` | which package groups `home.nix` installs — booleans, what `setup-toolkits` writes |
 
 Rule of thumb: a file under `~/.config`, or a tool only you invoke → `home.nix`. The login shell, a
 base command every script assumes (git, curl, sed), or Android glue → `nix-on-droid.nix`.
