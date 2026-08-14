@@ -19,6 +19,21 @@ import org.json.JSONException;
 
 public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
 
+    /**
+     * The property behind each toolbar key page, in page order. A page exists only while its
+     * property holds keys, so this is the whole vocabulary of pages the row editor can offer.
+     */
+    public static final String[] PAGE_PROPERTY_KEYS = {
+        TermuxPropertyConstants.KEY_EXTRA_KEYS,
+        TermuxPropertyConstants.KEY_EXTRA_KEYS2,
+    };
+
+    /** The default value of each page, index-aligned with {@link #PAGE_PROPERTY_KEYS}. */
+    public static final String[] PAGE_DEFAULT_VALUES = {
+        TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS,
+        TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS2,
+    };
+
     private ExtraKeysInfo mExtraKeysInfo;
 
     final TermuxActivity mActivity;
@@ -41,13 +56,19 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
     /**
      * Set the terminal extra keys and style.
      */
+    /** True when this page holds no keys — the pager drops such a page instead of showing a blank. */
+    public boolean isEmpty() {
+        return mExtraKeysInfo == null || mExtraKeysInfo.getMatrix().length == 0;
+    }
+
     private void setExtraKeys(int i) {
         mExtraKeysInfo = null;
         try {
             // The mMap stores the extra key and style string values while loading properties
             // Check {@link #getExtraKeysInternalPropertyValueFromValue(String)} and
             // {@link #getExtraKeysStyleInternalPropertyValueFromValue(String)}
-            String extrakeys = (String) mActivity.getProperties().getInternalPropertyValue(i == 0 ? TermuxPropertyConstants.KEY_EXTRA_KEYS : TermuxPropertyConstants.KEY_EXTRA_KEYS2, false);
+            String pageKey = PAGE_PROPERTY_KEYS[Math.max(0, Math.min(i, PAGE_PROPERTY_KEYS.length - 1))];
+            String extrakeys = (String) mActivity.getProperties().getInternalPropertyValue(pageKey, false);
             String extraKeysStyle = (String) mActivity.getProperties().getInternalPropertyValue(TermuxPropertyConstants.KEY_EXTRA_KEYS_STYLE, true);
             ExtraKeysConstants.ExtraKeyDisplayMap extraKeyDisplayMap = ExtraKeysInfo.getCharDisplayMapForStyle(extraKeysStyle);
             if (ExtraKeysConstants.EXTRA_KEY_DISPLAY_MAPS.DEFAULT_CHAR_DISPLAY.equals(extraKeyDisplayMap) && !TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE.equals(extraKeysStyle)) {
@@ -59,7 +80,10 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
             Logger.showToast(mActivity, "Could not load and set the \"" + TermuxPropertyConstants.KEY_EXTRA_KEYS + "\" property from the properties file: " + e.toString(), true);
             Logger.logStackTraceWithMessage(LOG_TAG, "Could not load and set the \"" + TermuxPropertyConstants.KEY_EXTRA_KEYS + "\" property from the properties file: ", e);
             try {
-                mExtraKeysInfo = new ExtraKeysInfo(i == 0 ? TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS : TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS2, TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE, ExtraKeysConstants.CONTROL_CHARS_ALIASES);
+                mExtraKeysInfo = new ExtraKeysInfo(
+                    PAGE_DEFAULT_VALUES[Math.max(0, Math.min(i, PAGE_DEFAULT_VALUES.length - 1))],
+                    TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE,
+                    ExtraKeysConstants.CONTROL_CHARS_ALIASES);
             } catch (JSONException e2) {
                 Logger.showToast(mActivity, "Can't create default extra keys", true);
                 Logger.logStackTraceWithMessage(LOG_TAG, "Could create default extra keys: ", e);
