@@ -590,6 +590,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     public static final int CONTEXT_MENU_STYLE_ID = 11;
 
+    private static final int CONTEXT_MENU_SELECT_URL_ID = 0;
+
+    private static final int CONTEXT_MENU_SHARE_TRANSCRIPT_ID = 1;
+
+    private static final int CONTEXT_MENU_SET_WALLPAPER_ID = 2;
+
+    private static final int CONTEXT_MENU_REMOVE_WALLPAPER_ID = 3;
+
+    private static final int CONTEXT_MENU_SETTINGS_ID = 6;
+
+    private static final int CONTEXT_MENU_RESET_TERMINAL_ID = 7;
+
+    private static final int CONTEXT_MENU_GLASS_LAB_ID = 9;
+
+    private static final int CONTEXT_MENU_COMMAND_PALETTE_ID = 10;
+
+    /** One row of the long-press action dialog. */
+    private static final class TerminalActionItem {
+        final int id;
+        final CharSequence title;
+
+        TerminalActionItem(int id, CharSequence title) {
+            this.id = id;
+            this.title = title;
+        }
+
+        @NonNull
+        @Override
+        public String toString() {
+            return title.toString();
+        }
+    }
+
+    @Nullable private AlertDialog mTerminalActionDialog;
+
     private static final String ARG_TERMINAL_TOOLBAR_TEXT_INPUT = "terminal_toolbar_text_input";
 
     private static final String ARG_ACTIVITY_RECREATED = "activity_recreated";
@@ -5509,7 +5544,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void resetUiForInPlaceSessionRecovery(@NonNull String reason) {
         Logger.logWarn(LOG_TAG, "Resetting launcher UI before in-place empty-session recovery from " + reason);
-        // The long-press menu is a sheet now, and the plane it lives on is torn down with the rest.
+        if (mTerminalActionDialog != null) {
+            mTerminalActionDialog.dismiss();
+            mTerminalActionDialog = null;
+        }
         if (mTerminalSheet != null) mTerminalSheet.dismissImmediately();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.resetTransientVisualState();
@@ -10187,14 +10225,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /**
-     * The long-press menu rows that are not registry tools; see {@link #CONTEXT_MENU_STYLE_ID}.
-     * Public because {@code TerminalActionMenu} builds the menu from another package.
-     */
+    /** The long-press action dialog's rows, and the two legacy menu items that share their ids. */
     public boolean handleTerminalAction(int itemId) {
+        TerminalSession session = getCurrentSession();
         switch(itemId) {
+            case CONTEXT_MENU_SELECT_URL_ID:
+                mTermuxTerminalViewClient.showUrlSelection();
+                return true;
+            case CONTEXT_MENU_SHARE_TRANSCRIPT_ID:
+                mTermuxTerminalViewClient.shareSessionTranscript();
+                return true;
+            case CONTEXT_MENU_SET_WALLPAPER_ID:
+                launchManagedWallpaperPicker();
+                return true;
+            case CONTEXT_MENU_REMOVE_WALLPAPER_ID:
+                setWallpaperModeEnabled(this, !shouldUseWallpaperPassthroughMode());
+                return true;
+            case CONTEXT_MENU_SETTINGS_ID:
+                openSettingsHome();
+                return true;
+            case CONTEXT_MENU_RESET_TERMINAL_ID:
+                onResetTerminalSession(session);
+                return true;
             case CONTEXT_MENU_KILL_PROCESS_ID:
-                showKillSessionDialog(getCurrentSession());
+                showKillSessionDialog(session);
+                return true;
+            case CONTEXT_MENU_GLASS_LAB_ID:
+                enterDockTuningMode();
+                return true;
+            case CONTEXT_MENU_COMMAND_PALETTE_ID:
+                com.termux.app.terminal.TerminalCommandPalette.show(this);
                 return true;
             case CONTEXT_MENU_STYLE_ID:
                 openTerminalStyling();
@@ -10234,22 +10294,51 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * @param anchor screen point the menu should open at — the long press that led here — or null
-     *               for a centred card, which is what a palette or keybinding invocation gets since
-     *               no finger named a place for it.
+     * @param anchor accepted for the callers that pass one, but the dialog centres itself: this is
+     *               the pre-sheet menu, restored at the owner's request.
      */
     public boolean showTerminalActionSheet(@Nullable android.graphics.PointF anchor) {
         TerminalSession currentSession = getCurrentSession();
         if (currentSession == null) {
             return false;
         }
-        // A sheet is already up — the browser, a prompt, or this menu itself. Stacking a menu on it
-        // would bury whatever the user is in the middle of, so the gesture is spent doing nothing.
-        if (isTerminalSheetOpen()) {
+        if (mTerminalActionDialog != null && mTerminalActionDialog.isShowing()) {
             return true;
         }
-        return com.termux.app.terminal.TerminalActionMenu.show(this, currentSession.getPid(),
-            anchor);
+        List<TerminalActionItem> items = new ArrayList<>();
+        items.add(new TerminalActionItem(CONTEXT_MENU_COMMAND_PALETTE_ID, getString(R.string.action_command_palette)));
+        items.add(new TerminalActionItem(CONTEXT_MENU_SELECT_URL_ID, getString(R.string.action_select_url)));
+        items.add(new TerminalActionItem(CONTEXT_MENU_SHARE_TRANSCRIPT_ID, getString(R.string.action_share_transcript)));
+        items.add(new TerminalActionItem(CONTEXT_MENU_SET_WALLPAPER_ID, getString(R.string.action_set_background_image)));
+        items.add(new TerminalActionItem(
+            CONTEXT_MENU_REMOVE_WALLPAPER_ID,
+            getString(shouldUseWallpaperPassthroughMode()
+                ? R.string.action_disable_background_image
+                : R.string.action_enable_background_image)
+        ));
+        items.add(new TerminalActionItem(CONTEXT_MENU_GLASS_LAB_ID, getString(R.string.action_glass_lab)));
+        // Appearance and Apps & Access are reachable from the Settings page; keep this sheet lean.
+        items.add(new TerminalActionItem(CONTEXT_MENU_SETTINGS_ID, getString(R.string.action_open_settings)));
+        items.add(new TerminalActionItem(CONTEXT_MENU_RESET_TERMINAL_ID, getString(R.string.action_reset_terminal)));
+        items.add(new TerminalActionItem(CONTEXT_MENU_KILL_PROCESS_ID,
+            getString(R.string.action_kill_process, currentSession.getPid())));
+
+        ArrayAdapter<TerminalActionItem> adapter = new ArrayAdapter<>(this,
+            android.R.layout.simple_list_item_1, items);
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+            .setAdapter(adapter, (dialogInterface, which) -> handleTerminalAction(items.get(which).id))
+            .setOnDismissListener(dialogInterface -> {
+                if (mTerminalView != null) {
+                    mTerminalView.onContextMenuClosed(null);
+                }
+                if (mTerminalActionDialog == dialogInterface) {
+                    mTerminalActionDialog = null;
+                }
+            })
+            .create();
+        mTerminalActionDialog = dialog;
+        dialog.show();
+        return true;
     }
 
     /**
