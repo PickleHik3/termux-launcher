@@ -143,6 +143,19 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_APP_LAUNCHER_APPS_ROW_ENABLED = true;
 
         /**
+         * Defines the key for which screen edge the landscape dock rail is docked to. The app
+         * drawer's pull runs away from that edge, so this also picks the swipe that opens it.
+         */
+        public static final String KEY_APP_LAUNCHER_DOCK_RAIL_SIDE = "app_launcher_dock_rail_side";
+
+        public static final String APP_LAUNCHER_DOCK_RAIL_SIDE_LEFT = "left";
+
+        public static final String APP_LAUNCHER_DOCK_RAIL_SIDE_RIGHT = "right";
+
+        public static final String DEFAULT_APP_LAUNCHER_DOCK_RAIL_SIDE =
+            APP_LAUNCHER_DOCK_RAIL_SIDE_LEFT;
+
+        /**
          * Defines the key for enabling the terminal extra-keys dock row.
          */
         public static final String KEY_APP_LAUNCHER_EXTRA_KEYS_ROW_ENABLED =

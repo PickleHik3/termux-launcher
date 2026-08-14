@@ -514,6 +514,29 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_APPS_ROW_ENABLED, value, false);
     }
 
+    /** @return {@code "left"} or {@code "right"}; anything else stored reads back as the default. */
+    public String getAppLauncherDockRailSide() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_RAIL_SIDE,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_RAIL_SIDE, true);
+        return TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_RIGHT.equals(value)
+            ? TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_RIGHT
+            : TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_LEFT;
+    }
+
+    public void setAppLauncherDockRailSide(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_RAIL_SIDE,
+            TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_RIGHT.equals(value)
+                ? TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_RIGHT
+                : TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_LEFT, false);
+    }
+
+    /** @return true when the landscape rail sits on the right, i.e. the drawer pull runs left. */
+    public boolean isAppLauncherDockRailOnRight() {
+        return TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_RIGHT.equals(getAppLauncherDockRailSide());
+    }
+
     public boolean isAppLauncherExtraKeysRowEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_APP_LAUNCHER_EXTRA_KEYS_ROW_ENABLED,
