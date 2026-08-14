@@ -14,6 +14,7 @@ import android.text.TextUtils;
 import android.widget.ListView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import com.termux.R;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
@@ -659,7 +660,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 // must not touch the theme or resources, and this way the files describe the same
                 // palette the terminal just took.
                 final Properties exported =
-                    MaterialTerminalColorScheme.createMaterialRoleProperties(mActivity, props);
+                    MaterialTerminalColorScheme.createMaterialRoleProperties(mActivity, props, level);
                 MATERIAL_COLOR_FILE_EXECUTOR.execute(() -> {
                     try {
                         MaterialTerminalColorScheme.writeMaterialColorFiles(exported);
@@ -678,12 +679,52 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                     }
                 }
             }
-            TerminalColors.COLOR_SCHEME.updateWith(props);
+            TerminalColors.COLOR_SCHEME.updateWith(colorKeysOnly(props));
             resetAllSessionColors();
             updateBackgroundColor();
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyTerminalColors()", e);
         }
+    }
+
+    /**
+     * The colour entries of {@code props}, with everything else dropped and logged.
+     *
+     * <p>{@code TerminalColorScheme.updateWith()} throws on the first key it does not recognise, and it
+     * throws while iterating an unordered map — so one stray line in a hand-written
+     * {@code colors.properties} does not merely get ignored, it leaves the palette partially applied
+     * and skips the session reset and the background update that follow. Filtering here keeps a bad
+     * line cosmetic.
+     */
+    @VisibleForTesting
+    static Properties colorKeysOnly(@NonNull Properties props) {
+        Properties filtered = new Properties();
+        for (String key : props.stringPropertyNames()) {
+            if (isTerminalColorKey(key)) {
+                filtered.setProperty(key, props.getProperty(key));
+            } else {
+                Logger.logWarn(LOG_TAG, "Ignoring non-colour terminal palette property '" + key + "'");
+            }
+        }
+        return filtered;
+    }
+
+    private static boolean isTerminalColorKey(@NonNull String key) {
+        switch (key) {
+            case "foreground":
+            case "background":
+            case "cursor":
+                return true;
+            default:
+                break;
+        }
+        if (!key.startsWith("color")) return false;
+        String index = key.substring("color".length());
+        if (index.isEmpty()) return false;
+        for (int i = 0; i < index.length(); i++) {
+            if (!Character.isDigit(index.charAt(i))) return false;
+        }
+        return true;
     }
 
     /** Load the configured faces and apply them to every pane that has a renderer. */

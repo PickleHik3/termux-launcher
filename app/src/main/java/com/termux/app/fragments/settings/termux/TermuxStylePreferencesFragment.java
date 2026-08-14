@@ -529,6 +529,13 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherDockStyle(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
+            case "app_launcher_dock_rail_side":
+                mPreferences.setAppLauncherDockRailSide(value);
+                // The side moves the rail's layout gravity and the content root's cutout padding,
+                // both of which are applied from an insets pass; recreate rather than restyle so
+                // the terminal is re-inset from the edge the rail just left.
+                scheduleTermuxActivityStylingSync(true);
+                break;
             case "app_launcher_drawer_view_type":
                 mPreferences.setAppLauncherDrawerViewType(value);
                 scheduleAppDrawerSync();
@@ -604,6 +611,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return com.termux.app.launcher.LauncherUseCaseMode.currentMode(mPreferences);
             case "app_launcher_dock_style":
                 return mPreferences.getAppLauncherDockStyle();
+            case "app_launcher_dock_rail_side":
+                return mPreferences.getAppLauncherDockRailSide();
             case "app_launcher_drawer_view_type":
                 return mPreferences.getAppLauncherDrawerViewType();
             case "app_launcher_drawer_icon_size_dp":
