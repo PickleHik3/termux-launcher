@@ -265,7 +265,13 @@ public final class AppDrawerCategoryView extends ViewGroup
         overviewLayout.setSpanCount(Math.max(1, metrics.columns));
         detailLayout.setSpanCount(Math.max(1, metrics.expandedColumns));
         int horizontal = Math.max(0, Math.round(metrics.sidePaddingPx));
-        overview.setPadding(horizontal, 0, horizontal, 0);
+        // Bottom padding, not clipped: the last row used to sit flush against the plane's bottom
+        // edge, so in landscape — where a second row only half fits — the tiles read as clipped by
+        // the plane rather than as a list that scrolls. One row gap of overscroll says the
+        // difference, and the tiles still paint into it while dragging.
+        int bottom = Math.max(0, Math.round(metrics.itemGapPx + metrics.itemBottomGapPx));
+        overview.setPadding(horizontal, 0, horizontal, bottom);
+        overview.setClipToPadding(false);
         tileSpacing.setMetrics(metrics);
         overview.invalidateItemDecorations();
         tileAdapter.setMetrics(metrics);

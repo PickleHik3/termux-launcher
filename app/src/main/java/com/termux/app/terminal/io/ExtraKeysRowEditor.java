@@ -783,7 +783,7 @@ public final class ExtraKeysRowEditor {
      */
     private void openGlyphPicker(@NonNull EditText field) {
         dialog.hide();
-        ExtraKeyGlyphPicker.show(context, glyph -> {
+        ExtraKeyGlyphPicker.show(context, field.getText().toString(), glyph -> {
             Editable text = field.getText();
             int start = clampToText(field.getSelectionStart(), text.length());
             int end = clampToText(field.getSelectionEnd(), text.length());

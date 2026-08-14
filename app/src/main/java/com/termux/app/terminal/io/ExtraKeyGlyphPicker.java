@@ -77,6 +77,8 @@ public final class ExtraKeyGlyphPicker {
     @NonNull private final ExtraKeyGlyphCatalogue catalogue;
     @Nullable private Runnable onClosed;
 
+    /** The field's value when the picker opened; the swatch's first subject. */
+    @Nullable private String initialGlyph;
     @Nullable private TextView previewCap;
     @Nullable private TextView previewName;
 
@@ -98,8 +100,19 @@ public final class ExtraKeyGlyphPicker {
 
     public static void show(@NonNull Context context, @NonNull OnPicked onPicked,
                             @Nullable Runnable onClosed) {
+        show(context, null, onPicked, onClosed);
+    }
+
+    /**
+     * @param current what the field being edited holds right now, so the swatch opens showing the
+     *                glyph the user is about to replace rather than an empty outline. Null, or a
+     *                value that is not a single catalogue glyph, opens on the hint instead.
+     */
+    public static void show(@NonNull Context context, @Nullable CharSequence current,
+                            @NonNull OnPicked onPicked, @Nullable Runnable onClosed) {
         ExtraKeyGlyphPicker picker = new ExtraKeyGlyphPicker(context);
         picker.onClosed = onClosed;
+        picker.initialGlyph = current == null ? null : current.toString();
         picker.open(onPicked);
     }
 
@@ -274,8 +287,36 @@ public final class ExtraKeyGlyphPicker {
 
     private void showPreview(@Nullable ExtraKeyGlyphCatalogue.Glyph glyph) {
         if (previewCap == null || previewName == null) return;
-        previewCap.setText(glyph == null ? "" : glyph.text);
-        previewName.setText(glyph == null ? "" : glyph.name + " · U+" + glyph.hex());
+        if (glyph != null) {
+            previewCap.setText(glyph.text);
+            previewName.setText(glyph.name + " · U+" + glyph.hex());
+            previewCap.setAlpha(1f);
+            return;
+        }
+        // Nothing to show is still worth saying: an outlined empty box reads as a broken cap, which
+        // is exactly how the swatch looked before anything had been tapped.
+        ExtraKeyGlyphCatalogue.Glyph opening = openingGlyph();
+        if (opening != null) {
+            previewCap.setText(opening.text);
+            previewName.setText(opening.name + " · U+" + opening.hex());
+            previewCap.setAlpha(1f);
+            return;
+        }
+        previewCap.setText("");
+        previewCap.setAlpha(0.4f);
+        previewName.setText(context.getString(R.string.settings_extra_keys_glyph_preview_hint));
+    }
+
+    /** The glyph the field already held, when the catalogue knows it. */
+    @Nullable
+    private ExtraKeyGlyphCatalogue.Glyph openingGlyph() {
+        if (initialGlyph == null || initialGlyph.isEmpty()) return null;
+        for (String category : ExtraKeyGlyphCatalogue.CATEGORIES) {
+            for (ExtraKeyGlyphCatalogue.Glyph glyph : catalogue.byCategory(category)) {
+                if (glyph.text.equals(initialGlyph)) return glyph;
+            }
+        }
+        return null;
     }
 
     private void renderResults(@NonNull LinearLayout results, @NonNull String query,

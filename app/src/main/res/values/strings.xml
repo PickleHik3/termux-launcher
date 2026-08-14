@@ -139,6 +139,7 @@
     <string name="settings_extra_keys_glyph_search_hint">Search glyphs</string>
     <string name="settings_extra_keys_glyph_insert">Insert glyph</string>
     <string name="settings_extra_keys_glyph_recent">Recent</string>
+    <string name="settings_extra_keys_glyph_preview_hint">Tap a glyph to preview it</string>
     <string name="settings_extra_keys_glyph_category_arrows">Arrows</string>
     <string name="settings_extra_keys_glyph_category_blocks">Blocks</string>
     <string name="settings_extra_keys_glyph_category_shapes">Shapes</string>
