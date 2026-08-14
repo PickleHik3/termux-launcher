@@ -26,9 +26,9 @@ import java.util.List;
  * the tile reads as a folder card (label band above a square icon area, slightly taller than
  * wide), not as a picture with an external caption.
  *
- * <p>Redesign: the whole card is one open-category target. The three large icons and the 2x2
- * mini-cluster are display only — launching individual apps is the expanded grid's job — so a tap
- * anywhere on the card expands it, with a light press dip (0.98 scale, lifted wash) as feedback.
+ * <p>The three large icons launch their app directly — they are the category's shortcut row. The
+ * 2x2 mini-cluster stays display only, and every other part of the card (label band, gaps, the
+ * cluster itself) opens the category, with a light press dip (0.98 scale, lifted wash) as feedback.
  */
 public final class AppDrawerCategoryTileView extends ViewGroup {
     public static final float HEADING_TEXT_SP = 13f;
@@ -37,6 +37,10 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
     private static final int FILL_PRESSED_COLOR = 0x1CFFFFFF;
     private static final int STROKE_COLOR = 0x21FFFFFF;
     private static final float PRESSED_SCALE = 0.98f;
+    /** Per-icon press dip for the three launch shortcuts, tighter than the card's own. */
+    private static final float ICON_PRESSED_SCALE = 0.90f;
+    /** Preview slots that launch their app instead of opening the category. */
+    public static final int LAUNCH_ICON_COUNT = 3;
     public interface ExpansionListener {
         void onExpandRequested(@NonNull AppDrawerCategoryBucket bucket,
                                @NonNull AppDrawerCategoryTileView source);
@@ -68,8 +72,16 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         strokePaint.setStyle(Paint.Style.STROKE);
         strokePaint.setStrokeWidth(Math.max(1f, getResources().getDisplayMetrics().density));
         strokePaint.setColor(STROKE_COLOR);
+        // The whole-card open target: a transparent sibling laid under the icons and over the drawn
+        // card, reporting its pressed state back for the card's press dip. It is added first so the
+        // three launch icons sit above it and can take their own taps; the display-only slots stay
+        // non-clickable and fall through to it.
+        expandTarget = new PressTargetView(context, this::applyPressedAppearance);
+        expandTarget.setBackgroundColor(Color.TRANSPARENT);
+        expandTarget.setClickable(true);
+        addView(expandTarget);
         for (int i = 0; i < icons.length; i++) {
-            ImageView icon = new ImageView(context);
+            ImageView icon = new PressScaleImageView(context);
             // The cached drawable is rendered at this view's exact pixel size. CENTER therefore
             // performs no second scaling pass (CENTER_INSIDE made the already-small bitmap look
             // like a large preview squeezed into a mini view on high-density devices).
@@ -77,12 +89,6 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
             icons[i] = icon;
             addView(icon);
         }
-        // The whole-card open target: a transparent sibling laid over the entire drawn tile, above
-        // every display-only icon, that reports its pressed state back for the card's press dip.
-        expandTarget = new PressTargetView(context, this::applyPressedAppearance);
-        expandTarget.setBackgroundColor(Color.TRANSPARENT);
-        expandTarget.setClickable(true);
-        addView(expandTarget);
         heading = new TextView(context);
         heading.setTextSize(TypedValue.COMPLEX_UNIT_SP, HEADING_TEXT_SP);
         heading.setTypeface(android.graphics.Typeface.create("sans-serif-medium",
@@ -105,6 +111,25 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         setScaleY(pressed ? PRESSED_SCALE : 1f);
         fillPaint.setColor(pressed ? FILL_PRESSED_COLOR : FILL_COLOR);
         invalidate();
+    }
+
+    /** A preview icon that dips on its own while held, so a launch tap reads as a button. */
+    private static final class PressScaleImageView extends ImageView {
+        PressScaleImageView(@NonNull android.content.Context context) { super(context); }
+        @Override protected void dispatchSetPressed(boolean pressed) {
+            super.dispatchSetPressed(pressed);
+            applyPress(pressed);
+        }
+        @Override public void setPressed(boolean pressed) {
+            boolean changed = pressed != isPressed();
+            super.setPressed(pressed);
+            if (changed) applyPress(pressed);
+        }
+        private void applyPress(boolean pressed) {
+            float scale = pressed && isClickable() ? ICON_PRESSED_SCALE : 1f;
+            setScaleX(scale);
+            setScaleY(scale);
+        }
     }
 
     /** A plain transparent view that reports pressed-state flips to the card. */
@@ -173,11 +198,27 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
             icon.setImageDrawable(artwork != null ? artwork : entry.icon);
             if (dock != null) dock.applyIconColorFilter(icon);
             icon.setVisibility(VISIBLE);
-            // Display-only, all seven: the whole card is one open-category target and individual
-            // launches live in the expanded grid. The full-card target above them owns the tap.
-            icon.setClickable(false);
             icon.setLongClickable(false);
-            icon.setContentDescription(null);
+            if (i < LAUNCH_ICON_COUNT && dock != null) {
+                // The three large slots are shortcuts: a tap launches that app instead of opening
+                // the category. Same gate as every other drawer cell, so a close drag that started
+                // on the card can never fire a launch on release.
+                icon.setClickable(true);
+                icon.setContentDescription(entry.label);
+                icon.setOnClickListener(view -> {
+                    SuggestionBarView currentDock = this.dock;
+                    if (!this.clickGate.suppressCellClick() && currentDock != null)
+                        currentDock.launchEntryFromDrawer(view, entry);
+                });
+            } else {
+                // Display only: the mini-cluster stands for "there is more in here", so its taps
+                // fall through to the open-category target underneath.
+                // Clearing the listener first: setOnClickListener makes a view clickable even when
+                // the listener handed to it is null.
+                icon.setOnClickListener(null);
+                icon.setClickable(false);
+                icon.setContentDescription(null);
+            }
         }
         requestLayout();
     }
@@ -212,6 +253,8 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         icon.setClickable(false);
         icon.setLongClickable(false);
         icon.setContentDescription(null);
+        icon.setScaleX(1f);
+        icon.setScaleY(1f);
         icon.setVisibility(INVISIBLE);
     }
 

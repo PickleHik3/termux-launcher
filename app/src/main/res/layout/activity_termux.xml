@@ -463,7 +463,18 @@
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_above="@+id/apps_bar_indicator_band"
-                android:visibility="gone" />
+                android:visibility="gone">
+
+                <!-- Transform host owned solely by the dock plank physics: the icon row tilts and
+                     shifts with the glass under it. The bar itself keeps its own page-switch
+                     transforms, and the pager keeps the drawer's lift translation. -->
+                <FrameLayout
+                    android:id="@+id/apps_bar_plank_layer"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipChildren="false"
+                    android:clipToPadding="false" />
+            </FrameLayout>
 
             <View
                 android:id="@+id/apps_bar_indicator_band"

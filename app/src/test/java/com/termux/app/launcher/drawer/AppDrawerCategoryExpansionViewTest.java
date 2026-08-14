@@ -77,6 +77,27 @@ public class AppDrawerCategoryExpansionViewTest {
         assertEquals(0, f.view.getDetailAdapter().getItemCount());
     }
 
+    @Test public void detailContentGrowsOutOfTheCardAndIsBoundLongBeforeTheEnd() {
+        Fixture f = fixture();
+        // Mid-expansion: the grid is already bound and visible, scaled down inside the pane rather
+        // than waiting at full size for the pane to finish.
+        for (int i = 0; i < 300 && f.view.expansionProgress() < 0.5f; i++)
+            f.view.advance(1f / 60f, false);
+        assertTrue(f.view.expansionProgress() < 1f);
+        assertEquals(f.bucket.size(), f.view.getDetailAdapter().getItemCount());
+        assertTrue(f.view.getDetailList().getAlpha() > 0f);
+        assertTrue(f.view.getDetailList().getScaleX() < 1f);
+        assertNotNull(f.view.getDetailList().getClipBounds());
+
+        for (int i = 0; i < 300 && f.view.expansionState()
+            != AppDrawerCategoryExpansionModel.State.EXPANDED; i++)
+            f.view.advance(1f / 60f, false);
+        assertEquals(1f, f.view.getDetailList().getScaleX(), 0f);
+        assertEquals(0f, f.view.getDetailList().getTranslationY(), 0f);
+        assertNull(f.view.getDetailList().getClipBounds());
+        assertNull(f.view.getDetailHeader().getClipBounds());
+    }
+
     @Test public void morphOwnsNoBitmapSnapshotField() {
         for (java.lang.reflect.Field field : AppDrawerCategoryMorphView.class.getDeclaredFields())
             assertFalse(android.graphics.Bitmap.class.isAssignableFrom(field.getType()));

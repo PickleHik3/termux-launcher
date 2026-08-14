@@ -15,6 +15,14 @@ public final class AppDrawerCategoryExpansionModel {
     public static final int RELEASE_DETAIL = 1 << 2;
     public static final int BIND_OVERVIEW = 1 << 3;
 
+    /**
+     * The one staging boundary. Overview previews are released and the detail grid is bound at the
+     * same crossing — release first, bind second — so the two icon sets still never hold the shared
+     * rendered-icon cache at once, but the detail content exists for almost the whole expansion
+     * instead of popping in at the end of it.
+     */
+    public static final float STAGING_BOUNDARY = 0.15f;
+
     @NonNull private State state = State.OVERVIEW;
     @Nullable private String selectedId;
     private float progress;
@@ -52,19 +60,19 @@ public final class AppDrawerCategoryExpansionModel {
     public int setProgress(float value) {
         float next = AppDrawerTransitionGeometry.clamp01(value);
         int events = NONE;
-        if (next >= 0.25f && !overviewReleased) {
+        if (next >= STAGING_BOUNDARY && !overviewReleased) {
             overviewReleased = true;
             events |= RELEASE_OVERVIEW;
         }
-        if (next >= 0.35f && !detailBound) {
+        if (next >= STAGING_BOUNDARY && !detailBound) {
             detailBound = true;
             events |= BIND_DETAIL;
         }
-        if (next < 0.35f && detailBound) {
+        if (next < STAGING_BOUNDARY && detailBound) {
             detailBound = false;
             events |= RELEASE_DETAIL;
         }
-        if (next < 0.25f && overviewReleased) {
+        if (next < STAGING_BOUNDARY && overviewReleased) {
             overviewReleased = false;
             events |= BIND_OVERVIEW;
         }

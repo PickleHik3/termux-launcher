@@ -57,6 +57,9 @@ public final class AppDrawerCategoryView extends ViewGroup
     private final ClickGate clickGate = new ClickGate();
     private final int touchSlop;
 
+    /** Where the tapped card sat: the detail content grows out of it instead of fading in flat. */
+    @Nullable private Frame expandSource;
+    private final android.graphics.Rect morphClip = new android.graphics.Rect();
     @Nullable private AppDrawerCategoryGridMetrics metrics;
     @Nullable private Runnable frameRequestListener;
     @Nullable private Runnable popupDismissCallback;
@@ -327,6 +330,7 @@ public final class AppDrawerCategoryView extends ViewGroup
         Frame sourceFrame = tileAdapter.selectedTileBounds(overview, bucket.category.slug, this);
         if (sourceFrame == null)
             sourceFrame = new Frame(source.getLeft(), source.getTop(), source.getRight(), source.getBottom());
+        expandSource = sourceFrame;
         Frame destination = new Frame(0f, 0f, getWidth(), getHeight());
         float radius = metrics == null ? 0f : metrics.radiusPx;
         morph.setFrames(sourceFrame, destination, radius, radius);
@@ -396,13 +400,76 @@ public final class AppDrawerCategoryView extends ViewGroup
         if ((events & AppDrawerCategoryExpansionModel.BIND_OVERVIEW) != 0)
             tileAdapter.rebindAttachedPreviews();
         float p = expansion.progress();
-        overview.setAlpha(1f - AppDrawerTransitionGeometry.ramp(p, 0f, 0.25f));
-        float detailAlpha = AppDrawerTransitionGeometry.ramp(p, 0.35f, 0.70f);
+        float boundary = AppDrawerCategoryExpansionModel.STAGING_BOUNDARY;
+        overview.setAlpha(1f - AppDrawerTransitionGeometry.ramp(p, 0f, boundary));
+        // The detail content fades in right where it becomes bound and finishes well before the
+        // pane does, so the icons ride the expansion instead of arriving after it.
+        float detailAlpha = AppDrawerTransitionGeometry.ramp(p, boundary, 0.55f);
         detailHeader.setAlpha(detailAlpha);
         collapseChevron.setAlpha(detailAlpha);
         detailCount.setAlpha(detailAlpha);
         detailList.setAlpha(detailAlpha);
+        applyDetailMorphTransform(p);
         morph.setProgress(p);
+    }
+
+    /**
+     * Maps the detail header row and grid into the morphing pane rectangle: at progress 0 they sit
+     * scaled down inside the tapped card, at 1 they are at their laid-out size. Each view is clipped
+     * to the part of the pane it covers, so nothing paints outside the growing glass.
+     */
+    private void applyDetailMorphTransform(float progress) {
+        Frame source = expandSource;
+        int width = getWidth();
+        int height = getHeight();
+        if (source == null || width <= 0 || height <= 0 || source.width() <= 0f) {
+            resetDetailMorphTransform();
+            return;
+        }
+        float startScale = AppDrawerTransitionGeometry.clamp01(source.width() / width);
+        float scale = Math.max(0.05f, startScale + (1f - startScale) * progress);
+        float left = source.left * (1f - progress);
+        float top = source.top * (1f - progress);
+        float frameWidth = source.width() + (width - source.width()) * progress;
+        float frameHeight = source.height() + (height - source.height()) * progress;
+        applyMorphChild(detailHeader, scale, left, top, frameWidth, frameHeight);
+        applyMorphChild(collapseChevron, scale, left, top, frameWidth, frameHeight);
+        applyMorphChild(detailCount, scale, left, top, frameWidth, frameHeight);
+        applyMorphChild(detailList, scale, left, top, frameWidth, frameHeight);
+    }
+
+    private void applyMorphChild(@NonNull View view, float scale, float frameLeft, float frameTop,
+                                 float frameWidth, float frameHeight) {
+        view.setPivotX(0f);
+        view.setPivotY(0f);
+        view.setScaleX(scale);
+        view.setScaleY(scale);
+        // Pivoting at the view's own origin maps its laid-out point L to frameLeft + L * scale.
+        view.setTranslationX(frameLeft - view.getLeft() * (1f - scale));
+        view.setTranslationY(frameTop - view.getTop() * (1f - scale));
+        int clipRight = Math.round(frameWidth / scale) - view.getLeft();
+        int clipBottom = Math.round(frameHeight / scale) - view.getTop();
+        if (clipRight >= view.getWidth() && clipBottom >= view.getHeight()) {
+            view.setClipBounds(null);
+            return;
+        }
+        morphClip.set(0, 0, Math.max(0, clipRight), Math.max(0, clipBottom));
+        view.setClipBounds(morphClip);
+    }
+
+    private void resetDetailMorphTransform() {
+        resetMorphChild(detailHeader);
+        resetMorphChild(collapseChevron);
+        resetMorphChild(detailCount);
+        resetMorphChild(detailList);
+    }
+
+    private static void resetMorphChild(@NonNull View view) {
+        view.setScaleX(1f);
+        view.setScaleY(1f);
+        view.setTranslationX(0f);
+        view.setTranslationY(0f);
+        view.setClipBounds(null);
     }
 
     private void bindDetailCount(@NonNull AppDrawerCategoryBucket bucket) {
@@ -411,6 +478,7 @@ public final class AppDrawerCategoryView extends ViewGroup
     }
 
     private void finishAtExpanded() {
+        resetDetailMorphTransform();
         overview.setVisibility(INVISIBLE);
         detailHeader.setVisibility(VISIBLE);
         collapseChevron.setVisibility(VISIBLE);
@@ -425,6 +493,8 @@ public final class AppDrawerCategoryView extends ViewGroup
     }
 
     private void finishAtOverview() {
+        resetDetailMorphTransform();
+        expandSource = null;
         detailAdapter.releaseAttached(detailList);
         selectedBucket = null;
         detailHeader.setText(null);

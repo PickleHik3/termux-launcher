@@ -1997,6 +1997,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDockPlankController = new DockPlankController(plank, specular, glow);
             mDockPlankTarget = plank;
         }
+        // The icon row follows the same springs as the glass under it.
+        mDockPlankController.setIconLayer(findViewById(R.id.apps_bar_plank_layer));
         mDockPlankController.setReducedMotion(isReducedMotionEnabled());
     }
 
@@ -5697,20 +5699,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
 
+        // The bar lives one level down, inside the plank transform layer, so the dock physics can
+        // tilt and shift the icons without fighting the bar's own page-switch transforms or the
+        // drawer's lift translation on the pager itself.
+        FrameLayout appsBarPlankLayer = findViewById(R.id.apps_bar_plank_layer);
+        final ViewGroup appsBarHost = appsBarPlankLayer != null ? appsBarPlankLayer : appsBarContainer;
+
         if (mSuggestionBarView == null) {
             LayoutInflater inflater = LayoutInflater.from(TermuxActivity.this);
-            mSuggestionBarView = (SuggestionBarView) inflater.inflate(R.layout.suggestion_bar, appsBarContainer, false);
+            mSuggestionBarView = (SuggestionBarView) inflater.inflate(R.layout.suggestion_bar, appsBarHost, false);
         } else if (mSuggestionBarView.getParent() instanceof ViewGroup) {
             ((ViewGroup) mSuggestionBarView.getParent()).removeView(mSuggestionBarView);
         }
 
-        if (mSuggestionBarView.getParent() != appsBarContainer) {
-            appsBarContainer.removeAllViews();
+        if (mSuggestionBarView.getParent() != appsBarHost) {
+            appsBarHost.removeAllViews();
             FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             );
-            appsBarContainer.addView(mSuggestionBarView, params);
+            appsBarHost.addView(mSuggestionBarView, params);
         }
 
         mSuggestionBarView.setAppDataProvider(mLauncherAppDataProvider);

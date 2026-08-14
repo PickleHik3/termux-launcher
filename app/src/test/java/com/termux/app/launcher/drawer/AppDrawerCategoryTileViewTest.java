@@ -92,19 +92,44 @@ public class AppDrawerCategoryTileViewTest {
         assertEquals(metrics.smallIconPx, tile.icons[3].getWidth());
     }
 
-    @Test public void everyIconIsDisplayOnlyAndTheWholeCardAndHeadingExpand() {
+    @Test public void largeIconsLaunchWhileTheClusterCardAndHeadingExpand() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         SuggestionBarView dock = new SuggestionBarView(activity, null);
         int[] expansions = {0};
-        AppDrawerCategoryTileView tile = tile(dock, bucket(7), metrics(), expansions);
-        for (int i = 0; i < 7; i++) {
+        AppDrawerCategoryBucket bucket = bucket(7);
+        AppDrawerCategoryTileView tile = tile(dock, bucket, metrics(), expansions);
+        for (int i = 0; i < AppDrawerCategoryTileView.LAUNCH_ICON_COUNT; i++) {
+            assertTrue(tile.icons[i].isClickable());
+            assertFalse(tile.icons[i].isLongClickable());
+            assertEquals(bucket.entries().get(i).label, tile.icons[i].getContentDescription());
+        }
+        for (int i = AppDrawerCategoryTileView.LAUNCH_ICON_COUNT; i < 7; i++) {
             assertFalse(tile.icons[i].isClickable());
             assertFalse(tile.icons[i].isLongClickable());
             assertNull(tile.icons[i].getContentDescription());
         }
+        // A launch tap never opens the category, and the display-only slots never take the tap.
+        assertTrue(tile.icons[0].performClick());
+        assertFalse(tile.icons[6].performClick());
+        assertEquals(0, expansions[0]);
         assertTrue(tile.expandTarget.performClick());
         assertTrue(tile.heading.performClick());
         assertEquals(2, expansions[0]);
+    }
+
+    @Test public void launchIconsSitAboveTheOpenTargetAndDipOnTheirOwn() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        SuggestionBarView dock = new SuggestionBarView(activity, null);
+        AppDrawerCategoryTileView tile = tile(dock, bucket(7), metrics(), new int[1]);
+        assertTrue(tile.indexOfChild(tile.icons[0]) > tile.indexOfChild(tile.expandTarget));
+        tile.icons[0].setPressed(true);
+        assertTrue(tile.icons[0].getScaleX() < 1f);
+        assertEquals(1f, tile.getScaleX(), 0.001f);
+        tile.icons[0].setPressed(false);
+        assertEquals(1f, tile.icons[0].getScaleX(), 0.001f);
+        // Display-only slots never dip: they are not the thing being pressed.
+        tile.icons[6].setPressed(true);
+        assertEquals(1f, tile.icons[6].getScaleX(), 0.001f);
     }
 
     @Test public void pressingTheCardDipsItAndReleaseRestoresIt() {

@@ -37,14 +37,17 @@ public class AppDrawerCategoryExpansionModelTest {
     @Test public void stagingCrossingsFireOnceInBothDirections() {
         AppDrawerCategoryExpansionModel model = new AppDrawerCategoryExpansionModel();
         model.expand(ID);
-        assertEquals(0, model.setProgress(0.24f));
-        assertEquals(AppDrawerCategoryExpansionModel.RELEASE_OVERVIEW,
-            model.setProgress(0.25f));
+        float boundary = AppDrawerCategoryExpansionModel.STAGING_BOUNDARY;
+        assertEquals(0, model.setProgress(boundary - 0.01f));
+        // One boundary, both crossings: the overview is released and the detail bound together, in
+        // that order, so the two icon sets still never hold the shared cache at the same time.
+        assertEquals(AppDrawerCategoryExpansionModel.RELEASE_OVERVIEW
+            | AppDrawerCategoryExpansionModel.BIND_DETAIL, model.setProgress(boundary));
         assertEquals(0, model.setProgress(0.30f));
-        assertEquals(AppDrawerCategoryExpansionModel.BIND_DETAIL, model.setProgress(0.35f));
         assertEquals(0, model.setProgress(0.9f));
-        assertEquals(AppDrawerCategoryExpansionModel.RELEASE_DETAIL, model.setProgress(0.34f));
-        assertEquals(AppDrawerCategoryExpansionModel.BIND_OVERVIEW, model.setProgress(0.24f));
+        assertEquals(AppDrawerCategoryExpansionModel.RELEASE_DETAIL
+            | AppDrawerCategoryExpansionModel.BIND_OVERVIEW,
+            model.setProgress(boundary - 0.01f));
         assertEquals(0, model.setProgress(0.1f));
     }
 

@@ -19,10 +19,20 @@ import android.view.View;
 final class DockPlankController implements Choreographer.FrameCallback {
 
     private static final float MAX_TILT_DEG = 4f;
+    /** Share of the slab's tilt the icon row adds on top of it, so the icons read as sitting above. */
+    private static final float ICON_TILT_FACTOR = 0.45f;
+    /** Standalone icon tilt used when the slab itself is deliberately kept flat (edge-to-edge dock). */
+    private static final float ICON_TILT_DEG = 3.2f;
+    /** How far the icon row slides toward the finger at full contact. */
+    private static final float ICON_SHIFT_DP = 5f;
+    /** How far the icon row sinks into the glass while pressed. */
+    private static final float ICON_PRESS_DP = 1.5f;
 
     private final View mPlank;       // the transformed slab (whole dock stack)
     private final View mSpecular;    // moving specular highlight
     private final View mGlow;        // accent rim glow
+    private final float mDensity;
+    private View mIconLayer;         // the dock's icon row, rides the same springs as the glass
 
     private boolean mEnabled = true;
     private boolean mReducedMotion = false;
@@ -46,10 +56,39 @@ final class DockPlankController implements Choreographer.FrameCallback {
         mPlank = plank;
         mSpecular = specular;
         mGlow = glow;
+        View metricsSource = plank != null ? plank : (specular != null ? specular : glow);
+        mDensity = metricsSource == null
+            ? 1f : metricsSource.getResources().getDisplayMetrics().density;
         if (mPlank != null) {
             // Keep the perspective gentle so the small tilt reads as depth, not distortion.
-            mPlank.setCameraDistance(mPlank.getResources().getDisplayMetrics().density * 2600f);
+            mPlank.setCameraDistance(mDensity * 2600f);
         }
+    }
+
+    /**
+     * The dock's icon row. It rides the same springs as the glass: a share of the slab's tilt when
+     * the slab moves, its own tilt when the slab is held flat, plus a shift toward the finger and a
+     * press sink in both modes. Passing a different view (or null) neutralizes the previous one.
+     */
+    void setIconLayer(View iconLayer) {
+        if (mIconLayer == iconLayer) {
+            return;
+        }
+        if (mIconLayer != null) {
+            resetIconLayer(mIconLayer);
+        }
+        mIconLayer = iconLayer;
+        if (mIconLayer != null) {
+            mIconLayer.setCameraDistance(mDensity * 2600f);
+            applyToViews();
+        }
+    }
+
+    private static void resetIconLayer(View layer) {
+        layer.setRotationX(0f);
+        layer.setRotationY(0f);
+        layer.setTranslationX(0f);
+        layer.setTranslationY(0f);
     }
 
     void setReducedMotion(boolean reduced) {
@@ -224,6 +263,7 @@ final class DockPlankController implements Choreographer.FrameCallback {
                 mPlank.setScaleY(1f);
             }
         }
+        applyToIconLayer();
         if (mGlow instanceof DockEdgeGlowView) {
             // Drive the reactive rim: overall strength from the glow spring, and the live tilt so the
             // hot lobe sweeps around the perimeter as the plank tips (physical glass-edge light).
@@ -247,6 +287,40 @@ final class DockPlankController implements Choreographer.FrameCallback {
             mSpecular.setTranslationY((mLightY.value - 0.5f) * hh);
             mSpecular.setAlpha(clamp01(0.07f + mGlowLevel.value * 0.22f + mPress.value * 0.12f));
         }
+    }
+
+    /**
+     * Couples the icon row to the glass. Amplitude is the contact level, so the row tips and slides
+     * toward the finger on touch and springs back to neutral on release — the icons and the plank
+     * settle on the same spring, never on separate timelines.
+     */
+    private void applyToIconLayer() {
+        View icons = mIconLayer;
+        if (icons == null || icons.getWidth() <= 0 || icons.getHeight() <= 0) {
+            return;
+        }
+        float level = clamp01(mGlowLevel.value);
+        float dx = mLightX.value - 0.5f;
+        float dy = mLightY.value - 0.5f;
+        float tiltX;
+        float tiltY;
+        if (mMotionEnabled) {
+            // The slab already tilts under them; a fraction more separates the two planes.
+            tiltX = mRx.value * ICON_TILT_FACTOR;
+            tiltY = mRy.value * ICON_TILT_FACTOR;
+        } else {
+            // Edge-to-edge dock: rotating the full-width slab would expose clipped side gaps, so the
+            // inset icon row is the layer that carries the tilt for it.
+            tiltX = -dy * 2f * ICON_TILT_DEG * level;
+            tiltY = dx * 2f * ICON_TILT_DEG * level;
+        }
+        float shift = mDensity * ICON_SHIFT_DP * level;
+        icons.setPivotX(icons.getWidth() * 0.5f);
+        icons.setPivotY(icons.getHeight() * 0.5f);
+        icons.setRotationX(tiltX);
+        icons.setRotationY(tiltY);
+        icons.setTranslationX(dx * 2f * shift);
+        icons.setTranslationY(dy * shift + mPress.value * mDensity * ICON_PRESS_DP);
     }
 
     private static float clamp01(float v) {
