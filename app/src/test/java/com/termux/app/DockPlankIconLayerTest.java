@@ -16,51 +16,93 @@ import org.robolectric.annotation.Config;
 import org.robolectric.annotation.ConscryptMode;
 
 /**
- * The dock's icon row is driven by the same springs as the glass under it, including in the
- * edge-to-edge style where the slab itself is deliberately held flat.
+ * The dock is one plane: the slab owns the only transform, the icon row inherits it, and every
+ * spring settles once without overshoot.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 public class DockPlankIconLayerTest {
 
-    @Test public void flatSlabStillTiltsAndShiftsTheIconsTowardTheFinger() {
-        Fixture f = fixture(false);
+    /** Matches DockPlankController.MAX_TILT_DEG. */
+    private static final float MAX_TILT_DEG = 3f;
+
+    @Test public void iconsInsideTheSlabAreLeftEntirelyAlone() {
+        Fixture f = fixture(true, true);
         f.controller.onPointerDown(0.95f, 0.5f);
-        run(f.controller, 20);
-
-        assertEquals(0f, f.plank.getRotationY(), 0.001f);
-        assertTrue(f.icons.getRotationY() > 0.5f);
-        assertTrue(f.icons.getTranslationX() > 0.5f);
-
-        f.controller.onPointerUp();
-        run(f.controller, 400);
-        assertEquals(0f, f.icons.getRotationY(), 0.05f);
-        assertEquals(0f, f.icons.getTranslationX(), 0.5f);
-    }
-
-    @Test public void tiltingSlabCarriesTheIconsWithIt() {
-        Fixture f = fixture(true);
-        f.controller.onPointerDown(0.95f, 0.5f);
-        run(f.controller, 20);
+        run(f.controller, 30);
 
         assertTrue(f.plank.getRotationY() > 0.5f);
-        // The icons take a share of the slab's own tilt on top of it, never the opposite sign.
-        assertTrue(f.icons.getRotationY() > 0f);
-        assertTrue(f.icons.getRotationY() < f.plank.getRotationY());
+        assertEquals(0f, f.icons.getRotationY(), 0f);
+        assertEquals(0f, f.icons.getRotationX(), 0f);
+        assertEquals(0f, f.icons.getTranslationX(), 0f);
+        assertEquals(1f, f.icons.getScaleX(), 0f);
+    }
+
+    @Test public void aDetachedIconRowGetsTheSlabTransformVerbatim() {
+        Fixture f = fixture(true, false);
+        f.controller.onPointerDown(0.95f, 0.5f);
+        run(f.controller, 30);
+
+        assertTrue(f.plank.getRotationY() > 0.5f);
+        assertEquals(f.plank.getRotationY(), f.icons.getRotationY(), 0f);
+        assertEquals(f.plank.getRotationX(), f.icons.getRotationX(), 0f);
+        assertEquals(f.plank.getTranslationX(), f.icons.getTranslationX(), 0f);
+        assertEquals(f.plank.getScaleX(), f.icons.getScaleX(), 0f);
+    }
+
+    @Test public void bothDockStylesTiltAndSlideAndNeitherExceedsTheTiltCap() {
+        for (boolean hinge : new boolean[]{true, false}) {
+            Fixture f = fixture(hinge, true);
+            f.controller.onPointerDown(1f, 1f);
+            run(f.controller, 60);
+
+            assertTrue(f.plank.getRotationY() > 0.5f);
+            assertTrue(f.plank.getRotationY() <= MAX_TILT_DEG + 0.001f);
+            assertTrue(Math.abs(f.plank.getRotationX()) <= MAX_TILT_DEG + 0.001f);
+            // The rotation is never mathematically isolated: it carries a small slide.
+            assertTrue(f.plank.getTranslationX() > 0.5f);
+            // The hinged bar keeps its bottom edge pinned and overscans to cover the slide.
+            // Touch at the bottom-right corner: the capsule slides that way, the hinged bar does not
+            // move vertically at all.
+            assertEquals(hinge ? 0f : 1f, Math.signum(f.plank.getTranslationY()), 0f);
+            assertTrue(hinge ? f.plank.getScaleX() > 1f : f.plank.getScaleX() < 1f);
+        }
+    }
+
+    @Test public void nothingOvershootsItsTargetOnTheWayInOrOut() {
+        Fixture f = fixture(true, true);
+        f.controller.onPointerDown(1f, 0.5f);
+        for (int i = 0; i < 120; i++) {
+            f.controller.doFrame(16_666_666L * (i + 1));
+            assertTrue("tilt overshot: " + f.plank.getRotationY(),
+                f.plank.getRotationY() <= MAX_TILT_DEG + 0.001f);
+        }
+        float peakShift = f.plank.getTranslationX();
+
+        f.controller.onPointerUp();
+        for (int i = 120; i < 400; i++) {
+            f.controller.doFrame(16_666_666L * (i + 1));
+            // A critically damped return never crosses neutral on the way back.
+            assertTrue("tilt rang: " + f.plank.getRotationY(), f.plank.getRotationY() >= -0.001f);
+            assertTrue("slide rang: " + f.plank.getTranslationX(),
+                f.plank.getTranslationX() >= -0.001f && f.plank.getTranslationX() <= peakShift + 0.001f);
+        }
+        assertEquals(0f, f.plank.getRotationY(), 0.02f);
+        assertEquals(1f, f.plank.getScaleX(), 0.002f);
     }
 
     @Test public void droppingTheLayerLeavesItNeutral() {
-        Fixture f = fixture(false);
+        Fixture f = fixture(true, false);
         f.controller.onPointerDown(0.95f, 0.5f);
-        run(f.controller, 20);
+        run(f.controller, 30);
         assertTrue(f.icons.getRotationY() != 0f);
 
         f.controller.setIconLayer(null);
         assertEquals(0f, f.icons.getRotationY(), 0f);
         assertEquals(0f, f.icons.getRotationX(), 0f);
         assertEquals(0f, f.icons.getTranslationX(), 0f);
-        assertEquals(0f, f.icons.getTranslationY(), 0f);
+        assertEquals(1f, f.icons.getScaleX(), 0f);
     }
 
     private static void run(DockPlankController controller, int frames) {
@@ -71,15 +113,18 @@ public class DockPlankIconLayerTest {
         }
     }
 
-    private static Fixture fixture(boolean motionEnabled) {
+    private static Fixture fixture(boolean hinge, boolean iconsInsidePlank) {
         Application context = RuntimeEnvironment.getApplication();
-        View plank = new View(context);
-        plank.layout(0, 0, 1080, 160);
+        FrameLayout plank = new FrameLayout(context);
         FrameLayout icons = new FrameLayout(context);
+        if (iconsInsidePlank) {
+            plank.addView(icons);
+        }
+        plank.layout(0, 0, 1080, 160);
         icons.layout(0, 0, 1080, 160);
         DockPlankController controller = new DockPlankController(plank, null, null);
-        controller.setMotionEnabled(motionEnabled);
-        controller.setHingeMode(!motionEnabled);
+        controller.setMotionEnabled(true);
+        controller.setHingeMode(hinge);
         controller.setIconLayer(icons);
         controller.setEnabled(true);
         return new Fixture(controller, plank, icons);

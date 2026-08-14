@@ -2030,10 +2030,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 glow.setRenderEffect(RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.CLAMP));
             }
         }
-        // Capsule keeps the free-floating tilt + dip. The edge-to-edge default dock keeps the
-        // touch-tracked specular/glow only; rotating a full-width slab exposes clipped side gaps.
+        // Both styles tilt now: the capsule free-floating with a press dip, the edge-to-edge bar
+        // hinged at the screen edge and overscanned so its slide cannot open a strip at the sides.
         boolean capsuleDock = isRoundedDockStyle();
-        mDockPlankController.setMotionEnabled(capsuleDock);
+        mDockPlankController.setMotionEnabled(true);
         mDockPlankController.setHingeMode(!capsuleDock);
         mDockPlankController.setReducedMotion(isReducedMotionEnabled());
         mDockPlankController.setEnabled(true);
