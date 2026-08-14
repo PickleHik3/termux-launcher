@@ -90,7 +90,6 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_TERMINAL_FONT_SIZE_INCREASE = "terminal.font_size_increase";
     public static final String TOOL_TERMINAL_FONT_SIZE_DECREASE = "terminal.font_size_decrease";
     public static final String TOOL_TERMINAL_SELECT_URL = "terminal.select_url";
-    public static final String TOOL_TERMINAL_SELECT_TEXT = "terminal.select_text";
     public static final String TOOL_TERMINAL_HINTS = "terminal.hints";
     public static final String TOOL_TERMINAL_SEARCH_SCROLLBACK = "terminal.search_scrollback";
     public static final String TOOL_TERMINAL_SHARE_TRANSCRIPT = "terminal.share_transcript";
@@ -202,7 +201,6 @@ public final class TerminalActionDispatcher {
             case TOOL_TERMINAL_FONT_SIZE_INCREASE:
             case TOOL_TERMINAL_FONT_SIZE_DECREASE:
             case TOOL_TERMINAL_SELECT_URL:
-            case TOOL_TERMINAL_SELECT_TEXT:
             case TOOL_TERMINAL_HINTS:
             case TOOL_TERMINAL_SEARCH_SCROLLBACK:
             case TOOL_TERMINAL_SHARE_TRANSCRIPT:
@@ -771,7 +769,6 @@ public final class TerminalActionDispatcher {
                 case TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD:
                 case TOOL_TERMINAL_FONT_SIZE_INCREASE:
                 case TOOL_TERMINAL_FONT_SIZE_DECREASE:
-                case TOOL_TERMINAL_SELECT_TEXT:
                 case TOOL_TERMINAL_SELECT_URL:
                 case TOOL_TERMINAL_HINTS:
                 case TOOL_TERMINAL_SEARCH_SCROLLBACK:
@@ -789,11 +786,6 @@ public final class TerminalActionDispatcher {
                             break;
                         case TOOL_TERMINAL_FONT_SIZE_DECREASE:
                             viewClient.changeFontSize(false);
-                            break;
-                        case TOOL_TERMINAL_SELECT_TEXT:
-                            if (!viewClient.startTextSelection())
-                                return error(409, "no_pane",
-                                    "There is no pane to select text in");
                             break;
                         case TOOL_TERMINAL_SELECT_URL:
                             viewClient.showUrlSelection();

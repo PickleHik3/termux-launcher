@@ -408,8 +408,6 @@
 
     <!-- Terminal Popup -->
     <string name="terminal_action_menu_title">Terminal</string>
-    <string name="action_select_text">Select text</string>
-    <string name="action_back">Back</string>
     <string name="action_search_scrollback">Search</string>
     <string name="action_copy_selection">Copy</string>
     <string name="action_paste">Paste</string>
@@ -1388,7 +1386,6 @@
     <string name="tool_terminal_font_size_decrease">Decrease font size</string>
     <string name="tool_terminal_select_url">Select URL</string>
     <string name="tool_terminal_hints">Hints</string>
-    <string name="tool_terminal_select_text">Select text</string>
     <string name="tool_terminal_search_scrollback">Search scrollback</string>
     <string name="tool_terminal_share_transcript">Share transcript</string>
     <string name="tool_clipboard_paste">Paste</string>
@@ -1462,7 +1459,6 @@
     <string name="tool_desc_terminal_font_size_increase">Make the terminal text larger.</string>
     <string name="tool_desc_terminal_font_size_decrease">Make the terminal text smaller.</string>
     <string name="tool_desc_terminal_select_url">Pick a link from the terminal scrollback.</string>
-    <string name="tool_desc_terminal_select_text">Start text selection in the focused pane, where the last long press landed.</string>
     <string name="tool_desc_terminal_hints">Open or copy URLs, paths, hashes, and source line references by keyboard label.</string>
     <string name="terminal_hints_title">Terminal hints</string>
     <string name="terminal_hints_instructions">Press a label to open a URL or copy another item. Hold Shift while pressing a label to copy anything.</string>
