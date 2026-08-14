@@ -72,6 +72,7 @@
     <string name="settings_color_mode_title">Color mode</string>
     <string name="settings_wallpaper_colors_title">Use wallpaper colors</string>
     <string name="settings_wallpaper_colors_summary">Builds the launcher palette from the current wallpaper.</string>
+    <string name="settings_wallpaper_colors_hint">While on, this overrides ~/.termux/colors.properties. Applying a Termux:Styling scheme turns it off.</string>
     <string name="settings_terminal_contrast_title">Terminal contrast</string>
     <string name="settings_terminal_contrast_summary">%1$s</string>
     <string name="settings_terminal_contrast_disabled">Available when wallpaper colors are on</string>
@@ -106,6 +107,8 @@
     <string name="settings_extra_keys_editor_swipe_up">Swipe-up action</string>
     <string name="settings_extra_keys_editor_shows">Display label</string>
     <string name="settings_extra_keys_editor_shows_hint">Blank uses the action name</string>
+    <string name="settings_extra_keys_editor_swipe_up_shows">Swipe-up label</string>
+    <string name="settings_extra_keys_editor_swipe_up_shows_hint">Shown in the small badge above the key</string>
     <string name="settings_extra_keys_editor_none">Nothing</string>
     <string name="settings_extra_keys_editor_clear_swipe_up">Remove swipe-up action</string>
     <string name="settings_extra_keys_editor_macro_summary">Macro: %1$s</string>
@@ -132,6 +135,16 @@
     <string name="settings_extra_keys_action_no_match">No match</string>
     <string name="settings_extra_keys_action_back">Back</string>
     <string name="settings_extra_keys_action_clear_search">Clear search</string>
+    <string name="settings_extra_keys_glyph_picker_title">Choose glyph</string>
+    <string name="settings_extra_keys_glyph_search_hint">Search glyphs</string>
+    <string name="settings_extra_keys_glyph_insert">Insert glyph</string>
+    <string name="settings_extra_keys_glyph_recent">Recent</string>
+    <string name="settings_extra_keys_glyph_category_arrows">Arrows</string>
+    <string name="settings_extra_keys_glyph_category_blocks">Blocks</string>
+    <string name="settings_extra_keys_glyph_category_shapes">Shapes</string>
+    <string name="settings_extra_keys_glyph_category_powerline">Powerline</string>
+    <string name="settings_extra_keys_glyph_category_technical">Technical</string>
+    <string name="settings_extra_keys_glyph_category_terminal_marks">Terminal marks</string>
     <string name="settings_edit_extra_keys_title">Edit extra keys</string>
     <string name="settings_edit_extra_keys_summary">Keys, swipe-up actions and pages of the extra keys row.</string>
     <string name="settings_terminal_key_row_header">Extra keys</string>
@@ -261,6 +274,10 @@
     <string name="settings_pinned_apps_header">Dock rows</string>
     <string name="settings_show_pinned_apps_title">Apps row</string>
     <string name="settings_show_pinned_apps_summary">Shows pinned apps in the launcher dock.</string>
+    <string name="settings_dock_rail_side_title">Landscape rail side</string>
+    <string name="settings_dock_rail_side_summary">Which edge the landscape apps rail docks to. Swipe off the rail, away from that edge, to open the app drawer.</string>
+    <string name="settings_dock_rail_side_left">Left</string>
+    <string name="settings_dock_rail_side_right">Right</string>
     <string name="settings_show_extra_keys_row_title">Extra keys row</string>
     <string name="settings_show_extra_keys_row_summary">Shows terminal extra keys in the launcher dock.</string>
     <string name="settings_edit_pinned_apps_title">Edit pinned apps</string>
@@ -389,6 +406,11 @@
 
 
     <!-- Terminal Popup -->
+    <string name="terminal_action_menu_title">Terminal</string>
+    <string name="action_search_scrollback">Search</string>
+    <string name="action_copy_selection">Copy</string>
+    <string name="action_paste">Paste</string>
+    <string name="action_more">More</string>
     <string name="action_select_url">Select URL</string>
     <string name="title_select_url_dialog">Click URL to copy or long press to open</string>
     <string name="title_select_url_none_found">No URL found in the terminal.</string>

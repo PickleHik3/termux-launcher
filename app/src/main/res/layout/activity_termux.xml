@@ -1617,8 +1617,8 @@
 
         <!-- Landscape-only vertical dock rail. A sibling of the padded content root so it can
              occupy the display-cutout column the terminal is inset from. updateDockRailView()
-             sizes and populates it. -->
-        <ScrollView
+             sizes and populates it, and moves the gravity to the preferred edge. -->
+        <com.termux.app.launcher.drawer.DockRailScrollView
             android:id="@+id/dock_rail_scroll"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
@@ -1633,7 +1633,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:gravity="center_horizontal" />
-        </ScrollView>
+        </com.termux.app.launcher.drawer.DockRailScrollView>
 
         <!-- App drawer overlay plane. A full-bleed sibling of the padded content root, so it paints
              over the whole accessory stack while still losing to the command palette in z. It is
@@ -1710,6 +1710,57 @@
                     app:realtimeBlurRadius="18dp"
                     app:realtimeOverlayColor="@android:color/transparent" />
             </FrameLayout>
+        </FrameLayout>
+
+        <!-- Terminal sheet plane. The one in-app surface every terminal prompt that used to be an
+             AlertDialog or a PopupMenu now lands on. A dialog window takes focus, which pulls the
+             InputConnection off TerminalView and summons the system IME — the swap the in-app
+             keyboard exists to avoid, and what made the session browser's search box collapse the
+             keyboard the moment it opened. Nothing in here is ever an EditText for the same reason;
+             TerminalSheetController types the fields from the key channel.
+
+             Above the palette in z because a sheet is modal and the palette collapses before it
+             opens one, and below the rename chip because a rename can be started from a sheet.
+             INVISIBLE rather than gone so the host stays measured and the blur gates its own work
+             on isShown(). -->
+        <FrameLayout
+            android:id="@+id/terminal_sheet_host"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:visibility="invisible">
+
+            <FrameLayout
+                android:id="@+id/terminal_sheet_glass"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <!-- Wallpaper-mode frost: shows the shared pre-blurred wallpaper frame, replacing
+                     the live blur that can only see the window's own (mostly transparent) content
+                     there. -->
+                <ImageView
+                    android:id="@+id/terminal_sheet_wallpaper_backdrop"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitXY"
+                    android:importantForAccessibility="no"
+                    android:visibility="gone" />
+
+                <com.github.mmin18.widget.RealtimeBlurView
+                    android:id="@+id/terminal_sheet_blur"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    app:realtimeBlurRadius="18dp"
+                    app:realtimeOverlayColor="@android:color/transparent" />
+            </FrameLayout>
+
+            <!-- Cards, oldest first: a sheet opened from a sheet (the workspace picker's confirm)
+                 stacks here rather than replacing the one under it. -->
+            <FrameLayout
+                android:id="@+id/terminal_sheet_stack"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipChildren="false" />
         </FrameLayout>
 
         <!-- Inline rename chips. Last child of the content root so a chip lands over the window bar

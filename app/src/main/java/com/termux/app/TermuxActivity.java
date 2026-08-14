@@ -94,6 +94,8 @@ import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
 import com.termux.app.launcher.animation.LauncherTransitionController;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
+import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
+import com.termux.app.launcher.drawer.DockRailScrollView;
 import com.termux.app.launcher.data.LauncherConfigRepository;
 import com.termux.app.launcher.folder.FolderRenameController;
 import com.termux.app.launcher.folder.FolderRenameModel;
@@ -146,10 +148,12 @@ import com.termux.view.TerminalView;
 import com.termux.view.TerminalViewClient;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import androidx.core.view.OneShotPreDrawListener;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -449,7 +453,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private static final long SHELL_INPUT_GRACE_MS = 700L;
 
-    @Nullable private AlertDialog mTerminalActionDialog;
     @Nullable private com.termux.app.terminal.SessionSwitchIndicatorView mSessionSwitchIndicator;
     private final com.termux.app.statusbar.BackgroundProcessModel mBackgroundProcessModel =
         new com.termux.app.statusbar.BackgroundProcessModel();
@@ -464,6 +467,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final java.util.Set<Integer> mAttentionShellPids = new java.util.HashSet<>();
     private final Runnable mBackgroundProcessResync = this::syncBackgroundProcessStack;
     @Nullable private com.termux.app.terminal.TerminalCommandPaletteController mCommandPalette;
+    @Nullable private com.termux.app.terminal.TerminalSheetController mTerminalSheet;
     @Nullable private com.termux.app.launcher.drawer.AppDrawerController mAppDrawerController;
 
     /**
@@ -575,43 +579,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Time constant for recent pointer velocity; independent of touch sampling rate. */
     private static final float AZ_RECENT_MOTION_TAU_MS = 50f;
 
-    private static final int CONTEXT_MENU_SELECT_URL_ID = 0;
+    /**
+     * The two long-press menu rows with no registry tool behind them. Everything else the menu
+     * offers goes through {@code TerminalActionDispatcher} instead, so the menu, the palette, a
+     * keybind and a remote caller share one implementation; these two have nowhere to share with.
+     * Kill process is the confirmation dialog rather than {@code session.close_current}'s silent
+     * close, and Style hands off to the Termux:Styling plugin.
+     */
+    public static final int CONTEXT_MENU_KILL_PROCESS_ID = 8;
 
-    private static final int CONTEXT_MENU_SHARE_TRANSCRIPT_ID = 1;
-
-    private static final int CONTEXT_MENU_SET_WALLPAPER_ID = 2;
-
-    private static final int CONTEXT_MENU_REMOVE_WALLPAPER_ID = 3;
-
-    private static final int CONTEXT_MENU_LOOK_AND_FEEL_ID = 4;
-
-    private static final int CONTEXT_MENU_APPS_BAR_ID = 5;
-
-    private static final int CONTEXT_MENU_SETTINGS_ID = 6;
-
-    private static final int CONTEXT_MENU_RESET_TERMINAL_ID = 7;
-
-    private static final int CONTEXT_MENU_KILL_PROCESS_ID = 8;
-
-    private static final int CONTEXT_MENU_GLASS_LAB_ID = 9;
-
-    private static final int CONTEXT_MENU_COMMAND_PALETTE_ID = 10;
-
-    private static final class TerminalActionItem {
-        final int id;
-        final CharSequence title;
-
-        TerminalActionItem(int id, CharSequence title) {
-            this.id = id;
-            this.title = title;
-        }
-
-        @NonNull
-        @Override
-        public String toString() {
-            return title.toString();
-        }
-    }
+    public static final int CONTEXT_MENU_STYLE_ID = 11;
 
     private static final String ARG_TERMINAL_TOOLBAR_TEXT_INPUT = "terminal_toolbar_text_input";
 
@@ -720,6 +697,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mCachedAccessoryWallpaperBlurSystemId = -1;
     private long mCachedAccessoryWallpaperBlurManagedLastModified = -1L;
     private long mCachedAccessoryWallpaperBlurManagedLength = -1L;
+    /**
+     * The orientation the cached frames were captured in. The frame rect alone was supposed to
+     * carry this, but a rotation delivers {@code onConfigurationChanged} <em>before</em> the window
+     * is re-laid out, so a crop taken during that pass records the outgoing orientation's rect and
+     * then matches itself forever after. That is what landscape showed: a brighter, mismatched
+     * wallpaper region with a hard seam at the pane's left edge, while portrait was correct.
+     */
+    private int mCachedAccessoryWallpaperBlurOrientation = Configuration.ORIENTATION_UNDEFINED;
+
+    /** The rotation geometry pass waiting for the new layout, or null when none is pending. */
+    @Nullable private OneShotPreDrawListener mPendingOrientationGeometryPass;
 
     /** Wallpaper-frost crop state for the top pane (status inset band + window-bar pane). */
     private boolean mTopPaneFrostDirty = true;
@@ -2033,7 +2021,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return specular;
     }
 
-    private boolean isReducedMotionEnabled() {
+    public boolean isReducedMotionEnabled() {
         try {
             float scale = Settings.Global.getFloat(
                 getContentResolver(), Settings.Global.ANIMATOR_DURATION_SCALE, 1f);
@@ -2897,6 +2885,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Logger.logStackTraceWithMessage(LOG_TAG, "Failed to detect live wallpaper state", e);
             return false;
         }
+    }
+
+    /**
+     * The dock's rectangle on screen, for a surface that wants to sit exactly where the dock is.
+     *
+     * @return false when there is no dock laid out — a terminal-only install, or before first layout.
+     */
+    public boolean dockBoundsOnScreen(@NonNull Rect out) {
+        View accessoryContainer = findViewById(R.id.accessory_stack_container);
+        if (accessoryContainer == null || accessoryContainer.getVisibility() != View.VISIBLE
+            || accessoryContainer.getWidth() <= 0 || accessoryContainer.getHeight() <= 0) {
+            return false;
+        }
+        int[] location = new int[2];
+        accessoryContainer.getLocationOnScreen(location);
+        out.set(location[0], location[1], location[0] + accessoryContainer.getWidth(),
+            location[1] + accessoryContainer.getHeight());
+        return true;
     }
 
     private void configureExtraKeysBackground() {
@@ -4075,6 +4081,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && mCachedAccessoryWallpaperBlurSystemId == systemWallpaperId
             && mCachedAccessoryWallpaperBlurManagedLastModified == managedLastModified
             && mCachedAccessoryWallpaperBlurManagedLength == managedLength
+            && mCachedAccessoryWallpaperBlurOrientation
+                == getResources().getConfiguration().orientation
             && mCachedAccessoryWallpaperBlurFrameRect.equals(frameRect);
         if (sourceValid) {
             Bitmap cached = mCachedAccessoryWallpaperBlurByRadius.get(blurRadiusDp);
@@ -4111,6 +4119,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         mCachedAccessoryWallpaperBlurFrameRect.set(frameRect);
+        mCachedAccessoryWallpaperBlurOrientation = getResources().getConfiguration().orientation;
         mCachedAccessoryWallpaperBlurManagedSource = managedSource;
         mCachedAccessoryWallpaperBlurSystemId = systemWallpaperId;
         mCachedAccessoryWallpaperBlurManagedLastModified = managedLastModified;
@@ -4188,6 +4197,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         mCachedAccessoryWallpaperBlurByRadius.clear();
         mCachedAccessoryWallpaperBlurFrameRect.setEmpty();
+        mCachedAccessoryWallpaperBlurOrientation = Configuration.ORIENTATION_UNDEFINED;
         mCachedAccessoryWallpaperBlurManagedSource = false;
         mCachedAccessoryWallpaperBlurSystemId = -1;
         mCachedAccessoryWallpaperBlurManagedLastModified = -1L;
@@ -4716,17 +4726,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         // Keep content out of the camera hole now that the window draws under the cutout. Only the
         // horizontal insets matter: the top cutout is already covered by the status-bar inset.
-        // In landscape the dock rail claims the left column, so the content inset grows to the
-        // rail's width (which itself never shrinks below the cutout inset).
+        // In landscape the dock rail claims one edge column, so the content inset on that side
+        // grows to the rail's width (which itself never shrinks below the cutout inset).
         androidx.core.graphics.Insets cutoutInsets = insetsCompat.getInsets(Type.displayCutout());
         mLastDisplayCutoutInsetLeft = cutoutInsets.left;
-        int leftContentInsetPx = isDockRailActive() ? resolveDockRailWidthPx() : cutoutInsets.left;
+        mLastDisplayCutoutInsetRight = cutoutInsets.right;
+        mLastNavigationBarInsetBottom = insetsCompat.getInsets(Type.navigationBars()).bottom;
+        boolean railActive = isDockRailActive();
+        boolean railOnRight = isDockRailOnRight();
+        int leftContentInsetPx = railActive && !railOnRight
+            ? resolveDockRailWidthPx() : cutoutInsets.left;
+        int rightContentInsetPx = railActive && railOnRight
+            ? resolveDockRailWidthPx() : cutoutInsets.right;
         View rootRelativeLayout = findViewById(R.id.activity_termux_root_relative_layout);
         if (rootRelativeLayout != null
             && (rootRelativeLayout.getPaddingLeft() != leftContentInsetPx
-                || rootRelativeLayout.getPaddingRight() != cutoutInsets.right)) {
+                || rootRelativeLayout.getPaddingRight() != rightContentInsetPx)) {
             rootRelativeLayout.setPadding(leftContentInsetPx, rootRelativeLayout.getPaddingTop(),
-                cutoutInsets.right, rootRelativeLayout.getPaddingBottom());
+                rightContentInsetPx, rootRelativeLayout.getPaddingBottom());
         }
 
         applyTerminalSurfaceAppearance();
@@ -5203,6 +5220,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mCommandPalette != null)
             mCommandPalette.dismissImmediately();
+        if (mTerminalSheet != null)
+            mTerminalSheet.dismissImmediately();
         closeAppDrawerImmediate();
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onStop();
@@ -5276,6 +5295,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mCommandPalette.dismissImmediately();
             mCommandPalette = null;
         }
+        if (mTerminalSheet != null) {
+            mTerminalSheet.dismissImmediately();
+            mTerminalSheet = null;
+        }
         if (mInAppKeyboard != null) {
             mTermuxTerminalViewClient.setInAppKeyboardController(null);
             mInAppKeyboard.onDestroy();
@@ -5329,12 +5352,70 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mCommandPalette.dismissImmediately();
             mCommandPalette.refreshAppearance();
         }
-        // Dock metrics are orientation-dependent: landscape collapses the horizontal rows in favor
-        // of the left rail, portrait restores them. The full toolbar-geometry pass reruns because
-        // the accessory stack container is explicitly sized from these metrics.
+        // No refresh pass to match the palette's: a sheet's glass is built per show(), so the next
+        // one already picks up the new configuration.
+        if (mTerminalSheet != null)
+            mTerminalSheet.dismissImmediately();
+        // Every pre-blurred wallpaper frame describes the orientation being left; a rotation makes
+        // all of them wrong at once.
+        clearCachedAccessoryWallpaperBlur();
+        scheduleOrientationGeometryPass();
+    }
+
+    /**
+     * Runs the orientation-dependent geometry pass once the new layout exists.
+     *
+     * <p>A rotation delivers {@code onConfigurationChanged} <em>before</em> the window is re-laid
+     * out: the decor view, the display metrics and every child still report the orientation being
+     * left. Running the pass inline therefore sized the accessory stack from stale geometry, posted
+     * a terminal resize, and then did it all again after the real layout — the two SIGWINCHes
+     * ({@code 11 110} then {@code 12 110}) one rotation into landscape produced, which made TUIs
+     * redraw twice. The same stale pass is what filled the glass with a crop of the outgoing frame.
+     *
+     * <p>{@link OneShotPreDrawListener} rather than a {@code post()}: it fires after measure and
+     * layout of the new configuration and before the first draw, so nothing is ever painted from
+     * the intermediate state.
+     */
+    private void scheduleOrientationGeometryPass() {
+        View decorView = getWindow() != null ? getWindow().getDecorView() : null;
+        if (decorView == null) {
+            runOrientationGeometryPass();
+            return;
+        }
+        if (mPendingOrientationGeometryPass != null) {
+            // Two rotations before a single layout: the later one describes where we end up.
+            mPendingOrientationGeometryPass.removeListener();
+        }
+        mPendingOrientationGeometryPass = OneShotPreDrawListener.add(decorView, () -> {
+            mPendingOrientationGeometryPass = null;
+            runOrientationGeometryPass();
+        });
+    }
+
+    /**
+     * Dock metrics are orientation-dependent: landscape collapses the horizontal rows in favor of
+     * the rail, portrait restores them. The full toolbar-geometry pass reruns because the accessory
+     * stack container is explicitly sized from these metrics.
+     */
+    @VisibleForTesting
+    void runOrientationGeometryPass() {
+        // The listener is attached to the decor view and can outlive the state the pass reads —
+        // a rotation delivered while the activity is tearing down still draws once.
+        if (mProperties == null) return;
         setTerminalToolbarHeight();
         updateDockRailView();
+        // The render state hides the apps and A-Z rows in landscape and shows them in portrait, and
+        // it is derived, not stored — so it has to be rebuilt here too. Without this the rows a
+        // landscape session collapsed stayed collapsed after rotating back, with their preferences
+        // still enabled, until something else happened to sync the accessory stack.
+        configureExtraKeysBackground();
         updateWindowBackgroundForCurrentSession();
+    }
+
+    /** True while a rotation's geometry pass is waiting for the new layout. */
+    @VisibleForTesting
+    boolean hasPendingOrientationGeometryPass() {
+        return mPendingOrientationGeometryPass != null;
     }
 
     /**
@@ -5428,10 +5509,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void resetUiForInPlaceSessionRecovery(@NonNull String reason) {
         Logger.logWarn(LOG_TAG, "Resetting launcher UI before in-place empty-session recovery from " + reason);
-        if (mTerminalActionDialog != null) {
-            mTerminalActionDialog.dismiss();
-            mTerminalActionDialog = null;
-        }
+        // The long-press menu is a sheet now, and the plane it lives on is torn down with the rest.
+        if (mTerminalSheet != null) mTerminalSheet.dismissImmediately();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.resetTransientVisualState();
             mSuggestionBarView.clearAzPreview();
@@ -9102,11 +9181,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private static final float DOCK_RAIL_MIN_WIDTH_DP = 52f;
+    /**
+     * Breathing room between a rail icon and the display edge it is docked to, on top of whatever
+     * cutout inset that edge already carries. Without it the icons sat against the glass — and on
+     * the rounded corners, partly under it.
+     */
+    private static final float DOCK_RAIL_EDGE_MARGIN_DP = 10f;
     private static final float DOCK_RAIL_ICON_SIZE_DP = 38f;
     private static final float DOCK_RAIL_ICON_SPACING_DP = 10f;
 
-    /** Left display-cutout inset from the last insets pass; the rail never draws narrower. */
+    /** Horizontal display-cutout insets from the last insets pass; the rail never draws narrower. */
     private int mLastDisplayCutoutInsetLeft;
+    private int mLastDisplayCutoutInsetRight;
+    /** Navigation-bar inset, so the rail's scroll range can clear it at the bottom. */
+    private int mLastNavigationBarInsetBottom;
 
     private boolean isDockRailActive() {
         return isLandscapeOrientation()
@@ -9114,21 +9202,94 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && mPreferences.isAppLauncherAppsRowEnabled();
     }
 
-    private int resolveDockRailWidthPx() {
-        return Math.max(mLastDisplayCutoutInsetLeft, Math.round(dpToPx(DOCK_RAIL_MIN_WIDTH_DP)));
+    private boolean isDockRailOnRight() {
+        return mPreferences != null && mPreferences.isAppLauncherDockRailOnRight();
     }
 
     /**
+     * Which way the app drawer is pulled off the rail: away from the edge it is docked to. Portrait
+     * has no rail, and the drawer is pulled down off the apps row there instead.
+     */
+    @NonNull
+    private AppDrawerGestureArbiter.Pull resolveDockRailPull() {
+        if (!isDockRailActive())
+            return AppDrawerGestureArbiter.Pull.NONE;
+        return isDockRailOnRight()
+            ? AppDrawerGestureArbiter.Pull.LEFT : AppDrawerGestureArbiter.Pull.RIGHT;
+    }
+
+    /**
+     * The rail's column: the docked edge's cutout inset <em>plus</em> a column wide enough for an
+     * icon and its two margins. It used to be the larger of the two, which on a device whose cutout
+     * inset is small left the icons hard against the display edge, and left the content column
+     * inset by no more than the icons themselves — so on the right-hand rail the terminal's own text
+     * ran underneath them.
+     */
+    private int resolveDockRailWidthPx() {
+        return resolveDockRailEdgeInsetPx() + Math.max(Math.round(dpToPx(DOCK_RAIL_MIN_WIDTH_DP)),
+            Math.round(dpToPx(DOCK_RAIL_ICON_SIZE_DP + 2 * DOCK_RAIL_EDGE_MARGIN_DP)));
+    }
+
+    /** The cutout inset on the edge the rail is docked to; zero on a device without one there. */
+    private int resolveDockRailEdgeInsetPx() {
+        return isDockRailOnRight() ? mLastDisplayCutoutInsetRight : mLastDisplayCutoutInsetLeft;
+    }
+
+    /**
+     * The rail's half of the app-drawer pull. Only four of the nine vetoes have a rail equivalent:
+     * the rail carries no search field, no A-Z scrub and no long-press pickup, so those slots are
+     * permanently clear, and the pull direction is the one veto that is not a boolean.
+     */
+    private final DockRailScrollView.DrawerPullListener mDockRailDrawerPullListener =
+        new DockRailScrollView.DrawerPullListener() {
+            @NonNull
+            @Override
+            public AppDrawerGestureArbiter.Eligibility captureDrawerEligibility() {
+                return new AppDrawerGestureArbiter.Eligibility(
+                    mPreferences != null && mPreferences.isAppLauncherDrawerEnabled(),
+                    true,
+                    true,
+                    resolveDockRailPull(),
+                    !mDockTuningMode,
+                    !isCommandPaletteOpen(),
+                    true,
+                    !isAppDrawerEngaged(),
+                    !isFullStatusBarEngaged());
+            }
+
+            @Override
+            public void onDrawerDragBegin(float downPull) {
+                getAppDrawerController().beginDrag(downPull);
+            }
+
+            @Override
+            public void onDrawerDrag(float pull) {
+                getAppDrawerController().updateDrag(pull);
+            }
+
+            @Override
+            public void onDrawerDragEnd(float velocityPxPerSec) {
+                getAppDrawerController().endDrag(velocityPxPerSec);
+            }
+
+            @Override
+            public void onDrawerDragCancel() {
+                getAppDrawerController().cancelDrag();
+            }
+        };
+
+    /**
      * Rebuilds the landscape dock rail: the pinned dock apps as a vertical icon column that owns
-     * the left edge (the horizontal dock rows stay collapsed in landscape). The rail sits beside
+     * one screen edge (the horizontal dock rows stay collapsed in landscape). The rail sits beside
      * the padded content root, so it lives in the same column the terminal is inset from.
      */
     private void updateDockRailView() {
-        android.widget.ScrollView railScroll = findViewById(R.id.dock_rail_scroll);
+        DockRailScrollView railScroll = findViewById(R.id.dock_rail_scroll);
         LinearLayout railList = findViewById(R.id.dock_rail_list);
         if (railScroll == null || railList == null)
             return;
         if (!isDockRailActive() || mSuggestionBarView == null) {
+            railScroll.setDrawerPullListener(null);
             railScroll.setVisibility(View.GONE);
             railList.removeAllViews();
             return;
@@ -9139,8 +9300,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             scrollParams.width = railWidthPx;
             railScroll.setLayoutParams(scrollParams);
         }
+        if (scrollParams instanceof FrameLayout.LayoutParams) {
+            int gravity = (isDockRailOnRight() ? Gravity.END : Gravity.START) | Gravity.TOP;
+            FrameLayout.LayoutParams frameParams = (FrameLayout.LayoutParams) scrollParams;
+            if (frameParams.gravity != gravity) {
+                frameParams.gravity = gravity;
+                railScroll.setLayoutParams(frameParams);
+            }
+        }
+        railScroll.setDrawerPullListener(mDockRailDrawerPullListener);
+        // Padded on all four sides rather than only vertically: the docked edge carries its cutout
+        // inset plus a margin, and the scroll range clears the status and navigation bars, so the
+        // first and last icons cannot end up under a system bar when the rail is scrolled.
         int verticalPadPx = Math.round(dpToPx(10));
-        railScroll.setPadding(0, mLastStatusBarInsetTop + verticalPadPx, 0, verticalPadPx);
+        int edgeMarginPx = Math.round(dpToPx(DOCK_RAIL_EDGE_MARGIN_DP));
+        int dockedEdgePadPx = resolveDockRailEdgeInsetPx() + edgeMarginPx;
+        railScroll.setPadding(isDockRailOnRight() ? edgeMarginPx : dockedEdgePadPx,
+            mLastStatusBarInsetTop + verticalPadPx,
+            isDockRailOnRight() ? dockedEdgePadPx : edgeMarginPx,
+            mLastNavigationBarInsetBottom + verticalPadPx);
         railScroll.setClipToPadding(false);
         railList.removeAllViews();
         int iconSizePx = Math.round(dpToPx(DOCK_RAIL_ICON_SIZE_DP));
@@ -10009,89 +10187,69 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    private boolean handleTerminalAction(int itemId) {
-        TerminalSession session = getCurrentSession();
+    /**
+     * The long-press menu rows that are not registry tools; see {@link #CONTEXT_MENU_STYLE_ID}.
+     * Public because {@code TerminalActionMenu} builds the menu from another package.
+     */
+    public boolean handleTerminalAction(int itemId) {
         switch(itemId) {
-            case CONTEXT_MENU_SELECT_URL_ID:
-                mTermuxTerminalViewClient.showUrlSelection();
-                return true;
-            case CONTEXT_MENU_SHARE_TRANSCRIPT_ID:
-                mTermuxTerminalViewClient.shareSessionTranscript();
-                return true;
-            case CONTEXT_MENU_SET_WALLPAPER_ID:
-                launchManagedWallpaperPicker();
-                return true;
-            case CONTEXT_MENU_REMOVE_WALLPAPER_ID:
-                setWallpaperModeEnabled(this, !shouldUseWallpaperPassthroughMode());
-                return true;
-            case CONTEXT_MENU_LOOK_AND_FEEL_ID:
-                openLookAndFeelSettings();
-                return true;
-            case CONTEXT_MENU_APPS_BAR_ID:
-                openAppsBarSettings();
-                return true;
-            case CONTEXT_MENU_SETTINGS_ID:
-                openSettingsHome();
-                return true;
-            case CONTEXT_MENU_RESET_TERMINAL_ID:
-                onResetTerminalSession(session);
-                return true;
             case CONTEXT_MENU_KILL_PROCESS_ID:
-                showKillSessionDialog(session);
+                showKillSessionDialog(getCurrentSession());
                 return true;
-            case CONTEXT_MENU_GLASS_LAB_ID:
-                enterDockTuningMode();
-                return true;
-            case CONTEXT_MENU_COMMAND_PALETTE_ID:
-                com.termux.app.terminal.TerminalCommandPalette.show(this);
+            case CONTEXT_MENU_STYLE_ID:
+                openTerminalStyling();
                 return true;
             default:
                 return false;
         }
     }
 
+    /**
+     * Termux:Styling if it is there, Appearance settings if it is not.
+     *
+     * <p>Decided by the launch outcome rather than by a {@code resolveActivity} or a
+     * {@code getPackageInfo}: under Android 11 package visibility both are filtered for a package this
+     * app does not declare in {@code <queries>}, so they answer "not installed" for a plugin that is
+     * sitting right there.
+     */
+    private void openTerminalStyling() {
+        Intent stylingIntent = new Intent();
+        stylingIntent.setClassName(TermuxConstants.TERMUX_STYLING_PACKAGE_NAME,
+            TermuxConstants.TERMUX_STYLING_APP.TERMUX_STYLING_ACTIVITY_NAME);
+        try {
+            startActivity(stylingIntent);
+        } catch (Exception exception) {
+            Logger.logWarn(LOG_TAG, "Cannot open Termux:Styling, falling back to Appearance settings: "
+                + exception.getMessage());
+            openLookAndFeelSettings();
+        }
+    }
+
+    /**
+     * The terminal long-press menu. Keeps its {@code boolean} contract — the long-press path and
+     * {@code terminal.action_sheet} both read it as "was the gesture spent here".
+     */
     public boolean showTerminalActionSheet() {
+        return showTerminalActionSheet(null);
+    }
+
+    /**
+     * @param anchor screen point the menu should open at — the long press that led here — or null
+     *               for a centred card, which is what a palette or keybinding invocation gets since
+     *               no finger named a place for it.
+     */
+    public boolean showTerminalActionSheet(@Nullable android.graphics.PointF anchor) {
         TerminalSession currentSession = getCurrentSession();
         if (currentSession == null) {
             return false;
         }
-        if (mTerminalActionDialog != null && mTerminalActionDialog.isShowing()) {
+        // A sheet is already up — the browser, a prompt, or this menu itself. Stacking a menu on it
+        // would bury whatever the user is in the middle of, so the gesture is spent doing nothing.
+        if (isTerminalSheetOpen()) {
             return true;
         }
-        List<TerminalActionItem> items = new ArrayList<>();
-        items.add(new TerminalActionItem(CONTEXT_MENU_COMMAND_PALETTE_ID, getString(R.string.action_command_palette)));
-        items.add(new TerminalActionItem(CONTEXT_MENU_SELECT_URL_ID, getString(R.string.action_select_url)));
-        items.add(new TerminalActionItem(CONTEXT_MENU_SHARE_TRANSCRIPT_ID, getString(R.string.action_share_transcript)));
-        items.add(new TerminalActionItem(CONTEXT_MENU_SET_WALLPAPER_ID, getString(R.string.action_set_background_image)));
-        items.add(new TerminalActionItem(
-            CONTEXT_MENU_REMOVE_WALLPAPER_ID,
-            getString(shouldUseWallpaperPassthroughMode()
-                ? R.string.action_disable_background_image
-                : R.string.action_enable_background_image)
-        ));
-        items.add(new TerminalActionItem(CONTEXT_MENU_GLASS_LAB_ID, getString(R.string.action_glass_lab)));
-        // Appearance and Apps & Access are reachable from the Settings page; keep this sheet lean.
-        items.add(new TerminalActionItem(CONTEXT_MENU_SETTINGS_ID, getString(R.string.action_open_settings)));
-        items.add(new TerminalActionItem(CONTEXT_MENU_RESET_TERMINAL_ID, getString(R.string.action_reset_terminal)));
-        items.add(new TerminalActionItem(CONTEXT_MENU_KILL_PROCESS_ID,
-            getString(R.string.action_kill_process, currentSession.getPid())));
-
-        ArrayAdapter<TerminalActionItem> adapter = new ArrayAdapter<>(this,
-            android.R.layout.simple_list_item_1, items);
-        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
-            .setAdapter(adapter, (dialogInterface, which) -> handleTerminalAction(items.get(which).id))
-            .setOnDismissListener(dialogInterface -> {
-                if (mTerminalView != null) {
-                    mTerminalView.onContextMenuClosed(null);
-                }
-                if (mTerminalActionDialog == dialogInterface) {
-                    mTerminalActionDialog = null;
-                }
-            })
-            .create();
-        mTerminalActionDialog = dialog;
-        dialog.show();
-        return true;
+        return com.termux.app.terminal.TerminalActionMenu.show(this, currentSession.getPid(),
+            anchor);
     }
 
     /**
@@ -10107,6 +10265,66 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     public boolean isCommandPaletteOpen() {
         return mCommandPalette != null && mCommandPalette.isOpen();
+    }
+
+    /**
+     * The terminal sheet plane, created on first use. Like the palette it lives in the activity
+     * rather than in a dialog window, so a prompt costs no focus change and no system IME, and it
+     * binds its views lazily so a session that never opens a prompt never pays for them.
+     */
+    @NonNull
+    public com.termux.app.terminal.TerminalSheetController getTerminalSheetController() {
+        if (mTerminalSheet == null)
+            mTerminalSheet = new com.termux.app.terminal.TerminalSheetController(this);
+        return mTerminalSheet;
+    }
+
+    /** Guarded on the field, not the lazy accessor: asking must not build a plane. */
+    public boolean isTerminalSheetOpen() {
+        return mTerminalSheet != null && mTerminalSheet.isOpen();
+    }
+
+    /**
+     * Glass for a sheet card. Same builder, tint and rim as the dock and the rename chip, so the
+     * plane reads as the same kit rather than as a Material dialog that lost its window.
+     */
+    @NonNull
+    public Drawable buildTerminalSheetSurface() {
+        float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity() / 100f : 0.5f;
+        int grain = mPreferences != null
+            ? mPreferences.getDockGlassGrain()
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
+        // Floored well above the dock's opacity: a sheet has body text over a live blur, and at the
+        // dock's own tint the terminal behind it reads straight through the words.
+        return buildGlassSurface(Math.max(0.92f, barAlpha), 0f, 1f, false, grain,
+            dpToPx(com.termux.app.terminal.TerminalSheetController.cornerRadiusDp()), true);
+    }
+
+    /**
+     * Makes a keyboard available for typing into a focusless surface, and reports whether one is.
+     *
+     * <p>False means there is nothing on screen to aim the key channel at — the caller either does
+     * without typing or falls back to a focused editor.
+     */
+    public boolean ensureInAppTypingKeyboard() {
+        if (!isInAppKeyboardEnabled() || mInAppKeyboard == null) return false;
+        if (!mInAppKeyboard.isVisible()) {
+            mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                .ShowReason.KEYBOARD_ACTION);
+        }
+        return true;
+    }
+
+    /**
+     * Whether a raw screen point lands on the in-app keyboard. Every full-screen focusless overlay
+     * has to let those touches through: they are the keys it is typed with, and swallowing them
+     * would end the interaction on its first keystroke.
+     */
+    public boolean isPointOnInAppKeyboard(float rawX, float rawY) {
+        if (mInAppKeyboard == null) return false;
+        Rect keyboard = new Rect();
+        return mInAppKeyboard.getKeyboardRectOnScreen(keyboard)
+            && keyboard.contains(Math.round(rawX), Math.round(rawY));
     }
 
     /**
@@ -10203,6 +10421,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mInAppKeyboard.setKeyValueInterceptor(active ? getCommandPaletteController() : null);
     }
 
+    /**
+     * Routes in-app keyboard values to the terminal sheet plane while a sheet is up, the same slot
+     * and the same three channels the palette documents above.
+     *
+     * <p>Releasing means "whoever owns the slot now", not "nobody": the drawer's search may be open
+     * behind a sheet the drawer itself never closed.
+     */
+    public void setTerminalSheetInterceptorActive(boolean active) {
+        if (mInAppKeyboard == null)
+            return;
+        if (active) {
+            mInAppKeyboard.setKeyValueInterceptor(getTerminalSheetController());
+            return;
+        }
+        setAppDrawerInterceptorActive(isAppDrawerOpen());
+    }
+
     /** Seed rect for surfaces growing out of the space bar; false when the keyboard is hidden. */
     public boolean getInAppKeyboardSpaceBarRect(@NonNull Rect out) {
         return mInAppKeyboard != null && mInAppKeyboard.getSpaceBarRectOnScreen(out);
@@ -10296,6 +10531,42 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && mAppDrawerController.handleSearchCodePoint(codePoint, ctrlDown);
     }
 
+    /** Set when {@link #handleOverlayPaneKey} closed a pane, so the matching release is swallowed. */
+    private boolean mOverlayPaneClaimedBackDown;
+
+    /**
+     * Back aimed at the widget pane or the FULL status pane, claimed in the key channel.
+     *
+     * <p>{@link #onBackPressed()} already closes both, but on a device the back key travels the key
+     * channel and is consumed before {@code onBackPressed()} ever runs — which is why two presses
+     * left the pane open and only the pull-up gesture closed it. The drawer has had a claim here for
+     * exactly this reason; these two had none. The order matches {@link #onBackPressed()}: panes
+     * before the palette and the drawer.
+     *
+     * <p>Restricted to {@code ACTION_DOWN} on the back key, so nothing here can swallow the escape
+     * stroke the palette is checked first for.
+     */
+    public boolean handleOverlayPaneKey(int keyCode, @NonNull KeyEvent event) {
+        if (keyCode != KeyEvent.KEYCODE_BACK || event.getAction() != KeyEvent.ACTION_DOWN)
+            return false;
+        boolean consumed = (mWidgetPaneController != null && mWidgetPaneController.onBackPressed())
+            || (mFullStatusBarController != null && mFullStatusBarController.onBackPressed());
+        if (consumed) mOverlayPaneClaimedBackDown = true;
+        return consumed;
+    }
+
+    /**
+     * Whether the release of a back press this activity's panes already consumed should be
+     * swallowed. Tracked as a flag rather than re-asked as "is a pane open", because by the time the
+     * release arrives the pane is closing and would answer no.
+     */
+    public boolean consumeOverlayPaneKeyUp(int keyCode) {
+        if (keyCode != KeyEvent.KEYCODE_BACK || !mOverlayPaneClaimedBackDown)
+            return false;
+        mOverlayPaneClaimedBackDown = false;
+        return true;
+    }
+
     /** True while the drawer plane is up — what the key-release swallow asks. */
     public boolean isAppDrawerOpen() {
         return mAppDrawerController != null && mAppDrawerController.isOpen();
@@ -10324,9 +10595,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && (mCurrentWSession == null || !isSplitPanesEnabled())) return false;
         if (target == com.termux.app.terminal.TerminalRenameTarget.PANE
             && getCurrentSession() == null) return false;
-        // The palette and the drawer both own the same interceptor slot the chip needs, so a rename
-        // starts from a clean surface rather than fighting one of them for typing.
+        // The palette, the sheet plane and the drawer all own the same interceptor slot the chip
+        // needs, so a rename starts from a clean surface rather than fighting one of them for
+        // typing. The sheets also have to go for a second reason: the chip anchors to the window
+        // bar or the session indicator, both of which sit behind a modal sheet, so a rename started
+        // from the browser would otherwise open an editor nobody can see.
         if (isCommandPaletteOpen()) mCommandPalette.collapse();
+        if (mTerminalSheet != null) mTerminalSheet.dismissAll();
         if (mAppDrawerController != null && mAppDrawerController.isOpen())
             mAppDrawerController.close(true);
         return getRenameCoordinator().begin(target);
@@ -10466,12 +10741,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public boolean ensureTypingKeyboard() {
-            if (!isInAppKeyboardEnabled() || mInAppKeyboard == null) return false;
-            if (!mInAppKeyboard.isVisible()) {
-                mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                    .ShowReason.KEYBOARD_ACTION);
-            }
-            return true;
+            return ensureInAppTypingKeyboard();
         }
 
         @Override
@@ -10491,10 +10761,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public boolean isPointOnTypingKeyboard(float rawX, float rawY) {
-            if (mInAppKeyboard == null) return false;
-            Rect keyboard = new Rect();
-            return mInAppKeyboard.getKeyboardRectOnScreen(keyboard)
-                && keyboard.contains(Math.round(rawX), Math.round(rawY));
+            return isPointOnInAppKeyboard(rawX, rawY);
         }
 
         @Override
@@ -10626,14 +10893,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && mCommandPalette.handleSoftKeyboardCodePoint(codePoint, ctrlDown);
     }
 
+    /** Hardware and external-keyboard strokes claimed by the open sheet plane. */
+    public boolean handleTerminalSheetKey(int keyCode, @NonNull KeyEvent event) {
+        return mTerminalSheet != null && mTerminalSheet.handleHardwareKey(keyCode, event);
+    }
+
+    /** The sheet plane's twin of {@link #handleCommandPaletteCodePoint}, for the same reason. */
+    public boolean handleTerminalSheetCodePoint(int codePoint, boolean ctrlDown) {
+        return mTerminalSheet != null
+            && mTerminalSheet.handleSoftKeyboardCodePoint(codePoint, ctrlDown);
+    }
+
     /**
      * Back consumers, in order.
      *
      * <p>FULL stays first, including while its exit spring is settling, so repeated Back cannot
-     * fall through into another surface. The palette follows, then the drawer because it is a
-     * full-screen plane, and both of the consumers
+     * fall through into another surface. The palette follows, then the sheet plane, then the drawer
+     * because it is a full-screen plane, and both of the consumers
      * below it — dock tuning and the navigation drawer — are conceptually behind it; a back press
      * that skipped past it would dismiss something the user cannot even see.
+     *
+     * <p>The sheet plane sits after the palette so it can never swallow the escape stroke the
+     * palette is checked first for, and before the drawer, which a sheet closes as it opens and
+     * therefore always outranks.
      */
     @SuppressLint("RtlHardcoded")
     @Override
@@ -10650,6 +10932,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         } else if (isCommandPaletteOpen()) {
             mCommandPalette.collapse();
+        } else if (mTerminalSheet != null && mTerminalSheet.onBackPressed()) {
+            // One card per press, not the whole stack: a confirmation opened over the workspace
+            // picker has to give the picker back rather than drop the user on the terminal.
+            return;
         } else if (mAppDrawerController != null && mAppDrawerController.isOpen()) {
             // A back press with something typed is spent on the query and the drawer stays up. The
             // branch still consumes it either way: falling through to dock tuning because the query
@@ -10755,18 +11041,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return super.onContextItemSelected(item);
     }
 
+    /**
+     * Confirms killing a session on the terminal sheet plane rather than in a dialog window, so the
+     * prompt costs no focus change over the terminal it is about. The pid rides in the title: it is
+     * the only thing distinguishing this prompt from the same one about another session.
+     */
     private void showKillSessionDialog(TerminalSession session) {
         if (session == null)
             return;
-        final MaterialAlertDialogBuilder b = new MaterialAlertDialogBuilder(this);
-        b.setIcon(android.R.drawable.ic_dialog_alert);
-        b.setMessage(R.string.title_confirm_kill_process);
-        b.setPositiveButton(android.R.string.ok, (dialog, id) -> {
-            dialog.dismiss();
-            session.finishIfRunning();
-        });
-        b.setNegativeButton(android.R.string.cancel, null);
-        b.show();
+        com.termux.app.terminal.TerminalSheetController sheet = getTerminalSheetController();
+        LinearLayout body = com.termux.app.terminal.TerminalSheetViews.body(this);
+        com.termux.app.terminal.TerminalSheetViews.addMessage(body,
+            getString(R.string.title_confirm_kill_process));
+        LinearLayout actions = com.termux.app.terminal.TerminalSheetViews.addActionRow(body);
+        com.termux.app.terminal.TerminalSheetViews.addAction(actions,
+            getString(android.R.string.cancel), sheet::dismiss);
+        com.termux.app.terminal.TerminalSheetViews.addAction(actions,
+            getString(android.R.string.ok), () -> {
+                sheet.dismiss();
+                session.finishIfRunning();
+            });
+        sheet.show(getString(R.string.action_kill_process, session.getPid()), body);
     }
 
     private void onResetTerminalSession(TerminalSession session) {
@@ -14249,6 +14544,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPackageChangeReceiverRegistered = false;
     }
 
+    /**
+     * Turn "Use wallpaper colors" off when Termux:Styling has just written a colour scheme.
+     *
+     * <p>Dynamic colours build the palette from the wallpaper and never read
+     * {@code ~/.termux/colors.properties}, so picking a scheme in Termux:Styling used to do nothing
+     * visible and say nothing about why. Only the styling app sends
+     * {@code EXTRA_RELOAD_STYLE = "colors"} — the in-app reload carries {@code EXTRA_RECREATE_ACTIVITY}
+     * alone — so this cannot fire on our own restyles. Re-enabling the switch hands the palette back
+     * to the wallpaper, which is what the hint under it says.
+     */
+    @VisibleForTesting
+    void yieldDynamicColorsToStylingScheme(@Nullable Intent intent) {
+        if (intent == null || !TERMUX_ACTIVITY.ACTION_RELOAD_STYLE.equals(intent.getAction()))
+            return;
+        if (!"colors".equals(intent.getStringExtra(TERMUX_ACTIVITY.EXTRA_RELOAD_STYLE)))
+            return;
+        if (mPreferences == null || !mPreferences.isTerminalDynamicColorsEnabled())
+            return;
+        if (!TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE.isFile())
+            return;
+        Logger.logInfo(LOG_TAG, "Termux:Styling wrote a colour scheme; disabling wallpaper colours");
+        mPreferences.setTerminalDynamicColorsEnabled(false);
+    }
+
     private void fixTermuxActivityBroadcastReceiverIntent(Intent intent) {
         if (intent == null)
             return;
@@ -14283,6 +14602,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         public void onReceive(Context context, Intent intent) {
             if (intent == null)
                 return;
+            // Before the visibility gate: Termux:Styling normally broadcasts while this activity is in
+            // the background, and the user's choice of scheme must not be dropped for that.
+            yieldDynamicColorsToStylingScheme(intent);
             if (mIsVisible) {
                 fixTermuxActivityBroadcastReceiverIntent(intent);
                 switch(intent.getAction()) {
