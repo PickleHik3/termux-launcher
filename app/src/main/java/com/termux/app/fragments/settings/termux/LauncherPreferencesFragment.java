@@ -7,6 +7,8 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.widget.Toast;
 
@@ -23,8 +25,10 @@ import com.termux.R;
 import com.termux.app.TermuxActivity;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.PillPreference;
+import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.launcher.LauncherLockAccessibilityAccess;
+import com.termux.app.launcher.LauncherUseCaseMode;
 import com.termux.app.launcher.PinnedAppsEditor;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
@@ -34,6 +38,16 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
 @Keep
 public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
+
+    private static final String KEY_USE_CASE_MODE = "app_launcher_use_case_mode";
+    /** The home surfaces the use case switch owns, in screen order. */
+    private static final String[] USE_CASE_SURFACE_KEYS = {
+        "app_launcher_apps_row_enabled",
+        "app_launcher_az_row_enabled",
+        "app_launcher_drawer_enabled",
+        "app_launcher_widget_pane_enabled",
+    };
+    private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
 
     private static final String KEY_STORAGE = "app_launcher_storage_access";
     private static final String KEY_NOTIFICATION_ACCESS = "app_launcher_notification_access";
@@ -134,6 +148,49 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
                     .show();
                 return true;
             });
+        }
+
+        // Last: it wraps the surface switches' change listeners, so they must already be set.
+        configureUseCaseMode();
+    }
+
+    /**
+     * Wires the launcher / terminal-only chooser. The mode is the user's stored choice, so the
+     * indicator stays put when a single surface below is flipped — only the mode itself moves it.
+     * Switching mode rewrites the surface switches, read back posted because a preference change
+     * listener fires before the new value reaches the data store.
+     */
+    private void configureUseCaseMode() {
+        SegmentedPillPreference mode = findPreference(KEY_USE_CASE_MODE);
+        if (mode == null) return;
+        mode.setSegments(
+            new String[]{LauncherUseCaseMode.MODE_LAUNCHER, LauncherUseCaseMode.MODE_TERMINAL},
+            new int[]{R.string.settings_use_case_launcher, R.string.settings_use_case_terminal});
+        mode.setOnPreferenceChangeListener((preference, newValue) -> {
+            MAIN_HANDLER.post(this::syncUseCaseSurfaceSwitches);
+            return true;
+        });
+    }
+
+    /** Pushes the post-switch surface states onto the switches the mode just rewrote. */
+    private void syncUseCaseSurfaceSwitches() {
+        Context context = getContext();
+        if (context == null) return;
+        TermuxStylePreferencesDataStore store = TermuxStylePreferencesDataStore.getInstance(context);
+        for (String key : USE_CASE_SURFACE_KEYS) {
+            SwitchPreferenceCompat surface = findPreference(key);
+            if (surface == null) continue;
+            boolean value = store.getBoolean(key, true);
+            if (surface.isChecked() != value) surface.setChecked(value);
+        }
+        SwitchPreferenceCompat recents = findPreference("show_in_recents_when_not_default");
+        if (recents != null) {
+            boolean value = store.getBoolean("show_in_recents_when_not_default", true);
+            if (recents.isChecked() != value) recents.setChecked(value);
+        }
+        SwitchPreferenceCompat appsRow = findPreference("app_launcher_apps_row_enabled");
+        if (appsRow != null) {
+            updateAppsBarDependentPreferences(appsRow, findPreference("app_launcher_notification_dots"));
         }
     }
 
