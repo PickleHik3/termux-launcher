@@ -56,7 +56,9 @@ wrong paths.
 
 - **`launcher` flake template** (`templates/launcher/`, used by the
   [getting-started walkthrough](Nix_Package_Management.md)): fish as
-  login shell, oh-my-posh Material themes, eza/zoxide/yazi, LazyVim,
+  login shell, oh-my-posh Material themes, eza/zoxide/yazi, a
+  `setup-nvim` distro chooser (AstroNvim default, with a colourscheme
+  generated from the wallpaper palette),
   fastfetch/timg/chafa, the launcher's stock `config.fish`, and the
   `sshd-start`/`sshd-autostart` toolset. Kept compatible with both old
   and new oh-my-posh, ships `ncurses`, and puts the proot `/bin`

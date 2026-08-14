@@ -14,6 +14,15 @@
 # users, but it is deprecated: the launcher's own windows, panes, workspaces,
 # and status bar replace what tmux and btop provided here.
 #
+# The fish config is split in two: config.fish is launcher-owned and replaced
+# on every run (with a .bak), while ~/.config/fish/conf.d/personal.fish is
+# yours — installed once, never overwritten, and the place for aliases,
+# EDITOR, and other personal settings.
+#
+# Neovim is handled by a separate chooser: this script installs `setup-nvim`
+# into ~/.local/bin, and that picks a distro (AstroNvim by default, with a
+# colourscheme generated from the wallpaper palette) only when you run it.
+#
 # Existing files are never overwritten silently — every replaced config gets a
 # timestamped .bak alongside it.
 
@@ -65,6 +74,16 @@ fetch() {
     fi
 }
 
+# fetch_once <relative-name> <destination> — for files that become the user's
+# after the first install: copied when missing, never replaced afterwards.
+fetch_once() {
+    if [ -e "$2" ]; then
+        log "  kept existing $2 (yours to edit; delete it and re-run to refresh)"
+    else
+        fetch "$1" "$2"
+    fi
+}
+
 ask_yn() {
     prompt="$1"
     default="${2:-y}"
@@ -113,8 +132,14 @@ install_shell_configs() {
     log ""
     log "== Fish + Oh My Posh configs =="
     fetch config.fish "$FISH_CONFIG"
+    fetch_once conf.d-personal.fish "$(dirname "$FISH_CONFIG")/conf.d/personal.fish"
     fetch aliens-material.omp.json "$OMP_DIR/aliens-material.omp.json"
     fetch termux-launcher.omp.json "$OMP_DIR/termux-launcher.omp.json"
+
+    fetch setup-nvim "$HOME/.local/bin/setup-nvim"
+    chmod +x "$HOME/.local/bin/setup-nvim"
+    log "Neovim: run 'setup-nvim' when you want to pick a distro (AstroNvim,"
+    log "NvChad, LazyVim, kickstart, or stock); it never runs automatically."
 
     if command -v fish >/dev/null 2>&1; then
         if command -v chsh >/dev/null 2>&1 && ask_yn "Make fish the default shell?"; then

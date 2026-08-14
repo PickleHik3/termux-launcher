@@ -1,0 +1,974 @@
+#!/system/bin/sh
+# setup-nvim — pick a Neovim setup, or add the launcher's integrations to one you
+# already have. Nothing installs Neovim configuration automatically: the choice of
+# distro is the user's, and an existing ~/.config/nvim is never touched unless you
+# say so in as many words.
+#
+#   setup-nvim                          interactive menu
+#   setup-nvim --distro astronvim       non-interactive
+#   setup-nvim --distro astronvim --appname astronvim
+#                                       install side by side, launch with
+#                                       NVIM_APPNAME=astronvim nvim
+#   setup-nvim --integrations-only      just clipboard + wrap (+ theme where supported)
+#
+# What "integrations" means: OSC 52 clipboard so yanks reach the Android clipboard
+# with no helper tool, always-on line wrap for a phone-width screen, and — on
+# AstroNvim and NvChad — a colourscheme generated from the launcher's wallpaper
+# palette (~/.termux/material-colors.sh) that retints live when the wallpaper
+# changes.
+#
+# Replacing an existing config is gated on typing REPLACE, and even then the old
+# config is moved to ~/.config/nvim.bak-<timestamp> first — only the plugin,
+# state, and cache directories are deleted, and plugins reinstall themselves.
+
+set -eu
+
+fail() { printf 'setup-nvim: %s\n' "$*" >&2; exit 1; }
+
+distro=""
+appname="nvim"
+integrations_only=0
+assume_yes=0
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --distro) distro="${2:-}"; shift 2 ;;
+    --appname) appname="${2:-}"; shift 2 ;;
+    --integrations-only) integrations_only=1; shift ;;
+    --yes|-y) assume_yes=1; shift ;;
+    -h|--help)
+      echo "usage: setup-nvim [--distro astronvim|nvchad|lazyvim|kickstart|stock]"
+      echo "                  [--appname NAME] [--integrations-only] [--yes]"
+      exit 0 ;;
+    *) fail "unknown option '$1'" ;;
+  esac
+done
+
+config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
+target="$config_home/$appname"
+data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/$appname"
+
+# ----------------------------------------------------------------------------
+# Packages. Everything else in this script is plain file shuffling.
+# ----------------------------------------------------------------------------
+
+ensure_packages() {
+    missing=""
+    command -v nvim >/dev/null 2>&1 || missing="$missing neovim"
+    command -v git >/dev/null 2>&1 || missing="$missing git"
+    [ -n "$missing" ] || return 0
+
+    if command -v pacman >/dev/null 2>&1; then
+        # shellcheck disable=SC2086
+        pacman -S --needed --noconfirm $missing || fail "could not install:$missing"
+    elif command -v pkg >/dev/null 2>&1; then
+        # shellcheck disable=SC2086
+        pkg install -y $missing || fail "could not install:$missing"
+    else
+        fail "missing:$missing (and no supported package manager, pkg or pacman, to install them)"
+    fi
+}
+
+# ----------------------------------------------------------------------------
+# Shipped Lua, written out once and copied into the chosen config so it
+# survives on its own — these files are yours to edit afterwards.
+# ----------------------------------------------------------------------------
+
+payload_dir=$(mktemp -d "${TMPDIR:-/tmp}/setup-nvim.XXXXXX")
+trap 'rm -rf "$payload_dir"' EXIT
+
+write_payloads() {
+
+cat > "$payload_dir/material_palette.lua" <<'LUA_PALETTE'
+-- Builds a base46 theme from the launcher's wallpaper-derived Material palette.
+--
+-- The launcher writes ~/.termux/material-colors.sh on every wallpaper/theme change.
+-- It carries both Material roles (SURFACE*, PRIMARY, ERROR, OUTLINE...) and a full
+-- ANSI set (TERMINAL_COLOR0..15, TERMINAL_BACKGROUND/FOREGROUND).
+--
+-- Division of labour, which is the whole trick: syntax comes from the ANSI colours
+-- (already hue-diversified, so code keeps red/green/yellow/blue/magenta/cyan
+-- separation) and UI chrome comes from the Material roles (so the editor matches the
+-- wallpaper). Mixing that the other way round collapses code into one tint.
+--
+-- Everything is then clamped: a wallpaper is not designed for code contrast.
+
+local M = {}
+
+local PALETTE = os.getenv("HOME") .. "/.termux/material-colors.sh"
+
+-- Contrast targets, WCAG-style ratios against the background.
+local TEXT_CONTRAST = 4.5 -- syntax, foreground text
+local DIM_CONTRAST = 3.0 -- comments, borders, gutter
+
+--- Colour helpers ----------------------------------------------------------
+
+local function hex2rgb(hex)
+  hex = hex:gsub("#", "")
+  return tonumber(hex:sub(1, 2), 16), tonumber(hex:sub(3, 4), 16), tonumber(hex:sub(5, 6), 16)
+end
+
+local function clamp(v, lo, hi)
+  return math.max(lo, math.min(hi, v))
+end
+
+local function rgb2hex(r, g, b)
+  return string.format("#%02X%02X%02X", clamp(math.floor(r + 0.5), 0, 255),
+    clamp(math.floor(g + 0.5), 0, 255), clamp(math.floor(b + 0.5), 0, 255))
+end
+
+local function channel_lin(c)
+  c = c / 255
+  return c <= 0.03928 and c / 12.92 or ((c + 0.055) / 1.055) ^ 2.4
+end
+
+local function luminance(hex)
+  local r, g, b = hex2rgb(hex)
+  return 0.2126 * channel_lin(r) + 0.7152 * channel_lin(g) + 0.0722 * channel_lin(b)
+end
+
+local function contrast(a, b)
+  local l1, l2 = luminance(a), luminance(b)
+  if l1 < l2 then
+    l1, l2 = l2, l1
+  end
+  return (l1 + 0.05) / (l2 + 0.05)
+end
+
+local function mix(a, b, t)
+  local ar, ag, ab = hex2rgb(a)
+  local br, bg, bb = hex2rgb(b)
+  return rgb2hex(ar + (br - ar) * t, ag + (bg - ag) * t, ab + (bb - ab) * t)
+end
+
+local function rgb2hsl(hex)
+  local r, g, b = hex2rgb(hex)
+  r, g, b = r / 255, g / 255, b / 255
+  local max, min = math.max(r, g, b), math.min(r, g, b)
+  local l = (max + min) / 2
+  if max == min then
+    return 0, 0, l
+  end
+  local d = max - min
+  local s = l > 0.5 and d / (2 - max - min) or d / (max + min)
+  local h
+  if max == r then
+    h = (g - b) / d + (g < b and 6 or 0)
+  elseif max == g then
+    h = (b - r) / d + 2
+  else
+    h = (r - g) / d + 4
+  end
+  return h * 60, s, l
+end
+
+local function hue2rgb(p, q, t)
+  if t < 0 then
+    t = t + 1
+  end
+  if t > 1 then
+    t = t - 1
+  end
+  if t < 1 / 6 then
+    return p + (q - p) * 6 * t
+  end
+  if t < 1 / 2 then
+    return q
+  end
+  if t < 2 / 3 then
+    return p + (q - p) * (2 / 3 - t) * 6
+  end
+  return p
+end
+
+local function hsl2rgb(h, s, l)
+  h = (h % 360) / 360
+  if s == 0 then
+    local v = l * 255
+    return rgb2hex(v, v, v)
+  end
+  local q = l < 0.5 and l * (1 + s) or l + s - l * s
+  local p = 2 * l - q
+  return rgb2hex(hue2rgb(p, q, h + 1 / 3) * 255, hue2rgb(p, q, h) * 255, hue2rgb(p, q, h - 1 / 3) * 255)
+end
+
+local function saturate(hex, amount)
+  local h, s, l = rgb2hsl(hex)
+  return hsl2rgb(h, clamp(s + amount, 0, 1), l)
+end
+
+local function hue_distance(a, b)
+  local ha = rgb2hsl(a)
+  local hb = rgb2hsl(b)
+  local d = math.abs(ha - hb) % 360
+  return d > 180 and 360 - d or d
+end
+
+--- Lift a colour until it is legible on bg, without changing its hue.
+--- Mixing toward white/black rather than working in OKLCH: no external deps, and
+--- the hue drift over the few steps this needs is not visible.
+local function ensure_contrast(fg, bg, target)
+  local towards = luminance(bg) > 0.18 and "#000000" or "#FFFFFF"
+  local out = fg
+  for _ = 1, 24 do
+    if contrast(out, bg) >= target then
+      break
+    end
+    out = mix(out, towards, 0.06)
+  end
+  return out
+end
+
+--- Palette file -----------------------------------------------------------
+
+--- Parses `export TERMUX_MATERIAL_KEY='#RRGGBB'` lines. Returns nil when the file
+--- is missing, which is the plain-Termux / pre-first-wallpaper case.
+function M.read(path)
+  local fd = io.open(path or PALETTE, "r")
+  if not fd then
+    return nil
+  end
+  local out = {}
+  for line in fd:lines() do
+    local key, value = line:match("^%s*export%s+TERMUX_MATERIAL_([%w_]+)%s*=%s*'?([^']*)'?%s*$")
+    if key and value ~= "" then
+      out[key] = value
+    end
+  end
+  fd:close()
+  return next(out) and out or nil
+end
+
+--- A fixed, known-good syntax set. Used when the wallpaper cannot supply one.
+local FALLBACK_SYNTAX = {
+  red = "#E06C75",
+  orange = "#D19A66",
+  yellow = "#E5C07B",
+  green = "#98C379",
+  cyan = "#56B6C2",
+  blue = "#61AFEF",
+  magenta = "#C678DD",
+}
+
+--- Chroma floor: a greyscale wallpaper yields six near-identical hues, and
+--- faithfully reproducing that makes code unreadable. Degrade instead.
+local function syntax_from(p, bg)
+  local syn = {
+    red = p.TERMINAL_COLOR1,
+    green = p.TERMINAL_COLOR2,
+    yellow = p.TERMINAL_COLOR3,
+    blue = p.TERMINAL_COLOR4,
+    magenta = p.TERMINAL_COLOR5,
+    cyan = p.TERMINAL_COLOR6,
+    orange = p.TERTIARY or p.TERMINAL_COLOR3,
+  }
+
+  local total, count = 0, 0
+  for _, hex in pairs(syn) do
+    if hex then
+      local _, s = rgb2hsl(hex)
+      total, count = total + s, count + 1
+    end
+  end
+  local average_saturation = count > 0 and total / count or 0
+
+  local degraded = count < 7 or average_saturation < 0.15
+  if degraded then
+    syn = vim.deepcopy(FALLBACK_SYNTAX)
+  end
+
+  for name, hex in pairs(syn) do
+    syn[name] = ensure_contrast(hex, bg, TEXT_CONTRAST)
+  end
+
+  return syn, degraded, average_saturation
+end
+
+--- Build ------------------------------------------------------------------
+
+function M.build()
+  local p = M.read()
+  if not p then
+    return nil
+  end
+
+  local bg = p.TERMINAL_BACKGROUND or p.SURFACE or "#1A1111"
+  local fg = p.TERMINAL_FOREGROUND or p.ON_SURFACE or "#F1DEDD"
+  local is_light = luminance(bg) > 0.18
+
+  local syn, degraded, saturation = syntax_from(p, bg)
+
+  -- Diagnostics must never be mistaken for ordinary syntax. Material's ERROR role
+  -- is authoritative, but on a red-tinted wallpaper it lands right on top of the
+  -- syntax red, so separate them by chroma — and move the syntax colour never the
+  -- diagnostic one, so an error always reads as an error.
+  local error_colour = p.ERROR or syn.red
+  if hue_distance(error_colour, syn.red) < 20 then
+    local _, error_saturation = rgb2hsl(error_colour)
+    local _, red_saturation = rgb2hsl(syn.red)
+    if math.abs(error_saturation - red_saturation) < 0.15 then
+      error_colour = saturate(error_colour, 0.25)
+    end
+  end
+  error_colour = ensure_contrast(error_colour, bg, TEXT_CONTRAST)
+
+  local surface1 = p.SURFACE_CONTAINER or mix(bg, fg, 0.06)
+  local surface2 = p.SURFACE_CONTAINER_HIGH or mix(bg, fg, 0.12)
+  local surface3 = p.SURFACE_CONTAINER_HIGHEST or mix(bg, fg, 0.18)
+  local outline = p.OUTLINE or mix(bg, fg, 0.45)
+  local outline_variant = p.OUTLINE_VARIANT or mix(bg, fg, 0.25)
+  local comment = ensure_contrast(p.TERMINAL_COLOR8 or outline, bg, DIM_CONTRAST)
+  local accent = p.PRIMARY or syn.blue
+
+  local theme = {
+    type = is_light and "light" or "dark",
+
+    -- Chrome: Material roles, so the editor matches the wallpaper.
+    base_30 = {
+      white = fg,
+      darker_black = mix(bg, is_light and "#FFFFFF" or "#000000", 0.25),
+      black = bg,
+      black2 = surface1,
+      one_bg = surface1,
+      one_bg2 = surface2,
+      one_bg3 = surface3,
+      grey = outline_variant,
+      grey_fg = comment,
+      grey_fg2 = outline,
+      light_grey = ensure_contrast(p.ON_SURFACE_VARIANT or outline, bg, DIM_CONTRAST),
+      line = outline_variant,
+      statusline_bg = surface1,
+      lightbg = surface2,
+      pmenu_bg = accent,
+      folder_bg = accent,
+
+      -- Semantics: pinned, not free-running.
+      red = error_colour,
+      green = syn.green,
+      vibrant_green = ensure_contrast(p.TERMINAL_COLOR10 or syn.green, bg, TEXT_CONTRAST),
+      yellow = syn.yellow,
+      sun = ensure_contrast(p.TERMINAL_COLOR11 or syn.yellow, bg, TEXT_CONTRAST),
+      blue = syn.blue,
+      nord_blue = ensure_contrast(p.TERMINAL_COLOR12 or syn.blue, bg, TEXT_CONTRAST),
+      cyan = syn.cyan,
+      teal = ensure_contrast(p.TERMINAL_COLOR14 or syn.cyan, bg, TEXT_CONTRAST),
+      purple = syn.magenta,
+      dark_purple = ensure_contrast(p.TERMINAL_COLOR13 or syn.magenta, bg, TEXT_CONTRAST),
+      pink = ensure_contrast(p.TERMINAL_COLOR13 or syn.magenta, bg, TEXT_CONTRAST),
+      baby_pink = ensure_contrast(p.TERMINAL_COLOR9 or syn.red, bg, TEXT_CONTRAST),
+      orange = syn.orange,
+    },
+
+    -- Syntax: ANSI slots, which keep their hue separation.
+    base_16 = {
+      base00 = bg,
+      base01 = surface1,
+      base02 = surface2,
+      base03 = comment, -- comments
+      base04 = ensure_contrast(p.ON_SURFACE_VARIANT or outline, bg, DIM_CONTRAST),
+      base05 = fg, -- default text
+      base06 = ensure_contrast(p.TERMINAL_COLOR15 or fg, bg, TEXT_CONTRAST),
+      base07 = surface3,
+      base08 = syn.red, -- variables, tags
+      base09 = syn.orange, -- numbers, constants
+      base0A = syn.yellow, -- types
+      base0B = syn.green, -- strings
+      base0C = syn.cyan, -- escapes, regex
+      base0D = syn.blue, -- functions
+      base0E = syn.magenta, -- keywords
+      base0F = mix(syn.red, bg, 0.35), -- deprecated
+    },
+  }
+
+  -- Diagnostics/state are inspectable rather than guessed at: :lua= these.
+  vim.g.material_theme_info = {
+    degraded = degraded,
+    average_saturation = saturation,
+    contrast_level = p.TERMINAL_CONTRAST_LEVEL,
+    comment_contrast = contrast(comment, bg),
+    fg_contrast = contrast(fg, bg),
+    type = theme.type,
+  }
+
+  return theme
+end
+
+--- Live reload -----------------------------------------------------------
+
+local watcher, pending
+
+--- Rebuild highlights when the launcher rewrites the palette, so changing the
+--- wallpaper retints an open editor. Debounced: the file is rewritten in a few
+--- syscalls and fs_event reports each one.
+function M.watch()
+  if watcher then
+    return
+  end
+  watcher = vim.uv.new_fs_event()
+  if not watcher then
+    return
+  end
+  watcher:start(PALETTE, {}, function()
+    if pending then
+      return
+    end
+    pending = true
+    vim.defer_fn(function()
+      pending = false
+      M.reload()
+    end, 250)
+  end)
+end
+
+function M.reload()
+  package.loaded["launcher.material_palette"] = nil
+  package.loaded["themes.material"] = nil
+  local ok, err = pcall(function()
+    require("base46").load_all_highlights()
+  end)
+  if not ok then
+    vim.notify("material theme reload failed: " .. tostring(err), vim.log.levels.WARN)
+  end
+end
+
+return M
+LUA_PALETTE
+
+cat > "$payload_dir/integrations.lua" <<'LUA_INTEGRATIONS'
+-- Termux Launcher integrations for Neovim. Installed by `setup-nvim` and required
+-- from whichever config you chose, so it works the same under AstroNvim, NvChad,
+-- LazyVim, kickstart, or a stock config.
+--
+-- Nothing here depends on a plugin. Delete the require line in your config to
+-- opt out, or copy the bits you want and drop the rest.
+
+-- Clipboard through OSC 52. The launcher terminal decodes the escape sequence and
+-- hands the text to the Android clipboard, so yanks reach other apps with no helper
+-- tool -- no Termux:API needed. The terminal never answers clipboard *queries*
+-- (reading it back would let anything that can write to your terminal steal what
+-- you last copied), so paste reads Neovim's own register rather than blocking on a
+-- reply that never arrives. Paste from Android with the terminal's own paste action.
+local ok, osc52 = pcall(require, "vim.ui.clipboard.osc52")
+if ok then
+  vim.g.clipboard = {
+    name = "OSC 52",
+    copy = {
+      ["+"] = osc52.copy "+",
+      ["*"] = osc52.copy "*",
+    },
+    paste = {
+      ["+"] = function()
+        return vim.split(vim.fn.getreg '"', "\n")
+      end,
+      ["*"] = function()
+        return vim.split(vim.fn.getreg '"', "\n")
+      end,
+    },
+  }
+  vim.opt.clipboard = "unnamedplus"
+end
+
+-- Wrap long lines instead of scrolling them off a phone-width screen: break at word
+-- boundaries, keep the wrapped part at the original indent, and mark continuations
+-- so a wrapped line is not mistaken for a real one.
+vim.opt.wrap = true
+vim.opt.linebreak = true
+vim.opt.breakindent = true
+vim.opt.showbreak = "↪ "
+
+-- Distros and filetype plugins set wrap per window after this file runs, so
+-- re-assert it on every new window rather than only at startup.
+vim.api.nvim_create_autocmd({ "BufWinEnter", "WinNew" }, {
+  group = vim.api.nvim_create_augroup("launcher_wrap", { clear = true }),
+  callback = function()
+    vim.opt_local.wrap = true
+    vim.opt_local.linebreak = true
+  end,
+})
+
+-- Retint when the launcher rewrites its wallpaper palette. Only meaningful for a
+-- base46 theme (NvChad) built from that palette; harmless everywhere else.
+local has_base46 = pcall(require, "base46")
+if has_base46 then
+  local palette_ok, palette = pcall(require, "launcher.material_palette")
+  if palette_ok then
+    palette.watch()
+  end
+end
+
+-- Report what the generated theme decided: contrast ratios, whether the greyscale
+-- fallback kicked in, the launcher's contrast level. `:MaterialThemeInfo`
+vim.api.nvim_create_user_command("MaterialThemeInfo", function()
+  local palette_ok, palette = pcall(require, "launcher.material_palette")
+  if not palette_ok then
+    vim.notify("launcher.material_palette is not installed", vim.log.levels.WARN)
+    return
+  end
+  palette.build() -- populates vim.g.material_theme_info
+  print(vim.inspect(vim.g.material_theme_info))
+end, { desc = "Show how the wallpaper-derived theme was built" })
+LUA_INTEGRATIONS
+
+cat > "$payload_dir/theme-material.lua" <<'LUA_NVCHAD_THEME'
+-- Wallpaper-derived base46 theme, installed as lua/themes/material.lua by
+-- `setup-nvim`. All the work is in lua/launcher/material_palette.lua.
+--
+-- Falls back to onedark's tables when no palette file exists yet — plain Termux, or
+-- before the launcher has exported wallpaper colours — so the colourscheme is never
+-- broken, just static.
+local built = require("launcher.material_palette").build()
+local M = built or require "base46.themes.onedark"
+
+M = require("base46").override_theme(M, "material")
+
+return M
+LUA_NVCHAD_THEME
+
+cat > "$payload_dir/astro-colors-material.lua" <<'LUA_ASTRO_COLORS'
+-- `:colorscheme material` — wallpaper-derived, via base16-nvim.
+--
+-- A real colors/ file rather than a one-shot setup() call, so AstroNvim can be told
+-- `colorscheme = "material"` like any other theme, and re-applying it (after a
+-- wallpaper change, or by hand) is just :colorscheme material.
+local ok, palette = pcall(require, "launcher.material_palette")
+if not ok then
+  return
+end
+
+local built = palette.build()
+if not built then
+  return
+end
+
+require("base16-colorscheme").setup(built.base_16)
+vim.o.background = built.type == "light" and "light" or "dark"
+
+-- base16-nvim derives diagnostics from the base16 syntax slots, so DiagnosticError
+-- comes out identical to base08 (variables, tags) and DiagnosticWarn identical to
+-- base0E (keywords) — a warning then reads as a keyword. The palette's base_30
+-- carries colours picked for exactly this: `red` is Material's ERROR role, pushed
+-- apart in chroma when the wallpaper puts it on top of the syntax red. base46 uses
+-- those directly; here they have to be applied by hand.
+local d = built.base_30
+local diagnostics = {
+  Error = d.red,
+  Warn = d.sun,
+  Info = d.blue,
+  Hint = d.teal,
+  Ok = d.vibrant_green,
+}
+for level, colour in pairs(diagnostics) do
+  vim.api.nvim_set_hl(0, "Diagnostic" .. level, { fg = colour })
+  vim.api.nvim_set_hl(0, "DiagnosticVirtualText" .. level, { fg = colour })
+  vim.api.nvim_set_hl(0, "DiagnosticFloating" .. level, { fg = colour })
+  vim.api.nvim_set_hl(0, "DiagnosticSign" .. level, { fg = colour })
+  vim.api.nvim_set_hl(0, "DiagnosticUnderline" .. level, { undercurl = true, sp = colour })
+end
+
+-- base16-nvim paints the standard groups, but AstroNvim's identity lives in groups
+-- it never touches. Two families matter:
+--
+-- 1. Chrome. base16 sets StatusLine/TabLine from the base16 ramp, which is flat.
+--    The Material surface roles give real layering (surface < container < high),
+--    so the sidebar, tabline and statusline read as distinct planes.
+-- 2. Mode colours. AstroNvim's setup_colors() resolves the mode indicator from
+--    HeirlineNormal/Insert/Visual/Replace/Command/Terminal/Inactive highlight
+--    groups (see _astroui_status.lua). base16 defines none of them, so it falls
+--    back to lualine_mode(colors_name) -- no "material" lualine theme exists --
+--    and then to AstroNvim's stock blue/green/purple. Defining them here is what
+--    makes the statusline follow the wallpaper.
+--
+-- These are set from colors/material.lua rather than astroui's highlights.init so
+-- ordering is guaranteed: heirline recomputes on ColorScheme, after this file runs.
+local set = function(group, attrs) vim.api.nvim_set_hl(0, group, attrs) end
+local accent = d.pmenu_bg -- Material PRIMARY
+
+-- Chrome, on the Material surface ramp.
+set("StatusLine", { fg = d.white, bg = d.statusline_bg })
+set("StatusLineNC", { fg = d.grey_fg, bg = d.statusline_bg })
+set("TabLine", { fg = d.grey_fg2, bg = d.darker_black })
+set("TabLineFill", { bg = d.darker_black })
+set("TabLineSel", { fg = d.white, bg = d.one_bg2 })
+set("WinBar", { fg = d.grey_fg2, bg = d.black })
+set("WinBarNC", { fg = d.grey, bg = d.black })
+set("WinSeparator", { fg = d.line, bg = d.black })
+set("Pmenu", { fg = d.white, bg = d.one_bg })
+set("PmenuSel", { fg = d.black, bg = accent })
+set("PmenuSbar", { bg = d.one_bg2 })
+set("PmenuThumb", { bg = d.grey })
+set("FloatBorder", { fg = d.line, bg = d.darker_black })
+set("NormalFloat", { fg = d.white, bg = d.darker_black })
+set("CursorLine", { bg = d.one_bg })
+set("Visual", { bg = d.one_bg3 })
+
+-- Sidebar and pickers. Setting a group that a plugin never uses is harmless, so
+-- both neo-tree and the snacks picker are covered without probing which is active.
+for group, attrs in pairs {
+  NeoTreeNormal = { fg = d.white, bg = d.darker_black },
+  NeoTreeNormalNC = { fg = d.grey_fg2, bg = d.darker_black },
+  NeoTreeEndOfBuffer = { fg = d.darker_black, bg = d.darker_black },
+  NeoTreeWinSeparator = { fg = d.darker_black, bg = d.darker_black },
+  NeoTreeRootName = { fg = accent, bold = true },
+  NeoTreeDirectoryIcon = { fg = accent },
+  NeoTreeGitModified = { fg = d.yellow },
+  TelescopeNormal = { fg = d.white, bg = d.darker_black },
+  TelescopeBorder = { fg = d.line, bg = d.darker_black },
+  TelescopePromptTitle = { fg = d.black, bg = accent, bold = true },
+  TelescopeSelection = { bg = d.one_bg2 },
+  SnacksPicker = { fg = d.white, bg = d.darker_black },
+  SnacksPickerBorder = { fg = d.line, bg = d.darker_black },
+  SnacksPickerTitle = { fg = d.black, bg = accent, bold = true },
+  SnacksPickerListCursorLine = { bg = d.one_bg2 },
+  SnacksDashboardHeader = { fg = accent },
+  SnacksDashboardIcon = { fg = d.blue },
+} do
+  set(group, attrs)
+end
+
+-- Git signs, and the statusline segments derived from them. Without these,
+-- setup_colors() falls back to hardcoded onedark values (git_added "#98c379").
+set("GitSignsAdd", { fg = d.green })
+set("GitSignsChange", { fg = d.yellow })
+set("GitSignsDelete", { fg = d.red })
+set("GitSignsAddNr", { fg = d.green })
+set("GitSignsChangeNr", { fg = d.yellow })
+set("GitSignsDeleteNr", { fg = d.red })
+set("DiffAdd", { fg = d.green, bg = d.one_bg })
+set("DiffChange", { fg = d.yellow, bg = d.one_bg })
+set("DiffDelete", { fg = d.red, bg = d.one_bg })
+set("NvimEnvironmentName", { fg = d.orange })
+
+-- Mode indicator, the piece that looked stock.
+set("HeirlineNormal", { bg = accent })
+set("HeirlineInsert", { bg = d.green })
+set("HeirlineVisual", { bg = d.purple })
+set("HeirlineReplace", { bg = d.red })
+set("HeirlineCommand", { bg = d.yellow })
+set("HeirlineTerminal", { bg = d.teal })
+set("HeirlineInactive", { bg = d.grey })
+
+-- :terminal inside nvim on the same 16 colours the shell uses.
+local ansi = {
+  built.base_16.base00, built.base_16.base08, built.base_16.base0B, built.base_16.base0A,
+  built.base_16.base0D, built.base_16.base0E, built.base_16.base0C, built.base_16.base05,
+  d.grey_fg2, d.baby_pink, d.vibrant_green, d.sun,
+  d.nord_blue, d.dark_purple, d.teal, built.base_16.base06,
+}
+for i, colour in ipairs(ansi) do
+  vim.g["terminal_color_" .. (i - 1)] = colour
+end
+
+-- Transparency. A terminal cell has no alpha channel, so this is on/off here: bg
+-- "NONE" makes nvim inherit the terminal's own background, and *that* is where the
+-- degree comes from -- the launcher's terminal/surface opacity slider. Set
+-- vim.g.material_transparent = true before the colourscheme loads, or toggle it
+-- live with :MaterialTransparent.
+--
+-- Deliberately selective: the buffer area goes transparent so the wallpaper shows
+-- through, while statusline, sidebar, floats and pickers keep solid backgrounds.
+-- Fully transparent chrome is where legibility falls apart -- those surfaces carry
+-- small, dense text over whatever happens to be behind them.
+local function apply_transparency(on)
+  local groups = {
+    "Normal", "NormalNC", "SignColumn", "EndOfBuffer", "LineNr", "CursorLineNr",
+    "FoldColumn", "NonText", "MsgArea", "VertSplit",
+  }
+  for _, group in ipairs(groups) do
+    local hl = vim.api.nvim_get_hl(0, { name = group, link = false })
+    -- Opaque means opaque: set the background explicitly rather than leaving it
+    -- unset. Unset merely inherits Normal, which looks identical but reports as
+    -- NONE and would go transparent again if Normal ever did.
+    hl.bg = on and "NONE" or built.base_16.base00
+    vim.api.nvim_set_hl(0, group, hl)
+  end
+  set("WinSeparator", { fg = d.line, bg = on and "NONE" or d.black })
+  -- Floats blend against the buffer behind them; the popup menu likewise. Modest
+  -- values only: past ~20 the text starts fighting whatever is underneath.
+  vim.o.winblend = on and 10 or 0
+  vim.o.pumblend = on and 10 or 0
+end
+
+apply_transparency(vim.g.material_transparent == true)
+
+vim.api.nvim_create_user_command("MaterialTransparent", function(cmd)
+  local arg = cmd.args ~= "" and cmd.args or nil
+  local on
+  if arg == "on" then
+    on = true
+  elseif arg == "off" then
+    on = false
+  else
+    on = not (vim.g.material_transparent == true)
+  end
+  vim.g.material_transparent = on
+  vim.cmd.colorscheme "material"
+  print("material: transparency " .. (on and "on" or "off"))
+end, { nargs = "?", complete = function() return { "on", "off" } end,
+       desc = "Toggle transparent background (inherits the terminal's opacity)" })
+
+vim.g.colors_name = "material"
+LUA_ASTRO_COLORS
+
+cat > "$payload_dir/astro-plugin-material.lua" <<'LUA_ASTRO_PLUGIN'
+-- Wallpaper-derived colourscheme for AstroNvim.
+--
+-- AstroNvim has no base46, so the palette drives base16-nvim instead: it maps
+-- base00..base0F across every highlight group including treesitter captures, and
+-- lua/launcher/material_palette.lua already computes that table with the contrast
+-- floor, the diagnostic separation and the greyscale fallback applied.
+--
+-- The theme itself lives in colors/material.lua so AstroNvim can select it by name.
+return {
+  { "RRethy/base16-nvim", lazy = false, priority = 1000 },
+
+  {
+    "AstroNvim/astroui",
+    opts = { colorscheme = "material" },
+  },
+
+  -- Retint an open editor when the launcher rewrites the palette.
+  {
+    "AstroNvim/astrocore",
+    opts = function(_, opts)
+      local watcher, pending = vim.uv.new_fs_event(), false
+      if watcher then
+        watcher:start(os.getenv "HOME" .. "/.termux/material-colors.sh", {}, function()
+          if pending then
+            return
+          end
+          pending = true
+          -- Debounced: the palette is rewritten in a few syscalls and fs_event
+          -- reports each one.
+          vim.defer_fn(function()
+            pending = false
+            package.loaded["launcher.material_palette"] = nil
+            pcall(vim.cmd.colorscheme, "material")
+          end, 250)
+        end)
+      end
+      return opts
+    end,
+  },
+}
+LUA_ASTRO_PLUGIN
+
+}
+
+write_payloads
+
+# ----------------------------------------------------------------------------
+# Integrations, shared by every branch
+# ----------------------------------------------------------------------------
+
+# Copy-once: these are yours to edit afterwards, like conf.d/personal.fish.
+install_integrations() {
+    mkdir -p "$target/lua/launcher"
+    for name in material_palette.lua integrations.lua; do
+        if [ ! -e "$target/lua/launcher/$name" ]; then
+            cp "$payload_dir/$name" "$target/lua/launcher/$name"
+        fi
+    done
+}
+
+# Append the require to whichever file the chosen config loads for user options.
+hook_integrations() {
+    hook_file="$1"
+    mkdir -p "$(dirname "$hook_file")"
+    [ -e "$hook_file" ] || : > "$hook_file"
+    if ! grep -q 'launcher.integrations' "$hook_file"; then
+        printf '\n-- Termux Launcher: OSC 52 clipboard, line wrap, wallpaper theme.\nrequire "launcher.integrations"\n' >> "$hook_file"
+    fi
+}
+
+# NvChad only: base46 themes are Lua tables, so the palette can drive one.
+install_material_theme() {
+    mkdir -p "$target/lua/themes"
+    [ -e "$target/lua/themes/material.lua" ] || cp "$payload_dir/theme-material.lua" "$target/lua/themes/material.lua"
+    if [ -e "$target/lua/chadrc.lua" ]; then
+        sed -i 's|theme = "onedark"|theme = "material"|' "$target/lua/chadrc.lua"
+    fi
+    # base46 compiles highlights to a cache; a stale cache silently keeps the old
+    # theme, which looks exactly like the new theme failing to load.
+    rm -rf "$data_dir/base46"
+}
+
+# ----------------------------------------------------------------------------
+# Distro installers
+# ----------------------------------------------------------------------------
+
+clone() {
+    git clone --depth=1 "$1" "$target"
+    rm -rf "$target/.git"
+}
+
+# AstroNvim has no base46, so the palette drives base16-nvim through a
+# colors/material.lua, plus explicit chrome, heirline mode and git-sign groups:
+# AstroNvim resolves its statusline colours from highlight groups, and anything
+# left undefined silently falls back to its stock theme.
+install_astronvim() {
+    clone https://github.com/AstroNvim/template
+    install_integrations
+    mkdir -p "$target/colors" "$target/lua/plugins"
+    [ -e "$target/colors/material.lua" ] || cp "$payload_dir/astro-colors-material.lua" "$target/colors/material.lua"
+    [ -e "$target/lua/plugins/material.lua" ] || cp "$payload_dir/astro-plugin-material.lua" "$target/lua/plugins/material.lua"
+    hook_integrations "$target/init.lua"
+    echo "AstroNvim installed. Keybind hints: <leader> shows the which-key menu."
+    echo "Colourscheme follows your wallpaper; :MaterialThemeInfo shows how it was built,"
+    echo "and :MaterialTransparent toggles a transparent background."
+}
+
+install_nvchad() {
+    clone https://github.com/NvChad/starter
+    install_integrations
+    install_material_theme
+    hook_integrations "$target/lua/options.lua"
+    echo "NvChad installed. Cheatsheet: <leader>ch   Theme picker: <leader>th"
+    echo "Colourscheme follows your wallpaper; :MaterialThemeInfo shows how it was built."
+}
+
+install_lazyvim() {
+    clone https://github.com/LazyVim/starter
+    # Nothing in the starter needs luarocks -- lazy.nvim says so in its own health
+    # check -- but with rocks left on it still tries to build hererocks on the
+    # phone and reports an error until it does.
+    sed -i \
+        's|^  install = { colorscheme|  rocks = { enabled = false },\n  install = { colorscheme|' \
+        "$target/lua/config/lazy.lua"
+    install_integrations
+    hook_integrations "$target/lua/config/options.lua"
+    echo "LazyVim installed. Keymap help: <leader>sk"
+}
+
+install_kickstart() {
+    clone https://github.com/nvim-lua/kickstart.nvim
+    install_integrations
+    # kickstart is one readable init.lua; the require goes at the end of it.
+    hook_integrations "$target/init.lua"
+    echo "kickstart.nvim installed. It is meant to be read and edited: $target/init.lua"
+}
+
+install_stock() {
+    mkdir -p "$target"
+    install_integrations
+    hook_integrations "$target/init.lua"
+    echo "Stock Neovim with launcher integrations only. Try :Tutor if you are new to vim."
+}
+
+# ----------------------------------------------------------------------------
+# Integrations-only: detect what is already installed and hook into it.
+# ----------------------------------------------------------------------------
+
+run_integrations_only() {
+    if [ ! -d "$target" ]; then
+        fail "$target does not exist; run without --integrations-only first."
+    fi
+    install_integrations
+    if [ -e "$target/lua/chadrc.lua" ]; then
+        install_material_theme
+        hook_integrations "$target/lua/options.lua"
+    elif [ -e "$target/lua/plugins/astrocore.lua" ]; then
+        hook_integrations "$target/init.lua"
+    elif [ -e "$target/lua/config/options.lua" ]; then
+        hook_integrations "$target/lua/config/options.lua"
+    else
+        hook_integrations "$target/init.lua"
+    fi
+    echo "Launcher integrations added to $target."
+    exit 0
+}
+
+# ----------------------------------------------------------------------------
+# Choose
+# ----------------------------------------------------------------------------
+
+if [ "$integrations_only" -eq 1 ]; then
+    run_integrations_only
+fi
+
+if [ -z "$distro" ]; then
+    cat <<'MENU'
+Neovim setup
+
+  1) AstroNvim  + wallpaper-matched colourscheme, which-key hints
+  2) NvChad     + wallpaper-matched colourscheme, searchable cheatsheet (<leader>ch)
+  3) LazyVim    batteries included, many plugins
+  4) kickstart  one readable init.lua you own and edit
+  5) stock      no distro; just clipboard + line wrap
+  6) quit
+
+MENU
+    # Enter takes AstroNvim: wallpaper colourscheme plus which-key hints out of
+    # the box, which is the friendliest default for someone who has not chosen.
+    printf 'Choice [1-6, default 1]: '
+    read -r choice || choice=""
+    [ -n "$choice" ] || choice=1
+    case "$choice" in
+        1) distro=astronvim ;;
+        2) distro=nvchad ;;
+        3) distro=lazyvim ;;
+        4) distro=kickstart ;;
+        5) distro=stock ;;
+        *) echo "Nothing changed."; exit 0 ;;
+    esac
+fi
+
+# An existing config is never overwritten silently. Side-by-side is the default
+# suggestion: NVIM_APPNAME keeps both configs and both plugin sets apart, so you
+# can try one without losing the other.
+if [ -e "$target" ] && [ "$appname" = "nvim" ]; then
+    echo
+    echo "$target already exists."
+    if [ "$assume_yes" -eq 1 ]; then
+        fail "refusing to replace it non-interactively; pass --appname NAME."
+    fi
+    cat <<'EXISTS'
+  1) install side by side under NVIM_APPNAME (keeps what you have)
+  2) replace it (the old config is kept as a timestamped .bak)
+  3) only add launcher integrations to it
+  4) quit
+EXISTS
+    printf 'Choice [1-4]: '
+    read -r existing || existing=""
+    case "$existing" in
+        1) printf 'Name [%s]: ' "$distro"
+           read -r name || name=""
+           appname="${name:-$distro}"
+           target="$config_home/$appname"
+           data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/$appname"
+           if [ -e "$target" ]; then
+               fail "$target also exists; pick another name."
+           fi ;;
+        2) printf 'This moves %s aside and deletes its plugins. Type REPLACE to confirm: ' "$target"
+           read -r confirm || confirm=""
+           [ "$confirm" = "REPLACE" ] || { echo "Nothing changed."; exit 0; }
+           backup="$target.bak-$(date +%Y%m%d-%H%M%S)"
+           mv "$target" "$backup"
+           echo "Old config moved to $backup."
+           # Plugins, state and caches reinstall themselves; only the config is
+           # worth keeping.
+           rm -rf "$data_dir" \
+                  "${XDG_STATE_HOME:-$HOME/.local/state}/$appname" \
+                  "${XDG_CACHE_HOME:-$HOME/.cache}/$appname" ;;
+        3) run_integrations_only ;;
+        *) echo "Nothing changed."; exit 0 ;;
+    esac
+fi
+
+ensure_packages
+
+case "$distro" in
+    astronvim) install_astronvim ;;
+    nvchad) install_nvchad ;;
+    lazyvim) install_lazyvim ;;
+    kickstart) install_kickstart ;;
+    stock) install_stock ;;
+    *) fail "unknown distro '$distro'" ;;
+esac
+
+echo
+if [ "$appname" = "nvim" ]; then
+    echo "Start it with: nvim"
+else
+    echo "Start it with: NVIM_APPNAME=$appname nvim"
+fi
+echo "First launch installs plugins and compiles treesitter parsers — give it a minute."

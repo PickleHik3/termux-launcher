@@ -38,6 +38,7 @@ All credits go to the amazing developers and contributors of Termux, TEL, and Te
 - Sixel image drawing in terminal
 - Native sessions, windows, recursive split and floating panes, layouts, workspace restore, and session browser
 - Kitty keyboard/graphics protocols, safe hyperlinks, prompt navigation, and advanced font shaping
+- TUI-tuned touch, unlike stock Termux: drags scroll mouse-aware apps, taps click, and a brief press-and-hold turns the finger into a held mouse button — drag vim selections or resize tmux/TUI panes by touch
 - Searchable terminal command palette with customizable chords and modal keymaps
 - App dock with terminal app search
 - Android Material theme integration for launcher surfaces and Termux shell theming

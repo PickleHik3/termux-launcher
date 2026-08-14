@@ -21,6 +21,21 @@ Session
 
 Closing a pane, window, or session ends its shells. Switching between them does not.
 
+## Touch works like a mouse
+
+Terminal touch handling differs from stock Termux — it is tuned for full-screen TUIs, not just
+shell prompts:
+
+- **Drag scrolls, always.** Inside mouse-aware apps the drag becomes scroll-wheel events, so lists
+  in `htop`, lazygit, or vim scroll naturally.
+- **Tap sends a mouse click** when the running app tracks the mouse.
+- **Press and hold briefly, then drag, to hold the mouse button down.** A small haptic marks the
+  moment your finger becomes a held mouse drag — from there you can select text in vim, drag tmux
+  splits, or resize TUI panes exactly like a desktop mouse would.
+- **A quick long-press without moving** still starts ordinary text selection with the copy toolbar.
+- **Pinch to zoom** changes the focused pane's font size, with jitter filtering so two-finger
+  scrolling does not zoom by accident.
+
 ## Use the status row
 
 The top surface is both status display and navigation:
