@@ -22,17 +22,28 @@ import androidx.annotation.NonNull;
  *
  * <p>The dominance ratios are deliberately asymmetric — 1.2 for the drawer against 1.1 for the
  * page — which leaves a neutral cone around the diagonal where neither test passes and the
- * gesture simply stays {@link Claim#PENDING}. Upward drags can never satisfy the drawer test
- * (it requires a positive {@code dy}), so the badged-icon swipe-up is untouched by construction.
+ * gesture simply stays {@link Claim#PENDING}. Backwards drags can never satisfy the drawer test
+ * (it requires travel along {@link Pull}'s own direction), so the badged-icon swipe-up is
+ * untouched by construction.
  */
 public final class AppDrawerGestureArbiter {
 
     /** Who owns the touch stream. */
     public enum Claim { PENDING, PAGE_SWIPE, DRAWER_DRAG, CHILD_OWNED }
 
-    /** Vertical distance, as a multiple of touch slop, before the drawer may claim. */
+    /**
+     * Which way the drawer's pull travels off the dock — the dock's own geometry decides.
+     *
+     * <p>Landscape made this a direction rather than a flag: the pinned row becomes a vertical rail
+     * there, so the portrait pull-down had no surface left to start from and the drawer was simply
+     * unreachable. The rail's pull runs away from the edge it is docked to, and {@link #NONE} is
+     * the "no surface to pull from" case that used to be the {@code portrait} veto.
+     */
+    public enum Pull { DOWN, RIGHT, LEFT, NONE }
+
+    /** Distance along the pull's axis, as a multiple of touch slop, before the drawer may claim. */
     public static final float DRAWER_SLOP_FACTOR = 1.15f;
-    /** How far the drag must be dominated by its vertical component for the drawer to claim. */
+    /** How far the drag must be dominated by its pull-axis component for the drawer to claim. */
     public static final float DRAWER_DOMINANCE = 1.2f;
     /** How far the drag must be dominated by its horizontal component for the page to claim. */
     public static final float PAGE_DOMINANCE = 1.1f;
@@ -52,8 +63,8 @@ public final class AppDrawerGestureArbiter {
         public final boolean searchEmpty;
         /** No A-Z letter is being scrubbed. */
         public final boolean azInactive;
-        /** Portrait: the apps row is {@code GONE} in landscape, so there is nothing to pull from. */
-        public final boolean portrait;
+        /** Which way this dock's pull travels; {@link Pull#NONE} means nothing to pull from. */
+        @NonNull public final Pull pull;
         /** Dock tuning mode is off — it owns drags on the dock itself. */
         public final boolean notDockTuning;
         /** The command palette is closed. */
@@ -65,6 +76,7 @@ public final class AppDrawerGestureArbiter {
         /** The transient FULL status pane is neither open nor transitioning. */
         public final boolean fullStatusPaneClosed;
 
+        /** The portrait dock: {@code portrait} false is the landscape row that is {@code GONE}. */
         public Eligibility(boolean drawerEnabled, boolean searchEmpty, boolean azInactive,
                            boolean portrait, boolean notDockTuning, boolean paletteClosed,
                            boolean noActivePickup, boolean drawerIdle) {
@@ -72,14 +84,23 @@ public final class AppDrawerGestureArbiter {
                 noActivePickup, drawerIdle, true);
         }
 
+        /** The portrait dock: {@code portrait} false is the landscape row that is {@code GONE}. */
         public Eligibility(boolean drawerEnabled, boolean searchEmpty, boolean azInactive,
                            boolean portrait, boolean notDockTuning, boolean paletteClosed,
+                           boolean noActivePickup, boolean drawerIdle,
+                           boolean fullStatusPaneClosed) {
+            this(drawerEnabled, searchEmpty, azInactive, portrait ? Pull.DOWN : Pull.NONE,
+                notDockTuning, paletteClosed, noActivePickup, drawerIdle, fullStatusPaneClosed);
+        }
+
+        public Eligibility(boolean drawerEnabled, boolean searchEmpty, boolean azInactive,
+                           @NonNull Pull pull, boolean notDockTuning, boolean paletteClosed,
                            boolean noActivePickup, boolean drawerIdle,
                            boolean fullStatusPaneClosed) {
             this.drawerEnabled = drawerEnabled;
             this.searchEmpty = searchEmpty;
             this.azInactive = azInactive;
-            this.portrait = portrait;
+            this.pull = pull;
             this.notDockTuning = notDockTuning;
             this.paletteClosed = paletteClosed;
             this.noActivePickup = noActivePickup;
@@ -90,12 +111,12 @@ public final class AppDrawerGestureArbiter {
         /** Every veto clear, for an already-open plane or its full-width pager. */
         @NonNull
         public static Eligibility allClear() {
-            return new Eligibility(true, true, true, true, true, true, true, true, true);
+            return new Eligibility(true, true, true, Pull.DOWN, true, true, true, true, true);
         }
 
-        /** @return true when every veto is clear and the drawer may claim a vertical drag. */
+        /** @return true when every veto is clear and the drawer may claim a drag along its pull. */
         public boolean drawerEligible() {
-            return drawerEnabled && searchEmpty && azInactive && portrait
+            return drawerEnabled && searchEmpty && azInactive && pull != Pull.NONE
                 && notDockTuning && paletteClosed && noActivePickup && drawerIdle
                 && fullStatusPaneClosed;
         }
@@ -103,7 +124,7 @@ public final class AppDrawerGestureArbiter {
 
     /** Every veto set, used before the first {@link #begin} so a stray move can never claim. */
     private static final Eligibility INELIGIBLE =
-        new Eligibility(false, false, false, false, false, false, false, false, false);
+        new Eligibility(false, false, false, Pull.NONE, false, false, false, false, false);
 
     private Claim mClaim = Claim.PENDING;
     @NonNull private Eligibility mEligibility = INELIGIBLE;
@@ -170,16 +191,44 @@ public final class AppDrawerGestureArbiter {
 
         // Drawer first, unconditionally: the page test must never get to claim a drag the drawer
         // would also have accepted.
-        if (mEligibility.drawerEligible()
-            && dy >= slopPx * DRAWER_SLOP_FACTOR
-            && dy > adx * DRAWER_DOMINANCE) {
-            mClaim = Claim.DRAWER_DRAG;
-            return mClaim;
+        if (mEligibility.drawerEligible()) {
+            float along = travelAlongPull(mEligibility.pull, dx, dy);
+            // The landscape rail scrolls vertically, so the cross axis is what keeps a scroll from
+            // reading as a pull: only a drag dominated by the pull's own axis may claim.
+            float across = mEligibility.pull == Pull.DOWN ? adx : ady;
+            if (along >= slopPx * DRAWER_SLOP_FACTOR && along > across * DRAWER_DOMINANCE) {
+                mClaim = Claim.DRAWER_DRAG;
+                return mClaim;
+            }
         }
-        if (adx >= slopPx && adx > ady * PAGE_DOMINANCE) {
+        // The page swipe belongs to the portrait dock's pager. A horizontal pull is the landscape
+        // rail, which has no pager and whose sideways axis is the pull's own: running this test
+        // there would latch — and so deaden — every sideways drag that fell short of the drawer's
+        // slightly longer threshold, which is most of a slow swipe.
+        if (!isHorizontal(mEligibility.pull) && adx >= slopPx && adx > ady * PAGE_DOMINANCE) {
             mClaim = Claim.PAGE_SWIPE;
             return mClaim;
         }
         return mClaim;
+    }
+
+    /** @return true for the landscape rail's two pulls, whose axis is the page swipe's own. */
+    public static boolean isHorizontal(@NonNull Pull pull) {
+        return pull == Pull.RIGHT || pull == Pull.LEFT;
+    }
+
+    /**
+     * Signed distance the drag has covered towards the open state. Negative for a drag running
+     * back into the dock, which is how the badged-icon swipe-up and a rail flick towards its own
+     * edge stay unclaimable.
+     */
+    public static float travelAlongPull(@NonNull Pull pull, float dx, float dy) {
+        switch (pull) {
+            case DOWN: return dy;
+            case RIGHT: return dx;
+            case LEFT: return -dx;
+            case NONE:
+            default: return 0f;
+        }
     }
 }

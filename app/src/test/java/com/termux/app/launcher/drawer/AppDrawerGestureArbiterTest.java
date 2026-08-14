@@ -6,6 +6,7 @@ import static org.junit.Assert.assertTrue;
 
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter.Claim;
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter.Eligibility;
+import com.termux.app.launcher.drawer.AppDrawerGestureArbiter.Pull;
 
 import org.junit.Test;
 
@@ -140,6 +141,73 @@ public class AppDrawerGestureArbiterTest {
             assertEquals("veto: " + VETO_NAMES[i],
                 Claim.PAGE_SWIPE, page.evaluate(600f, 900f, SLOP));
         }
+    }
+
+    @Test
+    public void railOnTheLeftClaimsASwipeAwayFromItAndNothingElse() {
+        AppDrawerGestureArbiter right = new AppDrawerGestureArbiter();
+        right.begin(60f, 500f, rail(Pull.RIGHT));
+        assertEquals(Claim.PENDING, right.evaluate(60f + (SLOP * 1.14f), 500f, SLOP));
+        assertEquals(Claim.DRAWER_DRAG, right.evaluate(60f + (SLOP * 1.15f), 500f, SLOP));
+
+        // Back into the rail's own edge: nothing is there, and the rail has no pager to fall
+        // through to — a page claim would deaden every sideways drag short of the drawer's slop.
+        AppDrawerGestureArbiter inwards = new AppDrawerGestureArbiter();
+        inwards.begin(60f, 500f, rail(Pull.RIGHT));
+        assertEquals(Claim.PENDING, inwards.evaluate(60f - (SLOP * 5f), 500f, SLOP));
+        assertEquals(Claim.PENDING, inwards.evaluate(60f + (SLOP * 1.14f), 500f, SLOP));
+        // And the pull still lands once it clears the threshold, mid-stream.
+        assertEquals(Claim.DRAWER_DRAG, inwards.evaluate(60f + (SLOP * 5f), 500f, SLOP));
+    }
+
+    @Test
+    public void railOnTheRightMirrorsThePull() {
+        AppDrawerGestureArbiter left = new AppDrawerGestureArbiter();
+        left.begin(900f, 500f, rail(Pull.LEFT));
+        assertEquals(Claim.DRAWER_DRAG, left.evaluate(900f - (SLOP * 5f), 500f, SLOP));
+
+        AppDrawerGestureArbiter outwards = new AppDrawerGestureArbiter();
+        outwards.begin(900f, 500f, rail(Pull.LEFT));
+        assertEquals(Claim.PENDING, outwards.evaluate(900f + (SLOP * 5f), 500f, SLOP));
+    }
+
+    @Test
+    public void railScrollIsNeverADrawerPull() {
+        // The landscape rail scrolls vertically; both directions have to stay its own.
+        for (float dy : new float[]{SLOP * 20f, -SLOP * 20f}) {
+            for (Pull pull : new Pull[]{Pull.RIGHT, Pull.LEFT}) {
+                AppDrawerGestureArbiter arbiter = new AppDrawerGestureArbiter();
+                arbiter.begin(60f, 500f, rail(pull));
+                assertEquals(pull + " dy=" + dy,
+                    Claim.PENDING, arbiter.evaluate(60f, 500f + dy, SLOP));
+                // Still the rail's, with the sideways drift a finger dragging down a rail has.
+                assertEquals(pull + " dy=" + dy,
+                    Claim.PENDING, arbiter.evaluate(60f + (SLOP * 2f), 500f + dy, SLOP));
+                assertFalse(arbiter.isLatched());
+            }
+        }
+    }
+
+    @Test
+    public void noPullSurfaceVetoesTheDrawerWithoutTakingThePage() {
+        Eligibility none = rail(Pull.NONE);
+        assertFalse(none.drawerEligible());
+
+        AppDrawerGestureArbiter arbiter = new AppDrawerGestureArbiter();
+        arbiter.begin(60f, 500f, none);
+        assertEquals(Claim.PENDING, arbiter.evaluate(60f, 1600f, SLOP));
+        assertEquals(Claim.PAGE_SWIPE, arbiter.evaluate(600f, 520f, SLOP));
+    }
+
+    @Test
+    public void thePortraitFlagStillMeansPullDown() {
+        assertEquals(Pull.DOWN, eligible().pull);
+        assertEquals(Pull.NONE, eligibleExcept(3).pull);
+        assertEquals(Pull.DOWN, Eligibility.allClear().pull);
+    }
+
+    private static Eligibility rail(Pull pull) {
+        return new Eligibility(true, true, true, pull, true, true, true, true, true);
     }
 
     private static Eligibility eligible() {

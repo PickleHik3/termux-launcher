@@ -42,6 +42,12 @@
             app:title="@string/settings_show_extra_keys_row_title"
             app:summary="@string/settings_show_extra_keys_row_summary"
             android:defaultValue="true" />
+        <com.termux.app.fragments.settings.SegmentedPillPreference
+            app:key="app_launcher_dock_rail_side"
+            app:title="@string/settings_dock_rail_side_title"
+            app:summary="@string/settings_dock_rail_side_summary"
+            app:dependency="app_launcher_apps_row_enabled"
+            app:defaultValue="left" />
         <Preference
             app:key="app_launcher_default_buttons"
             app:title="@string/settings_edit_pinned_apps_title"

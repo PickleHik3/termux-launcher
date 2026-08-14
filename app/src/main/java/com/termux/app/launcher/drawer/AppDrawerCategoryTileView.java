@@ -261,7 +261,11 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         layoutCentered(icons[1], right, top, slot);
         layoutCentered(icons[2], left, bottom, slot);
         RectF parentSlot = new RectF(right, bottom, right + slot, bottom + slot);
-        RectF[] smallCells = smallCellRects(parentSlot, resolved.smallBlockGapPx);
+        // One large icon plus the block's own hairline gap, so each of the four cells comes out at
+        // exactly smallIconPx and no icon has to overflow the cell it is centred in.
+        RectF[] smallCells = smallCellRects(
+            smallBlockBounds(parentSlot, resolved.largeIconPx + resolved.smallBlockGapPx),
+            resolved.smallBlockGapPx);
         for (int i = 0; i < smallCells.length; i++) {
             RectF cell = smallCells[i];
             layoutCentered(icons[3 + i], cell.left, cell.top, cell.width());
@@ -276,6 +280,24 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         int x = Math.round(left + (size - view.getMeasuredWidth()) / 2f);
         int y = Math.round(top + (size - view.getMeasuredHeight()) / 2f);
         view.layout(x, y, x + view.getMeasuredWidth(), y + view.getMeasuredHeight());
+    }
+
+    /**
+     * The square the 2x2 block occupies inside its slot: one large icon's worth, centred.
+     *
+     * <p>Spreading the four small icons over the whole slot pushed the outer two against the tile's
+     * inner edges, so the block read as sitting closer to the border than the three large icons
+     * beside it. Clumping it to a large icon's footprint gives the tile even inner padding on every
+     * side and makes the block weigh the same as its neighbours.
+     */
+    @NonNull
+    static RectF smallBlockBounds(@NonNull RectF parentSlot, float blockSizePx) {
+        float size = Math.max(0f, Math.min(blockSizePx,
+            Math.min(parentSlot.width(), parentSlot.height())));
+        float insetX = (parentSlot.width() - size) / 2f;
+        float insetY = (parentSlot.height() - size) / 2f;
+        return new RectF(parentSlot.left + insetX, parentSlot.top + insetY,
+            parentSlot.right - insetX, parentSlot.bottom - insetY);
     }
 
     /** Exact centred 2x2 geometry inside the one large-slot rectangle. */

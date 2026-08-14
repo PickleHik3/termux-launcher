@@ -17,6 +17,14 @@ public final class AppDrawerCategoryGridMetrics {
     public static final float ITEM_BOTTOM_GAP_DP = 12f;
     /** The redesign's expanded category grid is a fixed three-across layout. */
     public static final int EXPANDED_COLUMNS = 3;
+    /** Ceiling once the height rule starts adding columns; the mock's own maximum is three. */
+    public static final int HEIGHT_FIT_MAX_COLUMNS = 6;
+    /**
+     * A tile may take this much of the viewport's height. Above it the row below is out of reach and
+     * the tile's own bottom row of icons is clipped by its border — which is what landscape looked
+     * like, where three columns of a 919dp-wide body came out as tall as the whole 297dp viewport.
+     */
+    public static final float MAX_TILE_VIEWPORT_FRACTION = 0.75f;
     public static final float MAX_ICON_DP = 48f;
     public static final float EMPTY_TOP_MIN_DP = 32f;
     public static final float HEADER_LIST_GAP_DP = 12f;
@@ -103,6 +111,16 @@ public final class AppDrawerCategoryGridMetrics {
         int columns = (int) Math.floor((width + gap) / (MIN_TILE_DP * d + gap));
         columns = Math.max(1, Math.min(3, columns));
         if (requestedColumns >= 1 && requestedColumns <= 3) columns = requestedColumns;
+        // Width alone decided this, which is why landscape was so sparse: three columns of a 919dp
+        // body are 300dp tiles, and a landscape viewport is 297dp tall — one row filled the screen,
+        // every tile's bottom row of icons was clipped by its own border, and seven icons sat
+        // scattered across a mostly empty card. A tile that would not fit the viewport therefore
+        // adds columns until it does, which only ever happens on a body far wider than it is tall.
+        if (viewport > 0f) {
+            float maxTile = viewport * MAX_TILE_VIEWPORT_FRACTION;
+            int fitting = (int) Math.ceil((available + gap) / Math.max(1f, maxTile + gap));
+            if (fitting > columns) columns = Math.min(HEIGHT_FIT_MAX_COLUMNS, fitting);
+        }
         float span = Math.max(0f, (available - (columns - 1) * gap) / columns);
         float inset = Math.min(TILE_HORIZONTAL_INSET_DP * d, span / 2f);
         float tile = Math.max(0f, span - 2f * inset);
