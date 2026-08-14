@@ -76,6 +76,7 @@ public class TerminalPaneController {
     private static final String STATE_WINDOW_ROOT = "root";
     private static final String STATE_WINDOW_ACTIVE = "active";
     private static final String STATE_WINDOW_LAYOUT = "layout_policy";
+    private static final String STATE_WINDOW_NAME = "window_name";
     private static final String STATE_WINDOW_FLOATS = "floats";
     private static final String STATE_FLOAT_LEFT = "float_left";
     private static final String STATE_FLOAT_TOP = "float_top";
@@ -201,6 +202,12 @@ public class TerminalPaneController {
          */
         @Nullable String layoutPolicy;
         /**
+         * User-given tab name, or null while the tab derives its label from the window's foreground
+         * process. Held per window rather than per shell so the label survives every pane change
+         * inside it — splitting, closing and refocusing panes all leave the name alone.
+         */
+        @Nullable String name;
+        /**
          * Panes detached from the tiled tree into freely positioned floats. List order is z-order
          * (last on top). A float always coexists with a non-empty tiled tree: the last tiled pane
          * can never float, and a dying tiled root promotes a float back into the tree.
@@ -294,7 +301,7 @@ public class TerminalPaneController {
                 frac.left, frac.top, frac.width(), frac.height()));
         }
         return new TerminalWorkspace.Window(active,
-            snapshotWorkspaceNode(window.root, capture), floats);
+            snapshotWorkspaceNode(window.root, capture), floats, window.name);
     }
 
     /**
@@ -326,6 +333,7 @@ public class TerminalPaneController {
         window.root = root;
         window.floating.addAll(floats);
         window.active = panes.get(definition.activePane);
+        window.name = TerminalNamePolicy.normalizeWindow(definition.name);
         mWindows.add(window);
         return window;
     }
@@ -373,6 +381,7 @@ public class TerminalPaneController {
         TerminalSession active = windowActiveSession(window);
         if (active != null) state.putString(STATE_WINDOW_ACTIVE, active.mHandle);
         if (window.layoutPolicy != null) state.putString(STATE_WINDOW_LAYOUT, window.layoutPolicy);
+        if (window.name != null) state.putString(STATE_WINDOW_NAME, window.name);
         if (!window.floating.isEmpty()) {
             ArrayList<Bundle> floats = new ArrayList<>();
             for (Leaf leaf : window.floating) {
@@ -424,6 +433,7 @@ public class TerminalPaneController {
         // window manually managed rather than wedge reapply on every later split.
         String layout = state.getString(STATE_WINDOW_LAYOUT);
         if (layout != null && isKnownLayout(layout)) window.layoutPolicy = layout;
+        window.name = TerminalNamePolicy.normalizeWindow(state.getString(STATE_WINDOW_NAME));
         mWindows.add(window);
         return window;
     }
@@ -905,6 +915,21 @@ public class TerminalPaneController {
         return mActiveWindow == null ? null : mActiveWindow.layoutPolicy;
     }
 
+    /** A window's user-given tab name, or null while its tab labels itself from its panes. */
+    @Nullable
+    public String windowName(@Nullable Window window) {
+        return window == null ? null : window.name;
+    }
+
+    /**
+     * Set or clear a window's tab name. An empty or blank name clears it, which puts the tab back on
+     * the derived process/directory label rather than leaving it blank.
+     */
+    public void setWindowName(@Nullable Window window, @Nullable CharSequence name) {
+        if (window == null) return;
+        window.name = TerminalNamePolicy.normalizeWindow(name);
+    }
+
     /**
      * Rebuild {@code window}'s tree into {@code layout}. Pure topology: no render, no host
      * notification, no policy bookkeeping, so both the public entry point and the automatic reapply
@@ -1100,7 +1125,7 @@ public class TerminalPaneController {
 
     /**
      * What the scratchpad shell was called before the name was shortened to fit
-     * {@link WindowSessionName#MAX_CODE_POINTS}. Existing shells keep this name for the life of
+     * {@link TerminalNamePolicy#SESSION_MAX_CODE_POINTS}. Existing shells keep this name for the life of
      * the process, so every recognition path has to accept both spellings.
      */
     public static final String LEGACY_SCRATCHPAD_SESSION_NAME = "scratchpad";
@@ -1381,10 +1406,21 @@ public class TerminalPaneController {
         FrameLayout.LayoutParams params = container.getLayoutParams() instanceof FrameLayout.LayoutParams
             ? (FrameLayout.LayoutParams) container.getLayoutParams()
             : new FrameLayout.LayoutParams(0, 0);
-        params.width = Math.round(frac.width() * hostWidth);
-        params.height = Math.round(frac.height() * hostHeight);
-        params.leftMargin = Math.round(frac.left * hostWidth);
-        params.topMargin = Math.round(frac.top * hostHeight);
+        int width = Math.round(frac.width() * hostWidth);
+        int height = Math.round(frac.height() * hostHeight);
+        int leftMargin = Math.round(frac.left * hostWidth);
+        int topMargin = Math.round(frac.top * hostHeight);
+        // Skip the no-op relayout: repeated host layout passes (keyboard settle, accessory band
+        // churn) would otherwise re-trigger a full measure of the float — and a PTY resize under a
+        // busy TUI — for bounds that did not actually change.
+        if (container.getLayoutParams() == params && params.width == width && params.height == height
+            && params.leftMargin == leftMargin && params.topMargin == topMargin) {
+            return;
+        }
+        params.width = width;
+        params.height = height;
+        params.leftMargin = leftMargin;
+        params.topMargin = topMargin;
         container.setLayoutParams(params);
     }
 

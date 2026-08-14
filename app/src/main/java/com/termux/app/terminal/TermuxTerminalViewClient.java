@@ -337,6 +337,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         TerminalKeyInspector inspector = TerminalKeyInspector.active();
         if (inspector != null)
             inspector.recordEvent(e, true);
+        // An open rename chip is a modal editor over one surface, so it outranks every other
+        // consumer: while it is up, every stroke belongs to the name being typed.
+        if (mActivity.handleTerminalRenameKey(keyCode, e))
+            return true;
         // The palette overlay claims typing before the terminal writes it, the same point the
         // in-app keyboard's interceptor sits at. Checked first so nothing else can consume esc.
         if (mActivity.handleCommandPaletteKey(keyCode, e))
@@ -509,8 +513,13 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             JSONObject arguments = mergeArguments(action.arguments, match.arguments);
             JSONObject result = dispatcher.execute(action.value, arguments);
             if (!result.optBoolean("ok", false)) {
+                String message = result.optString("message");
                 Logger.logWarn(LOG_TAG, "Binding " + match.stroke + " -> " + action.value
-                    + " failed: " + result.optString("message"));
+                    + " failed: " + message);
+                // Say so on screen too: a swallowed stroke that logs and shows nothing is how a
+                // broken binding passes for an unbound one.
+                mKeyChordOverlay.showFailure(match.stroke,
+                    message.isEmpty() ? action.value : message);
                 handled = true;
                 continue;
             }
@@ -657,6 +666,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         TerminalKeyInspector inspector = TerminalKeyInspector.active();
         if (inspector != null)
             inspector.recordCodePoint(codePoint, ctrlDown);
+        // The rename chip's twin of its onKeyDown hook, in the same order: it outranks the rest.
+        if (mActivity.handleTerminalRenameCodePoint(codePoint, ctrlDown))
+            return true;
         // The twin of the palette hook in onKeyDown, and checked first for the same reason. A
         // system IME commits ordinary characters through the input connection without ever sending
         // a key event, so this is the only route by which typing reaches the overlay from one.
@@ -793,10 +805,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                                 return true;
                             case TermuxPropertyConstants.ACTION_SHORTCUT_RENAME_SESSION:
                                 if (mActivity.isSplitPanesEnabled())
-                                    mActivity.renameCurrentWindowSession();
+                                    mActivity.promptCurrentSessionRename();
                                 else
-                                    mTermuxTerminalSessionActivityClient.renameSession(
-                                        mActivity.getCurrentSession());
+                                    mTermuxTerminalSessionActivityClient.promptCurrentPaneRename();
                                 return true;
                         }
                     }

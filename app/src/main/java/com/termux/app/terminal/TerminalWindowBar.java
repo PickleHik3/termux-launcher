@@ -827,6 +827,16 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         return true;
     }
 
+    /**
+     * The selected tab's view, so a surface can anchor itself to the window it belongs to. Null
+     * before the row is populated or while nothing is selected.
+     */
+    @Nullable
+    public View selectedTabView() {
+        if (mSelectedIndex < 0 || mSelectedIndex >= mTabs.getChildCount()) return null;
+        return mTabs.getChildAt(mSelectedIndex);
+    }
+
     /** Process is represented only by a Nerd Font glyph; visible text is the compact directory. */
     @NonNull
     public static WindowItem itemFor(@Nullable TerminalSession session, int index) {
@@ -839,6 +849,18 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         String spokenProcess = process == null ? "terminal" : process;
         return new WindowItem(processGlyph(process) + " " + directory,
             spokenProcess + " in " + directory);
+    }
+
+    /**
+     * Build an item for a window the user has named. The name replaces the derived text but keeps
+     * the live process glyph, so a named tab still shows at a glance what is running in it — the
+     * name says which window it is, the glyph says what it is doing.
+     */
+    @NonNull
+    public static WindowItem itemForNamed(@NonNull String name, @Nullable String processName) {
+        String spokenProcess = processName == null ? "terminal" : processName;
+        return new WindowItem(processGlyph(processName) + " " + name,
+            name + ", " + spokenProcess);
     }
 
     /**
@@ -948,8 +970,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         }
     }
 
+    /** Public so a named tab can keep the process glyph the derived label would have picked. */
     @Nullable
-    private static String processName(@Nullable String title) {
+    public static String processName(@Nullable String title) {
         String cleaned = clean(title);
         if (cleaned == null) return null;
         int inDirectory = cleaned.indexOf(" in <");

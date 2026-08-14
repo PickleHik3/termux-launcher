@@ -27,7 +27,6 @@ import androidx.appcompat.app.AlertDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
-import com.termux.shared.termux.interact.TextInputDialogUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -123,14 +122,16 @@ public final class TerminalSessionBrowser {
         popup.show();
     }
 
+    /**
+     * Renames through the anchored editor rather than a dialog, so the browser's rename costs no
+     * system-IME swap either. The row's session is brought forward by the activity first; the
+     * adapter reloads when the editor ends, through the activity's own refresh.
+     */
     private static void promptRename(@NonNull TermuxActivity activity,
                                      @NonNull BrowserAdapter adapter,
                                      @NonNull SessionBrowserModel.Session session) {
-        TextInputDialogUtils.textInput(activity, R.string.title_rename_window_session, session.name,
-            R.string.action_rename_session_confirm, text -> {
-                if (activity.renameBrowserSession(session.index, text)) adapter.reload();
-                else showActionFailed(activity);
-            }, -1, null, -1, null, null);
+        if (activity.beginSessionRenameAtIndex(session.index)) adapter.reload();
+        else showActionFailed(activity);
     }
 
     private static void confirmClose(@NonNull TermuxActivity activity,

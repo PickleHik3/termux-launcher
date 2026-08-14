@@ -431,35 +431,45 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             setCurrentSession(termuxSession.getTerminalSession());
     }
 
-    @SuppressLint("InflateParams")
-    public void renameSession(final TerminalSession sessionToRename) {
-        if (sessionToRename == null)
-            return;
-        if (mActivity.isSplitPanesEnabled()) {
-            mActivity.renameWindowSession(sessionToRename);
-            return;
-        }
-        TextInputDialogUtils.textInput(mActivity, R.string.title_rename_session, sessionToRename.mSessionName, R.string.action_rename_session_confirm, text -> {
-            renameSession(sessionToRename, text);
-            termuxSessionListNotifyUpdated();
-        }, -1, null, -1, null, null);
+    /**
+     * Prompts for a new name for the focused pane, in the anchored editor.
+     *
+     * <p>Deliberately not the drawer's row rename: with split panes on a drawer row <i>is</i> a
+     * session, so that path renames the session. This one always names the shell, which is what
+     * {@code pane.rename_prompt} means in both modes. Returns false when there is no focused pane.
+     */
+    public boolean promptCurrentPaneRename() {
+        if (mActivity.getCurrentSession() == null) return false;
+        return mActivity.beginTerminalRename(TerminalRenameTarget.PANE);
     }
 
     /**
-     * Renames the focused shell without prompting.
-     *
-     * <p>Seam for the {@code session.rename} registry action. Unlike
-     * {@link #renameSession(TerminalSession)}, this never redirects to the
-     * tmux-style session rename when split panes are on: the registry keeps the
-     * two distinct, with {@code window.rename} covering the containing session.
+     * Legacy dialog for the pane name, used only when there is no in-app keyboard for the anchored
+     * editor to be typed with.
      */
-    public boolean renameCurrentSessionTo(@Nullable String name) {
+    @SuppressLint("InflateParams")
+    public void promptCurrentPaneRenameDialog() {
+        final TerminalSession session = mActivity.getCurrentSession();
+        if (session == null) return;
+        TextInputDialogUtils.textInput(mActivity, R.string.title_rename_pane,
+            session.mSessionName, R.string.action_rename_session_confirm, text -> {
+                renameSession(session, text);
+                termuxSessionListNotifyUpdated();
+            }, -1, null, -1, null, null);
+    }
+
+    /**
+     * Renames the focused pane without prompting.
+     *
+     * <p>Seam for the {@code pane.rename} registry action and for a naming backend. An empty name
+     * restores the unnamed default, mirroring what an emptied editor does and keeping this
+     * symmetric with {@code window.rename} and {@code session.rename}.
+     */
+    public boolean renameCurrentPaneTo(@Nullable String name) {
         TerminalSession session = mActivity.getCurrentSession();
         if (session == null || name == null) return false;
-        // An empty name restores the unnamed default, mirroring what the rename
-        // dialog does with cleared text and keeping this symmetric with
-        // window.rename.
-        String trimmed = name.trim();
+        String trimmed = TerminalNamePolicy.normalizePane(name) == null
+            ? "" : TerminalNamePolicy.normalizePane(name);
         renameSession(session, trimmed.isEmpty() ? null : trimmed);
         termuxSessionListNotifyUpdated();
         return true;
@@ -607,10 +617,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // Number by the launcher's tmux-style session, not by raw shell count: every pane and
         // window is its own service shell, so the service index kept flashing "[3]" for what the
         // user sees as their second session.
-        int sessionNumber = mActivity.getWindowSessionNumber(session);
+        int sessionNumber = mActivity.getSessionNumberFor(session);
         if (sessionNumber < 1) sessionNumber = indexOfSession + 1;
         StringBuilder toastTitle = new StringBuilder("[" + sessionNumber + "]");
-        String sessionName = mActivity.getWindowSessionName(session);
+        String sessionName = mActivity.getSessionNameFor(session);
         if (TextUtils.isEmpty(sessionName)) sessionName = session.mSessionName;
         if (!TextUtils.isEmpty(sessionName)) {
             toastTitle.append(" ").append(sessionName);
