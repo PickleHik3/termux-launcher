@@ -24,7 +24,9 @@ public class DockAppsRowDragLifecycleTest {
         prefs.setAppLauncherAzRowEnabled(true);
         prefs.setAppLauncherExtraKeysRowEnabled(true);
         assertFalse(prefs.isAppLauncherAppsRowEnabled());
-        assertTrue(prefs.isAppLauncherAzRowEnabled());
+        // A-Z rides the apps row it scrubs; the stored choice is kept for when it returns.
+        assertFalse(prefs.isAppLauncherAzRowEnabled());
+        assertTrue(prefs.isAppLauncherAzRowChosen());
         assertTrue(prefs.isAppLauncherExtraKeysRowEnabled());
         prefs.setAppLauncherAzRowEnabled(false);
         assertFalse(prefs.isAppLauncherAzRowEnabled());

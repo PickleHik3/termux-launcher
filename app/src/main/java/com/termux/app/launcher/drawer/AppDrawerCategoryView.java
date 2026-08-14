@@ -31,9 +31,16 @@ import java.util.Set;
 public final class AppDrawerCategoryView extends ViewGroup
     implements AppDrawerCategoryTileView.ExpansionListener {
 
+    /** Header-row geometry from the redesign mock. */
+    private static final float CHEVRON_SIZE_DP = 30f;
+    private static final float HEADER_ITEM_GAP_DP = 10f;
+    private static final float HEADER_SIDE_INSET_DP = 16f;
+
     private final RecyclerView overview;
     private final RecyclerView detailList;
     private final TextView detailHeader;
+    private final TextView collapseChevron;
+    private final TextView detailCount;
     private final TextView emptyState;
     private final AppDrawerCategoryMorphView morph;
     private final GridLayoutManager overviewLayout;
@@ -113,10 +120,12 @@ public final class AppDrawerCategoryView extends ViewGroup
         addView(detailList);
 
         detailHeader = new TextView(context);
-        detailHeader.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28f);
+        detailHeader.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f);
+        detailHeader.setTypeface(android.graphics.Typeface.create("sans-serif",
+            android.graphics.Typeface.BOLD));
         detailHeader.setSingleLine(true);
         detailHeader.setEllipsize(TextUtils.TruncateAt.END);
-        detailHeader.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        detailHeader.setGravity(android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL);
         detailHeader.setIncludeFontPadding(false);
         detailHeader.setTextColor(dock == null ? Color.WHITE : dock.getLauncherTextColor());
         detailHeader.setClickable(true);
@@ -148,11 +157,49 @@ public final class AppDrawerCategoryView extends ViewGroup
         });
         addView(detailHeader);
 
+        // The mock's back chevron: a 30dp circle with a hairline ring, one more collapse target
+        // alongside the title itself. Same click gate, same collapse.
+        collapseChevron = new TextView(context);
+        collapseChevron.setText("‹");
+        collapseChevron.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f);
+        collapseChevron.setGravity(android.view.Gravity.CENTER);
+        collapseChevron.setIncludeFontPadding(false);
+        collapseChevron.setTextColor(dock == null ? Color.WHITE : dock.getLauncherTextColor());
+        android.graphics.drawable.GradientDrawable ring =
+            new android.graphics.drawable.GradientDrawable();
+        ring.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        ring.setColor(Color.TRANSPARENT);
+        ring.setStroke(Math.max(1, Math.round(
+            getResources().getDisplayMetrics().density)), 0x2EFFFFFF);
+        collapseChevron.setBackground(ring);
+        collapseChevron.setClickable(true);
+        collapseChevron.setVisibility(INVISIBLE);
+        collapseChevron.setOnClickListener(view -> {
+            if (!clickGate.suppressCellClick()) collapse();
+        });
+        addView(collapseChevron);
+
+        // Trailing "N APPS" count, mono and quiet, per the mock's header metadata style.
+        detailCount = new TextView(context);
+        detailCount.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
+        detailCount.setTypeface(android.graphics.Typeface.MONOSPACE);
+        detailCount.setLetterSpacing(0.16f);
+        detailCount.setSingleLine(true);
+        detailCount.setIncludeFontPadding(false);
+        detailCount.setGravity(android.view.Gravity.END | android.view.Gravity.CENTER_VERTICAL);
+        detailCount.setTextColor(halfAlpha(dock == null ? Color.WHITE
+            : dock.getLauncherTextColor()));
+        detailCount.setClickable(false);
+        detailCount.setVisibility(INVISIBLE);
+        addView(detailCount);
+
         emptyState = new TextView(context);
-        emptyState.setText(R.string.app_drawer_category_no_apps);
-        emptyState.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f);
+        emptyState.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
         emptyState.setGravity(android.view.Gravity.CENTER);
-        emptyState.setTextColor(dock == null ? Color.WHITE : dock.getLauncherTextColor());
+        emptyState.setLineSpacing(0f, 1.25f);
+        int emptyColor = dock == null ? Color.WHITE : dock.getLauncherTextColor();
+        emptyState.setTextColor(emptyColor);
+        emptyState.setText(emptyStateText(emptyColor));
         emptyState.setFocusable(false);
         emptyState.setClickable(false);
         addView(emptyState);
@@ -167,7 +214,32 @@ public final class AppDrawerCategoryView extends ViewGroup
         detailAdapter.setDock(dock);
         int color = dock == null ? Color.WHITE : dock.getLauncherTextColor();
         detailHeader.setTextColor(color);
+        collapseChevron.setTextColor(color);
+        detailCount.setTextColor(halfAlpha(color));
         emptyState.setTextColor(color);
+        emptyState.setText(emptyStateText(color));
+    }
+
+    private static int halfAlpha(int color) {
+        return androidx.core.graphics.ColorUtils.setAlphaComponent(color, 0x80);
+    }
+
+    /** "Nothing here yet" over a quieter one-line explanation, per the mock's empty states. */
+    @NonNull
+    private CharSequence emptyStateText(int color) {
+        String title = getResources().getString(R.string.app_drawer_category_empty_title);
+        String body = getResources().getString(R.string.app_drawer_category_empty_body);
+        android.text.SpannableStringBuilder text =
+            new android.text.SpannableStringBuilder(title + "\n" + body);
+        int flags = android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE;
+        text.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+            0, title.length(), flags);
+        text.setSpan(new android.text.style.RelativeSizeSpan(0.85f),
+            title.length() + 1, text.length(), flags);
+        text.setSpan(new android.text.style.ForegroundColorSpan(
+            androidx.core.graphics.ColorUtils.setAlphaComponent(color, 0x73)),
+            title.length() + 1, text.length(), flags);
+        return text;
     }
 
     public void setFrameRequestListener(@Nullable Runnable listener) {
@@ -227,6 +299,7 @@ public final class AppDrawerCategoryView extends ViewGroup
             abortToOverview();
         } else if (selectedBucket != null && expansion.detailBound()) {
             detailAdapter.submit(selectedBucket.entries());
+            bindDetailCount(selectedBucket);
             int anchorPosition = detailAdapter.positionOfStableId(firstAppId);
             detailLayout.scrollToPositionWithOffset(Math.max(0, anchorPosition), firstAppOffset);
         }
@@ -257,7 +330,11 @@ public final class AppDrawerCategoryView extends ViewGroup
         detailHeader.setContentDescription(getResources().getString(
             R.string.app_drawer_category_collapse,
             getResources().getString(bucket.category.labelRes)));
+        collapseChevron.setContentDescription(detailHeader.getContentDescription());
+        bindDetailCount(bucket);
         detailHeader.setVisibility(VISIBLE);
+        collapseChevron.setVisibility(VISIBLE);
+        detailCount.setVisibility(VISIBLE);
         detailList.setVisibility(VISIBLE);
         // selectedBucket determines the final bottom-up list height. Resolve that geometry once at
         // activation; animation frames only change draw state and never request another layout.
@@ -316,15 +393,26 @@ public final class AppDrawerCategoryView extends ViewGroup
         overview.setAlpha(1f - AppDrawerTransitionGeometry.ramp(p, 0f, 0.25f));
         float detailAlpha = AppDrawerTransitionGeometry.ramp(p, 0.35f, 0.70f);
         detailHeader.setAlpha(detailAlpha);
+        collapseChevron.setAlpha(detailAlpha);
+        detailCount.setAlpha(detailAlpha);
         detailList.setAlpha(detailAlpha);
         morph.setProgress(p);
+    }
+
+    private void bindDetailCount(@NonNull AppDrawerCategoryBucket bucket) {
+        detailCount.setText(getResources().getQuantityString(
+            R.plurals.app_drawer_category_app_count, bucket.size(), bucket.size()));
     }
 
     private void finishAtExpanded() {
         overview.setVisibility(INVISIBLE);
         detailHeader.setVisibility(VISIBLE);
+        collapseChevron.setVisibility(VISIBLE);
+        detailCount.setVisibility(VISIBLE);
         detailList.setVisibility(VISIBLE);
         detailHeader.setAlpha(1f);
+        collapseChevron.setAlpha(1f);
+        detailCount.setAlpha(1f);
         detailList.setAlpha(1f);
         morph.setVisibility(INVISIBLE);
         morph.setClickable(false);
@@ -336,6 +424,10 @@ public final class AppDrawerCategoryView extends ViewGroup
         detailHeader.setText(null);
         detailHeader.setContentDescription(null);
         detailHeader.setVisibility(INVISIBLE);
+        collapseChevron.setContentDescription(null);
+        collapseChevron.setVisibility(INVISIBLE);
+        detailCount.setText(null);
+        detailCount.setVisibility(INVISIBLE);
         detailList.setVisibility(INVISIBLE);
         morph.setVisibility(INVISIBLE);
         morph.setClickable(false);
@@ -451,7 +543,9 @@ public final class AppDrawerCategoryView extends ViewGroup
             || state == AppDrawerCategoryExpansionModel.State.COLLAPSE_DRAGGING)
             return Part.TRANSITION_BODY;
         if (state == AppDrawerCategoryExpansionModel.State.EXPANDED) {
-            if (contains(detailHeader, x, y)) return Part.COLLAPSE_ACTION;
+            // The whole header band — chevron, title and count — is one collapse affordance.
+            if (contains(detailHeader, x, y) || contains(collapseChevron, x, y)
+                || contains(detailCount, x, y)) return Part.COLLAPSE_ACTION;
             if (contains(detailList, x, y)) return Part.DETAIL_LIST;
             return Part.EMPTY_CHROME;
         }
@@ -496,6 +590,8 @@ public final class AppDrawerCategoryView extends ViewGroup
     @NonNull public RecyclerView getOverview() { return overview; }
     @NonNull public RecyclerView getDetailList() { return detailList; }
     @NonNull public TextView getDetailHeader() { return detailHeader; }
+    @NonNull public TextView getCollapseChevron() { return collapseChevron; }
+    @NonNull public TextView getDetailCount() { return detailCount; }
     @NonNull public TextView getEmptyState() { return emptyState; }
     @NonNull public AppDrawerCategoryMorphView getMorph() { return morph; }
     @NonNull public AppDrawerCategoryTileAdapter getTileAdapter() { return tileAdapter; }
@@ -527,15 +623,30 @@ public final class AppDrawerCategoryView extends ViewGroup
             MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
         detailHeader.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.AT_MOST),
             MeasureSpec.makeMeasureSpec(height, MeasureSpec.AT_MOST));
+        int chevron = chevronSizePx();
+        collapseChevron.measure(MeasureSpec.makeMeasureSpec(chevron, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(chevron, MeasureSpec.EXACTLY));
+        detailCount.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.AT_MOST),
+            MeasureSpec.makeMeasureSpec(height, MeasureSpec.AT_MOST));
         AppDrawerCategoryGridMetrics current = metrics;
         float listHeight = 0f;
         if (current != null) {
             int count = selectedBucket == null ? detailAdapter.getItemCount() : selectedBucket.size();
-            listHeight = current.resolveDetail(count, height, detailHeader.getMeasuredHeight()).listHeightPx;
+            listHeight = current.resolveDetail(count, height, headerBandPx()).listHeightPx;
         }
         detailList.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(Math.max(0, Math.round(listHeight)), MeasureSpec.EXACTLY));
         setMeasuredDimension(resolveSize(width, widthMeasureSpec), resolveSize(height, heightMeasureSpec));
+    }
+
+    private int chevronSizePx() {
+        return Math.max(1, Math.round(CHEVRON_SIZE_DP
+            * getResources().getDisplayMetrics().density));
+    }
+
+    /** The header row's band: tall enough for the chevron circle and the title, whichever wins. */
+    private int headerBandPx() {
+        return Math.max(detailHeader.getMeasuredHeight(), chevronSizePx());
     }
 
     @Override protected void onLayout(boolean changed, int l, int t, int r, int b) {
@@ -547,16 +658,34 @@ public final class AppDrawerCategoryView extends ViewGroup
         AppDrawerCategoryGridMetrics current = metrics;
         if (current == null) {
             detailHeader.layout(0, height, width, height);
+            collapseChevron.layout(0, height, 0, height);
+            detailCount.layout(width, height, width, height);
             detailList.layout(0, height, width, height);
             return;
         }
         int count = selectedBucket == null ? detailAdapter.getItemCount() : selectedBucket.size();
         AppDrawerCategoryGridMetrics.DetailLayout layout = current.resolveDetail(count, height,
-            detailHeader.getMeasuredHeight());
+            headerBandPx());
         int headerTop = Math.round(layout.headerTopPx);
         int headerBottom = Math.round(layout.headerBottomPx);
         int listTop = Math.round(layout.listTopPx);
-        detailHeader.layout(0, headerTop, width, headerBottom);
+        // Header row: chevron circle at the leading inset, count at the trailing inset, and the
+        // title — still the one full-band collapse target the tests and touch regions read —
+        // spanning the space between them, centred in the band.
+        float density = getResources().getDisplayMetrics().density;
+        int sideInset = Math.round(HEADER_SIDE_INSET_DP * density);
+        int itemGap = Math.round(HEADER_ITEM_GAP_DP * density);
+        int chevron = chevronSizePx();
+        int chevronTop = headerTop + Math.max(0, (headerBottom - headerTop - chevron) / 2);
+        collapseChevron.layout(sideInset, chevronTop, sideInset + chevron, chevronTop + chevron);
+        int countWidth = Math.min(detailCount.getMeasuredWidth(), Math.max(0, width - 2 * sideInset));
+        int countHeight = detailCount.getMeasuredHeight();
+        int countTop = headerTop + Math.max(0, (headerBottom - headerTop - countHeight) / 2);
+        detailCount.layout(width - sideInset - countWidth, countTop, width - sideInset,
+            countTop + countHeight);
+        int titleLeft = sideInset + chevron + itemGap;
+        int titleRight = Math.max(titleLeft, width - sideInset - countWidth - itemGap);
+        detailHeader.layout(titleLeft, headerTop, titleRight, headerBottom);
         detailList.layout(0, listTop, width, height);
     }
 

@@ -35,15 +35,19 @@ import java.util.concurrent.TimeUnit;
 public class LauncherDockRowPreferenceTest {
 
     @Test
-    public void xmlExposesThreeIndependentRowSwitches() {
+    public void xmlExposesThreeRowSwitchesWithAzCoupledToApps() {
         Application app = RuntimeEnvironment.getApplication();
         PreferenceManager manager = new PreferenceManager(app);
         manager.setPreferenceDataStore(TermuxStylePreferencesDataStore.getInstance(app));
         PreferenceScreen screen = manager.inflateFromResource(app, R.xml.launcher_preferences, null);
 
         assertIndependentSwitch(screen, "app_launcher_apps_row_enabled", "Apps row");
-        assertIndependentSwitch(screen, "app_launcher_az_row_enabled", "Alphabets row");
         assertIndependentSwitch(screen, "app_launcher_extra_keys_row_enabled", "Extra keys row");
+        // A-Z is the one coupled row: it scrubs the apps row, so it greys out with it.
+        Preference az = screen.findPreference("app_launcher_az_row_enabled");
+        assertTrue("app_launcher_az_row_enabled", az instanceof SwitchPreferenceCompat);
+        assertEquals("Alphabets row", az.getTitle().toString());
+        assertEquals("app_launcher_apps_row_enabled", az.getDependency());
     }
 
     @Test

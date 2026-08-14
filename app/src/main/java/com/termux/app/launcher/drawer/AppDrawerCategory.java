@@ -12,6 +12,7 @@ public enum AppDrawerCategory {
     SOCIAL("social", R.string.app_drawer_category_social, false),
     PRODUCTIVITY("productivity", R.string.app_drawer_category_productivity, false),
     UTILITIES("utilities", R.string.app_drawer_category_utilities, false),
+    GAMES("games", R.string.app_drawer_category_games, false),
     ENTERTAINMENT("entertainment", R.string.app_drawer_category_entertainment, false),
     SHOPPING_FOOD("shopping_food", R.string.app_drawer_category_shopping_food, false),
     FINANCE("finance", R.string.app_drawer_category_finance, false),

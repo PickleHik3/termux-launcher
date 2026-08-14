@@ -50,8 +50,11 @@ public class AppDrawerCategoryTileViewTest {
         assertEquals(m.largeIconPx, tile.icons[2].getHeight());
         assertEquals(m.smallIconPx, tile.icons[3].getWidth());
         assertEquals(m.smallIconPx, tile.icons[6].getHeight());
-        assertEquals(Math.round(m.largeSlotPx), tile.expandTarget.getWidth());
-        assertEquals(Math.round(m.largeSlotPx), tile.expandTarget.getHeight());
+        // Redesign: the open target is the whole drawn card.
+        assertEquals(Math.round(m.tileSidePx), tile.expandTarget.getWidth());
+        assertEquals(Math.round(tile.tileHeight()), tile.expandTarget.getHeight());
+        assertEquals(Math.round(tile.tileLeft()), tile.expandTarget.getLeft());
+        assertEquals(0, tile.expandTarget.getTop());
     }
 
     @Test public void smallSubCellsAreCenteredEvenlyGuttedAndContainedByParentSlot() {
@@ -89,16 +92,12 @@ public class AppDrawerCategoryTileViewTest {
         assertEquals(metrics.smallIconPx, tile.icons[3].getWidth());
     }
 
-    @Test public void firstThreeAreDirectActionsAndSmallBlockAndHeadingOnlyExpand() {
+    @Test public void everyIconIsDisplayOnlyAndTheWholeCardAndHeadingExpand() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         SuggestionBarView dock = new SuggestionBarView(activity, null);
         int[] expansions = {0};
         AppDrawerCategoryTileView tile = tile(dock, bucket(7), metrics(), expansions);
-        for (int i = 0; i < 3; i++) {
-            assertTrue(tile.icons[i].isClickable());
-            assertTrue(tile.icons[i].isLongClickable());
-        }
-        for (int i = 3; i < 7; i++) {
+        for (int i = 0; i < 7; i++) {
             assertFalse(tile.icons[i].isClickable());
             assertFalse(tile.icons[i].isLongClickable());
             assertNull(tile.icons[i].getContentDescription());
@@ -106,6 +105,17 @@ public class AppDrawerCategoryTileViewTest {
         assertTrue(tile.expandTarget.performClick());
         assertTrue(tile.heading.performClick());
         assertEquals(2, expansions[0]);
+    }
+
+    @Test public void pressingTheCardDipsItAndReleaseRestoresIt() {
+        AppDrawerCategoryTileView tile = tile(null, bucket(7), metrics(), new int[1]);
+        tile.expandTarget.setPressed(true);
+        assertEquals(0.98f, tile.getScaleX(), 0.001f);
+        assertEquals(0.98f, tile.getScaleY(), 0.001f);
+        tile.expandTarget.setPressed(false);
+        assertEquals(1f, tile.getScaleX(), 0.001f);
+        tile.unbind();
+        assertEquals(1f, tile.getScaleY(), 0.001f);
     }
 
     @Test public void missingPreviewsAreInvisibleNonClickableAndCannotAnswer() {

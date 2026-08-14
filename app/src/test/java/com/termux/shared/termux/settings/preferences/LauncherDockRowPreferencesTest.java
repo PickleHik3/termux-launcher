@@ -39,12 +39,24 @@ public class LauncherDockRowPreferencesTest {
         assertTrue(preferences.isAppLauncherExtraKeysRowEnabled());
     }
 
+    /**
+     * The A-Z index scrubs the apps row, so it follows it: with the apps row off the index is off
+     * too, but the user's own A-Z choice is kept and comes back with the apps row. The extra-keys
+     * row is a terminal surface and stays independent of both.
+     */
     @Test
     public void rowsPersistIndependently() {
         preferences.setAppLauncherAppsRowEnabled(false);
         assertFalse(preferences.isAppLauncherAppsRowEnabled());
-        assertTrue("Apps must not switch off A-Z", preferences.isAppLauncherAzRowEnabled());
+        assertFalse("A-Z is meaningless without the apps row",
+            preferences.isAppLauncherAzRowEnabled());
+        assertTrue("the A-Z choice survives the apps row going off",
+            preferences.isAppLauncherAzRowChosen());
         assertTrue(preferences.isAppLauncherExtraKeysRowEnabled());
+
+        preferences.setAppLauncherAppsRowEnabled(true);
+        assertTrue("A-Z comes back with the apps row", preferences.isAppLauncherAzRowEnabled());
+        preferences.setAppLauncherAppsRowEnabled(false);
 
         preferences.setAppLauncherAzRowEnabled(false);
         assertFalse(preferences.isAppLauncherAppsRowEnabled());

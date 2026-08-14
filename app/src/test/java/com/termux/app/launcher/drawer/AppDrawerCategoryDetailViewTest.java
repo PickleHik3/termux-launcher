@@ -62,6 +62,28 @@ public class AppDrawerCategoryDetailViewTest {
         assertEquals(160, view.getDetailList().getBottom());
     }
 
+    @Test public void headerShowsChevronTitleAndAppCountAndChevronCollapses() {
+        AppDrawerCategoryView view = expanded(8, 640);
+        assertEquals(View.VISIBLE, view.getCollapseChevron().getVisibility());
+        assertEquals(View.VISIBLE, view.getDetailCount().getVisibility());
+        assertEquals("8 APPS", view.getDetailCount().getText().toString());
+        assertTrue(view.getDetailCount().getRight() <= view.getWidth());
+        assertTrue(view.getCollapseChevron().getLeft() >= 0);
+        assertTrue(view.getCollapseChevron().getRight() <= view.getDetailHeader().getLeft());
+
+        assertTrue(view.getCollapseChevron().performClick());
+        assertEquals(AppDrawerCategoryExpansionModel.State.COLLAPSING, view.expansionState());
+        view.advance(1f / 60f, true);
+        assertEquals(AppDrawerCategoryExpansionModel.State.OVERVIEW, view.expansionState());
+        assertEquals(View.INVISIBLE, view.getCollapseChevron().getVisibility());
+        assertEquals("", view.getDetailCount().getText().toString());
+    }
+
+    @Test public void singleAppCategoryCountsWithoutThePlural() {
+        AppDrawerCategoryView view = expanded(1, 640);
+        assertEquals("1 APP", view.getDetailCount().getText().toString());
+    }
+
     @Test public void scrollingOverviewAndDetailDismissesAnchoredContextPopups() {
         List<AppDrawerCategoryBucket> buckets = new ArrayList<>();
         for (AppDrawerCategory category : AppDrawerCategory.values())

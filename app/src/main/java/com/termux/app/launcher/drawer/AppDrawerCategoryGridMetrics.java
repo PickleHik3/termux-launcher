@@ -6,13 +6,17 @@ import androidx.annotation.NonNull;
 public final class AppDrawerCategoryGridMetrics {
     public static final float MIN_TILE_DP = 144f;
     public static final float SIDE_PADDING_DP = 8f;
-    public static final float TILE_GAP_DP = 8f;
+    /** Card gap from the redesign mock: 12dp between the two columns and between rows. */
+    public static final float TILE_GAP_DP = 12f;
     public static final float TILE_HORIZONTAL_INSET_DP = 4f;
-    public static final float TILE_INNER_PADDING_DP = 10f;
-    public static final float SLOT_GAP_DP = 8f;
-    public static final float SMALL_BLOCK_GAP_DP = 4f;
+    /** Card inner padding from the mock (13/12/14 top/side/bottom, folded to one token). */
+    public static final float TILE_INNER_PADDING_DP = 12f;
+    public static final float SLOT_GAP_DP = 10f;
+    public static final float SMALL_BLOCK_GAP_DP = 5f;
     public static final float HEADING_GAP_DP = 8f;
     public static final float ITEM_BOTTOM_GAP_DP = 12f;
+    /** The redesign's expanded category grid is a fixed three-across layout. */
+    public static final int EXPANDED_COLUMNS = 3;
     public static final float MAX_ICON_DP = 48f;
     public static final float EMPTY_TOP_MIN_DP = 32f;
     public static final float HEADER_LIST_GAP_DP = 12f;
@@ -120,7 +124,7 @@ public final class AppDrawerCategoryGridMetrics {
         int icon = Math.max(0, Math.min(Math.min(Math.min(Math.round(MAX_ICON_DP * d),
             requestedIconPx), geometryIcon),
             Math.max(0, budgetIcon)));
-        int detailColumns = AppDrawerGridMetrics.resolveColumns(width / d);
+        int detailColumns = EXPANDED_COLUMNS;
         float detailCell = detailColumns == 0 ? 0f : width / detailColumns;
         int detailIcon = Math.min(icon, Math.max(0, Math.round(detailCell * 0.58f)));
         // One shared size is mandatory: preview-large and detail cache keys are identical.

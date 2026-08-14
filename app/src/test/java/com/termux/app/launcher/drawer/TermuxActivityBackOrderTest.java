@@ -1,5 +1,6 @@
 package com.termux.app.launcher.drawer;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -135,6 +136,96 @@ public class TermuxActivityBackOrderTest {
         assertTrue(controller.isOpen());
         assertTrue("the drawer's query must survive a press the palette consumed",
             controller.getSearchController().hasQuery());
+    }
+
+    /**
+     * The key channel is the one back actually travels on a device: KEYCODE_BACK reaches the
+     * terminal view's client and is claimed by the drawer's search intake before onBackPressed can
+     * ever run. That claim must walk the same internal hierarchy — here, collapse the expanded
+     * category — and must not put the whole drawer away.
+     */
+    @Test
+    public void aBackKeystrokeCollapsesTheExpandedCategoryInsteadOfClosingTheDrawer() {
+        TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
+        activity.setContentView(R.layout.activity_termux);
+        AppDrawerController controller = openDrawerWithExpandedCategory(activity);
+        AppDrawerContentView content = ReflectionHelpers.getField(controller, "mContent");
+
+        assertTrue(activity.handleAppDrawerKey(android.view.KeyEvent.KEYCODE_BACK,
+            new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN,
+                android.view.KeyEvent.KEYCODE_BACK)));
+
+        assertTrue("a category was expanded; the press belongs to it, not the drawer",
+            controller.isOpen());
+        assertEquals(AppDrawerCategoryExpansionModel.State.COLLAPSING,
+            content.getCategoryView().expansionState());
+        content.advanceDrawerFx(1f, 1f / 60f, true);
+        assertEquals(AppDrawerCategoryExpansionModel.State.OVERVIEW,
+            content.getCategoryView().expansionState());
+
+        assertTrue(activity.handleAppDrawerKey(android.view.KeyEvent.KEYCODE_BACK,
+            new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN,
+                android.view.KeyEvent.KEYCODE_BACK)));
+        assertFalse("with the grid showing, the next press does close the drawer",
+            controller.isOpen());
+    }
+
+    /** …and the same press mid-expansion reverses the transition rather than closing the plane. */
+    @Test
+    public void aBackKeystrokeMidExpansionReversesItInsteadOfClosingTheDrawer() {
+        TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
+        activity.setContentView(R.layout.activity_termux);
+        AppDrawerController controller = openDrawerWithExpandedCategory(activity, false);
+        AppDrawerContentView content = ReflectionHelpers.getField(controller, "mContent");
+        assertEquals(AppDrawerCategoryExpansionModel.State.EXPANDING,
+            content.getCategoryView().expansionState());
+
+        assertTrue(activity.handleAppDrawerKey(android.view.KeyEvent.KEYCODE_BACK,
+            new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN,
+                android.view.KeyEvent.KEYCODE_BACK)));
+
+        assertTrue(controller.isOpen());
+        assertEquals(AppDrawerCategoryExpansionModel.State.COLLAPSING,
+            content.getCategoryView().expansionState());
+    }
+
+    private static AppDrawerController openDrawerWithExpandedCategory(TermuxActivity activity) {
+        return openDrawerWithExpandedCategory(activity, true);
+    }
+
+    /** An open drawer showing categories, with the first one expanded (settled or mid-flight). */
+    private static AppDrawerController openDrawerWithExpandedCategory(TermuxActivity activity,
+                                                                      boolean settle) {
+        AppDrawerController controller = openDrawer(activity);
+        AppDrawerContentView content = new AppDrawerContentView(activity);
+        content.setViewType(AppDrawerViewType.CATEGORIES);
+        content.setCategoryMetrics(AppDrawerCategoryGridMetrics.resolve(360,
+            content.horizontalPagerUsableHeight(640), 1, 16, 16, 24, 8 * 1024 * 1024));
+        content.setInteractive(true);
+        content.bind(null, controller.getSearchController());
+        ReflectionHelpers.setField(controller, "mContent", content);
+        controller.getSearchController().setCatalogue(AppDrawerContentCategoriesTest.apps());
+        layout(content);
+        AppDrawerCategoryView categories = content.getCategoryView();
+        categories.onExpandRequested(categories.getTileAdapter().bucketAt(0),
+            (AppDrawerCategoryTileView) categories.getOverview().getChildAt(0));
+        layout(content);
+        if (settle) {
+            content.advanceDrawerFx(1f, 1f / 60f, true);
+            layout(content);
+            assertEquals(AppDrawerCategoryExpansionModel.State.EXPANDED,
+                categories.expansionState());
+        }
+        return controller;
+    }
+
+    private static void layout(AppDrawerContentView content) {
+        content.measure(
+            android.view.View.MeasureSpec.makeMeasureSpec(360,
+                android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(640,
+                android.view.View.MeasureSpec.EXACTLY));
+        content.layout(0, 0, 360, 640);
     }
 
     /** An open drawer with no views bound — the back consumer reads state, not geometry. */

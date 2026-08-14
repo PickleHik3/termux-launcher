@@ -31,6 +31,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -49,9 +50,11 @@ public final class LauncherAppDataProvider {
     private final Map<String, LauncherAppEntry> cachedFirstByPackage = new HashMap<>();
     private final Map<String, LauncherAppEntry> cachedDefaultByPackage = new HashMap<>();
     private final Map<Character, List<LauncherAppEntry>> letterBuckets = new HashMap<>();
+    private final Map<String, Long> cachedLastUpdateByPackage = new HashMap<>();
     private final List<Runnable> pendingRefreshCallbacks = new ArrayList<>();
     private boolean loaded;
     private boolean loading;
+    private boolean refreshing;
     private int refreshGeneration;
 
     private LauncherAppDataProvider(@NonNull Context context) {
@@ -80,11 +83,13 @@ public final class LauncherAppDataProvider {
         refreshGeneration++;
         loading = false;
         loaded = false;
+        refreshing = false;
         cachedApps = Collections.emptyList();
         cachedById.clear();
         cachedFirstByPackage.clear();
         cachedDefaultByPackage.clear();
         letterBuckets.clear();
+        cachedLastUpdateByPackage.clear();
         pendingRefreshCallbacks.clear();
     }
 
@@ -100,7 +105,12 @@ public final class LauncherAppDataProvider {
                 pendingRefreshCallbacks.add(callback);
             }
             if (loaded) {
-                dispatchRefreshCallbacksLocked();
+                // While a refresh is in flight the current snapshot is about to be replaced;
+                // hold the callbacks so they fire once against the fresh data instead of now
+                // against the stale one.
+                if (!refreshing) {
+                    dispatchRefreshCallbacksLocked();
+                }
                 return;
             }
             if (!loading) {
@@ -121,16 +131,7 @@ public final class LauncherAppDataProvider {
                 if (capturedGeneration != refreshGeneration) {
                     return;
                 }
-                cachedApps = immutableEntryList(snapshot.apps);
-                cachedById.clear();
-                cachedById.putAll(snapshot.byId);
-                cachedFirstByPackage.clear();
-                cachedFirstByPackage.putAll(snapshot.firstByPackage);
-                cachedDefaultByPackage.clear();
-                cachedDefaultByPackage.putAll(snapshot.defaultByPackage);
-                cacheLetterBuckets(snapshot.letterBuckets);
-                loaded = true;
-                loading = false;
+                applySnapshotLocked(snapshot);
                 callbacks = new ArrayList<>(pendingRefreshCallbacks);
                 pendingRefreshCallbacks.clear();
             }
@@ -140,6 +141,82 @@ public final class LauncherAppDataProvider {
                 }
             }
         });
+    }
+
+    /**
+     * Reloads the catalogue in the background while the current snapshot keeps serving reads —
+     * unlike {@link #invalidate()} + {@link #warmAsync}, callers never observe an empty list, so
+     * the drawer grid and dock stay populated across a package change instead of blanking for the
+     * whole rebuild.
+     *
+     * <p>{@code changedPackages} names the packages a broadcast reported as touched: entries from
+     * any other package are reused from the previous snapshot (same object, icon resolution
+     * skipped) when their label and package update time are unchanged. Pass {@code null} when the
+     * change scope is unknown (or icons must re-render, e.g. dynamic calendar day flips) to force
+     * a full rebuild of every entry.
+     */
+    public void refreshAsync(@Nullable Set<String> changedPackages, @Nullable Runnable callback) {
+        boolean cold;
+        Map<String, LauncherAppEntry> previousById = null;
+        Map<String, Long> previousLastUpdate = null;
+        int generationToLoad = -1;
+        synchronized (this) {
+            if (callback != null) {
+                pendingRefreshCallbacks.add(callback);
+            }
+            cold = !loaded;
+            if (!cold) {
+                generationToLoad = ++refreshGeneration;
+                refreshing = true;
+                if (changedPackages != null) {
+                    previousById = new LinkedHashMap<>(cachedById);
+                    previousLastUpdate = new HashMap<>(cachedLastUpdateByPackage);
+                }
+            }
+        }
+        if (cold) {
+            // Nothing on screen to preserve; the plain warm-up path already serves this case and
+            // will drain the callback queued above.
+            warmAsync(null);
+            return;
+        }
+        final int capturedGeneration = generationToLoad;
+        final Map<String, LauncherAppEntry> reusableById = previousById;
+        final Map<String, Long> reusableLastUpdate = previousLastUpdate;
+        final Set<String> changed = changedPackages;
+        executor.execute(() -> {
+            Snapshot snapshot = loadSnapshot(reusableById, reusableLastUpdate, changed);
+            List<Runnable> callbacks;
+            synchronized (LauncherAppDataProvider.this) {
+                if (capturedGeneration != refreshGeneration) {
+                    return;
+                }
+                applySnapshotLocked(snapshot);
+                callbacks = new ArrayList<>(pendingRefreshCallbacks);
+                pendingRefreshCallbacks.clear();
+            }
+            for (Runnable pending : callbacks) {
+                if (pending != null) {
+                    mainHandler.post(pending);
+                }
+            }
+        });
+    }
+
+    private void applySnapshotLocked(@NonNull Snapshot snapshot) {
+        cachedApps = immutableEntryList(snapshot.apps);
+        cachedById.clear();
+        cachedById.putAll(snapshot.byId);
+        cachedFirstByPackage.clear();
+        cachedFirstByPackage.putAll(snapshot.firstByPackage);
+        cachedDefaultByPackage.clear();
+        cachedDefaultByPackage.putAll(snapshot.defaultByPackage);
+        cacheLetterBuckets(snapshot.letterBuckets);
+        cachedLastUpdateByPackage.clear();
+        cachedLastUpdateByPackage.putAll(snapshot.lastUpdateByPackage);
+        loaded = true;
+        loading = false;
+        refreshing = false;
     }
 
     @NonNull
@@ -157,16 +234,7 @@ public final class LauncherAppDataProvider {
 
         Snapshot snapshot = loadSnapshot();
         synchronized (this) {
-            cachedApps = immutableEntryList(snapshot.apps);
-            cachedById.clear();
-            cachedById.putAll(snapshot.byId);
-            cachedFirstByPackage.clear();
-            cachedFirstByPackage.putAll(snapshot.firstByPackage);
-            cachedDefaultByPackage.clear();
-            cachedDefaultByPackage.putAll(snapshot.defaultByPackage);
-            cacheLetterBuckets(snapshot.letterBuckets);
-            loaded = true;
-            loading = false;
+            applySnapshotLocked(snapshot);
             return cachedApps;
         }
     }
@@ -210,6 +278,13 @@ public final class LauncherAppDataProvider {
 
     @NonNull
     private Snapshot loadSnapshot() {
+        return loadSnapshot(null, null, null);
+    }
+
+    @NonNull
+    private Snapshot loadSnapshot(@Nullable Map<String, LauncherAppEntry> previousById,
+                                  @Nullable Map<String, Long> previousLastUpdate,
+                                  @Nullable Set<String> changedPackages) {
         PackageManager packageManager = context.getPackageManager();
         Intent main = new Intent(Intent.ACTION_MAIN, null);
         main.addCategory(Intent.CATEGORY_LAUNCHER);
@@ -218,7 +293,7 @@ public final class LauncherAppDataProvider {
         Map<String, ComponentName> defaultComponentsByPackage = new HashMap<>();
         // One package lookup feeds every launcher activity in that package. This load runs on the
         // provider worker; category tiles never touch PackageManager while binding.
-        FirstInstallTimeCache firstInstallTimesByPackage = new FirstInstallTimeCache();
+        PackageTimesCache packageTimesByPackage = new PackageTimesCache();
 
         Snapshot snapshot = new Snapshot();
         for (ResolveInfo resolveInfo : launchables) {
@@ -227,15 +302,21 @@ public final class LauncherAppDataProvider {
             CharSequence labelSequence = info.loadLabel(packageManager);
             String label = labelSequence != null ? labelSequence.toString() : info.packageName;
             AppRef ref = new AppRef(info.packageName, info.name);
-            LauncherIconResolver.ResolvedIcon resolvedIcon = iconResolver.resolveDetailed(ref, null, null);
-            Drawable icon = resolvedIcon.drawable;
-            int category = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                && info.applicationInfo != null
-                ? info.applicationInfo.category : android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED;
-            long firstInstallTime = firstInstallTimesByPackage.valueFor(ref.packageName,
-                packageName -> readFirstInstallTime(packageManager, packageName));
-            LauncherAppEntry entry = new LauncherAppEntry(ref, label, icon,
-                resolvedIcon.iconPackArtwork, category, firstInstallTime);
+            PackageTimes times = packageTimesByPackage.valueFor(ref.packageName,
+                packageName -> readPackageTimes(packageManager, packageName));
+            snapshot.lastUpdateByPackage.put(ref.packageName, times.lastUpdateEpochMs);
+            LauncherAppEntry entry = reusableEntry(previousById, previousLastUpdate,
+                changedPackages, ref, label, times.lastUpdateEpochMs);
+            if (entry == null) {
+                LauncherIconResolver.ResolvedIcon resolvedIcon = iconResolver.resolveDetailed(ref, null, null);
+                Drawable icon = resolvedIcon.drawable;
+                int category = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                    && info.applicationInfo != null
+                    ? gameNormalizedCategory(info.applicationInfo)
+                    : android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED;
+                entry = new LauncherAppEntry(ref, label, icon,
+                    resolvedIcon.iconPackArtwork, category, times.firstInstallEpochMs);
+            }
             snapshot.apps.add(entry);
             snapshot.byId.put(ref.stableId(), entry);
             if (!snapshot.firstByPackage.containsKey(ref.packageName)) {
@@ -260,13 +341,37 @@ public final class LauncherAppDataProvider {
             }
             bucket.add(entry);
         }
-        addProfileApps(snapshot, packageManager, defaultComponentsByPackage);
+        addProfileApps(snapshot, packageManager, defaultComponentsByPackage,
+            previousById, changedPackages);
         return snapshot;
+    }
+
+    /**
+     * The previous snapshot's entry for {@code ref}, if the package broadcast scope and the
+     * package's update time both say its label and icon cannot have changed. Reuse skips icon-pack
+     * resolution and drawable loading — the dominant cost of a snapshot build.
+     */
+    @Nullable
+    private static LauncherAppEntry reusableEntry(@Nullable Map<String, LauncherAppEntry> previousById,
+                                                  @Nullable Map<String, Long> previousLastUpdate,
+                                                  @Nullable Set<String> changedPackages,
+                                                  @NonNull AppRef ref,
+                                                  @NonNull String label,
+                                                  long lastUpdateEpochMs) {
+        if (previousById == null || changedPackages == null) return null;
+        if (changedPackages.contains(ref.packageName)) return null;
+        LauncherAppEntry previous = previousById.get(ref.stableId());
+        if (previous == null || !previous.label.equals(label)) return null;
+        Long previousUpdate = previousLastUpdate == null ? null : previousLastUpdate.get(ref.packageName);
+        if (previousUpdate == null || previousUpdate != lastUpdateEpochMs) return null;
+        return previous;
     }
 
     private void addProfileApps(@NonNull Snapshot snapshot,
                                 @NonNull PackageManager packageManager,
-                                @NonNull Map<String, ComponentName> defaultComponentsByPackage) {
+                                @NonNull Map<String, ComponentName> defaultComponentsByPackage,
+                                @Nullable Map<String, LauncherAppEntry> previousById,
+                                @Nullable Set<String> changedPackages) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
             return;
         }
@@ -293,7 +398,7 @@ public final class LauncherAppDataProvider {
                     continue;
                 }
                 addProfileAppsForUser(snapshot, packageManager, launcherApps, userManager,
-                    profile, defaultComponentsByPackage);
+                    profile, defaultComponentsByPackage, previousById, changedPackages);
             }
         } catch (Throwable ignored) {
             // Profile access varies by Android build. Primary-user discovery above remains valid.
@@ -305,7 +410,9 @@ public final class LauncherAppDataProvider {
                                        @NonNull LauncherApps launcherApps,
                                        @NonNull UserManager userManager,
                                        @NonNull UserHandle profile,
-                                       @NonNull Map<String, ComponentName> defaultComponentsByPackage) {
+                                       @NonNull Map<String, ComponentName> defaultComponentsByPackage,
+                                       @Nullable Map<String, LauncherAppEntry> previousById,
+                                       @Nullable Set<String> changedPackages) {
         try {
             List<LauncherActivityInfo> activities = launcherApps.getActivityList(null, profile);
             if (activities == null || activities.isEmpty()) {
@@ -327,6 +434,22 @@ public final class LauncherAppDataProvider {
                     ? activity.getLabel().toString() : packageName;
                 String label = rawLabel + suffix;
                 AppRef ref = new AppRef(packageName, activityName, userId, serial, true, suffix.trim());
+                // Cross-user package update times are not readable from here, so profile reuse
+                // leans on the broadcast scope plus the label alone; a profile app update reaches
+                // us as a LauncherApps callback naming its package, which lands it in
+                // changedPackages and forces a rebuild of exactly its entries.
+                LauncherAppEntry reused = null;
+                if (previousById != null && changedPackages != null
+                    && !changedPackages.contains(packageName)) {
+                    LauncherAppEntry previous = previousById.get(ref.stableId());
+                    if (previous != null && previous.label.equals(label)) {
+                        reused = previous;
+                    }
+                }
+                if (reused != null) {
+                    addEntry(snapshot, packageManager, defaultComponentsByPackage, reused);
+                    continue;
+                }
                 Drawable icon = null;
                 try {
                     icon = activity.getIcon(0);
@@ -346,13 +469,24 @@ public final class LauncherAppDataProvider {
         }
     }
 
-    private static long readFirstInstallTime(@NonNull PackageManager packageManager,
-                                             @NonNull String packageName) {
+    private static PackageTimes readPackageTimes(@NonNull PackageManager packageManager,
+                                                 @NonNull String packageName) {
         try {
             PackageInfo info = packageManager.getPackageInfo(packageName, 0);
-            return info == null ? 0L : Math.max(0L, info.firstInstallTime);
+            return info == null ? PackageTimes.UNKNOWN
+                : new PackageTimes(Math.max(0L, info.firstInstallTime), Math.max(0L, info.lastUpdateTime));
         } catch (Throwable ignored) {
-            return 0L;
+            return PackageTimes.UNKNOWN;
+        }
+    }
+
+    static final class PackageTimes {
+        static final PackageTimes UNKNOWN = new PackageTimes(0L, 0L);
+        final long firstInstallEpochMs;
+        final long lastUpdateEpochMs;
+        PackageTimes(long firstInstallEpochMs, long lastUpdateEpochMs) {
+            this.firstInstallEpochMs = firstInstallEpochMs;
+            this.lastUpdateEpochMs = lastUpdateEpochMs;
         }
     }
 
@@ -363,7 +497,7 @@ public final class LauncherAppDataProvider {
             try {
                 android.content.pm.ApplicationInfo applicationInfo =
                     activity.getApplicationInfo();
-                if (applicationInfo != null) category = applicationInfo.category;
+                if (applicationInfo != null) category = gameNormalizedCategory(applicationInfo);
             } catch (Throwable ignored) {
             }
         }
@@ -384,19 +518,31 @@ public final class LauncherAppDataProvider {
         }
     }
 
-    interface InstallTimeReader { long read(@NonNull String packageName); }
+    /**
+     * Pre-category-API games declare {@code FLAG_IS_GAME} instead of {@code CATEGORY_GAME}; the
+     * flag is the same signal, so it fills in only when the declared category is undefined.
+     */
+    static int gameNormalizedCategory(@NonNull android.content.pm.ApplicationInfo applicationInfo) {
+        int category = applicationInfo.category;
+        if (category == android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED
+            && (applicationInfo.flags & android.content.pm.ApplicationInfo.FLAG_IS_GAME) != 0)
+            return android.content.pm.ApplicationInfo.CATEGORY_GAME;
+        return category;
+    }
+
+    interface PackageTimesReader { @NonNull PackageTimes read(@NonNull String packageName); }
 
     /** Worker-local package cache; multiple launcher activities pay one PackageInfo lookup. */
-    static final class FirstInstallTimeCache {
-        private final Map<String, Long> values = new HashMap<>();
-        long valueFor(@NonNull String packageName, @NonNull InstallTimeReader reader) {
-            Long value = values.get(packageName);
-            if (value != null || values.containsKey(packageName)) return value == null ? 0L : value;
-            long loaded;
+    static final class PackageTimesCache {
+        private final Map<String, PackageTimes> values = new HashMap<>();
+        @NonNull PackageTimes valueFor(@NonNull String packageName, @NonNull PackageTimesReader reader) {
+            PackageTimes value = values.get(packageName);
+            if (value != null) return value;
+            PackageTimes loaded;
             try {
-                loaded = Math.max(0L, reader.read(packageName));
+                loaded = reader.read(packageName);
             } catch (Throwable ignored) {
-                loaded = 0L;
+                loaded = PackageTimes.UNKNOWN;
             }
             values.put(packageName, loaded);
             return loaded;
@@ -503,5 +649,6 @@ public final class LauncherAppDataProvider {
         final Map<String, LauncherAppEntry> firstByPackage = new HashMap<>();
         final Map<String, LauncherAppEntry> defaultByPackage = new HashMap<>();
         final Map<Character, List<LauncherAppEntry>> letterBuckets = new HashMap<>();
+        final Map<String, Long> lastUpdateByPackage = new HashMap<>();
     }
 }

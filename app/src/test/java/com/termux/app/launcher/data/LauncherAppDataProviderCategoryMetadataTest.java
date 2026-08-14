@@ -65,16 +65,24 @@ public class LauncherAppDataProviderCategoryMetadataTest {
     }
 
     @Test public void installLookupCacheCallsItsSourceOncePerPackageIncludingFailure() {
-        LauncherAppDataProvider.FirstInstallTimeCache cache =
-            new LauncherAppDataProvider.FirstInstallTimeCache();
+        LauncherAppDataProvider.PackageTimesCache cache =
+            new LauncherAppDataProvider.PackageTimesCache();
         int[] calls = {0};
-        assertEquals(7L, cache.valueFor("com.example.same", pkg -> { calls[0]++; return 7L; }));
-        assertEquals(7L, cache.valueFor("com.example.same", pkg -> { calls[0]++; return 9L; }));
+        assertEquals(7L, cache.valueFor("com.example.same", pkg -> {
+            calls[0]++; return new LauncherAppDataProvider.PackageTimes(7L, 70L);
+        }).firstInstallEpochMs);
+        LauncherAppDataProvider.PackageTimes cached = cache.valueFor("com.example.same", pkg -> {
+            calls[0]++; return new LauncherAppDataProvider.PackageTimes(9L, 90L);
+        });
+        assertEquals(7L, cached.firstInstallEpochMs);
+        assertEquals(70L, cached.lastUpdateEpochMs);
         assertEquals(1, calls[0]);
         assertEquals(0L, cache.valueFor("com.example.fail", pkg -> {
             calls[0]++; throw new SecurityException("denied");
-        }));
-        assertEquals(0L, cache.valueFor("com.example.fail", pkg -> { calls[0]++; return 3L; }));
+        }).firstInstallEpochMs);
+        assertEquals(0L, cache.valueFor("com.example.fail", pkg -> {
+            calls[0]++; return new LauncherAppDataProvider.PackageTimes(3L, 30L);
+        }).firstInstallEpochMs);
         assertEquals(2, calls[0]);
     }
 
@@ -94,6 +102,25 @@ public class LauncherAppDataProviderCategoryMetadataTest {
         LauncherAppDataProvider.EntryMetadata neighbor = LauncherAppDataProvider.readProfileMetadata(
             new TestLauncherActivityInfo(info, 101L, false, false), 28);
         assertEquals(101L, neighbor.firstInstallTimeEpochMs);
+    }
+
+    @Test public void flagIsGameFillsInOnlyWhenTheDeclaredCategoryIsUndefined() {
+        ApplicationInfo game = new ApplicationInfo();
+        game.category = ApplicationInfo.CATEGORY_UNDEFINED;
+        game.flags = ApplicationInfo.FLAG_IS_GAME;
+        assertEquals(ApplicationInfo.CATEGORY_GAME,
+            LauncherAppDataProvider.gameNormalizedCategory(game));
+
+        ApplicationInfo declared = new ApplicationInfo();
+        declared.category = ApplicationInfo.CATEGORY_SOCIAL;
+        declared.flags = ApplicationInfo.FLAG_IS_GAME;
+        assertEquals(ApplicationInfo.CATEGORY_SOCIAL,
+            LauncherAppDataProvider.gameNormalizedCategory(declared));
+
+        ApplicationInfo plain = new ApplicationInfo();
+        plain.category = ApplicationInfo.CATEGORY_UNDEFINED;
+        assertEquals(ApplicationInfo.CATEGORY_UNDEFINED,
+            LauncherAppDataProvider.gameNormalizedCategory(plain));
     }
 
     @Test

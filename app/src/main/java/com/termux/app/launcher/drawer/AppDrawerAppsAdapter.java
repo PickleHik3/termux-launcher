@@ -40,7 +40,15 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
     /** Label size, in sp. Small enough that two words of an app name still fit a 84dp cell. */
     public static final float LABEL_TEXT_SP = 11f;
 
+    /** Where a search-result row's category line comes from; null hides the line. */
+    public interface CategoryLabelLookup {
+        @Nullable CharSequence categoryLabelFor(@NonNull LauncherAppEntry entry);
+    }
+
     private static final char[] NO_LETTERS = new char[0];
+    private static final int VIEW_TYPE_APP = 0;
+    private static final int VIEW_TYPE_FOLDER = 1;
+    private static final int VIEW_TYPE_SEARCH_ROW = 2;
 
     @Nullable private SuggestionBarView mDock;
     @NonNull private List<LauncherAppEntry> mEntries = new ArrayList<>();
@@ -58,6 +66,9 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
     /** The letter under the finger, or 0. Written every frame of a scrub and never notified on. */
     private char mScrubLetter = '\0';
     private float mScrubStrength;
+    /** True while the categories view type shows ranked results as rows instead of grid cells. */
+    private boolean mSearchRowPresentation;
+    @Nullable private CategoryLabelLookup mCategoryLookup;
 
     public AppDrawerAppsAdapter(@Nullable SuggestionBarView dock) {
         mDock = dock;
@@ -174,18 +185,47 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
         return mItems.size();
     }
 
+    /**
+     * Switches the categories search presentation: ranked results as full-width rows with a
+     * category line, instead of grid cells. A distinct view type, so pooled grid holders and row
+     * holders can never be exchanged for one another.
+     */
+    public void setSearchRowPresentation(boolean rows, @Nullable CategoryLabelLookup lookup) {
+        if (mSearchRowPresentation == rows && mCategoryLookup == lookup) return;
+        mSearchRowPresentation = rows;
+        mCategoryLookup = lookup;
+        notifyDataSetChanged();
+    }
+
     @Override public int getItemViewType(int position) {
-        return mItems.get(position).kind == AppDrawerItem.Kind.FOLDER ? 1 : 0;
+        if (mItems.get(position).kind == AppDrawerItem.Kind.FOLDER) return VIEW_TYPE_FOLDER;
+        return mSearchRowPresentation ? VIEW_TYPE_SEARCH_ROW : VIEW_TYPE_APP;
     }
 
     @NonNull
     @Override
     public Cell onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        AppDrawerAppCellView root = viewType == 1
-            ? new AppDrawerFolderCellView(parent.getContext())
-            : new AppDrawerAppCellView(parent.getContext());
-        root.setLayoutParams(new RecyclerView.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        AppDrawerAppCellView root;
+        switch (viewType) {
+            case VIEW_TYPE_FOLDER:
+                root = new AppDrawerFolderCellView(parent.getContext());
+                break;
+            case VIEW_TYPE_SEARCH_ROW:
+                root = new AppDrawerSearchResultRowView(parent.getContext());
+                break;
+            default:
+                root = new AppDrawerAppCellView(parent.getContext());
+                break;
+        }
+        RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        if (viewType == VIEW_TYPE_SEARCH_ROW) {
+            float density = parent.getResources().getDisplayMetrics().density;
+            params.leftMargin = Math.round(12f * density);
+            params.rightMargin = params.leftMargin;
+            params.bottomMargin = Math.round(6f * density);
+        }
+        root.setLayoutParams(params);
         return new Cell(root);
     }
 
@@ -198,6 +238,11 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
         else holder.cell.bind(mDock, item.app, metrics, mClickGate,
             mPickupEnabled ? mDragController : null);
         if (mPickupEnabled && mDragController != null) mDragController.bindTarget(holder.cell, item);
+        if (holder.cell instanceof AppDrawerSearchResultRowView && item.app != null) {
+            CategoryLabelLookup lookup = mCategoryLookup;
+            ((AppDrawerSearchResultRowView) holder.cell).setCategoryLabel(
+                lookup == null ? null : lookup.categoryLabelFor(item.app));
+        }
 
         // Last, and not optional. A cell the auto-scroll binds mid-scrub has to arrive already
         // dimmed; a cell bound with no scrub in progress is set to exactly 1 and 1, which is what

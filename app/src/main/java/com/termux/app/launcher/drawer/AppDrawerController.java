@@ -432,6 +432,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     @Override
     public void onSearchDismissRequested() {
+        // Esc and Back arrive here through the key channels, which the terminal's client runs
+        // before the activity's onBackPressed can walk its hierarchy — so this is the only place
+        // that hierarchy exists for a keystroke. Spend the press inside the drawer first: clear a
+        // typed query, or collapse an expanded (or mid-transition) category back to the tile grid.
+        // Only a press nothing inside claimed may close the whole plane.
+        AppDrawerContentView content = mContent;
+        if (content != null && content.handleBackInDrawer()) return;
         close(true);
     }
 
@@ -869,13 +876,16 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         return metrics.descent - metrics.ascent;
     }
 
-    /** The tile heading is 13sp, independently of the expanded app rows' 11sp labels. */
+    /**
+     * The tile heading is 13sp, independently of the expanded app rows' 11sp labels. The redesign's
+     * card titles wrap to two lines ("Communication & Social"), so the band is two line-heights.
+     */
     private float resolveCategoryTileHeadingHeightPx() {
         Paint paint = new Paint();
         paint.setTextSize(AppDrawerCategoryTileView.HEADING_TEXT_SP
             * mActivity.getResources().getDisplayMetrics().scaledDensity);
         Paint.FontMetrics metrics = paint.getFontMetrics();
-        return metrics.descent - metrics.ascent;
+        return 2f * (metrics.descent - metrics.ascent);
     }
 
     private void addHostLayoutListener() {

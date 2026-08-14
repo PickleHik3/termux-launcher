@@ -48,6 +48,50 @@ public class AppDrawerCategoryExpansionModelTest {
         assertEquals(0, model.setProgress(0.1f));
     }
 
+    /**
+     * The invariant Back's second rung stands on: in every non-OVERVIEW state — mid-expansion,
+     * settled, mid-drag and already collapsing — collapse() accepts, so a back press over any
+     * category surface is always spent on the category and can never fall through to a caller
+     * that would close the whole drawer.
+     */
+    @Test public void collapseIsAcceptedInEveryNonOverviewState() {
+        AppDrawerCategoryExpansionModel model = new AppDrawerCategoryExpansionModel();
+
+        // EXPANDING, at a mid-animation progress.
+        assertTrue(model.expand(ID));
+        model.setProgress(0.4f);
+        assertEquals(AppDrawerCategoryExpansionModel.State.EXPANDING, model.state());
+        assertTrue(model.collapse());
+        assertEquals(AppDrawerCategoryExpansionModel.State.COLLAPSING, model.state());
+
+        // COLLAPSING: a repeated press keeps being consumed rather than closing the drawer.
+        assertTrue(model.collapse());
+        assertEquals(AppDrawerCategoryExpansionModel.State.COLLAPSING, model.state());
+        model.setProgress(0f);
+        model.settle();
+
+        // EXPANDED.
+        assertTrue(model.expand(ID));
+        model.setProgress(1f);
+        model.settle();
+        assertEquals(AppDrawerCategoryExpansionModel.State.EXPANDED, model.state());
+        assertTrue(model.collapse());
+
+        // COLLAPSE_DRAGGING: back during a live drag retargets it into a collapse, and the drag's
+        // own late finish is a no-op against the new state.
+        model.setProgress(0f);
+        model.settle();
+        assertTrue(model.expand(ID));
+        model.setProgress(1f);
+        model.settle();
+        assertTrue(model.beginCollapseDrag());
+        assertEquals(AppDrawerCategoryExpansionModel.State.COLLAPSE_DRAGGING, model.state());
+        assertTrue(model.collapse());
+        assertEquals(AppDrawerCategoryExpansionModel.State.COLLAPSING, model.state());
+        model.finishCollapseDrag(false);
+        assertEquals(AppDrawerCategoryExpansionModel.State.COLLAPSING, model.state());
+    }
+
     @Test public void backRetargetPullCommitRefreshQueryAndTeardownResetLegally() {
         AppDrawerCategoryExpansionModel model = new AppDrawerCategoryExpansionModel();
         model.expand(ID);

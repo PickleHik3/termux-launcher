@@ -158,8 +158,10 @@ public class SuggestionBarDrawerGestureTest {
     @Test
     public void everyVetoBlocksTheDrawerAndLeavesThePageSwipeIntact() {
         List<String> failures = new ArrayList<>();
+        // "searchText" is deliberately absent: a filtered apps row no longer vetoes the pull-down
+        // (the vertical pull is unambiguous even over filtered results).
         for (String veto : new String[] {"pref", "dockTuning", "palette", "engaged", "full",
-            "searchText", "azLetter", "landscape", "activePickup", "noListener"}) {
+            "azLetter", "landscape", "activePickup", "noListener"}) {
             setUp();
             applyVeto(veto);
 
@@ -177,6 +179,17 @@ public class SuggestionBarDrawerGestureTest {
             dispatch(MotionEvent.ACTION_UP, 100f + TRAVEL, 80f);
         }
         assertEquals("[]", failures.toString());
+    }
+
+    @Test
+    public void aFilteredAppsRowStillOpensTheDrawer() {
+        ReflectionHelpers.setField(row, "lastInput", "ls ");
+
+        dispatch(MotionEvent.ACTION_DOWN, 100f, 20f);
+        dispatch(MotionEvent.ACTION_MOVE, 100f, 20f + TRAVEL);
+
+        assertEquals(CLAIM_DRAWER_DRAG, claim());
+        assertEquals(1, listener.begins);
     }
 
     private void applyVeto(String veto) {

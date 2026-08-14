@@ -22,12 +22,14 @@ public final class LauncherFolderPopupController implements Choreographer.FrameC
     private boolean closing;
     private boolean framePosted;
     private long lastFrame;
+    private boolean hiddenForDrag;
 
     public void show(@NonNull PopupWindow next, @NonNull String id,
                      @NonNull Runnable positionAndShow, @Nullable Runnable dismissListener) {
         dismissImmediate();
         popup = next;
         folderId = id;
+        hiddenForDrag = false;
         onDismiss = dismissListener;
         next.setFocusable(false);
         next.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED);
@@ -56,6 +58,22 @@ public final class LauncherFolderPopupController implements Choreographer.FrameC
         if (id.equals(folderId)) dismiss();
     }
 
+    /**
+     * Mutes the popup's visuals and touchability but keeps the window alive: a system drag started
+     * from a view inside this popup must not lose its source window mid-drag. The owner dismisses
+     * for real (via {@link #dismissImmediate()}) when the drag ends.
+     */
+    public void hideForDrag() {
+        PopupWindow current = popup;
+        View root = current == null ? null : current.getContentView();
+        if (root == null) return;
+        hiddenForDrag = true;
+        root.setAlpha(0f);
+        applyDimBehind(root, 0f);
+        current.setTouchable(false);
+        current.update();
+    }
+
     public void dismissImmediate() {
         PopupWindow current = popup;
         if (current == null) return;
@@ -80,6 +98,7 @@ public final class LauncherFolderPopupController implements Choreographer.FrameC
     }
 
     private void apply(float value) {
+        if (hiddenForDrag) return;
         PopupWindow current = popup;
         View root = current == null ? null : current.getContentView();
         if (root == null) return;
@@ -127,6 +146,7 @@ public final class LauncherFolderPopupController implements Choreographer.FrameC
         folderId = null;
         closing = false;
         framePosted = false;
+        hiddenForDrag = false;
         Runnable listener = onDismiss;
         onDismiss = null;
         if (listener != null) listener.run();

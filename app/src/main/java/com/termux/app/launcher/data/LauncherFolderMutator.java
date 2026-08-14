@@ -41,6 +41,30 @@ public final class LauncherFolderMutator {
         return AppendResult.APPLIED;
     }
 
+    /**
+     * Drag-out: removes the identified member from the folder and inserts it as a top-level dock
+     * item at {@code insertionIndex}. Callers persist through the repository afterwards, whose
+     * {@link #normalize} pass collapses the folder if fewer than two members remain.
+     */
+    @NonNull
+    public static AppendResult moveFolderAppToTopLevel(@NonNull List<PinnedItem> dockItems,
+                                                        @NonNull PinnedFolderItem folder,
+                                                        @NonNull String memberStableId,
+                                                        int insertionIndex) {
+        PinnedAppItem member = null;
+        for (PinnedAppItem app : folder.apps) {
+            if (app != null && memberStableId.equals(app.appRef.stableId())) {
+                member = app;
+                break;
+            }
+        }
+        if (member == null) return AppendResult.MISSING;
+        folder.apps.remove(member);
+        int bounded = Math.max(0, Math.min(insertionIndex, dockItems.size()));
+        dockItems.add(bounded, member);
+        return AppendResult.APPLIED;
+    }
+
     @NonNull
     public static PinnedFolderItem create(@NonNull String id,
                                           @NonNull PinnedAppItem target,

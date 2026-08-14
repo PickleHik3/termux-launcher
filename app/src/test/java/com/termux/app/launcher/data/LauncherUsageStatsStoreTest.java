@@ -22,6 +22,7 @@ import org.robolectric.annotation.ConscryptMode;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -62,6 +63,36 @@ public class LauncherUsageStatsStoreTest {
         put("{\"" + profile.appRef.stableId() + "\":{\"count\":3,\"last\":7}}");
         assertEquals(Arrays.asList(profile), new LauncherUsageStatsStore(context)
             .rankForSuggestions(Arrays.asList(primary, profile)));
+    }
+
+    @Test public void suggestionRankingDecaysCountsWithAFourteenDayHalfLife() {
+        long now = 2_000_000_000_000L;
+        long day = 24L * 60L * 60L * 1000L;
+        LauncherAppEntry stale = app("com.example.stale", "Stale", -1);
+        LauncherAppEntry fresh = app("com.example.fresh", "Fresh", -1);
+        // 10 launches 28 days ago decay to 2.5; 3 launches today stay at 3.0.
+        put("{\"" + stale.appRef.stableId() + "\":{\"count\":10,\"last\":" + (now - 28L * day)
+            + "},\"" + fresh.appRef.stableId() + "\":{\"count\":3,\"last\":" + now + "}}");
+        assertEquals(Arrays.asList(fresh, stale), new LauncherUsageStatsStore(context)
+            .rankForSuggestions(Arrays.asList(stale, fresh), now));
+        assertEquals(2.5, LauncherUsageStatsStore.decayedScore(10, now - 28L * day, now), 1e-9);
+        assertEquals(3.0, LauncherUsageStatsStore.decayedScore(3, now, now), 1e-9);
+        // Future launch timestamps clamp to age zero rather than inflating the score.
+        assertEquals(3.0, LauncherUsageStatsStore.decayedScore(3, now + day, now), 1e-9);
+        assertEquals(0.0, LauncherUsageStatsStore.decayedScore(0, now, now), 0.0);
+    }
+
+    @Test public void decayedScoresCoverOnlyUsedEntriesAndKeyByStableId() {
+        long now = 2_000_000_000_000L;
+        long day = 24L * 60L * 60L * 1000L;
+        LauncherAppEntry used = app("com.example.used", "Used", -1);
+        LauncherAppEntry never = app("com.example.never", "Never", -1);
+        put("{\"" + used.appRef.stableId() + "\":{\"count\":4,\"last\":" + (now - 14L * day)
+            + "}}");
+        Map<String, Double> scores = new LauncherUsageStatsStore(context)
+            .decayedScores(Arrays.asList(used, never), now);
+        assertEquals(1, scores.size());
+        assertEquals(2.0, scores.get(used.appRef.stableId()), 1e-9);
     }
 
     @Test public void rankForAzStillIgnoresRecencyIncludesNeverUsedAndKeepsStableTies() {

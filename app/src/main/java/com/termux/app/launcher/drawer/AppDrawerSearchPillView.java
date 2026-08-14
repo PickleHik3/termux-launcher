@@ -51,17 +51,25 @@ public final class AppDrawerSearchPillView extends View {
     }
 
     /** Pill height, in dp. The caller lays it out; this is only the default it starts from. */
-    public static final float HEIGHT_DP = 44f;
+    public static final float HEIGHT_DP = 46f;
 
-    private static final float PAD_H_DP = 14f;
-    private static final float TEXT_SP = 15f;
+    private static final float PAD_H_DP = 16f;
+    private static final float TEXT_SP = 16f;
+    /** Leading search glyph, drawn at half strength before the query/hint. */
+    private static final String SEARCH_GLYPH = "⌕";
+    private static final float SEARCH_GLYPH_SP = 14f;
+    private static final float GLYPH_TO_TEXT_DP = 8f;
     /** Width of the tap target at the trailing edge, which is larger than the glyph drawn in it. */
     private static final float CLEAR_TOUCH_DP = 44f;
     private static final float CLEAR_GLYPH_SP = 15f;
     private static final String CLEAR_GLYPH = "✕";
     /** Fill of the pill against the glass: a wash of the surface colour, not a second surface. */
-    private static final int FILL_ALPHA = 28;
-    private static final int STROKE_ALPHA = 34;
+    private static final int FILL_ALPHA = 15;
+    private static final int STROKE_ALPHA = 33;
+    /** Hint at 42% and the clear glyph at 55%, per the mock. */
+    private static final int HINT_ALPHA = 0x6B;
+    private static final int CLEAR_ALPHA = 0x8C;
+    private static final int GLYPH_ALPHA = 0x80;
 
     private final Paint mFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -90,7 +98,8 @@ public final class AppDrawerSearchPillView extends View {
         setWillNotDraw(false);
         mStroke.setStyle(Paint.Style.STROKE);
         mStroke.setStrokeWidth(Math.max(1f, mDensity));
-        mText.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
+        // Weight 500 per the mock's query text.
+        mText.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         mHint = context.getString(R.string.app_drawer_search_hint);
     }
 
@@ -153,12 +162,18 @@ public final class AppDrawerSearchPillView extends View {
         mText.setTextSize(TEXT_SP * mScaledDensity);
         Paint.FontMetrics metrics = mText.getFontMetrics();
         float baseline = (height * 0.5f) - ((metrics.ascent + metrics.descent) * 0.5f);
-        float textLeft = padH;
+        // Leading search glyph at half strength, then the query/hint after a small gap.
+        mText.setTextSize(SEARCH_GLYPH_SP * mScaledDensity);
+        mText.setColor(ColorUtils.setAlphaComponent(onSurface, GLYPH_ALPHA));
+        canvas.drawText(SEARCH_GLYPH, padH, baseline, mText);
+        float glyphAdvance = mText.measureText(SEARCH_GLYPH) + GLYPH_TO_TEXT_DP * mDensity;
+        mText.setTextSize(TEXT_SP * mScaledDensity);
+        float textLeft = padH + glyphAdvance;
         float textRight = width - padH - (hasQuery() ? clearWidthPx() : 0f);
         float available = Math.max(0f, textRight - textLeft);
 
         if (!hasQuery()) {
-            mText.setColor(ColorUtils.setAlphaComponent(onSurface, 0x8A));
+            mText.setColor(ColorUtils.setAlphaComponent(onSurface, HINT_ALPHA));
             canvas.drawText(ellipsizeStart(mHint, available), textLeft, baseline, mText);
             return;
         }
@@ -174,7 +189,7 @@ public final class AppDrawerSearchPillView extends View {
         canvas.drawRect(caretX, baseline + metrics.ascent * 0.86f, caretX + Math.max(1f, mDensity),
             baseline + (metrics.descent * 0.6f), mFill);
 
-        mText.setColor(ColorUtils.setAlphaComponent(onSurface, 0xB3));
+        mText.setColor(ColorUtils.setAlphaComponent(onSurface, CLEAR_ALPHA));
         mText.setTextSize(CLEAR_GLYPH_SP * mScaledDensity);
         float glyphWidth = mText.measureText(CLEAR_GLYPH);
         canvas.drawText(CLEAR_GLYPH, width - padH - glyphWidth, baseline, mText);

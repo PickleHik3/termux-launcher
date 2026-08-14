@@ -20,14 +20,17 @@ import androidx.core.view.ViewCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.termux.BuildConfig;
 import com.termux.app.Spring;
 import com.termux.app.SuggestionBarView;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
+import com.termux.app.launcher.data.LauncherCategoryOverrideStore;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.launcher.model.AppRef;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.io.IOException;
@@ -99,8 +102,12 @@ public final class AppDrawerContentView extends FrameLayout
     private static final float PILL_TO_GRID_DP = 10f;
     /** Bottom strip occupied by horizontal paging dots. */
     private static final float PAGE_INDICATOR_BAND_DP = 64f;
+    /** Band the categories search reserves above its rows for the "N RESULTS" label. */
+    private static final float RESULTS_LABEL_BAND_DP = 24f;
 
     private final AppDrawerSearchPillView mPill;
+    private final android.widget.TextView mResultsLabel;
+    private final android.widget.TextView mNoResults;
     private final RecyclerView mGrid;
     private final AppDrawerHorizontalPagerView mHorizontalPager;
     private final AppDrawerPageIndicatorView mPageIndicator;
@@ -111,6 +118,7 @@ public final class AppDrawerContentView extends FrameLayout
     private final AppDrawerAppsAdapter mAdapter;
     private final AppDrawerHorizontalPageAdapter mHorizontalAdapter;
     private final LauncherUsageStatsStore mUsageStats;
+    private final LauncherCategoryOverrideStore mCategoryOverrides;
     private final AppDrawerCategoryClassifier mCategoryClassifier;
     private final AppDrawerCloseArmingPolicy mPolicy = new AppDrawerCloseArmingPolicy();
     private final NestedScrollingParentHelper mParentHelper = new NestedScrollingParentHelper(this);
@@ -142,6 +150,13 @@ public final class AppDrawerContentView extends FrameLayout
     @NonNull private AppDrawerSectionIndex mSectionIndex = AppDrawerSectionIndex.build(null);
     @NonNull private List<LauncherAppEntry> mVisibleResults = Collections.emptyList();
     @NonNull private List<AppDrawerCategoryBucket> mCategoryBuckets = Collections.emptyList();
+    /** stableId → category label res, rebuilt with the buckets; the search rows' second line. */
+    @NonNull private final java.util.HashMap<String, Integer> mCategoryLabelIds =
+        new java.util.HashMap<>();
+    /** Vertical grid columns, retained so the search-row presentation can restore the span. */
+    private int mVerticalColumns = AppDrawerGridMetrics.MIN_COLUMNS;
+    private boolean mCategorySearchPresentation;
+    private final int mGridBaseTopMarginPx;
     @NonNull private AppDrawerViewType mViewType = AppDrawerViewType.VERTICAL;
     @NonNull private AppDrawerViewType mGestureViewType = AppDrawerViewType.VERTICAL;
 
@@ -226,7 +241,9 @@ public final class AppDrawerContentView extends FrameLayout
         if (dock != null) dock.setDrawerConfigChangedListener(this::onDockConfigChanged);
         mDensity = context.getResources().getDisplayMetrics().density;
         mUsageStats = LauncherUsageStatsStore.getInstance(context);
-        mCategoryClassifier = new AppDrawerCategoryClassifier(loadCuratedMap(context.getResources()));
+        mCategoryOverrides = new LauncherCategoryOverrideStore(context);
+        mCategoryClassifier = new AppDrawerCategoryClassifier(loadCuratedMap(context.getResources()),
+            packageName -> AppDrawerCategory.fromSlug(mCategoryOverrides.get(packageName)));
         setClipChildren(false);
         setClipToPadding(false);
 
@@ -271,6 +288,7 @@ public final class AppDrawerContentView extends FrameLayout
         LayoutParams gridParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT);
         gridParams.topMargin = pillParams.topMargin + pillParams.height + dp(PILL_TO_GRID_DP);
+        mGridBaseTopMarginPx = gridParams.topMargin;
         gridParams.bottomMargin = 0;
         // The letters are not an overlay: the grid gives up exactly the strip's width so no cell
         // ever sits under one, and the column count the controller resolves is computed from the
@@ -306,12 +324,45 @@ public final class AppDrawerContentView extends FrameLayout
         mCategoryView = new AppDrawerCategoryView(context, dock);
         mCategoryView.setFrameRequestListener(this::requestFrames);
         mCategoryView.setPopupDismissCallback(this::dismissContextPopups);
+        mCategoryView.getDetailAdapter().setCategoryChoiceListener(
+            this::showCategoryOverrideDialog);
         LayoutParams categoryParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT);
         categoryParams.topMargin = gridParams.topMargin;
         categoryParams.bottomMargin = 0;
         mCategoryView.setVisibility(GONE);
         addView(mCategoryView, categoryParams);
+
+        // The categories search chrome: a quiet mono "N RESULTS" band between the pill and the
+        // rows, and a centred no-results state. Both exist only while that presentation is up.
+        mResultsLabel = new android.widget.TextView(context);
+        mResultsLabel.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 10f);
+        mResultsLabel.setTypeface(android.graphics.Typeface.MONOSPACE);
+        mResultsLabel.setLetterSpacing(0.16f);
+        mResultsLabel.setSingleLine(true);
+        mResultsLabel.setIncludeFontPadding(false);
+        mResultsLabel.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        mResultsLabel.setTextColor(resultsChromeColor(0x73));
+        mResultsLabel.setVisibility(GONE);
+        LayoutParams resultsLabelParams = new LayoutParams(LayoutParams.MATCH_PARENT,
+            dp(RESULTS_LABEL_BAND_DP));
+        resultsLabelParams.leftMargin = dp(PILL_MARGIN_H_DP + 4f);
+        resultsLabelParams.rightMargin = resultsLabelParams.leftMargin;
+        resultsLabelParams.topMargin = mGridBaseTopMarginPx;
+        addView(mResultsLabel, resultsLabelParams);
+
+        mNoResults = new android.widget.TextView(context);
+        mNoResults.setGravity(Gravity.CENTER);
+        mNoResults.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 15f);
+        mNoResults.setLineSpacing(0f, 1.3f);
+        mNoResults.setVisibility(GONE);
+        bindNoResultsText();
+        LayoutParams noResultsParams = new LayoutParams(LayoutParams.MATCH_PARENT,
+            LayoutParams.WRAP_CONTENT);
+        noResultsParams.topMargin = mGridBaseTopMarginPx + dp(64f);
+        noResultsParams.leftMargin = dp(PILL_MARGIN_H_DP);
+        noResultsParams.rightMargin = dp(PILL_MARGIN_H_DP);
+        addView(mNoResults, noResultsParams);
 
         LayoutParams indicatorParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             dp(PAGE_INDICATOR_BAND_DP), Gravity.BOTTOM);
@@ -368,6 +419,55 @@ public final class AppDrawerContentView extends FrameLayout
         }
     }
 
+    /** Long-press inside an expanded category: pick a category for the app, or go back to auto. */
+    private void showCategoryOverrideDialog(@NonNull LauncherAppEntry entry) {
+        List<AppDrawerCategory> choices = new ArrayList<>();
+        for (AppDrawerCategory category : AppDrawerCategory.values())
+            if (!category.synthetic) choices.add(category);
+        CharSequence[] labels = new CharSequence[choices.size() + 1];
+        labels[0] = getResources().getString(com.termux.R.string.app_drawer_category_automatic);
+        AppDrawerCategory current = AppDrawerCategory.fromSlug(
+            mCategoryOverrides.get(entry.appRef.packageName));
+        int checked = 0;
+        for (int i = 0; i < choices.size(); i++) {
+            labels[i + 1] = getResources().getString(choices.get(i).labelRes);
+            if (choices.get(i) == current) checked = i + 1;
+        }
+        new android.app.AlertDialog.Builder(getContext())
+            .setTitle(entry.label)
+            .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                if (which == 0) mCategoryOverrides.clear(entry.appRef.packageName);
+                else mCategoryOverrides.set(entry.appRef.packageName, choices.get(which - 1).slug);
+                dialog.dismiss();
+                reclassifyCategories();
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    /** Reruns the pipeline over the live catalogue after an override mutation; no data reload. */
+    private void reclassifyCategories() {
+        if (hasQuery()) return;
+        setCategoryBuckets(mCategoryClassifier.classify(mVisibleResults, mUsageStats,
+            AppDrawerSystemRoleResolver.resolve(getContext()), System.currentTimeMillis()));
+        logCategoryDebugReport();
+        if (mViewType == AppDrawerViewType.CATEGORIES)
+            mCategoryView.submitBuckets(mCategoryBuckets);
+    }
+
+    private void logCategoryDebugReport() {
+        if (!BuildConfig.DEBUG) return;
+        String report = mCategoryClassifier.debugReport();
+        int from = 0;
+        while (from < report.length()) {
+            int to = Math.min(report.length(), from + 3500);
+            int newline = report.lastIndexOf('\n', to - 1);
+            if (newline > from && to < report.length()) to = newline + 1;
+            android.util.Log.d("AppDrawerCategories", report.substring(from, to));
+            from = to;
+        }
+    }
+
     // ------------------------------------------------------------------ wiring
 
     public void setCallbacks(@Nullable Callbacks callbacks) {
@@ -379,10 +479,39 @@ public final class AppDrawerContentView extends FrameLayout
      * Additive to the drag contract; {@link #bind} does not carry it because the row is not part of
      * the drawer's data path.
      */
+    /** The launcher text colour at an alpha, for the search chrome; white before a dock exists. */
+    private int resultsChromeColor(int alpha) {
+        SuggestionBarView dock = mDock;
+        int base = dock == null ? android.graphics.Color.WHITE : dock.getLauncherTextColor();
+        return androidx.core.graphics.ColorUtils.setAlphaComponent(base, alpha);
+    }
+
+    /** "No apps matched" over the quieter suggestion line, per the mock's no-results state. */
+    private void bindNoResultsText() {
+        String title = getResources().getString(
+            com.termux.R.string.app_drawer_search_no_results_title);
+        String body = getResources().getString(
+            com.termux.R.string.app_drawer_search_no_results_body);
+        android.text.SpannableStringBuilder text =
+            new android.text.SpannableStringBuilder(title + "\n" + body);
+        int flags = android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE;
+        text.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+            0, title.length(), flags);
+        text.setSpan(new android.text.style.ForegroundColorSpan(resultsChromeColor(0xCC)),
+            0, title.length(), flags);
+        text.setSpan(new android.text.style.RelativeSizeSpan(0.8f),
+            title.length() + 1, text.length(), flags);
+        text.setSpan(new android.text.style.ForegroundColorSpan(resultsChromeColor(0x73)),
+            title.length() + 1, text.length(), flags);
+        mNoResults.setText(text);
+    }
+
     public void setDock(@Nullable SuggestionBarView dock) {
         if (mDock != null && mDock != dock) mDock.setDrawerConfigChangedListener(null);
         mDock = dock;
         if (dock != null) dock.setDrawerConfigChangedListener(this::onDockConfigChanged);
+        mResultsLabel.setTextColor(resultsChromeColor(0x73));
+        bindNoResultsText();
         mAdapter.setDock(dock);
         mHorizontalAdapter.setDock(dock);
         mCategoryView.setDock(dock);
@@ -476,10 +605,13 @@ public final class AppDrawerContentView extends FrameLayout
     }
 
     public void setVerticalMetrics(@NonNull AppDrawerGridMetrics metrics) {
-        mLayoutManager.setSpanCount(Math.max(1, metrics.columns));
+        mVerticalColumns = Math.max(1, metrics.columns);
+        // The categories search presents this grid as a single-column row list; the grid span is
+        // restored the moment that presentation is put away.
+        mLayoutManager.setSpanCount(mCategorySearchPresentation ? 1 : mVerticalColumns);
         // Two rows of holders past the viewport: enough that a fling never rebinds visible cells,
         // small enough that the shared icon cache is not asked to hold a second screenful.
-        mGrid.setItemViewCacheSize(Math.max(1, metrics.columns) * 2);
+        mGrid.setItemViewCacheSize(mVerticalColumns * 2);
         mAdapter.setMetrics(metrics);
     }
 
@@ -549,6 +681,7 @@ public final class AppDrawerContentView extends FrameLayout
         LayoutParams gridParams = (LayoutParams) mGrid.getLayoutParams();
         switch (mViewType) {
             case VERTICAL:
+                applyCategorySearchPresentation(false);
                 gridParams.rightMargin = Math.round(mColumnWidthPx);
                 mGrid.setLayoutParams(gridParams);
                 mGrid.setVisibility(VISIBLE);
@@ -559,6 +692,7 @@ public final class AppDrawerContentView extends FrameLayout
                 mPageIndicator.setVisibility(GONE);
                 break;
             case HORIZONTAL:
+                applyCategorySearchPresentation(false);
                 mGrid.setVisibility(GONE);
                 mHorizontalPager.setVisibility(VISIBLE);
                 mCategoryView.setVisibility(GONE);
@@ -569,12 +703,62 @@ public final class AppDrawerContentView extends FrameLayout
                 gridParams.rightMargin = 0;
                 mGrid.setLayoutParams(gridParams);
                 boolean search = hasQuery();
+                applyCategorySearchPresentation(search);
                 mGrid.setVisibility(search ? VISIBLE : GONE);
                 mHorizontalPager.setVisibility(GONE);
                 mCategoryView.setVisibility(search ? GONE : VISIBLE);
                 hideColumn();
                 mPageIndicator.setVisibility(GONE);
                 break;
+        }
+    }
+
+    /**
+     * The categories view type shows ranked results as rows — one column, a "N RESULTS" band above
+     * them and a centred no-results state — while every other presentation keeps the plain grid.
+     */
+    private void applyCategorySearchPresentation(boolean active) {
+        if (mCategorySearchPresentation != active) {
+            mCategorySearchPresentation = active;
+            mAdapter.setSearchRowPresentation(active, active ? this::categoryLabelFor : null);
+            LayoutParams gridParams = (LayoutParams) mGrid.getLayoutParams();
+            gridParams.topMargin = mGridBaseTopMarginPx
+                + (active ? dp(RESULTS_LABEL_BAND_DP) : 0);
+            mGrid.setLayoutParams(gridParams);
+        }
+        mLayoutManager.setSpanCount(active ? 1 : mVerticalColumns);
+        boolean empty = mVisibleResults.isEmpty();
+        mResultsLabel.setVisibility(active ? VISIBLE : GONE);
+        mNoResults.setVisibility(active && empty ? VISIBLE : GONE);
+        if (active) {
+            mResultsLabel.setText(empty
+                ? getResources().getString(com.termux.R.string.app_drawer_search_no_results_label)
+                : getResources().getQuantityString(
+                    com.termux.R.plurals.app_drawer_search_result_count,
+                    mVisibleResults.size(), mVisibleResults.size()));
+        }
+    }
+
+    /** The classified bucket's label for a search row's category line, or null when unknown. */
+    @Nullable
+    private CharSequence categoryLabelFor(@NonNull LauncherAppEntry entry) {
+        Integer labelRes = mCategoryLabelIds.get(entry.appRef.stableId());
+        return labelRes == null ? null : getResources().getString(labelRes);
+    }
+
+    /** One write path for the buckets, so the search rows' category index can never go stale. */
+    private void setCategoryBuckets(@NonNull List<AppDrawerCategoryBucket> buckets) {
+        mCategoryBuckets = buckets;
+        mCategoryLabelIds.clear();
+        for (AppDrawerCategoryBucket bucket : buckets) {
+            // Synthetic buckets (Suggestions, Recently Added) duplicate apps that also live in a
+            // real category; the row's category line names the real one.
+            if (bucket.category.synthetic) continue;
+            for (LauncherAppEntry entry : bucket.entries()) {
+                String stableId = entry.appRef.stableId();
+                if (!mCategoryLabelIds.containsKey(stableId))
+                    mCategoryLabelIds.put(stableId, bucket.category.labelRes);
+            }
         }
     }
 
@@ -748,8 +932,9 @@ public final class AppDrawerContentView extends FrameLayout
         // package refreshes, direct search-controller fixtures and query-clear all on the same
         // atomic model path; ranked non-empty results never replace the category model.
         if (!hasQuery()) {
-            mCategoryBuckets = mCategoryClassifier.classify(results, mUsageStats,
-                System.currentTimeMillis());
+            setCategoryBuckets(mCategoryClassifier.classify(results, mUsageStats,
+                AppDrawerSystemRoleResolver.resolve(getContext()), System.currentTimeMillis()));
+            logCategoryDebugReport();
         }
         // The list identity changed under whatever menu was open, and every cell it was anchored to
         // is about to be rebound.
@@ -1776,5 +1961,17 @@ public final class AppDrawerContentView extends FrameLayout
     @NonNull
     public AppDrawerRopeColumnView getRopeColumn() {
         return mColumn;
+    }
+
+    /** @return the categories search's "N RESULTS" band */
+    @NonNull
+    public android.widget.TextView getResultsLabel() {
+        return mResultsLabel;
+    }
+
+    /** @return the categories search's centred no-results state */
+    @NonNull
+    public android.widget.TextView getNoResultsView() {
+        return mNoResults;
     }
 }

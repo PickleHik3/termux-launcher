@@ -11,11 +11,17 @@ public class AppDrawerCategoryGridMetricsTest {
     private static final int BUDGET = 8 * 1024 * 1024;
 
     @Test public void columnBreakpointsAreTheApprovedPhysicalFit() {
-        assertEquals(1, metrics(295f, 600f).columns);
-        assertEquals(2, metrics(296f, 600f).columns);
-        assertEquals(2, metrics(447f, 600f).columns);
-        assertEquals(3, metrics(448f, 600f).columns);
+        // Physical fit at the redesign's 12dp card gap: floor((w + 12) / (144 + 12)).
+        assertEquals(1, metrics(299f, 600f).columns);
+        assertEquals(2, metrics(300f, 600f).columns);
+        assertEquals(2, metrics(455f, 600f).columns);
+        assertEquals(3, metrics(456f, 600f).columns);
         assertEquals(3, metrics(1200f, 600f).columns);
+    }
+
+    @Test public void expandedGridIsTheRedesignsFixedThreeColumns() {
+        assertEquals(3, metrics(360f, 640f).expandedColumns);
+        assertEquals(3, metrics(1200f, 600f).expandedColumns);
     }
 
     @Test public void squareHeadingSlotsRadiusAndBudgetAreExact() {

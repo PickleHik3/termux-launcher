@@ -25,9 +25,18 @@ import java.util.List;
  * Seven-icon category preview drawn as one rounded rect with the heading INSIDE at the top —
  * the tile reads as a folder card (label band above a square icon area, slightly taller than
  * wide), not as a picture with an external caption.
+ *
+ * <p>Redesign: the whole card is one open-category target. The three large icons and the 2x2
+ * mini-cluster are display only — launching individual apps is the expanded grid's job — so a tap
+ * anywhere on the card expands it, with a light press dip (0.98 scale, lifted wash) as feedback.
  */
 public final class AppDrawerCategoryTileView extends ViewGroup {
     public static final float HEADING_TEXT_SP = 13f;
+    /** Card washes from the mock: white over the dark glass, wash-only like the search pill. */
+    private static final int FILL_COLOR = 0x0EFFFFFF;
+    private static final int FILL_PRESSED_COLOR = 0x1CFFFFFF;
+    private static final int STROKE_COLOR = 0x21FFFFFF;
+    private static final float PRESSED_SCALE = 0.98f;
     public interface ExpansionListener {
         void onExpandRequested(@NonNull AppDrawerCategoryBucket bucket,
                                @NonNull AppDrawerCategoryTileView source);
@@ -55,10 +64,10 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         setClipToPadding(false);
         setClickable(false);
         fillPaint.setStyle(Paint.Style.FILL);
-        fillPaint.setColor(0x1FFFFFFF);
+        fillPaint.setColor(FILL_COLOR);
         strokePaint.setStyle(Paint.Style.STROKE);
         strokePaint.setStrokeWidth(Math.max(1f, getResources().getDisplayMetrics().density));
-        strokePaint.setColor(0x38FFFFFF);
+        strokePaint.setColor(STROKE_COLOR);
         for (int i = 0; i < icons.length; i++) {
             ImageView icon = new ImageView(context);
             // The cached drawable is rendered at this view's exact pixel size. CENTER therefore
@@ -68,19 +77,51 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
             icons[i] = icon;
             addView(icon);
         }
-        expandTarget = new View(context);
+        // The whole-card open target: a transparent sibling laid over the entire drawn tile, above
+        // every display-only icon, that reports its pressed state back for the card's press dip.
+        expandTarget = new PressTargetView(context, this::applyPressedAppearance);
         expandTarget.setBackgroundColor(Color.TRANSPARENT);
         expandTarget.setClickable(true);
         addView(expandTarget);
         heading = new TextView(context);
         heading.setTextSize(TypedValue.COMPLEX_UNIT_SP, HEADING_TEXT_SP);
-        heading.setSingleLine(true);
-        heading.setMaxLines(1);
+        heading.setTypeface(android.graphics.Typeface.create("sans-serif-medium",
+            android.graphics.Typeface.NORMAL));
+        heading.setMaxLines(2);
         heading.setEllipsize(TextUtils.TruncateAt.END);
+        heading.setLetterSpacing(-0.005f);
         heading.setGravity(android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL);
         heading.setIncludeFontPadding(false);
         heading.setClickable(true);
         addView(heading);
+    }
+
+    /** The mock's press feedback: the card dips to 0.98 and its wash lifts while held. */
+    private void applyPressedAppearance(boolean pressed) {
+        setScaleX(pressed ? PRESSED_SCALE : 1f);
+        setScaleY(pressed ? PRESSED_SCALE : 1f);
+        fillPaint.setColor(pressed ? FILL_PRESSED_COLOR : FILL_COLOR);
+        invalidate();
+    }
+
+    /** A plain transparent view that reports pressed-state flips to the card. */
+    private static final class PressTargetView extends View {
+        interface PressedListener { void onPressedChanged(boolean pressed); }
+        @NonNull private final PressedListener listener;
+        PressTargetView(@NonNull android.content.Context context,
+                        @NonNull PressedListener listener) {
+            super(context);
+            this.listener = listener;
+        }
+        @Override protected void dispatchSetPressed(boolean pressed) {
+            super.dispatchSetPressed(pressed);
+            listener.onPressedChanged(pressed);
+        }
+        @Override public void setPressed(boolean pressed) {
+            boolean changed = pressed != isPressed();
+            super.setPressed(pressed);
+            if (changed) listener.onPressedChanged(pressed);
+        }
     }
 
     public void setMetrics(@NonNull AppDrawerCategoryGridMetrics metrics) {
@@ -100,7 +141,10 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         String label = getResources().getString(bucket.category.labelRes);
         heading.setText(label);
         heading.setClickable(true);
-        heading.setTextColor(dock == null ? Color.WHITE : dock.getLauncherTextColor());
+        // 90% of the launcher text colour, per the mock's card titles.
+        int headingColor = dock == null ? Color.WHITE : dock.getLauncherTextColor();
+        heading.setTextColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
+            headingColor, 0xE6));
         String open = getResources().getString(R.string.app_drawer_category_open, label);
         heading.setContentDescription(open);
         expandTarget.setContentDescription(open);
@@ -126,20 +170,11 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
             icon.setImageDrawable(artwork != null ? artwork : entry.icon);
             if (dock != null) dock.applyIconColorFilter(icon);
             icon.setVisibility(VISIBLE);
-            if (i < 3) {
-                icon.setClickable(true);
-                icon.setContentDescription(entry.label);
-                icon.setOnClickListener(view -> {
-                    if (!this.clickGate.suppressCellClick() && this.dock != null)
-                        this.dock.launchEntryFromDrawer(view, entry);
-                });
-                if (dock != null) dock.bindDrawerAppContextLongPress(icon, entry);
-            } else {
-                // Display-only: the one accessible target layered above all four owns the block.
-                icon.setClickable(false);
-                icon.setLongClickable(false);
-                icon.setContentDescription(null);
-            }
+            // Display-only, all seven: the whole card is one open-category target and individual
+            // launches live in the expanded grid. The full-card target above them owns the tap.
+            icon.setClickable(false);
+            icon.setLongClickable(false);
+            icon.setContentDescription(null);
         }
         requestLayout();
     }
@@ -151,6 +186,7 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
 
     public void unbind() {
         releaseDrawables();
+        applyPressedAppearance(false);
         heading.setText(null);
         heading.setContentDescription(null);
         heading.setOnClickListener(null);
@@ -197,9 +233,11 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
             icons[i].measure(MeasureSpec.makeMeasureSpec(size, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(size, MeasureSpec.EXACTLY));
         }
-        int block = resolved == null ? 1 : Math.max(1, Math.round(resolved.largeSlotPx));
-        expandTarget.measure(MeasureSpec.makeMeasureSpec(block, MeasureSpec.EXACTLY),
-            MeasureSpec.makeMeasureSpec(block, MeasureSpec.EXACTLY));
+        // The open target covers the whole drawn card, not just the fourth slot.
+        expandTarget.measure(
+            MeasureSpec.makeMeasureSpec(Math.max(1, Math.round(tileSide)), MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(Math.max(1, Math.round(headingBand + tileSide)),
+                MeasureSpec.EXACTLY));
         int desired = Math.round(headingBand + tileSide
             + (resolved == null ? 0f : resolved.itemBottomGapPx));
         setMeasuredDimension(resolveSize(width, widthMeasureSpec), resolveSize(desired, heightMeasureSpec));
@@ -228,10 +266,10 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
             RectF cell = smallCells[i];
             layoutCentered(icons[3 + i], cell.left, cell.top, cell.width());
         }
-        int blockLeft = Math.round(right);
-        int blockTop = Math.round(bottom);
-        expandTarget.layout(blockLeft, blockTop, blockLeft + Math.round(slot),
-            blockTop + Math.round(slot));
+        // Whole-card target: exactly the drawn rounded rect.
+        expandTarget.layout(Math.round(tileLeft), 0,
+            Math.round(tileLeft) + expandTarget.getMeasuredWidth(),
+            expandTarget.getMeasuredHeight());
     }
 
     private static void layoutCentered(@NonNull View view, float left, float top, float size) {

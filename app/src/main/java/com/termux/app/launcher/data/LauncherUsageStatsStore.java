@@ -40,6 +40,8 @@ public final class LauncherUsageStatsStore {
         return 0; // Collections.sort is stable, so identical labels retain source order.
     };
     private static final Comparator<RankedEntry> SUGGESTION_RANKING_COMPARATOR = (a, b) -> {
+        int scoreComparison = Double.compare(b.decayedScore, a.decayedScore);
+        if (scoreComparison != 0) return scoreComparison;
         int countComparison = Integer.compare(b.count, a.count);
         if (countComparison != 0) return countComparison;
         int lastComparison = Long.compare(b.lastLaunchEpochMs, a.lastLaunchEpochMs);
@@ -48,6 +50,9 @@ public final class LauncherUsageStatsStore {
         if (labelComparison != 0) return labelComparison;
         return a.entry.appRef.stableId().compareTo(b.entry.appRef.stableId());
     };
+    /** Half-life of a launch's suggestion weight; two weeks idle costs half the count. */
+    private static final double DECAY_HALF_LIFE_DAYS = 14.0;
+    private static final double MS_PER_DAY = 24.0 * 60.0 * 60.0 * 1000.0;
 
     private final SharedPreferences sharedPreferences;
     @NonNull private final Context applicationContext;
@@ -111,21 +116,50 @@ public final class LauncherUsageStatsStore {
         return sorted;
     }
 
-    /** Positive-use entries only, ordered by count, recency, label and profile-aware stable id. */
+    /** Positive-use entries only, ordered by decayed score, count, recency, label, stable id. */
     @NonNull
     public synchronized List<LauncherAppEntry> rankForSuggestions(
         @NonNull List<LauncherAppEntry> entries) {
+        return rankForSuggestions(entries, System.currentTimeMillis());
+    }
+
+    @NonNull
+    public synchronized List<LauncherAppEntry> rankForSuggestions(
+        @NonNull List<LauncherAppEntry> entries, long nowEpochMs) {
         ensureLoaded();
         List<RankedEntry> ranked = new ArrayList<>(entries.size());
         for (LauncherAppEntry entry : entries) {
             UsageStat stat = usageByStableId.get(entry.appRef.stableId());
             if (stat == null || stat.count <= 0) continue;
-            ranked.add(new RankedEntry(entry, stat.count, stat.lastLaunchEpochMs));
+            ranked.add(new RankedEntry(entry, stat.count, stat.lastLaunchEpochMs,
+                decayedScore(stat.count, stat.lastLaunchEpochMs, nowEpochMs)));
         }
         Collections.sort(ranked, SUGGESTION_RANKING_COMPARATOR);
         List<LauncherAppEntry> sorted = new ArrayList<>(ranked.size());
         for (RankedEntry item : ranked) sorted.add(item.entry);
         return sorted;
+    }
+
+    /** Per-stable-id decayed scores for the given entries; never-used entries are omitted. */
+    @NonNull
+    public synchronized Map<String, Double> decayedScores(@NonNull List<LauncherAppEntry> entries,
+                                                          long nowEpochMs) {
+        ensureLoaded();
+        Map<String, Double> scores = new HashMap<>();
+        for (LauncherAppEntry entry : entries) {
+            UsageStat stat = usageByStableId.get(entry.appRef.stableId());
+            if (stat == null || stat.count <= 0) continue;
+            scores.put(entry.appRef.stableId(),
+                decayedScore(stat.count, stat.lastLaunchEpochMs, nowEpochMs));
+        }
+        return scores;
+    }
+
+    /** {@code count * 0.5^(daysSinceLastLaunch / 14)}; future timestamps clamp to age zero. */
+    public static double decayedScore(int count, long lastLaunchEpochMs, long nowEpochMs) {
+        if (count <= 0) return 0.0;
+        double days = Math.max(0L, nowEpochMs - lastLaunchEpochMs) / MS_PER_DAY;
+        return count * Math.pow(0.5, days / DECAY_HALF_LIFE_DAYS);
     }
 
     private static String safeLabel(@NonNull LauncherAppEntry entry) {
@@ -179,15 +213,18 @@ public final class LauncherUsageStatsStore {
         final LauncherAppEntry entry;
         final int count;
         final long lastLaunchEpochMs;
+        final double decayedScore;
 
         RankedEntry(@NonNull LauncherAppEntry entry, int count) {
-            this(entry, count, 0L);
+            this(entry, count, 0L, 0.0);
         }
 
-        RankedEntry(@NonNull LauncherAppEntry entry, int count, long lastLaunchEpochMs) {
+        RankedEntry(@NonNull LauncherAppEntry entry, int count, long lastLaunchEpochMs,
+                    double decayedScore) {
             this.entry = entry;
             this.count = count;
             this.lastLaunchEpochMs = lastLaunchEpochMs;
+            this.decayedScore = decayedScore;
         }
     }
 }

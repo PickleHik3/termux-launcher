@@ -127,6 +127,45 @@ public class AppDrawerContentCategoriesTest {
         assertNull(bucket(AppDrawerCategory.SUGGESTIONS));
     }
 
+    @Test public void categoriesSearchShowsRowsWithCategoryLinesAndACountLabel() {
+        search.setCatalogue(Collections.singletonList(apps().get(0)));
+        assertTrue(search.handleCodePoint('a', false));
+        layout();
+        RecyclerView grid = content.getGrid();
+        assertEquals(1, ((androidx.recyclerview.widget.GridLayoutManager)
+            grid.getLayoutManager()).getSpanCount());
+        assertEquals(View.VISIBLE, content.getResultsLabel().getVisibility());
+        assertEquals(View.GONE, content.getNoResultsView().getVisibility());
+        assertEquals("1 RESULT", content.getResultsLabel().getText().toString());
+        assertTrue(grid.getChildCount() > 0);
+        View row = grid.getChildAt(0);
+        assertTrue(row instanceof AppDrawerSearchResultRowView);
+        AppDrawerSearchResultRowView resultRow = (AppDrawerSearchResultRowView) row;
+        assertEquals("Alpha", resultRow.label.getText().toString());
+        // "Alpha" is CATEGORY_SOCIAL in this fixture; the second line names its real bucket.
+        assertEquals(RuntimeEnvironment.getApplication().getString(
+            com.termux.R.string.app_drawer_category_social),
+            resultRow.category.getText().toString());
+
+        assertTrue(content.clearQueryIfPresent());
+        layout();
+        assertEquals(View.GONE, content.getResultsLabel().getVisibility());
+        assertTrue(((androidx.recyclerview.widget.GridLayoutManager)
+            grid.getLayoutManager()).getSpanCount() > 1);
+    }
+
+    @Test public void categoriesSearchWithNoMatchesShowsTheNoResultsState() {
+        assertTrue(search.handleCodePoint('z', false));
+        assertTrue(search.handleCodePoint('q', false));
+        assertTrue(search.handleCodePoint('x', false));
+        layout();
+        assertTrue(search.results().isEmpty());
+        assertEquals(View.VISIBLE, content.getNoResultsView().getVisibility());
+        assertEquals(RuntimeEnvironment.getApplication().getString(
+            com.termux.R.string.app_drawer_search_no_results_label),
+            content.getResultsLabel().getText().toString());
+    }
+
     @Test public void backHierarchyClearsQueryThenCollapsesThenOffersDrawerClose() {
         search.handleCodePoint('a', false);
         assertTrue(content.handleBackInDrawer());
