@@ -23,6 +23,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.widget.TextViewCompat;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
@@ -30,6 +31,9 @@ import com.google.android.material.color.MaterialColors;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.app.settings.TermuxPropertiesFile;
+import com.termux.shared.termux.extrakeys.ExtraKeyButton;
+import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
+import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
 import java.util.ArrayList;
@@ -71,6 +75,15 @@ public final class ExtraKeysRowEditor {
 
     private final List<ExtraKeysLayoutModel> pages = new ArrayList<>();
     private int currentPage;
+
+    /**
+     * The same key-name to glyph map the live toolbar draws with, read from {@code extra-keys-style}
+     * when the draft is loaded. Without it a cap showed the raw key name — {@code KEYBOARD} rather
+     * than {@code ⌨} — for a key the row itself renders as one glyph.
+     */
+    @NonNull
+    private ExtraKeysConstants.ExtraKeyDisplayMap displayMap =
+        ExtraKeysConstants.EXTRA_KEY_DISPLAY_MAPS.DEFAULT_CHAR_DISPLAY;
 
     private BottomSheetDialog dialog;
     private ScrollView bodyScroller;
@@ -215,6 +228,9 @@ public final class ExtraKeysRowEditor {
     private void loadPages() {
         pages.clear();
         Properties properties = TermuxPropertiesFile.load(context);
+        displayMap = ExtraKeysInfo.getCharDisplayMapForStyle(
+            properties.getProperty(TermuxPropertyConstants.KEY_EXTRA_KEYS_STYLE,
+                TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE));
         for (int page = 0; page < TermuxTerminalExtraKeys.PAGE_PROPERTY_KEYS.length; page++) {
             String value = properties.getProperty(TermuxTerminalExtraKeys.PAGE_PROPERTY_KEYS[page]);
             if (value == null) value = TermuxTerminalExtraKeys.PAGE_DEFAULT_VALUES[page];
@@ -352,7 +368,7 @@ public final class ExtraKeysRowEditor {
 
         TextView popup = new TextView(context);
         // Kept in the tree even when empty so every cap has the same height (F-06).
-        popup.setText(key.popup == null ? "" : "↑ " + key.popup.label());
+        popup.setText(key.popup == null ? "" : "↑ " + capText(key.popup));
         popup.setTextColor(colorSubtle);
         popup.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
         popup.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -361,12 +377,10 @@ public final class ExtraKeysRowEditor {
         cap.addView(popup);
 
         TextView label = new TextView(context);
-        label.setText(key.label());
+        label.setText(capText(key));
         label.setTextColor(colorText);
-        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
         label.setGravity(Gravity.CENTER_HORIZONTAL);
-        label.setMaxLines(2);
-        label.setEllipsize(TextUtils.TruncateAt.END);
+        applyCapLabelSizing(label);
         cap.addView(label);
         if (selected) selectedCapLabel = label;
 
@@ -389,6 +403,30 @@ public final class ExtraKeysRowEditor {
         });
         cap.setOnDragListener(capDropListener(model, row, index, background, rebuild));
         return cap;
+    }
+
+    /**
+     * What a cap reads: the same resolution the live toolbar performs, so an editor cap never shows
+     * an action id for a key the row draws as a glyph.
+     */
+    @NonNull
+    private String capText(@NonNull ExtraKeysLayoutModel.Key key) {
+        return ExtraKeyButton.resolveDisplay(key.key, key.display, displayMap);
+    }
+
+    /**
+     * A cap label never wraps: one line, shrinking to a 9sp floor and only then ellipsizing.
+     *
+     * <p>Two clipped lines inside a 56dp cap was the worst of both — a long label lost its tail
+     * <em>and</em> the cap grew. The full action name belongs in the edit panel, which has the width
+     * for it.
+     */
+    private void applyCapLabelSizing(@NonNull TextView label) {
+        label.setSingleLine(true);
+        label.setEllipsize(TextUtils.TruncateAt.END);
+        // Autosizing owns the text size from here; setTextSize would be overridden anyway.
+        TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(label, 9, 15, 1,
+            TypedValue.COMPLEX_UNIT_SP);
     }
 
     /** The "+" cap ending every row; picks an action and appends it. Labelled in empty rows. */
@@ -493,7 +531,7 @@ public final class ExtraKeysRowEditor {
             })));
 
         String popupLabel = key.popup == null
-            ? context.getString(R.string.settings_extra_keys_editor_none) : key.popup.label();
+            ? context.getString(R.string.settings_extra_keys_editor_none) : capText(key.popup);
         panel.addView(selectorRow(context.getString(R.string.settings_extra_keys_editor_swipe_up),
             popupLabel, () -> openPicker(picked -> {
                 key.popup = picked;
@@ -521,15 +559,43 @@ public final class ExtraKeysRowEditor {
             @Override public void afterTextChanged(Editable s) {
                 String text = s.toString().trim();
                 key.display = text.isEmpty() ? null : text;
-                if (selectedCapLabel != null) selectedCapLabel.setText(key.label());
+                if (selectedCapLabel != null) selectedCapLabel.setText(capText(key));
                 markDirty();
             }
         });
-        panel.addView(display);
+        panel.addView(labelField(display));
         TextView supporting = caption(context.getString(
             R.string.settings_extra_keys_editor_shows_hint));
         supporting.setPadding(pad(4), 0, 0, pad(4));
         panel.addView(supporting);
+
+        // The swipe-up key gets the same field. Without it the badge kept whatever the action picker
+        // wrote — "Previous session" for tool:session.previous — which is a whole word inside a 9sp
+        // badge, and there was no way to shorten it to a glyph.
+        if (key.popup != null) {
+            final ExtraKeysLayoutModel.Key popupKey = key.popup;
+            panel.addView(header(context.getString(
+                R.string.settings_extra_keys_editor_swipe_up_shows)));
+            EditText popupDisplay = new EditText(context);
+            popupDisplay.setSingleLine(true);
+            popupDisplay.setTextColor(colorText);
+            popupDisplay.setHintTextColor(colorSubtle);
+            if (popupKey.display != null) popupDisplay.setText(popupKey.display);
+            popupDisplay.addTextChangedListener(new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+                @Override public void afterTextChanged(Editable s) {
+                    String text = s.toString().trim();
+                    popupKey.display = text.isEmpty() ? null : text;
+                    markDirty();
+                }
+            });
+            panel.addView(labelField(popupDisplay));
+            TextView popupSupporting = caption(context.getString(
+                R.string.settings_extra_keys_editor_swipe_up_shows_hint));
+            popupSupporting.setPadding(pad(4), 0, 0, pad(4));
+            panel.addView(popupSupporting);
+        }
 
         panel.addView(header(context.getString(R.string.settings_extra_keys_editor_move)));
         panel.addView(moveButtons(model, row, index, rebuild));
@@ -680,6 +746,57 @@ public final class ExtraKeysRowEditor {
             dialog.show();
             scrollSelectionIntoView();
         });
+    }
+
+    /**
+     * A label field with the glyph picker beside it. A cap label is usually a character no soft
+     * keyboard offers — ⌘, ⇥, a Powerline separator — so the catalogue sits next to the field
+     * rather than behind a menu the field never mentions.
+     */
+    private View labelField(@NonNull EditText field) {
+        LinearLayout fieldRow = row();
+        field.setLayoutParams(new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        fieldRow.addView(field);
+
+        TextView insert = new TextView(context);
+        insert.setText("Ω");
+        insert.setContentDescription(context.getString(R.string.settings_extra_keys_glyph_insert));
+        insert.setTextColor(colorAccent);
+        insert.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f);
+        insert.setGravity(Gravity.CENTER);
+        insert.setMinimumHeight(pad(48));
+        insert.setBackground(outline());
+        LinearLayout.LayoutParams insertParams = new LinearLayout.LayoutParams(pad(48),
+            ViewGroup.LayoutParams.WRAP_CONTENT);
+        insertParams.setMargins(pad(8), 0, 0, 0);
+        insert.setLayoutParams(insertParams);
+        insert.setOnClickListener(v -> openGlyphPicker(field));
+        fieldRow.addView(insert);
+        return fieldRow;
+    }
+
+    /**
+     * F-05 again: one sheet at a time. The glyph lands at the caret rather than replacing the
+     * field, so a label may mix a glyph with text, and the field's own watcher still owns the
+     * model — a field left blank keeps writing {@code null}.
+     */
+    private void openGlyphPicker(@NonNull EditText field) {
+        dialog.hide();
+        ExtraKeyGlyphPicker.show(context, glyph -> {
+            Editable text = field.getText();
+            int start = clampToText(field.getSelectionStart(), text.length());
+            int end = clampToText(field.getSelectionEnd(), text.length());
+            text.replace(Math.min(start, end), Math.max(start, end), glyph);
+        }, () -> {
+            dialog.show();
+            scrollSelectionIntoView();
+        });
+    }
+
+    /** An unfocused field reports a -1 selection, which {@code replace} would throw on. */
+    private static int clampToText(int index, int length) {
+        return index < 0 ? length : Math.min(index, length);
     }
 
     /** F-01: after a rebuild, bring the selected key's row and its edit panel back into view. */

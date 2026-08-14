@@ -3,6 +3,10 @@ package com.termux.app.terminal.io;
 import android.app.Application;
 import android.os.Build;
 
+import com.termux.shared.termux.extrakeys.ExtraKeyButton;
+import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
+import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -139,6 +143,54 @@ public class ExtraKeysLayoutModelTest {
 
         assertNull(key.display);
         assertEquals("HOME", key.label());
+    }
+
+    /**
+     * The editor and the live toolbar have to arrive at the same cap text. They did not: the editor
+     * fell back to the raw key name, so a cap that the row draws as {@code ⌨} read {@code KEYBOARD},
+     * clipped over two lines inside a 56dp cap.
+     */
+    @Test
+    public void theCapLabelResolvesThroughTheSameMapTheLiveRowUses() {
+        ExtraKeysConstants.ExtraKeyDisplayMap map =
+            ExtraKeysInfo.getCharDisplayMapForStyle("default");
+
+        assertEquals("⌨", ExtraKeyButton.resolveDisplay("KEYBOARD", null, map));
+        assertEquals("←", ExtraKeyButton.resolveDisplay("LEFT", null, map));
+        // An explicit display always wins, exactly as in the live row.
+        assertEquals("exit", ExtraKeyButton.resolveDisplay("KEYBOARD", "exit", map));
+        // Macros resolve token by token and stay joined by spaces.
+        assertEquals("CTRL ⌨", ExtraKeyButton.resolveDisplay("CTRL KEYBOARD", null, map));
+        // Nothing in the map: the spec itself, which is what the edit panel is for.
+        assertEquals("tool:workspace.picker",
+            ExtraKeyButton.resolveDisplay("tool:workspace.picker", null, map));
+    }
+
+    /** The swipe-up label is a real field now, so it has to survive a write and a re-read. */
+    @Test
+    public void aSwipeUpDisplayRoundTripsThroughSerialization() {
+        ExtraKeysLayoutModel model = ExtraKeysLayoutModel.parse(
+            "[[{key: ESC, popup: {key: \"tool:session.previous\", display: \"Previous session\"}}]]");
+
+        model.row(0).get(0).popup.display = "⇤";
+        String serialized = model.serialize();
+
+        ExtraKeysLayoutModel reread = ExtraKeysLayoutModel.parse(serialized);
+        ExtraKeysLayoutModel.Key popup = reread.row(0).get(0).popup;
+        assertEquals("tool:session.previous", popup.key);
+        assertEquals("⇤", popup.display);
+    }
+
+    /** Clearing the field writes no {@code display} at all rather than an empty one. */
+    @Test
+    public void anEmptySwipeUpDisplayIsDroppedRatherThanWrittenBlank() {
+        ExtraKeysLayoutModel model = ExtraKeysLayoutModel.parse(
+            "[[{key: ESC, popup: {key: HOME, display: \"Start of line\"}}]]");
+
+        model.row(0).get(0).popup.display = null;
+
+        ExtraKeysLayoutModel reread = ExtraKeysLayoutModel.parse(model.serialize());
+        assertNull(reread.row(0).get(0).popup.display);
     }
 
     @Test
