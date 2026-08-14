@@ -148,13 +148,24 @@ public final class WidgetEditOverlayView extends View {
         canvas.drawCircle(x, y, radius, handleRingPaint);
     }
 
-    private float chipRadius() { return dp(13f); }
-    /** Corner-anchored but clamped inside the overlay so a full-width frame never clips it. */
-    private float chipCenterX() {
-        return Math.min(frame.right - dp(2f), getWidth() - chipRadius() - dp(2f));
+    float chipRadius() { return dp(13f); }
+
+    /**
+     * The chip straddles the frame's top-right corner, which for a cell against the pane's own edge
+     * left half of it sitting out on the pane rim; such a cell wears the chip tucked fully inside
+     * its frame instead. Interior cells keep the corner anchor, and the overlay bounds still clamp
+     * the result so no geometry can push the chip off the pane.
+     */
+    float chipCenterX() {
+        float radius = chipRadius(), inset = dp(2f);
+        float center = frame.right + radius > getWidth() ? frame.right - radius - inset : frame.right - inset;
+        return Math.min(Math.max(center, radius + inset), getWidth() - radius - inset);
     }
-    private float chipCenterY() {
-        return Math.max(frame.top + dp(2f), chipRadius() + dp(2f));
+
+    float chipCenterY() {
+        float radius = chipRadius(), inset = dp(2f);
+        float center = frame.top < radius ? frame.top + radius + inset : frame.top + inset;
+        return Math.min(Math.max(center, radius + inset), getHeight() - radius - inset);
     }
 
     @Override public boolean onTouchEvent(@NonNull MotionEvent event) {
