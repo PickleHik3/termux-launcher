@@ -49,27 +49,46 @@ public class AppDrawerControllerHorizontalTest {
         ReflectionHelpers.setField(controller, "mOpenRect", new Frame(0f, 0f, 720f, 1280f));
     }
 
-    @Test public void verticalSubtractsRopeButHorizontalUsesFullWidthAndOwnKeys() {
-        preferences.setAppLauncherDrawerViewType("vertical");
-        preferences.setAppLauncherDrawerGridColumnsVertical(5);
-        ReflectionHelpers.setField(controller, "mLayoutConfig",
-            AppDrawerLayoutConfig.from(preferences));
+    @Test public void verticalSubtractsRopeButHorizontalUsesFullWidthAndOwnMetrics() {
+        // Geometry is pinned through the config rather than through preferences: the icon-size and
+        // column/row settings are gone, so from(preferences) reports auto for all of them (see
+        // storedGeometryPreferencesAreIgnored below). Each view still reads only its own fields.
+        AppDrawerLayoutConfig pinned = new AppDrawerLayoutConfig(AppDrawerViewType.VERTICAL, 0,
+            5, 6, 2, 0);
+        ReflectionHelpers.setField(controller, "mLayoutConfig", pinned);
         invokePrepare();
         assertEquals(AppDrawerViewType.VERTICAL, content.getViewType());
         assertEquals(5, ((AppDrawerAppsAdapter) content.getGrid().getAdapter())
             .getMetrics().columns);
 
-        preferences.setAppLauncherDrawerViewType("horizontal");
-        preferences.setAppLauncherDrawerGridColumnsHorizontal(6);
-        preferences.setAppLauncherDrawerGridRowsHorizontal(2);
         ReflectionHelpers.setField(controller, "mLayoutConfig",
-            AppDrawerLayoutConfig.from(preferences));
+            new AppDrawerLayoutConfig(AppDrawerViewType.HORIZONTAL, 0, 5, 6, 2, 0));
         invokePrepare();
         AppDrawerHorizontalGridMetrics metrics = content.getHorizontalAdapter().getMetrics();
         assertEquals(AppDrawerViewType.HORIZONTAL, content.getViewType());
         assertEquals(720f, metrics.usablePageWidthPx, 0f);
         assertEquals(6, metrics.columns);
         assertEquals(2, metrics.rows);
+    }
+
+    @Test public void storedGeometryPreferencesAreIgnoredNowThatTheSettingsAreGone() {
+        preferences.setAppLauncherDrawerViewType("horizontal");
+        preferences.setAppLauncherDrawerIconSizeDp(36);
+        preferences.setAppLauncherDrawerGridColumnsVertical(5);
+        preferences.setAppLauncherDrawerGridColumnsHorizontal(6);
+        preferences.setAppLauncherDrawerGridRowsHorizontal(2);
+        preferences.setAppLauncherDrawerGridColumnsCategories(1);
+
+        AppDrawerLayoutConfig config = AppDrawerLayoutConfig.from(preferences);
+
+        // The view type is the one surviving preference; a value left behind by an older install
+        // must not pin geometry the drawer now resolves itself.
+        assertEquals(AppDrawerViewType.HORIZONTAL, config.viewType);
+        assertEquals(0, config.iconSizeDp);
+        assertEquals(0, config.verticalColumns);
+        assertEquals(0, config.horizontalColumns);
+        assertEquals(0, config.horizontalRows);
+        assertEquals(0, config.categoryColumns);
     }
 
     @Test public void preferenceReloadClosesAndReconfiguresTheExistingSingleTree() {

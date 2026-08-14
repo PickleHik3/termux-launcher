@@ -298,11 +298,6 @@
     <string name="settings_app_drawer_view_type_vertical">Vertical</string>
     <string name="settings_app_drawer_view_type_horizontal">Horizontal pages</string>
     <string name="settings_app_drawer_view_type_categories">Categories</string>
-    <string name="settings_app_drawer_auto">Auto</string>
-    <string name="settings_app_drawer_icon_size_title">Icon size</string>
-    <string name="settings_app_drawer_columns_title">Columns</string>
-    <string name="settings_app_drawer_rows_title">Rows</string>
-    <string name="settings_app_drawer_category_columns_title">Category tile columns</string>
     <string name="folder_capacity_reached">Folder is full</string>
     <string name="folder_already_contains_app">App is already in this folder</string>
     <string name="app_drawer_category_suggestions">Suggestions</string>

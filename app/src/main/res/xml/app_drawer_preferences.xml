@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Icon size and column/row counts are deliberately absent: every drawer view resolves its own
+     geometry from the plane's width now, and the category cards size their previews to fill. -->
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <ListPreference
@@ -7,40 +9,5 @@
         android:defaultValue="vertical"
         app:entries="@array/app_launcher_drawer_view_type_entries"
         app:entryValues="@array/app_launcher_drawer_view_type_values"
-        app:useSimpleSummaryProvider="true" />
-    <ListPreference
-        app:key="app_launcher_drawer_icon_size_dp"
-        app:title="@string/settings_app_drawer_icon_size_title"
-        android:defaultValue="0"
-        app:entries="@array/app_launcher_drawer_icon_size_entries"
-        app:entryValues="@array/app_launcher_drawer_icon_size_values"
-        app:useSimpleSummaryProvider="true" />
-    <ListPreference
-        app:key="app_launcher_drawer_grid_columns_vertical"
-        app:title="@string/settings_app_drawer_columns_title"
-        android:defaultValue="0"
-        app:entries="@array/app_launcher_drawer_app_columns_entries"
-        app:entryValues="@array/app_launcher_drawer_app_columns_values"
-        app:useSimpleSummaryProvider="true" />
-    <ListPreference
-        app:key="app_launcher_drawer_grid_columns_horizontal"
-        app:title="@string/settings_app_drawer_columns_title"
-        android:defaultValue="0"
-        app:entries="@array/app_launcher_drawer_app_columns_entries"
-        app:entryValues="@array/app_launcher_drawer_app_columns_values"
-        app:useSimpleSummaryProvider="true" />
-    <ListPreference
-        app:key="app_launcher_drawer_grid_rows_horizontal"
-        app:title="@string/settings_app_drawer_rows_title"
-        android:defaultValue="0"
-        app:entries="@array/app_launcher_drawer_rows_entries"
-        app:entryValues="@array/app_launcher_drawer_rows_values"
-        app:useSimpleSummaryProvider="true" />
-    <ListPreference
-        app:key="app_launcher_drawer_grid_columns_categories"
-        app:title="@string/settings_app_drawer_category_columns_title"
-        android:defaultValue="0"
-        app:entries="@array/app_launcher_drawer_category_columns_entries"
-        app:entryValues="@array/app_launcher_drawer_category_columns_values"
         app:useSimpleSummaryProvider="true" />
 </PreferenceScreen>

@@ -87,7 +87,10 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         heading.setTextSize(TypedValue.COMPLEX_UNIT_SP, HEADING_TEXT_SP);
         heading.setTypeface(android.graphics.Typeface.create("sans-serif-medium",
             android.graphics.Typeface.NORMAL));
-        heading.setMaxLines(2);
+        // One line, ellipsized. A two-line band reserved a whole empty line inside every card — no
+        // shipped category label wraps at two columns, and the ones that would are read the same
+        // ellipsized as they were on a second line nobody could see the bottom of.
+        heading.setMaxLines(1);
         heading.setEllipsize(TextUtils.TruncateAt.END);
         heading.setLetterSpacing(-0.005f);
         heading.setGravity(android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL);
@@ -252,7 +255,9 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         float right = left + slot + resolved.slotGapPx;
         // Label band first, icon square below it — both inside the one drawn rect.
         int headingLeft = Math.round(tileLeft + inner);
-        int headingTop = Math.round(inner * 0.75f);
+        // The same spacing as every other side. The old 0.75 of it made the label sit closer to the
+        // card's top edge than to its own left one.
+        int headingTop = Math.round(inner);
         heading.layout(headingLeft, headingTop, headingLeft + heading.getMeasuredWidth(),
             headingTop + heading.getMeasuredHeight());
         float top = headingBand + inner;

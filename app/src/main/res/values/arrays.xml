@@ -48,32 +48,6 @@
         <item>horizontal</item>
         <item>categories</item>
     </string-array>
-    <string-array name="app_launcher_drawer_icon_size_entries">
-        <item>@string/settings_app_drawer_auto</item><item>36 dp</item><item>40 dp</item>
-        <item>44 dp</item><item>48 dp</item>
-    </string-array>
-    <string-array name="app_launcher_drawer_icon_size_values">
-        <item>0</item><item>36</item><item>40</item><item>44</item><item>48</item>
-    </string-array>
-    <string-array name="app_launcher_drawer_app_columns_entries">
-        <item>@string/settings_app_drawer_auto</item><item>4</item><item>5</item><item>6</item>
-    </string-array>
-    <string-array name="app_launcher_drawer_app_columns_values">
-        <item>0</item><item>4</item><item>5</item><item>6</item>
-    </string-array>
-    <string-array name="app_launcher_drawer_rows_entries">
-        <item>@string/settings_app_drawer_auto</item><item>2</item><item>3</item><item>4</item>
-        <item>5</item><item>6</item>
-    </string-array>
-    <string-array name="app_launcher_drawer_rows_values">
-        <item>0</item><item>2</item><item>3</item><item>4</item><item>5</item><item>6</item>
-    </string-array>
-    <string-array name="app_launcher_drawer_category_columns_entries">
-        <item>@string/settings_app_drawer_auto</item><item>1</item><item>2</item><item>3</item>
-    </string-array>
-    <string-array name="app_launcher_drawer_category_columns_values">
-        <item>0</item><item>1</item><item>2</item><item>3</item>
-    </string-array>
     <string-array name="termux_top_pane_clock_style_entries">
         <item>@string/termux_top_pane_clock_style_flip</item>
         <item>@string/termux_top_pane_clock_style_lcd</item>

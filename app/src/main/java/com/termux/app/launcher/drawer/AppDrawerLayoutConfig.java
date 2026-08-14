@@ -30,13 +30,18 @@ public final class AppDrawerLayoutConfig {
         return new AppDrawerLayoutConfig(AppDrawerViewType.VERTICAL, 0, 0, 0, 0, 0);
     }
 
+    /**
+     * The view type is the only drawer layout preference left. Icon size and the column/row counts
+     * are read as auto (0) on purpose: the settings entries are gone, every view resolves its own
+     * geometry from the plane's width, and the category cards size their previews to fill — a stored
+     * value from an older install would only pin an icon smaller than the card wants.
+     *
+     * <p>The explicit constructor still takes all six, so a caller (and the tests) can pin geometry;
+     * nothing in the app does.
+     */
     @NonNull public static AppDrawerLayoutConfig from(@NonNull TermuxAppSharedPreferences prefs) {
         return new AppDrawerLayoutConfig(AppDrawerViewType.fromPreference(
-            prefs.getAppLauncherDrawerViewType()), prefs.getAppLauncherDrawerIconSizeDp(),
-            prefs.getAppLauncherDrawerGridColumnsVertical(),
-            prefs.getAppLauncherDrawerGridColumnsHorizontal(),
-            prefs.getAppLauncherDrawerGridRowsHorizontal(),
-            prefs.getAppLauncherDrawerGridColumnsCategories());
+            prefs.getAppLauncherDrawerViewType()), 0, 0, 0, 0, 0);
     }
 
     private static boolean validIcon(int value) {

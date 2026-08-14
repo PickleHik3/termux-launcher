@@ -156,6 +156,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     @Nullable private Frame mOpenRect;
     @Nullable private AppDrawerAccessoryChoreography.Band mExtraKeysBand;
     @Nullable private AppDrawerAccessoryChoreography.Band mKeyboardBand;
+    @Nullable private AppDrawerAccessoryChoreography.Band mStatusBand;
     @Nullable private View mAccessorySurface;
     @Nullable private View mAppsPager;
     @Nullable private View mAzRow;
@@ -165,6 +166,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     @Nullable private View mAzLabelOverlay;
     @Nullable private View mExtraKeysView;
     @Nullable private View mKeyboardView;
+    /** The app-owned top status bar, the one band above the plane. */
+    @Nullable private View mStatusBarView;
+    private float mStatusCompactHeightPx;
     private boolean mRoundedStyle;
     private boolean mHasBands;
     private float mSeedRadiusPx;
@@ -656,13 +660,41 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mAzFxOverlay = mActivity.findViewById(R.id.apps_bar_az_fx_overlay);
         mAzLabelOverlay = mActivity.findViewById(R.id.apps_bar_az_label_overlay);
         captureBands(dockRect);
+        captureStatusBand();
         return true;
     }
 
     /**
-     * The rectangle the plane grows into. Depends only on the host, the window bar and the two
-     * radius/inset preferences — nothing about the accessory stack — which is what makes it the one
-     * thing the host layout listener may safely recompute while the drawer is open.
+     * The top status bar, measured once — whichever form it is in.
+     *
+     * <p>Captured like the bottom bands and for the same reason: the pane's height <em>is</em> the
+     * terminal's height, so the transition may only transform it. The compact height comes from the
+     * activity's own resolver rather than being assumed, because the rounded style's pane is a
+     * different size and the collapse channel is the difference between the two.
+     *
+     * <p>A hidden bar (terminal-only styles, fullscreen) leaves a null band and no writes at all,
+     * which is what keeps a pane that is {@code GONE} from being handed a translation it would still
+     * be wearing the next time something makes it visible.
+     */
+    private void captureStatusBand() {
+        mStatusBarView = mActivity.findViewById(R.id.terminal_window_bar_host);
+        Frame bar = isBandVisible(mStatusBarView) ? frameOf(mStatusBarView) : null;
+        mStatusBand = bar == null ? null
+            : new AppDrawerAccessoryChoreography.Band(bar.top, bar.height());
+        mStatusCompactHeightPx = mActivity.getCompactTopStatusBarHeightPx();
+    }
+
+    /**
+     * The rectangle the plane grows into. Depends only on the host and the two radius/inset
+     * preferences — nothing about the accessory stack, and nothing about the top status bar —
+     * which is what makes it the one thing the host layout listener may safely recompute while the
+     * drawer is open.
+     *
+     * <p>The top edge is the host's own, not the status bar's bottom: the plane swallows the bar,
+     * which leaves through {@link AppDrawerStatusBandChoreography} instead of standing over the
+     * drawer under the backdrop tint. The host itself begins below the system status-bar inset —
+     * the root consumes it as padding — so the inset strip above stays the system's, exactly as it
+     * does for the command palette.
      *
      * @return null when the host has not laid out; callers keep the rect they already had
      */
@@ -676,18 +708,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // are the dock's and whose open left/right are this inset.
         float inset = AppDrawerTransitionGeometry.resolveInsetPx(
             mActivity.getDockHorizontalInsetPx(), mActivity.getDockHorizontalInsetPx(), 1f);
-        View windowBar = mActivity.findViewById(R.id.terminal_window_bar_host);
-        float contentTop = 0f;
-        if (windowBar != null && windowBar.getVisibility() == View.VISIBLE) {
-            Frame barRect = frameOf(windowBar);
-            if (barRect != null) contentTop = barRect.bottom;
-        }
         // Square bottom corners in default style are expressed by pushing the bottom edge one
         // radius past the host: Outline clipping is a single-radius round rect, and a Path clip
         // would cost the cheap outline clip for two corners nobody can see.
         float bottomBleed = mRoundedStyle ? 0f : mOpenRadiusPx;
-        return new Frame(inset, contentTop, host.getWidth() - inset,
-            host.getHeight() + bottomBleed);
+        return new Frame(inset, 0f, host.getWidth() - inset, host.getHeight() + bottomBleed);
     }
 
     /**
@@ -877,15 +902,18 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     }
 
     /**
-     * The tile heading is 13sp, independently of the expanded app rows' 11sp labels. The redesign's
-     * card titles wrap to two lines ("Communication & Social"), so the band is two line-heights.
+     * The tile heading is 13sp, independently of the expanded app rows' 11sp labels.
+     *
+     * <p>One line-height, not two. The band was two because "Communication &amp; Social" was
+     * expected to wrap, but at the shipped two-column width nothing does, so every card carried an
+     * empty line between its title and its icons. The label is ellipsized to one line instead.
      */
     private float resolveCategoryTileHeadingHeightPx() {
         Paint paint = new Paint();
         paint.setTextSize(AppDrawerCategoryTileView.HEADING_TEXT_SP
             * mActivity.getResources().getDisplayMetrics().scaledDensity);
         Paint.FontMetrics metrics = paint.getFontMetrics();
-        return 2f * (metrics.descent - metrics.ascent);
+        return metrics.descent - metrics.ascent;
     }
 
     private void addHostLayoutListener() {
@@ -993,6 +1021,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         applyAlpha(mAzLabelOverlay, rowAlpha);
 
         applyAccessoryBands(p, frame.bottom, k);
+        applyStatusBand(p);
 
         AppDrawerDockChoreographyTarget target = mDockTarget;
         if (target != null) target.setDrawerTransitionProgress(p);
@@ -1031,6 +1060,18 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             result.extraKeysAlpha);
         applyBand(mKeyboardView, result.keyboardTranslationY, result.keyboardClipTopPx,
             result.keyboardAlpha);
+    }
+
+    /**
+     * The top band, on the same three channels the bottom ones use. Skipped entirely when no bar
+     * was captured — the plane still grows to the host's top edge either way.
+     */
+    private void applyStatusBand(float p) {
+        AppDrawerAccessoryChoreography.Band band = mStatusBand;
+        if (band == null) return;
+        AppDrawerStatusBandChoreography.Result result = AppDrawerStatusBandChoreography.resolve(
+            p, band.heightPx, mStatusCompactHeightPx);
+        applyBand(mStatusBarView, result.translationY, result.clipTopPx, result.alpha);
     }
 
     /**
@@ -1104,6 +1145,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             applyAlpha(mAzLabelOverlay, 1f);
             applyBand(mExtraKeysView, 0f, 0f, 1f);
             applyBand(mKeyboardView, 0f, 0f, 1f);
+            // Unconditional, unlike applyStatusBand's null guard: a bar that was captured and then
+            // hidden mid-transition must still be handed back untransformed.
+            applyBand(mStatusBarView, 0f, 0f, 1f);
             AppDrawerDockChoreographyTarget target = mDockTarget;
             if (target != null) target.setDrawerTransitionProgress(0f);
             if (mHost != null) {
@@ -1117,6 +1161,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 frost.setVisibility(View.GONE);
             }
             mHasBands = false;
+            mStatusBand = null;
         } finally {
             mEngaged = false;
             mActivity.flushPendingAccessoryGeometry();

@@ -36,6 +36,29 @@ public class AppDrawerCategoryGridMetricsTest {
         assertTrue(m.chargedPreviewBytes() <= Math.floor(BUDGET * 0.60d));
     }
 
+    @Test public void oneSpacingRunsEveryGapInsideAndOutsideTheCard() {
+        for (float[] input : new float[][] {{360f, 640f, 1f}, {1080f, 2100f, 2.625f},
+            {1920f, 900f, 2f}}) {
+            AppDrawerCategoryGridMetrics m = AppDrawerCategoryGridMetrics.resolve(
+                input[0], input[1], input[2], 16f * input[2], 16f * input[2], 80f, BUDGET);
+            String at = "w=" + input[0] + " d=" + input[2];
+            // Outside: the plane-edge gap is the card-to-card gap, and the drawn card fills its span.
+            assertEquals(at, m.sidePaddingPx, m.itemGapPx, EPS);
+            assertEquals(at, 0f, m.tileHorizontalInsetPx, EPS);
+            assertEquals(at, m.spanWidthPx, m.tileSidePx, EPS);
+            // Inside: pad, icon, gap, icon, pad — one number, and it is the card's whole width.
+            assertEquals(at, m.innerPaddingPx, m.slotGapPx, EPS);
+            assertEquals(at, m.innerPaddingPx, m.headingGapPx, EPS);
+            assertEquals(at, m.tileSidePx, 3f * m.innerPaddingPx + 2f * m.largeIconPx, 1.5f);
+            // The icon fills its half of the card: slot and icon are the same size, so nothing
+            // floats in a ring of dead space, and the spacing never drops below the 12dp rhythm.
+            assertEquals(at, m.largeIconPx, m.largeSlotPx, EPS);
+            assertTrue(at, m.innerPaddingPx >= AppDrawerCategoryGridMetrics.RHYTHM_DP * input[2]
+                - EPS);
+            assertTrue(at, m.chargedPreviewBytes() <= Math.floor(BUDGET * 0.60d));
+        }
+    }
+
     @Test public void bottomUpDetailGrowsFromBottomThenOverflows() {
         AppDrawerCategoryGridMetrics m = metrics(360f, 640f);
         AppDrawerCategoryGridMetrics.DetailLayout one = m.resolveDetail(1, 500f, 40f);

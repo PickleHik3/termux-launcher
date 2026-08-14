@@ -5,16 +5,25 @@ import androidx.annotation.NonNull;
 /** Pure category overview/detail sizing, including shared rendered-icon cache accounting. */
 public final class AppDrawerCategoryGridMetrics {
     public static final float MIN_TILE_DP = 144f;
-    public static final float SIDE_PADDING_DP = 8f;
+    /**
+     * One rhythm for every gap the overview draws — plane edge to card, card to card, card edge to
+     * icon, icon to icon. The old set (8dp side padding, a 4dp tile inset, 10dp between slots, 8dp
+     * under the heading) added up to a 12dp outer gap beside a 20dp gap between the columns and a
+     * 26dp gap between the rows, which is what read as uneven.
+     */
+    public static final float RHYTHM_DP = 12f;
+    public static final float SIDE_PADDING_DP = RHYTHM_DP;
     /** Card gap from the redesign mock: 12dp between the two columns and between rows. */
-    public static final float TILE_GAP_DP = 12f;
-    public static final float TILE_HORIZONTAL_INSET_DP = 4f;
-    /** Card inner padding from the mock (13/12/14 top/side/bottom, folded to one token). */
-    public static final float TILE_INNER_PADDING_DP = 12f;
-    public static final float SLOT_GAP_DP = 10f;
+    public static final float TILE_GAP_DP = RHYTHM_DP;
+    /**
+     * Zero: the drawn card fills its grid span. The old 4dp inset sat inside every span and so was
+     * added to the gap between the columns (12 + 2x4 = 20dp) while the outer edge kept 12dp.
+     */
+    public static final float TILE_HORIZONTAL_INSET_DP = 0f;
+    /** Minimum card inner padding. The resolved spacing only ever grows past it. */
+    public static final float TILE_INNER_PADDING_DP = RHYTHM_DP;
     public static final float SMALL_BLOCK_GAP_DP = 5f;
-    public static final float HEADING_GAP_DP = 8f;
-    public static final float ITEM_BOTTOM_GAP_DP = 12f;
+    public static final float ITEM_BOTTOM_GAP_DP = RHYTHM_DP;
     /** The redesign's expanded category grid is a fixed three-across layout. */
     public static final int EXPANDED_COLUMNS = 3;
     /** Ceiling once the height rule starts adding columns; the mock's own maximum is three. */
@@ -25,7 +34,12 @@ public final class AppDrawerCategoryGridMetrics {
      * like, where three columns of a 919dp-wide body came out as tall as the whole 297dp viewport.
      */
     public static final float MAX_TILE_VIEWPORT_FRACTION = 0.75f;
-    public static final float MAX_ICON_DP = 48f;
+    /**
+     * Ceiling only. The preview icons are sized to fill their half of the card, so on a phone the
+     * geometry (or the cache budget) decides — not this. It exists so a very wide card cannot ask
+     * for an icon nobody wants to look at.
+     */
+    public static final float MAX_ICON_DP = 72f;
     public static final float EMPTY_TOP_MIN_DP = 32f;
     public static final float HEADER_LIST_GAP_DP = 12f;
     public static final float PREVIEW_BUDGET_FRACTION = 0.60f;
@@ -78,7 +92,10 @@ public final class AppDrawerCategoryGridMetrics {
         this.smallBlockGapPx = Math.min(Math.max(0f, smallBlockGapPx), largeSlotPx);
         this.smallCellPx = Math.max(0f, (largeSlotPx - this.smallBlockGapPx) / 2f);
         this.largeIconPx = largeIconPx;
-        this.smallIconPx = Math.max(0, largeIconPx / 2);
+        // Off the cell, not half the large icon: the 2x2 block now occupies exactly one icon's
+        // footprint, so half a large icon is a hair wider than the cell it would sit in and the four
+        // previews would touch across the block's hairline gap.
+        this.smallIconPx = Math.max(0, (int) Math.floor(this.smallCellPx));
         this.estimatedAttachedTiles = estimatedAttachedTiles;
         this.expandedColumns = expandedColumns;
         this.expandedRowHeightPx = expandedRowHeightPx;
@@ -125,17 +142,20 @@ public final class AppDrawerCategoryGridMetrics {
         float inset = Math.min(TILE_HORIZONTAL_INSET_DP * d, span / 2f);
         float tile = Math.max(0f, span - 2f * inset);
         float heading = finiteNonNegative(headingHeightPx);
-        float headingGap = HEADING_GAP_DP * d;
         float bottom = ITEM_BOTTOM_GAP_DP * d;
-        float itemHeight = tile + headingGap + heading + bottom;
-        float inner = Math.min(TILE_INNER_PADDING_DP * d, tile / 2f);
-        float slotGap = Math.min(SLOT_GAP_DP * d, Math.max(0f, tile - 2f * inner));
-        float largeSlot = Math.max(0f, (tile - 2f * inner - slotGap) / 2f);
+        float pad = Math.min(TILE_INNER_PADDING_DP * d, tile / 4f);
+        // Attached-tile estimate for the cache budget, taken at the tightest card the spacing can
+        // produce: a shorter item means more of them on screen, so this is the conservative end and
+        // it breaks the circle (the real item height depends on the icon the budget is about to
+        // decide).
         int attached = Math.max(1, columns * ((int) Math.ceil(
-            viewport / Math.max(1f, itemHeight)) + 1));
+            viewport / Math.max(1f, tile + pad + heading + bottom)) + 1));
         double allowed = Math.max(0d, cacheBudgetBytes) * PREVIEW_BUDGET_FRACTION;
         int budgetIcon = (int) Math.floor(Math.sqrt(allowed / (32d * attached)));
-        int geometryIcon = (int) Math.floor(largeSlot * 0.80f);
+        // Fill, do not float: the icon takes its whole half of the card, so the only space left
+        // inside is the rhythm itself. The old 0.80 of an over-sized slot is what left every preview
+        // sitting in a ring of dead space.
+        int geometryIcon = (int) Math.floor(Math.max(0f, (tile - 3f * pad) / 2f));
         int requestedIconPx = requestedIconDp == 36 || requestedIconDp == 40
             || requestedIconDp == 44 || requestedIconDp == 48
             ? Math.round(requestedIconDp * d) : Math.round(MAX_ICON_DP * d);
@@ -150,9 +170,18 @@ public final class AppDrawerCategoryGridMetrics {
         float detailRow = icon + AppDrawerGridMetrics.LABEL_GAP_DP * d
             + finiteNonNegative(appLabelHeightPx)
             + AppDrawerGridMetrics.ROW_BOTTOM_DP * d;
+        // The one spacing the whole card is built from: the width the two icons could not take is
+        // split three ways, so the left pad, the gap between them and the right pad are the same
+        // number. The tile view reuses it above the heading, under it, between the rows and below
+        // the bottom row — which is what keeps the padding even on all four sides however small a
+        // low-memory budget forced the icons.
+        float spacing = icon > 0 ? Math.max(0f, (tile - 2f * icon) / 3f) : pad;
+        // Slot == icon: there is no ring left for anything to float inside.
+        float largeSlot = icon;
+        float itemHeight = tile + spacing + heading + bottom;
         float smallBlockGap = Math.min(SMALL_BLOCK_GAP_DP * d, largeSlot);
         return new AppDrawerCategoryGridMetrics(columns, side, gap, span, inset, tile,
-            itemHeight, headingGap, heading, bottom, inner, slotGap, largeSlot, smallBlockGap,
+            itemHeight, spacing, heading, bottom, spacing, spacing, largeSlot, smallBlockGap,
             icon, attached,
             detailColumns, detailRow, Math.min(finiteNonNegative(drawerRadiusPx), tile / 2f),
             Math.max(1f, viewport), EMPTY_TOP_MIN_DP * d, HEADER_LIST_GAP_DP * d);

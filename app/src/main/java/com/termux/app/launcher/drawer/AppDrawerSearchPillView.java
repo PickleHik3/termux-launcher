@@ -57,7 +57,12 @@ public final class AppDrawerSearchPillView extends View {
     private static final float TEXT_SP = 16f;
     /** Leading search glyph, drawn at half strength before the query/hint. */
     private static final String SEARCH_GLYPH = "⌕";
-    private static final float SEARCH_GLYPH_SP = 14f;
+    /**
+     * Larger than the text it leads, because this glyph's ink is barely half its point size — at the
+     * hint's own 16sp it measured 7dp tall against 15dp of text and read as a speck. 22sp brings its
+     * ink up to the hint's cap height.
+     */
+    private static final float SEARCH_GLYPH_SP = 22f;
     private static final float GLYPH_TO_TEXT_DP = 8f;
     /** Width of the tap target at the trailing edge, which is larger than the glyph drawn in it. */
     private static final float CLEAR_TOUCH_DP = 44f;

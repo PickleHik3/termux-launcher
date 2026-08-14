@@ -2623,6 +2623,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return Math.round(dpToPx(collapsed ? capsule ? 30 : 32 : capsule ? 100 : 96));
     }
 
+    /**
+     * The top pane's COMPACT height in the current style. Read by the app drawer's top-band
+     * choreography, which fakes the expanded→compact collapse with a clip while the plane grows:
+     * the real two-state animator writes the pane's height, and the drawer transition freezes
+     * exactly that.
+     */
+    public int getCompactTopStatusBarHeightPx() {
+        return targetStatusBarHeightPx(isRoundedDockStyle(), true);
+    }
+
     private int resolveDockCapsuleContentInsetPx() {
         // Inner padding between the capsule border and the row content. Trimmed slightly from the
         // 16dp redline so the rows (and the 2-row extra keys) sit a touch closer to the edges.
