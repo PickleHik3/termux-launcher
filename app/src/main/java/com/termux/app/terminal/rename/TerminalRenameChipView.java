@@ -22,26 +22,26 @@ import com.termux.app.terminal.TerminalRenameTarget;
 public final class TerminalRenameChipView extends View {
 
     private static final float HORIZONTAL_PADDING_DP = 12f;
-    private static final float LABEL_GAP_DP = 8f;
     private static final float MIN_TEXT_WIDTH_DP = 96f;
     private static final float HEIGHT_DP = 40f;
 
-    private final Paint labelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint caretPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final float density;
 
+    /** The target's id, kept for the content description now that the chip no longer draws it. */
     @NonNull private String label = "";
     @Nullable private InlineRenameModel model;
-    /** Shown in place of an empty draft, so a cleared chip still says what enter would do. */
+    /**
+     * Shown in place of an empty draft. This is the target — "window", "session", "pane" — so one
+     * greyed word says both what is being renamed and that nothing has been typed yet.
+     */
     @NonNull private String emptyHint = "";
 
     public TerminalRenameChipView(@NonNull Context context) {
         super(context);
         density = getResources().getDisplayMetrics().density;
         float scaledDensity = getResources().getDisplayMetrics().scaledDensity;
-        labelPaint.setTypeface(Typeface.DEFAULT_BOLD);
-        labelPaint.setTextSize(11f * scaledDensity);
         textPaint.setTypeface(Typeface.MONOSPACE);
         textPaint.setTextSize(14f * scaledDensity);
         setFocusable(false);
@@ -55,8 +55,11 @@ public final class TerminalRenameChipView extends View {
         requestLayout();
     }
 
+    /**
+     * The first colour is no longer used — the chip stopped drawing a separate label — but the
+     * three-colour signature stays so the host keeps handing over one palette for the whole chip.
+     */
     public void setColors(int labelColor, int textColor, int caretColor) {
-        labelPaint.setColor(labelColor);
         textPaint.setColor(textColor);
         caretPaint.setColor(caretColor);
         invalidate();
@@ -88,13 +91,12 @@ public final class TerminalRenameChipView extends View {
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         float padding = HORIZONTAL_PADDING_DP * density;
-        float labelWidth = labelPaint.measureText(label) + LABEL_GAP_DP * density;
         InlineRenameModel current = model;
         String drawn = current == null || current.isEmpty() ? emptyHint
             : current.text();
         float textWidth = Math.max(MIN_TEXT_WIDTH_DP * density, textPaint.measureText(drawn)
             + textPaint.getTextSize());
-        int desired = Math.round(padding * 2 + labelWidth + textWidth);
+        int desired = Math.round(padding * 2 + textWidth);
         int height = Math.round(HEIGHT_DP * density);
         setMeasuredDimension(resolveSize(desired, widthMeasureSpec),
             resolveSize(height, heightMeasureSpec));
@@ -106,9 +108,7 @@ public final class TerminalRenameChipView extends View {
         InlineRenameModel current = model;
         if (current == null) return;
         float padding = HORIZONTAL_PADDING_DP * density;
-        float labelBaseline = (getHeight() - (labelPaint.descent() + labelPaint.ascent())) / 2f;
-        canvas.drawText(label, padding, labelBaseline, labelPaint);
-        float textStart = padding + labelPaint.measureText(label) + LABEL_GAP_DP * density;
+        float textStart = padding;
         float baseline = (getHeight() - (textPaint.descent() + textPaint.ascent())) / 2f;
         String text = current.text();
         if (current.isEmpty()) {

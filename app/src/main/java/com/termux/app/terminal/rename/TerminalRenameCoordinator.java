@@ -428,12 +428,10 @@ public final class TerminalRenameCoordinator implements InlineRenameController.H
 
     @NonNull
     private String emptyHintFor(@NonNull TerminalRenameTarget target) {
-        // An emptied draft clears the name, so the hint says what the surface falls back to.
-        switch (target) {
-            case WINDOW: return "auto label";
-            case SESSION: return "unnamed";
-            case PANE:
-            default: return "shell default";
-        }
+        // The chip used to carry two texts: a bold "window" tag and a greyed "auto label" saying
+        // what an emptied draft falls back to. Two labels in a chip that has to fit beside a tab is
+        // one too many, and the fallback wording was the less useful of the two — so the hint is now
+        // the target itself and the tag is gone.
+        return target.id;
     }
 }
