@@ -122,17 +122,42 @@ public final class FullStatusBarController {
         float velocity = Float.isFinite(velocityPxPerSec) ? velocityPxPerSec : 0f;
         boolean flingOpen = velocity > travel * DRAG_COMMIT_VELOCITY_TRAVELS;
         boolean flingClose = velocity < -travel * DRAG_DISMISS_VELOCITY_TRAVELS;
-        boolean commit = !flingClose && (flingOpen || progress >= DRAG_COMMIT_PROGRESS);
+        // One pull-down, two rest stops. When the drag started from the compact bar, the
+        // expanded status form sits between it and the widget pane: a release settles on
+        // whichever form the finger left it nearest, while a downward fling always commits
+        // the widget surface and an upward fling always returns to the captured prior.
+        // From the expanded form the extra stop degenerates (expandedProgress == 0) and the
+        // decision reduces to the original binary commit.
+        float expandedProgress = expandedRestProgress(normal, full);
+        boolean commit = !flingClose && (flingOpen
+            || progress >= expandedProgress + (1f - expandedProgress) * DRAG_COMMIT_PROGRESS);
         segmentStartHeight = Math.max(0, host.currentHeight());
         if (commit) {
             segmentTargetHeight = full;
             motion = Motion.OPENING;
         } else {
-            segmentTargetHeight = normal;
+            if (!flingClose && expandedProgress > 0f
+                && progress >= expandedProgress * 0.5f) {
+                // Rest at the expanded form: retargeting the prior makes every close path —
+                // this spring, Back, closeImmediateToPrior — land and persist EXPANDED.
+                prior = TopStatusBarState.EXPANDED;
+            }
+            segmentTargetHeight = host.normalHeight(prior);
             motion = Motion.CLOSING;
             host.onFullSettled(false);
         }
         startSegment();
+    }
+
+    /**
+     * Progress (against this drag's travel) at which the expanded status form rests, or 0 when
+     * the drag began at or above it and the form offers no intermediate stop.
+     */
+    private float expandedRestProgress(int normal, int full) {
+        if (prior == TopStatusBarState.EXPANDED || prior == TopStatusBarState.FULL) return 0f;
+        int expanded = host.normalHeight(TopStatusBarState.EXPANDED);
+        if (expanded <= normal || expanded >= full) return 0f;
+        return FullStatusBarGeometry.progressForHeight(expanded, normal, full);
     }
 
     /** With FULL settled, a pull-up owns the close 1:1; {@link #dragEnd} decides at release. */

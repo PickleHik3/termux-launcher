@@ -70,8 +70,17 @@ public class StatusBarGesturePolicyTest {
         assertEquals(StatusBarGesturePolicy.Claim.PENDING, overChip.claim());
         assertEquals(StatusBarGesturePolicy.Claim.PULL_DOWN, overChip.move(12, 30));
 
+        // The unified gesture's other direction: expanded bar + upward drag = collapse claim,
+        // sharing the pull-down's eligibility (chips included).
         StatusBarGesturePolicy upward = pullPolicy(true, true, TopStatusBarState.EXPANDED);
-        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED, upward.move(12, -30));
+        assertEquals(StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE, upward.move(12, -30));
+
+        StatusBarGesturePolicy upwardCompact = pullPolicy(true, true, TopStatusBarState.COMPACT);
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED, upwardCompact.move(12, -30));
+
+        StatusBarGesturePolicy upwardIneligible = pullPolicy(true, false,
+            TopStatusBarState.EXPANDED);
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED, upwardIneligible.move(12, -30));
 
         StatusBarGesturePolicy ineligible = pullPolicy(false, false, TopStatusBarState.EXPANDED);
         assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED, ineligible.move(12, 30));

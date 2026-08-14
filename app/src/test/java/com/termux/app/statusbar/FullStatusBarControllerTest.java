@@ -91,15 +91,52 @@ public class FullStatusBarControllerTest {
         FullStatusBarController controller = new FullStatusBarController(host, frames);
 
         assertTrue(controller.dragBegin(TopStatusBarState.COMPACT));
-        controller.dragUpdate(60f);
-        assertEquals(92, host.height);
-        // 60/568 travel, no fling: release springs back to the captured COMPACT form.
+        controller.dragUpdate(10f);
+        assertEquals(42, host.height);
+        // 10/568 travel, below half the way to the expanded form, no fling: release springs
+        // back to the captured COMPACT form.
         controller.dragEnd(0f);
         assertSame(FullStatusBarController.Motion.CLOSING, controller.motion());
         frames.runToIdle();
         assertFalse(controller.isEngaged());
         assertEquals(32, host.height);
         assertFalse(host.engaged);
+    }
+
+    @Test public void compactDragReleasedNearTheExpandedFormRestsThere() {
+        FakeHost host = new FakeHost();
+        host.height = 32;
+        FakeFrames frames = new FakeFrames();
+        FullStatusBarController controller = new FullStatusBarController(host, frames);
+
+        assertTrue(controller.dragBegin(TopStatusBarState.COMPACT));
+        controller.dragUpdate(60f);
+        assertEquals(92, host.height);
+        // Past half the way to the expanded form (96) but short of the FULL commit line:
+        // the release adopts EXPANDED as the resting form and persists it as the prior.
+        controller.dragEnd(0f);
+        assertSame(FullStatusBarController.Motion.CLOSING, controller.motion());
+        frames.runToIdle();
+        assertFalse(controller.isEngaged());
+        assertEquals(96, host.height);
+        assertSame(TopStatusBarState.EXPANDED, controller.priorState());
+    }
+
+    @Test public void compactDragFlungDownCommitsFullFromAnyProgress() {
+        FakeHost host = new FakeHost();
+        host.height = 32;
+        FakeFrames frames = new FakeFrames();
+        FullStatusBarController controller = new FullStatusBarController(host, frames);
+
+        assertTrue(controller.dragBegin(TopStatusBarState.COMPACT));
+        controller.dragUpdate(60f);
+        controller.dragEnd(5000f);
+        assertSame(FullStatusBarController.Motion.OPENING, controller.motion());
+        frames.runToIdle();
+        assertSame(FullStatusBarController.Motion.FULL, controller.motion());
+        assertEquals(600, host.height);
+        // A fling straight to FULL keeps the captured COMPACT prior for the eventual close.
+        assertSame(TopStatusBarState.COMPACT, controller.priorState());
     }
 
     @Test public void fastFlingCommitsRegardlessOfProgressAndDragClampsToBounds() {

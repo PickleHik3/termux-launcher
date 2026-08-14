@@ -1,13 +1,19 @@
 package com.termux.app.statusbar;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.appwidget.AppWidgetHostView;
 import android.content.Context;
+import android.graphics.Paint;
+import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
@@ -50,9 +56,24 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     private boolean mDispatchInProgress;
     private boolean mDeferredReset;
     private boolean mFullDragActive;
+    private boolean mFullPaneAvailable = true;
     @Nullable private android.view.VelocityTracker mVelocityTracker;
     private int mFullStatusRowBottomInset;
     private final Runnable mLongPress = this::commitLongPress;
+    /** Pull-down hint: a grabber pill that blooms below the row on a tap of the bar's chrome. */
+    private static final long HINT_DURATION_MS = 620L;
+    private static final float HINT_WIDTH_DP = 30f;
+    private static final float HINT_HEIGHT_DP = 3f;
+    private static final float HINT_INSET_DP = 3f;
+    private static final float HINT_TRAVEL_DP = 4f;
+    @Nullable private ValueAnimator mHintAnimator;
+    private float mHintProgress;
+    @Nullable private Paint mHintPaint;
+    @Nullable private RectF mHintRect;
+    private int mPullHintCount;
+
+    /** How many times the pull-down hint has played — the animation itself is not observable. */
+    int pullHintCount() { return mPullHintCount; }
     @Nullable private com.termux.app.GlassRimRenderer mRim;
     private float mRimRadiusPx;
     private float mRimProgress;
@@ -92,6 +113,19 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     public void setAnotherSurfaceEngaged(boolean engaged) { mAnotherSurfaceEngaged = engaged; }
 
     /**
+     * Whether the FULL pane exists at all. Off for a terminal-only install: the pane is a home
+     * surface, and leaving the pull-down armed would open an empty notification panel over a
+     * terminal. Also silences the pull-down hint, which must never advertise a dead gesture.
+     */
+    public void setFullPaneAvailable(boolean available) {
+        if (mFullPaneAvailable == available) return;
+        mFullPaneAvailable = available;
+        if (!available) cancelPullHint();
+    }
+
+    public boolean isFullPaneAvailable() { return mFullPaneAvailable; }
+
+    /**
      * Glass rim over the FULL pane's outline: fades in with the expansion, shimmers while the
      * transition (or the pull-down drag) is live, and disappears entirely in the normal forms.
      */
@@ -104,8 +138,72 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         invalidate();
     }
 
+    /**
+     * A tap on the bar's own chrome answers with the grabber the bar does not wear at rest: a
+     * short pill that fades in below the row, sinks a few dp and fades out — the pull-down saying
+     * it is there. Taps that belong to a child (window chips, the stat and weather widgets, the
+     * sessions chip) never reach here, so switching windows or opening a card stays silent.
+     */
+    private void showPullHint() {
+        if (!mFullPaneAvailable || mState == TopStatusBarState.FULL) return;
+        mPullHintCount++;
+        if (mHintAnimator != null) mHintAnimator.cancel();
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(HINT_DURATION_MS);
+        animator.setInterpolator(new DecelerateInterpolator());
+        animator.addUpdateListener(value -> {
+            mHintProgress = (float) value.getAnimatedValue();
+            invalidate();
+        });
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator a) {
+                mHintProgress = 0f;
+                mHintAnimator = null;
+                invalidate();
+            }
+        });
+        mHintAnimator = animator;
+        animator.start();
+    }
+
+    private void cancelPullHint() {
+        if (mHintAnimator != null) {
+            mHintAnimator.cancel();
+            mHintAnimator = null;
+        }
+        if (mHintProgress != 0f) {
+            mHintProgress = 0f;
+            invalidate();
+        }
+    }
+
+    private void drawPullHint(@NonNull android.graphics.Canvas canvas) {
+        if (mHintProgress <= 0f) return;
+        // One rise-and-fall envelope over the whole animation, so the pill never snaps off.
+        float envelope = (float) Math.sin(Math.PI * mHintProgress);
+        if (envelope <= 0.01f) return;
+        float density = getResources().getDisplayMetrics().density;
+        if (mHintPaint == null) {
+            mHintPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            mHintPaint.setStyle(Paint.Style.FILL);
+        }
+        int color = com.google.android.material.color.MaterialColors.getColor(this,
+            com.termux.shared.R.attr.termuxColorOnSurfaceVariant, 0xFFB0B0B0);
+        mHintPaint.setColor(color);
+        mHintPaint.setAlpha(Math.round(150 * envelope));
+        float width = HINT_WIDTH_DP * density;
+        float height = HINT_HEIGHT_DP * density;
+        float travel = HINT_TRAVEL_DP * density * mHintProgress;
+        float left = (getWidth() - width) / 2f;
+        float top = getHeight() - height - HINT_INSET_DP * density + travel;
+        if (mHintRect == null) mHintRect = new RectF();
+        mHintRect.set(left, top, left + width, top + height);
+        canvas.drawRoundRect(mHintRect, height / 2f, height / 2f, mHintPaint);
+    }
+
     @Override protected void dispatchDraw(@NonNull android.graphics.Canvas canvas) {
         super.dispatchDraw(canvas);
+        drawPullHint(canvas);
         if (mRimProgress <= 0f) return;
         if (mRim == null) {
             mRim = new com.termux.app.GlassRimRenderer(
@@ -212,6 +310,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
             case LONG_PRESS:
             case PULL_DOWN:
             case PULL_UP:
+            case COLLAPSE_SWIPE:
                 return true;
             default:
                 return false;
@@ -296,7 +395,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         // Pull-down works along the bar's whole length. In the EXPANDED form only the bar itself
         // arms it — the top widget slot above (clock, notifications, media) keeps its own touch.
         boolean inTopSlot = isInsideView(findViewById(R.id.terminal_top_widget_area), event);
-        boolean pullDownEligible = !blocked && mState != TopStatusBarState.FULL
+        boolean pullDownEligible = mFullPaneAvailable && !blocked && mState != TopStatusBarState.FULL
             && !(mState == TopStatusBarState.EXPANDED && inTopSlot);
         // With FULL open, an upward drag anywhere on the pane drags it closed — mirroring the
         // pull-down. Only live drag owners veto it: a provider's own nested scroll, the widget
@@ -344,7 +443,15 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
                 && mListener != null) {
                 mListener.onCollapsedStateRequested(collapsed);
             }
+        } else if (gesture != null
+            && gesture.claim() == StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE) {
+            if (gesture.down().normalTarget != TopStatusBarState.COMPACT && mListener != null) {
+                mListener.onCollapsedStateRequested(true);
+            }
         } else if (gesture != null && gesture.claim() == StatusBarGesturePolicy.Claim.PENDING) {
+            // eligible() is the "this touch was the bar's own, not a child's" test — pull-down
+            // alone keeps a chip's stream PENDING too, and a chip tap must not answer with a hint.
+            if (gesture.down().eligible()) showPullHint();
             performClick();
         }
         requestStructuralReset();
@@ -354,7 +461,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         StatusBarGesturePolicy gesture = mGesture;
         if (gesture == null || mPostedToken == 0L) return;
         if (gesture.timeout(mPostedToken) != StatusBarGesturePolicy.Claim.LONG_PRESS
-            || mFullCallbackDelivered) return;
+            || mFullCallbackDelivered || !mFullPaneAvailable) return;
         mFullCallbackDelivered = true;
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
         Listener listener = mListener;
@@ -391,6 +498,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
 
     @Override protected void onDetachedFromWindow() {
         if (mGesture != null) mGesture.cancel();
+        cancelPullHint();
         clearTracking();
         super.onDetachedFromWindow();
     }

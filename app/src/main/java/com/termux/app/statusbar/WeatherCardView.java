@@ -22,6 +22,7 @@ import androidx.core.widget.ImageViewCompat;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
@@ -52,6 +53,7 @@ public final class WeatherCardView extends LinearLayout {
     private final TextView mAttribution;
 
     private boolean mWeekMode;
+    private boolean mFahrenheit;
     @NonNull private WeatherController.Weather mWeather = new WeatherController.Weather();
 
     public WeatherCardView(@NonNull Context context) {
@@ -135,6 +137,8 @@ public final class WeatherCardView extends LinearLayout {
 
     public void bind(@NonNull WeatherController.Weather weather) {
         mWeather = weather;
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(getContext(), false);
+        mFahrenheit = preferences != null && preferences.isStatusWidgetWeatherFahrenheit();
         if (!weather.valid) {
             mCurrentIcon.setVisibility(INVISIBLE);
             mCurrent.setText("no-location".equals(weather.error)
@@ -260,9 +264,8 @@ public final class WeatherCardView extends LinearLayout {
         return d;
     }
 
-    private static String fmtTemp(double c) {
-        if (Double.isNaN(c)) return "--°";
-        return Math.round(c) + "°";
+    private String fmtTemp(double c) {
+        return WeatherController.formatTemp(c, mFahrenheit);
     }
 
     @SuppressLint("SimpleDateFormat")

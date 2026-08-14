@@ -5,7 +5,8 @@ import androidx.annotation.NonNull;
 /** Pure one-way status gesture arbitration over one immutable DOWN snapshot. */
 public final class StatusBarGesturePolicy {
     public enum Claim {
-        PENDING, HORIZONTAL_SWIPE, LONG_PRESS, PULL_DOWN, PULL_UP, CHILD_OWNED, CANCELLED
+        PENDING, HORIZONTAL_SWIPE, LONG_PRESS, PULL_DOWN, PULL_UP, COLLAPSE_SWIPE, CHILD_OWNED,
+        CANCELLED
     }
 
     public static final class Down {
@@ -107,6 +108,11 @@ public final class StatusBarGesturePolicy {
         if (ay > down.touchSlop && ay > ax) {
             if (dy > 0f && down.pullDownEligible) claim = Claim.PULL_DOWN;
             else if (dy < 0f && down.pullUpEligible) claim = Claim.PULL_UP;
+            // The unified vertical gesture's other direction: with the bar expanded, an upward
+            // drag collapses it. Gated on the pull-down's eligibility so both directions work
+            // along the bar's entire length and share the same vetoes (blocked, FULL, top slot).
+            else if (dy < 0f && down.pullDownEligible
+                && down.state == TopStatusBarState.EXPANDED) claim = Claim.COLLAPSE_SWIPE;
             else claim = Claim.CHILD_OWNED;
         } else if (ax > down.touchSlop && ax > ay) {
             // A stream that only pull-down could claim stays a child's for everything else.

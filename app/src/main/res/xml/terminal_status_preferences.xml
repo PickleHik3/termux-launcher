@@ -64,6 +64,12 @@
             app:title="@string/settings_weather_title"
             app:summary="@string/settings_weather_summary"
             app:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="status_widget_weather_fahrenheit"
+            app:title="@string/settings_weather_fahrenheit_title"
+            app:summary="@string/settings_weather_fahrenheit_summary"
+            app:defaultValue="false"
+            app:dependency="status_widget_weather" />
         <Preference
             app:key="top_pane_notification_access"
             app:persistent="false"

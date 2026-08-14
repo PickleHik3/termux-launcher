@@ -267,6 +267,16 @@ public final class WeatherController {
 
     // ---- WMO weather-code presentation shared with the card ----
 
+    /**
+     * Formats a Celsius reading for display, converting to Fahrenheit when asked. Shared by the
+     * compact status-bar widget and the detail card so both always agree on unit and rounding.
+     */
+    @NonNull
+    public static String formatTemp(double celsius, boolean fahrenheit) {
+        if (Double.isNaN(celsius)) return "--°";
+        return Math.round(fahrenheit ? celsius * 9 / 5 + 32 : celsius) + "°";
+    }
+
     /** Material vector icon for a WMO weather code, including clear/partly-cloudy day/night. */
     @DrawableRes
     public static int iconFor(int code, boolean isDay) {

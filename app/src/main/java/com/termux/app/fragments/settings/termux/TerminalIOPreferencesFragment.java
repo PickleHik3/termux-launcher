@@ -74,6 +74,9 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
             case "status_widget_weather":
                 mPreferences.setStatusWidgetWeatherEnabled(value);
                 break;
+            case "status_widget_weather_fahrenheit":
+                mPreferences.setStatusWidgetWeatherFahrenheit(value);
+                break;
             default:
                 break;
         }
@@ -98,6 +101,8 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isStatusWidgetRamEnabled();
             case "status_widget_weather":
                 return mPreferences.isStatusWidgetWeatherEnabled();
+            case "status_widget_weather_fahrenheit":
+                return mPreferences.isStatusWidgetWeatherFahrenheit();
             default:
                 return defValue;
         }
