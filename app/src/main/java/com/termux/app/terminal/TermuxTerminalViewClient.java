@@ -1,14 +1,13 @@
 package com.termux.app.terminal;
 
 import android.annotation.SuppressLint;
-import androidx.appcompat.app.AlertDialog;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Environment;
+import android.graphics.PointF;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
@@ -19,7 +18,8 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.EditText;
-import android.widget.ListView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 import com.termux.R;
 import com.termux.app.SuggestionBarCallback;
@@ -341,9 +341,19 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         // consumer: while it is up, every stroke belongs to the name being typed.
         if (mActivity.handleTerminalRenameKey(keyCode, e))
             return true;
+        // Back for the widget pane and the FULL status pane. Same order as onBackPressed(), and the
+        // same reason the drawer has a claim below: on a device the back key is consumed in this
+        // channel and never reaches onBackPressed().
+        if (mActivity.handleOverlayPaneKey(keyCode, e))
+            return true;
         // The palette overlay claims typing before the terminal writes it, the same point the
         // in-app keyboard's interceptor sits at. Checked first so nothing else can consume esc.
         if (mActivity.handleCommandPaletteKey(keyCode, e))
+            return true;
+        // The sheet plane, after the palette so it can never swallow the escape stroke the palette
+        // is checked first for, and before the drawer, which a sheet closes as it opens. On a device
+        // back is consumed here and never reaches onBackPressed(), so the plane needs both routes.
+        if (mActivity.handleTerminalSheetKey(keyCode, e))
             return true;
         // After the palette (which can be summoned over the drawer and therefore outranks it) and
         // before the app-search hook, which reads the terminal's own input line — a line nothing
@@ -587,6 +597,13 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             return true;
         if (mActivity.isFolderRenameActive())
             return true;
+        // The release of a back press a pane consumed on the way down.
+        if (mActivity.consumeOverlayPaneKeyUp(keyCode))
+            return true;
+        // Same for the sheet plane: onKeyDown claimed the press, and a release let through on its
+        // own would reach the shell behind a modal surface.
+        if (mActivity.isTerminalSheetOpen())
+            return true;
         // Same for the drawer: onKeyDown claimed the press, and a release let through on its own
         // would reach the shell behind a full-screen plane.
         if (mActivity.isAppDrawerOpen())
@@ -651,14 +668,24 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         return state;
     }
 
+    /**
+     * Where the long press that started this interaction landed, in screen coordinates.
+     *
+     * <p>The action menu opens at the finger, but it is not the long press that opens it: the press
+     * starts text selection, and the menu arrives one step later from the selection toolbar's
+     * More button, which carries no coordinates of its own. So the point is kept here.
+     */
+    @androidx.annotation.Nullable private PointF mLastLongPressOnScreen;
+
     @Override
     public boolean onLongPress(MotionEvent event) {
+        mLastLongPressOnScreen = new PointF(event.getRawX(), event.getRawY());
         return false;
     }
 
     @Override
     public boolean onShowContextMenu(TerminalView view) {
-        return mActivity.showTerminalActionSheet();
+        return mActivity.showTerminalActionSheet(mLastLongPressOnScreen);
     }
 
     @Override
@@ -673,6 +700,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         // system IME commits ordinary characters through the input connection without ever sending
         // a key event, so this is the only route by which typing reaches the overlay from one.
         if (mActivity.handleCommandPaletteCodePoint(codePoint, ctrlDown))
+            return true;
+        // The sheet plane's twin of the same hook, in the same order as onKeyDown.
+        if (mActivity.handleTerminalSheetCodePoint(codePoint, ctrlDown))
             return true;
         // The drawer's twin of the same hook, in the same order as onKeyDown: after the palette,
         // before the enter-only app-search hook below.
@@ -1091,16 +1121,26 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     private void showHyperlinkDialog(String uri) {
         String scheme = Uri.parse(uri).getScheme();
         boolean openable = scheme != null && OPENABLE_HYPERLINK_SCHEMES.contains(scheme.toLowerCase(Locale.ROOT));
-        AlertDialog.Builder builder = new MaterialAlertDialogBuilder(mActivity)
-            .setTitle(R.string.title_hyperlink_dialog)
-            .setMessage(uri)
-            .setNeutralButton(R.string.action_hyperlink_copy, (di, which) ->
-                ShareUtils.copyTextToClipboard(mActivity, uri, mActivity.getString(R.string.msg_select_url_copied_to_clipboard)))
-            .setNegativeButton(android.R.string.cancel, null);
+        TerminalSheetController sheet = mActivity.getTerminalSheetController();
+        LinearLayout body = TerminalSheetViews.body(mActivity);
+        TerminalSheetViews.addMessage(body, uri);
+        LinearLayout actions = TerminalSheetViews.addActionRow(body);
+        TerminalSheetViews.addAction(actions, mActivity.getString(android.R.string.cancel),
+            sheet::dismiss);
+        TerminalSheetViews.addAction(actions, mActivity.getString(R.string.action_hyperlink_copy),
+            () -> {
+                sheet.dismiss();
+                ShareUtils.copyTextToClipboard(mActivity, uri,
+                    mActivity.getString(R.string.msg_select_url_copied_to_clipboard));
+            });
         if (openable) {
-            builder.setPositiveButton(R.string.action_hyperlink_open, (di, which) -> ShareUtils.openUrl(mActivity, uri));
+            TerminalSheetViews.addAction(actions,
+                mActivity.getString(R.string.action_hyperlink_open), () -> {
+                    sheet.dismiss();
+                    ShareUtils.openUrl(mActivity, uri);
+                });
         }
-        builder.show();
+        sheet.show(mActivity.getString(R.string.title_hyperlink_dialog), body);
     }
 
     public void showUrlSelection() {
@@ -1109,30 +1149,37 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             return;
         String text = ShellUtils.getTerminalSessionTranscriptText(session, true, true);
         LinkedHashSet<CharSequence> urlSet = TermuxUrlUtils.extractUrls(text);
+        TerminalSheetController sheet = mActivity.getTerminalSheetController();
+        String title = mActivity.getString(R.string.action_select_url);
         if (urlSet.isEmpty()) {
-            new MaterialAlertDialogBuilder(mActivity).setMessage(R.string.title_select_url_none_found).show();
+            LinearLayout notice = TerminalSheetViews.body(mActivity);
+            TerminalSheetViews.addMessage(notice,
+                mActivity.getString(R.string.title_select_url_none_found));
+            sheet.show(title, notice);
             return;
         }
         final CharSequence[] urls = urlSet.toArray(new CharSequence[0]);
         // Latest first.
         Collections.reverse(Arrays.asList(urls));
-        // Click to copy url to clipboard:
-        final AlertDialog dialog = new MaterialAlertDialogBuilder(mActivity).setItems(urls, (di, which) -> {
-            String url = (String) urls[which];
-            ShareUtils.copyTextToClipboard(mActivity, url, mActivity.getString(R.string.msg_select_url_copied_to_clipboard));
-        }).setTitle(R.string.title_select_url_dialog).create();
-        // Long press to open URL:
-        dialog.setOnShowListener(di -> {
-            // this is a ListView with your "buds" in it
-            ListView lv = dialog.getListView();
-            lv.setOnItemLongClickListener((parent, view, position, id) -> {
-                dialog.dismiss();
-                String url = (String) urls[position];
+        LinearLayout body = TerminalSheetViews.body(mActivity);
+        // The instruction was the dialog's title; on a card it is the message, because the title
+        // line is a single ellipsized row and this sentence is what tells the two gestures apart.
+        TerminalSheetViews.addMessage(body, mActivity.getString(R.string.title_select_url_dialog));
+        for (CharSequence entry : urls) {
+            final String url = entry.toString();
+            // Tap copies, long press opens — the same split the list dialog had.
+            TextView row = TerminalSheetViews.addMenuRow(body, url, () -> {
+                sheet.dismiss();
+                ShareUtils.copyTextToClipboard(mActivity, url,
+                    mActivity.getString(R.string.msg_select_url_copied_to_clipboard));
+            });
+            row.setOnLongClickListener(view -> {
+                sheet.dismiss();
                 ShareUtils.openUrl(mActivity, url);
                 return true;
             });
-        });
-        dialog.show();
+        }
+        sheet.show(title, TerminalSheetViews.wrapScrolling(body));
     }
 
     /** Show the keyboard-addressable URL/path/hash/line-reference hint picker. */
