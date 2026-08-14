@@ -1,15 +1,8 @@
 package com.termux.app.terminal;
 
-import androidx.appcompat.app.AlertDialog;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import android.content.Context;
-import android.text.Editable;
-import android.text.TextWatcher;
 import android.view.Gravity;
-import android.view.KeyEvent;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -25,87 +18,152 @@ import com.termux.view.TerminalView;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Native scrollback-search dialog that jumps the current pane to a selected row. */
+/**
+ * Scrollback search on the {@link TerminalSheetController} plane: type a query, pick a match, jump
+ * the pane to that row.
+ *
+ * <p>This was the worst offender of all the terminal dialogs. It carried a focused {@code EditText},
+ * so searching a transcript pulled the {@code InputConnection} off {@code TerminalView}, dropped the
+ * in-app keyboard and swapped in the system IME over the terminal — for a query the user typically
+ * abandons after four characters. The query is a label typed from the sheet's key channel now, and
+ * nothing here can take focus.
+ */
 final class TerminalScrollbackSearchOverlay {
+
+    /** One result row's height, so the bar can grow by whole rows rather than by guesswork. */
+    private static final float ROW_HEIGHT_DP = 46f;
+    /** The bar's ceiling in rows; beyond this the list scrolls inside the frame. */
+    private static final int MAX_VISIBLE_ROWS = 5;
+    /** Marks the highlighted row, since an unfocused list draws no selector of its own. */
+    private static final String HIGHLIGHT_PREFIX = "▸ ";
+
+    /**
+     * Where a chosen match sends the pane. A seam rather than a direct {@code TerminalView} call so
+     * the surface can be built and typed at without a live emulator behind it.
+     */
+    interface RowJump {
+        void jumpTo(int row);
+    }
 
     private TerminalScrollbackSearchOverlay() {}
 
     static void show(@NonNull TermuxActivity activity, @NonNull TerminalView terminalView) {
         if (terminalView.mEmulator == null) return;
-        List<TerminalScrollbackSearchModel.Line> snapshot = snapshot(terminalView.mEmulator);
+        show(activity, snapshot(terminalView.mEmulator), row -> {
+            terminalView.jumpToBufferRow(row);
+            terminalView.requestFocus();
+        });
+    }
 
-        LinearLayout content = new LinearLayout(activity);
-        content.setOrientation(LinearLayout.VERTICAL);
-        int margin = dp(activity, 20);
-        content.setPadding(margin, dp(activity, 4), margin, 0);
-        EditText query = new EditText(activity);
+    static void show(@NonNull TermuxActivity activity,
+                     @NonNull List<TerminalScrollbackSearchModel.Line> snapshot,
+                     @NonNull RowJump jump) {
+        TerminalSheetController sheet = activity.getTerminalSheetController();
+        float density = activity.getResources().getDisplayMetrics().density;
+        LinearLayout body = TerminalSheetViews.body(activity);
+
+        LinearLayout queryRow = new LinearLayout(activity);
+        queryRow.setOrientation(LinearLayout.HORIZONTAL);
+        queryRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView query = new TextView(activity);
+        query.setTextSize(16f);
         query.setSingleLine(true);
-        query.setHint(R.string.terminal_scrollback_search_hint);
-        query.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
-        content.addView(query, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        query.setMinHeight(Math.round(40 * density));
+        query.setGravity(Gravity.CENTER_VERTICAL);
+        queryRow.addView(query, new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         TextView count = new TextView(activity);
-        count.setGravity(Gravity.START);
-        content.addView(count, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        count.setTextSize(13f);
+        count.setAlpha(0.7f);
+        count.setGravity(Gravity.CENTER_VERTICAL);
+        queryRow.addView(count, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        TerminalSheetViews.addToFrame(body, queryRow);
 
         ListView list = new ListView(activity);
-        LinearLayout.LayoutParams listParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(activity, 360));
-        listParams.topMargin = dp(activity, 6);
-        content.addView(list, listParams);
-
+        list.setChoiceMode(ListView.CHOICE_MODE_SINGLE);
+        // Selection is drawn by the adapter's own highlight rather than by the list's activated
+        // state: nothing on this plane may take focus, and an unfocused ListView paints no selector.
         ArrayAdapter<String> adapter = new ArrayAdapter<>(activity,
             android.R.layout.simple_list_item_1, new ArrayList<>());
         list.setAdapter(adapter);
-        List<TerminalScrollbackSearchModel.Match> matches = new ArrayList<>();
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
-            .setTitle(R.string.terminal_scrollback_search_title)
-            .setView(content)
-            .setNegativeButton(android.R.string.cancel, null)
-            .create();
+        int rowHeightPx = Math.round(ROW_HEIGHT_DP * density);
+        LinearLayout.LayoutParams listParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0);
+        listParams.topMargin = Math.round(6 * density);
+        body.addView(list, listParams);
 
-        Runnable selectFirst = () -> {
-            if (!matches.isEmpty()) choose(dialog, terminalView, matches.get(0));
+        List<TerminalScrollbackSearchModel.Match> matches = new ArrayList<>();
+        int[] highlight = {0};
+        // The bar lifts only as far as the results it actually has, to a ceiling, so a one-hit query
+        // barely covers the terminal and a hundred-hit query scrolls inside a fixed frame.
+        Runnable resize = () -> {
+            int rows = Math.min(matches.size(), MAX_VISIBLE_ROWS);
+            listParams.height = rows * rowHeightPx;
+            list.setLayoutParams(listParams);
+            list.setVisibility(rows == 0 ? android.view.View.GONE : android.view.View.VISIBLE);
         };
-        query.setOnEditorActionListener((view, actionId, event) -> {
-            selectFirst.run();
-            return !matches.isEmpty();
-        });
-        query.setOnKeyListener((view, keyCode, event) -> {
-            if (keyCode == KeyEvent.KEYCODE_ENTER && event.getAction() == KeyEvent.ACTION_DOWN) {
-                selectFirst.run();
-                return !matches.isEmpty();
+        Runnable render = () -> {
+            adapter.clear();
+            for (int i = 0; i < matches.size(); i++) {
+                TerminalScrollbackSearchModel.Match match = matches.get(i);
+                String row = activity.getString(R.string.terminal_scrollback_search_row,
+                    displayRow(match.row), match.snippet);
+                adapter.add(i == highlight[0] ? HIGHLIGHT_PREFIX + row : row);
             }
-            return false;
-        });
+            adapter.notifyDataSetChanged();
+            if (!matches.isEmpty()) list.setSelection(highlight[0]);
+        };
+
         list.setOnItemClickListener((parent, view, position, id) ->
-            choose(dialog, terminalView, matches.get(position)));
-        query.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int countChars) {
+            choose(sheet, jump, matches.get(position)));
+
+        TerminalSheetController.TextField field = new TerminalSheetController.TextField(query,
+            activity.getString(R.string.terminal_scrollback_search_hint), value -> {
                 matches.clear();
-                matches.addAll(TerminalScrollbackSearchModel.search(snapshot, s.toString()));
-                adapter.clear();
-                for (TerminalScrollbackSearchModel.Match match : matches) {
-                    adapter.add(activity.getString(R.string.terminal_scrollback_search_row,
-                        displayRow(match.row), match.snippet));
-                }
-                count.setText(s.length() == 0 ? "" : activity.getResources().getQuantityString(
+                matches.addAll(TerminalScrollbackSearchModel.search(snapshot, value));
+                highlight[0] = 0;
+                count.setText(value.isEmpty() ? "" : activity.getResources().getQuantityString(
                     R.plurals.terminal_scrollback_search_results, matches.size(), matches.size()));
+                resize.run();
+                render.run();
+            }, () -> {
+                if (!matches.isEmpty()) choose(sheet, jump, matches.get(highlight[0]));
+            });
+
+        // Arrows walk the results from all three input paths at once — the in-app keyboard, an
+        // extra-keys row and a hardware or IME arrow all arrive as the same key code.
+        TerminalSheetController.TextSink sink = new TerminalSheetController.TextSink() {
+            @Override public void onText(@NonNull String text) { field.onText(text); }
+
+            @Override public void onBackspace() { field.onBackspace(); }
+
+            @Override public boolean onCommit() { return field.onCommit(); }
+
+            @Override public boolean onArrow(int delta) {
+                if (matches.isEmpty()) return false;
+                int moved = TerminalScrollbackSearchModel.moveHighlight(highlight[0], delta,
+                    matches.size());
+                if (moved == highlight[0]) return true;
+                highlight[0] = moved;
+                render.run();
+                return true;
             }
-            @Override public void afterTextChanged(Editable s) {}
-        });
-        dialog.setOnShowListener(ignored -> query.requestFocus());
-        dialog.show();
+        };
+
+        resize.run();
+        // No heading: this is a bar sitting on the dock, and the field's own hint already says what
+        // it searches. A title row would spend a fifth of the bar's height repeating it.
+        sheet.show("", body, false, sink, null, false,
+            TerminalSheetController.Placement.aboveDock());
     }
 
-    private static void choose(AlertDialog dialog, TerminalView view,
-                               TerminalScrollbackSearchModel.Match match) {
-        dialog.dismiss();
-        view.jumpToBufferRow(match.row);
-        view.requestFocus();
+    private static void choose(@NonNull TerminalSheetController sheet, @NonNull RowJump jump,
+                               @NonNull TerminalScrollbackSearchModel.Match match) {
+        sheet.dismiss();
+        jump.jumpTo(match.row);
     }
 
     @NonNull
@@ -123,9 +181,5 @@ final class TerminalScrollbackSearchOverlay {
 
     private static String displayRow(int row) {
         return row < 0 ? Integer.toString(row) : "+" + row;
-    }
-
-    private static int dp(Context context, int value) {
-        return Math.round(value * context.getResources().getDisplayMetrics().density);
     }
 }
