@@ -86,6 +86,20 @@
         <item>default</item>
         <item>harder</item>
     </string-array>
+    <string name="settings_ui_color_source_title">Interface colors</string>
+    <string name="settings_ui_color_source_summary_wallpaper">Dock, status bar, drawer and keyboard follow the wallpaper palette.</string>
+    <string name="settings_ui_color_source_summary_scheme">Dock, status bar, drawer and keyboard are derived from the terminal color scheme.</string>
+    <string name="settings_ui_color_source_no_scheme">No color scheme installed yet — apply one from Termux:Styling first.</string>
+    <string name="settings_ui_color_source_unsupported">Needs Android 11 or newer; the terminal still follows the scheme.</string>
+    <string name="settings_ui_color_source_hint">Overrides in ~/.termux/launcher-theme.properties are read on top of the scheme: one token per line, e.g. primary = color3.</string>
+    <string-array name="termux_ui_color_source_entries">
+        <item>From wallpaper</item>
+        <item>From terminal color scheme</item>
+    </string-array>
+    <string-array name="termux_ui_color_source_values">
+        <item>wallpaper</item>
+        <item>scheme</item>
+    </string-array>
     <string name="settings_wallpaper_title">Wallpaper</string>
     <string name="settings_icon_appearance_header">Icon appearance</string>
     <string name="settings_icon_appearance_title">Use monochrome icons</string>

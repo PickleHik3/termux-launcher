@@ -123,6 +123,7 @@ import com.termux.shared.data.DataUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY;
 import com.termux.app.activities.SettingsActivity;
+import com.termux.app.theme.LauncherSchemeTheme;
 import com.termux.app.theme.TermuxThemeManager;
 import com.termux.shared.termux.crash.TermuxCrashUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -14838,6 +14839,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         if (!"colors".equals(intent.getStringExtra(TERMUX_ACTIVITY.EXTRA_RELOAD_STYLE)))
             return;
+        // A new scheme on disk invalidates the derived chrome palette whether or not the chrome is
+        // currently following it — the cache is keyed on the file, and the user may switch the
+        // source over afterwards without touching the file again.
+        LauncherSchemeTheme.invalidate();
         if (mPreferences == null || !mPreferences.isTerminalDynamicColorsEnabled())
             return;
         if (!TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE.isFile())

@@ -27,12 +27,14 @@ import com.termux.app.TermuxService;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.terminal.io.BellHandler;
 import com.termux.shared.logger.Logger;
+import com.termux.app.theme.LauncherSchemeTheme;
 import com.termux.terminal.TerminalColors;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.util.LinkedHashMap;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -677,6 +679,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                     try (InputStream in = new FileInputStream(colorsFile)) {
                         props.load(in);
                     }
+                    exportSchemeColorFiles(props);
                 }
             }
             TerminalColors.COLOR_SCHEME.updateWith(colorKeysOnly(props));
@@ -685,6 +688,35 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyTerminalColors()", e);
         }
+    }
+
+    /**
+     * Export the scheme-derived roles to {@code material-colors.properties} / {@code .sh}.
+     *
+     * <p>The wallpaper path already writes those files, and the bundled fish, tmux and Neovim
+     * configs read them — so a scheme that only reached the terminal left every one of those
+     * consumers describing a palette the user had just replaced. Same file, same key names, one
+     * source of truth whichever way the colours were chosen.
+     */
+    private void exportSchemeColorFiles(@NonNull Properties terminalProps) {
+        // Unlike the wallpaper export, every input here is a file and some arithmetic — no theme
+        // attributes, no resources — so the whole thing including the derivation runs on the writer
+        // thread rather than costing the activity two stats and a palette build during onCreate.
+        final Properties snapshot = new Properties();
+        snapshot.putAll(terminalProps);
+        MATERIAL_COLOR_FILE_EXECUTOR.execute(() -> {
+            try {
+                LinkedHashMap<String, Integer> tokens = LauncherSchemeTheme.tokens();
+                if (tokens == null) return;
+                Properties exported = LauncherSchemeTheme.exportProperties(tokens);
+                for (String key : snapshot.stringPropertyNames()) {
+                    exported.setProperty("terminal_" + key, snapshot.getProperty(key));
+                }
+                MaterialTerminalColorScheme.writeMaterialColorFiles(exported);
+            } catch (Exception e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Error writing scheme color files", e);
+            }
+        });
     }
 
     /**

@@ -805,6 +805,15 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_VALUE_TERMINAL_DYNAMIC_COLORS_ENABLED = true;
 
+        /**
+         * Defines the key for where the launcher chrome — dock, status bar, drawer, keyboard —
+         * takes its colours from: {@code wallpaper} for Material dynamic colours, or {@code scheme}
+         * to derive them from the terminal colour scheme in {@code ~/.termux/colors.properties}.
+         */
+        public static final String KEY_UI_COLOR_SOURCE = "ui_color_source";
+
+        public static final String DEFAULT_VALUE_UI_COLOR_SOURCE = "wallpaper";
+
         /** Contrast profile for wallpaper-derived terminal colors. */
         public static final String KEY_TERMINAL_CONTRAST_LEVEL = "terminal_contrast_level";
 
