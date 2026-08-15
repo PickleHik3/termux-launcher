@@ -131,6 +131,9 @@ public final class TerminalView extends View {
 
     int[] mDefaultSelectors = new int[] { -1, -1, -1, -1 };
 
+    /** Find-session highlights, copy-mode cursor and selection, or null when no find is running. */
+    @Nullable private TerminalFindOverlay mFindOverlay;
+
     float mScaleFactor = 1.f;
 
     /**
@@ -1937,6 +1940,17 @@ public final class TerminalView extends View {
         return mRenderer == null ? 0f : mRenderer.getFontWidth();
     }
 
+    /** Rendered text size in pixels, or zero until a renderer is configured. */
+    public float getTerminalTextSizePixels() {
+        return mRenderer == null ? 0f : mRenderer.mTextSize;
+    }
+
+    /** The face the transcript is drawn in, so a surface about the terminal can match it. */
+    @Nullable
+    public android.graphics.Typeface getTerminalTypeface() {
+        return mRenderer == null ? null : mRenderer.mTypeface;
+    }
+
     /** Current rendered character-cell line height, or zero until a renderer is configured. */
     public float getTerminalCellHeightPixels() {
         return mRenderer == null ? 0f : mRenderer.getFontLineSpacing();
@@ -1959,6 +1973,10 @@ public final class TerminalView extends View {
                 canvas.translate(0f, -scrollOffset);
             }
             mRenderer.render(mEmulator, canvas, mTopRow, sel[0], sel[1], sel[2], sel[3], mUseTransparentFrameClear, mTransparentFrameOverlayColor, getHorizontalContentOffset(), scrollOffset != 0f ? 1 : 0);
+            if (mFindOverlay != null) {
+                mRenderer.renderFindOverlay(mEmulator, canvas, mTopRow, mFindOverlay,
+                    getHorizontalContentOffset(), scrollOffset != 0f ? 1 : 0);
+            }
             if (mCursorTrail.isEnabled() && !isSelectingText()) {
                 boolean needsAnotherFrame = mCursorTrail.draw(canvas, mEmulator.getCursorCol(), mEmulator.getCursorRow(), mTopRow,
                     mRenderer.mFontWidth, mRenderer.mFontLineSpacing, getHorizontalContentOffset(), mRenderer.mFontLineSpacingAndAscent,
@@ -2069,6 +2087,43 @@ public final class TerminalView extends View {
     }
 
     /** Jump to a row from the screen buffer's external coordinate system. */
+    /**
+     * Installs (or with null clears) the find session's highlights, copy-mode cursor and selection.
+     * The view only draws them; every decision about what they contain lives above it.
+     */
+    public void setFindOverlay(@Nullable TerminalFindOverlay overlay) {
+        mFindOverlay = overlay;
+        invalidate();
+    }
+
+    @Nullable
+    public TerminalFindOverlay getFindOverlay() {
+        return mFindOverlay;
+    }
+
+    /**
+     * Scrolls the least amount that brings {@code row} onto the screen, keeping a margin of context
+     * around it where the transcript allows. Unlike {@link #jumpToBufferRow(int)} — which pins the
+     * row to the top — this leaves the view alone when the row is already comfortably visible, so
+     * walking matches inside one screenful does not make the transcript jump under the reader.
+     */
+    public boolean revealBufferRow(int row, int marginRows) {
+        if (mEmulator == null) return false;
+        int lowest = -mEmulator.getScreen().getActiveTranscriptRows();
+        int margin = Math.max(0, Math.min(marginRows, Math.max(0, (mEmulator.mRows - 1) / 2)));
+        int target = mTopRow;
+        if (row < mTopRow + margin) target = row - margin;
+        else if (row > mTopRow + mEmulator.mRows - 1 - margin)
+            target = row - mEmulator.mRows + 1 + margin;
+        target = Math.max(lowest, Math.min(0, target));
+        if (target == mTopRow) return false;
+        mTopRow = target;
+        clearScrollOffset();
+        mCursorTrail.reset();
+        invalidate();
+        return true;
+    }
+
     public boolean jumpToBufferRow(int row) {
         if (mEmulator == null) return false;
         int lowest = -mEmulator.getScreen().getActiveTranscriptRows();

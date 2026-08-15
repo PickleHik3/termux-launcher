@@ -221,6 +221,8 @@ public final class TerminalRenderer {
     final BoxDrawingPolicy mBoxDrawingPolicy;
 
     private final Paint mTextPaint = new Paint();
+    /** Fills for the find overlay, kept off the text paint's per-run state. */
+    private final Paint mOverlayPaint = new Paint();
     private Typeface mCurrentTypeface;
 
     /** Memoized fallback-chain lookups; sized for this renderer's chain and never resized. */
@@ -1311,6 +1313,82 @@ public final class TerminalRenderer {
             canvas.drawRect(segments.shadeRects[offset], segments.shadeRects[offset + 1],
                 segments.shadeRects[offset + 2], segments.shadeRects[offset + 3], mTextPaint);
         }
+    }
+
+    /**
+     * Paints a find session over the transcript that has just been rendered: the selection under
+     * everything, then every match with the current one lit brighter, then the copy-mode cursor.
+     *
+     * <p>It runs as its own pass rather than through the selection channel the screen render
+     * already has, because that channel carries exactly one range and inverts the cells it covers.
+     * A find highlight has to be able to cover dozens of ranges at once and must stay readable, so
+     * these are translucent fills laid over the glyphs, in the row geometry the render loop uses.</p>
+     */
+    public final void renderFindOverlay(TerminalEmulator emulator, Canvas canvas, int topRow,
+                                        TerminalFindOverlay overlay, float horizontalOffset,
+                                        int extraRows) {
+        if (emulator == null || overlay == null || overlay.isEmpty()) return;
+        final int endRow = Math.min(topRow + emulator.mRows + extraRows, emulator.mRows);
+        final int columns = emulator.mColumns;
+        // Same origin as the screen render's first row, so a highlight lands on its own cells.
+        final float firstRowTop = mFontLineSpacingAndAscent;
+
+        if (overlay.selectionMode != TerminalFindOverlay.SELECTION_NONE && overlay.cursorVisible) {
+            int first = Math.min(overlay.anchorRow, overlay.cursorRow);
+            int last = Math.max(overlay.anchorRow, overlay.cursorRow);
+            for (int row = Math.max(topRow, first); row <= Math.min(endRow - 1, last); row++) {
+                int start;
+                int end;
+                switch (overlay.selectionMode) {
+                    case TerminalFindOverlay.SELECTION_LINE:
+                        start = 0;
+                        end = columns - 1;
+                        break;
+                    case TerminalFindOverlay.SELECTION_BLOCK:
+                        start = Math.min(overlay.anchorColumn, overlay.cursorColumn);
+                        end = Math.max(overlay.anchorColumn, overlay.cursorColumn);
+                        break;
+                    default:
+                        // Charwise runs from the anchor to the cursor, whole rows in between.
+                        boolean forward = overlay.cursorRow > overlay.anchorRow
+                            || (overlay.cursorRow == overlay.anchorRow
+                            && overlay.cursorColumn >= overlay.anchorColumn);
+                        int startRow = forward ? overlay.anchorRow : overlay.cursorRow;
+                        int startCol = forward ? overlay.anchorColumn : overlay.cursorColumn;
+                        int endRowSel = forward ? overlay.cursorRow : overlay.anchorRow;
+                        int endCol = forward ? overlay.cursorColumn : overlay.anchorColumn;
+                        start = row == startRow ? startCol : 0;
+                        end = row == endRowSel ? endCol : columns - 1;
+                        break;
+                }
+                drawOverlayRect(canvas, row, topRow, firstRowTop, start, end, horizontalOffset,
+                    overlay.selectionColor);
+            }
+        }
+
+        for (int i = 0; i < overlay.spans.size(); i++) {
+            TerminalFindOverlay.Span span = overlay.spans.get(i);
+            if (span.row < topRow || span.row >= endRow) continue;
+            drawOverlayRect(canvas, span.row, topRow, firstRowTop, span.startColumn, span.endColumn,
+                horizontalOffset, i == overlay.currentSpan ? overlay.currentMatchColor
+                    : overlay.matchColor);
+        }
+
+        if (overlay.cursorVisible && overlay.cursorRow >= topRow && overlay.cursorRow < endRow) {
+            drawOverlayRect(canvas, overlay.cursorRow, topRow, firstRowTop, overlay.cursorColumn,
+                overlay.cursorColumn, horizontalOffset, overlay.cursorColor);
+        }
+    }
+
+    private void drawOverlayRect(Canvas canvas, int row, int topRow, float firstRowTop,
+                                 int startColumn, int endColumn, float horizontalOffset, int color) {
+        if (endColumn < startColumn) return;
+        float top = firstRowTop + (row - topRow) * mFontLineSpacing;
+        // Its own paint: the text paint carries per-run typeface, skew and effects, and this pass
+        // runs between frames of that state rather than inside it.
+        mOverlayPaint.setColor(color);
+        canvas.drawRect(horizontalOffset + startColumn * mFontWidth, top,
+            horizontalOffset + (endColumn + 1) * mFontWidth, top + mFontLineSpacing, mOverlayPaint);
     }
 
     private void drawCellRect(Canvas canvas, int startColumn, int endColumn, float top, float bottom,

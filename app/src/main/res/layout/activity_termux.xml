@@ -781,9 +781,21 @@
             </FrameLayout>
         </FrameLayout>
 
+        <!-- Scrollback find strip: one text line above the dock, so the transcript it searches
+             stays on screen with its matches lit. Filled by TerminalFindCoordinator. -->
+        <FrameLayout
+            android:id="@+id/terminal_find_bar_host"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_above="@id/accessory_stack_container"
+            android:layout_alignWithParentIfMissing="true"
+            android:elevation="16dp"
+            android:visibility="gone" />
+
         <!-- Keybind hint popup: shown while a Ctrl+Alt prefix is latched on the in-app keyboard,
              flush against the accessory stack so it reads as part of the keyboard. Rows and the
              glass background are built in updateKeybindHintPopup(). -->
+
         <LinearLayout
             android:id="@+id/keybind_hint_popup"
             android:layout_width="match_parent"

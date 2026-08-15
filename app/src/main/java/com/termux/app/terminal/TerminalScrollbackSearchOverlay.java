@@ -19,21 +19,24 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Scrollback search on the {@link TerminalSheetController} plane: type a query, pick a match, jump
- * the pane to that row.
+ * The fallback scrollback search, for the one case the find strip cannot serve: no in-app keyboard
+ * to type a query into, and hence nothing on screen to aim its three input channels at.
  *
- * <p>This was the worst offender of all the terminal dialogs. It carried a focused {@code EditText},
- * so searching a transcript pulled the {@code InputConnection} off {@code TerminalView}, dropped the
- * in-app keyboard and swapped in the system IME over the terminal — for a query the user typically
- * abandons after four characters. The query is a label typed from the sheet's key channel now, and
- * nothing here can take focus.
+ * <p>Shaped to match the strip that replaced it — a bare bar on the dock's edge, no plane backdrop,
+ * mono query with the count at the trailing end — so the fallback looks like the thing it stands in
+ * for rather than like the full-screen list it used to be. The transcript stays visible above it;
+ * the only thing it gives up versus the strip is the in-place highlighting, which is why it lists
+ * its hits instead.
+ *
+ * <p>Nothing here takes focus: the query is a label typed from the sheet's key channel, so the
+ * terminal keeps its {@code InputConnection} and no system IME is summoned.
  */
 final class TerminalScrollbackSearchOverlay {
 
-    /** One result row's height, so the bar can grow by whole rows rather than by guesswork. */
-    private static final float ROW_HEIGHT_DP = 46f;
+    /** One result row's height. Compact, because this is a bar and not a browser. */
+    private static final float ROW_HEIGHT_DP = 30f;
     /** The bar's ceiling in rows; beyond this the list scrolls inside the frame. */
-    private static final int MAX_VISIBLE_ROWS = 5;
+    private static final int MAX_VISIBLE_ROWS = 4;
     /** Marks the highlighted row, since an unfocused list draws no selector of its own. */
     private static final String HIGHLIGHT_PREFIX = "▸ ";
 
@@ -67,15 +70,19 @@ final class TerminalScrollbackSearchOverlay {
         queryRow.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView query = new TextView(activity);
-        query.setTextSize(16f);
+        // Mono at the strip's size: this is the same surface by another route, and the query is
+        // terminal text.
+        query.setTypeface(android.graphics.Typeface.MONOSPACE);
+        query.setTextSize(14f);
         query.setSingleLine(true);
-        query.setMinHeight(Math.round(40 * density));
+        query.setMinHeight(Math.round(28 * density));
         query.setGravity(Gravity.CENTER_VERTICAL);
         queryRow.addView(query, new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         TextView count = new TextView(activity);
-        count.setTextSize(13f);
+        count.setTypeface(android.graphics.Typeface.MONOSPACE);
+        count.setTextSize(12f);
         count.setAlpha(0.7f);
         count.setGravity(Gravity.CENTER_VERTICAL);
         queryRow.addView(count, new LinearLayout.LayoutParams(
@@ -157,7 +164,7 @@ final class TerminalScrollbackSearchOverlay {
         // No heading: this is a bar sitting on the dock, and the field's own hint already says what
         // it searches. A title row would spend a fifth of the bar's height repeating it.
         sheet.show("", body, false, sink, null, false,
-            TerminalSheetController.Placement.aboveDock());
+            TerminalSheetController.Placement.aboveDockBare());
     }
 
     private static void choose(@NonNull TerminalSheetController sheet, @NonNull RowJump jump,

@@ -1462,6 +1462,7 @@
     <string name="tool_desc_terminal_search_scrollback">Find text in this pane’s scrollback and jump to a match.</string>
     <string name="terminal_scrollback_search_title">Search scrollback</string>
     <string name="terminal_scrollback_search_hint">Search text</string>
+    <string name="terminal_find_yanked">Copied selection</string>
     <string name="terminal_scrollback_search_row">Row %1$s   %2$s</string>
     <plurals name="terminal_scrollback_search_results">
         <item quantity="one">1 match</item>

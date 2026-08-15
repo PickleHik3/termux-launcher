@@ -341,6 +341,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         // consumer: while it is up, every stroke belongs to the name being typed.
         if (mActivity.handleTerminalRenameKey(keyCode, e))
             return true;
+        // The find strip is the same kind of claim: while it is up every stroke is either the query
+        // or a vim command over the transcript, and none of it belongs to the shell.
+        if (mActivity.handleScrollbackFindKey(keyCode, e))
+            return true;
         // Back for the widget pane and the FULL status pane. Same order as onBackPressed(), and the
         // same reason the drawer has a claim below: on a device the back key is consumed in this
         // channel and never reaches onBackPressed().
@@ -695,6 +699,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             inspector.recordCodePoint(codePoint, ctrlDown);
         // The rename chip's twin of its onKeyDown hook, in the same order: it outranks the rest.
         if (mActivity.handleTerminalRenameCodePoint(codePoint, ctrlDown))
+            return true;
+        // The find strip's twin of its onKeyDown hook, in the same order.
+        if (mActivity.handleScrollbackFindCodePoint(codePoint, ctrlDown))
             return true;
         // The twin of the palette hook in onKeyDown, and checked first for the same reason. A
         // system IME commits ordinary characters through the input connection without ever sending
@@ -1190,7 +1197,17 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         TerminalHintsOverlay.show(mActivity, text == null ? "" : text);
     }
 
+    /**
+     * Scrollback search: the strip above the dock, which leaves the transcript on screen with its
+     * matches lit. It falls back to {@link #showScrollbackSearchFallback()} by itself when there is
+     * no keyboard to type a query with.
+     */
     public void showScrollbackSearch() {
+        mActivity.beginScrollbackFind();
+    }
+
+    /** The compact sheet search, for when no keyboard can be raised to type into the strip. */
+    public void showScrollbackSearchFallback() {
         TerminalView view = mActivity.getTerminalView();
         if (view != null) TerminalScrollbackSearchOverlay.show(mActivity, view);
     }

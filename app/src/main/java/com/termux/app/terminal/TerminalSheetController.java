@@ -83,14 +83,17 @@ public final class TerminalSheetController
 
     /** Where a card sits on the plane. */
     public static final class Placement {
-        private static final Placement CENTERED = new Placement(null, false);
+        private static final Placement CENTERED = new Placement(null, false, false);
 
         @Nullable final PointF anchor;
         final boolean docked;
+        /** No plane backdrop: the surface behind this card stays exactly as it was. */
+        final boolean bare;
 
-        private Placement(@Nullable PointF anchor, boolean docked) {
+        private Placement(@Nullable PointF anchor, boolean docked, boolean bare) {
             this.anchor = anchor;
             this.docked = docked;
+            this.bare = bare;
         }
 
         /** The default: a centred card with side and vertical insets. */
@@ -102,7 +105,7 @@ public final class TerminalSheetController
         /** A compact menu at a touch point, clamped inside the plane. */
         @NonNull
         public static Placement at(@Nullable PointF screenPoint) {
-            return screenPoint == null ? CENTERED : new Placement(screenPoint, false);
+            return screenPoint == null ? CENTERED : new Placement(screenPoint, false, false);
         }
 
         /**
@@ -114,7 +117,20 @@ public final class TerminalSheetController
          */
         @NonNull
         public static Placement aboveDock() {
-            return new Placement(null, true);
+            return new Placement(null, true, false);
+        }
+
+        /**
+         * The same bar, with the plane's backdrop left off entirely.
+         *
+         * <p>For a surface that is <em>about</em> what is behind it. Scrollback search blurring the
+         * transcript it searches was the worst of it: the plane's full-screen frost took the thing
+         * being searched away at the moment it mattered. A bare card sits on the dock's edge like
+         * the keybind hint slab does, and everything above it stays legible.
+         */
+        @NonNull
+        public static Placement aboveDockBare() {
+            return new Placement(null, true, true);
         }
     }
 
@@ -195,13 +211,16 @@ public final class TerminalSheetController
         @Nullable final Runnable onDismiss;
         /** True while this card hides the one under it; see {@link #show}'s {@code coverPrevious}. */
         final boolean coversPrevious;
+        /** True for a card that asked for no backdrop; see {@link Placement#aboveDockBare()}. */
+        final boolean bare;
 
         Sheet(@NonNull View card, @Nullable TextSink sink, @Nullable Runnable onDismiss,
-              boolean coversPrevious) {
+              boolean coversPrevious, boolean bare) {
             this.card = card;
             this.sink = sink;
             this.onDismiss = onDismiss;
             this.coversPrevious = coversPrevious;
+            this.bare = bare;
         }
     }
 
@@ -285,11 +304,12 @@ public final class TerminalSheetController
             mActivity.closeFullStatusBarImmediate();
             if (mActivity.isAppDrawerOpen()) mActivity.getAppDrawerController().closeImmediate();
         }
+        boolean bare = placement.bare;
         View card = buildCard(title, content, fillHeight);
         if (coverPrevious && !mStack.isEmpty())
             mStack.get(mStack.size() - 1).card.setVisibility(View.GONE);
         mStackHost.addView(card);
-        mStack.add(new Sheet(card, sink, onDismiss, coverPrevious));
+        mStack.add(new Sheet(card, sink, onDismiss, coverPrevious, bare));
         mHost.setVisibility(View.VISIBLE);
         applyBackdropMaterial();
         // Only a sheet with somewhere for typing to land is worth summoning a keyboard for; a
@@ -309,6 +329,8 @@ public final class TerminalSheetController
             mStack.get(mStack.size() - 1).card.setVisibility(View.VISIBLE);
         if (top.onDismiss != null) top.onDismiss.run();
         if (mStack.isEmpty()) onEmptied();
+        // A bare card leaving can uncover one that does want the backdrop, and the other way round.
+        else applyBackdropMaterial();
     }
 
     /**
@@ -406,8 +428,27 @@ public final class TerminalSheetController
     private void applyBackdropMaterial() {
         ImageView frost = mActivity.findViewById(R.id.terminal_sheet_wallpaper_backdrop);
         View blur = mActivity.findViewById(R.id.terminal_sheet_blur);
+        if (allBare()) {
+            // Every open card asked for no backdrop, so the plane draws nothing of its own and what
+            // is behind it — the transcript a search is searching — stays exactly as it was.
+            if (frost != null) {
+                frost.setImageDrawable(null);
+                frost.setVisibility(View.GONE);
+            }
+            if (blur != null) blur.setVisibility(View.GONE);
+            return;
+        }
         boolean frosted = frost != null && mActivity.applyCommandPaletteWallpaperFrost(frost);
         if (blur != null) blur.setVisibility(frosted ? View.GONE : View.VISIBLE);
+    }
+
+    /** True when nothing on the plane wants a backdrop; one card that does brings it back. */
+    private boolean allBare() {
+        if (mStack.isEmpty()) return false;
+        for (Sheet sheet : mStack) {
+            if (!sheet.bare) return false;
+        }
+        return true;
     }
 
     @NonNull

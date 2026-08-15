@@ -374,6 +374,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Anchored glass editor for session/window/pane renames; built on first rename. */
     @Nullable
     private com.termux.app.terminal.rename.TerminalRenameCoordinator mRenameCoordinator;
+    @Nullable private com.termux.app.terminal.find.TerminalFindCoordinator mFindCoordinator;
     private LauncherTransitionController mLauncherTransitionController;
     private int mLastLauncherIconPreferencesSignature = Integer.MIN_VALUE;
 
@@ -1168,6 +1169,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Rename owns the in-app-keyboard interceptor only while this activity is visible.
         mFolderRenameController.onActivityPaused();
         if (mRenameCoordinator != null) mRenameCoordinator.onActivityPaused();
+        // Same rule for the find strip: it holds the interceptor and paints over a pane, and both
+        // must be handed back before this activity stops being the one on screen.
+        if (mFindCoordinator != null) mFindCoordinator.cancel();
         super.onPause();
     }
 
@@ -9639,6 +9643,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // so the icons sit closer to the edges and line up better with the A–Z row's letter span.
         int appsContentInset = Math.round(contentInset * 0.82f);
 
+        // The find strip is dock furniture: it spans exactly the dock's own width, whichever style
+        // is set, so it reads as the bar's top edge rather than as a floating panel.
+        updateViewHorizontalMargins(R.id.terminal_find_bar_host, surfaceInset);
         updateViewHorizontalMargins(R.id.apps_bar_viewpager, appsContentInset);
         updateViewHorizontalMargins(R.id.apps_bar_indicator_band, contentInset);
         updateViewHorizontalMargins(R.id.apps_bar_az_row, contentInset);
@@ -10744,6 +10751,120 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mRenameCoordinator != null && mRenameCoordinator.isActive();
     }
 
+    // ------------------------------------------------------------------ scrollback find strip
+
+    @NonNull
+    private com.termux.app.terminal.find.TerminalFindCoordinator getFindCoordinator() {
+        if (mFindCoordinator == null)
+            mFindCoordinator = new com.termux.app.terminal.find.TerminalFindCoordinator(
+                new TerminalFindHost());
+        return mFindCoordinator;
+    }
+
+    /** Opens the find strip on the focused pane, or the compact fallback with no keyboard to type. */
+    public boolean beginScrollbackFind() {
+        return getFindCoordinator().begin(getTerminalView());
+    }
+
+    public boolean isScrollbackFindActive() {
+        return mFindCoordinator != null && mFindCoordinator.isActive();
+    }
+
+    public void cancelScrollbackFind() {
+        if (mFindCoordinator != null) mFindCoordinator.cancel();
+    }
+
+    /** Hardware and external-keyboard strokes claimed by an open find session. */
+    public boolean handleScrollbackFindKey(int keyCode, @NonNull KeyEvent event) {
+        return mFindCoordinator != null && mFindCoordinator.handleKeyDown(keyCode, event);
+    }
+
+    /** System-IME committed text claimed by an open find session. */
+    public boolean handleScrollbackFindCodePoint(int codePoint, boolean ctrlDown) {
+        return mFindCoordinator != null && mFindCoordinator.handleCodePoint(codePoint, ctrlDown);
+    }
+
+    /** Activity half of the find strip: where it hangs, what it is drawn in, and its keyboard. */
+    private final class TerminalFindHost
+            implements com.termux.app.terminal.find.TerminalFindCoordinator.Host {
+
+        @Nullable
+        @Override
+        public ViewGroup findBarHost() {
+            return findViewById(R.id.terminal_find_bar_host);
+        }
+
+        @Nullable
+        @Override
+        public TerminalView terminalView() {
+            return getTerminalView();
+        }
+
+        @NonNull
+        @Override
+        public Drawable barBackground() {
+            float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity() / 100f : 0.5f;
+            // The keybind hint slab's surface, but a good deal thinner. That slab is read instead of
+            // what is behind it; this strip is read alongside the transcript it is searching, and the
+            // row of matches directly above it has to stay legible through the glass.
+            return buildDockGlassSurface(Math.min(0.45f, barAlpha * 0.6f), 0f, 1f, false);
+        }
+
+        @NonNull
+        @Override
+        public int[] barColors() {
+            return new int[] {
+                getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
+                    R.color.termux_on_surface),
+                getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+                    R.color.termux_on_surface_variant),
+                getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary,
+                    R.color.termux_primary),
+            };
+        }
+
+        @Override
+        public boolean ensureTypingKeyboard() {
+            return ensureInAppTypingKeyboard();
+        }
+
+        @Override
+        public void installFindInterceptor(
+                @Nullable com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler
+                    .KeyValueInterceptor interceptor) {
+            if (mInAppKeyboard == null) return;
+            if (interceptor != null) {
+                mInAppKeyboard.setKeyValueInterceptor(interceptor);
+            } else {
+                setAppDrawerInterceptorActive(isAppDrawerOpen());
+            }
+        }
+
+        @Override
+        public void showFallbackSearch() {
+            TermuxTerminalViewClient client = getTermuxTerminalViewClient();
+            if (client != null) client.showScrollbackSearchFallback();
+        }
+
+        @Override
+        public void copyToClipboard(@NonNull String text) {
+            android.content.ClipboardManager clipboard =
+                (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (clipboard != null)
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("", text));
+        }
+
+        @Override
+        public void onYanked(@NonNull String text) {
+            showToast(getString(R.string.terminal_find_yanked), true);
+        }
+
+        @Override
+        public boolean isReducedMotionEnabled() {
+            return TermuxActivity.this.isReducedMotionEnabled();
+        }
+    }
+
     /** Hardware and external-keyboard strokes claimed by an open rename chip. */
     public boolean handleTerminalRenameKey(int keyCode, @NonNull KeyEvent event) {
         return mRenameCoordinator != null && mRenameCoordinator.handleKeyDown(keyCode, event);
@@ -11031,6 +11152,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // thing Back closes — and closing it discards the draft, unlike a tap outside.
         if (isTerminalRenameActive()) {
             mRenameCoordinator.cancel();
+            return;
+        }
+        // The find strip is the next surface in: Back leaves the search before it leaves anything
+        // the search was opened over.
+        if (isScrollbackFindActive()) {
+            cancelScrollbackFind();
             return;
         }
         if (mWidgetPaneController != null && mWidgetPaneController.onBackPressed()) {
