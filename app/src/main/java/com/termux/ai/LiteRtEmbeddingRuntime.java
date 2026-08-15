@@ -3,8 +3,6 @@ package com.termux.ai;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.sentencepiece.SentencePieceProcessor;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -14,8 +12,12 @@ import java.io.File;
 import java.util.List;
 
 final class LiteRtEmbeddingRuntime implements AutoCloseable {
+    /** Gemma sentencepiece control ids; the sentencepiece4j binding does not expose bosId()/eosId(). */
+    private static final int TOKEN_BOS = 2;
+    private static final int TOKEN_EOS = 1;
+
     @Nullable private Interpreter interpreter;
-    @Nullable private SentencePieceProcessor tokenizer;
+    @Nullable private SentencePieceBpeTokenizer tokenizer;
     @Nullable private String loadedModelPath;
     @Nullable private String loadedTokenizerPath;
     private int sequenceLength = 0;
@@ -83,7 +85,7 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
             return;
         }
         close();
-        tokenizer = new SentencePieceProcessor(tokenizerFile.toPath());
+        tokenizer = SentencePieceBpeTokenizer.fromModelFile(tokenizerFile);
         Interpreter.Options options = new Interpreter.Options()
             .setNumThreads(Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors())));
         interpreter = new Interpreter(modelFile, options);
@@ -91,6 +93,15 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
         int[] outputShape = interpreter.getOutputTensor(0).shape();
         sequenceLength = inputShape.length >= 2 ? inputShape[inputShape.length - 1] : 1024;
         outputDimensions = outputShape.length >= 2 ? outputShape[outputShape.length - 1] : 768;
+        // BOS + EOS framing needs at least two slots in every input row.
+        if (sequenceLength < 2) {
+            close();
+            throw new IllegalStateException("Embedding model reports an unusable sequence length: " + sequenceLength);
+        }
+        if (outputDimensions <= 0) {
+            close();
+            throw new IllegalStateException("Embedding model reports an unusable output dimension: " + outputDimensions);
+        }
         loadedModelPath = modelPath;
         loadedTokenizerPath = tokenizerPath;
     }
@@ -98,25 +109,32 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
     @NonNull
     private Embedding embedOne(@NonNull String text, int dimensions) {
         if (interpreter == null || tokenizer == null) throw new IllegalStateException("Embedding runtime is not loaded.");
-        List<Integer> ids = tokenizer.encode(text);
-        int usedTokens = Math.min(ids.size(), sequenceLength);
+        int[] ids = tokenizer.encode(text);
+        // Truncate the encoded body, never the framing: BOS and EOS must both survive.
+        int bodyTokens = Math.max(0, Math.min(ids.length, sequenceLength - 2));
+        int usedTokens = bodyTokens + 2;
         int[][] tokenIds = new int[1][sequenceLength];
-        for (int i = 0; i < usedTokens; i++) tokenIds[0][i] = ids.get(i);
+        tokenIds[0][0] = TOKEN_BOS;
+        for (int i = 0; i < bodyTokens; i++) tokenIds[0][i + 1] = ids[i];
+        tokenIds[0][bodyTokens + 1] = TOKEN_EOS;
         float[][] output = new float[1][outputDimensions];
         interpreter.run(tokenIds, output);
         float[] vector = output[0];
-        if (dimensions == vector.length) return new Embedding(vector, usedTokens);
+        if (dimensions == vector.length) return new Embedding(normalize(vector), usedTokens);
         float[] truncated = new float[dimensions];
+        System.arraycopy(vector, 0, truncated, 0, dimensions);
+        return new Embedding(normalize(truncated), usedTokens);
+    }
+
+    @NonNull
+    private float[] normalize(@NonNull float[] vector) {
         double sumSquares = 0.0;
-        for (int i = 0; i < dimensions; i++) {
-            truncated[i] = vector[i];
-            sumSquares += (double) truncated[i] * truncated[i];
-        }
+        for (float value : vector) sumSquares += (double) value * value;
         double norm = Math.sqrt(sumSquares);
         if (norm > 0.0) {
-            for (int i = 0; i < dimensions; i++) truncated[i] = (float) (truncated[i] / norm);
+            for (int i = 0; i < vector.length; i++) vector[i] = (float) (vector[i] / norm);
         }
-        return new Embedding(truncated, usedTokens);
+        return vector;
     }
 
     @Nullable
