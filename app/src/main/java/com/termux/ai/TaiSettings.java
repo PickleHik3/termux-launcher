@@ -40,10 +40,18 @@ public final class TaiSettings {
     public static final String KEY_API_TOKEN = "tai_api_token";
     public static final String KEY_API_BIND_MODE = "tai_api_bind_mode";
     public static final String KEY_API_AUTH_REQUIRED = "tai_api_auth_required";
+    public static final String KEY_API_LAN_SESSION_STARTED_AT = "tai_api_lan_session_started_at";
     public static final String KEY_OPENAI_AUTO_LOAD = "tai_openai_auto_load";
 
     public static final String BIND_MODE_LOCALHOST = "localhost";
     public static final String BIND_MODE_LAN = "lan";
+
+    /** How long a LAN exposure window stays valid before the listener falls back to loopback. */
+    public static final long LAN_SESSION_MAX_MS = 12L * 60 * 60 * 1000;
+
+    public static final String LAN_WARNING = "LAN mode is unencrypted development-only exposure: "
+        + "requests travel over plain HTTP and the bearer token is visible to anyone on the network. "
+        + "It turns itself off 12 hours after being enabled, and rotates the token when it does.";
 
     private static final String AUTO = "auto";
     private static final String GLOBAL_PARAMETER_PREFIX = "tai_global_parameter.";
@@ -233,7 +241,37 @@ public final class TaiSettings {
     }
 
     public void setApiBindMode(@Nullable String bindMode) {
-        preferences.edit().putString(KEY_API_BIND_MODE, normalizeApiBindMode(bindMode)).apply();
+        String normalized = normalizeApiBindMode(bindMode);
+        SharedPreferences.Editor editor = preferences.edit().putString(KEY_API_BIND_MODE, normalized);
+        // Entering LAN mode starts a fresh exposure window; leaving it clears the stamp so a later
+        // re-enable is never credited with an old session's remaining time.
+        editor.putLong(KEY_API_LAN_SESSION_STARTED_AT,
+            BIND_MODE_LAN.equals(normalized) ? System.currentTimeMillis() : 0L);
+        editor.apply();
+    }
+
+    public long getLanSessionStartedAt() {
+        return preferences.getLong(KEY_API_LAN_SESSION_STARTED_AT, 0L);
+    }
+
+    /**
+     * Whether the LAN exposure window has run out.
+     *
+     * <p>LAN mode speaks plaintext HTTP and the bearer token rides in every request header, so
+     * anybody on the network can lift it off the wire and keep it forever. Bounding the window
+     * turns that long-lived credential into a session one: after {@link #LAN_SESSION_MAX_MS} the
+     * listener drops back to loopback and the token is rotated, so a captured token stops being
+     * useful even if the user forgot LAN mode was on.
+     *
+     * <p>A stamp in the future (clock moved backwards) counts as expired rather than as an
+     * unbounded session.
+     */
+    public boolean isLanSessionExpired() {
+        if (!BIND_MODE_LAN.equals(getApiBindMode())) return false;
+        long startedAt = getLanSessionStartedAt();
+        if (startedAt <= 0L) return true;
+        long elapsed = System.currentTimeMillis() - startedAt;
+        return elapsed < 0L || elapsed > LAN_SESSION_MAX_MS;
     }
 
     public void setApiPort(int port) {
@@ -588,7 +626,11 @@ public final class TaiSettings {
         String bindMode = getApiBindMode();
         json.put("bindMode", bindMode);
         if (BIND_MODE_LAN.equals(bindMode)) {
-            json.put("lanWarning", "LAN exposure allows any device on your network to reach this endpoint when the token is known.");
+            json.put("lanWarning", LAN_WARNING);
+            json.put("lanSessionStartedAt", getLanSessionStartedAt());
+            json.put("lanSessionExpiresAt", getLanSessionStartedAt() <= 0L
+                ? 0L : getLanSessionStartedAt() + LAN_SESSION_MAX_MS);
+            json.put("lanSessionExpired", isLanSessionExpired());
         }
         String configuredToken = preferences.getString(KEY_API_TOKEN, "");
         json.put("apiTokenConfigured", isValidApiToken(configuredToken));

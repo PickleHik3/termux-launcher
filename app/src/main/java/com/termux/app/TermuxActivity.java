@@ -10290,17 +10290,56 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * An Intent that opens Termux:Styling, or {@code null} when the companion is not installed.
+     *
+     * <p>Asking at all needs the {@code <queries>} entry for the styling package: under Android 11
+     * package visibility a {@code getPackageInfo} for a package this app does not declare answers
+     * "not installed" for a plugin that is sitting right there. The shared user id covers the
+     * stock plugins already, and the manifest names the package so a build without one still gets
+     * a true answer.
+     *
+     * <p>The documented activity is tried first and the package's own launcher activity second,
+     * because the plugin has renamed that class across releases and a user with an older or newer
+     * build than this constant should still get the row rather than a menu that quietly drops it.
+     */
+    @Nullable
+    static Intent resolveTerminalStylingIntent(@NonNull PackageManager packageManager) {
+        String stylingPackage = TermuxConstants.TERMUX_STYLING_PACKAGE_NAME;
+        String stylingActivity = TermuxConstants.TERMUX_STYLING_APP.TERMUX_STYLING_ACTIVITY_NAME;
+        try {
+            packageManager.getActivityInfo(new ComponentName(stylingPackage, stylingActivity), 0);
+            Intent stylingIntent = new Intent();
+            stylingIntent.setClassName(stylingPackage, stylingActivity);
+            return stylingIntent;
+        } catch (Exception ignored) {
+            // Falls through to the launcher activity below.
+        }
+        try {
+            return packageManager.getLaunchIntentForPackage(stylingPackage);
+        } catch (Exception exception) {
+            Logger.logVerbose(LOG_TAG, "Termux:Styling is not installed: " + exception.getMessage());
+            return null;
+        }
+    }
+
+    /** Whether the Style row belongs in the terminal long-press menu on this device. */
+    public boolean isTerminalStylingAvailable() {
+        return resolveTerminalStylingIntent(getPackageManager()) != null;
+    }
+
+    /**
      * Termux:Styling if it is there, Appearance settings if it is not.
      *
-     * <p>Decided by the launch outcome rather than by a {@code resolveActivity} or a
-     * {@code getPackageInfo}: under Android 11 package visibility both are filtered for a package this
-     * app does not declare in {@code <queries>}, so they answer "not installed" for a plugin that is
-     * sitting right there.
+     * <p>The fallback stays even though the row is now gated on the companion being installed: the
+     * package can be uninstalled while this menu is open, and the launch is the only check that
+     * cannot go stale between asking and starting.
      */
     private void openTerminalStyling() {
-        Intent stylingIntent = new Intent();
-        stylingIntent.setClassName(TermuxConstants.TERMUX_STYLING_PACKAGE_NAME,
-            TermuxConstants.TERMUX_STYLING_APP.TERMUX_STYLING_ACTIVITY_NAME);
+        Intent stylingIntent = resolveTerminalStylingIntent(getPackageManager());
+        if (stylingIntent == null) {
+            openLookAndFeelSettings();
+            return;
+        }
         try {
             startActivity(stylingIntent);
         } catch (Exception exception) {
@@ -10342,6 +10381,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : R.string.action_enable_background_image)
         ));
         items.add(new TerminalActionItem(CONTEXT_MENU_GLASS_LAB_ID, getString(R.string.action_glass_lab)));
+        // Only when the companion is installed: a row that opens the Appearance settings under the
+        // name of a plugin the device does not have is a broken promise, not a shortcut.
+        if (isTerminalStylingAvailable()) {
+            items.add(new TerminalActionItem(CONTEXT_MENU_STYLE_ID, getString(R.string.action_style_terminal)));
+        }
         // Appearance and Apps & Access are reachable from the Settings page; keep this sheet lean.
         items.add(new TerminalActionItem(CONTEXT_MENU_SETTINGS_ID, getString(R.string.action_open_settings)));
         items.add(new TerminalActionItem(CONTEXT_MENU_RESET_TERMINAL_ID, getString(R.string.action_reset_terminal)));

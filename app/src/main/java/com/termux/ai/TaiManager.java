@@ -22,10 +22,6 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.io.File;
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.ArrayList;
@@ -1962,10 +1958,12 @@ public final class TaiManager {
         if (url.startsWith("file://")) {
             String path = Uri.parse(url).getPath();
             if (path == null || path.trim().isEmpty()) throw new JSONException("media_fetch_failed:Empty file URL");
-            return image ? new Content.ImageFile(path) : new Content.AudioFile(path);
+            String resolved = TaiMediaAccess.resolveLocalPath(path);
+            return image ? new Content.ImageFile(resolved) : new Content.AudioFile(resolved);
         }
         if (url.startsWith("/")) {
-            return image ? new Content.ImageFile(url) : new Content.AudioFile(url);
+            String resolved = TaiMediaAccess.resolveLocalPath(url);
+            return image ? new Content.ImageFile(resolved) : new Content.AudioFile(resolved);
         }
         if (url.startsWith("http://") || url.startsWith("https://")) {
             byte[] bytes = fetchMedia(url);
@@ -1998,34 +1996,7 @@ public final class TaiManager {
 
     @NonNull
     private static byte[] fetchMedia(@NonNull String url) throws JSONException {
-        try {
-            HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-            connection.setConnectTimeout(10_000);
-            connection.setReadTimeout(20_000);
-            connection.setInstanceFollowRedirects(true);
-            int status = connection.getResponseCode();
-            if (status < 200 || status >= 300) {
-                throw new JSONException("media_fetch_failed:HTTP " + status + " while fetching media");
-            }
-            int length = connection.getContentLength();
-            if (length > MAX_MEDIA_BYTES) throw new JSONException("media_fetch_failed:Media exceeds 25 MB");
-            try (InputStream input = connection.getInputStream();
-                 ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-                byte[] buffer = new byte[8192];
-                int read;
-                int total = 0;
-                while ((read = input.read(buffer)) != -1) {
-                    total += read;
-                    if (total > MAX_MEDIA_BYTES) throw new JSONException("media_fetch_failed:Media exceeds 25 MB");
-                    output.write(buffer, 0, read);
-                }
-                return output.toByteArray();
-            }
-        } catch (JSONException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new JSONException("media_fetch_failed:" + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
-        }
+        return TaiMediaAccess.fetch(url, MAX_MEDIA_BYTES);
     }
 
     @NonNull

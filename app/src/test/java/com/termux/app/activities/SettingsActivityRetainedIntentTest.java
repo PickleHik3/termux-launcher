@@ -1,6 +1,7 @@
 package com.termux.app.activities;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -10,6 +11,7 @@ import android.os.Build;
 import androidx.fragment.app.Fragment;
 
 import com.termux.R;
+import com.termux.app.fragments.settings.ThrowingPreferencesFragment;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -64,15 +66,42 @@ public class SettingsActivityRetainedIntentTest {
     @Test
     public void currentFragmentConstructorFailureIsRethrownInsteadOfFallingBack() {
         Intent intent = new Intent(ApplicationProviderHolder.context(), SettingsActivity.class)
-            .putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT, ThrowingFragment.class.getName());
+            .putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT,
+                ThrowingPreferencesFragment.class.getName());
 
         try {
             Robolectric.buildActivity(SettingsActivity.class, intent).create();
         } catch (RuntimeException e) {
-            assertTrue(hasCause(e, ConstructorFailure.class));
+            assertTrue(hasCause(e, ThrowingPreferencesFragment.ConstructorFailure.class));
             return;
         }
         throw new AssertionError("Expected the fragment constructor failure to escape");
+    }
+
+    /**
+     * SettingsActivity is exported, so the fragment name in an Intent is attacker-controlled: a
+     * class outside the settings screens must never be instantiated on its say-so.
+     */
+    @Test
+    public void fragmentOutsideTheSettingsPackageFallsBackToRoot() {
+        Intent intent = new Intent(ApplicationProviderHolder.context(), SettingsActivity.class)
+            .putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT, ThrowingFragment.class.getName());
+
+        try (ActivityController<SettingsActivity> controller =
+                 Robolectric.buildActivity(SettingsActivity.class, intent).create()) {
+            SettingsActivity activity = controller.get();
+            activity.getSupportFragmentManager().executePendingTransactions();
+            assertRootFragment(activity);
+        }
+    }
+
+    @Test
+    public void allowlistAcceptsSettingsScreensAndRefusesEverythingElse() {
+        assertTrue(SettingsActivity.isAllowedInitialFragment(
+            SettingsActivity.RootPreferencesFragment.class));
+        assertTrue(SettingsActivity.isAllowedInitialFragment(ThrowingPreferencesFragment.class));
+        assertFalse(SettingsActivity.isAllowedInitialFragment(ThrowingFragment.class));
+        assertFalse(SettingsActivity.isAllowedInitialFragment(Fragment.class));
     }
 
     private static void assertRootFragment(SettingsActivity activity) {
@@ -86,6 +115,7 @@ public class SettingsActivityRetainedIntentTest {
         return false;
     }
 
+    /** Deliberately not a settings-package fragment: the allowlist must refuse it. */
     public static final class ThrowingFragment extends Fragment {
         public ThrowingFragment() { throw new ConstructorFailure(); }
     }

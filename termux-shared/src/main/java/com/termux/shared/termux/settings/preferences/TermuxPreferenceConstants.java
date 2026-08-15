@@ -201,6 +201,21 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_APP_LAUNCHER_NOTIFICATION_DOTS = false;
 
         /**
+         * Defines the key for persisting notification history to {@code ~/.launcherctl}.
+         *
+         * <p>Separate from notification access itself, and off by default. Notification access is
+         * granted for dots, the status bar and the top pane, all of which only need notifications
+         * in memory. Writing their contents -- titles, texts, expanded texts, so SMS bodies, email
+         * previews and 2FA codes -- into the Termux home puts them inside the shell's trust domain,
+         * where every package and script running under the app UID can read them. That is a second,
+         * larger decision, so it is asked separately rather than inherited from the grant.
+         */
+        public static final String KEY_APP_LAUNCHER_NOTIFICATION_HISTORY =
+            "app_launcher_notification_history";
+
+        public static final boolean DEFAULT_APP_LAUNCHER_NOTIFICATION_HISTORY = false;
+
+        /**
          * Defines the key for the optional dynamic "most used apps" dock page.
          */
         public static final String KEY_APP_LAUNCHER_MOST_USED_PAGE = "app_launcher_most_used_page";

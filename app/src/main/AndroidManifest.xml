@@ -74,6 +74,13 @@
         <intent>
             <action android:name="com.gau.go.launcherex.theme" />
         </intent>
+        <!--
+            The Style row in the terminal long-press menu is shown only when the companion is
+            actually installed, which means asking. The shared user id already exempts the plugins
+            from Android 11 package visibility, but naming the package keeps that answer true even
+            for a build that does not share one.
+        -->
+        <package android:name="${TERMUX_PACKAGE_NAME}.styling" />
     </queries>
 
     <application

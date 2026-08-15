@@ -796,8 +796,20 @@ install_material_theme() {
 # Distro installers
 # ----------------------------------------------------------------------------
 
+# Distro starters are cloned at whatever their default branch points to today, and
+# deliberately so: a starter is a template you then own and edit, and the plugin
+# manager inside it resolves plugins at HEAD no matter what this script pins. A
+# commit pin here would only buy the appearance of a supply chain guarantee.
+# Set NVIM_DISTRO_REF to a tag or commit when you do want a fixed starting point.
+# Either way the resolved commit is printed, so what you installed is recorded.
 clone() {
-    git clone --depth=1 "$1" "$target"
+    if [ -n "${NVIM_DISTRO_REF:-}" ]; then
+        git clone "$1" "$target"
+        git -C "$target" checkout --quiet "$NVIM_DISTRO_REF"
+    else
+        git clone --depth=1 "$1" "$target"
+    fi
+    echo "  $1 @ $(git -C "$target" rev-parse HEAD)"
     rm -rf "$target/.git"
 }
 
