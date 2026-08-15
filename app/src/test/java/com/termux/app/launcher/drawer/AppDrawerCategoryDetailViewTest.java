@@ -79,6 +79,40 @@ public class AppDrawerCategoryDetailViewTest {
         assertEquals("", view.getDetailCount().getText().toString());
     }
 
+    @Test public void chevronTitleAndCountSitOnOneRowSharingABaseline() {
+        AppDrawerCategoryView view = expanded(8, 640);
+        View chevron = view.getCollapseChevron();
+        View title = view.getDetailHeader();
+        View count = view.getDetailCount();
+
+        // The circle is centred on the title's ink — baseline minus half a cap height — not on the
+        // title's line box, whose empty descent would otherwise push the letters above the arrow.
+        int capHeight = Math.round(((android.widget.TextView) title).getTextSize() * 0.71f);
+        int inkCentre = title.getTop() + title.getBaseline() - capHeight / 2;
+        assertEquals(inkCentre, centre(chevron), 1);
+        // The two runs of text share a baseline rather than each being centred in its own box,
+        // which is what made a 10sp count read as sitting off the 17sp title's row.
+        assertEquals(title.getTop() + title.getBaseline(), count.getTop() + count.getBaseline(), 1);
+        // Following the ink can put the circle a few pixels over the band's edge — the band is a
+        // text measurement, not a frame — but never far enough to touch the grid below it.
+        assertTrue(chevron.getTop() >= 0);
+        assertTrue(chevron.getBottom() <= view.getDetailList().getTop());
+        assertTrue(count.getTop() >= title.getTop());
+        assertTrue(count.getBottom() <= title.getBottom());
+    }
+
+    @Test public void theTitleIsMeasuredAtTheWidthItIsLaidOutAtSoItEllipsizesInPlace() {
+        AppDrawerCategoryView view = expanded(8, 640);
+        View title = view.getDetailHeader();
+        assertEquals(title.getWidth(), title.getMeasuredWidth());
+        // It never runs under the count.
+        assertTrue(title.getRight() <= view.getDetailCount().getLeft());
+    }
+
+    private static int centre(View view) {
+        return (view.getTop() + view.getBottom()) / 2;
+    }
+
     @Test public void singleAppCategoryCountsWithoutThePlural() {
         AppDrawerCategoryView view = expanded(1, 640);
         assertEquals("1 APP", view.getDetailCount().getText().toString());

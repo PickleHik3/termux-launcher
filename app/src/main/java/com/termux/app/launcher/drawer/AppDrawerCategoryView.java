@@ -8,6 +8,7 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -33,13 +34,15 @@ public final class AppDrawerCategoryView extends ViewGroup
 
     /** Header-row geometry from the redesign mock. */
     private static final float CHEVRON_SIZE_DP = 30f;
+    /** Inset of the drawn arrow inside its circle, so the icon reads at ~16dp in a 30dp ring. */
+    private static final float CHEVRON_ICON_INSET_DP = 7f;
     private static final float HEADER_ITEM_GAP_DP = 10f;
     private static final float HEADER_SIDE_INSET_DP = 16f;
 
     private final RecyclerView overview;
     private final RecyclerView detailList;
     private final TextView detailHeader;
-    private final TextView collapseChevron;
+    private final ImageView collapseChevron;
     private final TextView detailCount;
     private final TextView emptyState;
     private final AppDrawerCategoryMorphView morph;
@@ -160,14 +163,19 @@ public final class AppDrawerCategoryView extends ViewGroup
         });
         addView(detailHeader);
 
-        // The mock's back chevron: a 30dp circle with a hairline ring, one more collapse target
+        // The mock's back affordance: a 30dp circle with a hairline ring, one more collapse target
         // alongside the title itself. Same click gate, same collapse.
-        collapseChevron = new TextView(context);
-        collapseChevron.setText("‹");
-        collapseChevron.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f);
-        collapseChevron.setGravity(android.view.Gravity.CENTER);
-        collapseChevron.setIncludeFontPadding(false);
-        collapseChevron.setTextColor(dock == null ? Color.WHITE : dock.getLauncherTextColor());
+        //
+        // A drawn icon, not a glyph. It used to be the "‹" character in a TextView, and a single
+        // angle quotation mark is typeset small and high in its em box — so it sat above the row no
+        // matter how the box was aligned, and it read as a quote mark rather than as Back.
+        collapseChevron = new ImageView(context);
+        collapseChevron.setImageResource(R.drawable.ic_category_back_arrow);
+        collapseChevron.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        int chevronPadding = Math.round(CHEVRON_ICON_INSET_DP
+            * getResources().getDisplayMetrics().density);
+        collapseChevron.setPadding(chevronPadding, chevronPadding, chevronPadding, chevronPadding);
+        collapseChevron.setColorFilter(dock == null ? Color.WHITE : dock.getLauncherTextColor());
         android.graphics.drawable.GradientDrawable ring =
             new android.graphics.drawable.GradientDrawable();
         ring.setShape(android.graphics.drawable.GradientDrawable.OVAL);
@@ -217,7 +225,7 @@ public final class AppDrawerCategoryView extends ViewGroup
         detailAdapter.setDock(dock);
         int color = dock == null ? Color.WHITE : dock.getLauncherTextColor();
         detailHeader.setTextColor(color);
-        collapseChevron.setTextColor(color);
+        collapseChevron.setColorFilter(color);
         detailCount.setTextColor(halfAlpha(color));
         emptyState.setTextColor(color);
         emptyState.setText(emptyStateText(color));
@@ -666,7 +674,7 @@ public final class AppDrawerCategoryView extends ViewGroup
     @NonNull public RecyclerView getOverview() { return overview; }
     @NonNull public RecyclerView getDetailList() { return detailList; }
     @NonNull public TextView getDetailHeader() { return detailHeader; }
-    @NonNull public TextView getCollapseChevron() { return collapseChevron; }
+    @NonNull public ImageView getCollapseChevron() { return collapseChevron; }
     @NonNull public TextView getDetailCount() { return detailCount; }
     @NonNull public TextView getEmptyState() { return emptyState; }
     @NonNull public AppDrawerCategoryMorphView getMorph() { return morph; }
@@ -697,12 +705,17 @@ public final class AppDrawerCategoryView extends ViewGroup
             MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
         morph.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
-        detailHeader.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.AT_MOST),
-            MeasureSpec.makeMeasureSpec(height, MeasureSpec.AT_MOST));
         int chevron = chevronSizePx();
         collapseChevron.measure(MeasureSpec.makeMeasureSpec(chevron, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(chevron, MeasureSpec.EXACTLY));
         detailCount.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.AT_MOST),
+            MeasureSpec.makeMeasureSpec(height, MeasureSpec.AT_MOST));
+        // The title is measured at the width it will actually be laid out at — what is left between
+        // the chevron and the count. Measuring it against the full width let a long category name
+        // compute its ellipsis for a box wider than the one it lands in, so it was clipped by the
+        // count instead of ellipsized before it.
+        HeaderRow header = headerRow(width);
+        detailHeader.measure(MeasureSpec.makeMeasureSpec(header.titleWidth, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(height, MeasureSpec.AT_MOST));
         AppDrawerCategoryGridMetrics current = metrics;
         float listHeight = 0f;
@@ -718,6 +731,44 @@ public final class AppDrawerCategoryView extends ViewGroup
     private int chevronSizePx() {
         return Math.max(1, Math.round(CHEVRON_SIZE_DP
             * getResources().getDisplayMetrics().density));
+    }
+
+    /** Horizontal geometry of the header row, resolved identically by measure and layout. */
+    private static final class HeaderRow {
+        final int chevronLeft;
+        final int chevronSize;
+        final int titleLeft;
+        final int titleWidth;
+        final int countLeft;
+        final int countWidth;
+
+        HeaderRow(int chevronLeft, int chevronSize, int titleLeft, int titleWidth,
+                  int countLeft, int countWidth) {
+            this.chevronLeft = chevronLeft;
+            this.chevronSize = chevronSize;
+            this.titleLeft = titleLeft;
+            this.titleWidth = titleWidth;
+            this.countLeft = countLeft;
+            this.countWidth = countWidth;
+        }
+    }
+
+    @NonNull
+    private HeaderRow headerRow(int width) {
+        float density = getResources().getDisplayMetrics().density;
+        int sideInset = Math.round(HEADER_SIDE_INSET_DP * density);
+        int itemGap = Math.round(HEADER_ITEM_GAP_DP * density);
+        int chevron = chevronSizePx();
+        int countWidth = Math.min(detailCount.getMeasuredWidth(),
+            Math.max(0, width - 2 * sideInset));
+        // Tracked text carries one letter-space after its last glyph, and an END-gravity box aligns
+        // that trailing space — not the glyph — to its right edge. Pushing the box out by exactly
+        // that much lands the S of "APPS" on the same inset the chevron circle starts at.
+        int trailingTrack = Math.round(detailCount.getLetterSpacing() * detailCount.getTextSize());
+        int titleLeft = sideInset + chevron + itemGap;
+        int countLeft = Math.max(titleLeft, width - sideInset - countWidth + trailingTrack);
+        int titleWidth = Math.max(0, countLeft - itemGap - titleLeft);
+        return new HeaderRow(sideInset, chevron, titleLeft, titleWidth, countLeft, countWidth);
     }
 
     /** The header row's band: tall enough for the chevron circle and the title, whichever wins. */
@@ -745,24 +796,59 @@ public final class AppDrawerCategoryView extends ViewGroup
         int headerTop = Math.round(layout.headerTopPx);
         int headerBottom = Math.round(layout.headerBottomPx);
         int listTop = Math.round(layout.listTopPx);
-        // Header row: chevron circle at the leading inset, count at the trailing inset, and the
-        // title — still the one full-band collapse target the tests and touch regions read —
-        // spanning the space between them, centred in the band.
-        float density = getResources().getDisplayMetrics().density;
-        int sideInset = Math.round(HEADER_SIDE_INSET_DP * density);
-        int itemGap = Math.round(HEADER_ITEM_GAP_DP * density);
-        int chevron = chevronSizePx();
-        int chevronTop = headerTop + Math.max(0, (headerBottom - headerTop - chevron) / 2);
-        collapseChevron.layout(sideInset, chevronTop, sideInset + chevron, chevronTop + chevron);
-        int countWidth = Math.min(detailCount.getMeasuredWidth(), Math.max(0, width - 2 * sideInset));
+        // Header row: chevron circle at the leading inset, count at the trailing inset, title
+        // between them. The circle is centred in the band because it is a shape, but the two runs
+        // of text are placed on a shared baseline rather than each centred in its own box — a 17sp
+        // title and a 10sp mono count centred separately sit at two different baselines, which is
+        // exactly what reads as three things not on one row.
+        HeaderRow header = headerRow(width);
+        int band = Math.max(0, headerBottom - headerTop);
+        // The title still spans the whole band: it is the one full-band collapse target the touch
+        // regions and the tests read, and its own CENTER_VERTICAL gravity centres the text in it.
+        detailHeader.layout(header.titleLeft, headerTop, header.titleLeft + header.titleWidth,
+            headerBottom);
+
+        // The arrow is centred on the title's *ink*, not on the band. A text box is centred by its
+        // ascent-to-descent line box, and the descent below the baseline is empty for a title with
+        // no descenders — so on a face with a generous descent the letters ride visibly above the
+        // box's centre, and a circle centred on the band then sits low against them. Measuring the
+        // cap height off the actual paint keeps this true whatever face the system supplies.
+        int titleBaseline = detailHeader.getBaseline();
+        int inkCentre = titleBaseline >= 0
+            ? headerTop + titleBaseline - capHeightPx(detailHeader) / 2
+            : headerTop + band / 2;
+        int chevronTop = clampInt(inkCentre - header.chevronSize / 2,
+            headerTop - header.chevronSize / 2, headerBottom - header.chevronSize / 2);
+        collapseChevron.layout(header.chevronLeft, chevronTop,
+            header.chevronLeft + header.chevronSize, chevronTop + header.chevronSize);
+
         int countHeight = detailCount.getMeasuredHeight();
-        int countTop = headerTop + Math.max(0, (headerBottom - headerTop - countHeight) / 2);
-        detailCount.layout(width - sideInset - countWidth, countTop, width - sideInset,
+        int countTop = headerTop + Math.max(0, (band - countHeight) / 2);
+        // Read after the title is laid out: a TextView's baseline includes the offset its vertical
+        // gravity puts it at inside the box it actually got.
+        int countBaseline = detailCount.getBaseline();
+        if (titleBaseline >= 0 && countBaseline >= 0) {
+            countTop = clampInt(headerTop + titleBaseline - countBaseline,
+                headerTop, Math.max(headerTop, headerBottom - countHeight));
+        }
+        detailCount.layout(header.countLeft, countTop, header.countLeft + header.countWidth,
             countTop + countHeight);
-        int titleLeft = sideInset + chevron + itemGap;
-        int titleRight = Math.max(titleLeft, width - sideInset - countWidth - itemGap);
-        detailHeader.layout(titleLeft, headerTop, titleRight, headerBottom);
         detailList.layout(0, listTop, width, height);
+    }
+
+    /**
+     * Cap height of the face the view is actually painting with, measured rather than assumed: the
+     * ratio between cap height and text size is a property of the font, and this app ships a font
+     * picker.
+     */
+    private static int capHeightPx(@NonNull TextView view) {
+        android.graphics.Rect bounds = new android.graphics.Rect();
+        view.getPaint().getTextBounds("H", 0, 1, bounds);
+        return bounds.height() > 0 ? bounds.height() : Math.round(view.getTextSize() * 0.71f);
+    }
+
+    private static int clampInt(int value, int min, int max) {
+        return value < min ? min : (value > max ? max : value);
     }
 
     private static final class TileSpacingDecoration extends RecyclerView.ItemDecoration {
