@@ -10,4 +10,13 @@
         app:entries="@array/app_launcher_drawer_view_type_entries"
         app:entryValues="@array/app_launcher_drawer_view_type_values"
         app:useSimpleSummaryProvider="true" />
+
+    <Preference
+        app:key="app_launcher_category_sort"
+        app:title="@string/settings_app_drawer_category_sort_title"
+        app:summary="@string/settings_app_drawer_category_sort_summary" />
+
+    <Preference
+        app:key="app_launcher_category_refresh"
+        app:title="@string/settings_app_drawer_category_refresh_title" />
 </PreferenceScreen>

@@ -24,6 +24,7 @@ import com.termux.BuildConfig;
 import com.termux.app.Spring;
 import com.termux.app.SuggestionBarView;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
+import com.termux.app.launcher.data.LauncherCategoryAssignmentSource;
 import com.termux.app.launcher.data.LauncherCategoryOverrideStore;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
@@ -119,6 +120,7 @@ public final class AppDrawerContentView extends FrameLayout
     private final AppDrawerHorizontalPageAdapter mHorizontalAdapter;
     private final LauncherUsageStatsStore mUsageStats;
     private final LauncherCategoryOverrideStore mCategoryOverrides;
+    private final LauncherCategoryAssignmentSource mCategoryAssignments;
     private final AppDrawerCategoryClassifier mCategoryClassifier;
     private final AppDrawerCloseArmingPolicy mPolicy = new AppDrawerCloseArmingPolicy();
     private final NestedScrollingParentHelper mParentHelper = new NestedScrollingParentHelper(this);
@@ -242,8 +244,9 @@ public final class AppDrawerContentView extends FrameLayout
         mDensity = context.getResources().getDisplayMetrics().density;
         mUsageStats = LauncherUsageStatsStore.getInstance(context);
         mCategoryOverrides = new LauncherCategoryOverrideStore(context);
+        mCategoryAssignments = new LauncherCategoryAssignmentSource(mCategoryOverrides);
         mCategoryClassifier = new AppDrawerCategoryClassifier(loadCuratedMap(context.getResources()),
-            packageName -> AppDrawerCategory.fromSlug(mCategoryOverrides.get(packageName)));
+            mCategoryAssignments);
         setClipChildren(false);
         setClipToPadding(false);
 
@@ -448,6 +451,8 @@ public final class AppDrawerContentView extends FrameLayout
     /** Reruns the pipeline over the live catalogue after an override mutation; no data reload. */
     private void reclassifyCategories() {
         if (hasQuery()) return;
+        // An external edit or a finished sort run rewrites app-categories.conf behind our back.
+        mCategoryAssignments.invalidate();
         setCategoryBuckets(mCategoryClassifier.classify(mVisibleResults, mUsageStats,
             AppDrawerSystemRoleResolver.resolve(getContext()), System.currentTimeMillis()));
         logCategoryDebugReport();
