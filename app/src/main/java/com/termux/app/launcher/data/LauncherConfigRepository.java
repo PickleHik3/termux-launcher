@@ -200,6 +200,28 @@ public final class LauncherConfigRepository {
             ? MutationResult.APPLIED : MutationResult.NO_OP;
     }
 
+    /**
+     * Moves a folder to a free position in the app drawer.
+     *
+     * @param anchorStableId the app the folder should sit in front of,
+     *     {@link PinnedFolderItem#DRAWER_ANCHOR_END} to park it after every app, or null to hand
+     *     the folder back to automatic (first-member) placement.
+     */
+    public synchronized MutationResult setFolderDrawerAnchor(long expectedRevision,
+                                                             @NonNull String folderId,
+                                                             @Nullable String anchorStableId) {
+        LauncherConfigSnapshot before = loadSnapshot();
+        if (before.revision != expectedRevision) return MutationResult.STALE;
+        LinkedHashMap<String, PinnedFolderItem> folders = cloneFolders(before.folders);
+        PinnedFolderItem folder = folders.get(folderId);
+        if (folder == null) return MutationResult.MISSING;
+        if (anchorStableId == null ? folder.drawerAnchor == null
+            : anchorStableId.equals(folder.drawerAnchor)) return MutationResult.NO_OP;
+        folder.drawerAnchor = anchorStableId;
+        return persistAndPublish(cloneDock(before.dockItems, folders), folders, currentOverrides())
+            ? MutationResult.APPLIED : MutationResult.NO_OP;
+    }
+
     /** Removes dock references only; the shared entity remains available to the drawer. */
     public synchronized MutationResult unpinFolder(long expectedRevision, @NonNull String folderId) {
         LauncherConfigSnapshot before = loadSnapshot();
@@ -410,6 +432,10 @@ public final class LauncherConfigRepository {
             : raw.optInt("cols", PinnedFolderItem.DEFAULT_COLS), 1, PinnedFolderItem.MAX_GRID);
         folder.tintOverrideEnabled = raw.optBoolean("tintOverrideEnabled", false);
         folder.tintColor = raw.optInt("tintColor", 0xFF202020);
+        // Absent means automatic placement; an empty string is a real value (park at the end), so
+        // the key's presence — not its emptiness — decides.
+        folder.drawerAnchor = raw.has("drawerAnchor") && !raw.isNull("drawerAnchor")
+            ? raw.optString("drawerAnchor", PinnedFolderItem.DRAWER_ANCHOR_END) : null;
         JSONArray apps = raw.optJSONArray("apps");
         if (apps != null) {
             for (int i = 0; i < apps.length() && folder.apps.size() < PinnedFolderItem.MAX_APPS; i++) {
@@ -504,6 +530,7 @@ public final class LauncherConfigRepository {
         raw.put("columns", clamp(folder.cols, 1, PinnedFolderItem.MAX_GRID));
         raw.put("tintOverrideEnabled", folder.tintOverrideEnabled);
         raw.put("tintColor", folder.tintColor);
+        if (folder.drawerAnchor != null) raw.put("drawerAnchor", folder.drawerAnchor);
         JSONArray apps = new JSONArray();
         Set<String> unique = new LinkedHashSet<>();
         for (PinnedAppItem app : folder.apps) {
@@ -597,6 +624,7 @@ public final class LauncherConfigRepository {
         copy.cols = source.cols;
         copy.tintOverrideEnabled = source.tintOverrideEnabled;
         copy.tintColor = source.tintColor;
+        copy.drawerAnchor = source.drawerAnchor;
         for (PinnedAppItem app : source.apps) copy.apps.add(cloneApp(app));
         return copy;
     }

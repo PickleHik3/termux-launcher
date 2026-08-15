@@ -31,19 +31,40 @@ public final class AppDrawerFolderCellView extends AppDrawerAppCellView {
     public void bindFolder(@Nullable SuggestionBarView dock, @NonNull PinnedFolderItem folder,
                            @Nullable AppDrawerGridMetrics metrics,
                            @NonNull ClickGate clickGate) {
+        bindFolder(dock, folder, metrics, clickGate, null);
+    }
+
+    public void bindFolder(@Nullable SuggestionBarView dock, @NonNull PinnedFolderItem folder,
+                           @Nullable AppDrawerGridMetrics metrics,
+                           @NonNull ClickGate clickGate,
+                           @Nullable AppDrawerPickupDelegate pickupDelegate) {
         bindFolder(dock, folder, metrics == null ? 0 : Math.round(metrics.iconPx),
-            metrics == null ? 0 : Math.round(metrics.rowHeightPx), clickGate);
+            metrics == null ? 0 : Math.round(metrics.rowHeightPx), clickGate, pickupDelegate);
     }
 
     public void bindFolder(@Nullable SuggestionBarView dock, @NonNull PinnedFolderItem folder,
                            @Nullable AppDrawerHorizontalGridMetrics metrics,
                            @NonNull ClickGate clickGate) {
+        bindFolder(dock, folder, metrics, clickGate, null);
+    }
+
+    public void bindFolder(@Nullable SuggestionBarView dock, @NonNull PinnedFolderItem folder,
+                           @Nullable AppDrawerHorizontalGridMetrics metrics,
+                           @NonNull ClickGate clickGate,
+                           @Nullable AppDrawerPickupDelegate pickupDelegate) {
         bindFolder(dock, folder, metrics == null ? 0 : Math.round(metrics.iconPx),
-            metrics == null ? 0 : Math.round(metrics.rowHeightPx), clickGate);
+            metrics == null ? 0 : Math.round(metrics.rowHeightPx), clickGate, pickupDelegate);
+    }
+
+    /** The member-icon mosaic, used as the drag shadow when the tile is picked up. */
+    @NonNull
+    public android.view.View mosaicView() {
+        return mosaic;
     }
 
     private void bindFolder(@Nullable SuggestionBarView dock, @NonNull PinnedFolderItem folder,
-                            int iconPx, int rowHeightPx, @NonNull ClickGate clickGate) {
+                            int iconPx, int rowHeightPx, @NonNull ClickGate clickGate,
+                            @Nullable AppDrawerPickupDelegate pickupDelegate) {
         unbind();
         iconPx = Math.max(1, iconPx);
         applyGeometry(rowHeightPx, iconPx);
@@ -93,6 +114,14 @@ public final class AppDrawerFolderCellView extends AppDrawerAppCellView {
             if (!clickGate.suppressCellClick() && dock != null)
                 dock.openFolderFromDrawer(folder.id, this);
         });
+        // A folder has no app context menu, so the long press means one thing only: pick the tile
+        // up and carry it to a new place in the drawer.
+        if (pickupDelegate == null) {
+            setOnLongClickListener(null);
+            setLongClickable(false);
+        } else {
+            setOnLongClickListener(view -> pickupDelegate.startFolderPickup(this, folder));
+        }
     }
 
     @Override public void unbind() {

@@ -251,6 +251,24 @@
                                 android:visibility="gone"
                                 android:contentDescription="@string/termux_status_widget_weather_content_description" />
 
+                            <!-- The AI glyph is not a preference: it appears only while a model is
+                                 actually resident, so it owns its own visibility and its own dot. -->
+                            <com.termux.app.statusbar.MaterialDotSeparatorView
+                                android:id="@+id/terminal_status_dot_ai"
+                                android:layout_width="3dp"
+                                android:layout_height="3dp"
+                                android:layout_gravity="center_vertical"
+                                android:layout_marginHorizontal="1dp"
+                                android:visibility="gone" />
+
+                            <com.termux.app.statusbar.StatusBarWidgetView
+                                android:id="@+id/terminal_status_widget_ai"
+                                android:layout_width="wrap_content"
+                                android:layout_height="match_parent"
+                                android:layout_marginStart="3dp"
+                                android:visibility="gone"
+                                android:contentDescription="@string/termux_status_widget_ai_content_description" />
+
                         </LinearLayout>
                     </LinearLayout>
 

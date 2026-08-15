@@ -1,43 +1,49 @@
 package com.termux.app.fragments.settings.termux;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Context;
 import android.content.ContextWrapper;
+import android.content.res.ColorStateList;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
+import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 
+import com.google.android.material.color.MaterialColors;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiModelRegistry;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
-import com.termux.app.launcher.data.LauncherCategoryFile;
+import com.termux.app.launcher.data.LauncherCategoryPasteImporter;
+import com.termux.app.launcher.data.LauncherCategoryPasteNotification;
 import com.termux.app.launcher.data.LauncherCategorySortPrompt;
-import com.termux.app.launcher.data.LauncherCategorySortState;
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.shared.interact.ShareUtils;
-import com.termux.shared.termux.TermuxConstants;
 
-import java.io.File;
-import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -49,7 +55,6 @@ import java.util.concurrent.Executors;
  */
 final class CategorySortDialogs {
 
-    private static final String CATEGORY_FILE_NAME = "app-categories.conf";
     /** Measured on-device throughput, used only for the "takes about N minutes" estimate. */
     private static final int SECONDS_PER_APP_E4B = 3;
     private static final int SECONDS_PER_APP_E2B = 1;
@@ -124,7 +129,9 @@ final class CategorySortDialogs {
     /**
      * Presents the two ways to categorize: the on-device model, and copying a prompt into an
      * external AI chat. Both rows carry their warning in the row itself — a privacy cost or a
-     * multi-minute run is information the user needs before choosing, not after.
+     * multi-minute run is information the user needs before choosing, not after. The rows are drawn
+     * as cards rather than as a platform list, because a three-line row in
+     * {@code simple_list_item_1} clips its warning — the very line that must not be missed.
      *
      * @param onDeviceChosen run when the on-device row is picked; the caller owns starting the
      *     service, because only it can keep polling for progress afterwards.
@@ -136,102 +143,218 @@ final class CategorySortDialogs {
                             @Nullable Runnable onPasteApplied) {
         TaiModelSpec model = resolveModel(context);
         String unavailable = unavailableReason(context, model);
+        boolean onDeviceEnabled = unavailable == null && model != null;
 
-        String onDeviceRow;
-        if (unavailable == null && model != null) {
-            onDeviceRow = context.getString(R.string.settings_app_drawer_category_sort_on_device)
-                + "\n" + context.getString(
-                    R.string.settings_app_drawer_category_sort_on_device_summary, model.displayName)
-                + "\n" + context.getString(
-                    R.string.settings_app_drawer_category_sort_on_device_warning,
-                    estimatedMinutes(model, apps.size()));
-        } else {
-            onDeviceRow = context.getString(R.string.settings_app_drawer_category_sort_on_device)
-                + "\n" + unavailable;
-        }
-        String pasteRow = context.getString(R.string.settings_app_drawer_category_sort_paste)
-            + "\n" + context.getString(R.string.settings_app_drawer_category_sort_paste_summary)
-            + "\n" + context.getString(R.string.settings_app_drawer_category_sort_paste_warning);
+        float density = context.getResources().getDisplayMetrics().density;
+        LinearLayout container = new LinearLayout(context);
+        container.setOrientation(LinearLayout.VERTICAL);
+        int padH = Math.round(20 * density);
+        container.setPadding(padH, Math.round(4 * density), padH, Math.round(4 * density));
+        ScrollView scroll = new ScrollView(context);
+        scroll.addView(container);
 
-        final boolean onDeviceEnabled = unavailable == null && model != null;
-        List<CharSequence> rows = new ArrayList<>();
-        rows.add(onDeviceRow);
-        rows.add(pasteRow);
-        ArrayAdapter<CharSequence> adapter = new ArrayAdapter<CharSequence>(
-                context, android.R.layout.simple_list_item_1, rows) {
-            @Override
-            public boolean areAllItemsEnabled() {
-                return onDeviceEnabled;
-            }
-
-            @Override
-            public boolean isEnabled(int position) {
-                return position != 0 || onDeviceEnabled;
-            }
-
-            @NonNull
-            @Override
-            public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
-                View view = super.getView(position, convertView, parent);
-                TextView text = view.findViewById(android.R.id.text1);
-                if (text != null) {
-                    // The rows are title + summary + warning, and the platform row layout is sized
-                    // for one line; unlock it or the warning is the part that gets cut.
-                    text.setSingleLine(false);
-                    text.setMaxLines(4);
-                    text.setEnabled(isEnabled(position));
-                }
-                return view;
-            }
-        };
-
-        new AlertDialog.Builder(context)
+        AlertDialog dialog = new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.settings_app_drawer_category_sort_dialog_title)
-            .setAdapter(adapter, (dialog, which) -> {
-                if (which == 0) {
-                    onDeviceChosen.run();
-                    return;
-                }
-                ShareUtils.copyTextToClipboard(context, "Termux Launcher app categories",
-                    LauncherCategorySortPrompt.pasteablePrompt(apps), null);
-                showPasteBack(context, apps, onPasteApplied);
-            })
+            .setView(scroll)
             .setNegativeButton(android.R.string.cancel, null)
-            .show();
+            .create();
+
+        String onDeviceSummary = onDeviceEnabled && model != null
+            ? context.getString(R.string.settings_app_drawer_category_sort_on_device_summary,
+                model.displayName)
+            : unavailable;
+        String onDeviceNote = onDeviceEnabled && model != null
+            ? context.getString(R.string.settings_app_drawer_category_sort_on_device_warning,
+                estimatedMinutes(model, apps.size()))
+            : null;
+        container.addView(buildRow(context,
+            R.drawable.ic_symbol_smart_toy,
+            context.getString(R.string.settings_app_drawer_category_sort_on_device),
+            onDeviceSummary,
+            onDeviceNote,
+            onDeviceEnabled,
+            () -> {
+                dialog.dismiss();
+                onDeviceChosen.run();
+            }));
+
+        container.addView(buildRow(context,
+            R.drawable.ic_symbol_content_copy,
+            context.getString(R.string.settings_app_drawer_category_sort_paste),
+            context.getString(R.string.settings_app_drawer_category_sort_paste_summary),
+            context.getString(R.string.settings_app_drawer_category_sort_paste_warning),
+            true,
+            () -> {
+                dialog.dismiss();
+                startPasteRoute(context, apps, onPasteApplied);
+            }));
+
+        dialog.show();
     }
 
     /**
-     * Takes the AI chat's answer back. The prompt is already on the clipboard when this opens, so
-     * the dialog is only the return leg.
+     * One card in the chooser: icon, title, summary, and the warning as its own dimmer line so it
+     * cannot be truncated away. A disabled card keeps its text — the summary is the reason it is
+     * disabled — but loses its ripple and its click.
+     */
+    @NonNull
+    private static View buildRow(@NonNull Context context,
+                                 @DrawableRes int iconRes,
+                                 @NonNull String title,
+                                 @Nullable String summary,
+                                 @Nullable String note,
+                                 boolean enabled,
+                                 @NonNull Runnable onClick) {
+        float density = context.getResources().getDisplayMetrics().density;
+        int titleColor = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorOnSurface, 0xFFECEFF4);
+        int summaryColor = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorOnSurfaceVariant, 0xFF9AA3B2);
+        int surfaceColor = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+            MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSurfacePanel, 0xFF20242C));
+        int accent = MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorPrimary, 0xFF8AB4F8);
+
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        int padding = Math.round(16 * density);
+        row.setPadding(padding, padding, padding, padding);
+
+        GradientDrawable card = new GradientDrawable();
+        card.setColor(surfaceColor);
+        card.setCornerRadius(20 * density);
+        if (enabled) {
+            row.setBackground(new RippleDrawable(
+                ColorStateList.valueOf(MaterialColors.compositeARGBWithAlpha(accent, 48)), card, null));
+            row.setClickable(true);
+            row.setFocusable(true);
+            row.setOnClickListener(v -> onClick.run());
+        } else {
+            row.setBackground(card);
+            row.setAlpha(0.5f);
+        }
+
+        ImageView icon = new ImageView(context);
+        icon.setImageResource(iconRes);
+        icon.setImageTintList(ColorStateList.valueOf(enabled ? accent : summaryColor));
+        int iconSize = Math.round(24 * density);
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(iconSize, iconSize);
+        iconParams.setMarginEnd(Math.round(16 * density));
+        row.addView(icon, iconParams);
+
+        LinearLayout texts = new LinearLayout(context);
+        texts.setOrientation(LinearLayout.VERTICAL);
+
+        TextView titleView = new TextView(context);
+        titleView.setText(title);
+        titleView.setTextColor(titleColor);
+        titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f);
+        titleView.setTypeface(Typeface.DEFAULT_BOLD);
+        texts.addView(titleView);
+
+        if (summary != null && !summary.isEmpty()) {
+            TextView summaryView = new TextView(context);
+            summaryView.setText(summary);
+            summaryView.setTextColor(summaryColor);
+            summaryView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+            summaryView.setLineSpacing(Math.round(2 * density), 1f);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            params.topMargin = Math.round(2 * density);
+            texts.addView(summaryView, params);
+        }
+
+        if (note != null && !note.isEmpty()) {
+            TextView noteView = new TextView(context);
+            noteView.setText(note);
+            noteView.setTextColor(MaterialColors.compositeARGBWithAlpha(summaryColor, 200));
+            noteView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+            noteView.setLineSpacing(Math.round(2 * density), 1f);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            params.topMargin = Math.round(6 * density);
+            texts.addView(noteView, params);
+        }
+
+        row.addView(texts, new LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rowParams.topMargin = Math.round(6 * density);
+        rowParams.bottomMargin = Math.round(6 * density);
+        row.setLayoutParams(rowParams);
+        return row;
+    }
+
+    /**
+     * Copies the prompt and opens both return legs at once: the paste-back dialog for a user who
+     * stays in Settings, and a persistent notification for the far more common case where they
+     * leave for a chat app and the dialog does not survive the trip.
+     */
+    private static void startPasteRoute(@NonNull Context context,
+                                        @NonNull List<LauncherCategorySortPrompt.AppEntry> apps,
+                                        @Nullable Runnable onPasteApplied) {
+        copyPrompt(context, apps, false);
+        LauncherCategoryPasteNotification.post(context);
+        showPasteBack(context, apps, onPasteApplied);
+    }
+
+    private static void copyPrompt(@NonNull Context context,
+                                   @NonNull List<LauncherCategorySortPrompt.AppEntry> apps,
+                                   boolean toast) {
+        ShareUtils.copyTextToClipboard(context, "Termux Launcher app categories",
+            LauncherCategorySortPrompt.pasteablePrompt(apps), null);
+        if (toast) Toast.makeText(context,
+            R.string.settings_app_drawer_category_sort_paste_copied, Toast.LENGTH_SHORT).show();
+    }
+
+    /**
+     * Takes the AI chat's answer back. The prompt is already on the clipboard when this opens, but
+     * the copy button stays available: coming back from a chat app usually means the clipboard now
+     * holds the answer, and re-opening the chooser to re-copy the prompt would overwrite it.
      */
     static void showPasteBack(@NonNull Context context,
                               @NonNull List<LauncherCategorySortPrompt.AppEntry> apps,
                               @Nullable Runnable onApplied) {
+        float density = context.getResources().getDisplayMetrics().density;
         EditText input = new EditText(context);
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         input.setSingleLine(false);
         input.setMinLines(6);
         input.setMaxLines(12);
-        input.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
-        int padding = Math.round(24 * context.getResources().getDisplayMetrics().density);
-        LinearLayout layout = new LinearLayout(context);
-        layout.setPadding(padding, 0, padding, 0);
-        layout.addView(input);
+        input.setHint(R.string.settings_app_drawer_category_sort_paste_input_hint);
+        input.setGravity(Gravity.TOP | Gravity.START);
 
-        new AlertDialog.Builder(context)
+        LinearLayout layout = new LinearLayout(context);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        int padH = Math.round(24 * density);
+        layout.setPadding(padH, Math.round(8 * density), padH, 0);
+        layout.addView(input, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // Neutral button rather than a view button: the dialog must not close when the prompt is
+        // re-copied, and a neutral button is the one dialog button that leaves it open by default.
+        AlertDialog dialog = new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.settings_app_drawer_category_sort_paste)
-            .setMessage(R.string.settings_app_drawer_category_sort_paste_summary)
+            .setMessage(R.string.settings_app_drawer_category_sort_paste_dialog_body)
             .setView(layout)
-            .setPositiveButton(android.R.string.ok, (dialog, which) ->
+            .setPositiveButton(R.string.settings_app_drawer_category_sort_paste_apply, (d, which) ->
                 applyPastedReply(context, apps, input.getText().toString(), onApplied))
+            .setNeutralButton(R.string.settings_app_drawer_category_sort_paste_copy_again, null)
             .setNegativeButton(android.R.string.cancel, null)
-            .show();
+            .create();
+        dialog.show();
+        View copyButton = dialog.getButton(AlertDialog.BUTTON_NEUTRAL);
+        if (copyButton != null) copyButton.setOnClickListener(v -> copyPrompt(context, apps, true));
     }
 
     /**
-     * Merges a pasted reply into {@code app-categories.conf}. Pasted assignments win over what the
-     * file already says for the same package — the user just asked for this answer — but packages
-     * the reply never mentions keep their section.
+     * Merges a pasted reply into {@code app-categories.conf} off the main thread and reports the
+     * outcome. The merge itself lives in {@link LauncherCategoryPasteImporter} because the
+     * notification reply path applies the same text without any dialog around it.
      */
     private static void applyPastedReply(@NonNull Context context,
                                          @NonNull List<LauncherCategorySortPrompt.AppEntry> apps,
@@ -239,83 +362,27 @@ final class CategorySortDialogs {
                                          @Nullable Runnable onApplied) {
         LinkedHashSet<String> known = new LinkedHashSet<>();
         for (LauncherCategorySortPrompt.AppEntry app : apps) known.add(app.packageName);
-        Map<String, String> slugByPackage = LauncherCategorySortPrompt.parsePastedReply(reply, known);
-        int applied = slugByPackage.size();
-        // Every package line the reply's grammar yielded, minus the ones that survived the
-        // known-package filter: dropping hallucinated packages silently would read as the feature
-        // failing, so the count is reported.
-        int ignored = Math.max(0, countPackageLines(reply) - applied);
-
-        if (applied == 0) {
-            Toast.makeText(context, context.getString(
-                R.string.settings_app_drawer_category_sort_done, 0, 0)
-                + ignoredSuffix(ignored), Toast.LENGTH_LONG).show();
-            return;
-        }
-
-        LinkedHashSet<String> reassigned = new LinkedHashSet<>();
-        for (String packageName : slugByPackage.keySet())
-            reassigned.add(packageName.toLowerCase(Locale.US));
 
         FILE_EXECUTOR.execute(() -> {
-            File file = new File(TermuxConstants.TERMUX_HOME_DIR_PATH + "/" + CATEGORY_FILE_NAME);
-            LauncherCategoryFile existing;
-            try {
-                existing = LauncherCategoryFile.parse(file);
-            } catch (Exception ignoredError) {
-                existing = LauncherCategoryFile.empty();
+            LauncherCategoryPasteImporter.Result result =
+                LauncherCategoryPasteImporter.apply(context, known, reply);
+            final String message;
+            if (result.isFailure()) {
+                message = context.getString(
+                    R.string.settings_app_drawer_category_sort_failed, result.errorMessage);
+            } else {
+                message = context.getString(R.string.settings_app_drawer_category_sort_done,
+                    result.applied, result.categories) + ignoredSuffix(context, result.ignored);
             }
-
-            LinkedHashMap<String, List<String>> merged = new LinkedHashMap<>();
-            for (Map.Entry<String, List<String>> section : existing.sections().entrySet()) {
-                List<String> packages = new ArrayList<>();
-                for (String packageName : section.getValue()) {
-                    if (reassigned.contains(packageName.toLowerCase(Locale.US))) continue;
-                    packages.add(packageName);
-                }
-                merged.put(section.getKey(), packages);
-            }
-            for (Map.Entry<String, String> assignment : slugByPackage.entrySet()) {
-                List<String> packages = merged.get(assignment.getValue());
-                if (packages == null) {
-                    packages = new ArrayList<>();
-                    merged.put(assignment.getValue(), packages);
-                }
-                packages.add(assignment.getKey());
-            }
-
-            LinkedHashMap<String, List<String>> written = new LinkedHashMap<>();
-            for (Map.Entry<String, List<String>> section : merged.entrySet()) {
-                if (section.getValue().isEmpty()) continue;
-                written.put(section.getKey(), section.getValue());
-            }
-
-            try {
-                LauncherCategoryFile.of(written).write(file);
-            } catch (Exception error) {
-                String message = context.getString(
-                    R.string.settings_app_drawer_category_sort_failed,
-                    error.getMessage() == null ? error.toString() : error.getMessage());
-                MAIN_HANDLER.post(() -> {
-                    if (!isContextAlive(context)) return;
-                    Toast.makeText(context, message, Toast.LENGTH_LONG).show();
-                });
-                return;
-            }
-
-            LinkedHashSet<String> allPackages = new LinkedHashSet<>();
-            for (List<String> packages : written.values()) allPackages.addAll(packages);
-            new LauncherCategorySortState(context).recordRun(System.currentTimeMillis(),
-                allPackages.size(), LauncherCategorySortState.SOURCE_PASTED, null);
-            LauncherAppDataProvider.getInstance(context).invalidate();
-
-            String message = context.getString(
-                R.string.settings_app_drawer_category_sort_done, applied, written.size())
-                + ignoredSuffix(ignored);
             MAIN_HANDLER.post(() -> {
                 if (!isContextAlive(context)) return;
                 Toast.makeText(context, message, Toast.LENGTH_LONG).show();
-                if (onApplied != null) onApplied.run();
+                if (result.applied > 0 && !result.isFailure()) {
+                    // The notification is the other half of this same round trip; once the answer
+                    // landed there is nothing left to reply to.
+                    LauncherCategoryPasteNotification.cancel(context);
+                    if (onApplied != null) onApplied.run();
+                }
             });
         });
     }
@@ -336,22 +403,10 @@ final class CategorySortDialogs {
         return true;
     }
 
-    /** @return how many package lines the reply contained, before unknown packages are dropped. */
-    private static int countPackageLines(@NonNull String reply) {
-        try {
-            int lines = 0;
-            for (List<String> packages : LauncherCategoryFile.parse(new StringReader(reply))
-                    .sections().values())
-                lines += packages.size();
-            return lines;
-        } catch (Exception ignored) {
-            return 0;
-        }
-    }
-
     @NonNull
-    private static String ignoredSuffix(int ignored) {
-        return ignored <= 0 ? "" : " · " + ignored + " lines ignored";
+    private static String ignoredSuffix(@NonNull Context context, int ignored) {
+        return ignored <= 0 ? "" : " · " + context.getString(
+            R.string.settings_app_drawer_category_sort_ignored_lines, ignored);
     }
 
     /** Rounded up and never zero: "about 0 minutes" would read as instant. */

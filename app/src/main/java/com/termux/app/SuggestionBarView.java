@@ -15,6 +15,7 @@ import android.app.Notification;
 import android.app.PendingIntent;
 import android.app.RemoteInput;
 import android.content.ClipData;
+import android.content.ClipDescription;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.ContextWrapper;
@@ -319,6 +320,8 @@ public final class SuggestionBarView extends GridLayout
     @Nullable private View activePinnedDragSourceView;
     @Nullable private PinnedDragState activePinnedDragState;
     @Nullable private FolderEntryDragState activeFolderEntryDragState;
+    /** Identifies a folder-member drag in windows the drag's local state does not reach. */
+    static final String FOLDER_ENTRY_CLIP_LABEL = "folder-entry";
     private PopupWindow appContextPopupWindow;
     private PopupWindow shortcutsPopupWindow;
     private PopupWindow notificationPopupWindow;
@@ -917,6 +920,17 @@ public final class SuggestionBarView extends GridLayout
         if (source == null) return LauncherConfigRepository.MutationResult.MISSING;
         return configRepository.addAppToFolder(revision, folderId,
             new PinnedAppItem(source.appRef));
+    }
+
+    /**
+     * Parks a drawer folder in front of a given app (or at the end of the list), which is what a
+     * folder tile dragged around the drawer persists.
+     */
+    @NonNull
+    public LauncherConfigRepository.MutationResult moveDrawerFolder(long revision,
+        @NonNull String folderId, @Nullable String anchorStableId) {
+        if (configRepository == null) return LauncherConfigRepository.MutationResult.MISSING;
+        return configRepository.setFolderDrawerAnchor(revision, folderId, anchorStableId);
     }
 
     @Nullable
@@ -6774,13 +6788,13 @@ public final class SuggestionBarView extends GridLayout
         if (ghost == null) return false;
         FolderEntryDragState dragState = new FolderEntryDragState(sourceFolderId,
             resolveForSelectionRef(entry.appRef));
-        ClipData clip = ClipData.newPlainText("folder-entry", dragState.appRef.stableId());
+        ClipData clip = ClipData.newPlainText(FOLDER_ENTRY_CLIP_LABEL, dragState.appRef.stableId());
         View.DragShadowBuilder shadow = createRaisedDragShadow(ghost, sizePx);
         activePinnedDragSourceView = view;
         activeFolderEntryDragState = dragState;
         boolean started;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            started = view.startDragAndDrop(clip, shadow, dragState, 0);
+            started = view.startDragAndDrop(clip, shadow, dragState, crossWindowDragFlags());
         } else {
             started = view.startDrag(clip, shadow, dragState, 0);
         }
@@ -6843,7 +6857,8 @@ public final class SuggestionBarView extends GridLayout
     private boolean handlePinnedBarDragEvent(@NonNull View targetView, @NonNull DragEvent event) {
         Object localState = event.getLocalState();
         boolean pinnedDrag = localState instanceof PinnedDragState;
-        boolean folderEntryDrag = localState instanceof FolderEntryDragState;
+        FolderEntryDragState folderEntry = resolveFolderEntryDrag(event);
+        boolean folderEntryDrag = folderEntry != null;
         if (!pinnedDrag && !folderEntryDrag) return false;
 
         int slotCount = Math.max(1, maxButtonCount);
@@ -6880,8 +6895,7 @@ public final class SuggestionBarView extends GridLayout
                 targetView.setAlpha(1f);
                 clearFolderDragInsertionPreview();
                 if (folderEntryDrag) {
-                    return applyFolderEntryDrop((FolderEntryDragState) localState, targetIndex,
-                        targetItem, dropXRatio);
+                    return applyFolderEntryDrop(folderEntry, targetIndex, targetItem, dropXRatio);
                 }
                 return applyPinnedDrop((PinnedDragState) localState, targetIndex, targetItem, dropXRatio);
             case DragEvent.ACTION_DRAG_ENDED:
@@ -7092,6 +7106,68 @@ public final class SuggestionBarView extends GridLayout
         PinnedDragState(int sourceIndex) {
             this.sourceIndex = sourceIndex;
         }
+    }
+
+    /**
+     * The folder member leaves a {@link android.widget.PopupWindow}, and a plain (window-local)
+     * system drag is delivered only to the window it started in — so the dock row and the app
+     * drawer, which live in the activity window, never saw the drop. These flags let the drag cross
+     * our own windows; below API 34, where the same-application flag does not exist, the global
+     * flag is the only way to leave the popup window at all.
+     */
+    private static int crossWindowDragFlags() {
+        if (Build.VERSION.SDK_INT >= 34) return View.DRAG_FLAG_GLOBAL_SAME_APPLICATION;
+        return View.DRAG_FLAG_GLOBAL;
+    }
+
+    /**
+     * A cross-window drag carries its local state only inside the source window, so the dock and
+     * drawer identify a folder-member drag by clip label plus the live drag this view owns.
+     *
+     * @return the in-flight folder-member drag this event belongs to, or null when the event is
+     *     some other drag.
+     */
+    @Nullable
+    private FolderEntryDragState resolveFolderEntryDrag(@NonNull DragEvent event) {
+        Object localState = event.getLocalState();
+        if (localState instanceof FolderEntryDragState) return (FolderEntryDragState) localState;
+        FolderEntryDragState active = activeFolderEntryDragState;
+        if (active == null || active.cancelled) return null;
+        ClipDescription description = event.getClipDescription();
+        CharSequence label = description == null ? null : description.getLabel();
+        return label != null && FOLDER_ENTRY_CLIP_LABEL.contentEquals(label) ? active : null;
+    }
+
+    /** True while this event belongs to a member being dragged out of the shared folder popup. */
+    public boolean isFolderEntryDrag(@NonNull DragEvent event) {
+        return resolveFolderEntryDrag(event) != null;
+    }
+
+    /**
+     * Drops a folder member onto the app drawer: it leaves the folder and reappears in the drawer's
+     * plain list, since the drawer composer suppresses exactly the apps a folder holds. A folder
+     * left with fewer than two members collapses in the repository's normalize pass.
+     *
+     * @return true when the member was removed, so the drawer can consume the drop.
+     */
+    public boolean dropFolderEntryOnDrawer(@NonNull DragEvent event) {
+        FolderEntryDragState dragState = resolveFolderEntryDrag(event);
+        if (dragState == null || configRepository == null) return false;
+        LauncherConfigSnapshot snapshot = configRepository.loadSnapshot();
+        PinnedFolderItem folder = snapshot.folder(dragState.folderId);
+        PinnedAppItem member = findFolderApp(folder, dragState.appRef);
+        if (folder == null || member == null) return false;
+        LauncherConfigRepository.MutationResult result = configRepository.removeAppFromFolder(
+            snapshot.revision, folder.id, member.appRef.stableId());
+        if (result != LauncherConfigRepository.MutationResult.APPLIED) return false;
+        dragState.cancelled = true;
+        activeFolderEntryDragState = null;
+        activePinnedDragSourceView = null;
+        // The popup is only hidden while a drag is in flight, and the dock's own drag listener —
+        // the usual place that finishes it — may be hidden behind the open drawer.
+        sharedFolderPopup.dismissImmediate();
+        refreshPinnedItemsFromRepository();
+        return true;
     }
 
     /** Local drag state for a member dragged out of a folder popup. */

@@ -16,7 +16,7 @@
         app:title="@string/settings_app_drawer_category_sort_title"
         app:summary="@string/settings_app_drawer_category_sort_summary" />
 
-    <Preference
+    <com.termux.app.fragments.settings.termux.CategorySortProgressPreference
         app:key="app_launcher_category_refresh"
         app:title="@string/settings_app_drawer_category_refresh_title" />
 </PreferenceScreen>

@@ -253,6 +253,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final long WINDOW_LABEL_POLL_MS = 2000L;
     /** Trailing CPU/RAM/weather widgets, their data controllers, and the shared detail card host. */
     @Nullable private com.termux.app.statusbar.SystemStatsController mStatsController;
+    @Nullable private com.termux.app.statusbar.AiIndicatorController mAiIndicatorController;
     @Nullable private com.termux.app.statusbar.SystemStatsCardView mStatsCardView;
     /**
      * Presentation smoothing for the two bar readings only. One controller feeds both surfaces, and
@@ -5257,6 +5258,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mBackgroundProcessHandler.removeCallbacks(mBackgroundProcessResync);
         mStatusCardHost.dismiss();
         if (mStatsController != null) mStatsController.stop();
+        if (mAiIndicatorController != null) mAiIndicatorController.stop();
         // Sampling stops here, so the smoothed history stops meaning anything. Dropped now rather
         // than aged out on resume: the first reading the user sees again has to be the true one.
         mBarCpuSmoother.reset();
@@ -13478,6 +13480,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } else if (mWeatherController != null) {
             mWeatherController.stop();
         }
+
+        ensureAiIndicatorController();
+    }
+
+    /**
+     * The AI glyph has no preference behind it. It is a live state, not a choice: it appears while a
+     * model is resident and greys out on its way back off screen, so it is wired once and left to
+     * its own visibility rule.
+     */
+    private void ensureAiIndicatorController() {
+        com.termux.app.statusbar.StatusBarWidgetView ai = findViewById(R.id.terminal_status_widget_ai);
+        com.termux.app.statusbar.MaterialDotSeparatorView aiDot =
+            findViewById(R.id.terminal_status_dot_ai);
+        if (ai == null || aiDot == null) return;
+        if (mAiIndicatorController == null) {
+            mAiIndicatorController = new com.termux.app.statusbar.AiIndicatorController(ai, aiDot);
+            ai.setOnClickListener(view -> {
+                Intent intent = new Intent(this, com.termux.app.activities.SettingsActivity.class);
+                intent.putExtra(com.termux.app.activities.SettingsActivity.EXTRA_OPEN_TAI_SETTINGS, true);
+                startActivity(intent);
+            });
+        }
+        mAiIndicatorController.start();
+        mAiIndicatorController.refresh();
     }
 
     @NonNull

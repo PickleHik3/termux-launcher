@@ -274,6 +274,10 @@
             android:name=".shared.activities.ReportActivity$ReportActivityBroadcastReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".app.launcher.data.LauncherCategoryPasteNotification$ActionReceiver"
+            android:exported="false" />
+
 
         <service
             android:name=".app.TermuxService"

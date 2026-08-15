@@ -176,6 +176,11 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
         return mEntries;
     }
 
+    /** The composed rows as bound, for drop-position resolution during a drag. */
+    @NonNull public List<AppDrawerItem> items() {
+        return mItems;
+    }
+
     @Nullable public AppDrawerItem itemAt(int position) {
         return position >= 0 && position < mItems.size() ? mItems.get(position) : null;
     }
@@ -234,7 +239,8 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
         AppDrawerItem item = mItems.get(position);
         AppDrawerGridMetrics metrics = mMetrics;
         if (item.kind == AppDrawerItem.Kind.FOLDER)
-            ((AppDrawerFolderCellView) holder.cell).bindFolder(mDock, item.folder, metrics, mClickGate);
+            ((AppDrawerFolderCellView) holder.cell).bindFolder(mDock, item.folder, metrics,
+                mClickGate, mPickupEnabled ? mDragController : null);
         else holder.cell.bind(mDock, item.app, metrics, mClickGate,
             mPickupEnabled ? mDragController : null);
         if (mPickupEnabled && mDragController != null) mDragController.bindTarget(holder.cell, item);
@@ -253,6 +259,16 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
     private void applyScrubHighlight(@NonNull Cell holder, int position) {
         char letter = letterForPosition(position);
         holder.cell.setScrubAppearance(letter, mScrubLetter, mScrubStrength);
+    }
+
+    @Override
+    public void onViewAttachedToWindow(@NonNull Cell holder) {
+        super.onViewAttachedToWindow(holder);
+        // The third write path, and the one a scrub upward depends on: a holder that left the
+        // viewport moments ago comes back out of the recycler's view cache <em>without</em> being
+        // rebound, so it would otherwise return wearing the appearance it had under the previous
+        // letter — dim, while the letter it belongs to is the one under the finger.
+        applyScrubHighlight(holder, holder.getAdapterPosition());
     }
 
     @Override

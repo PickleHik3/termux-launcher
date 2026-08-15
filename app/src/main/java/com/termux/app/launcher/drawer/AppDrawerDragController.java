@@ -1,9 +1,11 @@
 package com.termux.app.launcher.drawer;
 
 import android.content.ClipData;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.view.DragEvent;
@@ -18,6 +20,7 @@ import com.termux.app.SuggestionBarView;
 import com.termux.app.launcher.data.LauncherConfigRepository;
 import com.termux.app.launcher.data.LauncherConfigSnapshot;
 import com.termux.app.launcher.model.LauncherAppEntry;
+import com.termux.app.launcher.model.PinnedFolderItem;
 
 /** Platform drag coordinator. Local state contains stable identity/revision only. */
 public final class AppDrawerDragController implements AppDrawerPickupDelegate {
@@ -33,6 +36,14 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
         boolean canDropOnCurrentTarget();
         @Nullable AppDrawerItem resolveCurrentDropTarget(@NonNull String stableId);
         @NonNull AppDrawerViewType frozenSourceViewType();
+
+        /**
+         * @return the anchor a dragged folder should take when dropped on {@code targetStableId}:
+         *     the stable id of the first app at or after that row, or
+         *     {@link com.termux.app.launcher.model.PinnedFolderItem#DRAWER_ANCHOR_END} when the
+         *     drop lands past the last app.
+         */
+        @NonNull String drawerAnchorFor(@Nullable String targetStableId);
     }
 
     private final SuggestionBarView dock;
@@ -77,6 +88,49 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
         if (!started) cleanup();
         else host.onDragStateChanged(true);
         return started;
+    }
+
+    /**
+     * Picks up a folder tile. Same platform drag as an app, but the drop repositions the folder in
+     * the drawer instead of merging it into whatever it lands on — a folder has nothing to merge.
+     */
+    @Override public boolean startFolderPickup(@NonNull View source, @NonNull PinnedFolderItem folder) {
+        if (!host.isFrozenPickupEligible(folder.id)) return false;
+        if (!host.claimPickupDrag(folder.id)) return false;
+        PickupArtwork artwork = folderPickupArtwork(source);
+        if (artwork == null) return false;
+        LauncherConfigSnapshot snapshot = dock.getLauncherConfigSnapshot();
+        host.armTerminalDispatchDragLatch();
+        Rect bounds = new Rect();
+        source.getGlobalVisibleRect(bounds);
+        overlay.begin(artwork.drawable, artwork.sizePx, bounds);
+        active = new LocalState(folder.id, snapshot.revision, bounds,
+            host.frozenSourceViewType(), true);
+        cleaned = false;
+        ClipData clip = ClipData.newPlainText("launcher-item", "");
+        View.DragShadowBuilder shadow = new DrawableShadow(artwork.drawable, artwork.sizePx);
+        boolean started = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
+            ? source.startDragAndDrop(clip, shadow, active, 0)
+            : source.startDrag(clip, shadow, active, 0);
+        if (!started) cleanup();
+        else host.onDragStateChanged(true);
+        return started;
+    }
+
+    /**
+     * A folder tile has no single icon view — its artwork is the mosaic of member icons, so the
+     * drag shadow is a snapshot of that mosaic rather than a shared cached drawable.
+     */
+    @Nullable
+    static PickupArtwork folderPickupArtwork(@NonNull View source) {
+        if (!(source instanceof AppDrawerFolderCellView)) return null;
+        View mosaic = ((AppDrawerFolderCellView) source).mosaicView();
+        int size = Math.min(mosaic.getWidth(), mosaic.getHeight());
+        if (size <= 0) return null;
+        Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        mosaic.draw(new Canvas(bitmap));
+        return new PickupArtwork(
+            new BitmapDrawable(source.getResources(), bitmap), size);
     }
 
     @Nullable
@@ -141,9 +195,29 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
         }
     }
 
+    /** True while the in-flight drag carries a folder tile rather than an app. */
+    public boolean isFolderSourceDrag() {
+        return active != null && active.folderSource;
+    }
+
+    /**
+     * Drop on drawer space no row claimed: a dragged folder parks at the end of the list. Apps have
+     * nothing to do here — an app dropped on blank space keeps its alphabetical place.
+     */
+    public boolean dropFolderAtDrawerEnd() {
+        if (active == null || !active.folderSource) return false;
+        active.accepted = applyFolderMove(active.sourceStableId, active.revision,
+            PinnedFolderItem.DRAWER_ANCHOR_END);
+        return active.accepted;
+    }
+
     /** The exact repository-and-visible-host seam used by the platform ACTION_DROP path. */
     boolean applyDropMutation(@NonNull String sourceStableId, long revision,
                               @NonNull AppDrawerItem target) {
+        if (active != null && active.folderSource) {
+            return applyFolderMove(sourceStableId, revision,
+                host.drawerAnchorFor(target.stableId));
+        }
         LauncherConfigRepository.MutationResult result = target.kind == AppDrawerItem.Kind.FOLDER
             ? dock.addDrawerAppToFolder(revision, target.stableId, sourceStableId)
             : dock.createDrawerFolder(revision, target.app, sourceStableId);
@@ -158,6 +232,14 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
             Toast.makeText(overlay.getContext(), com.termux.R.string.folder_capacity_reached,
                 Toast.LENGTH_SHORT).show();
         }
+        return accepted;
+    }
+
+    private boolean applyFolderMove(@NonNull String folderId, long revision,
+                                    @NonNull String anchorStableId) {
+        boolean accepted = dock.moveDrawerFolder(revision, folderId, anchorStableId)
+            == LauncherConfigRepository.MutationResult.APPLIED;
+        if (accepted) host.onAcceptedDrop();
         return accepted;
     }
 
@@ -189,13 +271,20 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
         final Rect frozenSourceBounds;
         final AppDrawerViewType sourceViewType;
         final String sourceSurface = "drawer";
+        /** A folder tile on the move; its stable id is the folder id, not an app's. */
+        final boolean folderSource;
         boolean accepted;
         LocalState(String sourceStableId, long revision, Rect frozenSourceBounds,
                    AppDrawerViewType sourceViewType) {
+            this(sourceStableId, revision, frozenSourceBounds, sourceViewType, false);
+        }
+        LocalState(String sourceStableId, long revision, Rect frozenSourceBounds,
+                   AppDrawerViewType sourceViewType, boolean folderSource) {
             this.sourceStableId = sourceStableId;
             this.revision = revision;
             this.frozenSourceBounds = new Rect(frozenSourceBounds);
             this.sourceViewType = sourceViewType;
+            this.folderSource = folderSource;
         }
     }
 

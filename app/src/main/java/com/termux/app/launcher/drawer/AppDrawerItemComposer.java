@@ -41,7 +41,9 @@ public final class AppDrawerItemComposer {
                 suppressed.add(member.appRef.stableId());
                 earliest = Math.min(earliest, position);
             }
-            if (earliest != Integer.MAX_VALUE) insertions.add(new FolderAt(folder, earliest));
+            // A folder whose members are all uninstalled has nothing to show, anchored or not.
+            if (earliest == Integer.MAX_VALUE) continue;
+            insertions.add(new FolderAt(folder, anchoredPosition(folder, positions, sortedApps.size(), earliest)));
         }
         Collections.sort(insertions, Comparator.comparingInt((FolderAt value) -> value.position)
             .thenComparing(value -> normalize(value.folder.title))
@@ -58,6 +60,22 @@ public final class AppDrawerItemComposer {
         while (folderIndex < insertions.size())
             result.add(AppDrawerItem.folder(insertions.get(folderIndex++).folder));
         return result;
+    }
+
+    /**
+     * @return where a folder wants to sit: its dragged-to anchor when that app is still installed,
+     *     otherwise the automatic position next to its first member. An anchor pointing at a
+     *     removed app degrades to automatic rather than dumping the folder at the top.
+     */
+    private static int anchoredPosition(@NonNull PinnedFolderItem folder,
+                                        @NonNull Map<String, Integer> positions,
+                                        int appCount,
+                                        int automaticPosition) {
+        String anchor = folder.drawerAnchor;
+        if (anchor == null) return automaticPosition;
+        if (PinnedFolderItem.DRAWER_ANCHOR_END.equals(anchor)) return appCount;
+        Integer anchored = positions.get(anchor);
+        return anchored == null ? automaticPosition : anchored;
     }
 
     @NonNull

@@ -83,6 +83,11 @@ public final class AppDrawerHorizontalPageAdapter
         return position >= 0 && position < mEntries.size() ? mEntries.get(position) : null;
     }
 
+    /** The composed rows as bound, for drop-position resolution during a drag. */
+    @NonNull public List<AppDrawerItem> items() {
+        return mItems;
+    }
+
     @Nullable public AppDrawerItem itemAt(int position) {
         return position >= 0 && position < mItems.size() ? mItems.get(position) : null;
     }
@@ -172,7 +177,7 @@ public final class AppDrawerHorizontalPageAdapter
                 cell.setVisibility(View.VISIBLE);
                 cell.setClickable(true);
                 if (wantsFolder) ((AppDrawerFolderCellView) cell).bindFolder(mDock, item.folder,
-                    metrics, mClickGate);
+                    metrics, mClickGate, mPickupEnabled ? mDragController : null);
                 else cell.bind(mDock, item.app, metrics == null ? 0 : Math.round(metrics.iconPx),
                     metrics == null ? 0 : Math.round(metrics.rowHeightPx), mClickGate,
                     mPickupEnabled ? mDragController : null);

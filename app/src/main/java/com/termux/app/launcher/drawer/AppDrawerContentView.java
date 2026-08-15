@@ -30,6 +30,7 @@ import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.launcher.model.AppRef;
+import com.termux.app.launcher.model.PinnedFolderItem;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -384,13 +385,18 @@ public final class AppDrawerContentView extends FrameLayout
 
         setOnDragListener((view, event) -> {
             AppDrawerDragController controller = mDragController;
-            if (controller == null || !controller.owns(event.getLocalState())) return false;
+            if (controller == null || !controller.owns(event.getLocalState()))
+                return handleFolderEntryDragEvent(event);
             switch (event.getAction()) {
                 case DragEvent.ACTION_DRAG_STARTED:
                     return true;
                 case DragEvent.ACTION_DRAG_LOCATION:
                     onContentDragLocation(event.getX(), event.getY());
                     return true;
+                case DragEvent.ACTION_DROP:
+                    // Blank drawer space: only a folder has somewhere to land here, and the only
+                    // position past the last row is the end of the list.
+                    return controller.isFolderSourceDrag() && controller.dropFolderAtDrawerEnd();
                 case DragEvent.ACTION_DRAG_EXITED:
                     onDragTargetExited();
                     return true;
@@ -1168,6 +1174,10 @@ public final class AppDrawerContentView extends FrameLayout
         mScrubSpring.target = 1f;
         mScrubSpring.vel = 0f;
         applyScrubHighlight();
+        // The walk above runs against the pre-scroll children; the jump above relaid them out. One
+        // more walk after that layout is what makes a cell that merely moved — rather than being
+        // rebound — carry the new letter's appearance.
+        mGrid.post(this::applyScrubHighlight);
         requestFrames();
     }
 
@@ -1430,9 +1440,11 @@ public final class AppDrawerContentView extends FrameLayout
             AppDrawerTouchRegions.Region region = regionAt(ev.getX(), ev.getY());
             AppDrawerItem downItem = drawerItemAt(ev.getX(), ev.getY());
             mGestureDragStableId = downItem == null ? null : downItem.stableId;
+            // Folders join apps here: a folder tile is picked up the same way, it just travels to a
+            // free position instead of merging into what it lands on.
             mGestureDragEligible = mInteractive && !hasQuery()
                 && mViewType != AppDrawerViewType.CATEGORIES
-                && downItem != null && downItem.kind == AppDrawerItem.Kind.APP;
+                && downItem != null;
             mDragPolicy = new AppDrawerDragPolicy(new AppDrawerDragPolicy.FrozenDown(
                 mGestureViewType, mInteractive, !hasQuery(), mGestureDragEligible,
                 mGestureDragStableId));
@@ -1562,6 +1574,30 @@ public final class AppDrawerContentView extends FrameLayout
         return mGestureViewType;
     }
 
+    /**
+     * Folders are anchored to the app they sit in front of, so a drop resolves to the first app at
+     * or after the row it landed on. Dropping on the trailing folders — or on nothing — parks the
+     * folder at the end, which is the only position past the last app.
+     */
+    @NonNull @Override public String drawerAnchorFor(@Nullable String targetStableId) {
+        if (targetStableId == null) return PinnedFolderItem.DRAWER_ANCHOR_END;
+        List<AppDrawerItem> items = mViewType == AppDrawerViewType.HORIZONTAL
+            ? mHorizontalAdapter.items() : mAdapter.items();
+        int index = -1;
+        for (int i = 0; i < items.size(); i++) {
+            if (targetStableId.equals(items.get(i).stableId)) {
+                index = i;
+                break;
+            }
+        }
+        if (index < 0) return PinnedFolderItem.DRAWER_ANCHOR_END;
+        for (int i = index; i < items.size(); i++) {
+            AppDrawerItem item = items.get(i);
+            if (item.kind == AppDrawerItem.Kind.APP) return item.stableId;
+        }
+        return PinnedFolderItem.DRAWER_ANCHOR_END;
+    }
+
     @Override public void onDragLocation(@NonNull View target, float localX, float localY) {
         target.getLocationOnScreen(mDragLocation);
         int rawX = Math.round(mDragLocation[0] + localX);
@@ -1573,7 +1609,9 @@ public final class AppDrawerContentView extends FrameLayout
     }
 
     private void onContentDragLocation(float x, float y) {
-        if (drawerItemAt(x, y) == null) {
+        // Bounds, not cells: the edge a drag has to be held against to scroll or flip pages is
+        // usually past the last row, where there is no cell under the finger at all.
+        if (!withinDragSurface(x, y)) {
             cancelDragNavigation();
             return;
         }
@@ -1599,6 +1637,29 @@ public final class AppDrawerContentView extends FrameLayout
                 if (velocity != 0f) postOnAnimation(mDragAutoscroll);
             }
         }
+    }
+
+    /**
+     * The other drag that can land here: an app carried out of the folder popup, which is a
+     * different window and therefore a drag this view does not own. Dropping it anywhere on the
+     * drawer means "leave the folder" — the app is suppressed from the list precisely because the
+     * folder holds it, so removal is the whole move.
+     */
+    private boolean handleFolderEntryDragEvent(@NonNull DragEvent event) {
+        SuggestionBarView dock = mDock;
+        if (dock == null || !dock.isFolderEntryDrag(event)) return false;
+        if (event.getAction() != DragEvent.ACTION_DROP) return true;
+        if (!dock.dropFolderEntryOnDrawer(event)) return false;
+        post(this::onDockConfigChanged);
+        return true;
+    }
+
+    /** @return true while the drag point is over the scrolling surface of the current view type. */
+    private boolean withinDragSurface(float x, float y) {
+        View surface = mGestureViewType == AppDrawerViewType.HORIZONTAL ? mHorizontalPager : mGrid;
+        if (surface == null || surface.getVisibility() != VISIBLE) return false;
+        return x >= surface.getLeft() && x <= surface.getRight()
+            && y >= surface.getTop() && y <= surface.getBottom();
     }
 
     @Override public void onDragTargetExited() {

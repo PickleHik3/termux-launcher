@@ -44,7 +44,14 @@ public final class LauncherCategorySortService extends Service {
     public static final String EXTRA_MODEL_ID = "model_id";
 
     private static final String CHANNEL_ID = "termux_launcher_category_sort";
-    private static final int NOTIFICATION_ID = 24110;
+    /**
+     * Distinct from every other notification this app posts. It used to be 24110, the id
+     * {@link com.termux.ai.TaiRuntimeService} posts its own foreground notification under from the
+     * {@code :tai_runtime} process — so the two overwrote and cancelled each other, and a finished
+     * sort could leave its last frame ("saving", bar full) stuck under the runtime's ownership.
+     */
+    private static final int NOTIFICATION_ID = 24112;
+    private static final int RESULT_NOTIFICATION_ID = 24113;
     private static final String CATEGORY_FILE_NAME = "app-categories.conf";
     private static final int MAX_TOKENS = 24;
     private static final long NOTIFICATION_INTERVAL_MS = 750L;
@@ -52,8 +59,11 @@ public final class LauncherCategorySortService extends Service {
     private static volatile boolean running;
     private static volatile int processed;
     private static volatile int total;
+    @NonNull private static volatile String phase = LauncherCategorySortProgress.PHASE_PREPARING;
     @Nullable private static volatile String errorMessage;
     private static volatile boolean cancelRequested;
+    /** The last finished run's own words, kept so the settings row can report it on return. */
+    @Nullable private static volatile String outcome;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private long lastNotificationUpdateMs;
@@ -61,7 +71,14 @@ public final class LauncherCategorySortService extends Service {
     public static boolean isRunning() { return running; }
     public static int getProcessed() { return processed; }
     public static int getTotal() { return total; }
+    /** One of the {@link LauncherCategorySortProgress} phase constants. */
+    @NonNull public static String getPhase() { return phase; }
     @Nullable public static String getErrorMessage() { return errorMessage; }
+    /**
+     * @return what the last finished run did, or null when none has finished in this process. Read
+     *     by the settings row, which is routinely re-created after the run it started.
+     */
+    @Nullable public static String getOutcome() { return outcome; }
 
     public static void cancel() { cancelRequested = true; }
     public static boolean isCancelRequested() { return cancelRequested; }
@@ -75,7 +92,8 @@ public final class LauncherCategorySortService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         ensureChannel();
-        startForeground(NOTIFICATION_ID, buildNotification(getString(R.string.settings_app_drawer_category_sort_running, 0, 0), 0, 0, true));
+        startForeground(NOTIFICATION_ID, buildNotification(
+            getString(R.string.settings_app_drawer_category_sort_hint_preparing), 0, true, true));
         if (intent == null || !ACTION_SORT.equals(intent.getAction()) || running) {
             stopForeground(true);
             stopSelf(startId);
@@ -86,17 +104,24 @@ public final class LauncherCategorySortService extends Service {
         cancelRequested = false;
         processed = 0;
         total = 0;
+        phase = LauncherCategorySortProgress.PHASE_PREPARING;
         errorMessage = null;
+        outcome = null;
         String modelId = intent.getStringExtra(EXTRA_MODEL_ID);
         executor.execute(() -> {
             try {
                 runSort(modelId);
             } catch (Throwable t) {
                 errorMessage = t.getMessage() == null ? t.toString() : t.getMessage();
+                outcome = getString(R.string.settings_app_drawer_category_sort_failed, errorMessage);
             } finally {
                 running = false;
                 cancelRequested = false;
+                // Order matters: drop the ongoing progress notification first, then post the
+                // result as its own dismissible one — a user who left Settings mid-run learns how
+                // it ended without going back in.
                 stopForeground(true);
+                postResultNotification();
                 stopSelf(startId);
             }
         });
@@ -136,12 +161,28 @@ public final class LauncherCategorySortService extends Service {
             if (existing.categoryForPackage(packageName) == null) pending.add(packageName);
         }
         total = pending.size();
+        if (pending.isEmpty()) {
+            // Nothing new to classify. Loading a model to sort zero apps would burn 10-20 seconds
+            // and then flash a progress bar that was never measuring anything.
+            outcome = getString(R.string.settings_app_drawer_category_sort_nothing_pending,
+                labelByPackage.size());
+            new LauncherCategorySortState(this).recordRun(System.currentTimeMillis(),
+                labelByPackage.size(), LauncherCategorySortState.SOURCE_ON_DEVICE_MODEL, modelId);
+            return;
+        }
 
         LinkedHashMap<String, List<String>> merged = new LinkedHashMap<>();
         for (Map.Entry<String, List<String>> section : existing.sections().entrySet())
             merged.put(section.getKey(), new ArrayList<>(section.getValue()));
 
         TaiManager manager = TaiManager.getInstance(this);
+        // Loading is minutes of the run on a cold runtime, and it used to happen invisibly inside
+        // the first inference — which read as "stuck at 0 of N". Load it here so the phase is a
+        // phase the user can see.
+        phase = LauncherCategorySortProgress.PHASE_LOADING_MODEL;
+        updateProgressNotification(true);
+        loadModel(manager, modelId);
+        phase = LauncherCategorySortProgress.PHASE_SORTING;
         int assigned = 0;
         for (String packageName : pending) {
             if (cancelRequested) break;
@@ -161,6 +202,8 @@ public final class LauncherCategorySortService extends Service {
             assigned++;
         }
 
+        phase = LauncherCategorySortProgress.PHASE_SAVING;
+        updateProgressNotification(true);
         if (assigned > 0) LauncherCategoryFile.of(merged).write(file);
 
         LinkedHashSet<String> written = new LinkedHashSet<>();
@@ -171,8 +214,26 @@ public final class LauncherCategorySortService extends Service {
             LauncherCategorySortState.SOURCE_ON_DEVICE_MODEL,
             modelId
         );
+        outcome = cancelRequested
+            ? getString(R.string.settings_app_drawer_category_sort_cancelled, assigned)
+            : getString(R.string.settings_app_drawer_category_sort_done, assigned, merged.size());
 
         provider.invalidate();
+    }
+
+    /**
+     * Loads the model up front. A failure is not fatal on purpose: the per-app inference below will
+     * try to load it again and report its own error, and a preflight warning that only blocks the
+     * explicit load must not cancel a run the user asked for.
+     */
+    private void loadModel(@NonNull TaiManager manager, @Nullable String modelId) {
+        if (modelId == null || modelId.trim().isEmpty()) return;
+        try {
+            JSONObject request = new JSONObject();
+            request.put("model", modelId);
+            manager.loadModel(request.toString());
+        } catch (Exception ignored) {
+        }
     }
 
     @Nullable
@@ -213,11 +274,46 @@ public final class LauncherCategorySortService extends Service {
         if (manager == null) return;
         int done = processed;
         int count = total;
-        manager.notify(NOTIFICATION_ID, buildNotification(
-            getString(R.string.settings_app_drawer_category_sort_running, done, count), done, count, true));
+        manager.notify(NOTIFICATION_ID, buildNotification(progressText(done, count),
+            LauncherCategorySortProgress.percent(phase, done, count),
+            LauncherCategorySortProgress.isIndeterminate(phase), true));
     }
 
-    private Notification buildNotification(String text, int done, int count, boolean ongoing) {
+    /**
+     * The run's last word, as a dismissible notification. Posted under its own id so it does not
+     * race the foreground notification this service just dropped.
+     */
+    private void postResultNotification() {
+        String text = outcome;
+        if (text == null || text.trim().isEmpty()) return;
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        if (manager == null) return;
+        ensureChannel();
+        manager.notify(RESULT_NOTIFICATION_ID, new NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_service_notification)
+            .setContentTitle(getString(R.string.settings_app_drawer_category_sort_title))
+            .setContentText(text)
+            .setStyle(new NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(settingsIntent())
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build());
+    }
+
+    @NonNull
+    private PendingIntent settingsIntent() {
+        return PendingIntent.getActivity(this, 0, new Intent(this, SettingsActivity.class),
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0);
+    }
+
+    /** The same phase wording the settings row shows, so the two surfaces never disagree. */
+    @NonNull
+    private String progressText(int done, int count) {
+        return getString(LauncherCategorySortProgress.hint(phase, done, count), done, count);
+    }
+
+    private Notification buildNotification(String text, int percent, boolean indeterminate,
+                                           boolean ongoing) {
         Intent settingsIntent = new Intent(this, SettingsActivity.class);
         PendingIntent pendingIntent = PendingIntent.getActivity(
             this,
@@ -233,13 +329,8 @@ public final class LauncherCategorySortService extends Service {
             .setOnlyAlertOnce(true)
             .setOngoing(ongoing)
             .setPriority(NotificationCompat.PRIORITY_LOW);
-        if (ongoing) {
-            if (count > 0) {
-                builder.setProgress(count, done, false);
-            } else {
-                builder.setProgress(0, 0, true);
-            }
-        }
+        if (ongoing) builder.setProgress(indeterminate ? 0 : 100, indeterminate ? 0 : percent,
+            indeterminate);
         return builder.build();
     }
 
