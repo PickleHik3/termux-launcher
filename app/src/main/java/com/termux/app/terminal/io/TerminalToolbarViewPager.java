@@ -33,7 +33,16 @@ public class TerminalToolbarViewPager {
 
         @Override
         public int getCount() {
-            return 2;
+            // Every configured key page, then the text input page last. A second key page only
+            // exists when "extra-keys2" is non-empty, so a user who does not want one writes
+            // "extra-keys2=[]" (or removes the page in the editor) and gets the old two-page pager.
+            return mActivity.getExtraKeysPageCount() + 1;
+        }
+
+        @Override
+        public int getItemPosition(@NonNull Object object) {
+            // Pages are rebuilt wholesale after an edit; nothing survives a notifyDataSetChanged.
+            return POSITION_NONE;
         }
 
         @Override
@@ -46,15 +55,22 @@ public class TerminalToolbarViewPager {
         public Object instantiateItem(@NonNull ViewGroup collection, int position) {
             LayoutInflater inflater = LayoutInflater.from(mActivity);
             View layout;
-            if (position == 0) {
+            int keyPages = mActivity.getExtraKeysPageCount();
+            if (position < keyPages) {
                 layout = inflater.inflate(R.layout.view_terminal_toolbar_extra_keys, collection, false);
                 ExtraKeysView extraKeysView = (ExtraKeysView) layout;
-                extraKeysView.setExtraKeysViewClient(mActivity.getTermuxTerminalExtraKeys());
+                extraKeysView.setExtraKeysViewClient(mActivity.getTermuxTerminalExtraKeys(position));
                 extraKeysView.setButtonTextAllCaps(mActivity.getProperties().shouldExtraKeysTextBeAllCaps());
+                // Left swipe from the last key page reaches the text input; from an earlier one it
+                // is just the next key page, which the pager already handles.
+                final int textInputPage = keyPages;
                 extraKeysView.setToolbarTextInputSwipeListener(() ->
-                    mActivity.getTerminalToolbarViewPager().setCurrentItem(1, true));
-                mActivity.setExtraKeysView(extraKeysView);
-                extraKeysView.reload(mActivity.getTermuxTerminalExtraKeys().getExtraKeysInfo(), mActivity.getTerminalToolbarDefaultHeight());
+                    mActivity.getTerminalToolbarViewPager().setCurrentItem(textInputPage, true));
+                extraKeysView.setPageIndicator(position, keyPages);
+                mActivity.setExtraKeysView(extraKeysView, position);
+                extraKeysView.reload(
+                    mActivity.getTermuxTerminalExtraKeys(position).getExtraKeysInfo(),
+                    mActivity.getTerminalToolbarDefaultHeight());
             } else {
                 layout = inflater.inflate(R.layout.view_terminal_toolbar_text_input, collection, false);
 
@@ -126,7 +142,7 @@ public class TerminalToolbarViewPager {
 
         @Override
         public void onPageSelected(int position) {
-            if (position == 0) {
+            if (position < mActivity.getExtraKeysPageCount()) {
                 mActivity.endTerminalToolbarExternalTextInput();
                 mActivity.getTerminalView().requestFocus();
             } else {

@@ -14,8 +14,11 @@ import java.util.List;
 /** Versioned, declarative description of a terminal workspace. */
 public final class TerminalWorkspace {
 
-    public static final int VERSION = 2;
-    /** Oldest schema this build still loads. Version 2 added per-window floating panes. */
+    public static final int VERSION = 3;
+    /**
+     * Oldest schema this build still loads. Version 2 added per-window floating panes, version 3
+     * per-window names. Both are optional keys, so every older file still loads unchanged.
+     */
     private static final int MIN_VERSION = 1;
     public static final int MAX_SESSIONS = 64;
     public static final int MAX_WINDOWS = 64;
@@ -61,15 +64,23 @@ public final class TerminalWorkspace {
         public final int activePane;
         @NonNull public final Node root;
         @NonNull public final List<FloatingPane> floats;
+        /** User-given tab name, or null while the tab labels itself from its foreground process. */
+        @Nullable public final String name;
 
         public Window(int activePane, @NonNull Node root) {
-            this(activePane, root, null);
+            this(activePane, root, null, null);
         }
 
         public Window(int activePane, @NonNull Node root, @Nullable List<FloatingPane> floats) {
+            this(activePane, root, floats, null);
+        }
+
+        public Window(int activePane, @NonNull Node root, @Nullable List<FloatingPane> floats,
+                      @Nullable String name) {
             this.activePane = activePane;
             this.root = root;
             this.floats = floats == null ? Collections.emptyList() : immutable(floats);
+            this.name = name;
         }
     }
 
@@ -148,6 +159,7 @@ public final class TerminalWorkspace {
             if (session.currentWindow < 0 || session.currentWindow >= session.windows.size())
                 invalid("currentWindow is outside windows");
             for (Window window : session.windows) {
+                if (window.name != null) requireText(window.name, "window name", true);
                 int windowPanes = validateNode(window.root, 1);
                 for (FloatingPane floating : window.floats) {
                     windowPanes += validateNode(floating.pane, 1);
@@ -200,6 +212,7 @@ public final class TerminalWorkspace {
             for (Window window : session.windows) {
                 JSONObject windowJson = new JSONObject();
                 windowJson.put("activePane", window.activePane);
+                if (window.name != null) windowJson.put("name", window.name);
                 windowJson.put("root", nodeToJson(window.root));
                 if (!window.floats.isEmpty()) {
                     JSONArray floatArray = new JSONArray();
@@ -257,7 +270,8 @@ public final class TerminalWorkspace {
                         invalid("floats must be an array");
                     }
                     windows.add(new Window(requiredInt(windowJson, "activePane"),
-                        nodeFromJson(requiredObject(windowJson, "root"), 1), floats));
+                        nodeFromJson(requiredObject(windowJson, "root"), 1), floats,
+                        optionalString(windowJson, "name")));
                 }
                 sessions.add(new Session(sessionName, currentWindow, windows));
             }

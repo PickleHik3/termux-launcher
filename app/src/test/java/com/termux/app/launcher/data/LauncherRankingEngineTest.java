@@ -96,12 +96,41 @@ public class LauncherRankingEngineTest {
         assertEquals(8, ranked.size());
         assertEquals("term", ranked.get(0).appRef.packageName);
         assertEquals("plain.one", ranked.get(1).appRef.packageName);
-        assertEquals("term.prefix", ranked.get(2).appRef.packageName);
-        assertEquals("prefix.three", ranked.get(3).appRef.packageName);
-        assertEquals("plain.four", ranked.get(4).appRef.packageName);
-        assertEquals("xtermx", ranked.get(5).appRef.packageName);
-        assertEquals("plain.six", ranked.get(6).appRef.packageName);
+        assertEquals("prefix.three", ranked.get(2).appRef.packageName);
+        assertEquals("plain.four", ranked.get(3).appRef.packageName);
+        assertEquals("plain.six", ranked.get(4).appRef.packageName);
+        assertEquals("term.prefix", ranked.get(5).appRef.packageName);
+        assertEquals("xtermx", ranked.get(6).appRef.packageName);
         assertEquals("plain.seven", ranked.get(7).appRef.packageName);
+    }
+
+    @Test
+    public void filterAndRank_ranksLabelPrefixesAboveVendorPackages() {
+        List<LauncherAppEntry> entries = Arrays.asList(
+            entry("moe.shizuku.privileged.api", "moe.shizuku.manager.MainActivity", "Shizuku"),
+            entry("com.mobilism.app", "com.mobilism.app.MainActivity", "Mobilism"),
+            entry("com.limelight", "com.limelight.ShortcutTrampoline", "Moonlight")
+        );
+
+        List<LauncherAppEntry> ranked = LauncherRankingEngine.filterAndRank(entries, "mo", 70);
+
+        assertEquals(3, ranked.size());
+        assertEquals("com.mobilism.app", ranked.get(0).appRef.packageName);
+        assertEquals("com.limelight", ranked.get(1).appRef.packageName);
+        assertEquals("moe.shizuku.privileged.api", ranked.get(2).appRef.packageName);
+    }
+
+    @Test
+    public void filterAndRank_keepsMatchesOnlyThePackageCarries() {
+        List<LauncherAppEntry> entries = Arrays.asList(
+            entry("moe.shizuku.privileged.api", "moe.shizuku.manager.MainActivity", "Shizuku"),
+            entry("com.example.notes", "com.example.notes.MainActivity", "Notes")
+        );
+
+        List<LauncherAppEntry> ranked = LauncherRankingEngine.filterAndRank(entries, "moe", 70);
+
+        assertEquals(1, ranked.size());
+        assertEquals("moe.shizuku.privileged.api", ranked.get(0).appRef.packageName);
     }
 
     @Test

@@ -105,6 +105,9 @@ public final class TerminalView extends View {
      */
     private boolean mTerminalSizeUpdatesPaused;
     private boolean mTerminalSizeUpdatePending;
+    /** Per-instance instrumentation seam; production leaves this null. */
+    public interface SizeUpdateObserver { void onUpdateSize(TerminalView view); }
+    private SizeUpdateObserver mSizeUpdateObserver;
     private int mTransparentFrameOverlayColor;
 
     private TextSelectionCursorController mTextSelectionCursorController;
@@ -127,6 +130,9 @@ public final class TerminalView extends View {
     int mTopRow;
 
     int[] mDefaultSelectors = new int[] { -1, -1, -1, -1 };
+
+    /** Find-session highlights, copy-mode cursor and selection, or null when no find is running. */
+    @Nullable private TerminalFindOverlay mFindOverlay;
 
     float mScaleFactor = 1.f;
 
@@ -1850,7 +1856,12 @@ public final class TerminalView extends View {
      */
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-        updateSize();
+        if (mTerminalSizeUpdatesPaused) {
+            mTerminalSizeUpdatePending = true;
+            invalidate();
+        } else {
+            updateSize();
+        }
     }
 
     /**
@@ -1866,11 +1877,15 @@ public final class TerminalView extends View {
             invalidate();
             return;
         }
+        if (mSizeUpdateObserver != null) mSizeUpdateObserver.onUpdateSize(this);
         int viewWidth = getWidth();
         int viewHeight = getHeight();
         // mRenderer may be null if the view is laid out before its font/text size is set
         // (e.g. a split pane made visible before setTextSize()). Nothing to size yet.
-        if (viewWidth == 0 || viewHeight == 0 || mTermSession == null || mRenderer == null)
+        // A settled host takeover may intentionally leave the pane at zero height. It still owes
+        // the PTY its single final (minimum-row) size; ordinary pre-layout zeroes remain ignored.
+        if (viewWidth == 0 || (viewHeight == 0 && !keepCursorAtBottom)
+            || mTermSession == null || mRenderer == null)
             return;
         // Set to 80 and 24 if you want to enable vttest.
         int newColumns = Math.max(4, (int) (viewWidth / mRenderer.mFontWidth));
@@ -1905,13 +1920,35 @@ public final class TerminalView extends View {
         if (!paused && mTerminalSizeUpdatePending) {
             mTerminalSizeUpdatePending = false;
             // Run after the final split layout pass so only the settled geometry reaches the PTY.
-            post(() -> updateSize(keepCursorAtBottomOnResume));
+            new Handler(Looper.getMainLooper()).post(
+                () -> updateSize(keepCursorAtBottomOnResume));
         }
+    }
+
+    /** Resume a cached, currently hidden pane without delivering its stale detached geometry. */
+    public void resumeTerminalSizeUpdatesDiscardingPending() {
+        mTerminalSizeUpdatePending = false;
+        mTerminalSizeUpdatesPaused = false;
+    }
+
+    public void setSizeUpdateObserverForTests(SizeUpdateObserver observer) {
+        mSizeUpdateObserver = observer;
     }
 
     /** Current rendered character-cell width, or zero until a renderer has been configured. */
     public float getTerminalCellWidthPixels() {
         return mRenderer == null ? 0f : mRenderer.getFontWidth();
+    }
+
+    /** Rendered text size in pixels, or zero until a renderer is configured. */
+    public float getTerminalTextSizePixels() {
+        return mRenderer == null ? 0f : mRenderer.mTextSize;
+    }
+
+    /** The face the transcript is drawn in, so a surface about the terminal can match it. */
+    @Nullable
+    public android.graphics.Typeface getTerminalTypeface() {
+        return mRenderer == null ? null : mRenderer.mTypeface;
     }
 
     /** Current rendered character-cell line height, or zero until a renderer is configured. */
@@ -1936,6 +1973,10 @@ public final class TerminalView extends View {
                 canvas.translate(0f, -scrollOffset);
             }
             mRenderer.render(mEmulator, canvas, mTopRow, sel[0], sel[1], sel[2], sel[3], mUseTransparentFrameClear, mTransparentFrameOverlayColor, getHorizontalContentOffset(), scrollOffset != 0f ? 1 : 0);
+            if (mFindOverlay != null) {
+                mRenderer.renderFindOverlay(mEmulator, canvas, mTopRow, mFindOverlay,
+                    getHorizontalContentOffset(), scrollOffset != 0f ? 1 : 0);
+            }
             if (mCursorTrail.isEnabled() && !isSelectingText()) {
                 boolean needsAnotherFrame = mCursorTrail.draw(canvas, mEmulator.getCursorCol(), mEmulator.getCursorRow(), mTopRow,
                     mRenderer.mFontWidth, mRenderer.mFontLineSpacing, getHorizontalContentOffset(), mRenderer.mFontLineSpacingAndAscent,
@@ -2046,6 +2087,43 @@ public final class TerminalView extends View {
     }
 
     /** Jump to a row from the screen buffer's external coordinate system. */
+    /**
+     * Installs (or with null clears) the find session's highlights, copy-mode cursor and selection.
+     * The view only draws them; every decision about what they contain lives above it.
+     */
+    public void setFindOverlay(@Nullable TerminalFindOverlay overlay) {
+        mFindOverlay = overlay;
+        invalidate();
+    }
+
+    @Nullable
+    public TerminalFindOverlay getFindOverlay() {
+        return mFindOverlay;
+    }
+
+    /**
+     * Scrolls the least amount that brings {@code row} onto the screen, keeping a margin of context
+     * around it where the transcript allows. Unlike {@link #jumpToBufferRow(int)} — which pins the
+     * row to the top — this leaves the view alone when the row is already comfortably visible, so
+     * walking matches inside one screenful does not make the transcript jump under the reader.
+     */
+    public boolean revealBufferRow(int row, int marginRows) {
+        if (mEmulator == null) return false;
+        int lowest = -mEmulator.getScreen().getActiveTranscriptRows();
+        int margin = Math.max(0, Math.min(marginRows, Math.max(0, (mEmulator.mRows - 1) / 2)));
+        int target = mTopRow;
+        if (row < mTopRow + margin) target = row - margin;
+        else if (row > mTopRow + mEmulator.mRows - 1 - margin)
+            target = row - mEmulator.mRows + 1 + margin;
+        target = Math.max(lowest, Math.min(0, target));
+        if (target == mTopRow) return false;
+        mTopRow = target;
+        clearScrollOffset();
+        mCursorTrail.reset();
+        invalidate();
+        return true;
+    }
+
     public boolean jumpToBufferRow(int row) {
         if (mEmulator == null) return false;
         int lowest = -mEmulator.getScreen().getActiveTranscriptRows();

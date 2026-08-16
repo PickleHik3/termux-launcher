@@ -51,7 +51,10 @@ public class LauncherCtlApiServerLanSettingsTest {
         JSONObject json = settings.toJson();
 
         assertEquals(TaiSettings.BIND_MODE_LAN, json.getString("bindMode"));
-        assertTrue(json.getString("lanWarning").contains("LAN exposure"));
+        assertTrue(json.getString("lanWarning").contains("plain HTTP"));
+        assertTrue(json.getLong("lanSessionExpiresAt")
+            > json.getLong("lanSessionStartedAt"));
+        assertFalse(json.getBoolean("lanSessionExpired"));
     }
 
     @Test
@@ -80,6 +83,32 @@ public class LauncherCtlApiServerLanSettingsTest {
         assertUnauthorizedResponseHasCorsOrigin(TaiSettings.BIND_MODE_LAN);
     }
 
+    @Test
+    public void settings_lanSessionExpiresAfterTheExposureWindow() throws Exception {
+        TaiSettings settings = freshSettings();
+        settings.setApiBindMode(TaiSettings.BIND_MODE_LAN);
+        assertFalse(settings.isLanSessionExpired());
+
+        ApplicationProvider.<Context>getApplicationContext()
+            .getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putLong(TaiSettings.KEY_API_LAN_SESSION_STARTED_AT,
+                System.currentTimeMillis() - TaiSettings.LAN_SESSION_MAX_MS - 1000)
+            .commit();
+
+        assertTrue(settings.isLanSessionExpired());
+    }
+
+    @Test
+    public void settings_leavingLanModeClearsTheSessionStamp() throws Exception {
+        TaiSettings settings = freshSettings();
+        settings.setApiBindMode(TaiSettings.BIND_MODE_LAN);
+        settings.setApiBindMode(TaiSettings.BIND_MODE_LOCALHOST);
+
+        assertEquals(0L, settings.getLanSessionStartedAt());
+        assertFalse(settings.isLanSessionExpired());
+    }
+
     private static TaiSettings freshSettings() {
         Context context = ApplicationProvider.getApplicationContext();
         context.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE).edit().clear().commit();
@@ -87,15 +116,16 @@ public class LauncherCtlApiServerLanSettingsTest {
     }
 
     /**
-     * Browser OpenAI clients need CORS, so every response carries the allow-origin
-     * header; the bearer token (mandatory on LAN) is the access-control layer.
+     * Browser OpenAI clients served from loopback need CORS, so the allow-origin header is echoed
+     * back for exactly those; a request with no Origin (curl, an SDK) gets no CORS grant at all.
      */
     private static void assertUnauthorizedResponseHasCorsOrigin(String bindMode) throws Exception {
         assertFalse(LauncherCtlApiServer.isAuthorized("1234567890abcdef", null));
         assertTrue(LauncherCtlApiServer.bindAddressForMode(bindMode).length() > 0);
 
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        LauncherCtlApiServer.writeResponse(output, LauncherCtlApiServer.unauthorizedResponse());
+        LauncherCtlApiServer.writeResponse(output, LauncherCtlApiServer.unauthorizedResponse(),
+            "http://localhost:8080");
         String response = output.toString(StandardCharsets.UTF_8.name());
 
         assertTrue(response.startsWith("HTTP/1.1 401 Unauthorized"));
@@ -104,6 +134,6 @@ public class LauncherCtlApiServerLanSettingsTest {
         JSONObject json = new JSONObject(body);
         assertEquals("unauthorized", json.getJSONObject("error").getString("code"));
         assertEquals("unauthorized", json.getJSONObject("tai").getString("error"));
-        assertTrue(response.toLowerCase().contains("access-control-allow-origin: *"));
+        assertTrue(response.toLowerCase().contains("access-control-allow-origin: http://localhost:8080"));
     }
 }

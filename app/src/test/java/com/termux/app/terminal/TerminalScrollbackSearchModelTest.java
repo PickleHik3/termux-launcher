@@ -35,4 +35,26 @@ public class TerminalScrollbackSearchModelTest {
         assertTrue(snippet.startsWith("…"));
         assertTrue(snippet.endsWith("…"));
     }
+
+    /**
+     * Arrow navigation, which is the only way to walk the results from the in-app keyboard, an
+     * extra-keys row or a hardware arrow — none of them can tap a row.
+     */
+    @Test
+    public void highlightMovesByArrowsAndClampsAtBothEnds() {
+        assertEquals(1, TerminalScrollbackSearchModel.moveHighlight(0, 1, 3));
+        assertEquals(0, TerminalScrollbackSearchModel.moveHighlight(1, -1, 3));
+        // Held at an end, an arrow stays put rather than wrapping to the far end.
+        assertEquals(0, TerminalScrollbackSearchModel.moveHighlight(0, -1, 3));
+        assertEquals(2, TerminalScrollbackSearchModel.moveHighlight(2, 1, 3));
+        // A page key is a bigger delta and lands on the edge when it overshoots.
+        assertEquals(2, TerminalScrollbackSearchModel.moveHighlight(0, 5, 3));
+        assertEquals(0, TerminalScrollbackSearchModel.moveHighlight(2, -5, 3));
+    }
+
+    @Test
+    public void highlightStaysAtZeroWithoutResults() {
+        assertEquals(0, TerminalScrollbackSearchModel.moveHighlight(0, 1, 0));
+        assertEquals(0, TerminalScrollbackSearchModel.moveHighlight(3, -1, 0));
+    }
 }

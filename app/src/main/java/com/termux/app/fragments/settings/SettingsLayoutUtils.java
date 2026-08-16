@@ -10,11 +10,15 @@ import androidx.preference.SeekBarPreference;
 import androidx.preference.SwitchPreferenceCompat;
 
 import com.termux.R;
+import com.termux.app.fragments.settings.termux.CategorySortProgressPreference;
 import com.termux.app.fragments.settings.termux.TaiCatalogControlsPreference;
 import com.termux.app.fragments.settings.termux.TaiCatalogFilterPreference;
 import com.termux.app.fragments.settings.termux.TaiModelPreference;
 import com.termux.app.fragments.settings.termux.TaiOverridesPreference;
 import com.termux.app.fragments.settings.termux.TaiRuntimeActionsPreference;
+
+import java.util.Collections;
+import java.util.Set;
 
 public final class SettingsLayoutUtils {
 
@@ -65,6 +69,7 @@ public final class SettingsLayoutUtils {
 
         // Preferences that fully own their layout.
         if (preference instanceof SegmentedPillPreference
+            || preference instanceof CategorySortProgressPreference
             || preference instanceof StatusActionPreference
             || preference instanceof SettingsSearchPreference
             || preference instanceof StatusCardPreference
@@ -113,6 +118,14 @@ public final class SettingsLayoutUtils {
     private static boolean usesChevron(@NonNull Preference preference) {
         if (!preference.isSelectable()) return false;
         if (preference instanceof SwitchPreferenceCompat) return false;
+        if (ACTION_ROW_KEYS.contains(preference.getKey())) return false;
         return !(preference instanceof PreferenceCategory);
     }
+
+    /**
+     * Rows that run something on tap instead of opening a screen or a chooser. The chevron promises
+     * navigation, so these keep a bare row.
+     */
+    private static final Set<String> ACTION_ROW_KEYS = Collections.singleton(
+        "app_launcher_category_refresh");
 }

@@ -14,6 +14,7 @@ import android.text.TextUtils;
 import android.widget.ListView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import com.termux.R;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
@@ -26,12 +27,14 @@ import com.termux.app.TermuxService;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.terminal.io.BellHandler;
 import com.termux.shared.logger.Logger;
+import com.termux.app.theme.LauncherSchemeTheme;
 import com.termux.terminal.TerminalColors;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.util.LinkedHashMap;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -431,35 +434,45 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             setCurrentSession(termuxSession.getTerminalSession());
     }
 
-    @SuppressLint("InflateParams")
-    public void renameSession(final TerminalSession sessionToRename) {
-        if (sessionToRename == null)
-            return;
-        if (mActivity.isSplitPanesEnabled()) {
-            mActivity.renameWindowSession(sessionToRename);
-            return;
-        }
-        TextInputDialogUtils.textInput(mActivity, R.string.title_rename_session, sessionToRename.mSessionName, R.string.action_rename_session_confirm, text -> {
-            renameSession(sessionToRename, text);
-            termuxSessionListNotifyUpdated();
-        }, -1, null, -1, null, null);
+    /**
+     * Prompts for a new name for the focused pane, in the anchored editor.
+     *
+     * <p>Deliberately not the drawer's row rename: with split panes on a drawer row <i>is</i> a
+     * session, so that path renames the session. This one always names the shell, which is what
+     * {@code pane.rename_prompt} means in both modes. Returns false when there is no focused pane.
+     */
+    public boolean promptCurrentPaneRename() {
+        if (mActivity.getCurrentSession() == null) return false;
+        return mActivity.beginTerminalRename(TerminalRenameTarget.PANE);
     }
 
     /**
-     * Renames the focused shell without prompting.
-     *
-     * <p>Seam for the {@code session.rename} registry action. Unlike
-     * {@link #renameSession(TerminalSession)}, this never redirects to the
-     * tmux-style session rename when split panes are on: the registry keeps the
-     * two distinct, with {@code window.rename} covering the containing session.
+     * Legacy dialog for the pane name, used only when there is no in-app keyboard for the anchored
+     * editor to be typed with.
      */
-    public boolean renameCurrentSessionTo(@Nullable String name) {
+    @SuppressLint("InflateParams")
+    public void promptCurrentPaneRenameDialog() {
+        final TerminalSession session = mActivity.getCurrentSession();
+        if (session == null) return;
+        TextInputDialogUtils.textInput(mActivity, R.string.title_rename_pane,
+            session.mSessionName, R.string.action_rename_session_confirm, text -> {
+                renameSession(session, text);
+                termuxSessionListNotifyUpdated();
+            }, -1, null, -1, null, null);
+    }
+
+    /**
+     * Renames the focused pane without prompting.
+     *
+     * <p>Seam for the {@code pane.rename} registry action and for a naming backend. An empty name
+     * restores the unnamed default, mirroring what an emptied editor does and keeping this
+     * symmetric with {@code window.rename} and {@code session.rename}.
+     */
+    public boolean renameCurrentPaneTo(@Nullable String name) {
         TerminalSession session = mActivity.getCurrentSession();
         if (session == null || name == null) return false;
-        // An empty name restores the unnamed default, mirroring what the rename
-        // dialog does with cleared text and keeping this symmetric with
-        // window.rename.
-        String trimmed = name.trim();
+        String trimmed = TerminalNamePolicy.normalizePane(name) == null
+            ? "" : TerminalNamePolicy.normalizePane(name);
         renameSession(session, trimmed.isEmpty() ? null : trimmed);
         termuxSessionListNotifyUpdated();
         return true;
@@ -607,10 +620,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // Number by the launcher's tmux-style session, not by raw shell count: every pane and
         // window is its own service shell, so the service index kept flashing "[3]" for what the
         // user sees as their second session.
-        int sessionNumber = mActivity.getWindowSessionNumber(session);
+        int sessionNumber = mActivity.getSessionNumberFor(session);
         if (sessionNumber < 1) sessionNumber = indexOfSession + 1;
         StringBuilder toastTitle = new StringBuilder("[" + sessionNumber + "]");
-        String sessionName = mActivity.getWindowSessionName(session);
+        String sessionName = mActivity.getSessionNameFor(session);
         if (TextUtils.isEmpty(sessionName)) sessionName = session.mSessionName;
         if (!TextUtils.isEmpty(sessionName)) {
             toastTitle.append(" ").append(sessionName);
@@ -649,7 +662,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 // must not touch the theme or resources, and this way the files describe the same
                 // palette the terminal just took.
                 final Properties exported =
-                    MaterialTerminalColorScheme.createMaterialRoleProperties(mActivity, props);
+                    MaterialTerminalColorScheme.createMaterialRoleProperties(mActivity, props, level);
                 MATERIAL_COLOR_FILE_EXECUTOR.execute(() -> {
                     try {
                         MaterialTerminalColorScheme.writeMaterialColorFiles(exported);
@@ -666,14 +679,84 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                     try (InputStream in = new FileInputStream(colorsFile)) {
                         props.load(in);
                     }
+                    exportSchemeColorFiles(props);
                 }
             }
-            TerminalColors.COLOR_SCHEME.updateWith(props);
+            TerminalColors.COLOR_SCHEME.updateWith(colorKeysOnly(props));
             resetAllSessionColors();
             updateBackgroundColor();
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyTerminalColors()", e);
         }
+    }
+
+    /**
+     * Export the scheme-derived roles to {@code material-colors.properties} / {@code .sh}.
+     *
+     * <p>The wallpaper path already writes those files, and the bundled fish, tmux and Neovim
+     * configs read them — so a scheme that only reached the terminal left every one of those
+     * consumers describing a palette the user had just replaced. Same file, same key names, one
+     * source of truth whichever way the colours were chosen.
+     */
+    private void exportSchemeColorFiles(@NonNull Properties terminalProps) {
+        // Unlike the wallpaper export, every input here is a file and some arithmetic — no theme
+        // attributes, no resources — so the whole thing including the derivation runs on the writer
+        // thread rather than costing the activity two stats and a palette build during onCreate.
+        final Properties snapshot = new Properties();
+        snapshot.putAll(terminalProps);
+        MATERIAL_COLOR_FILE_EXECUTOR.execute(() -> {
+            try {
+                LinkedHashMap<String, Integer> tokens = LauncherSchemeTheme.tokens();
+                if (tokens == null) return;
+                Properties exported = LauncherSchemeTheme.exportProperties(tokens);
+                for (String key : snapshot.stringPropertyNames()) {
+                    exported.setProperty("terminal_" + key, snapshot.getProperty(key));
+                }
+                MaterialTerminalColorScheme.writeMaterialColorFiles(exported);
+            } catch (Exception e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Error writing scheme color files", e);
+            }
+        });
+    }
+
+    /**
+     * The colour entries of {@code props}, with everything else dropped and logged.
+     *
+     * <p>{@code TerminalColorScheme.updateWith()} throws on the first key it does not recognise, and it
+     * throws while iterating an unordered map — so one stray line in a hand-written
+     * {@code colors.properties} does not merely get ignored, it leaves the palette partially applied
+     * and skips the session reset and the background update that follow. Filtering here keeps a bad
+     * line cosmetic.
+     */
+    @VisibleForTesting
+    static Properties colorKeysOnly(@NonNull Properties props) {
+        Properties filtered = new Properties();
+        for (String key : props.stringPropertyNames()) {
+            if (isTerminalColorKey(key)) {
+                filtered.setProperty(key, props.getProperty(key));
+            } else {
+                Logger.logWarn(LOG_TAG, "Ignoring non-colour terminal palette property '" + key + "'");
+            }
+        }
+        return filtered;
+    }
+
+    private static boolean isTerminalColorKey(@NonNull String key) {
+        switch (key) {
+            case "foreground":
+            case "background":
+            case "cursor":
+                return true;
+            default:
+                break;
+        }
+        if (!key.startsWith("color")) return false;
+        String index = key.substring("color".length());
+        if (index.isEmpty()) return false;
+        for (int i = 0; i < index.length(); i++) {
+            if (!Character.isDigit(index.charAt(i))) return false;
+        }
+        return true;
     }
 
     /** Load the configured faces and apply them to every pane that has a renderer. */

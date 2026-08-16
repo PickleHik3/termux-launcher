@@ -13,6 +13,19 @@
     ]>
 
 <resources>
+    <string name="widget_add">Add widget</string>
+    <string name="widget_empty_message">Your widgets will appear here</string>
+    <string name="widget_empty_hint">Long-press to add widgets</string>
+    <string name="widget_menu_edit_widgets">Edit widgets</string>
+    <string name="widget_menu_add_page">Add page</string>
+    <string name="widget_menu_remove_page">Remove page</string>
+    <string name="widget_unsupported">Widgets aren\'t supported on this device</string>
+    <string name="widget_grid_settings">Widget grid settings</string>
+    <string name="widget_grid_summary">Grid size: %1$d rows × %2$d columns</string>
+    <string name="widget_not_added">Widget wasn\'t added</string>
+    <string name="widget_remove">Remove widget</string>
+    <string name="widget_remove_failed">Widget couldn\'t be removed</string>
+    <string name="launcher_widget_error">Widget couldn\'t load</string>
     <string name="settings_search_hint">Search settings</string>
     <string name="settings_search_contains">Contains: %1$s</string>
     <string name="settings_destination_appearance">Appearance</string>
@@ -31,8 +44,8 @@
     <string name="settings_destination_about_support_summary">Documentation, feedback, source, version, licenses, and donate</string>
     <string name="settings_terminal_display_header">Terminal display</string>
     <string name="settings_full_screen_title">Full screen</string>
-    <string name="settings_adjust_keyboard_title">Adjust for on-screen keyboard</string>
-    <string name="settings_adjust_keyboard_summary">Keeps terminal content visible above the on-screen keyboard.</string>
+    <string name="settings_adjust_keyboard_title">System keyboard compatibility</string>
+    <string name="settings_adjust_keyboard_summary">Workaround for Android system keyboards: pads the layout so the terminal and key rows stay visible above the on-screen keyboard. Turn off if you see gaps or jumpy resizing.</string>
     <string name="settings_show_recents_title">Show in Recents when not the default launcher</string>
     <string name="settings_show_recents_summary">Keeps the launcher available from the Recents screen when another home app is active.</string>
     <string name="settings_sessions_panes_header">Sessions and panes</string>
@@ -40,6 +53,11 @@
     <string name="settings_split_pane_controls_summary">Enable window splitting and tmux-style pane shortcuts.</string>
     <string name="settings_clock_status_header">Clock and status</string>
     <string name="settings_clock_style_title">Clock style</string>
+    <string name="settings_clock_alignment_title">Clock alignment</string>
+    <string name="settings_clock_alignment_summary">Places the expanded clock at the left, center, or right of the pane.</string>
+    <string name="settings_clock_alignment_left">Left</string>
+    <string name="settings_clock_alignment_center">Center</string>
+    <string name="settings_clock_alignment_right">Right</string>
     <string name="settings_use_12_hour_title">Use 12-hour time</string>
     <string name="settings_use_12_hour_summary">Shows time with AM and PM.</string>
     <string name="settings_status_panel_style_title">Status panel style</string>
@@ -48,10 +66,13 @@
     <string name="settings_memory_usage_summary">Shows current memory use in the status row.</string>
     <string name="settings_weather_title">Weather</string>
     <string name="settings_weather_summary">Shows current conditions in the status row. Location permission is required.</string>
+    <string name="settings_weather_fahrenheit_title">Use Fahrenheit</string>
+    <string name="settings_weather_fahrenheit_summary">Show weather temperatures in °F instead of °C.</string>
     <string name="settings_theme_header">Theme</string>
     <string name="settings_color_mode_title">Color mode</string>
     <string name="settings_wallpaper_colors_title">Use wallpaper colors</string>
     <string name="settings_wallpaper_colors_summary">Builds the launcher palette from the current wallpaper.</string>
+    <string name="settings_wallpaper_colors_hint">While on, this overrides ~/.termux/colors.properties. Applying a Termux:Styling scheme turns it off.</string>
     <string name="settings_terminal_contrast_title">Terminal contrast</string>
     <string name="settings_terminal_contrast_summary">%1$s</string>
     <string name="settings_terminal_contrast_disabled">Available when wallpaper colors are on</string>
@@ -65,11 +86,93 @@
         <item>default</item>
         <item>harder</item>
     </string-array>
+    <string name="settings_ui_color_source_title">Interface colors</string>
+    <string name="settings_ui_color_source_summary_wallpaper">Dock, status bar, drawer and keyboard follow the wallpaper palette.</string>
+    <string name="settings_ui_color_source_summary_scheme">Dock, status bar, drawer and keyboard are derived from the terminal color scheme.</string>
+    <string name="settings_ui_color_source_no_scheme">No color scheme installed yet — apply one from Termux:Styling first.</string>
+    <string name="settings_ui_color_source_unsupported">Needs Android 11 or newer; the terminal still follows the scheme.</string>
+    <string name="settings_ui_color_source_hint">Overrides in ~/.termux/launcher-theme.properties are read on top of the scheme: one token per line, e.g. primary = color3.</string>
+    <string-array name="termux_ui_color_source_entries">
+        <item>From wallpaper</item>
+        <item>From terminal color scheme</item>
+    </string-array>
+    <string-array name="termux_ui_color_source_values">
+        <item>wallpaper</item>
+        <item>scheme</item>
+    </string-array>
     <string name="settings_wallpaper_title">Wallpaper</string>
     <string name="settings_icon_appearance_header">Icon appearance</string>
     <string name="settings_icon_appearance_title">Use monochrome icons</string>
     <string name="settings_icon_pack_title">Icon pack</string>
     <string name="settings_pinned_icon_pack_title">Pinned-app icon pack</string>
+    <string name="settings_extra_keys_editor_title">Extra keys editor</string>
+    <string name="settings_extra_keys_editor_summary">Tap a key to edit it, hold and drag to move it. Changes are written to termux.properties when you save.</string>
+    <string name="settings_extra_keys_editor_page">Page %1$d</string>
+    <string name="settings_extra_keys_editor_page_selected">Page %1$d, selected</string>
+    <string name="settings_extra_keys_editor_page_hint">Swipe the key row to change pages</string>
+    <string name="settings_extra_keys_editor_add_page">+ New page</string>
+    <string name="settings_extra_keys_editor_add_row">Add row</string>
+    <string name="settings_extra_keys_editor_remove_row">Remove row %1$d</string>
+    <string name="settings_extra_keys_editor_add_key">Add key</string>
+    <string name="settings_extra_keys_editor_add_key_to_row">Add key to row %1$d</string>
+    <string name="settings_extra_keys_editor_remove_key">Remove key</string>
+    <string name="settings_extra_keys_editor_empty_row">Empty row — not saved</string>
+    <string name="settings_extra_keys_editor_does">Tap action</string>
+    <string name="settings_extra_keys_editor_swipe_up">Swipe-up action</string>
+    <string name="settings_extra_keys_editor_shows">Display label</string>
+    <string name="settings_extra_keys_editor_shows_hint">Blank uses the action name</string>
+    <string name="settings_extra_keys_editor_swipe_up_shows">Swipe-up label</string>
+    <string name="settings_extra_keys_editor_swipe_up_shows_hint">Shown in the small badge above the key</string>
+    <string name="settings_extra_keys_editor_none">Nothing</string>
+    <string name="settings_extra_keys_editor_clear_swipe_up">Remove swipe-up action</string>
+    <string name="settings_extra_keys_editor_macro_summary">Macro: %1$s</string>
+    <string name="settings_extra_keys_editor_move">Move</string>
+    <string name="settings_extra_keys_editor_move_left">Move key left</string>
+    <string name="settings_extra_keys_editor_move_right">Move key right</string>
+    <string name="settings_extra_keys_editor_move_up">Move key up</string>
+    <string name="settings_extra_keys_editor_move_down">Move key down</string>
+    <string name="settings_extra_keys_editor_row_removed">Row removed</string>
+    <string name="settings_extra_keys_editor_undo">Undo</string>
+    <string name="settings_extra_keys_editor_close">Close</string>
+    <string name="settings_extra_keys_editor_reset">Reset page</string>
+    <string name="settings_extra_keys_editor_reset_confirm">Reset current page to defaults?</string>
+    <string name="settings_extra_keys_editor_save">Save changes</string>
+    <string name="settings_extra_keys_editor_saved_toast">Extra keys saved</string>
+    <string name="settings_extra_keys_editor_discard_title">Discard changes?</string>
+    <string name="settings_extra_keys_editor_discard">Discard</string>
+    <string name="settings_extra_keys_editor_keep_editing">Keep editing</string>
+    <string name="settings_extra_keys_action_picker_title">Choose action</string>
+    <string name="settings_extra_keys_action_search_hint">Search actions</string>
+    <string name="settings_extra_keys_action_send_text">Send \"%1$s\" as text</string>
+    <string name="settings_extra_keys_action_macro_summary">Send as a macro (keys separated by spaces)</string>
+    <string name="settings_extra_keys_action_keys">Terminal keys</string>
+    <string name="settings_extra_keys_action_no_match">No match</string>
+    <string name="settings_extra_keys_action_back">Back</string>
+    <string name="settings_extra_keys_action_clear_search">Clear search</string>
+    <string name="settings_extra_keys_glyph_picker_title">Choose glyph</string>
+    <string name="settings_extra_keys_glyph_search_hint">Search glyphs</string>
+    <string name="settings_extra_keys_glyph_insert">Insert glyph</string>
+    <string name="settings_extra_keys_glyph_recent">Recent</string>
+    <string name="settings_extra_keys_glyph_preview_hint">Tap a glyph to preview it</string>
+    <string name="settings_extra_keys_glyph_category_arrows">Arrows</string>
+    <string name="settings_extra_keys_glyph_category_blocks">Blocks</string>
+    <string name="settings_extra_keys_glyph_category_shapes">Shapes</string>
+    <string name="settings_extra_keys_glyph_category_powerline">Powerline</string>
+    <string name="settings_extra_keys_glyph_category_technical">Technical</string>
+    <string name="settings_extra_keys_glyph_category_terminal_marks">Terminal marks</string>
+    <string name="settings_edit_extra_keys_title">Edit extra keys</string>
+    <string name="settings_edit_extra_keys_summary">Keys, swipe-up actions and pages of the extra keys row.</string>
+    <string name="settings_terminal_key_row_header">Extra keys</string>
+    <string name="settings_extra_keys_all_caps_title">Capitalize key labels</string>
+    <string name="settings_extra_keys_all_caps_summary">Show ESC and TAB in capitals rather than as written.</string>
+    <string name="settings_use_case_header">Use case</string>
+    <string name="settings_use_case_title">What this app is for</string>
+    <string name="settings_use_case_summary">Terminal only hides the pinned apps row, alphabets row, app drawer and widget pane, and keeps the app in Recents. Every switch below stays editable, so you can bring any of them back.</string>
+    <string name="settings_use_case_launcher">Launcher</string>
+    <string name="settings_use_case_terminal">Terminal only</string>
+    <string name="settings_home_widgets_header">Home widgets</string>
+    <string name="settings_widget_pane_enabled_title">Widget pane</string>
+    <string name="settings_widget_pane_enabled_summary">Pull down from the status bar for home screen widgets.</string>
     <string name="settings_surfaces_header">Surfaces</string>
     <string name="settings_customize_dock_title">Customize dock appearance</string>
     <string name="settings_customize_dock_summary">Choose the shared Default or Rounded shape and tune the dock live on the home screen.</string>
@@ -183,9 +286,15 @@
     <string name="settings_clear_logs_action">Clear</string>
     <string name="settings_logs_cleared">Logs cleared</string>
     <string name="settings_clear_logs_failed">Could not clear logs</string>
-    <string name="settings_pinned_apps_header">Pinned apps</string>
-    <string name="settings_show_pinned_apps_title">Show pinned apps row</string>
+    <string name="settings_pinned_apps_header">Dock rows</string>
+    <string name="settings_show_pinned_apps_title">Apps row</string>
     <string name="settings_show_pinned_apps_summary">Shows pinned apps in the launcher dock.</string>
+    <string name="settings_dock_rail_side_title">Landscape rail side</string>
+    <string name="settings_dock_rail_side_summary">Which edge the landscape apps rail docks to. Swipe off the rail, away from that edge, to open the app drawer.</string>
+    <string name="settings_dock_rail_side_left">Left</string>
+    <string name="settings_dock_rail_side_right">Right</string>
+    <string name="settings_show_extra_keys_row_title">Extra keys row</string>
+    <string name="settings_show_extra_keys_row_summary">Shows terminal extra keys in the launcher dock.</string>
     <string name="settings_edit_pinned_apps_title">Edit pinned apps</string>
     <string name="settings_edit_pinned_apps_summary">Choose apps and drag them to reorder directly.</string>
     <string name="settings_app_browsing_header">App browsing</string>
@@ -194,8 +303,92 @@
     <string name="settings_app_index_haptics_title">Launcher haptics</string>
     <string name="settings_app_index_haptics_summary">Subtle feedback across the app index and dock page changes.</string>
     <string name="settings_notification_dots_title">Notification dots</string>
+    <string name="settings_notification_history_title">Save notification history</string>
+    <string name="settings_notification_history_summary">Writes notification titles and text — including message bodies and one-time codes — into ~/.launcherctl, where any command or script you run in Termux can read them. Dots, the status bar and the top pane do not need this.</string>
     <string name="settings_most_used_page_title">Most-used apps page</string>
     <string name="settings_most_used_page_summary">Adds a page ranked by launcher usage.</string>
+    <string name="settings_app_drawer_header">App drawer</string>
+    <string name="settings_app_drawer_enabled_title">Swipe down for app drawer</string>
+    <string name="settings_app_drawer_enabled_summary">Swipe down on the pinned apps row to open the full-screen app drawer.</string>
+    <string name="settings_app_drawer_view_type_title">Drawer layout</string>
+    <string name="settings_app_drawer_view_type_vertical">Vertical</string>
+    <string name="settings_app_drawer_view_type_horizontal">Horizontal pages</string>
+    <string name="settings_app_drawer_view_type_categories">Categories</string>
+    <string name="settings_app_drawer_category_sort_title">Sort apps into categories</string>
+    <string name="settings_app_drawer_category_sort_summary">Choose how your apps get grouped</string>
+    <string name="settings_app_drawer_category_sort_dialog_title">Sort apps into categories</string>
+    <string name="settings_app_drawer_category_sort_on_device">On this device</string>
+    <string name="settings_app_drawer_category_sort_on_device_summary">%1$s · nothing leaves your phone</string>
+    <string name="settings_app_drawer_category_sort_on_device_warning">Takes about %1$d minutes. Keep the phone plugged in.</string>
+    <string name="settings_app_drawer_category_sort_paste">Copy a prompt for an AI chat</string>
+    <string name="settings_app_drawer_category_sort_paste_summary">Paste it into any AI chat, then paste the answer back</string>
+    <string name="settings_app_drawer_category_sort_paste_warning">Sends your installed-app list to that service</string>
+    <string name="settings_app_drawer_category_sort_unavailable_model">Not available — model not downloaded</string>
+    <string name="settings_app_drawer_category_sort_unavailable_memory">Not available — needs %1$s of RAM</string>
+    <string name="settings_app_drawer_category_refresh_title">Re-run categorization</string>
+    <string name="settings_app_drawer_category_refresh_summary">Sorts apps installed since the last run</string>
+    <string name="settings_app_drawer_category_refresh_never">Never run</string>
+    <string name="settings_app_drawer_category_refresh_last_run">Last run · %1$s · %2$d apps</string>
+    <string name="settings_app_drawer_category_sort_paste_dialog_body">The prompt is on your clipboard. Paste it into an AI chat, then paste its answer below.</string>
+    <string name="settings_app_drawer_category_sort_paste_input_hint">Paste the AI answer here</string>
+    <string name="settings_app_drawer_category_sort_paste_copy_again">Copy prompt to clipboard</string>
+    <string name="settings_app_drawer_category_sort_paste_copied">Prompt copied to clipboard</string>
+    <string name="settings_app_drawer_category_sort_paste_apply">Apply answer</string>
+    <string name="settings_app_drawer_category_sort_ignored_lines">%1$d lines ignored</string>
+    <string name="settings_app_drawer_category_paste_notification_channel">Category paste-back</string>
+    <string name="settings_app_drawer_category_paste_notification_channel_description">Lets you paste an AI chat\'s categorization answer back from the notification shade</string>
+    <string name="settings_app_drawer_category_paste_notification_title">Paste the AI answer</string>
+    <string name="settings_app_drawer_category_paste_notification_text">The prompt is on your clipboard. Paste it into an AI chat, then tap Reply here with its answer.</string>
+    <string name="settings_app_drawer_category_paste_notification_reply">Reply</string>
+    <string name="settings_app_drawer_category_paste_notification_dismiss">Dismiss</string>
+    <string name="settings_app_drawer_category_paste_notification_hint">Paste the AI answer</string>
+    <string name="settings_app_drawer_category_paste_notification_empty">No app assignments found in that reply. Paste the AI answer again.</string>
+    <string name="settings_app_drawer_category_sort_running">Sorting %1$d of %2$d apps…</string>
+    <string name="settings_app_drawer_category_sort_hint_preparing">Reading your app list…</string>
+    <string name="settings_app_drawer_category_sort_hint_loading_model">Loading the model…</string>
+    <string name="settings_app_drawer_category_sort_hint_categorizing">Categorizing %1$d of %2$d apps…</string>
+    <string name="settings_app_drawer_category_sort_hint_almost_there">Almost there — %1$d of %2$d apps</string>
+    <string name="settings_app_drawer_category_sort_hint_any_minute">Any minute now — %1$d of %2$d apps</string>
+    <string name="settings_app_drawer_category_sort_hint_saving">Saving the categories…</string>
+    <string name="settings_app_drawer_category_sort_nothing_pending">Nothing to do — all %1$d apps are already sorted</string>
+    <string name="settings_app_drawer_category_sort_cancelled">Stopped after %1$d apps</string>
+    <string name="settings_app_drawer_category_sort_done">Sorted %1$d apps into %2$d categories</string>
+    <string name="settings_app_drawer_category_sort_failed">Categorization failed: %1$s</string>
+    <string name="folder_capacity_reached">Folder is full</string>
+    <string name="folder_already_contains_app">App is already in this folder</string>
+    <string name="app_drawer_category_suggestions">Suggestions</string>
+    <string name="app_drawer_category_recently_added">Recently Added</string>
+    <string name="app_drawer_category_social">Communication &amp; Social</string>
+    <string name="app_drawer_category_productivity">Work &amp; School</string>
+    <string name="app_drawer_category_utilities">Utilities</string>
+    <string name="app_drawer_category_games">Games</string>
+    <string name="app_drawer_category_entertainment">Media &amp; Entertainment</string>
+    <string name="app_drawer_category_shopping_food">Shopping &amp; Food</string>
+    <string name="app_drawer_category_finance">Finance</string>
+    <string name="app_drawer_category_health">Health &amp; Fitness</string>
+    <string name="app_drawer_category_photo_video">Photo &amp; Creativity</string>
+    <string name="app_drawer_category_travel">Travel &amp; Local</string>
+    <string name="app_drawer_category_information_reading">News &amp; Reading</string>
+    <string name="app_drawer_category_other">Other</string>
+    <string name="app_drawer_category_automatic">Automatic (suggested)</string>
+    <string name="app_drawer_category_no_apps">No apps</string>
+    <string name="app_drawer_category_open">Open %1$s</string>
+    <string name="app_drawer_category_collapse">Collapse %1$s</string>
+    <string name="app_drawer_category_empty_title">Nothing here yet</string>
+    <string name="app_drawer_category_empty_body">Apps you install land here automatically.</string>
+    <plurals name="app_drawer_category_app_count">
+        <item quantity="one">%1$d APP</item>
+        <item quantity="other">%1$d APPS</item>
+    </plurals>
+    <string name="app_drawer_search_hint">Search apps</string>
+    <plurals name="app_drawer_search_result_count">
+        <item quantity="one">%1$d RESULT</item>
+        <item quantity="other">%1$d RESULTS</item>
+    </plurals>
+    <string name="app_drawer_search_no_results_label">NO RESULTS</string>
+    <string name="app_drawer_search_no_results_title">No apps matched</string>
+    <string name="app_drawer_search_no_results_body">Try a shorter word, or search the web instead.</string>
+    <string name="app_drawer_page_description">Page %1$d of %2$d</string>
     <string name="settings_launcher_search_header">Search</string>
     <string name="settings_app_search_prefix_title">App search prefix</string>
     <string name="settings_app_search_prefix_summary">Type this character in the terminal to start app search.</string>
@@ -246,8 +439,10 @@
     <string name="title_max_terminals_reached">Max terminals reached</string>
     <string name="msg_max_terminals_reached">Close down existing ones before creating new.</string>
 
-    <string name="title_rename_session">Set session name</string>
-    <string name="title_rename_window_session">Set session name (8 characters max)</string>
+    <string name="terminal_key_binding_failed">%1$s: %2$s</string>
+    <string name="title_rename_session">Set session name (8 characters max)</string>
+    <string name="title_rename_window">Set window name (14 characters max)</string>
+    <string name="title_rename_pane">Set pane name</string>
     <string name="action_rename_session_confirm">Set</string>
     <string name="title_create_named_session">New named session</string>
     <string name="action_create_named_session_confirm">Create</string>
@@ -263,6 +458,11 @@
 
 
     <!-- Terminal Popup -->
+    <string name="terminal_action_menu_title">Terminal</string>
+    <string name="action_search_scrollback">Search</string>
+    <string name="action_copy_selection">Copy</string>
+    <string name="action_paste">Paste</string>
+    <string name="action_more">More</string>
     <string name="action_select_url">Select URL</string>
     <string name="title_select_url_dialog">Click URL to copy or long press to open</string>
     <string name="title_select_url_none_found">No URL found in the terminal.</string>
@@ -459,6 +659,10 @@
                 <string name="termux_status_widget_cpu_content_description">CPU usage</string>
                 <string name="termux_status_widget_ram_content_description">Memory usage</string>
                 <string name="termux_status_widget_weather_content_description">Weather</string>
+                <string name="termux_status_widget_ai_content_description">AI model loaded</string>
+                <string name="termux_status_widget_ai_loading">…</string>
+                <string name="termux_status_widget_ai_resident">on</string>
+                <string name="termux_status_widget_ai_unloaded">off</string>
                 <string name="termux_compatibility_mode_title">Single-pane compatibility mode</string>
                 <string name="termux_compatibility_mode_off">Window/pane splitting and tmux-style keybinds are enabled.</string>
                 <string name="termux_compatibility_mode_on">Disables all window/pane splitting and restores native Termux single-pane behaviour.</string>
@@ -509,25 +713,9 @@
                 <string name="termux_in_app_keyboard_theme_dark">Dark</string>
                 <string name="termux_in_app_keyboard_theme_imported">Imported · %1$s</string>
                 <string name="termux_keyboard_color_scheme_title">Keyboard colors</string>
-                <string name="termux_keyboard_color_scheme_summary">Import a palette or paint individual keys.</string>
                 <string name="termux_keyboard_color_scheme_colors">Colors</string>
                 <string name="termux_keyboard_color_scheme_edit_colors">Edit colors</string>
                 <string name="termux_keyboard_color_scheme_save_colors">Save colors</string>
-                <string name="termux_keyboard_color_scheme_import_tinted">Import Tinted theme</string>
-                <string name="termux_keyboard_color_scheme_tinted_name_title">Import a Tinted theme</string>
-                <string name="termux_keyboard_color_scheme_tinted_name_message">Enter the complete theme ID shown in the Tinted Gallery. Base16, Base24, and Tinted8 are supported.</string>
-                <string name="termux_keyboard_color_scheme_tinted_name_hint">base16-apathy or base24-ayu-mirage</string>
-                <string name="termux_keyboard_color_scheme_tinted_gallery_link">Browse the Tinted Gallery ↗</string>
-                <string name="termux_keyboard_color_scheme_tinted_choose_file">Choose file</string>
-                <string name="termux_keyboard_color_scheme_tinted_import">Import</string>
-                <string name="termux_keyboard_color_scheme_tinted_name_error">Enter a Gallery theme ID using letters, numbers, spaces, underscores, or hyphens.</string>
-                <string name="termux_keyboard_color_scheme_tinted_downloading">Importing Tinted colors…</string>
-                <string name="termux_keyboard_color_scheme_tinted_not_found">Theme not found. Check its complete ID in the Tinted Gallery.</string>
-                <string name="termux_keyboard_color_scheme_tinted_network_error">Couldn’t download this theme. Check your connection and try again.</string>
-                <string name="termux_keyboard_color_scheme_tinted_imported">Tinted theme imported</string>
-                <string name="termux_keyboard_color_scheme_imported_file_name">Imported Tinted theme</string>
-                <string name="termux_keyboard_color_scheme_tinted_error">This isn’t a complete Base16, Base24, or Tinted8 scheme.</string>
-                <string name="termux_keyboard_color_scheme_tinted_read_error">Couldn’t read this theme file.</string>
                 <string name="termux_keyboard_color_scheme_follow_theme">Follow theme</string>
                 <string name="termux_keyboard_color_scheme_follow_theme_title">Follow the system theme?</string>
                 <string name="termux_keyboard_color_scheme_follow_theme_message">Pinned colors and any imported palette are discarded: every keyboard color follows your system theme and wallpaper again. Keys you painted keep their slot assignments.</string>
@@ -542,12 +730,13 @@
                 <string name="termux_keyboard_color_scheme_slot_description">%1$s, %2$s, %3$s</string>
                 <string name="termux_keyboard_color_scheme_slot_unpin">Follow theme again</string>
                 <string name="termux_keyboard_color_scheme_slot_unpinned">%1$s follows the system theme again</string>
-                <string name="termux_keyboard_color_scheme_instructions">Paint keys directly: choose a color and role, then tap or drag across the keyboard. Tap Edit colors and then a color to pin it to a hex value. Dashed colors follow your system theme; a dot marks a pinned one.</string>
+                <string name="termux_keyboard_color_scheme_instructions">Paint keys directly: choose a color and role, then tap or drag across the keyboard. With Background, tapping a color paints the whole keyboard; tap it again to clear. Tap Edit colors and then a color to pin it to a hex value. Dashed colors follow your system theme; a dot marks a pinned one.</string>
                 <string name="termux_keyboard_color_scheme_key_bg">Key bg</string>
                 <string name="termux_keyboard_color_scheme_key_border">Key border</string>
                 <string name="termux_keyboard_color_scheme_primary">Primary</string>
                 <string name="termux_keyboard_color_scheme_secondary">Secondary</string>
                 <string name="termux_keyboard_color_scheme_secondary_bottom">Secondary bottom override</string>
+                <string name="termux_keyboard_color_scheme_background">Background</string>
                 <!-- Short Material-role names for the 24 keyboard color slots, in slot order
                      (base00 … base17). Index 06 and 10 are both colorSurface in the palette
                      factory, so both are labelled Surface. -->
@@ -915,9 +1104,9 @@
         <string name="termux_ai_auth_required_summary_off">Localhost requests are accepted without a token. LAN mode always requires the token.</string>
         <string name="termux_ai_lan_enabled_title">LAN access</string>
         <string name="termux_ai_lan_enabled_summary_off">Localhost only (127.0.0.1)</string>
-        <string name="termux_ai_lan_enabled_summary_on">LAN access enabled. Bearer token required for all requests.</string>
+        <string name="termux_ai_lan_enabled_summary_on">LAN access enabled (unencrypted HTTP). Bearer token required; turns itself off after 12 hours.</string>
         <string name="termux_ai_lan_warning_title">Enable LAN access?</string>
-        <string name="termux_ai_lan_warning_message">LAN exposure allows any device on your network to reach this endpoint when the token is known. Only enable on trusted networks.</string>
+        <string name="termux_ai_lan_warning_message">LAN access is development-only exposure. Requests travel over plain HTTP, so the bearer token is visible to anyone on the network and any device that captures it can reach this endpoint. Access turns itself off 12 hours after being enabled and the token is rotated. Only enable on trusted networks.</string>
         <string name="termux_ai_backend_label_litert">LiteRT-LM</string>
         <string name="termux_ai_backend_label_mnn">MNN-LLM</string>
         <string name="termux_ai_capability_chat">chat</string>
@@ -971,6 +1160,7 @@
                 <string name="termux_surface_tuning_keyboard_height">Height</string>
                 <string name="termux_surface_tuning_keyboard_spacing">Spacing</string>
                 <string name="termux_surface_tuning_keyboard_key_opacity">Keys opacity</string>
+                <string name="termux_surface_tuning_keyboard_bg_opacity">Bg opacity</string>
                 <string name="termux_surface_tuning_edges">Padding</string>
                 <string name="termux_surface_tuning_dock_height_handle">Drag to resize the dock</string>
                 <string name="termux_surface_tuning_keyboard_height_handle">Drag to resize the keyboard</string>
@@ -1230,6 +1420,8 @@
     <string name="tool_pane_next_layout">Next pane layout</string>
     <string name="tool_pane_toggle_float">Float / dock pane</string>
     <string name="tool_terminal_toggle_scratchpad">Toggle scratchpad</string>
+    <string name="tool_extra_keys_edit">Edit key row</string>
+    <string name="tool_desc_extra_keys_edit">Open the editor for the terminal extra-keys row.</string>
     <string name="tool_workspace_picker">Load workspace</string>
     <string name="tool_workspace_save_prompt">Save workspace</string>
     <string name="tool_window_new">New window</string>
@@ -1253,8 +1445,9 @@
     <string name="tool_terminal_share_transcript">Share transcript</string>
     <string name="tool_clipboard_paste">Paste</string>
     <string name="tool_window_select">Switch to window</string>
-    <string name="tool_window_rename">Rename window session</string>
+    <string name="tool_window_rename">Rename window</string>
     <string name="tool_session_rename">Rename session</string>
+    <string name="tool_pane_rename">Rename pane</string>
     <string name="tool_session_rename_at_index">Rename session by index</string>
     <string name="tool_terminal_reset">Reset terminal</string>
     <string name="tool_appearance_set_wallpaper">Set wallpaper</string>
@@ -1273,8 +1466,9 @@
     <string name="tool_app_close_drawer">Close sessions drawer</string>
     <string name="tool_terminal_action_sheet">Terminal actions</string>
     <string name="tool_session_activate_by_index">Switch to session by number</string>
-    <string name="tool_window_rename_prompt">Rename window session…</string>
+    <string name="tool_window_rename_prompt">Rename window…</string>
     <string name="tool_session_rename_prompt">Rename session…</string>
+    <string name="tool_pane_rename_prompt">Rename pane…</string>
     <!-- Palette subtitles -->
     <string name="tool_desc_pane_split_vertical">Split the focused pane into two panes side by side.</string>
     <string name="tool_desc_pane_split_horizontal">Split the focused pane into two stacked panes.</string>
@@ -1328,6 +1522,7 @@
     <string name="tool_desc_terminal_search_scrollback">Find text in this pane’s scrollback and jump to a match.</string>
     <string name="terminal_scrollback_search_title">Search scrollback</string>
     <string name="terminal_scrollback_search_hint">Search text</string>
+    <string name="terminal_find_yanked">Copied selection</string>
     <string name="terminal_scrollback_search_row">Row %1$s   %2$s</string>
     <plurals name="terminal_scrollback_search_results">
         <item quantity="one">1 match</item>
@@ -1365,8 +1560,9 @@
     </plurals>
     <string name="tool_desc_app_open_drawer">Open the sessions drawer.</string>
     <string name="tool_desc_app_close_drawer">Close the sessions drawer.</string>
-    <string name="tool_desc_window_rename_prompt">Ask for a new name for the current window session.</string>
-    <string name="tool_desc_session_rename_prompt">Ask for a new name for the focused shell session.</string>
+    <string name="tool_desc_window_rename_prompt">Name the current window — the tab it occupies in the window bar.</string>
+    <string name="tool_desc_session_rename_prompt">Name the current session — the drawer row that holds the windows.</string>
+    <string name="tool_desc_pane_rename_prompt">Name the focused pane\'s shell.</string>
     <string name="tool_terminal_share_selected">Share selected text</string>
     <string name="tool_clipboard_copy_selected">Copy selected text</string>
     <string name="tool_desc_terminal_share_selected">Share the selected terminal text with another app.</string>
@@ -1428,7 +1624,6 @@
     <string name="sessions_panel_shell">shell</string>
     <string name="sessions_panel_close_session">Close session %1$d</string>
     <string name="sessions_panel_rename_session">Rename session %1$d</string>
-    <string name="termux_status_settings_content_description">Terminal and status settings</string>
     <string name="palette_unavailable_no_selection">Unavailable: no text selected</string>
     <string name="palette_unavailable_no_session">Unavailable: no active session</string>
 

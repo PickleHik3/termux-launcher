@@ -39,6 +39,11 @@
             app:entryValues="@array/termux_top_pane_clock_style_values"
             app:defaultValue="flip"
             app:useSimpleSummaryProvider="true" />
+        <com.termux.app.fragments.settings.SegmentedPillPreference
+            app:key="top_pane_clock_alignment"
+            app:title="@string/settings_clock_alignment_title"
+            app:summary="@string/settings_clock_alignment_summary"
+            app:defaultValue="left" />
         <SwitchPreferenceCompat
             app:key="top_pane_clock_am_pm"
             app:title="@string/settings_use_12_hour_title"
@@ -59,6 +64,12 @@
             app:title="@string/settings_weather_title"
             app:summary="@string/settings_weather_summary"
             app:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="status_widget_weather_fahrenheit"
+            app:title="@string/settings_weather_fahrenheit_title"
+            app:summary="@string/settings_weather_fahrenheit_summary"
+            app:defaultValue="false"
+            app:dependency="status_widget_weather" />
         <Preference
             app:key="top_pane_notification_access"
             app:persistent="false"

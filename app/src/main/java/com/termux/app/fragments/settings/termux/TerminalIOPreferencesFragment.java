@@ -74,6 +74,9 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
             case "status_widget_weather":
                 mPreferences.setStatusWidgetWeatherEnabled(value);
                 break;
+            case "status_widget_weather_fahrenheit":
+                mPreferences.setStatusWidgetWeatherFahrenheit(value);
+                break;
             default:
                 break;
         }
@@ -98,6 +101,8 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isStatusWidgetRamEnabled();
             case "status_widget_weather":
                 return mPreferences.isStatusWidgetWeatherEnabled();
+            case "status_widget_weather_fahrenheit":
+                return mPreferences.isStatusWidgetWeatherFahrenheit();
             default:
                 return defValue;
         }
@@ -108,6 +113,8 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
         if (mPreferences == null || key == null) return;
         if ("top_pane_clock_style".equals(key)) {
             mPreferences.setTopPaneClockStyle(value);
+        } else if ("top_pane_clock_alignment".equals(key)) {
+            mPreferences.setTopPaneClockAlignment(value);
         }
     }
 
@@ -116,6 +123,9 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
         if (mPreferences == null || key == null) return defValue;
         if ("top_pane_clock_style".equals(key)) {
             return mPreferences.getTopPaneClockStyle();
+        }
+        if ("top_pane_clock_alignment".equals(key)) {
+            return mPreferences.getTopPaneClockAlignment();
         }
         return defValue;
     }

@@ -143,11 +143,77 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_APP_LAUNCHER_APPS_ROW_ENABLED = true;
 
         /**
+         * Defines the key for which screen edge the landscape dock rail is docked to. The app
+         * drawer's pull runs away from that edge, so this also picks the swipe that opens it.
+         */
+        public static final String KEY_APP_LAUNCHER_DOCK_RAIL_SIDE = "app_launcher_dock_rail_side";
+
+        public static final String APP_LAUNCHER_DOCK_RAIL_SIDE_LEFT = "left";
+
+        public static final String APP_LAUNCHER_DOCK_RAIL_SIDE_RIGHT = "right";
+
+        public static final String DEFAULT_APP_LAUNCHER_DOCK_RAIL_SIDE =
+            APP_LAUNCHER_DOCK_RAIL_SIDE_LEFT;
+
+        /**
+         * Defines the key for enabling the terminal extra-keys dock row.
+         */
+        public static final String KEY_APP_LAUNCHER_EXTRA_KEYS_ROW_ENABLED =
+            "app_launcher_extra_keys_row_enabled";
+
+        public static final boolean DEFAULT_APP_LAUNCHER_EXTRA_KEYS_ROW_ENABLED = true;
+
+        /**
+         * Defines the key for enabling the home widget pane reached by the status bar pull-down.
+         */
+        public static final String KEY_APP_LAUNCHER_WIDGET_PANE_ENABLED =
+            "app_launcher_widget_pane_enabled";
+
+        public static final boolean DEFAULT_APP_LAUNCHER_WIDGET_PANE_ENABLED = true;
+
+        /**
+         * Defines the key for the launcher / terminal-only use case the user picked. Stored rather
+         * than derived from the surface switches: the surfaces stay individually settable after a
+         * mode is picked, and a derived mode would jump between the two the moment one is flipped.
+         */
+        public static final String KEY_APP_LAUNCHER_USE_CASE_MODE = "app_launcher_use_case_mode";
+
+        public static final String APP_LAUNCHER_USE_CASE_MODE_LAUNCHER = "launcher";
+        public static final String APP_LAUNCHER_USE_CASE_MODE_TERMINAL = "terminal";
+        public static final String DEFAULT_APP_LAUNCHER_USE_CASE_MODE =
+            APP_LAUNCHER_USE_CASE_MODE_LAUNCHER;
+
+        /**
+         * Defines the key holding the launcher surface states captured when the user switched to
+         * terminal-only mode, so switching back restores the layout they had. Encoded by
+         * {@code LauncherUseCaseMode}; an empty value means nothing was captured yet.
+         */
+        public static final String KEY_APP_LAUNCHER_USE_CASE_SNAPSHOT =
+            "app_launcher_use_case_snapshot";
+
+        public static final String DEFAULT_APP_LAUNCHER_USE_CASE_SNAPSHOT = "";
+
+        /**
          * Defines the key for showing active-notification dots on apps bar icons.
          */
         public static final String KEY_APP_LAUNCHER_NOTIFICATION_DOTS = "app_launcher_notification_dots";
 
         public static final boolean DEFAULT_APP_LAUNCHER_NOTIFICATION_DOTS = false;
+
+        /**
+         * Defines the key for persisting notification history to {@code ~/.launcherctl}.
+         *
+         * <p>Separate from notification access itself, and off by default. Notification access is
+         * granted for dots, the status bar and the top pane, all of which only need notifications
+         * in memory. Writing their contents -- titles, texts, expanded texts, so SMS bodies, email
+         * previews and 2FA codes -- into the Termux home puts them inside the shell's trust domain,
+         * where every package and script running under the app UID can read them. That is a second,
+         * larger decision, so it is asked separately rather than inherited from the grant.
+         */
+        public static final String KEY_APP_LAUNCHER_NOTIFICATION_HISTORY =
+            "app_launcher_notification_history";
+
+        public static final boolean DEFAULT_APP_LAUNCHER_NOTIFICATION_HISTORY = false;
 
         /**
          * Defines the key for the optional dynamic "most used apps" dock page.
@@ -182,6 +248,49 @@ public final class TermuxPreferenceConstants {
             "app_launcher_dock_corner_radius";
         public static final int DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS = -1;
         public static final int MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS = 40;
+
+        /**
+         * Defines the key for enabling the full-screen app launcher drawer.
+         */
+        public static final String KEY_APP_LAUNCHER_DRAWER_ENABLED = "app_launcher_drawer_enabled";
+
+        public static final boolean DEFAULT_APP_LAUNCHER_DRAWER_ENABLED = true;
+
+        public static final String KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE =
+            "app_launcher_drawer_view_type";
+        public static final String APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL = "vertical";
+        public static final String APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL = "horizontal";
+        public static final String APP_LAUNCHER_DRAWER_VIEW_TYPE_CATEGORIES = "categories";
+        public static final String DEFAULT_APP_LAUNCHER_DRAWER_VIEW_TYPE =
+            APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL;
+
+        public static final String KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_VERTICAL =
+            "app_launcher_drawer_grid_columns_vertical";
+        public static final String KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_HORIZONTAL =
+            "app_launcher_drawer_grid_columns_horizontal";
+        public static final String KEY_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL =
+            "app_launcher_drawer_grid_rows_horizontal";
+        public static final String KEY_APP_LAUNCHER_DRAWER_ICON_SIZE_DP =
+            "app_launcher_drawer_icon_size_dp";
+        public static final String KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_CATEGORIES =
+            "app_launcher_drawer_grid_columns_categories";
+        public static final int DEFAULT_APP_LAUNCHER_DRAWER_GRID_COLUMNS_VERTICAL = 0;
+        public static final int DEFAULT_APP_LAUNCHER_DRAWER_GRID_COLUMNS_HORIZONTAL = 0;
+        public static final int DEFAULT_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL = 0;
+        public static final int DEFAULT_APP_LAUNCHER_DRAWER_ICON_SIZE_DP = 0;
+        public static final int DEFAULT_APP_LAUNCHER_DRAWER_GRID_COLUMNS_CATEGORIES = 0;
+        public static final int MIN_APP_LAUNCHER_DRAWER_GRID_COLUMNS = 4;
+        public static final int MAX_APP_LAUNCHER_DRAWER_GRID_COLUMNS = 6;
+        public static final int MIN_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL = 2;
+        public static final int MAX_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL = 6;
+        public static final int MIN_APP_LAUNCHER_DRAWER_GRID_COLUMNS_CATEGORIES = 1;
+        public static final int MAX_APP_LAUNCHER_DRAWER_GRID_COLUMNS_CATEGORIES = 3;
+
+        /** Custom drawer corner radius in dp, or -1 to follow the shared rounded-surface token. */
+        public static final String KEY_APP_LAUNCHER_DRAWER_CORNER_RADIUS =
+            "app_launcher_drawer_corner_radius";
+        public static final int DEFAULT_APP_LAUNCHER_DRAWER_CORNER_RADIUS = -1;
+        public static final int MAX_APP_LAUNCHER_DRAWER_CORNER_RADIUS = 40;
 
         /**
          * Radius every Rounded-style surface takes when its own radius is left on -1 (follow the
@@ -228,6 +337,10 @@ public final class TermuxPreferenceConstants {
 
         public static final String KEY_STATUS_WIDGET_WEATHER = "status_widget_weather";
         public static final boolean DEFAULT_STATUS_WIDGET_WEATHER = true;
+
+        /** Show weather temperatures in Fahrenheit instead of the default Celsius. */
+        public static final String KEY_STATUS_WIDGET_WEATHER_FAHRENHEIT = "status_widget_weather_fahrenheit";
+        public static final boolean DEFAULT_STATUS_WIDGET_WEATHER_FAHRENHEIT = false;
 
         /** Animate the terminal cursor between its old and new cell instead of jumping. */
         public static final String KEY_TERMINAL_CURSOR_TRAIL = "terminal_cursor_trail";
@@ -447,6 +560,21 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_IN_APP_KEYBOARD_KEY_OPACITY = 100;
 
         /**
+         * Defines the opacity in percent of the keyboard's own background surface — the glass
+         * tint, or the color-scheme background override when one is set. Independent of the key
+         * caps ({@link #KEY_IN_APP_KEYBOARD_KEY_OPACITY}); 100 keeps the surface as the theme
+         * renders it.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY =
+            "in_app_keyboard_background_opacity";
+
+        public static final int DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY = 100;
+
+        public static final int MIN_IN_APP_KEYBOARD_BACKGROUND_OPACITY = 0;
+
+        public static final int MAX_IN_APP_KEYBOARD_BACKGROUND_OPACITY = 100;
+
+        /**
          * Defines the key for whether the soft keyboard will be enabled only if no hardware keyboard
          * attached, for cases where users want to use a hardware keyboard instead.
          */
@@ -498,6 +626,15 @@ public final class TermuxPreferenceConstants {
         public static final String TOP_PANE_CLOCK_STYLE_SLAB = "slab";
 
         public static final String DEFAULT_TOP_PANE_CLOCK_STYLE = TOP_PANE_CLOCK_STYLE_FLIP;
+
+        /** Horizontal alignment of the FULL-form top-pane clock inside the pane. */
+        public static final String KEY_TOP_PANE_CLOCK_ALIGNMENT = "top_pane_clock_alignment";
+
+        public static final String TOP_PANE_CLOCK_ALIGNMENT_LEFT = "left";
+        public static final String TOP_PANE_CLOCK_ALIGNMENT_CENTER = "center";
+        public static final String TOP_PANE_CLOCK_ALIGNMENT_RIGHT = "right";
+
+        public static final String DEFAULT_TOP_PANE_CLOCK_ALIGNMENT = TOP_PANE_CLOCK_ALIGNMENT_LEFT;
 
         /** Use a 12-hour top-pane clock and append the AM/PM period. */
         public static final String KEY_TOP_PANE_CLOCK_AM_PM = "top_pane_clock_am_pm";
@@ -667,6 +804,15 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_DYNAMIC_COLORS_ENABLED = "terminal_dynamic_colors_enabled";
 
         public static final boolean DEFAULT_VALUE_TERMINAL_DYNAMIC_COLORS_ENABLED = true;
+
+        /**
+         * Defines the key for where the launcher chrome — dock, status bar, drawer, keyboard —
+         * takes its colours from: {@code wallpaper} for Material dynamic colours, or {@code scheme}
+         * to derive them from the terminal colour scheme in {@code ~/.termux/colors.properties}.
+         */
+        public static final String KEY_UI_COLOR_SOURCE = "ui_color_source";
+
+        public static final String DEFAULT_VALUE_UI_COLOR_SOURCE = "wallpaper";
 
         /** Contrast profile for wallpaper-derived terminal colors. */
         public static final String KEY_TERMINAL_CONTRAST_LEVEL = "terminal_contrast_level";

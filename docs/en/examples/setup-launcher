@@ -14,12 +14,47 @@
 # users, but it is deprecated: the launcher's own windows, panes, workspaces,
 # and status bar replace what tmux and btop provided here.
 #
+# The fish config is split in two: config.fish is launcher-owned and replaced
+# on every run (with a .bak), while ~/.config/fish/conf.d/personal.fish is
+# yours — installed once, never overwritten, and the place for aliases,
+# EDITOR, and other personal settings.
+#
+# Neovim is handled by a separate chooser: this script installs `setup-nvim`
+# into ~/.local/bin, and that picks a distro (AstroNvim by default, with a
+# colourscheme generated from the wallpaper palette) only when you run it.
+#
 # Existing files are never overwritten silently — every replaced config gets a
 # timestamped .bak alongside it.
 
+# Every file this script installs is fetched from a pinned release tag and checked
+# against the digest table below before it is allowed anywhere near your shell.
+# Two of them — config.fish and setup-nvim — run code on every session, so a
+# mutable branch and an unverified download would mean the repository (or anything
+# that can answer for it) gets to choose what your shell executes forever after.
+#
+# Maintainers: after editing any template, run
+#   docs/en/examples/update-setup-launcher-digests.sh
+# and commit the refreshed table, then move TEMPLATES_REF to the release tag.
+
 set -eu
 
-RAW_BASE="${TERMUX_LAUNCHER_RAW_BASE:-https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples}"
+TEMPLATES_REF="${TERMUX_LAUNCHER_REF:-v0.2.35}"
+RAW_BASE="${TERMUX_LAUNCHER_RAW_BASE:-https://raw.githubusercontent.com/PickleHik3/termux-launcher/$TEMPLATES_REF/docs/en/examples}"
+
+# --- BEGIN DIGESTS (generated: update-setup-launcher-digests.sh) ---
+expected_digest() {
+    case "$1" in
+        aliens-material.omp.json) echo 87ce6bfdb16335fc543d3c974f19632503f0e803de73e728de8a265ac03da148 ;;
+        conf.d-personal.fish)     echo 6f7b666475e07ee0447fbdba29485a8681f1f622e7c0ab3f98f3ff15b0142190 ;;
+        config.fish)              echo 45d783407d0710d76dbc9d64abd539e6f8b449bd92a29c3108fa0908b810c353 ;;
+        keyboard-layout.xml)      echo 06824f3611e7a47ab0ca9dc5d72cc90f50c10a27adf8db60693e335294dcceb5 ;;
+        setup-nvim)               echo 345c79f048d4bf26dc5de7022443a470fb55266cb945367d383b2123049fa400 ;;
+        termux-launcher.omp.json) echo 756eeb5e6eef28f9cd4d20bd3274d4a374a8e8e0002c27d8df0c1348893d3b5f ;;
+        termux.properties)        echo ed7c0f3223b0de5a692474d19bd2a7b7b9a77154e2f0deae3d05dae242b20d6a ;;
+        *) echo "" ;;
+    esac
+}
+# --- END DIGESTS ---
 
 FISH_CONFIG="${FISH_CONFIG:-$HOME/.config/fish/config.fish}"
 OMP_DIR="${OMP_DIR:-$HOME/.config/ohmyposh}"
@@ -48,6 +83,16 @@ backup_existing() {
     fi
 }
 
+file_digest() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | cut -d' ' -f1
+    elif command -v openssl >/dev/null 2>&1; then
+        openssl dgst -sha256 "$1" | awk '{print $NF}'
+    else
+        echo ""
+    fi
+}
+
 # fetch <relative-name> <destination>
 fetch() {
     name="$1"
@@ -55,13 +100,46 @@ fetch() {
     dest_dir=$(dirname "$dest")
     mkdir -p "$dest_dir"
     tmp="$dest_dir/.$(basename "$dest").download"
-    if curl -fsSL -o "$tmp" "$RAW_BASE/$name"; then
-        backup_existing "$dest"
-        mv "$tmp" "$dest"
-        log "  installed $dest"
-    else
+    if ! curl -fsSL -o "$tmp" "$RAW_BASE/$name"; then
         rm -f "$tmp"
         fail "download failed: $RAW_BASE/$name"
+    fi
+
+    if [ "${TERMUX_LAUNCHER_SKIP_DIGEST:-0}" = 1 ]; then
+        warn "digest check skipped for $name (TERMUX_LAUNCHER_SKIP_DIGEST=1)"
+    else
+        expected=$(expected_digest "$name")
+        if [ -z "$expected" ]; then
+            rm -f "$tmp"
+            fail "no pinned digest for $name; refusing to install it"
+        fi
+        actual=$(file_digest "$tmp")
+        if [ -z "$actual" ]; then
+            rm -f "$tmp"
+            fail "no sha256 tool available (install coreutils or openssl-tool) — cannot verify $name"
+        fi
+        if [ "$actual" != "$expected" ]; then
+            rm -f "$tmp"
+            fail "digest mismatch for $name
+  expected $expected
+  got      $actual
+Refusing to install. Either the pinned ref ($TEMPLATES_REF) does not match this
+script's digest table, or the download was tampered with."
+        fi
+    fi
+
+    backup_existing "$dest"
+    mv "$tmp" "$dest"
+    log "  installed $dest"
+}
+
+# fetch_once <relative-name> <destination> — for files that become the user's
+# after the first install: copied when missing, never replaced afterwards.
+fetch_once() {
+    if [ -e "$2" ]; then
+        log "  kept existing $2 (yours to edit; delete it and re-run to refresh)"
+    else
+        fetch "$1" "$2"
     fi
 }
 
@@ -113,8 +191,14 @@ install_shell_configs() {
     log ""
     log "== Fish + Oh My Posh configs =="
     fetch config.fish "$FISH_CONFIG"
+    fetch_once conf.d-personal.fish "$(dirname "$FISH_CONFIG")/conf.d/personal.fish"
     fetch aliens-material.omp.json "$OMP_DIR/aliens-material.omp.json"
     fetch termux-launcher.omp.json "$OMP_DIR/termux-launcher.omp.json"
+
+    fetch setup-nvim "$HOME/.local/bin/setup-nvim"
+    chmod +x "$HOME/.local/bin/setup-nvim"
+    log "Neovim: run 'setup-nvim' when you want to pick a distro (AstroNvim,"
+    log "NvChad, LazyVim, kickstart, or stock); it never runs automatically."
 
     if command -v fish >/dev/null 2>&1; then
         if command -v chsh >/dev/null 2>&1 && ask_yn "Make fish the default shell?"; then

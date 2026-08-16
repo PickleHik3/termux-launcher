@@ -8,12 +8,17 @@ public final class StatusBarResizeGeometry {
         public final int top;
         public final int clockClipBottom;
         public final float expansion;
+        public final float fullExpansion;
+        public final float topSlotAlpha;
 
-        private Row(int height, int top, float expansion) {
+        private Row(int height, int top, float expansion, float fullExpansion,
+                    float topSlotAlpha) {
             this.height = height;
             this.top = top;
             this.clockClipBottom = top;
             this.expansion = expansion;
+            this.fullExpansion = fullExpansion;
+            this.topSlotAlpha = topSlotAlpha;
         }
     }
 
@@ -37,6 +42,27 @@ public final class StatusBarResizeGeometry {
         int remainingClearance = Math.round(collapsedBottomClearance * (1f - expansion));
         int rowTop = Math.max(0,
             surfaceHeight - bottomMargin - rowHeight - remainingClearance);
-        return new Row(rowHeight, rowTop, expansion);
+        return new Row(rowHeight, rowTop, expansion, 0f, expansion);
+    }
+
+    /** Explicit expanded-to-FULL geometry; normal two-state output above remains unchanged. */
+    public static Row calculateFull(int surfaceHeight, int expandedSurfaceHeight,
+                                    int fullSurfaceHeight, int expandedRowHeight,
+                                    int expandedBottomMargin) {
+        int range = Math.max(1, fullSurfaceHeight - expandedSurfaceHeight);
+        float fullExpansion = finiteClamp(
+            (surfaceHeight - expandedSurfaceHeight) / (float) range);
+        // The spring-written surface height is the row's authoritative moving edge. The resolved
+        // FULL target can briefly be stale while parent/accessory relayout is being delivered; it
+        // is useful for normalized progress but must never clamp real child geometry.
+        int actualSurface = Math.max(0, surfaceHeight);
+        int top = Math.max(0, actualSurface - Math.max(0, expandedBottomMargin)
+            - Math.max(0, expandedRowHeight));
+        return new Row(Math.max(0, expandedRowHeight), top, 1f, fullExpansion, 1f);
+    }
+
+    private static float finiteClamp(float value) {
+        if (Float.isNaN(value) || Float.isInfinite(value)) return 0f;
+        return Math.max(0f, Math.min(1f, value));
     }
 }

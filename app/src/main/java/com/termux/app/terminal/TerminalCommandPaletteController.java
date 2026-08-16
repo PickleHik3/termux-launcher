@@ -14,12 +14,12 @@ import android.view.View;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.app.Spring;
 import com.termux.app.TermuxActivity;
@@ -190,7 +190,7 @@ public final class TerminalCommandPaletteController
         mActivity = activity;
         mStats = new CommandPaletteActionStats(activity);
         mAppProvider = LauncherAppDataProvider.getInstance(activity);
-        mAppUsageStats = new LauncherUsageStatsStore(activity);
+        mAppUsageStats = LauncherUsageStatsStore.getInstance(activity);
         mDensity = activity.getResources().getDisplayMetrics().density;
     }
 
@@ -209,6 +209,14 @@ public final class TerminalCommandPaletteController
 
     public void show() {
         if (!bindViews()) return;
+        mActivity.closeFullStatusBarImmediate();
+        // Two full-screen glass surfaces must never stack: the palette is transient and summonable
+        // over anything, so the drawer is the one that yields. Immediate rather than animated —
+        // a plane springing shut behind a palette sprouting open reads as a glitch, not a handoff.
+        mActivity.getAppDrawerController().closeImmediate();
+        // Same rule for the sheet plane, which owns the same interceptor slot: the palette is the
+        // one surface summonable over anything, so the modal sheets are the ones that yield.
+        if (mActivity.isTerminalSheetOpen()) mActivity.getTerminalSheetController().dismissAll();
         mEntries.clear();
         mEntries.addAll(TerminalCommandPalette.buildEntries(mActivity));
         mEntries.addAll(TerminalCommandPalette.buildSessionEntries(mActivity));
@@ -1121,14 +1129,26 @@ public final class TerminalCommandPaletteController
         run(entry);
     }
 
+    /**
+     * The palette is gone by the time this is asked, so the confirmation is a sheet card rather than
+     * a dialog window: the palette exists to keep a destructive action off the system IME's path,
+     * and confirming it in a focus-taking window would hand back exactly what was avoided.
+     */
     private void confirmThenRun(@NonNull CommandPaletteFilter.Entry entry) {
         collapse();
-        new MaterialAlertDialogBuilder(mActivity)
-            .setTitle(mActivity.getString(R.string.palette_confirm_title, entry.title))
-            .setMessage(entry.subtitle)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.palette_confirm_run, (dialog, which) -> run(entry))
-            .show();
+        TerminalSheetController sheet = mActivity.getTerminalSheetController();
+        LinearLayout body = TerminalSheetViews.body(mActivity);
+        if (!entry.subtitle.isEmpty())
+            TerminalSheetViews.addMessage(body, entry.subtitle);
+        LinearLayout actions = TerminalSheetViews.addActionRow(body);
+        TerminalSheetViews.addAction(actions, mActivity.getString(android.R.string.cancel),
+            sheet::dismiss);
+        TerminalSheetViews.addAction(actions, mActivity.getString(R.string.palette_confirm_run),
+            () -> {
+                sheet.dismiss();
+                run(entry);
+            });
+        sheet.show(mActivity.getString(R.string.palette_confirm_title, entry.title), body);
     }
 
     private void run(@NonNull CommandPaletteFilter.Entry entry) {

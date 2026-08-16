@@ -70,4 +70,20 @@ public class TerminalClockWidgetTest {
         widget.setStyle("unknown");
         assertEquals("flip", widget.getStyle());
     }
+
+    @Test
+    public void alignment_acceptsThreeValuesAndFallsBackToLeft() {
+        TerminalClockWidget widget = new TerminalClockWidget(
+            ApplicationProvider.getApplicationContext(), null);
+
+        assertEquals("left", widget.getAlignment());
+        widget.setAlignment(TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_CENTER);
+        assertEquals("center", widget.getAlignment());
+        widget.setAlignment(TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_RIGHT);
+        assertEquals("right", widget.getAlignment());
+        widget.setAlignment("unknown");
+        assertEquals("left", widget.getAlignment());
+        widget.setAlignment(null);
+        assertEquals("left", widget.getAlignment());
+    }
 }

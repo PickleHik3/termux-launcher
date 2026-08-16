@@ -19,6 +19,28 @@ public class AccessoryStackLayoutPolicyTest {
     }
 
     @Test
+    public void combinedHeight_coversAllIndependentRowCombinations() {
+        int[] expected = {
+            0,       // none
+            60,      // apps
+            20,      // A-Z
+            86,      // apps + gap + A-Z
+            40,      // extra keys
+            100,     // apps + extra keys
+            60,      // A-Z + extra keys
+            126      // all three
+        };
+        for (int mask = 0; mask < 8; mask++) {
+            assertEquals("mask=" + mask, expected[mask],
+                AccessoryStackLayoutPolicy.computeCombinedHeight(
+                    (mask & 1) != 0,
+                    (mask & 2) != 0,
+                    (mask & 4) != 0,
+                    60, 20, 40, 6));
+        }
+    }
+
+    @Test
     public void appsBarInterRowGap_isZeroWhenAzDisabled() {
         int gap = AccessoryStackLayoutPolicy.computeAppsBarInterRowGapPx(false, 3f, 1.5f);
         assertEquals(0, gap);

@@ -107,9 +107,11 @@ public class TerminalKeyBindingResolverTest {
         // Ctrl+Alt+C: new window with panes on, new session with them off.
         assertEquals("window.new", tool(KeyEvent.KEYCODE_C, CTRL_ALT, SPLITS_ON));
         assertEquals("session.new", tool(KeyEvent.KEYCODE_C, CTRL_ALT, SPLITS_OFF));
-        // Ctrl+Alt+R renamed the window session with panes on, the shell with them off.
+        // Ctrl+Alt+R names the window with panes on and the pane with them off, while the shifted
+        // stroke names the session — three targets, never two names for one thing.
         assertEquals("window.rename_prompt", tool(KeyEvent.KEYCODE_R, CTRL_ALT, SPLITS_ON));
-        assertEquals("session.rename_prompt", tool(KeyEvent.KEYCODE_R, CTRL_ALT, SPLITS_OFF));
+        assertEquals("pane.rename_prompt", tool(KeyEvent.KEYCODE_R, CTRL_ALT, SPLITS_OFF));
+        assertEquals("session.rename_prompt", tool(KeyEvent.KEYCODE_R, CTRL_ALT_SHIFT, SPLITS_ON));
     }
 
     @Test

@@ -96,13 +96,31 @@ public class ExtraKeyButton {
             keys[i] = replaceAlias(extraKeyAliasMap, keys[i]);
         }
         this.key = TextUtils.join(" ", keys);
-        String displayFromConfig = getStringFromJson(config, KEY_DISPLAY_NAME);
-        if (displayFromConfig != null) {
-            this.display = displayFromConfig;
-        } else {
-            this.display = Arrays.stream(keys).map(key -> extraKeyDisplayMap.get(key, key)).collect(Collectors.joining(" "));
-        }
+        this.display = resolveDisplay(keys, getStringFromJson(config, KEY_DISPLAY_NAME), extraKeyDisplayMap);
         this.popup = popup;
+    }
+
+    /**
+     * What a key cap reads: an explicit {@code display} if there is one, otherwise every key name
+     * put through {@code extraKeyDisplayMap} — which is what turns {@code KEYBOARD} into {@code ⌨}.
+     *
+     * <p>Public and static because the row editor has to arrive at the same text as the live row.
+     * It used to fall back to the raw key name and so showed caps reading {@code KEYBOARD}, or
+     * {@code tool:workspace.picker}, for keys the toolbar itself drew as a single glyph.
+     *
+     * @param keySpec the key name, or a macro's key names joined by spaces.
+     */
+    @NonNull
+    public static String resolveDisplay(@NonNull String keySpec, @Nullable String display,
+                                        @NonNull ExtraKeysConstants.ExtraKeyDisplayMap extraKeyDisplayMap) {
+        return resolveDisplay(keySpec.split(" "), display, extraKeyDisplayMap);
+    }
+
+    @NonNull
+    private static String resolveDisplay(@NonNull String[] keys, @Nullable String display,
+                                         @NonNull ExtraKeysConstants.ExtraKeyDisplayMap extraKeyDisplayMap) {
+        if (display != null) return display;
+        return Arrays.stream(keys).map(key -> extraKeyDisplayMap.get(key, key)).collect(Collectors.joining(" "));
     }
 
     public String getStringFromJson(@NonNull JSONObject config, @NonNull String key) {

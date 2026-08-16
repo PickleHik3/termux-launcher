@@ -92,21 +92,24 @@ final class MnnEmbeddingRuntime implements AutoCloseable {
         outputDimensions = created.dim();
     }
 
-    /** Optional Matryoshka-style truncation: shorten to the requested size and L2-renormalize. */
+    /**
+     * Optional Matryoshka-style truncation: shorten to the requested size when asked. The returned
+     * vector is always L2-normalized, truncated or not, matching {@link LiteRtEmbeddingRuntime}.
+     */
     @NonNull
     private float[] shapeVector(@NonNull float[] vector, int dimensions) {
-        if (dimensions <= 0 || dimensions >= vector.length) return vector;
-        float[] truncated = new float[dimensions];
-        double sumSquares = 0.0;
-        for (int i = 0; i < dimensions; i++) {
-            truncated[i] = vector[i];
-            sumSquares += (double) truncated[i] * truncated[i];
+        float[] shaped = vector;
+        if (dimensions > 0 && dimensions < vector.length) {
+            shaped = new float[dimensions];
+            System.arraycopy(vector, 0, shaped, 0, dimensions);
         }
+        double sumSquares = 0.0;
+        for (float value : shaped) sumSquares += (double) value * value;
         double norm = Math.sqrt(sumSquares);
         if (norm > 0.0) {
-            for (int i = 0; i < dimensions; i++) truncated[i] = (float) (truncated[i] / norm);
+            for (int i = 0; i < shaped.length; i++) shaped[i] = (float) (shaped[i] / norm);
         }
-        return truncated;
+        return shaped;
     }
 
     @NonNull

@@ -26,6 +26,7 @@ import com.termux.app.statusbar.TopPaneFeed;
 import com.termux.app.statusbar.TopPaneMediaState;
 import com.termux.app.statusbar.TopPaneSlotMode;
 import com.termux.shared.logger.Logger;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -264,8 +265,27 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         }
     }
 
+    /**
+     * Whether the user asked for notification contents to be written to disk.
+     *
+     * <p>Notification access alone does not authorise this: it is granted for dots, the status bar
+     * and the top pane, which read notifications in memory and forget them. History persists them
+     * under the Termux home, where anything running as the app UID -- any package installed in the
+     * shell, any script a user pastes -- can read message bodies and one-time codes long after the
+     * notification itself is gone.
+     */
+    private boolean isHistoryEnabled() {
+        try {
+            TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(this);
+            return preferences != null && preferences.isAppLauncherNotificationHistoryEnabled();
+        } catch (Exception e) {
+            Logger.logErrorExtended(LOG_TAG, "Failed to read notification history preference: " + e.getMessage());
+            return false;
+        }
+    }
+
     private void persistPosted(StatusBarNotification sbn) {
-        if (sbn == null || sbn.getNotification() == null) {
+        if (sbn == null || sbn.getNotification() == null || !isHistoryEnabled()) {
             return;
         }
         try {
@@ -276,7 +296,7 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
     }
 
     private void persistRemoved(StatusBarNotification sbn) {
-        if (sbn == null || sbn.getNotification() == null) {
+        if (sbn == null || sbn.getNotification() == null || !isHistoryEnabled()) {
             return;
         }
         try {

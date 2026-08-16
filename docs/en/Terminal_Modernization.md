@@ -92,6 +92,15 @@ produced by the current keyboard layout.
 
 “Vertical split” means a vertical dividing line and therefore creates side-by-side panes.
 
+## Touch and mouse
+
+Touch handling differs from stock Termux: it is tuned for TUIs, not just shell prompts. Drags
+scroll — translated to scroll-wheel events inside mouse-aware apps — and taps click when the app
+tracks the mouse. **Press and hold briefly, then drag** to hold the mouse button down (a small
+haptic marks the handoff): from there, select text in vim, drag tmux splits, or resize TUI panes
+like a desktop mouse. A quick long-press without moving still opens ordinary text selection with
+the copy toolbar, and pinch changes only the focused pane's font size.
+
 ## Panes, windows, and layouts
 
 Use the default shortcuts or search the command palette for pane and window actions. Splitting starts

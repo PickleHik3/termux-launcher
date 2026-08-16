@@ -457,7 +457,12 @@ public final class TermuxPropertyConstants {
 
     public static final String IVALUE_VOLUME_KEY_BEHAVIOUR_VOLUME = "volume";
 
-    public static final String DEFAULT_IVALUE_VOLUME_KEYS_BEHAVIOUR = IVALUE_VOLUME_KEY_BEHAVIOUR_VIRTUAL;
+    /**
+     * Literal volume keys by default, unlike upstream Termux. This app can be the home launcher,
+     * and a launcher that swallows the volume rocker leaves no way to change the volume from the
+     * home screen. Set {@code volume-keys = virtual} to get the virtual Ctrl/Fn behaviour back.
+     */
+    public static final String DEFAULT_IVALUE_VOLUME_KEYS_BEHAVIOUR = IVALUE_VOLUME_KEY_BEHAVIOUR_VOLUME;
 
     /**
      * Defines the bidirectional map for volume keys behaviour values and their internal values

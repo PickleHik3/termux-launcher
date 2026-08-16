@@ -12,7 +12,7 @@ Important local areas:
 - `app/src/main/java/com/termux/launcherctl/LauncherCtlNotificationListener.java`: notification and media cache source for the in-app status bar UI.
 - `app/src/main/java/com/termux/ai/`: TAI settings, model registry, model downloads/imports, and runtime adapters.
 - `resources/bin/tai`: installed TAI shell helper.
-- `docs/en/examples/`: optional tmux, status, weather, and Shizuku helper scripts.
+- `docs/en/examples/`: optional shell, Neovim, tmux, status, weather, and Shizuku helper scripts.
 
 ## LauncherCtl Internals
 
@@ -221,12 +221,14 @@ The helper scripts in `docs/en/examples/` are not installed by the APK. The begi
 
 Scripts:
 
+- `setup-launcher`: interactive installer for the current shell setup — packages, fish + Oh My Posh configs, `setup-nvim`, and the `~/.termux` terminal configs.
+- `setup-nvim`: interactive Neovim setup. Installs AstroNvim (default), NvChad, LazyVim, kickstart, or a stock config, plus launcher integrations: OSC 52 clipboard, always-on line wrap, and — on AstroNvim and NvChad — a colorscheme generated from `~/.termux/material-colors.sh` that retints live on wallpaper changes.
 - `setup-tmux-btop`: interactive installer for Fish + Oh My Posh, tmux theme/plugin setup, and optional Shizuku `btop`.
 - `launcher-system-monitor`: cached CPU/RAM formatter for tmux status bars.
 - `launcher-weather-widget`: cached weather formatter using wttr.in.
 - `setup-btop-rish`: installs Linux `btop` under `/data/local/tmp` through Shizuku `rish`.
 - `kew-tmux-status`: optional second tmux status row for `kew-now-playing`.
-- `config.fish`, `aliens-material.omp.json`, and `termux-launcher.omp.json`: optional Fish and Oh My Posh defaults.
+- `config.fish`, `conf.d-personal.fish`, `aliens-material.omp.json`, and `termux-launcher.omp.json`: optional Fish and Oh My Posh defaults. `config.fish` is launcher-owned and replaced on re-install; `conf.d-personal.fish` is copied once to `~/.config/fish/conf.d/personal.fish` and never overwritten, so personal edits survive re-runs.
 - `tmux.conf` and `material-theme.tmux`: manual tmux examples.
 
 `launcher-system-monitor` samples `/proc/stat` and `/proc/meminfo` directly when Shizuku `rish` is available, so it works in plain Termux plus Shizuku setups without any launcher HTTP route. It keeps a short cache file so tmux status bars do not fork a Shizuku shell on every refresh.

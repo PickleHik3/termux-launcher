@@ -62,6 +62,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_WORKSPACE_PICKER = "workspace.picker";
     public static final String TOOL_WORKSPACE_SAVE_PROMPT = "workspace.save_prompt";
     public static final String TOOL_TERMINAL_TOGGLE_SCRATCHPAD = "terminal.toggle_scratchpad";
+    public static final String TOOL_EXTRA_KEYS_EDIT = "extrakeys.edit";
     public static final String TOOL_PANE_SPLIT_VERTICAL = "pane.split_vertical";
     public static final String TOOL_PANE_SPLIT_HORIZONTAL = "pane.split_horizontal";
     public static final String TOOL_PANE_FOCUS_DIRECTION = "pane.focus_direction";
@@ -97,6 +98,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_WINDOW_RENAME = "window.rename";
     public static final String TOOL_SESSION_RENAME = "session.rename";
     public static final String TOOL_SESSION_RENAME_AT_INDEX = "session.rename_at_index";
+    public static final String TOOL_PANE_RENAME = "pane.rename";
     public static final String TOOL_TERMINAL_RESET = "terminal.reset";
     public static final String TOOL_APPEARANCE_SET_WALLPAPER = "appearance.set_wallpaper";
     public static final String TOOL_APPEARANCE_TOGGLE_WALLPAPER = "appearance.toggle_wallpaper";
@@ -116,6 +118,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_SESSION_ACTIVATE_BY_INDEX = "session.activate_by_index";
     public static final String TOOL_WINDOW_RENAME_PROMPT = "window.rename_prompt";
     public static final String TOOL_SESSION_RENAME_PROMPT = "session.rename_prompt";
+    public static final String TOOL_PANE_RENAME_PROMPT = "pane.rename_prompt";
     public static final String TOOL_TERMINAL_SHARE_SELECTED = "terminal.share_selected";
     public static final String TOOL_CLIPBOARD_COPY_SELECTED = "clipboard.copy_selected";
     public static final String TOOL_FONTS_PICK = "fonts.pick";
@@ -170,6 +173,7 @@ public final class TerminalActionDispatcher {
             case TOOL_WORKSPACE_PICKER:
             case TOOL_WORKSPACE_SAVE_PROMPT:
             case TOOL_TERMINAL_TOGGLE_SCRATCHPAD:
+            case TOOL_EXTRA_KEYS_EDIT:
             case TOOL_PANE_SPLIT_VERTICAL:
             case TOOL_PANE_SPLIT_HORIZONTAL:
             case TOOL_PANE_FOCUS_DIRECTION:
@@ -204,6 +208,7 @@ public final class TerminalActionDispatcher {
             case TOOL_WINDOW_SELECT:
             case TOOL_WINDOW_RENAME:
             case TOOL_SESSION_RENAME:
+            case TOOL_PANE_RENAME:
             case TOOL_SESSION_RENAME_AT_INDEX:
             case TOOL_TERMINAL_RESET:
             case TOOL_APPEARANCE_SET_WALLPAPER:
@@ -224,6 +229,7 @@ public final class TerminalActionDispatcher {
             case TOOL_SESSION_ACTIVATE_BY_INDEX:
             case TOOL_WINDOW_RENAME_PROMPT:
             case TOOL_SESSION_RENAME_PROMPT:
+            case TOOL_PANE_RENAME_PROMPT:
             case TOOL_TERMINAL_SHARE_SELECTED:
             case TOOL_CLIPBOARD_COPY_SELECTED:
             case TOOL_FONTS_PICK:
@@ -464,6 +470,9 @@ public final class TerminalActionDispatcher {
                             return noSession(toolName);
                     }
                 }
+                case TOOL_EXTRA_KEYS_EDIT:
+                    activity.showExtraKeysRowEditor();
+                    return ok();
                 case TOOL_WORKSPACE_PICKER:
                     if (!activity.isSplitPanesEnabled()) return splitsDisabled();
                     activity.showWorkspacePicker();
@@ -624,7 +633,8 @@ public final class TerminalActionDispatcher {
                     }
                     // Same bookkeeping the suggestion bar does, so a launch from a
                     // binding or the palette also shapes the usage ranking.
-                    new LauncherUsageStatsStore(activity).recordLaunch(app.appRef.stableId());
+                    LauncherUsageStatsStore.getInstance(activity)
+                        .recordLaunch(app.appRef.stableId());
                     return ok().put("package", app.appRef.packageName).put("label", app.label);
                 }
                 case TOOL_APP_KEY_INSPECTOR:
@@ -652,7 +662,9 @@ public final class TerminalActionDispatcher {
                 }
 
                 case TOOL_WINDOW_RENAME_PROMPT:
-                    activity.renameCurrentWindowSession();
+                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
+                    if (!activity.promptCurrentWindowRename())
+                        return error(409, "no_window", "There is no window to rename");
                     return ok();
                 case TOOL_TERMINAL_SHARE_SELECTED:
                 case TOOL_CLIPBOARD_COPY_SELECTED: {
@@ -673,10 +685,19 @@ public final class TerminalActionDispatcher {
                 }
 
                 case TOOL_SESSION_RENAME_PROMPT: {
+                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
+                    if (!activity.promptCurrentSessionRename())
+                        return error(409, "no_session", "There is no session to rename");
+                    return ok();
+                }
+
+                case TOOL_PANE_RENAME_PROMPT: {
                     TermuxTerminalSessionActivityClient promptClient = activity.getTermuxTerminalSessionClient();
                     if (promptClient == null) return error(503, "unavailable", "Session client is not ready");
-                    if (activity.getCurrentSession() == null) return noSession(toolName);
-                    promptClient.renameSession(activity.getCurrentSession());
+                    // The pane's own shell, never the session the drawer row stands for: those are
+                    // session.rename_prompt's job, and conflating them is what made Ctrl+Alt+R and
+                    // Ctrl+Alt+Shift+R open the same editor.
+                    if (!promptClient.promptCurrentPaneRename()) return noSession(toolName);
                     return ok();
                 }
 
@@ -695,25 +716,36 @@ public final class TerminalActionDispatcher {
 
                 case TOOL_WINDOW_RENAME: {
                     if (!activity.isSplitPanesEnabled()) return splitsDisabled();
-                    // An explicit empty name clears the label, matching what the
-                    // rename dialog does. Only an absent key is an error.
+                    // An explicit empty name restores the automatic tab label; only an absent key
+                    // is an error.
                     if (!arguments.has("name")) return error(400, "bad_request", "Missing 'name'");
-                    if (!activity.renameCurrentWindowSessionTo(arguments.optString("name", ""))) {
-                        return error(409, "no_session", "There is no window session to rename");
+                    if (!activity.renameCurrentWindowTo(arguments.optString("name", ""))) {
+                        return error(409, "no_window", "There is no window to rename");
                     }
-                    // Report the stored name: WindowSessionName caps it, so what
+                    // Report the stored name: TerminalNamePolicy caps it, so what
                     // was asked for and what was kept can differ.
-                    String stored = activity.getCurrentWindowSessionName();
-                    return ok().put("name", stored == null ? JSONObject.NULL : stored);
+                    String storedWindow = activity.getCurrentWindowName();
+                    return ok().put("name", storedWindow == null ? JSONObject.NULL : storedWindow);
                 }
 
                 case TOOL_SESSION_RENAME: {
+                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
+                    // An explicit empty name clears the label; only an absent key is an error.
+                    if (!arguments.has("name")) return error(400, "bad_request", "Missing 'name'");
+                    if (!activity.renameCurrentSessionTo(arguments.optString("name", ""))) {
+                        return error(409, "no_session", "There is no session to rename");
+                    }
+                    String stored = activity.getCurrentSessionName();
+                    return ok().put("name", stored == null ? JSONObject.NULL : stored);
+                }
+
+                case TOOL_PANE_RENAME: {
                     TermuxTerminalSessionActivityClient renameClient = activity.getTermuxTerminalSessionClient();
                     if (renameClient == null) return error(503, "unavailable", "Session client is not ready");
                     if (!arguments.has("name")) return error(400, "bad_request", "Missing 'name'");
-                    String sessionName = arguments.optString("name", "").trim();
-                    if (!renameClient.renameCurrentSessionTo(sessionName)) return noSession(toolName);
-                    return ok().put("name", sessionName.isEmpty() ? JSONObject.NULL : sessionName);
+                    String paneName = arguments.optString("name", "").trim();
+                    if (!renameClient.renameCurrentPaneTo(paneName)) return noSession(toolName);
+                    return ok().put("name", paneName.isEmpty() ? JSONObject.NULL : paneName);
                 }
 
                 case TOOL_SESSION_RENAME_AT_INDEX: {
@@ -727,7 +759,7 @@ public final class TerminalActionDispatcher {
                             arguments.optString("name", ""))) {
                         return error(400, "bad_request", "No session at index " + sessionIndex);
                     }
-                    // Report the stored name: WindowSessionName caps it, so what was asked for
+                    // Report the stored name: TerminalNamePolicy caps it, so what was asked for
                     // and what was kept can differ.
                     String storedName = activity.getBrowserSessionName(sessionIndex);
                     return ok().put("index", sessionIndex)
@@ -819,7 +851,7 @@ public final class TerminalActionDispatcher {
             // this the policy is invisible to agents and to any device check.
             String paneLayout = activity.activePaneLayoutPolicy();
             if (paneLayout != null) state.put("paneLayout", paneLayout);
-            String sessionName = activity.getCurrentWindowSessionName();
+            String sessionName = activity.getCurrentSessionName();
             if (sessionName != null) state.put("windowSessionName", sessionName);
             state.put("wallpaperEnabled", activity.isWallpaperModeEnabled());
             state.put("cursorTrailEnabled", activity.isCursorTrailEnabled());

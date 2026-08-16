@@ -43,7 +43,6 @@ import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedFolderItem;
 import com.termux.app.launcher.model.PinnedItem;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -89,8 +88,8 @@ public final class PinnedAppsEditor {
     private PinnedAppsEditor(@NonNull Context context, @Nullable Runnable onSaved) {
         this.context = context;
         this.onSaved = onSaved;
-        this.repository = new LauncherConfigRepository(TermuxAppSharedPreferences.build(context, false));
-        this.usageStats = new LauncherUsageStatsStore(context);
+        this.repository = LauncherConfigRepository.getInstance(context);
+        this.usageStats = LauncherUsageStatsStore.getInstance(context);
         this.density = context.getResources().getDisplayMetrics().density;
         this.colorText = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurface, 0xFFECEFF4);
         this.colorSubtle = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant, 0xFF9AA3B2);

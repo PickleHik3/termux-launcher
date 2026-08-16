@@ -51,7 +51,8 @@ public final class LauncherIconResolver {
     @Nullable private final SystemIconLoader systemIconLoader;
 
     public LauncherIconResolver(@NonNull Context context) {
-        this(context, new IconPackRepository(context), TermuxAppSharedPreferences.build(context, false), null);
+        this(context, new IconPackRepository(context), TermuxAppSharedPreferences.build(context, false),
+            null, LauncherConfigRepository.getInstance(context));
     }
 
     public LauncherIconResolver(
@@ -60,12 +61,23 @@ public final class LauncherIconResolver {
         @Nullable TermuxAppSharedPreferences preferences,
         @Nullable SystemIconLoader systemIconLoader
     ) {
+        this(context, iconPackRepository, preferences, systemIconLoader,
+            preferences == null ? null : new LauncherConfigRepository(preferences));
+    }
+
+    private LauncherIconResolver(
+        @NonNull Context context,
+        @NonNull IconPackRepository iconPackRepository,
+        @Nullable TermuxAppSharedPreferences preferences,
+        @Nullable SystemIconLoader systemIconLoader,
+        @Nullable LauncherConfigRepository configRepository
+    ) {
         this.context = context.getApplicationContext();
         this.packageManager = this.context.getPackageManager();
         this.iconPackRepository = iconPackRepository;
         this.preferences = preferences;
         this.systemIconLoader = systemIconLoader;
-        this.configRepository = preferences == null ? null : new LauncherConfigRepository(preferences);
+        this.configRepository = configRepository;
     }
 
     @Nullable

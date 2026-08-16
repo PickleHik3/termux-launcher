@@ -32,6 +32,7 @@ public final class StatusBarWidgetView extends LinearLayout {
     private final ImageView mIcon;
     private final TextView mValue;
     private boolean mAccent;
+    private boolean mMuted;
     @NonNull private ColorRole mColorRole = ColorRole.PRIMARY;
 
     public StatusBarWidgetView(Context context) {
@@ -90,6 +91,17 @@ public final class StatusBarWidgetView extends LinearLayout {
         applyColors();
     }
 
+    /**
+     * Drains the colour out of the widget while keeping it on screen — the AI glyph's few seconds
+     * of afterlife once its model unloaded, so the state reads as "was, isn't" rather than as a
+     * widget that blinked out.
+     */
+    public void setMuted(boolean muted) {
+        if (mMuted == muted) return;
+        mMuted = muted;
+        applyColors();
+    }
+
     private void applyColors() {
         Context context = getContext();
         int primary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
@@ -100,13 +112,19 @@ public final class StatusBarWidgetView extends LinearLayout {
             com.google.android.material.R.attr.colorTertiary, primary);
         int roleColor = mColorRole == ColorRole.SECONDARY ? secondary
             : mColorRole == ColorRole.TERTIARY ? tertiary : primary;
+        if (mMuted) {
+            roleColor = MaterialColors.getColor(context,
+                com.termux.shared.R.attr.termuxColorOnSurfaceVariant, roleColor);
+        }
 
         // The trailing stats read as one status cluster. Color and dot separators provide the
         // grouping, so individual pill backgrounds only add visual noise.
         setBackground(null);
 
-        ImageViewCompat.setImageTintList(mIcon, ColorStateList.valueOf(roleColor));
-        mValue.setTextColor(ColorUtils.setAlphaComponent(roleColor, mAccent ? 255 : 238));
+        int alpha = mMuted ? 120 : mAccent ? 255 : 238;
+        ImageViewCompat.setImageTintList(mIcon,
+            ColorStateList.valueOf(ColorUtils.setAlphaComponent(roleColor, alpha)));
+        mValue.setTextColor(ColorUtils.setAlphaComponent(roleColor, alpha));
     }
 
     private int dp(int value) {
