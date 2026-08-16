@@ -1,0 +1,98 @@
+name: Build nix bootstrap
+
+# Builds the bootstrap zips the Nix edition downloads on first launch, from the
+# nix-on-droid fork this edition tracks. Manual only: the zips take a while to
+# build and nothing here changes on an ordinary app commit.
+#
+# The result is uploaded as workflow artifacts. Publishing is deliberately a
+# separate, human step — the app fetches these from the `nix-bootstrap` release
+# tag, so replacing those assets changes what every existing install downloads.
+
+on:
+  workflow_dispatch:
+    inputs:
+      nix_on_droid_ref:
+        description: 'Ref of PickleHik3/nix-on-droid to build from'
+        required: true
+        default: 'launcher-nix'
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone the nix-on-droid fork
+        uses: actions/checkout@v6
+        with:
+          repository: PickleHik3/nix-on-droid
+          ref: ${{ github.event.inputs.nix_on_droid_ref }}
+
+      - name: Install nix
+        uses: cachix/install-nix-action@v31
+        with:
+          # Read-only use of the upstream cache: everything but the patched
+          # proot substitutes from it, and the proot itself cross-compiles here.
+          extra_nix_config: |
+            extra-substituters = https://nix-on-droid.cachix.org
+            extra-trusted-public-keys = nix-on-droid.cachix.org-1:56snoMJTXmDRC1Ei24CmKoUqvHJ9XCp+nidK7qkMQrU=
+            experimental-features = nix-command flakes
+
+      - name: Build the bootstrap zips
+        run: |
+          nix \
+            --log-format bar-with-logs \
+            --option keep-going true \
+            --show-trace \
+            build .#bootstrapZip-aarch64 .#bootstrapZip-x86_64 \
+            --out-link result-bootstrap \
+            --impure
+
+      - name: Collect the zips under the names the app fetches
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          # `nix build` with two installables writes result-bootstrap and
+          # result-bootstrap-1. Read the arch off the file inside each link
+          # rather than assuming which link got which installable.
+          for link in result-bootstrap result-bootstrap-1; do
+            for zip in "$link"/bootstrap-*.zip; do
+              cp "$zip" "artifacts/bootstrap-nix-$(basename "$zip" | sed 's/^bootstrap-//')"
+            done
+          done
+          chmod u+w artifacts/*.zip
+          test -s artifacts/bootstrap-nix-aarch64.zip
+          test -s artifacts/bootstrap-nix-x86_64.zip
+          cd artifacts
+          sha256sum ./*.zip > sha256sums
+          ls -l
+          cat sha256sums
+
+      - name: Record which proot the login script expects
+        run: |
+          echo "Pinned proot store paths in modules/environment/login/default.nix:"
+          grep -n 'proot-termux-static' modules/environment/login/default.nix || true
+
+      - name: Upload bootstrap-nix-aarch64.zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-nix-aarch64
+          path: artifacts/bootstrap-nix-aarch64.zip
+          if-no-files-found: error
+
+      - name: Upload bootstrap-nix-x86_64.zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-nix-x86_64
+          path: artifacts/bootstrap-nix-x86_64.zip
+          if-no-files-found: error
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-nix-sha256sums
+          path: artifacts/sha256sums
+          if-no-files-found: error
