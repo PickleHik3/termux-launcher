@@ -48,6 +48,34 @@ The Android application also uses these independently maintained libraries:
 Dependencies used only by tests and build tooling are not part of the distributed APK. Their
 licenses remain available in their respective distributions.
 
+## Build recipes for external terminal tools
+
+The `recipes/` directory builds third-party command-line tools that exercise the launcher's
+graphics protocols. **No binary of any of these is distributed with Termux Launcher.** The
+repository contains only build scripts and patches; the tools are compiled from upstream sources on
+the machine that runs a recipe. The notices below record what each recipe builds, and what would
+attach if the project ever published the resulting binaries.
+
+- **[Fastfetch](https://github.com/fastfetch-cli/fastfetch)** — MIT — Copyright 2021–2023 Linus
+  Dierheimer, 2022– Carter Li. Built from pinned commit `9c7cfb8` (v2.67.0) with the repository's
+  animated Kitty graphics patch.
+- **[Sigye](https://github.com/am2rican5/sigye)** — MIT — built from pinned commit `0f0b8ca`
+  (v0.6.0) with the repository's Termux clipboard patch.
+- **[kitty](https://github.com/kovidgoyal/kitty) `kitten`** — GPL-3.0-only — Copyright Kovid Goyal.
+  Built from tag `v0.48.2`. The binary statically links kitty's Go dependencies (MIT and
+  BSD-licensed), whose notices travel with it. Distributing a built `kitten` obliges the
+  distributor to offer the corresponding source under GPLv3.
+- **[Chafa](https://github.com/hpjansson/chafa)** — LGPL-3.0-or-later — Copyright Hans Petter
+  Jansson. Fastfetch loads `libchafa.so` with `dlopen` at run time and does not link it statically,
+  which is also what keeps LGPLv3's relinking requirement out of scope. Chafa itself bundles
+  lodepng (Zlib) and libnsgif (MIT).
+- **[ImageMagick 7](https://imagemagick.org/)** — SPDX `ImageMagick` (the ImageMagick License, an
+  Apache-2.0 derivative, not Apache-2.0 itself) — Copyright ImageMagick Studio LLC. Also loaded
+  with `dlopen` at run time.
+
+Chafa and ImageMagick reach a device through the Termux package repositories, not through this
+project.
+
 ## Data sources
 
 - **[Open-Meteo](https://open-meteo.com/)** — forecast data licensed

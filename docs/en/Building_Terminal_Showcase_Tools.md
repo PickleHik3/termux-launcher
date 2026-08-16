@@ -97,6 +97,33 @@ Use `"kitty"`, not `"kitty-direct"`: Android terminals cannot use Kitty's deskto
 path, while the direct in-band protocol is supported. Fastfetch's image cache is versioned by the
 patch so an old static cached logo is not reused.
 
+## Kitten (kitty's client binary)
+
+`kitten` is the standalone Go client from kitty. Programs shell out to it — `kitten icat` is what
+several file managers and Fastfetch's `kitty-icat` logo type invoke — and it is not in the Termux
+repositories. Unlike the two recipes above it cannot practically be built on the phone: kitty's
+generated Go sources are produced by a generator that needs a built kitty application, so the
+recipe for it is a host cross-build. See [`recipes/cross/README.md`](../../recipes/cross/README.md).
+
+Termux Launcher implements the in-band Kitty graphics protocol that `kitten icat` uses, so a
+`kitten` binary built this way displays images here. Two things it will not do:
+
+- `kitten icat` warns that it cannot create shared memory, because Android has no `/dev/shm`. It
+  falls back to the in-band transfer, which is the supported path — the warning is noise.
+- `kitten @ …` remote control does nothing. Termux Launcher implements no kitty remote-control
+  endpoint; `launcherctl` and the terminal action registry cover that ground with a different
+  interface.
+
+## Building on a host instead of on the phone
+
+Everything in `recipes/termux` can also be cross-compiled from a Linux host with the Android NDK,
+which is useful when a device build is slow or the device is unavailable. `recipes/cross` contains
+those scripts, including a helper that assembles a Termux sysroot from published `.deb` packages —
+no Docker image and no `termux-packages` checkout are involved.
+
+Host-built binaries are still unverified until they run on a device. Install them the same way the
+on-device recipes do, into `~/.local/bin`.
+
 ## Recipe controls and troubleshooting
 
 Both scripts support these environment variables:
