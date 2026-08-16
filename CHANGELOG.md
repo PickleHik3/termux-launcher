@@ -170,6 +170,14 @@ system keyboard. Landscape is usable for the first time.
   the app the folder sits in front of, not an index, so installing and uninstalling apps does not
   drift it, and a folder whose anchor app is uninstalled falls back to sitting beside its first
   member.
+- **Named key bindings.** `map --label "Display name" …` in
+  `~/.termux/termux-launcher-bindings.conf` gives a binding the name the keybind hint legend prints
+  while Ctrl+Alt is latched. It matters for the generic actions: every app chord runs the one
+  `app.launch` action, so the legend used to read "Launch app" for all of them, whichever app each
+  one actually started. Bindings captured by long-pressing an app row in the command palette are
+  written with that row's app name as their label, so the chords most people have get named without
+  editing anything. Labels are capped at 32 characters, the width of a legend row, and an
+  unlabelled binding still shows its action's own title.
 
 ### Changed
 

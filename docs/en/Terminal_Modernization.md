@@ -316,6 +316,17 @@ map ctrl+alt+j send-text "git status\n"
 
 `--when` accepts `always`, `splits-on`, or `splits-off`.
 
+`--label "Display name"` names a binding for the keybind hint legend, up to 32 characters. Without
+one the legend prints the action's own title, which reads well for the specific actions and says
+nothing useful for the generic ones: every app chord runs `app.launch`, so an unlabelled row reads
+"Launch app" whichever app it starts. In a multi-line binding the first `--label` names the whole
+thing.
+
+```text
+map --label WhatsApp ctrl+alt+w app.launch com.whatsapp
+map --label "Repo status" ctrl+alt+j send-text "cd ~/src\n"
+```
+
 ### Action arguments
 
 Words after the action id are its arguments. Positional words fill the action's required arguments in
@@ -347,9 +358,12 @@ otherwise the launcher's fuzzy app ranking picks the best match, the same rankin
 uses.
 
 ```text
-map ctrl+alt+w app.launch com.whatsapp
-map ctrl+alt+shift+m app.launch Maps
+map --label WhatsApp ctrl+alt+w app.launch com.whatsapp
+map --label Maps ctrl+alt+shift+m app.launch Maps
 ```
+
+`--label` is what the keybind hint legend prints for the chord; without it every app row in the
+legend reads "Launch app".
 
 Installed apps also appear in the command palette under **Apps**: the most-used ones with no query,
 and the full ranked match list while filtering. Selecting a row runs `app.launch`.
@@ -359,8 +373,9 @@ and because the shortcut column is searchable, typing `ctrl+alt+w` finds the row
 
 You do not have to edit the file to bind one. **Long-press an app row** (or press `Ctrl+Alt+Enter` on
 the focused one) and the palette waits for a key combination: `⏎` saves, `⌫` clears, `Esc` cancels.
-The binding is written to `~/.termux/termux-launcher-bindings.conf` under a managed header, with your
-comments, blank lines and ordering preserved, and takes effect immediately.
+The binding is written to `~/.termux/termux-launcher-bindings.conf` under a managed header, labelled
+with the app name the row showed, with your comments, blank lines and ordering preserved, and takes
+effect immediately.
 
 Three details are worth knowing:
 

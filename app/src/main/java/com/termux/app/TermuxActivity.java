@@ -8146,7 +8146,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (popup == null) return;
         boolean show = modifiers != null && modifiers.isCtrl() && modifiers.isAlt()
             && isInAppKeyboardShown() && isSplitPanesEnabled();
-        Map<String, String> hints = null;
+        Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> hints = null;
         boolean shift = show && modifiers.isShift();
         String prefix = shift ? "ctrl+alt+shift+" : "ctrl+alt+";
         if (show) {
@@ -8230,7 +8230,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private Map<String, Integer> populateKeybindHintPopup(
             @NonNull android.widget.LinearLayout popup,
-            @NonNull Map<String, String> hints, boolean shift) {
+            @NonNull Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> hints,
+            boolean shift) {
         popup.removeAllViews();
         LauncherToolRegistry registry = LauncherToolRegistry.getInstance();
         boolean animate = !isReducedMotionEnabled();
@@ -8253,9 +8254,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<KeybindHintEntry> runEntries = new java.util.ArrayList<>();
         java.util.Map<String, Integer> litTokens = new java.util.LinkedHashMap<>();
         int added = 0;
-        for (Map.Entry<String, String> hint : hints.entrySet()) {
+        for (Map.Entry<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> hint
+                : hints.entrySet()) {
             String token = hint.getKey();
-            String toolName = hint.getValue();
+            String toolName = hint.getValue().toolName;
+            String label = keybindHintLabel(registry, toolName, hint.getValue().label);
+            // Runs merge on the printed label, not just the tool: nine app.launch digits named
+            // after nine different apps are nine bindings, not one "Launch app" row.
+            String runKey = toolName + ' ' + label;
             com.termux.app.terminal.KeybindGroupPalette.Group group =
                 com.termux.app.terminal.KeybindGroupPalette.groupFor(toolName);
             Integer groupColor = groupColors.get(group);
@@ -8269,7 +8275,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             litTokens.put(token, groupColor);
             boolean run = keybindHintRunToken(token);
             if (run) {
-                KeybindHintEntry merged = runEntryByTool.get(toolName);
+                KeybindHintEntry merged = runEntryByTool.get(runKey);
                 if (merged != null) {
                     merged.tokens.add(token);
                     continue;
@@ -8278,9 +8284,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (added >= KEYBIND_HINT_MAX) continue;
             added++;
             KeybindHintEntry entry = new KeybindHintEntry(
-                keybindHintCapText(token, shift), token, keybindHintLabel(registry, toolName));
+                keybindHintCapText(token, shift), token, label);
             if (run) {
-                runEntryByTool.put(toolName, entry);
+                runEntryByTool.put(runKey, entry);
                 runEntries.add(entry);
             }
             java.util.List<KeybindHintEntry> groupEntries = groups.get(group);
@@ -8486,7 +8492,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @NonNull
     private String keybindHintLabel(@NonNull LauncherToolRegistry registry,
-                                    @NonNull String toolName) {
+                                    @NonNull String toolName, @Nullable String label) {
+        // A --label in the binding file wins: only the user knows that Ctrl+Alt+W is "WhatsApp"
+        // rather than the generic "Launch app" every app chord would otherwise print.
+        if (label != null && !label.isEmpty()) return label;
         LauncherToolRegistry.ToolMetadata tool = registry.getTool(toolName);
         if (tool != null && tool.titleRes != 0) return getString(tool.titleRes);
         return toolName;

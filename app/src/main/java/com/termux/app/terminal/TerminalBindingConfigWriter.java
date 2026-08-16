@@ -81,10 +81,11 @@ public final class TerminalBindingConfigWriter {
      */
     @NonNull
     public static Edit putMapping(@NonNull List<String> lines, @NonNull String sequence,
-                                  @NonNull String tool, @NonNull List<String> arguments) {
+                                  @NonNull String tool, @NonNull List<String> arguments,
+                                  @Nullable String label) {
         String normalized = TerminalKeyBindingResolver.normalizeSequenceSpec(sequence);
         if (normalized.isEmpty()) return Edit.failed(lines, "empty key sequence");
-        String written = formatMapLine(normalized, tool, arguments);
+        String written = formatMapLine(normalized, tool, arguments, label);
         if (written.length() > TerminalBindingConfig.MAX_LINE_CHARS)
             return Edit.failed(lines, "mapping line is too long");
 
@@ -131,11 +132,19 @@ public final class TerminalBindingConfigWriter {
         return new Edit(out, removed, -1, null);
     }
 
-    /** A {@code map} directive with every word quoted as the tokenizer needs. */
+    /**
+     * A {@code map} directive with every word quoted as the tokenizer needs, carrying an optional
+     * {@code --label} display name. A label longer than the parser accepts is trimmed to fit
+     * rather than written out and rejected on the next read.
+     */
     @NonNull
     public static String formatMapLine(@NonNull String sequence, @NonNull String tool,
-                                       @NonNull List<String> arguments) {
+                                       @NonNull List<String> arguments, @Nullable String label) {
         StringBuilder line = new StringBuilder("map ");
+        String display = label == null ? "" : label.trim();
+        if (display.length() > TerminalBindingConfig.MAX_LABEL_CHARS)
+            display = display.substring(0, TerminalBindingConfig.MAX_LABEL_CHARS).trim();
+        if (!display.isEmpty()) line.append("--label ").append(quoteWord(display)).append(' ');
         line.append(quoteWord(sequence)).append(' ').append(quoteWord(tool));
         for (String argument : arguments) line.append(' ').append(quoteWord(argument));
         return line.toString();
@@ -242,25 +251,28 @@ public final class TerminalBindingConfigWriter {
      * precedents for writing into {@code ~/.termux} do the same, and the palette needs the reload
      * finished before it rebuilds its rows. Possible StrictMode complaint, deliberately accepted.
      *
+     * @param label app name for the keybind legend, since every app chord shares one action id.
      * @return null on success, else a human-readable reason.
      */
     @Nullable
-    public static String bindAppLaunch(@NonNull String sequence, @NonNull String query) {
+    public static String bindAppLaunch(@NonNull String sequence, @NonNull String query,
+                                       @Nullable String label) {
         return putMapping(new File(TerminalBindingConfig.FILE_PATH), sequence,
-            LauncherToolRegistry.TOOL_APP_LAUNCH, java.util.Collections.singletonList(query));
+            LauncherToolRegistry.TOOL_APP_LAUNCH, java.util.Collections.singletonList(query),
+            label);
     }
 
     /** As {@link #bindAppLaunch}, against an explicit file. Returns null on success. */
     @Nullable
     static String putMapping(@NonNull File file, @NonNull String sequence, @NonNull String tool,
-                             @NonNull List<String> arguments) {
+                             @NonNull List<String> arguments, @Nullable String label) {
         List<String> lines;
         try {
             lines = readLines(file);
         } catch (IOException e) {
             return "cannot read " + file.getName() + ": " + e.getMessage();
         }
-        Edit edit = putMapping(lines, sequence, tool, arguments);
+        Edit edit = putMapping(lines, sequence, tool, arguments, label);
         if (!edit.ok()) return edit.error;
         try {
             writeLines(file, edit.lines);

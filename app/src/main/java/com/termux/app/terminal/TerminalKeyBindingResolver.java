@@ -96,16 +96,39 @@ public final class TerminalKeyBindingResolver {
         final String toolName;
         final LauncherToolRegistry.BindingCondition condition;
         @NonNull final List<TerminalBindingConfig.Action> actions;
+        /** Display name the user gave this binding with {@code --label}, else null. */
+        @Nullable final String label;
 
         Claim(@NonNull String toolName, @NonNull LauncherToolRegistry.BindingCondition condition) {
-            this(Collections.singletonList(TerminalBindingConfig.Action.tool(toolName)), condition);
+            this(Collections.singletonList(TerminalBindingConfig.Action.tool(toolName)), condition,
+                null);
         }
 
         Claim(@NonNull List<TerminalBindingConfig.Action> actions,
-              @NonNull LauncherToolRegistry.BindingCondition condition) {
+              @NonNull LauncherToolRegistry.BindingCondition condition, @Nullable String label) {
             this.toolName = actions.isEmpty() ? "unmap" : actions.get(0).diagnosticName();
             this.condition = condition;
             this.actions = Collections.unmodifiableList(new ArrayList<>(actions));
+            this.label = label;
+        }
+    }
+
+    /** What a stroke under a latched prefix does, as the keybind hint legend needs to print it. */
+    public static final class Hint {
+        @NonNull public final String toolName;
+        /** The binding's {@code --label}, or null to fall back to the action's own title. */
+        @Nullable public final String label;
+
+        Hint(@NonNull String toolName, @Nullable String label) {
+            this.toolName = toolName;
+            this.label = label;
+        }
+
+        /** Part of the popup's repopulate signature, so a renamed binding redraws the legend. */
+        @NonNull
+        @Override
+        public String toString() {
+            return label == null ? toolName : toolName + "=" + label;
         }
     }
 
@@ -172,7 +195,7 @@ public final class TerminalKeyBindingResolver {
                 claims = new ArrayList<>(2);
                 map.put(mapping.sequence, claims);
             }
-            Claim configured = new Claim(mapping.actions, mapping.condition);
+            Claim configured = new Claim(mapping.actions, mapping.condition, mapping.label);
             Claim clashing = null;
             for (Claim existing : claims) {
                 if (existing.condition.overlaps(configured.condition)) {
@@ -228,7 +251,7 @@ public final class TerminalKeyBindingResolver {
                 claims = new ArrayList<>(2);
                 table.put(mapping.sequence, claims);
             }
-            Claim configured = new Claim(mapping.actions, mapping.condition);
+            Claim configured = new Claim(mapping.actions, mapping.condition, mapping.label);
             Claim clashing = null;
             for (Claim existing : claims) {
                 if (existing.condition.overlaps(configured.condition)) {
@@ -323,14 +346,14 @@ public final class TerminalKeyBindingResolver {
 
     /**
      * Root-keymap bindings exactly one key beyond {@code prefix} (e.g. {@code "ctrl+alt+"}), as
-     * suffix key -> claiming tool name under {@code context}, in registration order. Suffixes
-     * that add another modifier or start a sequence are excluded. Drives the in-app keyboard's
-     * modifier hint popup.
+     * suffix key -> claiming tool name and display name under {@code context}, in registration
+     * order. Suffixes that add another modifier or start a sequence are excluded. Drives the
+     * in-app keyboard's modifier hint popup.
      */
     @NonNull
-    public Map<String, String> hintsForPrefix(@NonNull String prefix,
-                                              @NonNull LauncherToolRegistry.ActionContext context) {
-        Map<String, String> hints = new LinkedHashMap<>();
+    public Map<String, Hint> hintsForPrefix(@NonNull String prefix,
+                                            @NonNull LauncherToolRegistry.ActionContext context) {
+        Map<String, Hint> hints = new LinkedHashMap<>();
         for (Map.Entry<String, List<Claim>> entry : bindings.entrySet()) {
             String stroke = entry.getKey();
             if (!stroke.startsWith(prefix)) continue;
@@ -346,7 +369,7 @@ public final class TerminalKeyBindingResolver {
                 }
             }
             if (claim == null || "unmap".equals(claim.toolName)) continue;
-            hints.put(suffix, claim.toolName);
+            hints.put(suffix, new Hint(claim.toolName, claim.label));
         }
         return hints;
     }

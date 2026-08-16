@@ -1041,9 +1041,12 @@ public final class TerminalCommandPaletteController
             popMode();
             return;
         }
+        // The row's own title becomes the binding's --label, so the keybind legend names the app
+        // instead of repeating "Launch app" for every chord captured this way.
         String error = TerminalBindingConfigWriter.bindAppLaunch(mCaptureStroke,
             CommandPaletteAppShortcuts.bindingArgumentFor(stableId,
-                defaultStableIdForPackage(stableId)));
+                defaultStableIdForPackage(stableId)),
+            pending.title);
         if (error != null) {
             Logger.logWarn(LOG_TAG, "Could not write binding: " + error);
             Toast.makeText(mActivity, mActivity.getString(R.string.palette_capture_failed, error),
