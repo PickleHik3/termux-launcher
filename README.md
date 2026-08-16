@@ -85,7 +85,7 @@ See [Getting Started](docs/en/Launcher_Getting_Started.md) for the setup flow.
 
 ### Quick start script
 
-[`setup-launcher`](docs/en/examples/setup-launcher) turns a fresh install into the full showcase shell in one run — fish + Oh My Posh with wallpaper Material colors, zoxide/eza/yazi/neovim, and the launcher terminal configs in `~/.termux`. It is interactive, and every config it replaces gets a timestamped `.bak` first:
+[`setup-launcher`](docs/en/examples/setup-launcher) turns a fresh install into the full showcase shell in one run — fish + Oh My Posh with wallpaper Material colors, zoxide/eza/yazi/neovim. It is interactive, and every config it replaces gets a timestamped `.bak` first. Nothing under `~/.termux` comes from the script: the app seeds those files itself and ships the extra keys row and keyboard layout as built-in defaults:
 
 ```sh
 curl -fsSLO https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-launcher

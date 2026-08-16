@@ -3,7 +3,13 @@
 #
 # Installs the current, secret-free templates derived from the live
 # development setup: fish + Oh My Posh with wallpaper Material colors,
-# zoxide/eza, and the launcher terminal configs in ~/.termux.
+# zoxide/eza.
+#
+# ~/.termux is no longer touched here. The app seeds termux.properties,
+# termux-launcher-bindings.conf and fonts.conf itself — only when they are
+# absent — and ships the extra keys row and the in-app keyboard layout as
+# built-in defaults. Rewriting termux.properties from a script would discard
+# the extra-keys row the in-app editor writes into it.
 #
 # Fonts are no longer handled here: the in-app font picker (Settings >
 # Terminal > Font) downloads and wires up curated families, Nerd Font
@@ -47,10 +53,8 @@ expected_digest() {
         aliens-material.omp.json) echo 87ce6bfdb16335fc543d3c974f19632503f0e803de73e728de8a265ac03da148 ;;
         conf.d-personal.fish)     echo 6f7b666475e07ee0447fbdba29485a8681f1f622e7c0ab3f98f3ff15b0142190 ;;
         config.fish)              echo 45d783407d0710d76dbc9d64abd539e6f8b449bd92a29c3108fa0908b810c353 ;;
-        keyboard-layout.xml)      echo 06824f3611e7a47ab0ca9dc5d72cc90f50c10a27adf8db60693e335294dcceb5 ;;
         setup-nvim)               echo 345c79f048d4bf26dc5de7022443a470fb55266cb945367d383b2123049fa400 ;;
         termux-launcher.omp.json) echo 756eeb5e6eef28f9cd4d20bd3274d4a374a8e8e0002c27d8df0c1348893d3b5f ;;
-        termux.properties)        echo dee11020c1eea3d7d81bae8837c47f3d68daeb7e5f949a4609a8b87052733355 ;;
         *) echo "" ;;
     esac
 }
@@ -58,7 +62,6 @@ expected_digest() {
 
 FISH_CONFIG="${FISH_CONFIG:-$HOME/.config/fish/config.fish}"
 OMP_DIR="${OMP_DIR:-$HOME/.config/ohmyposh}"
-TERMUX_DIR="$HOME/.termux"
 
 log() { printf '%s\n' "$*"; }
 warn() { printf 'setup-launcher: %s\n' "$*" >&2; }
@@ -213,25 +216,25 @@ install_shell_configs() {
 # Terminal configs (~/.termux)
 # ----------------------------------------------------------------------------
 
-install_terminal_configs() {
+show_terminal_config_notes() {
     log ""
     log "== Terminal configs (~/.termux) =="
-
-    if ask_yn "Install termux.properties (extra keys with launcher tools, escape back key, underline cursor)?"; then
-        fetch termux.properties "$TERMUX_DIR/termux.properties"
-    fi
-
-    if ask_yn "Install the custom in-app keyboard layout (fn layer, swipe tools on space)?" n; then
-        fetch keyboard-layout.xml "$TERMUX_DIR/keyboard/layout.xml"
-    fi
-
-    log "Key bindings: the app refreshes a pristine, fully commented"
-    log "termux-launcher-bindings.conf example at every start under"
-    log "~/.termux/launcher/examples/ — copy it to ~/.termux to customize."
-
-    if command -v termux-reload-settings >/dev/null 2>&1; then
-        termux-reload-settings || true
-    fi
+    log "Nothing to install: the app owns this directory now."
+    log ""
+    log "  termux.properties            seeded on install, commented, yours to edit"
+    log "  termux-launcher-bindings.conf  same"
+    log "  fonts.conf                     same"
+    log "  launcher/examples/             pristine copies, refreshed at every app start"
+    log ""
+    log "The extra keys row and the in-app keyboard layout both ship inside the app,"
+    log "so there is nothing to download for them. Editing the row (the extrakeys.edit"
+    log "action) writes extra-keys into ~/.termux/termux.properties, and this script"
+    log "deliberately never rewrites that file — it would take your row with it."
+    log ""
+    log "To start from the bundled keyboard layout and change it:"
+    log "  mkdir -p ~/.termux/keyboard"
+    log "  cp ~/.termux/launcher/examples/keyboard-layout.xml ~/.termux/keyboard/layout.xml"
+    log "  termux-reload-settings"
 }
 
 # ----------------------------------------------------------------------------
@@ -243,13 +246,16 @@ welcome() {
 Termux Launcher setup
 =====================
 
-  1) Everything below
-  2) Packages + fish/Oh My Posh shell configs
-  3) Terminal configs (~/.termux: properties, keyboard layout)
+  1) Packages + fish/Oh My Posh shell configs
   q) Quit
 
 Fonts (ligatures + Nerd Font icons) are installed from the in-app font
 picker: Settings > Terminal > Font.
+
+Nothing under ~/.termux is installed from here any more — the app seeds
+termux.properties, the key bindings, and fonts.conf itself, and the extra keys
+row and keyboard layout are built in. Overwriting those files from a script
+would throw away edits made in the app.
 
 Every existing config gets a timestamped .bak before being replaced.
 EOF
@@ -266,14 +272,7 @@ main() {
         1)
             install_packages
             install_shell_configs
-            install_terminal_configs
-            ;;
-        2)
-            install_packages
-            install_shell_configs
-            ;;
-        3)
-            install_terminal_configs
+            show_terminal_config_notes
             ;;
         q|Q)
             exit 0

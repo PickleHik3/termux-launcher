@@ -221,7 +221,7 @@ The helper scripts in `docs/en/examples/` are not installed by the APK. The begi
 
 Scripts:
 
-- `setup-launcher`: interactive installer for the current shell setup — packages, fish + Oh My Posh configs, `setup-nvim`, and the `~/.termux` terminal configs.
+- `setup-launcher`: interactive installer for the current shell setup — packages, fish + Oh My Posh configs, and `setup-nvim`. It deliberately installs nothing under `~/.termux`; the app seeds those files and would lose in-app edits if a script rewrote them.
 - `setup-nvim`: interactive Neovim setup. Installs AstroNvim (default), NvChad, LazyVim, kickstart, or a stock config, plus launcher integrations: OSC 52 clipboard, always-on line wrap, and — on AstroNvim and NvChad — a colorscheme generated from `~/.termux/material-colors.sh` that retints live on wallpaper changes.
 - `setup-tmux-btop`: interactive installer for Fish + Oh My Posh, tmux theme/plugin setup, and optional Shizuku `btop`.
 - `launcher-system-monitor`: cached CPU/RAM formatter for tmux status bars.

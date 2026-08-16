@@ -15,10 +15,8 @@ files=(
     aliens-material.omp.json
     conf.d-personal.fish
     config.fish
-    keyboard-layout.xml
     setup-nvim
     termux-launcher.omp.json
-    termux.properties
 )
 
 table=$'# --- BEGIN DIGESTS (generated: update-setup-launcher-digests.sh) ---\nexpected_digest() {\n    case "$1" in\n'
