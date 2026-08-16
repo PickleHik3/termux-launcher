@@ -180,9 +180,11 @@ system keyboard. Landscape is usable for the first time.
 - **`setup-launcher` asks a better question.** Three choices now: everything, the shell essentials
   (fish, Oh My Posh, zoxide, eza), or one item at a time. "Everything" adds Neovim with AstroNvim
   themed from the wallpaper palette, and the showcase binaries — sigye, the animated-logo fastfetch,
-  and kitten — installed into `~/.local/bin` as digest-pinned release assets. A release that has not
-  published a binary makes the script skip it with the recipe to build it, never install it
-  unverified.
+  and kitten — installed into `~/.local/bin` from
+  [termux-launcher-binaries](https://github.com/PickleHik3/termux-launcher-binaries), each checked
+  against a pinned sha256. An unpublished binary is skipped with the recipe that builds it, never
+  installed unverified. That repository carries the licences, the patches and the build recipes,
+  including the corresponding source for the GPL-3.0-only `kitten`.
 - **`setup-launcher` no longer writes to `~/.termux`.** The script installed `termux.properties` and
   the keyboard layout by replacing whichever files were there; now that the app seeds the former and
   the in-app editor writes an `extra-keys` row into it, a wholesale rewrite would throw that row

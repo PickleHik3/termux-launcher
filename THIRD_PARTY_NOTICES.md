@@ -51,10 +51,16 @@ licenses remain available in their respective distributions.
 ## Build recipes for external terminal tools
 
 The `recipes/` directory builds third-party command-line tools that exercise the launcher's
-graphics protocols. **No binary of any of these is distributed with Termux Launcher.** The
-repository contains only build scripts and patches; the tools are compiled from upstream sources on
-the machine that runs a recipe. The notices below record what each recipe builds, and what would
-attach if the project ever published the resulting binaries.
+graphics protocols. **No binary of any of these is distributed inside the Termux Launcher APK.**
+This repository contains only build scripts and patches; the tools are compiled from upstream
+sources on the machine that runs a recipe.
+
+Prebuilt `aarch64` binaries of three of them — `kitten`, the patched Fastfetch, and Sigye — are
+published separately at
+[PickleHik3/termux-launcher-binaries](https://github.com/PickleHik3/termux-launcher-binaries),
+which `setup-launcher` can install. That repository carries the upstream licence texts, the
+patches, the build recipes, and the corresponding-source pointers for the GPL-3.0-only `kitten`.
+The notices below apply to those builds.
 
 - **[Fastfetch](https://github.com/fastfetch-cli/fastfetch)** — MIT — Copyright 2021–2023 Linus
   Dierheimer, 2022– Carter Li. Built from pinned commit `9c7cfb8` (v2.67.0) with the repository's

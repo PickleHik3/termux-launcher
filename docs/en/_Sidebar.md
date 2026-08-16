@@ -16,6 +16,7 @@
 - [Nix: beginner's guide](Nix_Getting_Started.md)
 - [Nix package management](Nix_Package_Management.md)
 - [Nix fork differences](Nix_Fork_Differences.md)
+- [VAJ to Nix migration](VAJ_To_Nix_Migration.md)
 - [Showcase tools](Building_Terminal_Showcase_Tools.md)
 
 ## Local AI

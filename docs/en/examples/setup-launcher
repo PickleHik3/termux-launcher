@@ -48,7 +48,12 @@ set -eu
 
 TEMPLATES_REF="${TERMUX_LAUNCHER_REF:-v0.2.35}"
 RAW_BASE="${TERMUX_LAUNCHER_RAW_BASE:-https://raw.githubusercontent.com/PickleHik3/termux-launcher/$TEMPLATES_REF/docs/en/examples}"
-BINARIES_BASE="${TERMUX_LAUNCHER_BINARIES_BASE:-https://github.com/PickleHik3/termux-launcher/releases/download/$TEMPLATES_REF}"
+# The showcase binaries live in their own repository, pinned to a tag of it rather
+# than to TEMPLATES_REF: they are builds of other people's software on their own
+# schedule, and tying them to a launcher release would mean rebuilding all three
+# for every launcher tag.
+BINARIES_REF="${TERMUX_LAUNCHER_BINARIES_REF:-2026.08.16}"
+BINARIES_BASE="${TERMUX_LAUNCHER_BINARIES_BASE:-https://raw.githubusercontent.com/PickleHik3/termux-launcher-binaries/$BINARIES_REF/bin}"
 
 # --- BEGIN DIGESTS (generated: update-setup-launcher-digests.sh) ---
 expected_digest() {
@@ -65,6 +70,9 @@ expected_digest() {
 # --- BEGIN BINARY DIGESTS (generated: update-setup-launcher-digests.sh) ---
 expected_binary_digest() {
     case "$1" in
+        fastfetch)   echo 1278a38404ef4f4693642fb3f7b1b779419f9424dde15c85433bd5984a6f531e ;;
+        kitten)      echo 274ff935007bd6aa28dd7ef71439b52e10c2d7e0641f4413fd959508a74bf8c7 ;;
+        sigye)       echo be095e85f54c2a462b924ce21916a6586580713785ab5efc79b63050eead5eea ;;
         *) echo "" ;;
     esac
 }
@@ -165,7 +173,7 @@ fetch_binary() {
     name="$1"
     expected=$(expected_binary_digest "$name")
     if [ -z "$expected" ]; then
-        warn "$name is not published for $TEMPLATES_REF — skipping it.
+        warn "$name is not published for $BINARIES_REF — skipping it.
   Build it yourself with recipes/cross/build-$name.sh (see docs/en/Building_Terminal_Showcase_Tools.md)."
         return 0
     fi

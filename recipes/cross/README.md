@@ -14,6 +14,11 @@ NDK plus a sysroot assembled with `dpkg-deb -x`.
 | `build-sigye.sh` | patched Sigye clock | rustup `aarch64-linux-android` + NDK |
 | `build-kitten.sh` | kitty's standalone `kitten` client | Go + python3 |
 
+If you only want the binaries, they are published for `aarch64` at
+[termux-launcher-binaries](https://github.com/PickleHik3/termux-launcher-binaries) and
+`setup-launcher` installs them with a pinned digest. Build them yourself when you want to audit
+the result, target another prefix, or move a pin.
+
 ```sh
 cd /some/scratch/dir
 /path/to/recipes/cross/termux-sysroot.sh
