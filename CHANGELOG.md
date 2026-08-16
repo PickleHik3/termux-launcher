@@ -144,6 +144,11 @@ system keyboard. Landscape is usable for the first time.
 
 ### Changed
 
+- **The apt `setup-launcher` is gone from this edition.** It installed packages with `pkg` or
+  `pacman`, neither of which exists here, so it failed on the first item. Nothing replaces it:
+  the shell environment comes from the flake template, and `setup-toolkits` picks the toolkits —
+  shell, eye candy, editor, build, node, go, python — by editing `toolkits.nix` and switching.
+  `setup-nvim` is unaffected.
 - **The volume rocker stays the volume rocker.** Upstream Termux turns the volume keys into
   virtual Ctrl and Fn by default, and a launcher that swallows the rocker leaves no way to
   change the volume from the home screen. `volume-keys = virtual` restores upstream's

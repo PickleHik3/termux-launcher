@@ -83,16 +83,26 @@ Recommended setup:
 The built-in terminal keyboard is enabled on fresh installs; an external keyboard app is optional.
 See [Getting Started](docs/en/Launcher_Getting_Started.md) for the setup flow.
 
-### Quick start script
+### Quick start
 
-[`setup-launcher`](docs/en/examples/setup-launcher) turns a fresh install into the full showcase shell in one run — fish + Oh My Posh with wallpaper Material colors, zoxide/eza/yazi/neovim, and the launcher terminal configs in `~/.termux`. It is interactive, and every config it replaces gets a timestamped `.bak` first:
+This edition is configured declaratively, so there is no installer script to download. The fork
+ships a flake template that recreates the whole showcase shell — fish as the login shell, the
+oh-my-posh Material prompt, `eza`/`zoxide`/`yazi`, Neovim, and fastfetch with an animated logo:
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-launcher
-sh setup-launcher
+cd ~/.config/nix-on-droid
+rm flake.nix nix-on-droid.nix
+nix flake init -t github:PickleHik3/nix-on-droid/launcher-nix#launcher
+nix-on-droid switch --flake ~/.config/nix-on-droid
 ```
 
-Fonts are not part of the script — the in-app font picker (**Settings › Terminal › Font**) downloads and wires up curated families, Nerd Font builds included.
+`setup-toolkits` then picks what is installed — shell, eye candy, editor, build tools, node, go,
+python — by flipping booleans in `~/.config/nix-on-droid/toolkits.nix` and switching for you.
+Editing that file by hand does the same thing. See
+[Nix package management](docs/en/Nix_Package_Management.md).
+
+Fonts are separate either way — the in-app font picker (**Settings › Terminal › Font**) downloads
+and wires up curated families, Nerd Font builds included.
 
 ## Documentation
 

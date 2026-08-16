@@ -221,9 +221,9 @@ The helper scripts in `docs/en/examples/` are not installed by the APK. The begi
 
 Scripts:
 
-- `setup-launcher`: interactive installer for the current shell setup — packages, fish + Oh My Posh configs, `setup-nvim`, and the `~/.termux` terminal configs.
 - `setup-nvim`: interactive Neovim setup. Installs AstroNvim (default), NvChad, LazyVim, kickstart, or a stock config, plus launcher integrations: OSC 52 clipboard, always-on line wrap, and — on AstroNvim and NvChad — a colorscheme generated from `~/.termux/material-colors.sh` that retints live on wallpaper changes.
-- `setup-tmux-btop`: interactive installer for Fish + Oh My Posh, tmux theme/plugin setup, and optional Shizuku `btop`.
+- `setup-tmux-btop`: deprecated apt-edition installer for Fish + Oh My Posh, tmux theme/plugin setup, and optional Shizuku `btop`. It calls `pkg`, which this edition does not have — kept only as a reference.
+- The shell environment itself is not scripted here: it comes from the flake template, and `setup-toolkits` (shipped by that template) picks the toolkits — shell, eye candy, editor, build, node, go, python. See [Nix package management](Nix_Package_Management.md).
 - `launcher-system-monitor`: cached CPU/RAM formatter for tmux status bars.
 - `launcher-weather-widget`: cached weather formatter using wttr.in.
 - `setup-btop-rish`: installs Linux `btop` under `/data/local/tmp` through Shizuku `rish`.
