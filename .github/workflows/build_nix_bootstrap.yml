@@ -8,6 +8,12 @@ name: Build nix bootstrap
 # separate, human step — the app fetches these from the `nix-bootstrap` release
 # tag, so replacing those assets changes what every existing install downloads.
 
+# The dispatch button only appears once this file reaches the default branch,
+# which happens when dev merges into main at release time. Until then the push
+# trigger below is the way in: it is scoped to this file so ordinary
+# nix-edition commits do not rebuild the bootstrap, and "Re-run all jobs" on a
+# past run repeats a build without touching the repository.
+
 on:
   workflow_dispatch:
     inputs:
@@ -15,6 +21,11 @@ on:
         description: 'Ref of PickleHik3/nix-on-droid to build from'
         required: true
         default: 'launcher-nix'
+  push:
+    branches:
+      - nix-edition
+    paths:
+      - '.github/workflows/build_nix_bootstrap.yml'
 
 concurrency:
   group: ${{ github.workflow }}
@@ -29,7 +40,8 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: PickleHik3/nix-on-droid
-          ref: ${{ github.event.inputs.nix_on_droid_ref }}
+          # Empty on a push event, where there are no inputs to read.
+          ref: ${{ github.event.inputs.nix_on_droid_ref || 'launcher-nix' }}
 
       - name: Install nix
         uses: cachix/install-nix-action@v31
