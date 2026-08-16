@@ -222,7 +222,30 @@ disagree — the script reads the same file it writes. Only the booleans
 matter to `home.nix` and `flake.nix`; comments are yours.
 
 Adding packages that are not in any toolkit stays a `home.nix` edit, as
-always — the toolkits are a starting set, not a boundary.
+always — the toolkits are a starting set, not a boundary. That edit has a
+place waiting for it: `extraPackages`, an empty commented list near the top
+of `home.nix`, already wired into `home.packages`.
+
+```nix
+  extraPackages = with pkgs; [
+    htop
+    jq
+  ];
+```
+
+Then switch. Names are nixpkgs attribute names — `nix search nixpkgs htop`,
+or <https://search.nixos.org/packages>. A name that does not exist fails the
+switch by name and leaves the running environment alone, so a typo costs the
+error message and nothing else.
+
+Nothing you write takes effect on save, and no shell restart applies it
+either: the switch is what builds and activates. Because that is easy to
+learn the hard way, the shipped fish greeting compares the flake directory's
+`.nix` files against the last switch and says so when they are ahead:
+
+```
+~/.config/nix-on-droid has changes that are not applied yet — run: nix-on-droid switch --flake ~/.config/nix-on-droid
+```
 
 ### Global installs: `npm -g`, `go install`, `uv tool`
 
