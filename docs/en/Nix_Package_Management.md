@@ -128,6 +128,16 @@ CLI stack the examples in this wiki use. Replace the minimal first-boot
 files with it:
 
 ```sh
+setup-launcher
+```
+
+`setup-launcher` ships in the base environment and does the four steps below: it moves the
+minimal first-boot files aside with a timestamp, initialises the template, and switches.
+Run it again later and it does nothing but point at `setup-toolkits`.
+
+By hand:
+
+```sh
 cd ~/.config/nix-on-droid
 rm flake.nix nix-on-droid.nix        # the minimal files from first boot
 nix flake init -t github:PickleHik3/nix-on-droid/launcher-nix#launcher

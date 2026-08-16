@@ -122,8 +122,8 @@ None of these are required for the basic launcher and terminal:
   launching, panes, workspaces, and the terminal do not need it.
 - **TAI / Termux AI:** optional local model host under **Settings → Services & permissions → TAI ·
   Termux AI**. See the [TAI user guide](Termux_AI.md).
-- **Shell setup:** this edition has no installer script — the shell environment comes from the
-  flake template and `setup-toolkits` chooses which toolkits are installed. See
+- **Shell setup:** run `setup-launcher` at the first prompt — it installs the flake template and
+  switches; `setup-toolkits` then chooses which toolkits are installed. See
   [Nix getting started](Nix_Getting_Started.md) and [Nix package management](Nix_Package_Management.md).
   [`setup-nvim`](examples/setup-nvim) still sets up Neovim with the distro of your choice — AstroNvim
   (default), NvChad, LazyVim, kickstart, or stock — plus OSC 52 clipboard, line wrap, and, on

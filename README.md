@@ -90,11 +90,11 @@ ships a flake template that recreates the whole showcase shell — fish as the l
 oh-my-posh Material prompt, `eza`/`zoxide`/`yazi`, Neovim, and fastfetch with an animated logo:
 
 ```sh
-cd ~/.config/nix-on-droid
-rm flake.nix nix-on-droid.nix
-nix flake init -t github:PickleHik3/nix-on-droid/launcher-nix#launcher
-nix-on-droid switch --flake ~/.config/nix-on-droid
+setup-launcher
 ```
+
+It ships in the base environment, so it is there at the first prompt: it installs the template
+and runs the switch, restoring your files if anything fails.
 
 `setup-toolkits` then picks what is installed — shell, eye candy, editor, build tools, node, go,
 python — by flipping booleans in `~/.config/nix-on-droid/toolkits.nix` and switching for you.

@@ -59,6 +59,17 @@ shell, an oh-my-posh prompt, `eza`/`zoxide`/`yazi`, Neovim, fastfetch with an an
 small sshd toolset.
 
 ```sh
+setup-launcher
+```
+
+That is the whole step. It moves the two minimal first-boot files aside with a timestamp,
+fetches the template, and runs the switch. If the fetch fails it puts your files back; if the
+switch fails nothing changed and the environment you are in still works. `setup-launcher
+--no-switch` stops after the template so you can read it first.
+
+By hand, it is these four:
+
+```sh
 cd ~/.config/nix-on-droid
 rm flake.nix nix-on-droid.nix
 nix flake init -t github:PickleHik3/nix-on-droid/launcher-nix#launcher

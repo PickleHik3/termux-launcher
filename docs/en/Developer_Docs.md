@@ -223,7 +223,7 @@ Scripts:
 
 - `setup-nvim`: interactive Neovim setup. Installs AstroNvim (default), NvChad, LazyVim, kickstart, or a stock config, plus launcher integrations: OSC 52 clipboard, always-on line wrap, and — on AstroNvim and NvChad — a colorscheme generated from `~/.termux/material-colors.sh` that retints live on wallpaper changes.
 - `setup-tmux-btop`: deprecated apt-edition installer for Fish + Oh My Posh, tmux theme/plugin setup, and optional Shizuku `btop`. It calls `pkg`, which this edition does not have — kept only as a reference.
-- The shell environment itself is not scripted here: it comes from the flake template, and `setup-toolkits` (shipped by that template) picks the toolkits — shell, eye candy, editor, build, node, go, python. See [Nix package management](Nix_Package_Management.md).
+- The shell environment is not scripted from this directory: `setup-launcher` (shipped in the nix base environment) installs the flake template and switches, and `setup-toolkits` (shipped by that template) picks the toolkits — shell, eye candy, editor, build, node, go, python. See [Nix package management](Nix_Package_Management.md).
 - `launcher-system-monitor`: cached CPU/RAM formatter for tmux status bars.
 - `launcher-weather-widget`: cached weather formatter using wttr.in.
 - `setup-btop-rish`: installs Linux `btop` under `/data/local/tmp` through Shizuku `rish`.
