@@ -407,10 +407,22 @@ public final class TermuxPropertyConstants {
     public static final String KEY_EXTRA_KEYS2 = "extra-keys2";
 
 
-    //public static final String DEFAULT_IVALUE_EXTRA_KEYS = "[[ESC, TAB, CTRL, ALT, {key: '-', popup: '|'}, DOWN, UP]]"; // Single row
-    // Double row
-    public static final String DEFAULT_IVALUE_EXTRA_KEYS = "[[{key: KEYBOARD, popup: PASTE}, {key: 'tool:workspace.picker', display: '▤'}, {key: 'tool:workspace.save_prompt', display: '⛁'}, {key: 'tool:window.previous', display: '◧'}, {key: 'tool:window.next', display: '◨'}, {key: 'tool:pane.move_to_edge:edge=left', display: '⇤', popup: {key: 'tool:pane.next_layout', display: '⟳'}}, {key: 'tool:terminal.toggle_scratchpad', display: '▣', popup: {key: 'tool:pane.toggle_float', display: '◈'}}]]";
-    public static final String DEFAULT_IVALUE_EXTRA_KEYS2 = "[[F1, F2, F3, F4, F5, F6, F7, F8, F9, F10], ['[', ']', '{', '}', '$', '~', '=', -, _, '\"']]";
+    //public static final String DEFAULT_IVALUE_EXTRA_KEYS = "[[ESC, TAB, CTRL, ALT, {key: '-', popup: '|'}, DOWN, UP]]"; // Upstream Termux's row
+
+    /**
+     * The launcher's own key row, shipped as the default so a fresh install needs no
+     * termux.properties at all. A value for {@link #KEY_EXTRA_KEYS} in the properties file
+     * replaces it, which is also what the {@code extrakeys.edit} editor writes on save — so an
+     * app update can change this row without touching anyone's edited one.
+     */
+    public static final String DEFAULT_IVALUE_EXTRA_KEYS = "[[{key: KEYBOARD, popup: PASTE}, {key: 'tool:workspace.picker', display: '▤'}, {key: 'tool:workspace.save_prompt', display: '⛁'}, {key: 'tool:window.previous', display: '◧', popup: {key: 'tool:session.previous', display: '◀'}}, {key: 'tool:window.next', display: '◨', popup: {key: 'tool:session.next', display: '▶'}}, {key: 'tool:pane.move_to_edge:edge=left', display: '⇤', popup: {key: 'tool:pane.next_layout', display: '⟳'}}, {key: 'tool:terminal.toggle_scratchpad', display: '▣', popup: {key: 'tool:pane.toggle_float', display: '◈'}}]]";
+
+    /**
+     * The second page ships empty: one row is what the launcher needs, and the in-app keyboard's
+     * Fn layer already reaches F1-F12. A page with no keys is dropped by the pager rather than
+     * shown blank, so this is one page by default. Add keys here — or in the editor — to get it.
+     */
+    public static final String DEFAULT_IVALUE_EXTRA_KEYS2 = "[]";
 
     /**
      * Defines the key for extra keys style

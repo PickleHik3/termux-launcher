@@ -197,9 +197,15 @@ public class ExtraKeysLayoutModelTest {
     public void everyPageHasAPropertyAndADefault() {
         assertEquals(TermuxTerminalExtraKeys.PAGE_PROPERTY_KEYS.length,
             TermuxTerminalExtraKeys.PAGE_DEFAULT_VALUES.length);
+        // The launcher's own row is the first page and always holds keys.
+        assertFalse("the first page default must parse into keys",
+            ExtraKeysLayoutModel.parse(TermuxTerminalExtraKeys.PAGE_DEFAULT_VALUES[0]).isEmpty());
+        // A later page may ship empty — the pager drops an empty page rather than showing it
+        // blank. parse() reports a malformed value as empty too, so a default that does not
+        // literally declare an empty layout still has to produce keys.
         for (String value : TermuxTerminalExtraKeys.PAGE_DEFAULT_VALUES) {
-            assertFalse("a shipped page default must parse",
-                ExtraKeysLayoutModel.parse(value).isEmpty());
+            assertEquals("a shipped page default must parse: " + value,
+                "[]".equals(value.trim()), ExtraKeysLayoutModel.parse(value).isEmpty());
         }
     }
 }
