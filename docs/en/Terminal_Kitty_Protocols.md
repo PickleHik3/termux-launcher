@@ -13,8 +13,8 @@ TERM_PROGRAM_VERSION=<installed version>
 ```
 
 `TERM` remains `xterm-256color` by default. To use a different terminal identity for programs that
-string-match it, set this in `~/.termux/termux.properties` and reload settings or start a new app
-process:
+string-match it, set this in `~/.termux/termux.properties` — the app seeds that file with the
+property documented and commented out, so it is already there to uncomment:
 
 ```properties
 terminal-term = xterm-kitty

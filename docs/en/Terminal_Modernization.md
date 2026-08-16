@@ -253,13 +253,18 @@ The launcher installs its own configuration examples, so nothing has to be writt
 |---|---|---|
 | `~/.termux/termux-launcher-bindings.conf` | On install, only when absent | Bindings, chords, modal keymaps, launching apps from a chord |
 | `~/.termux/fonts.conf` | On install, only when absent | Faces, symbol maps, shaping, features, axes, cell metrics |
+| `~/.termux/termux.properties` | On install, only when absent | `TERM`, volume and back keys, extra keys, cursor, scrollback, margins, colours, app behaviour |
 | `~/.termux/keyboard/layout.xml` | Never — copy it yourself | In-app keyboard layout and space-bar swipe slots |
 | `~/.termux/launcher/examples/` | Refreshed at every app start | Pristine copies of all of the above, plus a `README.md` |
 
-The two seeded files arrive with every directive commented out, so a fresh install behaves exactly as
-it did before they existed — uncomment what you want. They are written only when missing, so app
+The three seeded files arrive with every directive commented out, so a fresh install behaves exactly
+as it did before they existed — uncomment what you want. They are written only when missing, so app
 updates never overwrite your edits. To start over, copy the file back from
 `~/.termux/launcher/examples/`.
+
+Only one properties file is ever read: `~/.termux/termux.properties` wins, and
+`~/.config/termux/termux.properties` applies only when the first is absent. A file already at that
+second path is therefore left in charge — the app seeds nothing rather than shadowing it.
 
 The keyboard layout is not seeded, because the moment `~/.termux/keyboard/layout.xml` exists it
 replaces the bundled layout. Opt in explicitly:
