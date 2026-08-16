@@ -122,9 +122,9 @@ None of these are required for the basic launcher and terminal:
   launching, panes, workspaces, and the terminal do not need it.
 - **TAI / Termux AI:** optional local model host under **Settings → Services & permissions → TAI ·
   Termux AI**. See the [TAI user guide](Termux_AI.md).
-- **Shell setup scripts:** [`setup-launcher`](examples/setup-launcher) installs the showcase shell
-  (fish + Oh My Posh with wallpaper Material colors, zoxide/eza/yazi) and nothing under `~/.termux`,
-  which the app seeds for itself; [`setup-nvim`](examples/setup-nvim) sets up Neovim with the distro of your
+- **Shell setup scripts:** [`setup-launcher`](examples/setup-launcher) installs the showcase shell —
+  everything, the essentials (fish + Oh My Posh with wallpaper Material colors, zoxide, eza), or one
+  item at a time — and nothing under `~/.termux`, which the app seeds for itself; [`setup-nvim`](examples/setup-nvim) sets up Neovim with the distro of your
   choice — AstroNvim (default), NvChad, LazyVim, kickstart, or stock — plus OSC 52 clipboard, line
   wrap, and, on AstroNvim and NvChad, a colorscheme generated from the wallpaper palette.
 

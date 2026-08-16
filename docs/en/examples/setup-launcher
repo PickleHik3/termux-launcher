@@ -1,67 +1,78 @@
 #!/system/bin/sh
 # setup-launcher — Termux Launcher shell environment installer.
 #
-# Installs the current, secret-free templates derived from the live
-# development setup: fish + Oh My Posh with wallpaper Material colors,
-# zoxide/eza.
+# Three choices: everything, the shell essentials, or one item at a time.
+# Nothing here is required — the launcher works out of the box, and this only
+# installs the shell setup the screenshots were taken with.
 #
-# ~/.termux is no longer touched here. The app seeds termux.properties,
+#   Shell        fish, Oh My Posh with the wallpaper Material palette, zoxide, eza
+#   Editor       neovim + AstroNvim, themed from the same palette
+#   Showcase     sigye, the animated-logo fastfetch, kitten
+#
+# ~/.termux is not touched. The app seeds termux.properties,
 # termux-launcher-bindings.conf and fonts.conf itself — only when they are
 # absent — and ships the extra keys row and the in-app keyboard layout as
-# built-in defaults. Rewriting termux.properties from a script would discard
-# the extra-keys row the in-app editor writes into it.
+# built-in defaults. Rewriting termux.properties from a script would discard the
+# extra-keys row the in-app editor writes into it.
 #
-# Fonts are no longer handled here: the in-app font picker (Settings >
-# Terminal > Font) downloads and wires up curated families, Nerd Font
-# builds included.
+# Fonts are not handled here either: the in-app font picker (Settings >
+# Terminal > Font) downloads and wires up curated families, Nerd Font builds
+# included.
 #
-# tmux, btop, and Shizuku are no longer part of this setup. The old installer
-# that handled them is kept as docs/en/examples/setup-tmux-btop for existing
-# users, but it is deprecated: the launcher's own windows, panes, workspaces,
-# and status bar replace what tmux and btop provided here.
+# tmux, btop, and Shizuku are gone from this setup. The old installer that
+# handled them is kept as docs/en/examples/setup-tmux-btop for existing users,
+# but it is deprecated: the launcher's own windows, panes, workspaces, and
+# status bar replace what tmux and btop provided.
 #
-# The fish config is split in two: config.fish is launcher-owned and replaced
-# on every run (with a .bak), while ~/.config/fish/conf.d/personal.fish is
-# yours — installed once, never overwritten, and the place for aliases,
-# EDITOR, and other personal settings.
-#
-# Neovim is handled by a separate chooser: this script installs `setup-nvim`
-# into ~/.local/bin, and that picks a distro (AstroNvim by default, with a
-# colourscheme generated from the wallpaper palette) only when you run it.
+# The fish config is split in two: config.fish is launcher-owned and replaced on
+# every run (with a .bak), while ~/.config/fish/conf.d/personal.fish is yours —
+# installed once, never overwritten, and the place for aliases, EDITOR, and
+# other personal settings.
 #
 # Existing files are never overwritten silently — every replaced config gets a
 # timestamped .bak alongside it.
 
 # Every file this script installs is fetched from a pinned release tag and checked
-# against the digest table below before it is allowed anywhere near your shell.
+# against a digest table below before it is allowed anywhere near your shell.
 # Two of them — config.fish and setup-nvim — run code on every session, so a
 # mutable branch and an unverified download would mean the repository (or anything
 # that can answer for it) gets to choose what your shell executes forever after.
+# The showcase binaries get the same treatment, and are skipped rather than
+# installed unverified when a release has not published them.
 #
 # Maintainers: after editing any template, run
-#   docs/en/examples/update-setup-launcher-digests.sh
-# and commit the refreshed table, then move TEMPLATES_REF to the release tag.
+#   docs/en/examples/update-setup-launcher-digests.sh [dir-with-built-binaries]
+# and commit the refreshed tables, then move TEMPLATES_REF to the release tag.
 
 set -eu
 
 TEMPLATES_REF="${TERMUX_LAUNCHER_REF:-v0.2.35}"
 RAW_BASE="${TERMUX_LAUNCHER_RAW_BASE:-https://raw.githubusercontent.com/PickleHik3/termux-launcher/$TEMPLATES_REF/docs/en/examples}"
+BINARIES_BASE="${TERMUX_LAUNCHER_BINARIES_BASE:-https://github.com/PickleHik3/termux-launcher/releases/download/$TEMPLATES_REF}"
 
 # --- BEGIN DIGESTS (generated: update-setup-launcher-digests.sh) ---
 expected_digest() {
     case "$1" in
         aliens-material.omp.json) echo 87ce6bfdb16335fc543d3c974f19632503f0e803de73e728de8a265ac03da148 ;;
         conf.d-personal.fish)     echo 6f7b666475e07ee0447fbdba29485a8681f1f622e7c0ab3f98f3ff15b0142190 ;;
-        config.fish)              echo 45d783407d0710d76dbc9d64abd539e6f8b449bd92a29c3108fa0908b810c353 ;;
+        config.fish)              echo 9e977847efd4410075282d686441faa4bb9524e2eb5aecbb3031317d5b857de0 ;;
         setup-nvim)               echo 345c79f048d4bf26dc5de7022443a470fb55266cb945367d383b2123049fa400 ;;
-        termux-launcher.omp.json) echo 756eeb5e6eef28f9cd4d20bd3274d4a374a8e8e0002c27d8df0c1348893d3b5f ;;
         *) echo "" ;;
     esac
 }
 # --- END DIGESTS ---
 
+# --- BEGIN BINARY DIGESTS (generated: update-setup-launcher-digests.sh) ---
+expected_binary_digest() {
+    case "$1" in
+        *) echo "" ;;
+    esac
+}
+# --- END BINARY DIGESTS ---
+
 FISH_CONFIG="${FISH_CONFIG:-$HOME/.config/fish/config.fish}"
 OMP_DIR="${OMP_DIR:-$HOME/.config/ohmyposh}"
+BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
 
 log() { printf '%s\n' "$*"; }
 warn() { printf 'setup-launcher: %s\n' "$*" >&2; }
@@ -96,34 +107,30 @@ file_digest() {
     fi
 }
 
-# fetch <relative-name> <destination>
-fetch() {
-    name="$1"
+# download <url> <destination> <expected-sha256>
+download() {
+    url="$1"
     dest="$2"
+    expected="$3"
     dest_dir=$(dirname "$dest")
     mkdir -p "$dest_dir"
     tmp="$dest_dir/.$(basename "$dest").download"
-    if ! curl -fsSL -o "$tmp" "$RAW_BASE/$name"; then
+    if ! curl -fsSL -o "$tmp" "$url"; then
         rm -f "$tmp"
-        fail "download failed: $RAW_BASE/$name"
+        fail "download failed: $url"
     fi
 
     if [ "${TERMUX_LAUNCHER_SKIP_DIGEST:-0}" = 1 ]; then
-        warn "digest check skipped for $name (TERMUX_LAUNCHER_SKIP_DIGEST=1)"
+        warn "digest check skipped for $(basename "$dest") (TERMUX_LAUNCHER_SKIP_DIGEST=1)"
     else
-        expected=$(expected_digest "$name")
-        if [ -z "$expected" ]; then
-            rm -f "$tmp"
-            fail "no pinned digest for $name; refusing to install it"
-        fi
         actual=$(file_digest "$tmp")
         if [ -z "$actual" ]; then
             rm -f "$tmp"
-            fail "no sha256 tool available (install coreutils or openssl-tool) — cannot verify $name"
+            fail "no sha256 tool available (install coreutils or openssl-tool) — cannot verify $url"
         fi
         if [ "$actual" != "$expected" ]; then
             rm -f "$tmp"
-            fail "digest mismatch for $name
+            fail "digest mismatch for $url
   expected $expected
   got      $actual
 Refusing to install. Either the pinned ref ($TEMPLATES_REF) does not match this
@@ -136,7 +143,14 @@ script's digest table, or the download was tampered with."
     log "  installed $dest"
 }
 
-# fetch_once <relative-name> <destination> — for files that become the user's
+# fetch <template-name> <destination>
+fetch() {
+    expected=$(expected_digest "$1")
+    [ -n "$expected" ] || fail "no pinned digest for $1; refusing to install it"
+    download "$RAW_BASE/$1" "$2" "$expected"
+}
+
+# fetch_once <template-name> <destination> — for files that become the user's
 # after the first install: copied when missing, never replaced afterwards.
 fetch_once() {
     if [ -e "$2" ]; then
@@ -144,6 +158,19 @@ fetch_once() {
     else
         fetch "$1" "$2"
     fi
+}
+
+# fetch_binary <name> — a release asset into ~/.local/bin, or a clear skip.
+fetch_binary() {
+    name="$1"
+    expected=$(expected_binary_digest "$name")
+    if [ -z "$expected" ]; then
+        warn "$name is not published for $TEMPLATES_REF — skipping it.
+  Build it yourself with recipes/cross/build-$name.sh (see docs/en/Building_Terminal_Showcase_Tools.md)."
+        return 0
+    fi
+    download "$BINARIES_BASE/$name-aarch64" "$BIN_DIR/$name" "$expected"
+    chmod +x "$BIN_DIR/$name"
 }
 
 ask_yn() {
@@ -158,83 +185,98 @@ ask_yn() {
     esac
 }
 
-# ----------------------------------------------------------------------------
-# Packages
-# ----------------------------------------------------------------------------
-
-install_packages() {
-    log ""
-    log "== Packages =="
-    # Everything the shipped configs actually use, and nothing else:
-    #   fish + oh-my-posh   the shell and prompt
-    #   zoxide, eza         cd/ls upgrades wired into config.fish
-    #   yazi                the `y` file-manager helper
-    #   neovim              default $EDITOR in the config
-    #   git, curl           used by this script and the prompt's git segment
-    packages="fish oh-my-posh zoxide eza yazi neovim git curl"
-
+install_pkg() {
     if command -v pacman >/dev/null 2>&1; then
-        log "Using pacman."
-        # shellcheck disable=SC2086
-        pacman -S --needed --noconfirm $packages || warn "some packages failed to install"
+        # shellcheck disable=SC2068
+        pacman -S --needed --noconfirm $@ || warn "could not install: $*"
     elif command -v pkg >/dev/null 2>&1; then
-        log "Using pkg."
-        # shellcheck disable=SC2086
-        pkg install -y $packages || warn "some packages failed to install"
+        # shellcheck disable=SC2068
+        pkg install -y $@ || warn "could not install: $*"
     else
         fail "no supported package manager found (pkg or pacman)"
     fi
 }
 
 # ----------------------------------------------------------------------------
-# Shell configs
+# Items
 # ----------------------------------------------------------------------------
 
-install_shell_configs() {
+item_fish() {
     log ""
-    log "== Fish + Oh My Posh configs =="
+    log "== fish =="
+    install_pkg fish
     fetch config.fish "$FISH_CONFIG"
     fetch_once conf.d-personal.fish "$(dirname "$FISH_CONFIG")/conf.d/personal.fish"
-    fetch aliens-material.omp.json "$OMP_DIR/aliens-material.omp.json"
-    fetch termux-launcher.omp.json "$OMP_DIR/termux-launcher.omp.json"
-
-    fetch setup-nvim "$HOME/.local/bin/setup-nvim"
-    chmod +x "$HOME/.local/bin/setup-nvim"
-    log "Neovim: run 'setup-nvim' when you want to pick a distro (AstroNvim,"
-    log "NvChad, LazyVim, kickstart, or stock); it never runs automatically."
-
-    if command -v fish >/dev/null 2>&1; then
-        if command -v chsh >/dev/null 2>&1 && ask_yn "Make fish the default shell?"; then
+    if command -v fish >/dev/null 2>&1 && command -v chsh >/dev/null 2>&1; then
+        if ask_yn "Make fish the default shell?"; then
             chsh -s fish || warn "chsh failed; run 'chsh -s fish' manually"
         fi
-    else
-        warn "fish is not installed; the config will wait for it"
     fi
 }
 
-# ----------------------------------------------------------------------------
-# Terminal configs (~/.termux)
-# ----------------------------------------------------------------------------
+item_ohmyposh() {
+    log ""
+    log "== Oh My Posh =="
+    install_pkg oh-my-posh
+    fetch aliens-material.omp.json "$OMP_DIR/aliens-material.omp.json"
+    log "  the theme follows ~/.termux/material-colors.sh, so it retints with the wallpaper"
+}
 
-show_terminal_config_notes() {
+item_zoxide() {
     log ""
-    log "== Terminal configs (~/.termux) =="
-    log "Nothing to install: the app owns this directory now."
+    log "== zoxide =="
+    install_pkg zoxide
+}
+
+item_eza() {
     log ""
-    log "  termux.properties            seeded on install, commented, yours to edit"
-    log "  termux-launcher-bindings.conf  same"
-    log "  fonts.conf                     same"
-    log "  launcher/examples/             pristine copies, refreshed at every app start"
+    log "== eza =="
+    install_pkg eza
+}
+
+item_neovim() {
     log ""
-    log "The extra keys row and the in-app keyboard layout both ship inside the app,"
-    log "so there is nothing to download for them. Editing the row (the extrakeys.edit"
-    log "action) writes extra-keys into ~/.termux/termux.properties, and this script"
-    log "deliberately never rewrites that file — it would take your row with it."
-    log ""
-    log "To start from the bundled keyboard layout and change it:"
-    log "  mkdir -p ~/.termux/keyboard"
-    log "  cp ~/.termux/launcher/examples/keyboard-layout.xml ~/.termux/keyboard/layout.xml"
-    log "  termux-reload-settings"
+    log "== Neovim + AstroNvim =="
+    install_pkg neovim git
+    fetch setup-nvim "$BIN_DIR/setup-nvim"
+    chmod +x "$BIN_DIR/setup-nvim"
+    # setup-nvim never replaces an existing config without an explicit REPLACE,
+    # so this is safe to run unattended.
+    "$BIN_DIR/setup-nvim" --distro astronvim --yes || warn "setup-nvim did not finish; run it yourself"
+}
+
+item_sigye()     { log ""; log "== sigye =="; fetch_binary sigye; }
+item_fastfetch() { log ""; log "== fastfetch (animated Kitty logo) =="; fetch_binary fastfetch; }
+item_kitten()    { log ""; log "== kitten (kitty's client) =="; fetch_binary kitten; }
+
+install_all() {
+    item_fish
+    item_ohmyposh
+    item_zoxide
+    item_eza
+    item_neovim
+    item_sigye
+    item_fastfetch
+    item_kitten
+}
+
+install_essentials() {
+    item_fish
+    item_ohmyposh
+    item_zoxide
+    item_eza
+}
+
+install_individually() {
+    ask_yn "fish + the launcher's config.fish?"        && item_fish
+    ask_yn "Oh My Posh + the Material theme?"          && item_ohmyposh
+    ask_yn "zoxide?"                                   && item_zoxide
+    ask_yn "eza?"                                      && item_eza
+    ask_yn "Neovim + AstroNvim (Material theme)?"      && item_neovim
+    ask_yn "sigye (clock)?"                        n   && item_sigye
+    ask_yn "fastfetch with the animated logo?"     n   && item_fastfetch
+    ask_yn "kitten (kitty's client binary)?"       n   && item_kitten
+    return 0
 }
 
 # ----------------------------------------------------------------------------
@@ -246,16 +288,11 @@ welcome() {
 Termux Launcher setup
 =====================
 
-  1) Packages + fish/Oh My Posh shell configs
+  1) All — fish, Oh My Posh, zoxide, eza, Neovim + AstroNvim, sigye,
+     fastfetch with the animated logo, kitten
+  2) Shell essentials — fish, Oh My Posh, zoxide, eza
+  3) Pick items one at a time
   q) Quit
-
-Fonts (ligatures + Nerd Font icons) are installed from the in-app font
-picker: Settings > Terminal > Font.
-
-Nothing under ~/.termux is installed from here any more — the app seeds
-termux.properties, the key bindings, and fonts.conf itself, and the extra keys
-row and keyboard layout are built in. Overwriting those files from a script
-would throw away edits made in the app.
 
 Every existing config gets a timestamped .bak before being replaced.
 EOF
@@ -263,23 +300,18 @@ EOF
 
 main() {
     require_cmd curl
+    mkdir -p "$BIN_DIR"
     welcome
     printf 'Choice [1]: '
     read -r choice || choice=1
     [ -n "$choice" ] || choice=1
 
     case "$choice" in
-        1)
-            install_packages
-            install_shell_configs
-            show_terminal_config_notes
-            ;;
-        q|Q)
-            exit 0
-            ;;
-        *)
-            fail "unknown choice: $choice"
-            ;;
+        1) install_all ;;
+        2) install_essentials ;;
+        3) install_individually ;;
+        q|Q) exit 0 ;;
+        *) fail "unknown choice: $choice" ;;
     esac
 
     log ""

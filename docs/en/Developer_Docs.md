@@ -221,14 +221,14 @@ The helper scripts in `docs/en/examples/` are not installed by the APK. The begi
 
 Scripts:
 
-- `setup-launcher`: interactive installer for the current shell setup — packages, fish + Oh My Posh configs, and `setup-nvim`. It deliberately installs nothing under `~/.termux`; the app seeds those files and would lose in-app edits if a script rewrote them.
+- `setup-launcher`: interactive installer for the current shell setup, offering all of it, the shell essentials, or single items — fish, Oh My Posh, zoxide, eza, Neovim through `setup-nvim`, and the showcase binaries (sigye, fastfetch, kitten) as digest-pinned release assets. It deliberately installs nothing under `~/.termux`; the app seeds those files and would lose in-app edits if a script rewrote them.
 - `setup-nvim`: interactive Neovim setup. Installs AstroNvim (default), NvChad, LazyVim, kickstart, or a stock config, plus launcher integrations: OSC 52 clipboard, always-on line wrap, and — on AstroNvim and NvChad — a colorscheme generated from `~/.termux/material-colors.sh` that retints live on wallpaper changes.
 - `setup-tmux-btop`: interactive installer for Fish + Oh My Posh, tmux theme/plugin setup, and optional Shizuku `btop`.
 - `launcher-system-monitor`: cached CPU/RAM formatter for tmux status bars.
 - `launcher-weather-widget`: cached weather formatter using wttr.in.
 - `setup-btop-rish`: installs Linux `btop` under `/data/local/tmp` through Shizuku `rish`.
 - `kew-tmux-status`: optional second tmux status row for `kew-now-playing`.
-- `config.fish`, `conf.d-personal.fish`, `aliens-material.omp.json`, and `termux-launcher.omp.json`: optional Fish and Oh My Posh defaults. `config.fish` is launcher-owned and replaced on re-install; `conf.d-personal.fish` is copied once to `~/.config/fish/conf.d/personal.fish` and never overwritten, so personal edits survive re-runs.
+- `config.fish`, `conf.d-personal.fish`, and `aliens-material.omp.json`: optional Fish and Oh My Posh defaults. `config.fish` is launcher-owned and replaced on re-install; `conf.d-personal.fish` is copied once to `~/.config/fish/conf.d/personal.fish` and never overwritten, so personal edits survive re-runs. `termux-launcher.omp.json` is the older, fuller prompt theme, kept only for the deprecated `setup-tmux-btop`; `setup-launcher` no longer installs it and `config.fish` no longer falls back to it.
 - `tmux.conf` and `material-theme.tmux`: manual tmux examples.
 
 `launcher-system-monitor` samples `/proc/stat` and `/proc/meminfo` directly when Shizuku `rish` is available, so it works in plain Termux plus Shizuku setups without any launcher HTTP route. It keeps a short cache file so tmux status bars do not fork a Shizuku shell on every refresh.

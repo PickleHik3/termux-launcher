@@ -177,11 +177,18 @@ system keyboard. Landscape is usable for the first time.
   virtual Ctrl and Fn by default, and a launcher that swallows the rocker leaves no way to
   change the volume from the home screen. `volume-keys = virtual` restores upstream's
   behaviour, and a test pins the value because an upstream merge could quietly take it back.
+- **`setup-launcher` asks a better question.** Three choices now: everything, the shell essentials
+  (fish, Oh My Posh, zoxide, eza), or one item at a time. "Everything" adds Neovim with AstroNvim
+  themed from the wallpaper palette, and the showcase binaries — sigye, the animated-logo fastfetch,
+  and kitten — installed into `~/.local/bin` as digest-pinned release assets. A release that has not
+  published a binary makes the script skip it with the recipe to build it, never install it
+  unverified.
 - **`setup-launcher` no longer writes to `~/.termux`.** The script installed `termux.properties` and
   the keyboard layout by replacing whichever files were there; now that the app seeds the former and
   the in-app editor writes an `extra-keys` row into it, a wholesale rewrite would throw that row
-  away. The script installs packages and the fish/Oh My Posh setup, then points at the app-managed
-  files instead. Its digest table drops from seven templates to five.
+  away. It also stopped installing `termux-launcher.omp.json` — `aliens-material.omp.json` is the
+  prompt theme, and the older one is kept only for the deprecated `setup-tmux-btop`. Four pinned
+  templates remain, down from seven.
 - **The dock moves as one plane.** A single slab transform everything on it inherits, replacing
   a glass slab and an icon row on channels of their own: the capsule free-floats with its press
   dip, the edge-to-edge bar hinges at the screen edge, and the tilt cap comes down from 4 to 3
