@@ -16,6 +16,20 @@ system keyboard. Landscape is usable for the first time.
   session. Unconfigured installs remain `TERM=xterm-256color`, and an explicit per-session
   environment value still wins. Capability detection continues to work through XTVERSION,
   `TERM_PROGRAM` and XTSMGRAPHICS, so this is only for programs that string-match the name.
+- **The key row and keyboard layout ship in the app.** The launcher's extra-keys row is the built-in
+  default, now including session switching as swipe-up popups on the window keys, and the in-app
+  keyboard layout is bundled as before. Neither needs a file, a download, or a setup script. An
+  `extra-keys` value in `~/.termux/termux.properties` — which is what the in-app editor writes — and
+  a `~/.termux/keyboard/layout.xml` both still win outright, and nothing in an app update rewrites
+  either, so an upgrade cannot cost you a customised row or layout. The second key page now ships
+  empty, since the in-app keyboard's Fn layer already reaches F1-F12; add keys to `extra-keys2` to
+  bring it back.
+- **A seeded `~/.termux/termux.properties`.** The app now ships a commented properties file
+  alongside the bindings and fonts examples, documenting `terminal-term` and the rest of the
+  launcher-relevant properties in place, so no download is needed to discover them. It is written
+  only when absent, every line is a comment so seeding changes no behaviour, and it is skipped
+  entirely when `~/.config/termux/termux.properties` exists — seeding the primary path would
+  otherwise silently disable a file kept at the secondary one.
 - **Host cross-build recipes**, in `recipes/cross`. The on-device recipes now have a counterpart
   that builds the same pinned sources for `aarch64` Termux from a Linux host, using the Android NDK
   and a sysroot assembled from published Termux `.deb` packages — no Docker image and no
@@ -163,6 +177,11 @@ system keyboard. Landscape is usable for the first time.
   virtual Ctrl and Fn by default, and a launcher that swallows the rocker leaves no way to
   change the volume from the home screen. `volume-keys = virtual` restores upstream's
   behaviour, and a test pins the value because an upstream merge could quietly take it back.
+- **`setup-launcher` no longer writes to `~/.termux`.** The script installed `termux.properties` and
+  the keyboard layout by replacing whichever files were there; now that the app seeds the former and
+  the in-app editor writes an `extra-keys` row into it, a wholesale rewrite would throw that row
+  away. The script installs packages and the fish/Oh My Posh setup, then points at the app-managed
+  files instead. Its digest table drops from seven templates to five.
 - **The dock moves as one plane.** A single slab transform everything on it inherits, replacing
   a glass slab and an icon row on channels of their own: the capsule free-floats with its press
   dip, the edge-to-edge bar hinges at the screen edge, and the tilt cap comes down from 4 to 3
