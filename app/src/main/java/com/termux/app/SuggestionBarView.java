@@ -7673,6 +7673,27 @@ public final class SuggestionBarView extends GridLayout
         swipePreviewFolderEntries = Collections.emptyList();
     }
 
+    /**
+     * The page commit, wrapped so it runs exactly once from whichever path the switch animation
+     * ends on — its own end, or a cancel.
+     *
+     * <p>Both switch animations used to commit the new page only from their end callback, and both
+     * drop that callback when cancelled: {@code ACTION_DOWN} on the row, a stable-draw release and
+     * {@link #resetTransientVisualState()} all cancel a switch that is still settling. The gesture
+     * had already qualified and the row had already played the whole slide, so the swipe looked
+     * committed and then silently landed back on the page it came from — the ghost swipe. A
+     * qualified swipe is a decision; the animation is only how it is shown.
+     */
+    @NonNull
+    private static Runnable pageCommitOnce(@Nullable Runnable commit) {
+        final boolean[] done = {false};
+        return () -> {
+            if (done[0]) return;
+            done[0] = true;
+            if (commit != null) commit.run();
+        };
+    }
+
     private void runSwipePreviewPageSwitch(
         int direction,
         long duration,
@@ -7690,6 +7711,7 @@ public final class SuggestionBarView extends GridLayout
         final float distanceRatio = clamp01(Math.abs(targetOffset - startOffset) / Math.max(1f, getWidth()));
         final long settleDuration = clamp(Math.round(duration * (0.72f + (0.28f * distanceRatio))), 240, 420);
         swipePageDragging = true;
+        final Runnable commit = pageCommitOnce(updateContent);
         ValueAnimator settle = ValueAnimator.ofFloat(startOffset, targetOffset);
         swipePreviewReboundAnimator = settle;
         settle.setDuration(settleDuration);
@@ -7706,7 +7728,7 @@ public final class SuggestionBarView extends GridLayout
                     return;
                 }
                 swipePreviewReboundAnimator = null;
-                if (updateContent != null) updateContent.run();
+                commit.run();
                 pageSwitchAnimating = false;
                 swipePageDragging = false;
                 swipePagePosition = resolveCurrentSwipePagePosition();
@@ -7723,6 +7745,10 @@ public final class SuggestionBarView extends GridLayout
                 if (swipePreviewReboundAnimator == animation) {
                     swipePreviewReboundAnimator = null;
                 }
+                // Whoever cancelled owns the visual state that follows (a new gesture, a reset);
+                // the page the swipe asked for is committed here either way.
+                commit.run();
+                swipePagePosition = resolveCurrentSwipePagePosition();
             }
         });
         settle.start();
@@ -7831,6 +7857,7 @@ public final class SuggestionBarView extends GridLayout
         final Interpolator settleInterpolator = pageSettleInterpolator();
         final long outgoingDuration = Math.max(92L, Math.round(duration * 0.44f));
         final long incomingDuration = Math.max(118L, duration - outgoingDuration);
+        final Runnable commit = pageCommitOnce(updateContent);
 
         animate()
             .translationX(-direction * (travel * 0.78f))
@@ -7839,19 +7866,24 @@ public final class SuggestionBarView extends GridLayout
             .setInterpolator(settleInterpolator)
             .setListener(new AnimatorListenerAdapter() {
                 private boolean completed;
+                private boolean cancelled;
 
                 @Override
                 public void onAnimationCancel(Animator animation) {
+                    cancelled = true;
+                    // Commit before the reset: the page is the swipe's decision, and the incoming
+                    // half that would otherwise have carried it is not going to run.
+                    commit.run();
                     finish(false);
                 }
 
                 @Override
                 public void onAnimationEnd(Animator animation) {
-                    if (completed) {
+                    if (completed || cancelled) {
                         return;
                     }
                     completed = true;
-                    if (updateContent != null) updateContent.run();
+                    commit.run();
                     setTranslationX(direction * travel);
                     setAlpha(0f);
                     animate()

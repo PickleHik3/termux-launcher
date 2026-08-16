@@ -233,6 +233,13 @@ system keyboard. Landscape is usable for the first time.
 
 ### Fixed
 
+- **Ghost swipes on the pinned apps row.** A swipe played its whole slide and then landed back on
+  the page it came from. Both page-switch animations committed the new page only from their end
+  callback, and both drop that callback when something cancels them mid-settle — a second finger
+  on the row, the host's transient-state reset, the stable-draw release that follows a re-render.
+  The swipe had already qualified and the haptic had already fired, so everything about it looked
+  committed except the result. A qualified swipe is now committed exactly once from whichever
+  path the animation ends on, cancel included.
 - **A hand-written `~/.termux/colors.properties` no longer loses in silence (#11).** Dynamic
   Material colours default on, and that branch never opens the file; applying a scheme from
   Termux:Styling now turns *Use wallpaper colors* off by itself, and a hint under the switch
