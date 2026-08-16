@@ -6,6 +6,7 @@ import com.termux.shared.theme.NightMode;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.file.filesystem.FileType;
 import com.termux.shared.settings.properties.SharedProperties;
+import com.termux.shared.shell.command.environment.TerminalTerm;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.logger.Logger;
 import com.termux.terminal.TerminalEmulator;
@@ -17,7 +18,7 @@ import java.util.List;
 import java.util.Set;
 
 /*
- * Version: v0.18.0
+ * Version: v0.20.0
  * SPDX-License-Identifier: MIT
  *
  * Changelog
@@ -86,6 +87,9 @@ import java.util.Set;
  * 
  * - 0.19.0 (2022-11-04)
  *      - Add `KEY_BACKGROUND_OVERLAY_COLOR` and `DEFAULT_IVALUE_BACKGROUND_OVERLAY_COLOR`
+ *
+ * - 0.20.0 (2026-08-16)
+ *      - Add `KEY_TERMINAL_TERM` and `DEFAULT_VALUE_TERMINAL_TERM`.
  */
 /**
  * A class that defines shared constants of the SharedProperties used by Termux app and its plugins.
@@ -310,6 +314,11 @@ public final class TermuxPropertyConstants {
 
     public static final int DEFAULT_IVALUE_TERMINAL_TRANSCRIPT_ROWS = TerminalEmulator.DEFAULT_TERMINAL_TRANSCRIPT_ROWS;
 
+    /** The TERM value exported to new terminal sessions. */
+    public static final String KEY_TERMINAL_TERM = "terminal-term";
+
+    public static final String DEFAULT_VALUE_TERMINAL_TERM = TerminalTerm.DEFAULT_VALUE;
+
     /* float */
     /**
      * Defines the key for the terminal toolbar height
@@ -486,7 +495,7 @@ public final class TermuxPropertyConstants {
     KEY_BELL_BEHAVIOUR, KEY_DELETE_TMPDIR_FILES_OLDER_THAN_X_DAYS_ON_EXIT, KEY_TERMINAL_CURSOR_BLINK_RATE, KEY_TERMINAL_CURSOR_STYLE, KEY_TERMINAL_MARGIN_HORIZONTAL, KEY_TERMINAL_MARGIN_VERTICAL, KEY_TERMINAL_TRANSCRIPT_ROWS, /* float */
     KEY_TERMINAL_TOOLBAR_HEIGHT_SCALE_FACTOR, /* Integer */
     KEY_SHORTCUT_CREATE_SESSION, KEY_SHORTCUT_NEXT_SESSION, KEY_SHORTCUT_PREVIOUS_SESSION, KEY_SHORTCUT_RENAME_SESSION, /* String */
-    KEY_BACK_KEY_BEHAVIOUR, KEY_DEFAULT_WORKING_DIRECTORY, KEY_EXTRA_KEYS, KEY_EXTRA_KEYS2, KEY_EXTRA_KEYS_STYLE, KEY_NIGHT_MODE, KEY_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR, KEY_VOLUME_KEYS_BEHAVIOUR, KEY_BACKGROUND_OVERLAY_COLOR));
+    KEY_BACK_KEY_BEHAVIOUR, KEY_DEFAULT_WORKING_DIRECTORY, KEY_EXTRA_KEYS, KEY_EXTRA_KEYS2, KEY_EXTRA_KEYS_STYLE, KEY_NIGHT_MODE, KEY_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR, KEY_VOLUME_KEYS_BEHAVIOUR, KEY_BACKGROUND_OVERLAY_COLOR, KEY_TERMINAL_TERM));
 
     /**
      * Defines the set for keys loaded by termux that have default boolean behaviour with false as default.

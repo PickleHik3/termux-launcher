@@ -50,7 +50,7 @@ expected_digest() {
         keyboard-layout.xml)      echo 06824f3611e7a47ab0ca9dc5d72cc90f50c10a27adf8db60693e335294dcceb5 ;;
         setup-nvim)               echo 345c79f048d4bf26dc5de7022443a470fb55266cb945367d383b2123049fa400 ;;
         termux-launcher.omp.json) echo 756eeb5e6eef28f9cd4d20bd3274d4a374a8e8e0002c27d8df0c1348893d3b5f ;;
-        termux.properties)        echo ed7c0f3223b0de5a692474d19bd2a7b7b9a77154e2f0deae3d05dae242b20d6a ;;
+        termux.properties)        echo dee11020c1eea3d7d81bae8837c47f3d68daeb7e5f949a4609a8b87052733355 ;;
         *) echo "" ;;
     esac
 }

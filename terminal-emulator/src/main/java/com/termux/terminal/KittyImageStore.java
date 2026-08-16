@@ -61,6 +61,9 @@ final class KittyImageStore {
         boolean completed;
         int byteCount;
 
+        /** Invisible placement prototypes referenced by U+10EEEE cells. */
+        final List<VirtualPlacement> virtualPlacements = new ArrayList<>();
+
         /** Extra animation frames; index 0 is protocol frame 2. */
         final List<Frame> frames = new ArrayList<>();
         /** The root frame's gap; the protocol sets it via {@code a=a,r=1,z=...}. */
@@ -82,6 +85,27 @@ final class KittyImageStore {
             this.width = width;
             this.height = height;
             this.byteCount = byteCount;
+        }
+    }
+
+    static final class VirtualPlacement {
+        final long placementId;
+        final int sourceX;
+        final int sourceY;
+        final int sourceWidth;
+        final int sourceHeight;
+        final int columns;
+        final int rows;
+
+        VirtualPlacement(long placementId, int sourceX, int sourceY, int sourceWidth,
+                         int sourceHeight, int columns, int rows) {
+            this.placementId = placementId;
+            this.sourceX = sourceX;
+            this.sourceY = sourceY;
+            this.sourceWidth = sourceWidth;
+            this.sourceHeight = sourceHeight;
+            this.columns = columns;
+            this.rows = rows;
         }
     }
 
@@ -145,6 +169,37 @@ final class KittyImageStore {
         return images.get(id);
     }
 
+    /** Add a Unicode-placeholder placement prototype; identified pairs replace their predecessor. */
+    void putVirtualPlacement(Entry entry, VirtualPlacement placement) {
+        if (placement.placementId != 0) {
+            for (int i = entry.virtualPlacements.size() - 1; i >= 0; i--) {
+                if (entry.virtualPlacements.get(i).placementId == placement.placementId)
+                    entry.virtualPlacements.remove(i);
+            }
+        }
+        entry.virtualPlacements.add(placement);
+    }
+
+    /** Find an exact virtual placement, or the first one when the placeholder carries no id. */
+    static VirtualPlacement virtualPlacement(Entry entry, long placementId) {
+        for (VirtualPlacement placement : entry.virtualPlacements) {
+            if (placementId == 0 || placement.placementId == placementId) return placement;
+        }
+        return null;
+    }
+
+    /** Remove all virtual placements, or only the identified one. */
+    static int removeVirtualPlacements(Entry entry, long placementId) {
+        int removed = 0;
+        for (int i = entry.virtualPlacements.size() - 1; i >= 0; i--) {
+            if (placementId == 0 || entry.virtualPlacements.get(i).placementId == placementId) {
+                entry.virtualPlacements.remove(i);
+                removed++;
+            }
+        }
+        return removed;
+    }
+
     void remove(long id) {
         Entry removed = images.remove(id);
         if (removed == null) return;
@@ -159,6 +214,21 @@ final class KittyImageStore {
                 if (entry.number == removed.number) latestIdByNumber.put(removed.number, entry.id);
             }
         }
+    }
+
+    /** Free stored data only when no Unicode-placeholder prototype still references it. */
+    void removeIfNoVirtualPlacements(long id) {
+        Entry entry = images.get(id);
+        if (entry != null && entry.virtualPlacements.isEmpty()) remove(id);
+    }
+
+    /** The d=A form must retain images referenced by virtual placements. */
+    void removeImagesWithoutVirtualPlacements() {
+        List<Long> removable = new ArrayList<>();
+        for (Entry entry : images.values()) {
+            if (entry.virtualPlacements.isEmpty()) removable.add(entry.id);
+        }
+        for (Long id : removable) remove(id);
     }
 
     void clear() {

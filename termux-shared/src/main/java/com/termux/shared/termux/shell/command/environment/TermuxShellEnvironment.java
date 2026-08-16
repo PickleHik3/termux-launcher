@@ -9,8 +9,11 @@ import com.termux.shared.shell.command.ExecutionCommand;
 import com.termux.shared.shell.command.environment.AndroidShellEnvironment;
 import com.termux.shared.shell.command.environment.ShellEnvironmentUtils;
 import com.termux.shared.shell.command.environment.ShellCommandShellEnvironment;
+import com.termux.shared.shell.command.environment.TerminalTerm;
 import com.termux.shared.termux.TermuxBootstrap;
 import com.termux.shared.termux.TermuxConstants;
+import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
+import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.shell.TermuxShellUtils;
 import java.nio.charset.Charset;
 import java.util.HashMap;
@@ -72,6 +75,10 @@ public class TermuxShellEnvironment extends AndroidShellEnvironment {
         HashMap<String, String> termuxAppEnvironment = TermuxAppShellEnvironment.getEnvironment(currentPackageContext);
         if (termuxAppEnvironment != null)
             environment.putAll(termuxAppEnvironment);
+        TermuxAppSharedProperties properties = TermuxAppSharedProperties.getProperties();
+        String configuredTerm = properties == null ? null : properties.getPropertyValue(
+            TermuxPropertyConstants.KEY_TERMINAL_TERM, TerminalTerm.DEFAULT_VALUE, true);
+        environment.put(ENV_TERM, TerminalTerm.resolve(configuredTerm));
 
         /*
         HashMap<String, String> termuxApiAppEnvironment = TermuxAPIShellEnvironment.getEnvironment(currentPackageContext);
