@@ -8,6 +8,21 @@ system keyboard. Landscape is usable for the first time.
 
 ### Added
 
+- **Kitty graphics Unicode placeholders.** `U=1` virtual placements and U+10EEEE
+  row/column/image-id decoding now draw stored images through ordinary text cells, enabling the
+  tmux path used by Neovim image plugins while retaining animation-frame updates.
+- **A configurable terminal name.** Set `terminal-term = xterm-kitty` (or another terminfo name) in
+  `~/.termux/termux.properties` for new sessions, then run `termux-reload-settings` and open a new
+  session. Unconfigured installs remain `TERM=xterm-256color`, and an explicit per-session
+  environment value still wins. Capability detection continues to work through XTVERSION,
+  `TERM_PROGRAM` and XTSMGRAPHICS, so this is only for programs that string-match the name.
+- **Host cross-build recipes**, in `recipes/cross`. The on-device recipes now have a counterpart
+  that builds the same pinned sources for `aarch64` Termux from a Linux host, using the Android NDK
+  and a sysroot assembled from published Termux `.deb` packages — no Docker image and no
+  `termux-packages` checkout. They add `kitten`, kitty's client binary, which cannot practically be
+  built on a phone: kitty's generated Go sources come from a generator that needs a built kitty.
+  `kitten icat` therefore works here, including through Unicode placeholders inside tmux.
+
 - **A full-screen app drawer.** Swipe down on the pinned apps row for an alphabetical grid of
   everything installed, with a search field and an A-Z rope down the side that scrubs to a
   section and dims the letters you are not on. The drawer is an overlay sibling of the root
