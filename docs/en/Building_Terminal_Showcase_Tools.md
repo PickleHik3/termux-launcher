@@ -97,6 +97,25 @@ Use `"kitty"`, not `"kitty-direct"`: Android terminals cannot use Kitty's deskto
 path, while the direct in-band protocol is supported. Fastfetch's image cache is versioned by the
 patch so an old static cached logo is not reused.
 
+The patch sends the image with a column count but no row count. Giving both makes a terminal
+stretch the image to fill that exact cell box, and the row count can only be a whole number of
+cells, so a logo whose pixel height is not a multiple of the cell height comes out visibly
+squashed. With columns alone the terminal derives the height from the image's own aspect ratio.
+
+Cross-building instead of building on the phone needs one extra piece: `recipes/cross/
+termux-pwd-polyfill.h`, force-included by `recipes/cross/build-fastfetch.sh`. Bionic answers
+`getpwuid()` for an app uid with `pw_dir="/data"`, and Fastfetch trusts passwd over `$HOME`, so a
+binary built against the stock NDK sysroot looks for its config in `/data/.config/fastfetch`, never
+finds it, and silently falls back to the built-in ASCII logo. Termux's own package builds avoid
+this because termux-packages patches `pwd.h` inside its copy of the NDK sysroot. To check a binary
+on device:
+
+```sh
+fastfetch -s Title --format json | grep -o '"homeDir":"[^"]*"'
+```
+
+It must report the Termux home, not `/data/`.
+
 ## Kitten (kitty's client binary)
 
 `kitten` is the standalone Go client from kitty. Programs shell out to it — `kitten icat` is what

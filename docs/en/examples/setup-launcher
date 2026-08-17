@@ -52,7 +52,7 @@ RAW_BASE="${TERMUX_LAUNCHER_RAW_BASE:-https://raw.githubusercontent.com/PickleHi
 # than to TEMPLATES_REF: they are builds of other people's software on their own
 # schedule, and tying them to a launcher release would mean rebuilding all three
 # for every launcher tag.
-BINARIES_REF="${TERMUX_LAUNCHER_BINARIES_REF:-2026.08.16}"
+BINARIES_REF="${TERMUX_LAUNCHER_BINARIES_REF:-2026.08.17}"
 BINARIES_BASE="${TERMUX_LAUNCHER_BINARIES_BASE:-https://raw.githubusercontent.com/PickleHik3/termux-launcher-binaries/$BINARIES_REF/bin}"
 
 # --- BEGIN DIGESTS (generated: update-setup-launcher-digests.sh) ---
@@ -70,7 +70,7 @@ expected_digest() {
 # --- BEGIN BINARY DIGESTS (generated: update-setup-launcher-digests.sh) ---
 expected_binary_digest() {
     case "$1" in
-        fastfetch)   echo 1278a38404ef4f4693642fb3f7b1b779419f9424dde15c85433bd5984a6f531e ;;
+        fastfetch)   echo 82fa706a1ad5eeb4a7899212ba6e03c441a1b6a798d81367ebb0d62cfca615e3 ;;
         kitten)      echo 274ff935007bd6aa28dd7ef71439b52e10c2d7e0641f4413fd959508a74bf8c7 ;;
         sigye)       echo be095e85f54c2a462b924ce21916a6586580713785ab5efc79b63050eead5eea ;;
         *) echo "" ;;
@@ -254,8 +254,21 @@ item_neovim() {
 }
 
 item_sigye()     { log ""; log "== sigye =="; fetch_binary sigye; }
-item_fastfetch() { log ""; log "== fastfetch (animated Kitty logo) =="; fetch_binary fastfetch; }
 item_kitten()    { log ""; log "== kitten (kitty's client) =="; fetch_binary kitten; }
+
+item_fastfetch() {
+    log ""
+    log "== fastfetch (animated Kitty logo) =="
+    # The published build links libandroid-glob and dlopens ImageMagick, Chafa and zlib: without
+    # the first it will not start at all, and without the others there is no image logo, only the
+    # built-in ASCII art.
+    install_pkg imagemagick chafa libandroid-glob zlib
+    fetch_binary fastfetch
+    if [ -x "$BIN_DIR/fastfetch" ] &&
+       ! "$BIN_DIR/fastfetch" --list-features 2>/dev/null | grep -qx imagemagick7; then
+        warn "fastfetch reports no imagemagick7 support — the GIF logo will not render."
+    fi
+}
 
 install_all() {
     item_fish
