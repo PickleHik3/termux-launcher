@@ -76,24 +76,38 @@ public class AppDrawerAppCellView extends LinearLayout {
 
     void bind(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
               int iconPx, int rowHeightPx, @NonNull ClickGate clickGate) {
-        bindInternal(dock, entry, iconPx, rowHeightPx, clickGate);
+        bindInternal(dock, entry, iconPx, rowHeightPx, clickGate, null, null);
     }
 
     void bind(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
               int iconPx, int rowHeightPx, @NonNull ClickGate clickGate,
               @Nullable AppDrawerPickupDelegate pickupDelegate) {
-        bindInternal(dock, entry, iconPx, rowHeightPx, clickGate, pickupDelegate);
+        bindInternal(dock, entry, iconPx, rowHeightPx, clickGate, pickupDelegate, null);
+    }
+
+    /** Used by the category detail grid: swaps the popup's Pin row for a Category row instead. */
+    void bind(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
+              int iconPx, int rowHeightPx, @NonNull ClickGate clickGate,
+              @Nullable AppDrawerCategoryChoiceListener categoryChoiceListener) {
+        bindInternal(dock, entry, iconPx, rowHeightPx, clickGate, null, categoryChoiceListener);
     }
 
     private void bindInternal(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
                               float iconSize, float rowHeight,
                               @NonNull ClickGate clickGate) {
-        bindInternal(dock, entry, iconSize, rowHeight, clickGate, null);
+        bindInternal(dock, entry, iconSize, rowHeight, clickGate, null, null);
     }
 
     private void bindInternal(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
                               float iconSize, float rowHeight, @NonNull ClickGate clickGate,
                               @Nullable AppDrawerPickupDelegate pickupDelegate) {
+        bindInternal(dock, entry, iconSize, rowHeight, clickGate, pickupDelegate, null);
+    }
+
+    private void bindInternal(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
+                              float iconSize, float rowHeight, @NonNull ClickGate clickGate,
+                              @Nullable AppDrawerPickupDelegate pickupDelegate,
+                              @Nullable AppDrawerCategoryChoiceListener categoryChoiceListener) {
         int iconPx = iconSize > 0f ? Math.max(1, Math.round(iconSize)) : 0;
         applyGeometry(rowHeight, iconPx);
         Drawable artwork = dock != null && iconPx > 0 ? dock.getRenderedIcon(entry, iconPx) : null;
@@ -108,7 +122,11 @@ public class AppDrawerAppCellView extends LinearLayout {
             if (!clickGate.suppressCellClick() && dock != null)
                 dock.launchEntryFromDrawer(icon, entry);
         });
-        if (dock != null) dock.bindDrawerAppContextLongPress(this, entry, pickupDelegate);
+        if (dock != null) {
+            Runnable categoryAction = categoryChoiceListener == null ? null
+                : () -> categoryChoiceListener.onCategoryChoiceRequested(entry, this);
+            dock.bindDrawerAppContextLongPress(this, entry, pickupDelegate, categoryAction);
+        }
     }
 
     protected void applyGeometry(float rowHeightPx, int iconPx) {

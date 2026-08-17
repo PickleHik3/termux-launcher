@@ -100,7 +100,10 @@ public class AppDrawerCategoryTileViewTest {
         AppDrawerCategoryTileView tile = tile(dock, bucket, metrics(), expansions);
         for (int i = 0; i < AppDrawerCategoryTileView.LAUNCH_ICON_COUNT; i++) {
             assertTrue(tile.icons[i].isClickable());
-            assertFalse(tile.icons[i].isLongClickable());
+            // A long press on a launch icon reuses the dock's Material app-context popup, with a
+            // Category row swapped in for Pin — the same reassignment entry point the expanded
+            // category grid offers.
+            assertTrue(tile.icons[i].isLongClickable());
             assertEquals(bucket.entries().get(i).label, tile.icons[i].getContentDescription());
         }
         for (int i = AppDrawerCategoryTileView.LAUNCH_ICON_COUNT; i < 7; i++) {
@@ -179,7 +182,7 @@ public class AppDrawerCategoryTileViewTest {
         tile.setLayoutParams(new ViewGroup.LayoutParams(Math.round(metrics.spanWidthPx),
             ViewGroup.LayoutParams.WRAP_CONTENT));
         tile.bind(dock, bucket, metrics, (value, source) -> expansions[0]++,
-            AppDrawerAppCellView.ALLOW_CLICKS);
+            AppDrawerAppCellView.ALLOW_CLICKS, null);
         int width = Math.round(metrics.spanWidthPx);
         tile.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(2000, View.MeasureSpec.AT_MOST));

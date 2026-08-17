@@ -330,6 +330,8 @@ public final class AppDrawerContentView extends FrameLayout
         mCategoryView.setPopupDismissCallback(this::dismissContextPopups);
         mCategoryView.getDetailAdapter().setCategoryChoiceListener(
             this::showCategoryOverrideDialog);
+        mCategoryView.getTileAdapter().setCategoryChoiceListener(
+            this::showCategoryOverrideDialog);
         LayoutParams categoryParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT);
         categoryParams.topMargin = gridParams.topMargin;
@@ -428,30 +430,20 @@ public final class AppDrawerContentView extends FrameLayout
         }
     }
 
-    /** Long-press inside an expanded category: pick a category for the app, or go back to auto. */
-    private void showCategoryOverrideDialog(@NonNull LauncherAppEntry entry) {
+    /** Long-press on a category app icon: pick a category for it, or go back to auto. */
+    private void showCategoryOverrideDialog(@NonNull LauncherAppEntry entry, @NonNull View anchor) {
+        SuggestionBarView dock = mDock;
+        if (dock == null) return;
         List<AppDrawerCategory> choices = new ArrayList<>();
         for (AppDrawerCategory category : AppDrawerCategory.values())
             if (!category.synthetic) choices.add(category);
-        CharSequence[] labels = new CharSequence[choices.size() + 1];
-        labels[0] = getResources().getString(com.termux.R.string.app_drawer_category_automatic);
         AppDrawerCategory current = AppDrawerCategory.fromSlug(
             mCategoryOverrides.get(entry.appRef.packageName));
-        int checked = 0;
-        for (int i = 0; i < choices.size(); i++) {
-            labels[i + 1] = getResources().getString(choices.get(i).labelRes);
-            if (choices.get(i) == current) checked = i + 1;
-        }
-        new android.app.AlertDialog.Builder(getContext())
-            .setTitle(entry.label)
-            .setSingleChoiceItems(labels, checked, (dialog, which) -> {
-                if (which == 0) mCategoryOverrides.clear(entry.appRef.packageName);
-                else mCategoryOverrides.set(entry.appRef.packageName, choices.get(which - 1).slug);
-                dialog.dismiss();
-                reclassifyCategories();
-            })
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
+        dock.showCategoryPickerPopup(entry, anchor, choices, current, picked -> {
+            if (picked == null) mCategoryOverrides.clear(entry.appRef.packageName);
+            else mCategoryOverrides.set(entry.appRef.packageName, picked.slug);
+            reclassifyCategories();
+        });
     }
 
     /** Reruns the pipeline over the live catalogue after an override mutation; no data reload. */

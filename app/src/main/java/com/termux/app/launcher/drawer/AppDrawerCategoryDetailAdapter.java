@@ -17,16 +17,11 @@ import java.util.List;
 public final class AppDrawerCategoryDetailAdapter
     extends RecyclerView.Adapter<AppDrawerCategoryDetailAdapter.Holder> {
 
-    /** Long-press seam scoped to the expanded detail grid; nowhere else offers reassignment. */
-    public interface CategoryChoiceListener {
-        void onCategoryChoiceRequested(@NonNull LauncherAppEntry entry);
-    }
-
     @Nullable private SuggestionBarView dock;
     @NonNull private List<LauncherAppEntry> entries = new ArrayList<>();
     @Nullable private AppDrawerCategoryGridMetrics metrics;
     @NonNull private AppDrawerAppCellView.ClickGate clickGate = AppDrawerAppCellView.ALLOW_CLICKS;
-    @Nullable private CategoryChoiceListener categoryChoiceListener;
+    @Nullable private AppDrawerCategoryChoiceListener categoryChoiceListener;
 
     public AppDrawerCategoryDetailAdapter(@Nullable SuggestionBarView dock) {
         this.dock = dock;
@@ -40,7 +35,7 @@ public final class AppDrawerCategoryDetailAdapter
     public void setClickGate(@NonNull AppDrawerAppCellView.ClickGate clickGate) {
         this.clickGate = clickGate;
     }
-    public void setCategoryChoiceListener(@Nullable CategoryChoiceListener listener) {
+    public void setCategoryChoiceListener(@Nullable AppDrawerCategoryChoiceListener listener) {
         this.categoryChoiceListener = listener;
     }
     public void submit(@NonNull List<LauncherAppEntry> entries) {
@@ -61,18 +56,7 @@ public final class AppDrawerCategoryDetailAdapter
         if (current == null) { holder.cell.unbind(); return; }
         LauncherAppEntry entry = entries.get(position);
         holder.cell.bind(dock, entry, current.largeIconPx,
-            Math.max(1, Math.round(current.expandedRowHeightPx)), clickGate);
-        // Replaces only the dock's long-click action installed by bind; press animation and
-        // click launch keep their shared implementations.
-        CategoryChoiceListener listener = categoryChoiceListener;
-        if (listener != null) {
-            holder.cell.setLongClickable(true);
-            holder.cell.setOnLongClickListener(view -> {
-                if (clickGate.suppressCellClick()) return false;
-                listener.onCategoryChoiceRequested(entry);
-                return true;
-            });
-        }
+            Math.max(1, Math.round(current.expandedRowHeightPx)), clickGate, categoryChoiceListener);
     }
     @Override public void onViewRecycled(@NonNull Holder holder) {
         super.onViewRecycled(holder);

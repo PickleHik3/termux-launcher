@@ -371,6 +371,7 @@
     <string name="app_drawer_category_information_reading">News &amp; Reading</string>
     <string name="app_drawer_category_other">Other</string>
     <string name="app_drawer_category_automatic">Automatic (suggested)</string>
+    <string name="app_drawer_category_menu_entry">Category</string>
     <string name="app_drawer_category_no_apps">No apps</string>
     <string name="app_drawer_category_open">Open %1$s</string>
     <string name="app_drawer_category_collapse">Collapse %1$s</string>

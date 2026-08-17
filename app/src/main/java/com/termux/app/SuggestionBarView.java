@@ -119,6 +119,7 @@ import com.termux.app.launcher.data.LauncherIconResolver;
 import com.termux.app.launcher.notifications.LauncherNotificationBadgeStore;
 import com.termux.app.launcher.data.LauncherRankingEngine;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
+import com.termux.app.launcher.drawer.AppDrawerCategory;
 import com.termux.app.launcher.drawer.AppDrawerController;
 import com.termux.app.launcher.drawer.AppDrawerPickupDelegate;
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
@@ -323,6 +324,7 @@ public final class SuggestionBarView extends GridLayout
     /** Identifies a folder-member drag in windows the drag's local state does not reach. */
     static final String FOLDER_ENTRY_CLIP_LABEL = "folder-entry";
     private PopupWindow appContextPopupWindow;
+    private PopupWindow categoryPickerPopupWindow;
     private PopupWindow shortcutsPopupWindow;
     private PopupWindow notificationPopupWindow;
     @Nullable private PopupWindow notificationInteractionPopup;
@@ -4418,10 +4420,29 @@ public final class SuggestionBarView extends GridLayout
     public void bindDrawerAppContextLongPress(@NonNull View pressTarget,
                                               @NonNull LauncherAppEntry entry,
                                               @Nullable AppDrawerPickupDelegate pickupDelegate) {
-        bindContextLongPressGesture(pressTarget, -1, false, () -> {
-            dismissShortcutsPopup();
-            showAppContextPopup(new AppMenuContext(entry, pressTarget, -1, null, null));
-        }, null, null, pickupDelegate, entry, null);
+        bindDrawerAppContextLongPress(pressTarget, entry, pickupDelegate, null);
+    }
+
+    /**
+     * Same as the two-arg overload, but with a {@code categoryAction}: when non-null, the popup
+     * this opens drops its Pin/Unpin row and gains a "Category" row that runs it instead — the
+     * app-drawer categories grid's reassignment entry point, reusing this Material popup rather
+     * than jumping straight to a category picker.
+     */
+    public void bindDrawerAppContextLongPress(@NonNull View pressTarget,
+                                              @NonNull LauncherAppEntry entry,
+                                              @Nullable AppDrawerPickupDelegate pickupDelegate,
+                                              @Nullable Runnable categoryAction) {
+        bindContextLongPressGesture(pressTarget, -1, false,
+            () -> showDrawerAppContextPopup(pressTarget, entry, categoryAction),
+            null, null, pickupDelegate, entry, null);
+    }
+
+    /** Shows the Material app-context popup anchored to a drawer view, outside the long-press gesture. */
+    public void showDrawerAppContextPopup(@NonNull View anchor, @NonNull LauncherAppEntry entry,
+                                          @Nullable Runnable categoryAction) {
+        dismissShortcutsPopup();
+        showAppContextPopup(new AppMenuContext(entry, anchor, -1, null, null, categoryAction));
     }
 
     private void bindFolderContextLongPress(
@@ -4621,6 +4642,8 @@ public final class SuggestionBarView extends GridLayout
         boolean folderSource = sourceFolder != null && context.folderEntryRef != null;
         int topPinnedIndex = context.pinnedIndex >= 0 ? context.pinnedIndex : findPinnedAppIndex(context.entry.appRef);
         boolean topPinned = topPinnedIndex >= 0;
+        // A category-context popup swaps its Pin/Unpin row for a Category row instead — see below.
+        boolean suppressPinRow = context.categoryAction != null;
 
         LinearLayout shell = new LinearLayout(getContext());
         shell.setOrientation(LinearLayout.VERTICAL);
@@ -4762,23 +4785,27 @@ public final class SuggestionBarView extends GridLayout
 
             addAppWideIconRows(shell, context.entry, tintBase);
 
-            TextView unpinRow = addPopupActionRow(shell, "Unpin", R.drawable.ic_dock_menu_pin, false, tintBase, () -> {
-                dismissAppContextPopup();
-                removePinnedAt(targetPinnedIndex);
-            });
-            appContextRows.add(new MenuActionRow(unpinRow, () -> {
-                dismissAppContextPopup();
-                removePinnedAt(targetPinnedIndex);
-            }, false));
+            if (!suppressPinRow) {
+                TextView unpinRow = addPopupActionRow(shell, "Unpin", R.drawable.ic_dock_menu_pin, false, tintBase, () -> {
+                    dismissAppContextPopup();
+                    removePinnedAt(targetPinnedIndex);
+                });
+                appContextRows.add(new MenuActionRow(unpinRow, () -> {
+                    dismissAppContextPopup();
+                    removePinnedAt(targetPinnedIndex);
+                }, false));
+            }
         } else {
-            TextView pinRow = addPopupActionRow(shell, "Pin", R.drawable.ic_dock_menu_pin, false, tintBase, () -> {
-                dismissAppContextPopup();
-                pinEntryToTopLevel(context.entry);
-            });
-            appContextRows.add(new MenuActionRow(pinRow, () -> {
-                dismissAppContextPopup();
-                pinEntryToTopLevel(context.entry);
-            }, false));
+            if (!suppressPinRow) {
+                TextView pinRow = addPopupActionRow(shell, "Pin", R.drawable.ic_dock_menu_pin, false, tintBase, () -> {
+                    dismissAppContextPopup();
+                    pinEntryToTopLevel(context.entry);
+                });
+                appContextRows.add(new MenuActionRow(pinRow, () -> {
+                    dismissAppContextPopup();
+                    pinEntryToTopLevel(context.entry);
+                }, false));
+            }
 
             TextView changeIconRow = addPopupActionRow(shell, "Change app icon", R.drawable.ic_dock_menu_change_icon, false, tintBase, () -> {
                 dismissAppContextPopup();
@@ -4789,6 +4816,20 @@ public final class SuggestionBarView extends GridLayout
                 changeAppIconForEntry(context.entry);
             }, false));
             addResetAppIconRowIfNeeded(shell, context.entry, tintBase);
+        }
+
+        if (context.categoryAction != null) {
+            Runnable categoryAction = context.categoryAction;
+            TextView categoryRow = addPopupActionRow(shell,
+                getResources().getString(R.string.app_drawer_category_menu_entry),
+                R.drawable.ic_dock_menu_category, false, tintBase, () -> {
+                    dismissAppContextPopup();
+                    categoryAction.run();
+                });
+            appContextRows.add(new MenuActionRow(categoryRow, () -> {
+                dismissAppContextPopup();
+                categoryAction.run();
+            }, false));
         }
 
         if (hasShortcuts) {
@@ -5818,6 +5859,93 @@ public final class SuggestionBarView extends GridLayout
         dismissAppContextPopup();
         dismissFolderPopup();
         dismissShortcutsPopup();
+        dismissCategoryPickerPopup();
+    }
+
+    /**
+     * The Material popup listing every non-synthetic {@link AppDrawerCategory} plus "Automatic",
+     * opened from the "Category" row of the drawer app-context popup. Replaces the old
+     * {@code AlertDialog}-based picker with the same glass/blur shell every other launcher popup uses.
+     */
+    public void showCategoryPickerPopup(
+        @NonNull LauncherAppEntry entry,
+        @NonNull View anchor,
+        @NonNull List<AppDrawerCategory> categories,
+        @Nullable AppDrawerCategory current,
+        @NonNull java.util.function.Consumer<AppDrawerCategory> onPick
+    ) {
+        dismissContextPopups();
+        LinearLayout shell = new LinearLayout(getContext());
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(dp(3), dp(3), dp(3), dp(3));
+
+        TextView header = new TextView(getContext());
+        header.setText(entry.label);
+        header.setTextColor(resolveLauncherTextColor());
+        header.setTextSize(12f);
+        header.setTypeface(Typeface.DEFAULT_BOLD);
+        header.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(8), dp(6), dp(8), dp(7));
+        shell.addView(header, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        int tintBase = inheritedTintColor & 0x00FFFFFF;
+        List<MenuActionRow> rows = new ArrayList<>();
+        rows.add(new MenuActionRow(addCategoryPickRow(shell,
+            getResources().getString(R.string.app_drawer_category_automatic), current == null, tintBase, () -> {
+                dismissCategoryPickerPopup();
+                onPick.accept(null);
+            }), () -> {}, false));
+        for (AppDrawerCategory category : categories) {
+            rows.add(new MenuActionRow(addCategoryPickRow(shell,
+                getResources().getString(category.labelRes), category == current, tintBase, () -> {
+                    dismissCategoryPickerPopup();
+                    onPick.accept(category);
+                }), () -> {}, false));
+        }
+
+        int rowWidth = normalizePopupRowWidths(rows);
+        constrainPopupHeaderWidth(header, rowWidth);
+
+        categoryPickerPopupWindow = buildPopupWindow(shell, tintBase, true, () -> {
+            if (categoryPickerPopupWindow != null && !categoryPickerPopupWindow.isShowing()) {
+                categoryPickerPopupWindow = null;
+            }
+        });
+        showPopupAtAnchor(categoryPickerPopupWindow, anchor);
+    }
+
+    @NonNull
+    private TextView addCategoryPickRow(@NonNull LinearLayout shell, @NonNull String title,
+                                        boolean checked, int tintBase, @NonNull Runnable action) {
+        TextView row = new TextView(getContext());
+        row.setText(title);
+        row.setTextColor(resolveLauncherTextColor());
+        row.setTextSize(12f);
+        row.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(8), dp(7), dp(8), dp(7));
+        row.setClickable(true);
+        if (checked) {
+            Drawable check = loadMenuIcon(R.drawable.ic_symbol_check_circle, dp(16), resolveLauncherTextColor());
+            row.setCompoundDrawablesRelative(null, null, check, null);
+            row.setCompoundDrawablePadding(dp(10));
+        }
+        stylePopupRow(row, false, tintBase);
+        row.setOnClickListener(v -> runPopupActionWithFeedback(row, action));
+        shell.addView(row, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return row;
+    }
+
+    private void dismissCategoryPickerPopup() {
+        if (categoryPickerPopupWindow != null) {
+            final PopupWindow popup = categoryPickerPopupWindow;
+            dismissPopupWindowAnimated(popup, () -> {
+                if (categoryPickerPopupWindow == popup) {
+                    categoryPickerPopupWindow = null;
+                }
+            });
+        }
     }
 
     private void showNotificationPopup(
@@ -6549,6 +6677,7 @@ public final class SuggestionBarView extends GridLayout
         final int pinnedIndex;
         @Nullable final String sourceFolderId;
         @Nullable final AppRef folderEntryRef;
+        @Nullable final Runnable categoryAction;
 
         AppMenuContext(
             @NonNull LauncherAppEntry entry,
@@ -6557,11 +6686,23 @@ public final class SuggestionBarView extends GridLayout
             @Nullable String sourceFolderId,
             @Nullable AppRef folderEntryRef
         ) {
+            this(entry, anchor, pinnedIndex, sourceFolderId, folderEntryRef, null);
+        }
+
+        AppMenuContext(
+            @NonNull LauncherAppEntry entry,
+            @NonNull View anchor,
+            int pinnedIndex,
+            @Nullable String sourceFolderId,
+            @Nullable AppRef folderEntryRef,
+            @Nullable Runnable categoryAction
+        ) {
             this.entry = entry;
             this.anchor = anchor;
             this.pinnedIndex = pinnedIndex;
             this.sourceFolderId = sourceFolderId;
             this.folderEntryRef = folderEntryRef;
+            this.categoryAction = categoryAction;
         }
     }
 

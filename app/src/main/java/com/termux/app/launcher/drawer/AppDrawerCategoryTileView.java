@@ -55,6 +55,7 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
     @Nullable private AppDrawerCategoryBucket bucket;
     @Nullable private SuggestionBarView dock;
     @Nullable private ExpansionListener expansionListener;
+    @Nullable private AppDrawerCategoryChoiceListener categoryChoiceListener;
     @NonNull private AppDrawerAppCellView.ClickGate clickGate = AppDrawerAppCellView.ALLOW_CLICKS;
     private float tileLeft;
     private float tileSide;
@@ -159,13 +160,15 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
 
     public void bind(@Nullable SuggestionBarView dock, @NonNull AppDrawerCategoryBucket bucket,
         @NonNull AppDrawerCategoryGridMetrics metrics, @NonNull ExpansionListener listener,
-        @NonNull AppDrawerAppCellView.ClickGate clickGate) {
+        @NonNull AppDrawerAppCellView.ClickGate clickGate,
+        @Nullable AppDrawerCategoryChoiceListener categoryChoiceListener) {
         unbind();
         this.dock = dock;
         this.bucket = bucket;
         this.metrics = metrics;
         this.expansionListener = listener;
         this.clickGate = clickGate;
+        this.categoryChoiceListener = categoryChoiceListener;
         String label = getResources().getString(bucket.category.labelRes);
         heading.setText(label);
         heading.setClickable(true);
@@ -198,7 +201,6 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
             icon.setImageDrawable(artwork != null ? artwork : entry.icon);
             if (dock != null) dock.applyIconColorFilter(icon);
             icon.setVisibility(VISIBLE);
-            icon.setLongClickable(false);
             if (i < LAUNCH_ICON_COUNT && dock != null) {
                 // The three large slots are shortcuts: a tap launches that app instead of opening
                 // the category. Same gate as every other drawer cell, so a close drag that started
@@ -210,6 +212,18 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
                     if (!this.clickGate.suppressCellClick() && currentDock != null)
                         currentDock.launchEntryFromDrawer(view, entry);
                 });
+                // A long press reuses the dock's Material app-context popup (Category row instead
+                // of Pin) rather than jumping straight to the category picker.
+                icon.setLongClickable(true);
+                icon.setOnLongClickListener(view -> {
+                    SuggestionBarView currentDock = this.dock;
+                    AppDrawerCategoryChoiceListener choiceListener = this.categoryChoiceListener;
+                    if (this.clickGate.suppressCellClick() || currentDock == null) return false;
+                    Runnable categoryAction = choiceListener == null ? null
+                        : () -> choiceListener.onCategoryChoiceRequested(entry, view);
+                    currentDock.showDrawerAppContextPopup(view, entry, categoryAction);
+                    return true;
+                });
             } else {
                 // Display only: the mini-cluster stands for "there is more in here", so its taps
                 // fall through to the open-category target underneath.
@@ -217,6 +231,7 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
                 // the listener handed to it is null.
                 icon.setOnClickListener(null);
                 icon.setClickable(false);
+                icon.setLongClickable(false);
                 icon.setContentDescription(null);
             }
         }
@@ -241,6 +256,7 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         bucket = null;
         dock = null;
         expansionListener = null;
+        categoryChoiceListener = null;
         clickGate = AppDrawerAppCellView.ALLOW_CLICKS;
     }
 
