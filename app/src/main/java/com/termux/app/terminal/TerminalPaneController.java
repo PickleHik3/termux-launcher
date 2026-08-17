@@ -3,6 +3,7 @@ package com.termux.app.terminal;
 import android.animation.ValueAnimator;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
@@ -11,6 +12,7 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -108,6 +110,8 @@ public class TerminalPaneController {
     private static final int FLOAT_PILL_BUTTON_DP = 44;
     /** Above tiled panes and the interaction overlay, below the 6dp key chord overlay. */
     private static final int FLOAT_ELEVATION_DP = 4;
+    /** Matches pane_active_border.xml's corner radius, so the content clip and its border ring agree. */
+    private static final int FLOAT_CORNER_RADIUS_DP = 6;
 
     /** Callbacks into the hosting activity. */
     public interface Host {
@@ -2488,6 +2492,15 @@ public class TerminalPaneController {
             content.setBackgroundColor(MaterialColors.getColor(getContext(),
                 com.termux.shared.R.attr.termuxColorSurfacePanel,
                 ContextCompat.getColor(getContext(), R.color.termux_surface_panel)));
+            // pane_active_border is a foreground stroke, not a clip — without this the terminal's
+            // own rectangular cell-background fill pokes a black triangle past each rounded corner.
+            final float cornerRadiusPx = dp(FLOAT_CORNER_RADIUS_DP);
+            content.setClipToOutline(true);
+            content.setOutlineProvider(new ViewOutlineProvider() {
+                @Override public void getOutline(View view, Outline outline) {
+                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cornerRadiusPx);
+                }
+            });
             content.addView(paneFrameFor(leaf.session), new LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             LayoutParams contentParams = new LayoutParams(
