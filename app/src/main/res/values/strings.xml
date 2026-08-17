@@ -1611,6 +1611,7 @@
         <item quantity="other">This terminates all %1$d panes in the session.</item>
     </plurals>
     <string name="session_browser_workspace_name">Workspace name</string>
+    <string name="session_browser_save_workspace_title">Save Workspace</string>
     <string name="workspace_save_capture_commands">Also save what is running</string>
     <string name="workspace_save_capture_commands_summary">Records the command in the foreground of each pane so loading can offer to run it again. Idle panes record nothing.</string>
     <string name="session_browser_workspace_saved">Saved workspace %1$s</string>

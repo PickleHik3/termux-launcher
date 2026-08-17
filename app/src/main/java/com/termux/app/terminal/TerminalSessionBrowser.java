@@ -296,7 +296,7 @@ public final class TerminalSessionBrowser {
         LinearLayout actions = TerminalSheetViews.addActionRow(body);
         TerminalSheetViews.addAction(actions, activity.getString(android.R.string.cancel), sheet::dismiss);
         TerminalSheetViews.addAction(actions, activity.getString(android.R.string.ok), save);
-        sheet.show(activity.getString(R.string.session_browser_workspace_name), body, false,
+        sheet.show(activity.getString(R.string.session_browser_save_workspace_title), body, false,
             field[0], null);
     }
 
