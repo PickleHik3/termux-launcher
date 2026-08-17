@@ -415,7 +415,7 @@ public final class TermuxPropertyConstants {
      * replaces it, which is also what the {@code extrakeys.edit} editor writes on save — so an
      * app update can change this row without touching anyone's edited one.
      */
-    public static final String DEFAULT_IVALUE_EXTRA_KEYS = "[[{key: KEYBOARD, popup: PASTE}, {key: 'tool:workspace.picker', display: '▤'}, {key: 'tool:workspace.save_prompt', display: '⛁'}, {key: 'tool:window.previous', display: '◧', popup: {key: 'tool:session.previous', display: '◀'}}, {key: 'tool:window.next', display: '◨', popup: {key: 'tool:session.next', display: '▶'}}, {key: 'tool:pane.move_to_edge:edge=left', display: '⇤', popup: {key: 'tool:pane.next_layout', display: '⟳'}}, {key: 'tool:terminal.toggle_scratchpad', display: '▣', popup: {key: 'tool:pane.toggle_float', display: '◈'}}]]";
+    public static final String DEFAULT_IVALUE_EXTRA_KEYS = "[[{key: KEYBOARD, display: '⌨', popup: PASTE}, {key: 'tool:workspace.picker', display: '⊞↑'}, {key: 'tool:workspace.save_prompt', display: '⊞↓'}, {key: 'tool:window.previous', display: '‹', popup: {key: 'tool:session.previous', display: '«'}}, {key: 'tool:window.next', display: '›', popup: {key: 'tool:session.next', display: '»'}}, {key: 'tool:pane.move_to_edge:edge=left', display: '⇤', popup: {key: 'tool:pane.next_layout', display: '▦↻'}}, {key: 'tool:terminal.toggle_scratchpad', display: '✎', popup: {key: 'tool:pane.toggle_float', display: '▣'}}]]";
 
     /**
      * The second page ships empty: one row is what the launcher needs, and the in-app keyboard's
