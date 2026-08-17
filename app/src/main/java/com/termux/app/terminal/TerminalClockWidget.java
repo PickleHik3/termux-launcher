@@ -14,6 +14,7 @@ import android.graphics.Typeface;
 import android.os.Build;
 import android.os.SystemClock;
 import android.util.AttributeSet;
+import android.view.MotionEvent;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -444,8 +445,9 @@ public final class TerminalClockWidget extends View {
                 return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 27f, -.045f) + dp(5f)
                     + stackedMetaWidth(9f, 6f, mediumTypeface(), Typeface.DEFAULT_BOLD, .16f);
             default:
-                return dp(64.5f) + dp(4f)
-                    + metaWidth(9.5f, 6.5f, 3f, Typeface.DEFAULT, mediumTypeface(), .16f, false);
+                // 15dp cards x4 + 1.5dp intra-pair gaps x2 + 4dp hour/minute gap.
+                return dp(67f) + dp(4f)
+                    + stackedMetaWidth(9.5f, 6.5f, Typeface.DEFAULT, mediumTypeface(), .16f);
         }
     }
 
@@ -514,6 +516,39 @@ public final class TerminalClockWidget extends View {
                 break;
         }
         if (hasRunningAnimation(now)) postInvalidateOnAnimation();
+    }
+
+    /**
+     * The slot lays this view out at the pane's full available width (so alignment can place the
+     * clock left/center/right within it), which leaves blank space beside the painted face. Gate
+     * the click listener to that painted region instead of the whole laid-out view.
+     */
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN
+            && !isInsidePaintedContent(event.getX(), event.getY())) {
+            return false;
+        }
+        return super.onTouchEvent(event);
+    }
+
+    private boolean isInsidePaintedContent(float x, float y) {
+        if (mSnapshot == null) return true;
+        switch (mForm) {
+            case MONO_CHIP:
+                return x >= 0f && x <= contentWidth();
+            case COMPACT: {
+                float scale = Math.min(1f, getHeight() / dp(compactColumnHeightDp()));
+                return x >= 0f && x <= contentWidth() * scale;
+            }
+            default: {
+                float columnDp = fullBandHeightDp() + fullDateGapDp() + fullDateBlockDp();
+                float scale = Math.min(1f, getHeight() / dp(columnDp));
+                float right = getWidth() / Math.max(.01f, scale);
+                float left = alignmentDx(right, contentWidth()) * scale;
+                return x >= left && x <= left + contentWidth() * scale;
+            }
+        }
     }
 
     private void drawFull(Canvas canvas, long now) {
@@ -935,101 +970,99 @@ public final class TerminalClockWidget extends View {
     }
 
     private void drawCompactFlip(Canvas canvas, long now) {
-        float x = drawFlipCards(canvas, now, 15f, 24f, 19f, 1.5f);
-        drawMetaRow(canvas, x + dp(4f), dp(21f), 9.5f, 6.5f, 3f, Typeface.DEFAULT, mediumTypeface(),
-            .16f, false, now, FLIP_DURATION_MS);
+        float digitBaseline = capCenteredBaseline(dp(24f) / 2f, condensedBoldTypeface(), 19f);
+        float x = drawCompactFlipCards(canvas, now, digitBaseline);
+        drawStackedMetaColumn(canvas, x + dp(4f), dp(21f), 9.5f, 6.5f, Typeface.DEFAULT,
+            mediumTypeface(), .16f, now, FLIP_DURATION_MS);
     }
 
-    /** Four evenly spaced cards: the refined face drops the colon so the row reads as one block. */
-    private float drawFlipCards(Canvas canvas, long now, float widthDp, float heightDp,
-                                float textDp, float gapDp) {
+    /** Same departure-board face as {@link #drawFullFlipCards}, at compact scale. */
+    private float drawCompactFlipCards(Canvas canvas, long now, float digitBaseline) {
         float x = 0f;
         for (int digit = 0; digit < 4; digit++) {
-            x = drawFlipDigit(canvas, digit, x, 0f, widthDp, heightDp, textDp, now);
-            if (digit < 3) x += dp(gapDp);
+            x = drawCompactFlipDigit(canvas, digit, x, digitBaseline, now);
+            if (digit == 0 || digit == 2) x += dp(1.5f);
+            else if (digit == 1) x += dp(4f);
         }
         return x;
     }
 
-    private float drawFlipDigit(Canvas canvas, int digit, float x, float y,
-                                float widthDp, float heightDp, float textDp, long now) {
-        float w = dp(widthDp), h = dp(heightDp), half = h / 2f;
-        RectF card = new RectF(x, y, x + w, y + h);
+    private float drawCompactFlipDigit(Canvas canvas, int digit, float x, float digitBaseline,
+                                       long now) {
+        float w = dp(15f), h = dp(24f);
+        RectF card = new RectF(x, 0f, x + w, h);
         float p = progress(digit, now, FLIP_DURATION_MS);
         boolean animating = p < 1f;
-        char bottom = animating ? mOldDigits[digit] : mDigits[digit];
 
-        // Resting drop shadow under the whole card grounds it before any lighting is drawn.
         mFillPaint.setShader(null);
-        mFillPaint.setColor(Color.argb(46, 0, 0, 0));
-        canvas.drawRoundRect(new RectF(card.left, card.top + dp(1f), card.right,
-            card.bottom + dp(1.5f)), dp(4f), dp(4f), mFillPaint);
+        mFillPaint.setStyle(Paint.Style.FILL);
+        mFillPaint.setColor(mUpperFlipColors[0]);
+        mFillPaint.setShadowLayer(dp(2.2f), 0f, dp(.7f), mFlipShadow);
+        canvas.drawRoundRect(card, dp(1f), dp(1f), mFillPaint);
+        mFillPaint.clearShadowLayer();
 
-        drawFlipHalf(canvas, card, true, mDigits[digit], textDp, 0f);
-        drawFlipHalf(canvas, card, false, bottom, textDp, 0f);
-        if (animating && p < .5f) {
+        if (!animating) {
+            drawCompactFlipHalf(canvas, card, true, mDigits[digit], true, digitBaseline, 0f);
+            drawCompactFlipHalf(canvas, card, false, mDigits[digit], true, digitBaseline, 0f);
+        } else if (p < .5f) {
             float local = p * 2f;
-            drawRotatedFlipHalf(canvas, card, true, mOldDigits[digit], textDp,
-                -90f * local * local);
-        } else if (animating) {
+            drawCompactFlipHalf(canvas, card, true, mDigits[digit], false, digitBaseline, 0f);
+            drawCompactFlipHalf(canvas, card, false, mOldDigits[digit], true, digitBaseline, 0f);
+            drawCompactRotatedFlipHalf(canvas, card, true, mOldDigits[digit], digitBaseline,
+                -90f * local * local, local);
+        } else {
             float local = (p - .5f) * 2f;
             float eased = 1f - (1f - local) * (1f - local);
-            drawRotatedFlipHalf(canvas, card, false, mDigits[digit], textDp,
-                90f * (1f - eased));
+            drawCompactFlipHalf(canvas, card, true, mDigits[digit], true, digitBaseline, 0f);
+            drawCompactFlipHalf(canvas, card, false, mDigits[digit], false, digitBaseline, 0f);
+            drawCompactRotatedFlipHalf(canvas, card, false, mDigits[digit], digitBaseline,
+                90f * (1f - eased), 1f - eased);
         }
 
-        // Split furniture, over the (possibly mid-flip) halves: the top card's cast shadow
-        // fading down the bottom half, a hairline pivot gap, and the lit edge where the bottom
-        // card catches the light — the three cues that make the two halves read as separate,
-        // slightly convex cards instead of one flat slab with a line through it.
-        float split = y + half;
-        mFillPaint.setShader(new LinearGradient(0f, split, 0f, split + dp(3f),
-            Color.argb(64, 0, 0, 0), Color.TRANSPARENT, Shader.TileMode.CLAMP));
-        canvas.drawRect(x, split, x + w, split + dp(3f), mFillPaint);
         mFillPaint.setShader(null);
-        mFillPaint.setColor(Color.argb(105, 0, 0, 0));
-        canvas.drawRect(x, split - dp(.5f), x + w, split + dp(.5f), mFillPaint);
-        mFillPaint.setColor(Color.argb(34, 255, 255, 255));
-        canvas.drawRect(x + dp(1.5f), split + dp(.5f), x + w - dp(1.5f), split + dp(1f),
-            mFillPaint);
-        return x + w;
+        mFillPaint.setStyle(Paint.Style.STROKE);
+        mFillPaint.setStrokeWidth(1f);
+        mFillPaint.setColor(mFlipRim);
+        canvas.drawRoundRect(card, dp(1f), dp(1f), mFillPaint);
+        mFillPaint.setStyle(Paint.Style.FILL);
+        drawCompactFlipHinge(canvas, card);
+        return card.right;
     }
 
-    /** @param shade 0..1 extra darkening for a mid-flip half (it tilts away from the light) */
-    private void drawFlipHalf(Canvas canvas, RectF card, boolean top, char digit, float textDp,
-                              float shade) {
-        float half = card.height() / 2f;
+    private void drawCompactFlipHalf(Canvas canvas, RectF card, boolean top, char digit,
+                                     boolean drawDigit, float digitBaseline, float foldShade) {
+        float split = card.centerY();
         RectF clip = top
-            ? new RectF(card.left, card.top, card.right, card.top + half)
-            : new RectF(card.left, card.top + half, card.right, card.bottom);
+            ? new RectF(card.left, card.top, card.right, split)
+            : new RectF(card.left, split, card.right, card.bottom);
         canvas.save();
         canvas.clipRect(clip);
-        // Per-half convex lighting: each half is brightest at the edge facing the light (the
-        // card top for the upper half, the pivot for the lower) and falls off across itself.
         mFillPaint.setShader(top
-            ? new LinearGradient(0f, card.top, 0f, card.top + half,
-                alpha(mOnSurface, .17f), alpha(mOnSurface, .095f), Shader.TileMode.CLAMP)
-            : new LinearGradient(0f, card.top + half, 0f, card.bottom,
-                alpha(mOnSurface, .09f), alpha(mOnSurface, .045f), Shader.TileMode.CLAMP));
-        canvas.drawRoundRect(card, dp(4f), dp(4f), mFillPaint);
+            ? new LinearGradient(0f, card.top, 0f, split, mUpperFlipColors, UPPER_FLIP_STOPS,
+                Shader.TileMode.CLAMP)
+            : new LinearGradient(0f, split, 0f, card.bottom, mLowerFlipColors, LOWER_FLIP_STOPS,
+                Shader.TileMode.CLAMP));
+        canvas.drawRoundRect(card, dp(1f), dp(1f), mFillPaint);
         mFillPaint.setShader(null);
-        mPaint.setTypeface(mediumTypeface());
-        mPaint.setLetterSpacing(-.02f);
-        mPaint.setTextSize(dp(textDp));
-        mPaint.setColor(mOnSurface);
-        mPaint.setTextAlign(Paint.Align.CENTER);
-        float baseline = card.centerY() - (mPaint.ascent() + mPaint.descent()) / 2f;
-        canvas.drawText(String.valueOf(digit), card.centerX(), baseline, mPaint);
-        mPaint.setLetterSpacing(0f);
-        if (shade > 0f) {
-            mFillPaint.setColor(Color.argb(Math.round(96f * Math.min(1f, shade)), 0, 0, 0));
-            canvas.drawRoundRect(card, dp(4f), dp(4f), mFillPaint);
+        if (drawDigit) {
+            mPaint.setTypeface(condensedBoldTypeface());
+            mPaint.setLetterSpacing(0f);
+            mPaint.setTextSize(dp(19f));
+            mPaint.setColor(mOnSurface);
+            mPaint.setAlpha(255);
+            mPaint.setTextAlign(Paint.Align.CENTER);
+            canvas.drawText(String.valueOf(digit), card.centerX(), digitBaseline, mPaint);
+        }
+        if (foldShade > 0f) {
+            mFillPaint.setColor(Color.argb(Math.round(255f * .22f * clamp01(foldShade)),
+                0, 0, 0));
+            canvas.drawRoundRect(card, dp(1f), dp(1f), mFillPaint);
         }
         canvas.restore();
     }
 
-    private void drawRotatedFlipHalf(Canvas canvas, RectF card, boolean top, char digit,
-                                     float textDp, float angle) {
+    private void drawCompactRotatedFlipHalf(Canvas canvas, RectF card, boolean top, char digit,
+                                            float digitBaseline, float angle, float foldShade) {
         float pivotY = card.centerY();
         mCamera.save();
         mCamera.rotateX(angle);
@@ -1039,8 +1072,39 @@ public final class TerminalClockWidget extends View {
         mMatrix.postTranslate(card.centerX(), pivotY);
         canvas.save();
         canvas.concat(mMatrix);
-        drawFlipHalf(canvas, card, top, digit, textDp, Math.abs(angle) / 90f);
+        drawCompactFlipHalf(canvas, card, top, digit, true, digitBaseline, foldShade);
         canvas.restore();
+    }
+
+    private void drawCompactFlipHinge(Canvas canvas, RectF card) {
+        float split = card.centerY();
+        mFillPaint.setShader(null);
+        mFillPaint.setColor(mFlipSeam);
+        canvas.drawRect(card.left, split - .5f, card.right, split + .5f, mFillPaint);
+
+        float clipWidth = dp(2.2f), clipHeight = dp(5f);
+        float clipTop = split - clipHeight / 2f;
+        RectF leftClip = new RectF(card.left - 1f, clipTop,
+            card.left - 1f + clipWidth, clipTop + clipHeight);
+        RectF rightClip = new RectF(card.right + 1f - clipWidth, clipTop,
+            card.right + 1f, clipTop + clipHeight);
+        drawCompactFlipHingeClip(canvas, leftClip);
+        drawCompactFlipHingeClip(canvas, rightClip);
+    }
+
+    private void drawCompactFlipHingeClip(Canvas canvas, RectF clip) {
+        mFillPaint.setStyle(Paint.Style.FILL);
+        mFillPaint.setShader(new LinearGradient(0f, clip.top, 0f, clip.bottom, mHingeFlipColors,
+            HINGE_FLIP_STOPS, Shader.TileMode.CLAMP));
+        mFillPaint.setShadowLayer(dp(.5f), 0f, dp(.25f), mFlipClipShadow);
+        canvas.drawRoundRect(clip, dp(.5f), dp(.5f), mFillPaint);
+        mFillPaint.clearShadowLayer();
+        mFillPaint.setShader(null);
+        mFillPaint.setStyle(Paint.Style.STROKE);
+        mFillPaint.setStrokeWidth(1f);
+        mFillPaint.setColor(mFlipClipOutline);
+        canvas.drawRoundRect(clip, dp(.5f), dp(.5f), mFillPaint);
+        mFillPaint.setStyle(Paint.Style.FILL);
     }
 
     // ---- LCD --------------------------------------------------------------

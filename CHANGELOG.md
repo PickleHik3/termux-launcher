@@ -8,6 +8,10 @@ system keyboard. Landscape is usable for the first time.
 
 ### Added
 
+- **Narrow symbols.** `narrow_symbols U+E0A0-U+E0A3,U+E0C0-U+E0C7 1` in `~/.termux/fonts.conf` caps
+  how many cells a private-use symbol may be drawn across, kitty's directive with kitty's syntax.
+  The count defaults to one, the maximum is five, and for a code point matched by several lines the
+  last one wins.
 - **Kitty graphics Unicode placeholders.** `U=1` virtual placements and U+10EEEE
   row/column/image-id decoding now draw stored images through ordinary text cells, enabling the
   tmux path used by Neovim image plugins while retaining animation-frame updates.
@@ -232,6 +236,40 @@ system keyboard. Landscape is usable for the first time.
   separate greyed fallback hint — two labels for one idea, in a pill with room for neither.
 
 ### Fixed
+
+- **Nerd Font icons drawn at half their height.** A Nerd Font glyph sits on a full em square while a
+  text cell is narrower than its em — Maple Mono's is 0.6 em — so a symbol squeezed into one cell
+  came out markedly shorter than the capitals beside it. Following kitty, a private-use symbol whose
+  glyph is wider than one cell now spreads into the blank cells after it: it asks for
+  `ceil(advance / cell width)` cells, takes as many as there are blanks, and never exceeds five.
+  The expansion existed before but required the trailing blank to carry the whole same style, which
+  no real icon does — fetch tools and prompts colour the icon and not the space after it. Only what
+  a blank can actually show now has to match: its background, and any underline or strikethrough
+  drawn across it. Powerline separators are unaffected, being geometry rather than shaped text.
+- **The clock claimed clicks from empty space.** Its slot lays the view out at the pane's full
+  width so alignment can place the face left, centre or right inside it, which left the click
+  listener covering blank pane either side of the painted clock. Touches are now gated to the
+  painted region for each form.
+- **The compact flip clock looked nothing like the full one.** It kept an older evenly-spaced card
+  row with flat halves, while the full face had moved on to the departure-board look: paired cards
+  with a wider hour/minute gap, per-half convex lighting, a cast shadow down the lower half, hinge
+  clips at the pivot, and the stacked meta column. The compact face is drawn from the same face
+  now, at compact scale, and its measured width follows the cards it actually draws.
+- **A cross-built Fastfetch ignored `~/.config/fastfetch`.** Bionic answers `getpwuid()` for an app
+  uid with `pw_dir="/data"`, and Fastfetch trusts passwd over `$HOME`, so the host-built binary
+  looked for its config in `/data/.config/fastfetch`, never found it, and fell back to the built-in
+  ASCII logo with no error. Termux's own package builds avoid this because termux-packages patches
+  `pwd.h` inside its copy of the NDK sysroot; `recipes/cross/build-fastfetch.sh` now force-includes
+  an equivalent polyfill and fails the build if it did not take effect.
+- **The animated Fastfetch logo was stretched vertically.** The kitty-animation patch sent both a
+  column and a row count, and a terminal given both stretches the image to fill exactly that cell
+  box — the row count being a whole number of cells, a 294 px logo was stretched into a 310 px box.
+  It now sends the column count alone and lets the terminal derive the height from the image's own
+  aspect ratio. The image cache key moved with it, so a stretched cached logo is not replayed.
+- **`setup-launcher` installed Fastfetch without its runtime dependencies.** The published build
+  links `libandroid-glob` and dlopens ImageMagick, Chafa and zlib; without the first it does not
+  start at all, and without the others there is no image logo. They are installed with it now, and
+  a build reporting no `imagemagick7` support says so.
 
 - **Ghost swipes on the pinned apps row.** A swipe played its whole slide and then landed back on
   the page it came from. Both page-switch animations committed the new page only from their end
