@@ -46,6 +46,9 @@ public final class TerminalFontConfig {
     private static final int MAX_SYMBOL_MAPS = 256;
     private static final int MAX_SYMBOL_RANGES = 1024;
     private static final int MAX_SYMBOL_MAP_NAME_CHARS = 32;
+    private static final int MAX_NARROW_SYMBOL_RULES = 64;
+    /** One cell plus kitty's {@code MAX_NUM_EXTRA_GLYPHS_PUA}. */
+    private static final int MAX_NARROW_SYMBOL_CELLS = 5;
     private static final int MAX_NAMED_TARGETS = 256;
     private static final int MAX_FALLBACK_FONTS = 8;
     private static final int MAX_FEATURES_PER_TARGET = 32;
@@ -121,6 +124,20 @@ public final class TerminalFontConfig {
         }
     }
 
+    /**
+     * One {@code narrow_symbols} line: the most cells a private-use symbol in these ranges may be
+     * drawn across. Later lines win over earlier ones for an overlapping code point.
+     */
+    public static final class NarrowSymbolsSpec {
+        @NonNull public final List<CodePointRange> ranges;
+        public final int cells;
+
+        private NarrowSymbolsSpec(@NonNull List<CodePointRange> ranges, int cells) {
+            this.ranges = Collections.unmodifiableList(new ArrayList<>(ranges));
+            this.cells = cells;
+        }
+    }
+
     public static final class SymbolMapSpec {
         @NonNull public final List<CodePointRange> ranges;
         @NonNull public final FaceSpec font;
@@ -149,6 +166,8 @@ public final class TerminalFontConfig {
         public final boolean filePresent;
         @NonNull public final Map<Face, FaceSpec> faces;
         @NonNull public final List<SymbolMapSpec> symbolMaps;
+        /** {@code narrow_symbols} ceilings, in declaration order. */
+        @NonNull public final List<NarrowSymbolsSpec> narrowSymbols;
         @NonNull public final List<FaceSpec> fallbackFonts;
         @NonNull public final LigaturePolicy ligaturePolicy;
         @NonNull public final Map<FontTarget, String> fontFeatures;
@@ -163,6 +182,7 @@ public final class TerminalFontConfig {
 
         private Result(boolean filePresent, @NonNull Map<Face, FaceSpec> faces,
                        @NonNull List<SymbolMapSpec> symbolMaps,
+                       @NonNull List<NarrowSymbolsSpec> narrowSymbols,
                        @NonNull List<FaceSpec> fallbackFonts,
                        @NonNull LigaturePolicy ligaturePolicy,
                        @NonNull Map<FontTarget, String> fontFeatures,
@@ -179,6 +199,8 @@ public final class TerminalFontConfig {
             faceCopy.putAll(faces);
             this.faces = Collections.unmodifiableMap(faceCopy);
             this.symbolMaps = Collections.unmodifiableList(new ArrayList<>(symbolMaps));
+            this.narrowSymbols =
+                Collections.unmodifiableList(new ArrayList<>(narrowSymbols));
             this.fallbackFonts = Collections.unmodifiableList(new ArrayList<>(fallbackFonts));
             this.ligaturePolicy = ligaturePolicy;
             EnumMap<FontTarget, String> featureCopy = new EnumMap<>(FontTarget.class);
@@ -243,6 +265,7 @@ public final class TerminalFontConfig {
     private static final class Accumulator {
         final EnumMap<Face, FaceSpec> faces = new EnumMap<>(Face.class);
         final List<SymbolMapSpec> symbolMaps = new ArrayList<>();
+        final List<NarrowSymbolsSpec> narrowSymbols = new ArrayList<>();
         final List<FaceSpec> fallbackFonts = new ArrayList<>();
         final EnumMap<FontTarget, String> fontFeatures = new EnumMap<>(FontTarget.class);
         final EnumMap<FontTarget, String> fontVariations = new EnumMap<>(FontTarget.class);
@@ -520,6 +543,40 @@ public final class TerminalFontConfig {
                 }
                 continue;
             }
+            if ("narrow_symbols".equalsIgnoreCase(words.get(0))) {
+                // narrow_symbols <ranges> [cells], kitty's own syntax. Without a count the ranges
+                // are pinned to a single cell, which is the point of the directive.
+                if (words.size() < 2 || words.size() > 3) {
+                    errors.add(where + ": expected narrow_symbols ranges and an optional cell count");
+                    continue;
+                }
+                if (accumulator.narrowSymbols.size() >= MAX_NARROW_SYMBOL_RULES) {
+                    errors.add(where + ": narrow_symbols count exceeds " + MAX_NARROW_SYMBOL_RULES);
+                    continue;
+                }
+                int cells = 1;
+                if (words.size() == 3) {
+                    try {
+                        cells = Integer.parseInt(words.get(2));
+                    } catch (NumberFormatException e) {
+                        cells = -1;
+                    }
+                    if (cells < 1 || cells > MAX_NARROW_SYMBOL_CELLS) {
+                        errors.add(where + ": narrow_symbols cell count must be 1 to "
+                            + MAX_NARROW_SYMBOL_CELLS);
+                        continue;
+                    }
+                }
+                List<CodePointRange> narrowRanges = parseRanges(words.get(1), where, errors);
+                if (narrowRanges == null) continue;
+                if (accumulator.symbolRangeCount + narrowRanges.size() > MAX_SYMBOL_RANGES) {
+                    errors.add(where + ": symbol range count exceeds " + MAX_SYMBOL_RANGES);
+                    continue;
+                }
+                accumulator.symbolRangeCount += narrowRanges.size();
+                accumulator.narrowSymbols.add(new NarrowSymbolsSpec(narrowRanges, cells));
+                continue;
+            }
             if ("symbol_map".equalsIgnoreCase(words.get(0))) {
                 String name = null;
                 int names = 0;
@@ -634,6 +691,7 @@ public final class TerminalFontConfig {
                 variations == null ? sharedVariations : variations));
         }
         return new Result(accumulator.filePresent, accumulator.faces, symbolMaps,
+            accumulator.narrowSymbols,
             accumulator.fallbackFonts, accumulator.ligaturePolicy, accumulator.fontFeatures,
             accumulator.fontVariations, namedFeatures, namedVariations, accumulator.metrics,
             accumulator.boxDrawing, accumulator.boxDrawingScale, accumulator.powerlineSymbols,

@@ -18,6 +18,8 @@ import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalRow;
 import com.termux.terminal.TextStyle;
 
+import java.util.Arrays;
+
 /**
  * Renderer of a {@link TerminalEmulator} into a {@link Canvas}.
  * <p/>
@@ -192,6 +194,52 @@ public final class TerminalRenderer {
         }
     }
 
+    /**
+     * Per-code-point ceilings on how many cells a private-use symbol may be drawn across, which is
+     * kitty's {@code narrow_symbols}. Ranges are consulted in declaration order and the last match
+     * wins, as kitty's {@code cell_cap_for_codepoint} does, so a later line can re-widen part of a
+     * range an earlier one narrowed.
+     */
+    public static final class SymbolExpansion {
+
+        public static final SymbolExpansion DEFAULT = new SymbolExpansion(null, null, null);
+
+        private final int[] first;
+        private final int[] last;
+        private final int[] columns;
+
+        /**
+         * @param first   inclusive range starts
+         * @param last    inclusive range ends, parallel to {@code first}
+         * @param columns cell ceiling per range, parallel to {@code first}
+         */
+        public SymbolExpansion(@Nullable int[] first, @Nullable int[] last,
+                               @Nullable int[] columns) {
+            final int size = first == null || last == null || columns == null ? 0
+                : Math.min(first.length, Math.min(last.length, columns.length));
+            this.first = size == 0 ? NO_BOUNDS : Arrays.copyOf(first, size);
+            this.last = size == 0 ? NO_BOUNDS : Arrays.copyOf(last, size);
+            this.columns = size == 0 ? NO_BOUNDS : Arrays.copyOf(columns, size);
+        }
+
+        /** The configured ceiling for this code point, or {@link Integer#MAX_VALUE} for none. */
+        int maxColumnsFor(int codePoint) {
+            int cap = Integer.MAX_VALUE;
+            for (int i = 0; i < first.length; i++) {
+                if (codePoint >= first[i] && codePoint <= last[i]) cap = columns[i];
+            }
+            return cap;
+        }
+    }
+
+    private static final int[] NO_BOUNDS = new int[0];
+
+    /**
+     * The most cells one private-use symbol may be drawn across, matching kitty's one cell plus
+     * {@code MAX_NUM_EXTRA_GLYPHS_PUA}.
+     */
+    static final int MAX_SYMBOL_EXPANSION_COLUMNS = 5;
+
     private static final SymbolMap[] NO_SYMBOL_MAPS = new SymbolMap[0];
 
     private static final Typeface[] NO_FALLBACK_TYPEFACES = new Typeface[0];
@@ -221,6 +269,8 @@ public final class TerminalRenderer {
     final FontMetricsAdjustments mFontMetricsAdjustments;
 
     final BoxDrawingPolicy mBoxDrawingPolicy;
+
+    final SymbolExpansion mSymbolExpansion;
 
     private final Paint mTextPaint = new Paint();
     /** Fills for the find overlay, kept off the text paint's per-run state. */
@@ -423,8 +473,29 @@ public final class TerminalRenderer {
                             @Nullable FontMetricsAdjustments fontMetricsAdjustments,
                             @Nullable BoxDrawingPolicy boxDrawingPolicy,
                             @Nullable Typeface[] fallbackTypefaces) {
+        this(textSize, typeface, boldTypeface, italicTypeface, boldItalicTypeface, symbolMaps,
+            ligaturePolicy, fontFeatures, fontVariations, fontMetricsAdjustments, boxDrawingPolicy,
+            fallbackTypefaces, SymbolExpansion.DEFAULT);
+    }
+
+    /**
+     * Construct a renderer with every control, including the per-code-point ceilings on how far a
+     * private-use symbol may spread into the blank cells after it.
+     */
+    public TerminalRenderer(int textSize, Typeface typeface, @Nullable Typeface boldTypeface,
+                            @Nullable Typeface italicTypeface,
+                            @Nullable Typeface boldItalicTypeface,
+                            @Nullable SymbolMap[] symbolMaps,
+                            @Nullable LigaturePolicy ligaturePolicy,
+                            @Nullable FontFeatures fontFeatures,
+                            @Nullable FontVariations fontVariations,
+                            @Nullable FontMetricsAdjustments fontMetricsAdjustments,
+                            @Nullable BoxDrawingPolicy boxDrawingPolicy,
+                            @Nullable Typeface[] fallbackTypefaces,
+                            @Nullable SymbolExpansion symbolExpansion) {
         mBoxDrawingPolicy = boxDrawingPolicy == null
             ? BoxDrawingPolicy.DEFAULT : boxDrawingPolicy;
+        mSymbolExpansion = symbolExpansion == null ? SymbolExpansion.DEFAULT : symbolExpansion;
         mFallbackTypefaces = fallbackTypefaces == null || fallbackTypefaces.length == 0
             ? NO_FALLBACK_TYPEFACES : fallbackTypefaces.clone();
         mFallbackResolver = new FallbackFontResolver(mFallbackTypefaces.length);
@@ -779,21 +850,38 @@ public final class TerminalRenderer {
                     ? mAsciiMeasures[faceStyle][codePoint]
                     : mTextPaint.measureText(line, currentCharIndex, charsForCodePoint);
                 final boolean fontWidthMismatch = Math.abs(measuredCodePointWidth / mFontWidth - codePointWcWidth) > 0.01;
-                // Kitty's private-use expansion: a PUA symbol whose neighbour is a same-styled
-                // blank gets both cells, so an icon wcwidth() calls narrow is not stamped into a
-                // single square. The space is consumed; the background pass painted its fill.
-                if (symbolTypeface != null && codePointWcWidth == 1 && isPrivateUse(codePoint)
-                    && !insideCursor && !insideSelection && column + 1 < columns
-                    && cursorX != column + 1 && !(column + 1 >= selx1 && column + 1 <= selx2)) {
-                    final int spaceIndex = currentCharIndex + charsForCodePoint;
-                    if (spaceIndex < charsUsedInLine && line[spaceIndex] == ' '
-                        && lineObject.getDisplayWidthAt(spaceIndex) == 1
-                        && lineObject.getStyle(column + 1) == style
+                // Kitty's private-use expansion (its fonts.c): a PUA symbol whose own glyph is
+                // wider than one cell, and which is followed by blanks that paint the same, is
+                // drawn across those cells instead of being squeezed into a single narrow square.
+                // The blanks are consumed; the background pass already painted their fill.
+                final int wantedColumns = symbolTypeface != null && codePointWcWidth == 1
+                    && isPrivateUse(codePoint) && !insideCursor && !insideSelection
+                    ? symbolExpansionColumns(measuredCodePointWidth, mFontWidth,
+                        mSymbolExpansion.maxColumnsFor(codePoint))
+                    : 1;
+                if (wantedColumns > 1) {
+                    int expandedColumns = 1;
+                    int blankIndex = currentCharIndex + charsForCodePoint;
+                    while (expandedColumns < wantedColumns && column + expandedColumns < columns
+                        && blankIndex < charsUsedInLine
+                        && isExpansionBlank(line[blankIndex])
+                        && lineObject.getDisplayWidthAt(blankIndex) == 1
+                        && cursorX != column + expandedColumns
+                        && !(column + expandedColumns >= selx1
+                            && column + expandedColumns <= selx2)
+                        && blankCellPaintsAlike(style,
+                            lineObject.getStyle(column + expandedColumns),
+                            palette, boldWithBright, reverseVideo)
                         && (rowHasDecorationColors
-                            ? lineObject.getDecorationColor(column + 1)
+                            ? lineObject.getDecorationColor(column + expandedColumns)
                             : TextStyle.DECORATION_COLOR_DEFAULT) == decorationColor
-                        && (rowHasHyperlinks ? lineObject.getHyperlinkId(column + 1) : 0)
+                        && (rowHasHyperlinks
+                            ? lineObject.getHyperlinkId(column + expandedColumns) : 0)
                             == hyperlinkId) {
+                        expandedColumns++;
+                        blankIndex++;
+                    }
+                    if (expandedColumns > 1) {
                         if (column > 0 && column != lastRunStartColumn) {
                             final int columnWidthSinceLastRun = column - lastRunStartColumn;
                             final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
@@ -811,13 +899,13 @@ public final class TerminalRenderer {
                                 lastRunFallbackTypeface, lastRunSymbolFeatures,
                                 lastRunSymbolVariations, false);
                         }
-                        drawTextRun(canvas, line, palette, heightOffset, column, 2,
+                        drawTextRun(canvas, line, palette, heightOffset, column, expandedColumns,
                             currentCharIndex, charsForCodePoint, measuredCodePointWidth, 0,
                             cursorShape, style, boldWithBright, reverseVideo, horizontalOffset,
                             decorationColor, hyperlinkId != 0, 0, symbolTypeface, null,
                             symbolFeatures, symbolVariations, false);
-                        column += 2;
-                        currentCharIndex = spaceIndex + 1;
+                        column += expandedColumns;
+                        currentCharIndex = blankIndex;
                         while (currentCharIndex < charsUsedInLine
                             && lineObject.getDisplayWidthAt(currentCharIndex) <= 0) {
                             currentCharIndex +=
@@ -1210,6 +1298,44 @@ public final class TerminalRenderer {
      * and reverse video — packed as {@code (foreground << 32) | background}. The single source of
      * truth for both the background pass and the glyph pass, so the two cannot disagree.
      */
+    /**
+     * Whether a blank cell carrying {@code blank} paints exactly what a blank cell carrying
+     * {@code symbol} would: the background, plus any underline or strikethrough drawn across it.
+     *
+     * A space shows nothing of its foreground colour or its face, so comparing whole styles — as
+     * the private-use expansion first did — refused the common case of a coloured icon followed by
+     * an uncoloured separator, and every such icon stayed squeezed into one narrow cell. What must
+     * still match is anything the expanded run would then draw differently over the second cell.
+     */
+    static boolean blankCellPaintsAlike(long symbol, long blank, int[] palette,
+                                        boolean boldWithBright, boolean reverseVideo) {
+        if ((int) resolveRunColors(symbol, palette, boldWithBright, reverseVideo)
+            != (int) resolveRunColors(blank, palette, boldWithBright, reverseVideo)) return false;
+        if (TextStyle.decodeUnderlineStyle(symbol) != TextStyle.decodeUnderlineStyle(blank))
+            return false;
+        final int decorations = TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE
+            | TextStyle.CHARACTER_ATTRIBUTE_STRIKETHROUGH;
+        return (TextStyle.decodeEffect(symbol) & decorations)
+            == (TextStyle.decodeEffect(blank) & decorations);
+    }
+
+    /**
+     * How many cells a private-use symbol wants, from its own advance: kitty's
+     * {@code ceil(glyph_width / cell_width)}, bounded by a {@code narrow_symbols} ceiling and by
+     * {@link #MAX_SYMBOL_EXPANSION_COLUMNS}. A glyph that already fits its cell wants exactly one,
+     * so it is neither grown nor re-centred over a neighbour it does not need.
+     */
+    static int symbolExpansionColumns(float advance, float cellWidth, int cap) {
+        if (!(cellWidth > 0f) || !(advance > cellWidth * 1.01f)) return 1;
+        final int wanted = (int) Math.ceil(advance / cellWidth - 0.01f);
+        return Math.max(1, Math.min(Math.min(wanted, cap), MAX_SYMBOL_EXPANSION_COLUMNS));
+    }
+
+    /** The blanks a symbol may spread into: a space, or the en-space kitty also accepts. */
+    static boolean isExpansionBlank(char c) {
+        return c == ' ' || c == '\u2002';
+    }
+
     static long resolveRunColors(long textStyle, int[] palette, boolean boldWithBright, boolean reverseVideo) {
         int foreColor = TextStyle.decodeForeColor(textStyle);
         final int effect = TextStyle.decodeEffect(textStyle);

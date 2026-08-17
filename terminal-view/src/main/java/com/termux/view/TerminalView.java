@@ -909,9 +909,27 @@ public final class TerminalView extends View {
                             TerminalRenderer.FontMetricsAdjustments fontMetricsAdjustments,
                             TerminalRenderer.BoxDrawingPolicy boxDrawingPolicy,
                             Typeface[] fallbackTypefaces) {
+        setTypeface(regular, bold, italic, boldItalic, symbolMaps, ligaturePolicy, fontFeatures,
+            fontVariations, fontMetricsAdjustments, boxDrawingPolicy, fallbackTypefaces,
+            TerminalRenderer.SymbolExpansion.DEFAULT);
+    }
+
+    /**
+     * As above, with the {@code narrow_symbols} ceilings on how far a private-use symbol may spread
+     * into the blank cells after it.
+     */
+    public void setTypeface(Typeface regular, Typeface bold, Typeface italic,
+                            Typeface boldItalic, TerminalRenderer.SymbolMap[] symbolMaps,
+                            TerminalRenderer.LigaturePolicy ligaturePolicy,
+                            TerminalRenderer.FontFeatures fontFeatures,
+                            TerminalRenderer.FontVariations fontVariations,
+                            TerminalRenderer.FontMetricsAdjustments fontMetricsAdjustments,
+                            TerminalRenderer.BoxDrawingPolicy boxDrawingPolicy,
+                            Typeface[] fallbackTypefaces,
+                            TerminalRenderer.SymbolExpansion symbolExpansion) {
         mRenderer = new TerminalRenderer(mRenderer.mTextSize, regular, bold, italic, boldItalic,
             symbolMaps, ligaturePolicy, fontFeatures, fontVariations, fontMetricsAdjustments,
-            boxDrawingPolicy, fallbackTypefaces);
+            boxDrawingPolicy, fallbackTypefaces, symbolExpansion);
         updateSize();
         invalidate();
     }
