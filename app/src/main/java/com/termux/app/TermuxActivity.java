@@ -8067,6 +8067,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * until the prefix is let go and taken up again.
      */
     private boolean mKeybindHintSpent;
+    /** Effective prefix at the last refresh, to notice a fresh one being taken up. */
+    @Nullable private String mKeybindHintLastPrefix;
 
     /**
      * While Ctrl+Alt (optionally +Shift) is held — latched on the in-app keyboard or held down on
@@ -8113,8 +8115,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void refreshKeybindHintPopup() {
         boolean hardware = mHardwareKeybindHintPrefix != null;
         String prefix = hardware ? mHardwareKeybindHintPrefix : mInAppKeybindHintPrefix;
-        // Letting the prefix go re-arms the legend for the next hold.
-        if (prefix == null) mKeybindHintSpent = false;
+        // Re-arm on both edges of the gap: letting the prefix go, and taking a new one up. Only
+        // the first was checked, and the spend is recorded *after* the release pass for a leader
+        // chord, so the flag survived into the next prefix and swallowed its legend.
+        if (prefix == null || mKeybindHintLastPrefix == null) mKeybindHintSpent = false;
+        mKeybindHintLastPrefix = prefix;
         if (mKeybindHintSpent) {
             performKeybindHintHide(false);
             return;
