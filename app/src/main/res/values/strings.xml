@@ -406,6 +406,9 @@
     <string name="title_max_terminals_reached">Max terminals reached</string>
     <string name="msg_max_terminals_reached">Close down existing ones before creating new.</string>
 
+    <string name="settings_lazy_mode_header">Battery</string>
+    <string name="settings_lazy_mode_title">Lazy mode</string>
+    <string name="settings_lazy_mode_summary">Stop the idle animation: the clock swaps its digits instead of folding them, a working window\'s rim stays lit instead of breathing, and the CPU/memory readings sample three times less often. Nothing repaints while you are only looking at the screen.</string>
     <string name="terminal_key_binding_failed">%1$s: %2$s</string>
     <!-- Brief confirmation of the binding that just ran: stroke, then the action's name. -->
     <string name="terminal_key_binding_ran">%1$s · %2$s</string>

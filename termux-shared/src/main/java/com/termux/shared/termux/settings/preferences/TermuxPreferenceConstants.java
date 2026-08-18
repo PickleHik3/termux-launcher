@@ -615,6 +615,14 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_VALUE_COMPATIBILITY_MODE = false;
 
+        /**
+         * Trades the launcher's idle animation for battery: the clock swaps its digits instead of
+         * folding them and the busy-window rim stops breathing, so nothing repaints the window while
+         * you are only looking at it. Sampling also backs off. Off by default.
+         */
+        public static final String KEY_LAZY_MODE = "lazy_mode";
+        public static final boolean DEFAULT_VALUE_LAZY_MODE = false;
+
         /** Clock renderer shown in the modular widget slot above the terminal window row. */
         public static final String KEY_TOP_PANE_CLOCK_STYLE = "top_pane_clock_style";
 

@@ -276,6 +276,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * window, which makes the raw CPU reading less spiky before any smoothing is applied.
      */
     private static final long STATS_BAR_INTERVAL_MS = 6000L;
+    /** Lazy-mode multipliers for the two sampling cadences; the readings are the same, just rarer. */
+    private static final long STATS_LAZY_MULTIPLIER = 3L;
     @Nullable private com.termux.app.statusbar.WeatherController mWeatherController;
     @Nullable private com.termux.app.statusbar.WeatherCardView mWeatherCardView;
     /** Fork-native sessions list dropped beneath the status-row session chip. */
@@ -12897,6 +12899,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         bar.setOnCreateWindowListener(this::createNewWindow);
         bar.setOnEdgeOverswipeListener(collapsed -> setTopStatusBarCollapsed(collapsed, true));
+        com.termux.app.terminal.TerminalWindowBar lazyWindowBar =
+            findViewById(R.id.terminal_window_bar);
+        if (lazyWindowBar != null && mPreferences != null)
+            lazyWindowBar.setLazyMode(mPreferences.isLazyModeEnabled());
+
         com.termux.app.statusbar.SessionsIndicatorView sessionsIndicator =
             findViewById(R.id.terminal_sessions_indicator);
         if (sessionsIndicator != null) {
@@ -13171,6 +13178,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 clock.setStyle(mPreferences.getTopPaneClockStyle());
                 clock.setAlignment(mPreferences.getTopPaneClockAlignment());
                 clock.setUseAmPm(mPreferences.isTopPaneClockAmPmEnabled());
+                clock.setLazyMode(mPreferences.isLazyModeEnabled());
             }
             // Only reachable while the panel is expanded: the widget slot the clock lives in is GONE
             // in the collapsed bar, so this needs no state check of its own.
@@ -13556,7 +13564,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (cpuOn || ramOn) {
             boolean cardShowing = mStatusCardHost.isShowing() && mStatsCardView != null;
             ensureStatsController().start(
-                cardShowing ? STATS_CARD_INTERVAL_MS : STATS_BAR_INTERVAL_MS, cardShowing);
+                statsInterval(cardShowing ? STATS_CARD_INTERVAL_MS : STATS_BAR_INTERVAL_MS),
+                cardShowing);
         } else if (mStatsController != null) {
             mStatsController.stop();
         }
@@ -13593,6 +13602,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     @NonNull
+    /** The sampling cadence, stretched in lazy mode. */
+    private long statsInterval(long normalMs) {
+        return mPreferences != null && mPreferences.isLazyModeEnabled()
+            ? normalMs * STATS_LAZY_MULTIPLIER : normalMs;
+    }
+
     private com.termux.app.statusbar.SystemStatsController ensureStatsController() {
         if (mStatsController == null) {
             mStatsController = new com.termux.app.statusbar.SystemStatsController(this, this::onStatsUpdated);
@@ -13635,7 +13650,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         detachFromParent(mStatsCardView);
         mStatsCardView.bind(ensureStatsController().latest());
-        ensureStatsController().start(STATS_CARD_INTERVAL_MS, true);
+        ensureStatsController().start(statsInterval(STATS_CARD_INTERVAL_MS), true);
         setWidgetAccent(anchor, true);
         mStatusCardHost.setDropEdge(findViewById(R.id.terminal_window_bar_host));
         mStatusCardHost.show(anchor, mStatsCardView, statusCardStyleProvider(), () -> {
@@ -13643,7 +13658,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mStatsController != null
                 && mPreferences != null
                 && (mPreferences.isStatusWidgetCpuEnabled() || mPreferences.isStatusWidgetRamEnabled())) {
-                mStatsController.start(STATS_BAR_INTERVAL_MS, false);
+                mStatsController.start(statsInterval(STATS_BAR_INTERVAL_MS), false);
             }
         });
     }

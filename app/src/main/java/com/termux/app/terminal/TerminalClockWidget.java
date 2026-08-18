@@ -1846,7 +1846,21 @@ public final class TerminalClockWidget extends View {
         return mHingeFlipShader;
     }
 
+    /**
+     * Lazy mode swaps the digits instead of folding them. The fold is the launcher's only source of
+     * idle frames — a 340ms flip restarting every second on a 119Hz panel is a full-window repaint
+     * about forty times a second — so switching it off is what takes the idle cost to nothing.
+     */
+    public void setLazyMode(boolean lazy) {
+        if (mLazyMode == lazy) return;
+        mLazyMode = lazy;
+        invalidate();
+    }
+
+    private boolean mLazyMode;
+
     private boolean hasRunningAnimation(long now) {
+        if (mLazyMode) return false;
         long duration = styleDurationMs();
         for (long changedAt : mChangedAt) {
             if (changedAt > 0L && now - changedAt < duration) return true;

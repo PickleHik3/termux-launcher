@@ -31,6 +31,15 @@
             android:defaultValue="true" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="@string/settings_lazy_mode_header">
+        <SwitchPreferenceCompat
+            app:key="lazy_mode"
+            app:icon="@drawable/ic_symbol_battery_saver"
+            app:title="@string/settings_lazy_mode_title"
+            app:summary="@string/settings_lazy_mode_summary"
+            app:defaultValue="false" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/settings_clock_status_header">
         <ListPreference
             app:key="top_pane_clock_style"
