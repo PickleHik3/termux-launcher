@@ -4,26 +4,16 @@
     <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
     <!ENTITY TERMUX_APP_NAME "Termux:Launcher">
     <!ENTITY TERMUX_API_APP_NAME "Termux:API">
-    <!ENTITY TERMUX_GUI_APP_NAME "Termux:GUI">
-    <!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
-    <!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
     <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
-    <!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
-    <!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
     ]>
 
 <resources>
     <string name="widget_add">Add widget</string>
-    <string name="widget_empty_message">Your widgets will appear here</string>
     <string name="widget_empty_hint">Long-press to add widgets</string>
     <string name="widget_menu_edit_widgets">Edit widgets</string>
     <string name="widget_menu_add_page">Add page</string>
     <string name="widget_menu_remove_page">Remove page</string>
     <string name="widget_unsupported">Widgets aren\'t supported on this device</string>
-    <string name="widget_grid_settings">Widget grid settings</string>
-    <string name="widget_grid_summary">Grid size: %1$d rows × %2$d columns</string>
-    <string name="widget_not_added">Widget wasn\'t added</string>
-    <string name="widget_remove">Remove widget</string>
     <string name="widget_remove_failed">Widget couldn\'t be removed</string>
     <string name="launcher_widget_error">Widget couldn\'t load</string>
     <string name="settings_search_hint">Search settings</string>
@@ -60,7 +50,6 @@
     <string name="settings_clock_alignment_right">Right</string>
     <string name="settings_use_12_hour_title">Use 12-hour time</string>
     <string name="settings_use_12_hour_summary">Shows time with AM and PM.</string>
-    <string name="settings_status_panel_style_title">Status panel style</string>
     <string name="settings_cpu_usage_title">CPU usage</string>
     <string name="settings_memory_usage_title">Memory usage</string>
     <string name="settings_memory_usage_summary">Shows current memory use in the status row.</string>
@@ -180,18 +169,6 @@
     <string name="settings_customize_status_summary">Tune status blur, opacity, grain, and radius live on the home screen. Shape follows the shared surface choice.</string>
     <string name="settings_customize_keyboard_title">Customize keyboard appearance</string>
     <string name="settings_customize_keyboard_summary">Edit keyboard size, spacing, key radius, and colors live on the home screen. Shape follows the shared surface choice.</string>
-    <string name="settings_dock_appearance_title">Dock appearance</string>
-    <string name="settings_dock_appearance_summary">Style, size, apps per page, blur, opacity, grain, and shape with a live launcher preview.</string>
-    <string name="settings_terminal_appearance_title">Terminal appearance</string>
-    <string name="settings_terminal_appearance_summary">Tune the terminal surface while keeping the current palette.</string>
-    <string name="settings_sessions_appearance_title">Sessions surface</string>
-    <string name="settings_sessions_appearance_summary">Tune the sessions menu surface.</string>
-    <string name="settings_glass_effects_title">Glass effects</string>
-    <string name="settings_glass_effects_summary">Tune blur, opacity, and grain with the live launcher preview.</string>
-    <string name="settings_terminal_surface_header">Terminal surface</string>
-    <string name="settings_sessions_surface_header">Sessions menu surface</string>
-    <string name="settings_terminal_opacity_summary">Controls how strongly the terminal surface covers the wallpaper.</string>
-    <string name="settings_sessions_opacity_summary">Controls how strongly the sessions menu covers the wallpaper.</string>
     <string name="settings_input_method_header">Input method</string>
     <string name="settings_on_screen_keyboard_title">On-screen keyboard</string>
     <string name="settings_keyboard_input_built_in">Built-in terminal keyboard</string>
@@ -199,11 +176,8 @@
     <string name="settings_keyboard_input_none">None</string>
     <string name="settings_hide_keyboard_hardware_title">Hide the on-screen keyboard</string>
     <string name="settings_hide_keyboard_hardware_summary">Hides the on-screen keyboard while a hardware keyboard is connected.</string>
-    <string name="settings_test_typing_title">Test typing</string>
-    <string name="settings_test_typing_hint">Type here…</string>
     <string name="settings_keyboard_colors_title">Keyboard colors</string>
     <string name="settings_keyboard_colors_summary">Edit keyboard colors with a persistent live preview.</string>
-    <string name="settings_size_shape_title">Size and shape</string>
     <string name="settings_typeface_title">Typeface</string>
     <string name="settings_layout_header">Layout</string>
     <string name="settings_extra_keys_title">Extra keys</string>
@@ -326,7 +300,6 @@
     <string name="settings_app_drawer_category_sort_unavailable_model">Not available — model not downloaded</string>
     <string name="settings_app_drawer_category_sort_unavailable_memory">Not available — needs %1$s of RAM</string>
     <string name="settings_app_drawer_category_refresh_title">Re-run categorization</string>
-    <string name="settings_app_drawer_category_refresh_summary">Sorts apps installed since the last run</string>
     <string name="settings_app_drawer_category_refresh_never">Never run</string>
     <string name="settings_app_drawer_category_refresh_last_run">Last run · %1$s · %2$d apps</string>
     <string name="settings_app_drawer_category_sort_paste_dialog_body">The prompt is on your clipboard. Paste it into an AI chat, then paste its answer below.</string>
@@ -343,7 +316,6 @@
     <string name="settings_app_drawer_category_paste_notification_dismiss">Dismiss</string>
     <string name="settings_app_drawer_category_paste_notification_hint">Paste the AI answer</string>
     <string name="settings_app_drawer_category_paste_notification_empty">No app assignments found in that reply. Paste the AI answer again.</string>
-    <string name="settings_app_drawer_category_sort_running">Sorting %1$d of %2$d apps…</string>
     <string name="settings_app_drawer_category_sort_hint_preparing">Reading your app list…</string>
     <string name="settings_app_drawer_category_sort_hint_loading_model">Loading the model…</string>
     <string name="settings_app_drawer_category_sort_hint_categorizing">Categorizing %1$d of %2$d apps…</string>
@@ -372,7 +344,6 @@
     <string name="app_drawer_category_other">Other</string>
     <string name="app_drawer_category_automatic">Automatic (suggested)</string>
     <string name="app_drawer_category_menu_entry">Category</string>
-    <string name="app_drawer_category_no_apps">No apps</string>
     <string name="app_drawer_category_open">Open %1$s</string>
     <string name="app_drawer_category_collapse">Collapse %1$s</string>
     <string name="app_drawer_category_empty_title">Nothing here yet</string>
@@ -400,11 +371,6 @@
     <string name="settings_set_default_launcher_summary">Opens Android’s default home app settings.</string>
     <string name="settings_double_tap_action_title">Double tap A–Z Row to lock screen</string>
     <string name="settings_double_tap_action_summary">Choose what happens when the A–Z index is double-tapped.</string>
-    <string name="settings_live_preview_title">Live preview</string>
-    <string name="settings_preview_surface_description">Surface preview. Open the live editor for full-size editing.</string>
-    <string name="settings_open_live_preview">Edit live on Home</string>
-    <string name="settings_sessions_preview_title">Sessions</string>
-    <string name="settings_sessions_preview_actions">Keyboard  ·  New session</string>
 
     <string name="application_name">&TERMUX_APP_NAME;</string>
     <string name="shared_user_label">&TERMUX_APP_NAME; user</string>
@@ -459,11 +425,6 @@
 
 
     <!-- Terminal Popup -->
-    <string name="terminal_action_menu_title">Terminal</string>
-    <string name="action_search_scrollback">Search</string>
-    <string name="action_copy_selection">Copy</string>
-    <string name="action_paste">Paste</string>
-    <string name="action_more">More</string>
     <string name="action_select_url">Select URL</string>
     <string name="title_select_url_dialog">Click URL to copy or long press to open</string>
     <string name="title_select_url_none_found">No URL found in the terminal.</string>
@@ -478,7 +439,6 @@
     <string name="title_share_transcript">Terminal transcript</string>
     <string name="title_share_transcript_with">Send transcript to:</string>
 
-    <string name="action_share_selected_text">Share selected text</string>
     <string name="title_share_selected_text">Terminal Text</string>
     <string name="title_share_selected_text_with">Send selected text to:</string>
 
@@ -494,8 +454,6 @@
     <string name="action_kill_process">Kill process (%d)</string>
     <string name="title_confirm_kill_process">Really kill this session?</string>
 
-    <string name="action_look_and_feel">Appearance</string>
-    <string name="action_apps_bar">Apps &amp; Access</string>
     <string name="action_set_background_image">Set Wallpaper</string>
     <string name="action_apply">Apply</string>
     <string name="action_enable_background_image">Enable Wallpaper</string>
@@ -512,8 +470,6 @@
     <string name="msg_generating_report">Generating Report</string>
     <string name="msg_add_termux_debug_info">Add &TERMUX_APP_NAME; debug info to report?</string>
 
-    <string name="error_styling_not_installed">The &TERMUX_STYLING_APP_NAME; Plugin App is not installed.</string>
-    <string name="action_styling_install">Install</string>
 
 
 
@@ -574,27 +530,9 @@
 
 
 
-    <string name="termux_preferences_title">Termux</string>
-    <string name="termux_preferences_summary">Core terminal, input, and debugging settings</string>
 
     <string name="termux_launcher_preferences_title">Apps &amp; Access</string>
-    <string name="termux_launcher_preferences_summary">Search, launcher behavior, and Android access settings</string>
     <string name="termux_app_launcher_empty_pinned_hint">Long-press here to pin your apps</string>
-    <string name="termux_launcher_search_preferences_summary">Configure launcher search behavior and default pinned apps</string>
-    <string name="termux_launcher_layout_preferences_summary">Configure launcher bar layout and sizing</string>
-    <string name="termux_launcher_icons_header">Launcher: Icons</string>
-    <string name="termux_launcher_icons_preferences_summary">Configure launcher icon rendering options</string>
-    <string name="termux_themes_header">Theme</string>
-    <string name="termux_terminal_background_header">Terminal</string>
-    <string name="termux_extrakeys_appsbar_header">Dock</string>
-    <string name="apps_bar_behavior_header">Launcher · Settings</string>
-    <string name="apps_bar_search_header">Launcher · Search</string>
-    <string name="apps_bar_soft_keyboard_header">Soft Keyboard Behavior</string>
-    <string name="apps_bar_icons_header">Icons</string>
-    <string name="personalization_header">Personalization</string>
-    <string name="apps_bar_visual_header">Visual</string>
-    <string name="apps_bar_maintenance_header">Defaults</string>
-    <string name="apps_bar_permissions_header">Permissions</string>
 
         <!-- Debugging Preferences -->
         <string name="termux_debugging_preferences_title">Debugging</string>
@@ -626,8 +564,6 @@
 
 
         <!-- Terminal IO Preferences -->
-        <string name="termux_terminal_io_preferences_title">Terminal I/O</string>
-        <string name="termux_terminal_io_preferences_summary">Preferences for terminal I/O</string>
 
             <!-- Split panes Category -->
             <string name="termux_split_panes_header">Split panes</string>
@@ -697,17 +633,11 @@
 
                 <!-- In-app Keyboard -->
                 <string name="termux_keyboard_preferences_title">Keyboard</string>
-                <string name="termux_keyboard_preferences_summary">Built-in terminal keyboard — themes, feedback and keys</string>
                 <string name="termux_keyboard_appearance_header">Appearance</string>
-                <string name="termux_keyboard_typing_header">Typing &amp; feedback</string>
-                <string name="termux_keyboard_advanced_header">Advanced</string>
-                <string name="termux_keyboard_credits_header">About this keyboard</string>
                 <string name="termux_keyboard_credits_text">If you like this keyboard, support its amazing developer ❤</string>
                 <string name="termux_keyboard_credits_summary">Powered by Unexpected Keyboard, an open-source project by Jules Aguillon.</string>
                 <string name="termux_keyboard_credits_github_title">Unexpected Keyboard on GitHub</string>
                 <string name="termux_keyboard_credits_play_title">Unexpected Keyboard on Google Play</string>
-                <string name="termux_in_app_keyboard_enabled_title">Built-in terminal keyboard</string>
-                <string name="termux_in_app_keyboard_enabled_summary">Type in the terminal with the launcher’s own keyboard instead of the Android keyboard. It stays ready when you switch back from other apps.</string>
                 <string name="termux_in_app_keyboard_theme_title">Theme</string>
                 <string name="termux_in_app_keyboard_theme_system">System</string>
                 <string name="termux_in_app_keyboard_theme_light">Light</string>
@@ -769,8 +699,6 @@
                 </string-array>
                 <string name="termux_keyboard_color_scheme_hex_title">Enter hex color</string>
                 <string name="termux_keyboard_color_scheme_hex_error">Use #RRGGBB or #AARRGGBB</string>
-                <string name="termux_in_app_keyboard_height_adjust_title">Size &amp; shape</string>
-                <string name="termux_in_app_keyboard_height_adjust_summary">Drag to resize the keyboard, or fine-tune key spacing and corner radius.</string>
                 <string name="termux_in_app_keyboard_height_adjust_handle">Drag to adjust keyboard height</string>
                 <string name="termux_in_app_keyboard_height_adjust_confirm">Confirm keyboard adjustments</string>
                 <string name="termux_in_app_keyboard_height_adjust_cancel">Cancel keyboard adjustments</string>
@@ -782,10 +710,7 @@
                 <string name="termux_in_app_keyboard_key_corner_radius_slider">Adjust keyboard key corner radius</string>
                 <string name="termux_in_app_keyboard_custom_layout_title">Custom layout</string>
                 <string name="termux_in_app_keyboard_custom_layout_summary">Load your own layout from ~/.termux/keyboard/layout.xml</string>
-                <string name="termux_keyboard_docs_header">Layout documentation</string>
-                <string name="termux_keyboard_docs_layouts_title">Creating custom layouts</string>
                 <string name="termux_keyboard_docs_layouts_summary">How to write your own layout.xml</string>
-                <string name="termux_keyboard_docs_keys_title">Possible key values</string>
                 <string name="termux_keyboard_docs_keys_summary">Every key name and value you can use in a layout</string>
                 <string-array name="termux_in_app_keyboard_theme_entries">
                     <item>System</item>
@@ -797,9 +722,7 @@
                     <item>light</item>
                     <item>dark</item>
                 </string-array>
-                <string name="termux_in_app_keyboard_haptics_title">Haptic feedback</string>
                 <string name="termux_in_app_keyboard_haptics_summary">Gentle haptic tick for every key.</string>
-                <string name="termux_in_app_keyboard_key_sound_title">Keypress sound</string>
                 <string name="termux_in_app_keyboard_key_sound_summary">Uses the system touch-sound volume.</string>
                 <string name="termux_in_app_keyboard_font_title">Font</string>
                 <string name="termux_in_app_keyboard_font_summary_default">System default typeface.</string>
@@ -807,8 +730,6 @@
                 <string name="termux_in_app_keyboard_font_pick">Choose font file…</string>
                 <string name="termux_in_app_keyboard_font_reset">Use system default</string>
                 <string name="termux_in_app_keyboard_font_error">Could not read that file as a font.</string>
-                <string name="termux_in_app_keyboard_extra_keys_title">Extra keys</string>
-                <string name="termux_in_app_keyboard_extra_keys_summary">Choose extra editing and navigation keys to show on the layout.</string>
 
                 <!-- Hardware keyboard behavior -->
                 <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Hide Android keyboard with hardware keyboard</string>
@@ -817,8 +738,6 @@
 
 
         <!-- Terminal View Preferences -->
-        <string name="termux_terminal_view_preferences_title">Terminal View</string>
-        <string name="termux_terminal_view_preferences_summary">Preferences for terminal view</string>
 
             <!-- View Category -->
             <string name="termux_terminal_view_view_header">View</string>
@@ -836,61 +755,37 @@
 
         <!-- Termux Style Preferences -->
         <string name="termux_style_preferences_title">Appearance</string>
-        <string name="termux_style_preferences_summary">Theme, wallpaper, terminal, dock, sessions menu</string>
 
-        <string name="termux_screen_preferences_title">Screen</string>
-        <string name="termux_screen_preferences_summary">Fullscreen and terminal fit</string>
-        <string name="termux_terminal_flush_dock_title">Flush terminal with dock</string>
-        <string name="termux_terminal_flush_dock_summary">Extend the dock glass to absorb space below the last terminal row</string>
 
-        <string name="termux_theme_mode_title">Mode</string>
         <string name="termux_theme_mode_system">System</string>
         <string name="termux_theme_mode_light">Light</string>
         <string name="termux_theme_mode_dark">Dark</string>
 
         <string name="termux_privileged_access_preferences_title">Shizuku</string>
-        <string name="termux_privileged_access_preferences_summary">Privileged backend controls</string>
 
         <string name="termux_ai_preferences_title">TAI · Termux AI</string>
-        <string name="termux_ai_preferences_summary">Local LiteRT-LM hosting, model management, endpoint</string>
-        <string name="termux_ai_overview_header">Overview</string>
         <string name="termux_ai_zone_runtime_title">Runtime</string>
         <string name="termux_ai_zone_models_title">Models</string>
         <string name="termux_ai_zone_server_title">Server</string>
         <string name="termux_ai_zone_advanced_title">Advanced</string>
-        <string name="termux_ai_runtime_control_header">Runtime control</string>
-        <string name="termux_ai_action_keep_warm_sub">Resident until idle</string>
-        <string name="termux_ai_action_cancel_sub">Stop streaming</string>
         <string name="termux_ai_action_unload_sub">Release engine</string>
         <string name="termux_ai_model_pill_installed">INSTALLED</string>
         <string name="termux_ai_model_pill_active">Default</string>
         <string name="termux_ai_model_state_loaded">Loaded</string>
-        <string name="termux_ai_model_pill_downloading">DOWNLOADING</string>
-        <string name="termux_ai_model_pill_gated">GATED</string>
         <string name="termux_ai_runtime_status_title">Runtime status</string>
         <string name="termux_ai_runtime_status_summary">LiteRT-LM is unloaded</string>
-        <string name="termux_ai_runtime_load_title">Load default model</string>
-        <string name="termux_ai_runtime_load_summary">Load the selected default assistant model with the current accelerator policy</string>
-        <string name="termux_ai_runtime_keep_warm_title">Keep warm</string>
-        <string name="termux_ai_runtime_keep_warm_summary">Load or keep the selected model resident until the idle/keep-warm timeout</string>
-        <string name="termux_ai_runtime_cancel_title">Cancel generation</string>
-        <string name="termux_ai_runtime_cancel_summary">Stop the active streaming or non-streaming generation</string>
         <string name="termux_ai_runtime_stop_title">Stop</string>
         <string name="termux_ai_runtime_stop_summary">Cancel current run</string>
         <string name="termux_ai_runtime_unload_title">Unload model</string>
-        <string name="termux_ai_runtime_unload_summary">Release all loaded AI engines and model memory</string>
         <string name="termux_ai_runtime_logs_title">Logs</string>
         <string name="termux_ai_runtime_logs_summary">Inspect runtime JSON</string>
         <string name="termux_ai_runtime_logs_copied">Runtime logs copied</string>
-        <string name="termux_ai_models_header">Models</string>
         <string name="termux_ai_models_empty_title">No installed models</string>
         <string name="termux_ai_models_empty_summary">Browse the catalog or import a local model to add one here.</string>
         <string name="termux_ai_models_browse_catalog_title">Browse Catalog</string>
         <string name="termux_ai_models_browse_catalog_summary">View downloadable/importable catalog models separately from installed models</string>
-        <string name="termux_ai_model_catalog_not_installed">not installed</string>
         <string name="termux_ai_catalog_controls_title">Catalog controls</string>
         <string name="termux_ai_catalog_results_title">Catalog models</string>
-        <string name="termux_ai_catalog_backend_filter_title">Backend</string>
         <string name="termux_ai_catalog_backend_all">All</string>
         <string name="termux_ai_catalog_backend_both">Both</string>
         <string name="termux_ai_catalog_install_all">All</string>
@@ -901,11 +796,8 @@
         <string name="termux_ai_catalog_empty_title">No catalog matches</string>
         <string name="termux_ai_catalog_empty_summary">Try a different filter or clear the search field.</string>
         <string name="termux_ai_catalog_action_install">Install</string>
-        <string name="termux_ai_catalog_action_downloading">Downloading %1$s · Cancel</string>
-        <string name="termux_ai_catalog_action_installed">Set default</string>
         <string name="termux_ai_catalog_action_active">Default</string>
         <string name="termux_ai_catalog_action_import_only">Import only</string>
-        <string name="termux_ai_catalog_action_mnn_unavailable">MNN runtime pending</string>
         <string name="termux_ai_catalog_import_only_title">Import-only catalog entry</string>
         <string name="termux_ai_catalog_import_only_message">%1$s is listed in the model market, but the app does not have verified artifact metadata for automatic download. Open the provider page, review terms, then use Local import after obtaining a compatible package.\n\n%2$s</string>
         <string name="termux_ai_huggingface_token_title">Hugging Face token</string>
@@ -924,18 +816,14 @@
         <string name="termux_ai_model_import_token_set">Hugging Face token: set · tap to change</string>
         <string name="termux_ai_model_import_token_unset">Hugging Face token: not set · tap to add (for gated/private repos)</string>
         <string name="termux_ai_model_import_gated_message">This Hugging Face repo is gated or private. Add your access token after accepting the model\'s terms on huggingface.co, then retry.</string>
-        <string name="termux_ai_model_import_hf_url_hint">Hugging Face HTTPS URL</string>
-        <string name="termux_ai_model_import_hf_token_hint">Optional Hugging Face token</string>
         <string name="termux_ai_model_import_id_hint">Model id (optional)</string>
         <string name="termux_ai_model_import_selected">Selected: %1$s\nSize: %2$s\n\nThe file will be copied into Termux Launcher model storage.</string>
         <string name="termux_ai_model_import_no_file_selected">No local file selected.</string>
         <string name="termux_ai_model_import_choose_file">Choose file</string>
         <string name="termux_ai_model_import_verify_action">Import &amp; verify</string>
         <string name="termux_ai_model_import_choose_one_source">Choose one local model file.</string>
-        <string name="termux_ai_model_import_mnn_local_unsupported">MNN folder packages must be downloaded from the catalog. Local MNN folder import is not supported yet.</string>
         <string name="termux_ai_model_import_invalid_model_id">Enter a valid model id.</string>
         <string name="termux_ai_model_import_copying">Copying selected model into app-private storage...</string>
-        <string name="termux_ai_model_import_invalid_file">Select a supported LiteRT .litertlm, .task, or .tflite package file</string>
         <string name="termux_ai_import_source_label">Hugging Face or local file</string>
         <string name="termux_ai_import_cap_chat">Chat/completions</string>
         <string name="termux_ai_import_cap_embeddings">Text embeddings</string>
@@ -954,18 +842,14 @@
         <string name="termux_ai_model_active_saved">Default model updated</string>
         <string name="termux_ai_model_tune_action">Parameters</string>
         <string name="termux_ai_model_tune_title">%1$s parameters</string>
-        <string name="termux_ai_model_tune_reset_action">Reset all to global defaults</string>
         <string name="termux_ai_model_tune_reset_one_action">Use global</string>
         <string name="termux_ai_model_tune_reset_done">Model overrides reset</string>
         <string name="termux_ai_model_tune_saved">Model override saved</string>
         <string name="termux_ai_model_tune_invalid">Value is outside the allowed range</string>
         <string name="termux_ai_model_tune_range">Allowed range: %1$.2f - %2$.2f, or auto for global default</string>
         <string name="termux_ai_runtime_action_failed">TAI runtime action failed</string>
-        <string name="termux_ai_runtime_keep_warm_started">Runtime keep-warm enabled</string>
         <string name="termux_ai_runtime_cancel_requested">Cancel requested</string>
         <string name="termux_ai_runtime_unloaded">Runtime unloaded</string>
-        <string name="termux_ai_models_refresh_title">Refresh model status</string>
-        <string name="termux_ai_models_refresh_summary">Update installed model and download progress rows</string>
         <string name="termux_ai_model_download_title">Download %1$s</string>
         <string name="termux_ai_model_download_message">Download %1$s (%2$s) from Hugging Face.\n\nLicense: %3$s\n\nBy continuing, you confirm that you reviewed and accept the provider license/terms. No provider token is bundled.</string>
         <string name="termux_ai_model_download_start">Start download</string>
@@ -978,20 +862,12 @@
         <string name="termux_ai_model_gated_title">Gated model</string>
         <string name="termux_ai_model_gated_message">%1$s requires Hugging Face login/license acceptance. Save a Hugging Face token here after accepting the model terms, then start the download.</string>
         <string name="termux_ai_model_open_provider">Open provider page</string>
-        <string name="termux_ai_model_missing_token">Save a Hugging Face token first, after accepting the provider terms.</string>
         <string name="termux_ai_model_download_started">Model download started</string>
         <string name="termux_ai_model_download_cancel">Cancel download</string>
         <string name="termux_ai_model_download_cancelled">Download cancellation requested</string>
         <string name="termux_ai_model_deleted">Model entry deleted</string>
         <string name="termux_ai_model_delete_missing">No downloaded model entry found</string>
         <string name="termux_ai_model_action_failed">TAI model action failed</string>
-        <string name="termux_ai_model_roles_header">Endpoint model</string>
-        <string name="termux_ai_runtime_header">Runtime overrides</string>
-        <string name="termux_ai_prompts_header">Prompt</string>
-        <string name="termux_ai_capabilities_header">Local endpoint</string>
-        <string name="termux_ai_model_privacy_notice_title">Model downloads and imports</string>
-        <string name="termux_ai_model_privacy_notice_summary">No models ship with the app. You choose what to download or import — gated models need your own Hugging Face token. Everything runs on-device and is served only over an authenticated localhost endpoint; nothing is sent to the cloud.</string>
-        <string name="termux_ai_default_assistant_model_title">Default assistant</string>
         <string name="termux_ai_auto_model_default">Auto / Gallery default</string>
         <string name="termux_ai_accelerator_auto_gpu_preferred">Auto / model profile</string>
         <string name="termux_ai_enabled">Enabled</string>
@@ -1013,27 +889,16 @@
         <string name="termux_ai_precision_title">Precision</string>
         <string name="termux_ai_memory_mode_title">Memory mode</string>
         <string name="termux_ai_general_prompt_title">General chat system prompt</string>
-        <string name="termux_ai_api_port_title">API port</string>
         <string name="termux_ai_api_port_summary">OpenAI base URL: %1$s</string>
-        <string name="termux_ai_api_port_saved">API port saved</string>
-        <string name="termux_ai_api_port_randomize_title">Randomize API port</string>
-        <string name="termux_ai_api_port_randomize_summary">Choose a new uncommon localhost port and restart the local API listener</string>
         <string name="termux_ai_api_port_randomized">API port randomized</string>
-        <string name="termux_ai_api_token_title">API bearer token</string>
-        <string name="termux_ai_api_token_saved">API token saved</string>
-        <string name="termux_ai_api_token_invalid">Token must be at least 16 characters with no spaces</string>
-        <string name="termux_ai_api_token_rotate_title">Recreate API token</string>
-        <string name="termux_ai_api_token_rotate_summary">Generate a new bearer token and update ~/.launcherctl/token</string>
         <string name="termux_ai_api_token_rotated">API token recreated</string>
         <string name="termux_ai_api_token_copied">API bearer token copied</string>
         <string name="termux_ai_base_url_copied">OpenAI base URL copied</string>
-        <string name="termux_ai_api_port_dialog_header">OpenAI base URL\n%1$s</string>
         <string name="termux_ai_dialog_save">Save</string>
         <string name="termux_ai_dialog_copy">Copy</string>
         <string name="termux_ai_dialog_reveal">Reveal</string>
         <string name="termux_ai_dialog_hide">Hide</string>
         <string name="termux_ai_endpoint_update_failed">Endpoint setting update failed</string>
-        <string name="termux_ai_endpoint_notice_title">OpenAI-compatible endpoint</string>
         <string name="termux_ai_endpoint_copy_title">OpenAI endpoint</string>
         <string name="termux_ai_endpoint_notice_summary">OpenAI and Ollama clients use ~/.launcherctl/endpoint and ~/.launcherctl/token. Supported surfaces include /v1/models, /v1/chat/completions, /v1/responses, /api/tags, and /api/chat.</string>
         <string name="termux_ai_endpoint_notice_summary_dynamic">OpenAI base URL: %1$s\nBearer token file: %2$s</string>
@@ -1044,15 +909,9 @@
         <string name="termux_ai_endpoint_randomize_port">Randomize port</string>
         <string name="termux_ai_endpoint_recreate_token">Recreate token</string>
         <string name="termux_ai_endpoint_files_footnote">Endpoint file: %1$s\nToken file: %2$s\n\nOpenAI-compatible clients use the base URL and send the bearer token as their API key.</string>
-        <string name="termux_ai_backend_header">Backend</string>
-        <string name="termux_ai_active_backend_title">Active backend</string>
-        <string name="termux_ai_active_backend_summary">Determined by the currently loaded or selected model</string>
-        <string name="termux_ai_mnn_catalog_title">MNN model market</string>
-        <string name="termux_ai_mnn_catalog_summary">Browse, filter, and download curated LiteRT and MNN models</string>
         <string name="termux_ai_mnn_custom_download_title">Custom MNN download</string>
         <string name="termux_ai_mnn_custom_download_warning">MNN folder packages start from config.json; native libraries are not accepted as models.</string>
         <string name="termux_ai_mnn_custom_download_invalid_url">URL must use HTTPS</string>
-        <string name="termux_ai_device_capabilities_header">Device capabilities</string>
         <string name="termux_ai_parameters_defaults_title">Parameters</string>
         <string name="termux_ai_parameters_defaults_summary">Edit global runtime defaults used unless a model override is set</string>
         <string name="termux_ai_openai_auto_load_title">OpenAI auto-load</string>
@@ -1092,14 +951,7 @@
         <string name="termux_ai_model_system_prompt_title">Model system prompt</string>
         <string name="termux_ai_model_system_prompt_summary">Leave empty or use global to inherit the general chat system prompt.</string>
         <string name="termux_ai_parameters_prompt_empty">Not set</string>
-        <string name="termux_ai_device_engine_info_title">Device &amp; engine info</string>
-        <string name="termux_ai_device_engine_info_summary">model: %1$s\nbackend: %2$s\nMNN: %3$s</string>
-        <string name="termux_ai_mnn_support_status_title">MNN support</string>
-        <string name="termux_ai_mnn_support_status_supported">Supported</string>
-        <string name="termux_ai_mnn_support_status_unsupported">Unsupported</string>
         <string name="termux_ai_mnn_runtime_pending">MNN runtime is not available in this APK yet.</string>
-        <string name="termux_ai_mnn_unsupported_reason_title">Unsupported reason</string>
-        <string name="termux_ai_mnn_unsupported_reason_summary">This build does not include the native MNN runtime yet</string>
         <string name="termux_ai_auth_required_title">Require API token</string>
         <string name="termux_ai_auth_required_summary_on">Requests must send the bearer token. Recommended.</string>
         <string name="termux_ai_auth_required_summary_off">Localhost requests are accepted without a token. LAN mode always requires the token.</string>
@@ -1110,8 +962,6 @@
         <string name="termux_ai_lan_warning_message">LAN access is development-only exposure. Requests travel over plain HTTP, so the bearer token is visible to anyone on the network and any device that captures it can reach this endpoint. Access turns itself off 12 hours after being enabled and the token is rotated. Only enable on trusted networks.</string>
         <string name="termux_ai_backend_label_litert">LiteRT-LM</string>
         <string name="termux_ai_backend_label_mnn">MNN-LLM</string>
-        <string name="termux_ai_capability_chat">chat</string>
-        <string name="termux_ai_capability_embeddings">embeddings</string>
         <string name="termux_ai_model_primary_action_desc">Model action button</string>
         <string name="termux_ai_dialog_enable">Enable</string>
 
@@ -1135,21 +985,13 @@
             <string name="termux_privileged_request_permission_unavailable">Permission request unavailable for current backend state.</string>
 
             <!-- Background Category -->
-            <string name="termux_background_header">Wallpaper</string>
-            <string name="termux_use_system_wallpaper_title">Wallpaper</string>
             <string name="termux_use_system_wallpaper_summary">Shows the current system wallpaper behind launcher surfaces.</string>
             <string name="termux_fullscreen_title">Fullscreen</string>
             <string name="termux_fullscreen_summary">Hide system bars while using the launcher</string>
                 
-                <string name="termux_terminal_background_opacity_title">Opacity</string>
             <!-- Extra Keys Category -->
-                <string name="termux_extrakeys_blur_radius_title">Blur strength</string>
                 <string name="termux_extrakeys_blur_live_wallpaper_note">Controls background blur in dp. Set to 0 for clear glass.</string>
                 <string name="termux_extrakeys_blur_live_wallpaper_active_note">Temporarily unavailable with a live wallpaper. Your value is preserved.</string>
-                <string name="termux_app_bar_opacity_title">Glass opacity</string>
-                <string name="termux_app_bar_opacity_summary">Controls the complete dock material. 0 is transparent; 100 is opaque.</string>
-                <string name="termux_dock_glass_grain_title">Glass grain</string>
-                <string name="termux_dock_glass_grain_summary">Subtle film grain over the dock glass. 0 disables it.</string>
                 <string name="termux_dock_tune_live_title">Surface editor</string>
                 <string name="termux_dock_tune_live_summary">Customize dock, keyboard, status panel, terminal, and sessions live on the home screen.</string>
                 <string name="termux_dock_tuning_title">Surface editor</string>
@@ -1168,7 +1010,6 @@
                 <string name="termux_dock_tuning_blur">Blur</string>
                 <string name="termux_dock_tuning_opacity">Opacity</string>
                 <string name="termux_dock_tuning_grain">Grain</string>
-                <string name="termux_dock_tuning_corner_radius">Corner radius</string>
                 <string name="termux_dock_tuning_radius">Corner radius</string>
                 <string name="termux_dock_tuning_style">Shape</string>
                 <string name="termux_dock_tuning_size">Size</string>
@@ -1181,90 +1022,39 @@
                 <string name="termux_dock_tuning_terminal_border">Border</string>
                 <string name="termux_dock_tuning_sessions">Opacity</string>
                 <string name="termux_surface_tuning_normalize">Match all surfaces</string>
-                <string name="termux_surface_tuning_normalize_hint">Blur, opacity, grain, corner radius and padding apply to the dock, keyboard and status bar together.</string>
                 <string name="termux_surface_tuning_clock">Clock</string>
                 <string name="termux_dock_tuning_section_dock">Dock</string>
                 <string name="termux_dock_tuning_section_terminal">Terminal</string>
                 <string name="termux_dock_tuning_section_sessions">Sessions</string>
                 <string name="termux_dock_tuning_done">Done</string>
                 <string name="termux_dock_tuning_cancel">Close</string>
-                <string name="termux_dock_tuning_reset">Reset</string>
-                <string name="termux_dock_tuning_reset_done">Dock appearance reset</string>
-                <string name="termux_dock_tuning_undo">Undo</string>
                 <string name="termux_dock_tuning_value_dp">%1$d dp</string>
                 <string name="termux_dock_tuning_value_percent">%1$d%%</string>
-                <string name="termux_app_launcher_row_haptics_title">Launcher haptics</string>
-                <string name="termux_app_launcher_row_haptics_summary">Subtle feedback across letters, apps, and dock pages.</string>
 
             <!-- App Launcher Category -->
-            <string name="termux_app_launcher_header">Behavior</string>
-            <string name="termux_app_launcher_search_header">Search</string>
-            <string name="termux_app_launcher_layout_header">Dock layout</string>
-            <string name="termux_app_launcher_appearance_header">Icons</string>
 
-                <string name="termux_app_launcher_button_count_title">Icons per page</string>
-                <string name="termux_app_launcher_button_count_summary">Set the number of icon slots on each dock page.</string>
-                <string name="termux_app_launcher_input_char_title">App search prefix</string>
-                <string name="termux_app_launcher_input_char_summary">Type this character in the terminal to start app search.</string>
-                <string name="termux_app_launcher_default_buttons_title">Edit pinned apps</string>
-                <string name="termux_app_launcher_default_buttons_summary">Choose and reorder the apps pinned to the dock.</string>
-                <string name="termux_app_launcher_most_used_page_title">Most-used apps page</string>
-                <string name="termux_app_launcher_most_used_page_summary">Add an extra dock page showing your most-used apps.</string>
-                <string name="termux_app_launcher_bw_icons_title">Black &amp; white icons</string>
                 <string name="termux_app_launcher_bw_icons_summary">Render app icons in grayscale.</string>
-                <string name="termux_app_launcher_icon_pack_title">Icon pack</string>
                 <string name="termux_app_launcher_icon_pack_summary">Use icons from an installed launcher icon pack.</string>
-                <string name="termux_app_launcher_pinned_icon_pack_title">Pinned icon pack</string>
                 <string name="termux_app_launcher_pinned_icon_pack_summary">Optional override for pinned apps. Otherwise they use the global icon pack.</string>
-                <string name="termux_app_launcher_apps_row_enabled_title">Show pinned apps row</string>
-                <string name="termux_app_launcher_apps_row_enabled_summary">Show the app icons row above extra keys.</string>
-                <string name="termux_app_launcher_terminal_swipe_enabled_title">Full-screen lateral swipes</string>
-                <string name="termux_app_launcher_terminal_swipe_enabled_summary">Use left and right terminal flings to page launcher apps, or open and close the sessions drawer.</string>
-                <string name="termux_app_launcher_notification_dots_title">Notification dots</string>
                 <string name="termux_app_launcher_notification_dots_summary">Show a Material color dot on apps with active notifications.</string>
                 <string name="termux_app_launcher_notification_dots_summary_needs_access">Enable notification access to show dots on apps with active notifications.</string>
                 <string name="termux_app_launcher_notification_access_title">Enable notification access?</string>
                 <string name="termux_app_launcher_notification_access_message">Notification dots use Android notification access to detect which apps currently have clearable notifications. Content is not used for launcher dots.</string>
                 <string name="termux_app_launcher_notification_access_enable">Open settings</string>
                 <string name="termux_app_launcher_notification_access_unavailable">Notification access settings are unavailable on this device.</string>
-                <string name="termux_app_launcher_permissions_title">Permissions</string>
-                <string name="termux_app_launcher_permissions_summary">Review launcher and Termux access.</string>
                 <string name="termux_app_launcher_access_status_on">Allowed</string>
                 <string name="termux_app_launcher_access_status_off">Action needed</string>
-                <string name="termux_app_launcher_storage_access_title">Storage access</string>
                 <string name="termux_app_launcher_notification_access_settings_title">Notification access</string>
-                <string name="termux_app_launcher_accessibility_lock_access_title">Accessibility lock</string>
-                <string name="termux_app_launcher_notification_settings_title">App notifications</string>
-                <string name="termux_app_launcher_app_permissions_title">App permissions</string>
-                <string name="termux_app_launcher_app_permissions_summary">Open Android app permission settings.</string>
                 <string name="termux_app_launcher_permission_settings_unavailable">Permission settings are unavailable on this device.</string>
-                <string name="termux_app_launcher_az_row_enabled_title">Show A–Z app index</string>
-                <string name="termux_app_launcher_az_row_enabled_summary">Show the alphabet scrubber below the dock.</string>
-                <string name="termux_app_launcher_az_double_tap_lock_title">A–Z index double-tap action</string>
-                <string name="termux_app_launcher_az_double_tap_lock_summary">Choose what double-tapping the A–Z app index does.</string>
-                <string name="termux_app_launcher_az_lock_method_dialog_title">Choose method</string>
                 <string name="termux_app_launcher_az_lock_method_off">Off</string>
                 <string name="termux_app_launcher_az_lock_method_shizuku">Shizuku\nSends a power-button keypress via Shizuku — preserves the system screen-off animation.</string>
                 <string name="termux_app_launcher_az_lock_method_accessibility">Accessibility\nUses the accessibility service to lock — the screen may flicker while turning off.</string>
-                <string name="termux_app_launcher_set_home_title">Set as default launcher</string>
-                <string name="termux_app_launcher_set_home_summary">Open Android default home app settings.</string>
                 <string name="termux_app_launcher_set_home_unavailable">Home launcher settings are unavailable on this device.</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_title">Enable accessibility lock</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_message">Enable Termux Launcher Lock Service to lock the screen from the alphabets row.</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_enable">Enable</string>
-                <string name="termux_app_launcher_reset_usage_ranking_title">Reset usage ranking</string>
-                <string name="termux_app_launcher_reset_usage_ranking_summary">Apps are ordered by usage frequency. Tap to reset.</string>
-                <string name="termux_app_launcher_bar_height_title">Dock size</string>
-                <string name="termux_app_launcher_bar_height_summary">Choose the overall dock size.</string>
-                <string name="termux_app_launcher_dock_style_title">Surface shape</string>
-                <string name="termux_app_launcher_dock_style_summary">Applies to the dock, keyboard, and status panel.</string>
                 <string name="termux_app_launcher_dock_style_default">Default</string>
                 <string name="termux_app_launcher_dock_style_rounded">Rounded</string>
-                <string name="termux_app_launcher_display_app_names_title">Display app names</string>
-                <string name="termux_app_launcher_display_app_names_summary">Show a compact name pill above the focused app while scrubbing the dock.</string>
-                <string name="termux_app_launcher_icon_scale_title">Icon scaling</string>
-                <string name="termux_app_launcher_icon_scale_summary">Choose how large app icons should appear inside the dock.</string>
-                <string name="termux_app_launcher_icon_scale_auto">Auto</string>
                 <string name="termux_dock_preset_smallest">Smallest</string>
                 <string name="termux_dock_preset_small">Small</string>
                 <string name="termux_dock_preset_default">Default</string>
@@ -1274,70 +1064,34 @@
                 <string name="termux_app_launcher_reset_usage_ranking_done">Adaptive A-Z ranking reset</string>
                 
             <!-- Sessions Category -->
-            <string name="termux_sessions_header">Termux Sessions Menu</string>
             
-                <string name="termux_sessions_opacity_title">Opacity</string>
 
         <!-- Legacy defaults retained so localized resources with older keys still merge on CI. -->
-        <string name="action_autofill_password">Autofill password</string>
-        <string name="action_autofill_username">Autofill username</string>
-        <string name="action_font_and_color">Font and color</string>
-        <string name="action_open_help">Help</string>
-        <string name="action_report_issue">Report issue</string>
         <string name="action_style_terminal">Style</string>
-        <string name="action_toggle_keep_screen_on">Keep screen on</string>
-        <string name="error_background_image_loading_failed">Failed to load the background image.</string>
-        <string name="error_background_image_loading_from_gallery_failed">Failed to load the selected image.</string>
-        <string name="termux_background_image_enabled_title">Display background image</string>
-        <string name="termux_background_image_enabled_off">Background images are disabled.</string>
-        <string name="termux_background_image_enabled_on">Background images are enabled.</string>
-        <string name="termux_terminal_dynamic_colors_title">Use wallpaper colors</string>
-        <string name="termux_terminal_dynamic_colors_summary">Background, text, cursor, and ANSI colors from current palette</string>
-        <string name="termux_extrakeys_blur_enabled_title">Extra keys blur</string>
-        <string name="termux_extrakeys_blur_enabled_off">Extra keys blur is disabled.</string>
-        <string name="termux_extrakeys_blur_enabled_on">Extra keys blur is enabled.</string>
-        <string name="termux_monet_background_enabled_title">Material background tint</string>
-        <string name="termux_monet_background_enabled_off">Material background tint is disabled.</string>
-        <string name="termux_monet_background_enabled_on">Material background tint is enabled.</string>
-        <string name="termux_sessions_blur_enabled_title">Sessions blur</string>
-        <string name="termux_sessions_blur_enabled_off">Sessions blur is disabled.</string>
-        <string name="termux_sessions_blur_enabled_on">Sessions blur is enabled.</string>
-        <string name="title_restore_background_image">Restore background image?</string>
 
 
 
     <!-- Termux:API App Preferences -->
-    <string name="termux_api_preferences_title">&TERMUX_API_APP_NAME;</string>
-    <string name="termux_api_preferences_summary">Preferences for &TERMUX_API_APP_NAME; app</string>
 
 
 
     <!-- Termux:Float App Preferences -->
-    <string name="termux_float_preferences_title">&TERMUX_FLOAT_APP_NAME;</string>
-    <string name="termux_float_preferences_summary">Preferences for &TERMUX_FLOAT_APP_NAME; app</string>
 
 
 
     <!-- Termux:Tasker App Preferences -->
-    <string name="termux_tasker_preferences_title">&TERMUX_TASKER_APP_NAME;</string>
-    <string name="termux_tasker_preferences_summary">Preferences for &TERMUX_TASKER_APP_NAME; app</string>
 
 
 
     <!-- Termux:GUI App Preferences -->
-    <string name="termux_gui_preferences_title">&TERMUX_GUI_APP_NAME;</string>
-    <string name="termux_gui_preferences_summary">Preferences for &TERMUX_GUI_APP_NAME; app</string>
 
 
 
     <!-- Termux:Widget App Preferences -->
-    <string name="termux_widget_preferences_title">&TERMUX_WIDGET_APP_NAME;</string>
-    <string name="termux_widget_preferences_summary">Preferences for &TERMUX_WIDGET_APP_NAME; app</string>
 
 
 
     <!-- About Preference -->
-    <string name="about_preference_title">About</string>
     <string name="about_preference_summary">Version, build, project source</string>
     <string name="open_source_licenses_preference_title">Open-source licenses</string>
     <string name="open_source_licenses_preference_summary">Libraries, upstream projects, and license texts</string>
@@ -1347,21 +1101,8 @@
     <string name="donate_preference_summary">Support development</string>
 
     <!-- Report Issue Preference -->
-    <string name="report_issue_preference_title">Send feedback</string>
     <string name="report_issue_preference_summary">Report a bug or suggest an idea on GitHub</string>
 
-    <string name="settings_expand_preview">Expand preview</string>
-    <string name="settings_collapse_preview">Collapse preview</string>
-    <string name="settings_keyboard_height_title">Keyboard height</string>
-    <string name="settings_key_spacing_title">Key spacing</string>
-    <string name="settings_corner_radius_title">Corner radius</string>
-    <string name="settings_dock_style_header">Dock</string>
-    <string name="settings_style_title">Style</string>
-    <string name="settings_size_title">Size</string>
-    <string name="settings_reset_title">Reset</string>
-    <string name="settings_dock_reset_summary">Restore dock appearance defaults</string>
-    <string name="settings_dock_reset_done">Dock appearance reset</string>
-    <string name="settings_undo">Undo</string>
     <string name="settings_manage_action">Manage</string>
     <string name="settings_connect_action">Connect</string>
     <string name="settings_configure_action">Configure</string>
@@ -1374,7 +1115,6 @@
 
     <!-- Command palette chrome -->
     <string name="action_command_palette">Command palette</string>
-    <string name="palette_title">Command palette</string>
     <string name="palette_search_hint">search</string>
     <string name="palette_empty">No matching actions</string>
     <string name="palette_unavailable_splits_disabled">Unavailable: compatibility mode is on</string>
@@ -1521,7 +1261,6 @@
     <string name="terminal_hints_none">No URLs, paths, hashes, or line references found.</string>
     <string name="terminal_hint_copied">Hint copied to clipboard</string>
     <string name="tool_desc_terminal_search_scrollback">Find text in this pane’s scrollback and jump to a match.</string>
-    <string name="terminal_scrollback_search_title">Search scrollback</string>
     <string name="terminal_scrollback_search_hint">Search text</string>
     <string name="terminal_find_yanked">Copied selection</string>
     <string name="terminal_scrollback_search_row">Row %1$s   %2$s</string>
@@ -1623,9 +1362,6 @@
     <!-- Status-row sessions panel -->
     <string name="sessions_panel_empty">No sessions</string>
     <string name="sessions_panel_new">New session</string>
-    <string name="sessions_panel_shell">shell</string>
-    <string name="sessions_panel_close_session">Close session %1$d</string>
-    <string name="sessions_panel_rename_session">Rename session %1$d</string>
     <string name="palette_unavailable_no_selection">Unavailable: no text selected</string>
     <string name="palette_unavailable_no_session">Unavailable: no active session</string>
 

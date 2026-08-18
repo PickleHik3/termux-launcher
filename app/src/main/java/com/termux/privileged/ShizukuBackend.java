@@ -4,9 +4,6 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.util.Log;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
@@ -493,16 +490,4 @@ public class ShizukuBackend implements PrivilegedBackend {
         return false;
     }
 
-    private String readStream(java.io.InputStream inputStream) throws IOException {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-        StringBuilder output = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) {
-            if (output.length() > 0) {
-                output.append("\n");
-            }
-            output.append(line);
-        }
-        return output.toString();
-    }
 }

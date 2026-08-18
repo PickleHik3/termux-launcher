@@ -1,6 +1,5 @@
 package com.termux.app.terminal.io;
 
-import android.content.Intent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -12,8 +11,6 @@ import androidx.viewpager.widget.PagerAdapter;
 import androidx.viewpager.widget.ViewPager;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
-import com.termux.app.activities.SettingsActivity;
-import com.termux.shared.activity.ActivityUtils;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.shared.view.KeyboardUtils;
 import com.termux.terminal.TerminalSession;

@@ -1,7 +1,6 @@
 package com.termux.privileged;
 
 import android.content.Context;
-import android.content.pm.PackageManager;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;

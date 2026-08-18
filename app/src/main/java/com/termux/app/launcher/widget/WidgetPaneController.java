@@ -1,7 +1,5 @@
 package com.termux.app.launcher.widget;
 
-import android.appwidget.AppWidgetManager;
-import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;

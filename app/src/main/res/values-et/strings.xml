@@ -3,12 +3,7 @@
 <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
 <!ENTITY TERMUX_APP_NAME "Termux:Launcher">
 <!ENTITY TERMUX_API_APP_NAME "Termux:API">
-<!ENTITY TERMUX_GUI_APP_NAME "Termux:GUI">
-<!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
-<!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
 <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
-<!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
-<!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
 ]>
 <resources>
     <string name="action_new_session">Uus sessioon</string>
@@ -17,14 +12,9 @@
     <string name="action_create_named_session_confirm">Loo</string>
     <string name="action_toggle_soft_keyboard">Klaviatuur</string>
     <string name="title_select_url_dialog">Vajuta URL, et kopeerida või hoia, et teha lahti</string>
-    <string name="action_autofill_password">Parooli auto-sisestus</string>
     <string name="title_confirm_kill_process">Soovite tõesti sessiooni peatada?</string>
     <string name="action_style_terminal">Stiil</string>
-    <string name="action_font_and_color">Kirjatüüp ja Värv</string>
     <string name="action_set_background_image">Vali taustapilt</string>
-    <string name="action_report_issue">Teata probleemist</string>
-    <string name="error_background_image_loading_failed">Ei õnnestunud taustapilti laadida. Määran tausta värvi.</string>
-    <string name="error_background_image_loading_from_gallery_failed">Ei õnnestunud pilti laadida. Proovige teist pilti.</string>
     <string name="termux_terminal_view_view_header">Vaata</string>
     <string name="bootstrap_error_abort">Katkesta</string>
     <string name="bootstrap_error_try_again">Proovi veel</string>
@@ -35,26 +25,17 @@
     <string name="msg_max_terminals_reached">Sulgege mõned enne uue avamist.</string>
     <string name="title_select_url_none_found">Terminalis ei leitud URL\'i.</string>
     <string name="msg_select_url_copied_to_clipboard">URL kopeeritud</string>
-    <string name="action_share_selected_text">Jaga valitud tekst</string>
     <string name="title_share_selected_text">Terminali Tekst</string>
     <string name="title_share_selected_text_with">Saada valitud text:</string>
     <string name="action_reset_terminal">Lähtesta</string>
     <string name="action_kill_process">Peata protsess (%d)</string>
-    <string name="action_toggle_keep_screen_on">Hoia ekraan sisse lülitatuna</string>
-    <string name="action_open_help">Abi</string>
     <string name="action_open_settings">Sätted</string>
-    <string name="action_styling_install">Paigalda</string>
     <string name="action_file_received_edit">Muuda</string>
-    <string name="title_restore_background_image">Taustapilt tuvastatud. Kas soovite selle taastada?</string>
     <string name="notification_action_exit">Välju</string>
     <string name="donate_preference_title">Anneta</string>
     <string name="termux_soft_keyboard_enabled_off">Virtuaalne klaviatuur on välja lülitatud.</string>
-    <string name="termux_terminal_io_preferences_summary">Terminali I/O sätted</string>
-    <string name="termux_terminal_io_preferences_title">Terminali I/O</string>
     <string name="termux_keyboard_header">Klaviatuur</string>
     <string name="termux_soft_keyboard_enabled_title">Virt. klaviatuur lubatud</string>
-    <string name="termux_terminal_view_preferences_title">Terminali vaade</string>
-    <string name="termux_terminal_view_preferences_summary">Terminali vaate sätted</string>
     <string name="permission_run_command_label">Jooksuta käske &TERMUX_APP_NAME; keskkonnas</string>
     <string name="bootstrap_installer_body">Eellaadimise pakettide paigaldamine…</string>
     <string name="bootstrap_error_title">Eellaadimise paigaldamine ebaõnnestus</string>
@@ -64,7 +45,6 @@
     <string name="title_file_received">Salvesta fail kausta ~/downloads/</string>
     <string name="action_file_received_open_directory">Ava kataloog</string>
     <string name="title_activity_termux_settings">&TERMUX_APP_NAME; seaded</string>
-    <string name="termux_preferences_summary">&TERMUX_APP_NAME; rakenduse eelistused</string>
     <string name="termux_debugging_preferences_title">Silumine</string>
     <string name="termux_debugging_preferences_summary">Silumise eelistused</string>
     <string name="termux_logging_header">Logimine</string>
@@ -73,12 +53,6 @@
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Virt. klaviatuur ainult siis, kui riistvaralist pole</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">Virtuaalne klaviatuur lülitatakse sisse ainult siis, kui riistvaralist klaviatuuri pole ühendatud.</string>
     <string name="termux_style_preferences_title">&TERMUX_APP_NAME; välimus</string>
-    <string name="termux_style_preferences_summary">&TERMUX_APP_NAME; välimuse ja kohandamise eelistused</string>
-    <string name="termux_background_header">Taust</string>
-    <string name="termux_background_image_enabled_title">Kuva taustapilti</string>
-    <string name="termux_background_image_enabled_on">Taustapilt lülitatakse sisse.</string>
-    <string name="about_preference_title">Teave</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Virtuaalne klaviatuur lülitatakse sisse ka siis, kui riistvaraline klaviatuur on ühendatud. (Vaikimisi)</string>
     <string name="shared_user_label">&TERMUX_APP_NAME; kasutaja</string>
-    <string name="termux_background_image_enabled_off">Taustapilt lülitatakse välja. Sisselülitamiseks veendu, et sobivad püst- ja rõhtformaadis failid on olemas. Kui soovid seada uue tausta, tee seda kontekstimenüüst Terminalil pikalt klikkides. (Vaikimisi)</string>
 </resources>

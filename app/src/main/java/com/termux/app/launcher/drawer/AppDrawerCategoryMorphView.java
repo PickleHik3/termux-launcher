@@ -1,7 +1,6 @@
 package com.termux.app.launcher.drawer;
 
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.Paint;
 import android.view.View;
 

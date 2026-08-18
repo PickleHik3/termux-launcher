@@ -1,6 +1,5 @@
 package com.termux.app.launcher.drawer;
 
-import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;

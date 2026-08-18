@@ -293,11 +293,6 @@ public final class FullStatusBarController {
             host.hostTopMargin()));
     }
 
-    private float currentFullProgress(int full) {
-        return FullStatusBarGeometry.progressForHeight(host.currentHeight(),
-            host.normalHeight(prior), full);
-    }
-
     private void beginResizeIfNeeded() {
         if (resizeOpen) return;
         resizeOpen = true;

@@ -31,7 +31,6 @@ import androidx.annotation.Nullable;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.preference.EditTextPreference;
-import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceManager;
@@ -58,7 +57,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -536,22 +534,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         Toast.makeText(context, toastResId, Toast.LENGTH_SHORT).show();
     }
 
-    private void showGlobalParametersDialog(Context context) {
-        String[] entries = new String[OVERRIDE_SPECS.length];
-        SharedPreferences preferences = getPreferenceManager().getSharedPreferences();
-        for (int i = 0; i < OVERRIDE_SPECS.length; i++) {
-            OverrideSpec spec = OVERRIDE_SPECS[i];
-            String value = preferences == null ? spec.defaultValue : preferences.getString(spec.key, spec.defaultValue);
-            entries[i] = getString(spec.titleRes) + "  ·  " + overrideValueLabel(spec.key,
-                value);
-        }
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.termux_ai_parameters_defaults_title)
-            .setItems(entries, (dialog, which) -> showOverrideDialog(context, which))
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
-    }
-
     private EditText buildDialogEditText(Context context, String value, int inputType, boolean multiline) {
         EditText input = new EditText(context);
         input.setInputType(inputType | (multiline ? InputType.TYPE_TEXT_FLAG_MULTI_LINE : 0));
@@ -803,15 +785,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         }
     }
 
-    private String getDefaultAssistantDisplayName(Context context) {
-        String modelId = new TaiSettings(context).getDefaultAssistantModel();
-        for (TaiModelCatalog.CatalogEntry entry : TaiModelCatalog.entries().values()) {
-            if (entry.modelId.equals(modelId)) return entry.displayName;
-        }
-        TaiModelSpec spec = new TaiModelStore(context).getUserModels().get(modelId);
-        return spec != null ? spec.displayName : modelId;
-    }
-
     private String buildRuntimeCardBody(Context context, JSONObject runtime, JSONObject runtimeStatus) {
         StringBuilder body = new StringBuilder();
         JSONObject device = runtimeStatus.optJSONObject("device");
@@ -908,20 +881,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             });
         }
         refreshTaiPage(context);
-    }
-
-    private void loadDefaultModel(Context context) {
-        Context appContext = context.getApplicationContext();
-        runRuntimeAction(
-            () -> TaiManager.getInstance(appContext).loadModel("{}"),
-            R.string.termux_ai_model_loaded);
-    }
-
-    private void keepWarmDefaultModel(Context context) {
-        Context appContext = context.getApplicationContext();
-        runRuntimeAction(
-            () -> TaiManager.getInstance(appContext).keepWarmRuntime("{}"),
-            R.string.termux_ai_runtime_keep_warm_started);
     }
 
     private void cancelGeneration(Context context) {
@@ -1080,42 +1039,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             });
             category.addPreference(row);
         }
-    }
-
-    private void configureModelPill(TaiModelPreference row, TaiModelSpec installed, JSONObject download, boolean gated) {
-        if (installed != null && installed.localPath != null) {
-            row.setPill(getString(R.string.termux_ai_model_pill_installed), true);
-            return;
-        }
-        if (download != null) {
-            String status = download.optString("status", "");
-            if (TaiModelStore.STATE_QUEUED.equals(status)
-                || TaiModelStore.STATE_DOWNLOADING.equals(status)
-                || TaiModelStore.STATE_VERIFYING.equals(status)) {
-                row.setPill(getString(R.string.termux_ai_model_pill_downloading), false);
-                return;
-            }
-        }
-        if (gated) {
-            row.setPill(getString(R.string.termux_ai_model_pill_gated), false);
-            return;
-        }
-        row.setPill(null, false);
-    }
-
-    private CharSequence buildCatalogMetaLine(Context context, TaiModelCatalog.CatalogEntry entry) {
-        String accel = null;
-        Integer minMemGb = entry.recommendedRamGb > 0 ? entry.recommendedRamGb : null;
-        try {
-            TaiModelSpec catalogModel = new TaiModelRegistry().getModel(entry.modelId);
-            if (catalogModel != null && TaiModelSpec.BACKEND_LITERT_LM.equals(entry.backend)) {
-                TaiModelProfile profile = TaiModelProfile.forModel(catalogModel);
-                accel = joinAccelerators(profile.compatibleAccelerators);
-                if (profile.minDeviceMemoryInGb != null) minMemGb = profile.minDeviceMemoryInGb;
-            }
-        } catch (Exception ignored) {
-        }
-        return buildMetaLine(context, entry.sizeBytes, accel, minMemGb);
     }
 
     private CharSequence buildInstalledMetaLine(Context context, TaiModelSpec model) {
@@ -1391,54 +1314,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             .commit();
     }
 
-    private void showCatalogBrowser(Context context) {
-        ArrayList<TaiModelCatalog.CatalogEntry> entries = new ArrayList<>(TaiModelCatalog.entries().values());
-        TaiModelStore store = new TaiModelStore(context);
-        // Same union /v1/models advertises: registered user models plus completed downloads. Either
-        // source can hold a custom model, so the browser must check both or it goes missing.
-        LinkedHashMap<String, TaiModelSpec> installed = new LinkedHashMap<>();
-        installed.putAll(store.getDownloadedReadableModels());
-        installed.putAll(store.getInstalledUserModels());
-        JSONArray downloads = store.getDownloads();
-        // Imported/URL-downloaded models that aren't catalog entries also belong here, with the same
-        // Parameters/Delete actions as installed catalog models.
-        ArrayList<TaiModelSpec> userOnly = new ArrayList<>();
-        for (TaiModelSpec spec : installed.values()) {
-            if (!TaiModelCatalog.entries().containsKey(spec.id)) userOnly.add(spec);
-        }
-        CharSequence[] labels = new CharSequence[entries.size() + userOnly.size()];
-        for (int i = 0; i < entries.size(); i++) {
-            TaiModelCatalog.CatalogEntry entry = entries.get(i);
-            JSONObject download = findDownload(downloads, entry.modelId);
-            String state = installed.containsKey(entry.modelId)
-                ? getString(R.string.termux_ai_model_pill_installed)
-                : download == null ? getString(R.string.termux_ai_model_catalog_not_installed) : download.optString("status", "");
-            labels[i] = entry.displayName + " · " + formatBytes(entry.sizeBytes) + " · " + state;
-        }
-        for (int j = 0; j < userOnly.size(); j++) {
-            TaiModelSpec spec = userOnly.get(j);
-            labels[entries.size() + j] = spec.displayName + " · " + formatBytes(spec.sizeBytes)
-                + " · " + getString(R.string.termux_ai_model_pill_installed) + " (added)";
-        }
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.termux_ai_models_browse_catalog_title)
-            .setItems(labels, (dialog, which) -> {
-                if (which >= entries.size()) {
-                    showInstalledModelActions(context, userOnly.get(which - entries.size()));
-                    return;
-                }
-                TaiModelCatalog.CatalogEntry entry = entries.get(which);
-                TaiModelSpec installedSpec = installed.get(entry.modelId);
-                if (installedSpec != null) {
-                    showInstalledModelActions(context, installedSpec);
-                } else {
-                    showModelActions(context, entry, null, findDownload(new TaiModelStore(context).getDownloads(), entry.modelId));
-                }
-            })
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
-    }
-
     private void setActiveModel(Context context, String modelId) {
         TaiModelSpec model = new TaiModelStore(context).getInstalledUserModels().get(modelId);
         TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(context);
@@ -1462,116 +1337,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             .setPositiveButton(R.string.termux_ai_model_delete_action, (dialog, which) -> deleteModel(context, model.id))
             .setNegativeButton(android.R.string.cancel, null)
             .show();
-    }
-
-    private void showTuneModelDialog(Context context, TaiModelSpec model) {
-        TaiSettings.ParameterSchema schema = TaiSettings.getParameterSchema(model.backend);
-        ArrayList<TaiSettings.ParameterSpec> specs = new ArrayList<>(schema.fields().values());
-        CharSequence[] labels = new CharSequence[specs.size() + 1];
-        SharedPreferences preferences = getPreferenceManager().getSharedPreferences();
-        for (int i = 0; i < specs.size(); i++) {
-            TaiSettings.ParameterSpec spec = specs.get(i);
-            String value = preferences == null ? "auto" : preferences.getString(modelParameterKey(model.id, spec.field), "auto");
-            labels[i] = parameterLabel(spec.field) + "  ·  " + overrideValueLabel(spec.field, value);
-        }
-        labels[specs.size()] = getString(R.string.termux_ai_model_tune_reset_action);
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(getString(R.string.termux_ai_model_tune_title, model.displayName))
-            .setItems(labels, (dialog, which) -> {
-                if (which == specs.size()) {
-                    new TaiSettings(context).resetModelParametersToGlobal(model.id);
-                    Toast.makeText(context, R.string.termux_ai_model_tune_reset_done, Toast.LENGTH_SHORT).show();
-                } else {
-                    showTuneParameterDialog(context, model, specs.get(which));
-                }
-            })
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
-    }
-
-    private void showTuneParameterDialog(Context context, TaiModelSpec model, TaiSettings.ParameterSpec spec) {
-        if (spec.options.length > 0 || spec.fallbackValue instanceof Boolean) {
-            ArrayList<String> values = new ArrayList<>();
-            values.add("auto");
-            if (spec.fallbackValue instanceof Boolean) {
-                values.add("true");
-                values.add("false");
-            } else {
-                for (String option : spec.options) values.add(option);
-            }
-            String[] labels = values.toArray(new String[0]);
-            String current = currentModelParameterValue(model.id, spec.field);
-            int checked = 0;
-            for (int i = 0; i < labels.length; i++) {
-                if (labels[i].equalsIgnoreCase(current)) {
-                    checked = i;
-                    break;
-                }
-            }
-            new MaterialAlertDialogBuilder(context)
-                .setTitle(parameterLabel(spec.field))
-                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
-                    saveModelParameter(context, model.id, spec, labels[which]);
-                    dialog.dismiss();
-                })
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
-            return;
-        }
-
-        EditText input = buildDialogEditText(context, currentModelParameterValue(model.id, spec.field),
-            InputType.TYPE_CLASS_NUMBER | (spec.fallbackValue instanceof Double
-                ? InputType.TYPE_NUMBER_FLAG_DECIMAL : 0), false);
-        String range = spec.minValue == null || spec.maxValue == null
-            ? null
-            : getString(R.string.termux_ai_model_tune_range, spec.minValue, spec.maxValue);
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(parameterLabel(spec.field))
-            .setView(wrapDialogView(context, range, input))
-            .setNeutralButton(R.string.termux_ai_model_tune_reset_one_action, (dialog, which) ->
-                saveModelParameter(context, model.id, spec, "auto"))
-            .setPositiveButton(R.string.termux_ai_dialog_save, (dialog, which) ->
-                saveModelParameter(context, model.id, spec, input.getText().toString()))
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
-    }
-
-    private String currentModelParameterValue(String modelId, String field) {
-        SharedPreferences preferences = getPreferenceManager().getSharedPreferences();
-        return preferences == null ? "auto" : preferences.getString(modelParameterKey(modelId, field), "auto");
-    }
-
-    private void saveModelParameter(Context context, String modelId, TaiSettings.ParameterSpec spec, String rawValue) {
-        String value = rawValue == null ? "auto" : rawValue.trim();
-        TaiSettings settings = new TaiSettings(context);
-        if (value.isEmpty() || "auto".equalsIgnoreCase(value)) {
-            settings.resetModelParameterToGlobal(modelId, spec.field);
-            Toast.makeText(context, R.string.termux_ai_model_tune_saved, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        Object parsed = spec.parse(value);
-        if (parsed == null) {
-            Toast.makeText(context, R.string.termux_ai_model_tune_invalid, Toast.LENGTH_LONG).show();
-            return;
-        }
-        settings.setModelParameter(modelId, spec.field, parsed);
-        Toast.makeText(context, R.string.termux_ai_model_tune_saved, Toast.LENGTH_SHORT).show();
-    }
-
-    private String modelParameterKey(String modelId, String field) {
-        return "tai_model_parameter." + modelId + "." + field;
-    }
-
-    private String parameterLabel(String field) {
-        if (TaiSettings.FIELD_MAX_TOKENS.equals(field)) return getString(R.string.termux_ai_max_tokens_title);
-        if (TaiSettings.FIELD_TOP_K.equals(field)) return getString(R.string.termux_ai_top_k_title);
-        if (TaiSettings.FIELD_TOP_P.equals(field)) return getString(R.string.termux_ai_top_p_title);
-        if (TaiSettings.FIELD_TEMPERATURE.equals(field)) return getString(R.string.termux_ai_temperature_title);
-        if (TaiSettings.FIELD_ACCELERATOR.equals(field)) return getString(R.string.termux_ai_accelerator_title);
-        if (TaiSettings.FIELD_ENABLE_THINKING.equals(field)) return getString(R.string.termux_ai_thinking_title);
-        if (TaiSettings.FIELD_ENABLE_SPECULATIVE_DECODING.equals(field)) return getString(R.string.termux_ai_speculative_decoding_title);
-        if (TaiSettings.FIELD_CONTEXT_WINDOW.equals(field)) return getString(R.string.termux_ai_context_window_title);
-        return field;
     }
 
     private void showRuntimeLogs(Context context) {

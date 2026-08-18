@@ -5,7 +5,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.HashMap;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Rect;
 import android.os.SystemClock;
 

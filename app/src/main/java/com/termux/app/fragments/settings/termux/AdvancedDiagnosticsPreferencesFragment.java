@@ -8,7 +8,6 @@ import android.os.Bundle;
 import android.widget.Toast;
 
 import androidx.annotation.Keep;
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.preference.ListPreference;
 import androidx.preference.Preference;
@@ -20,7 +19,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
-import com.termux.app.models.UserAction;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.shared.activities.ReportActivity;
 import com.termux.shared.android.AndroidUtils;

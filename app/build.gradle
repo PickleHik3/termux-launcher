@@ -40,14 +40,7 @@ android {
 
         manifestPlaceholders = [
             TERMUX_PACKAGE_NAME    : "com.termux",
-            TERMUX_APP_NAME        : "Termux:Monet",
-            TERMUX_API_APP_NAME    : "Termux:API",
-            TERMUX_GUI_APP_NAME    : "Termux:GUI",
-            TERMUX_BOOT_APP_NAME   : "Termux:Boot",
-            TERMUX_FLOAT_APP_NAME  : "Termux:Float",
-            TERMUX_STYLING_APP_NAME: "Termux:Styling",
-            TERMUX_TASKER_APP_NAME : "Termux:Tasker",
-            TERMUX_WIDGET_APP_NAME : "Termux:Widget",
+            TERMUX_APP_NAME        : "Termux:Launcher",
             TERMUX_APP_ALLOW_BACKUP: "false",
             TERMUX_APP_FULL_BACKUP_CONTENT: "false",
             TERMUX_APP_USES_CLEARTEXT_TRAFFIC: "false"

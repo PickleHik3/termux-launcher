@@ -35,7 +35,6 @@ import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
 import android.graphics.Point;
-import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
@@ -4032,180 +4031,6 @@ public final class SuggestionBarView extends GridLayout
         }
     }
 
-    private void showReplacePinnedApp(int index) {
-        if (allApps == null || allApps.isEmpty()) reloadAllApps();
-        String[] labels = appLabels(allApps);
-        new MaterialAlertDialogBuilder(getContext())
-            .setTitle("Replace pinned app")
-            .setItems(labels, (dialog, which) -> {
-                AppRef ref = allApps.get(which).appRef;
-                if (index >= 0 && index < pinnedItems.size()) {
-                    pinnedItems.set(index, new PinnedAppItem(ref));
-                }
-                persistPinsAndReload();
-            })
-            .show();
-    }
-
-    private void showMovePinnedAppToFolder(int appIndex, PinnedAppItem item) {
-        List<PinnedFolderItem> folders = allFolders();
-        if (folders.isEmpty()) {
-            showCreateFolderWithSeed(appIndex, item);
-            return;
-        }
-        String[] names = new String[folders.size()];
-        for (int i = 0; i < folders.size(); i++) names[i] = folders.get(i).title;
-
-        new MaterialAlertDialogBuilder(getContext())
-            .setTitle("Move to folder")
-            .setItems(names, (dialog, which) -> {
-                PinnedFolderItem folder = folders.get(which);
-                PinnedAppItem normalized = new PinnedAppItem(resolveForSelectionRef(item.appRef),
-                    item.iconOverride);
-                LauncherFolderMutator.AppendResult result =
-                    LauncherFolderMutator.moveTopLevelAppIntoFolder(pinnedItems, appIndex, folder,
-                        normalized);
-                if (result == LauncherFolderMutator.AppendResult.APPLIED) persistPinsAndReload();
-                else showFolderAppendRejected(result);
-            })
-            .show();
-    }
-
-    private void showCreateFolderWithSeed(int appIndex, PinnedAppItem item) {
-        EditText titleInput = new EditText(getContext());
-        titleInput.setHint("Folder name");
-        new MaterialAlertDialogBuilder(getContext())
-            .setTitle("Create folder")
-            .setView(titleInput)
-            .setPositiveButton("Create", (dialog, which) -> {
-                String title = titleInput.getText() == null ? "Folder" : titleInput.getText().toString().trim();
-                if (title.isEmpty()) title = "Folder";
-                PinnedFolderItem folder = new PinnedFolderItem(UUID.randomUUID().toString(), title);
-                addPinnedAppToFolderIfMissing(folder, item);
-
-                if (appIndex >= 0 && appIndex < pinnedItems.size()) {
-                    pinnedItems.set(appIndex, folder);
-                } else {
-                    pinnedItems.add(folder);
-                }
-                persistPinsAndReload();
-            })
-            .setNegativeButton("Cancel", null)
-            .show();
-    }
-
-    private void showFolderAppEditor(PinnedFolderItem folder) {
-        if (allApps == null || allApps.isEmpty()) reloadAllApps();
-        boolean[] checked = new boolean[allApps.size()];
-        Set<String> existing = new HashSet<>();
-        for (PinnedAppItem folderApp : folder.apps) {
-            existing.add(resolveForSelectionId(folderApp.appRef));
-        }
-        for (int i = 0; i < allApps.size(); i++) {
-            checked[i] = existing.contains(allApps.get(i).appRef.stableId());
-        }
-
-        String[] labels = appLabels(allApps);
-        new MaterialAlertDialogBuilder(getContext())
-            .setTitle("Edit folder apps")
-            .setMultiChoiceItems(labels, checked, (dialog, which, isChecked) -> {
-                checked[which] = isChecked;
-            })
-            .setPositiveButton("Save", (dialog, which) -> {
-                Map<String, PinnedIconOverride> existingOverrides = folderIconOverridesByStableId(folder);
-                folder.apps.clear();
-                for (int i = 0; i < checked.length; i++) {
-                    if (checked[i]) {
-                        AppRef ref = resolveForSelectionRef(allApps.get(i).appRef);
-                        folder.apps.add(new PinnedAppItem(ref, existingOverrides.get(ref.stableId())));
-                    }
-                }
-                persistPinsAndReload();
-            })
-            .setNegativeButton("Cancel", null)
-            .show();
-    }
-
-    private void showFolderSettings(PinnedFolderItem folder) {
-        LinearLayout layout = new LinearLayout(getContext());
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(dp(16), dp(12), dp(16), dp(12));
-        GradientDrawable panel = new GradientDrawable();
-        panel.setCornerRadius(dp(14));
-        panel.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xEE));
-        panel.setStroke(dp(1), withAlphaComponent(resolveLauncherOutlineColor(), 0x66));
-        layout.setBackground(panel);
-
-        TextView title = new TextView(getContext());
-        title.setText("Folder settings");
-        title.setTextColor(resolveLauncherTextColor());
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setTextSize(14f);
-        title.setPadding(0, 0, 0, dp(8));
-
-        final int[] rowsValue = new int[] {clamp(folder.rows, 1, PinnedFolderItem.MAX_GRID)};
-        final int[] colsValue = new int[] {clamp(folder.cols, 1, PinnedFolderItem.MAX_GRID)};
-        LinearLayout rowsControl = buildStepperRow("Rows", rowsValue, 1, PinnedFolderItem.MAX_GRID);
-        LinearLayout colsControl = buildStepperRow("Columns", colsValue, 1, PinnedFolderItem.MAX_GRID);
-
-        EditText colorInput = new EditText(getContext());
-        colorInput.setHint("Tint color");
-        colorInput.setText(folder.tintOverrideEnabled ? String.format(Locale.US, "#%08X", folder.tintColor) : "");
-        colorInput.setSingleLine(true);
-        colorInput.setHint("#AARRGGBB or #RRGGBB");
-
-        LinearLayout buttons = new LinearLayout(getContext());
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        buttons.setGravity(Gravity.END);
-
-        Button cancel = new Button(getContext());
-        cancel.setText("Cancel");
-        styleGhostButton(cancel);
-
-        Button save = new Button(getContext());
-        save.setText("Save");
-        styleGhostButton(save);
-
-        buttons.addView(cancel);
-        buttons.addView(save);
-
-        layout.addView(title);
-        layout.addView(rowsControl, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        layout.addView(colsControl, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        layout.addView(colorInput, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        layout.addView(buttons, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        AlertDialog dialog = new MaterialAlertDialogBuilder(getContext())
-            .setView(layout)
-            .create();
-
-        cancel.setOnClickListener(v -> dialog.dismiss());
-        save.setOnClickListener(v -> {
-            folder.rows = rowsValue[0];
-            folder.cols = colsValue[0];
-            String color = stringValue(colorInput.getText()).trim();
-            if (color.isEmpty()) {
-                folder.tintOverrideEnabled = false;
-            } else {
-                Integer parsed = parseColor(color);
-                if (parsed != null) {
-                    folder.tintOverrideEnabled = true;
-                    folder.tintColor = parsed;
-                }
-            }
-            dialog.dismiss();
-            persistPinsAndReload();
-        });
-
-        dialog.show();
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setSoftInputMode(
-                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE |
-                WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
-            );
-        }
-    }
-
     private void showFolderPopup(PinnedFolderItem folder, @Nullable View anchor) {
         showFolderPopup(folder, anchor, false);
     }
@@ -4355,16 +4180,6 @@ public final class SuggestionBarView extends GridLayout
         if (folderPopupWindow != null) {
             sharedFolderPopup.dismiss();
         }
-    }
-
-    private List<PinnedFolderItem> allFolders() {
-        List<PinnedFolderItem> out = new ArrayList<>();
-        for (PinnedItem item : pinnedItems) {
-            if (item instanceof PinnedFolderItem) {
-                out.add((PinnedFolderItem) item);
-            }
-        }
-        return out;
     }
 
     @NonNull
@@ -6654,11 +6469,6 @@ public final class SuggestionBarView extends GridLayout
         }
     }
 
-    private String[] appLabels(List<LauncherAppEntry> entries) {
-        List<String> displayLabels = buildDisplayLabels(entries);
-        return displayLabels.toArray(new String[0]);
-    }
-
     private static final class MenuActionRow {
         @NonNull final TextView rowView;
         @NonNull final Runnable action;
@@ -6876,17 +6686,6 @@ public final class SuggestionBarView extends GridLayout
         configRepository.dissolveFolder(configRepository.loadSnapshot().revision, folderId);
     }
 
-    private boolean addPinnedAppToFolderIfMissing(@NonNull PinnedFolderItem folder, @NonNull PinnedAppItem app) {
-        if (folder.apps.size() >= PinnedFolderItem.MAX_APPS) return false;
-        AppRef resolved = resolveForSelectionRef(app.appRef);
-        for (PinnedAppItem existing : folder.apps) {
-            if (resolveForSelectionRef(existing.appRef).stableId().equals(resolved.stableId())) {
-                return false;
-            }
-        }
-        folder.apps.add(new PinnedAppItem(resolved, app.iconOverride));
-        return true;
-    }
 
     private void showFolderAppendRejected(@NonNull LauncherFolderMutator.AppendResult result) {
         int message = result == LauncherFolderMutator.AppendResult.CAPACITY
@@ -7321,47 +7120,6 @@ public final class SuggestionBarView extends GridLayout
             this.folderId = folderId;
             this.appRef = appRef;
         }
-    }
-
-    private LinearLayout buildStepperRow(@NonNull String label, @NonNull int[] valueRef, int min, int max) {
-        LinearLayout row = new LinearLayout(getContext());
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(6), 0, dp(6));
-
-        TextView title = new TextView(getContext());
-        title.setText(label);
-        title.setTextColor(resolveLauncherTextColor());
-        row.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-        ImageButton minus = new ImageButton(getContext());
-        minus.setImageResource(android.R.drawable.ic_media_previous);
-        styleIconButton(minus, dp(2));
-        row.addView(minus, new LinearLayout.LayoutParams(dp(24), dp(24)));
-
-        TextView valueText = new TextView(getContext());
-        valueText.setTextColor(resolveLauncherTextColor());
-        valueText.setTypeface(Typeface.DEFAULT_BOLD);
-        valueText.setText(Integer.toString(valueRef[0]));
-        valueText.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams valueParams = new LinearLayout.LayoutParams(dp(32), ViewGroup.LayoutParams.WRAP_CONTENT);
-        valueParams.setMargins(dp(6), 0, dp(6), 0);
-        row.addView(valueText, valueParams);
-
-        ImageButton plus = new ImageButton(getContext());
-        plus.setImageResource(android.R.drawable.ic_input_add);
-        styleIconButton(plus, dp(2));
-        row.addView(plus, new LinearLayout.LayoutParams(dp(24), dp(24)));
-
-        minus.setOnClickListener(v -> {
-            valueRef[0] = clamp(valueRef[0] - 1, min, max);
-            valueText.setText(Integer.toString(valueRef[0]));
-        });
-        plus.setOnClickListener(v -> {
-            valueRef[0] = clamp(valueRef[0] + 1, min, max);
-            valueText.setText(Integer.toString(valueRef[0]));
-        });
-        return row;
     }
 
     private static int parseInt(CharSequence value, int fallback) {

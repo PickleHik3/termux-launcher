@@ -79,7 +79,6 @@ import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import com.github.mmin18.widget.AndroidStockBlurImpl;
 import com.github.mmin18.widget.RealtimeBlurView;
-import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -1626,16 +1625,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return buildGlassSurface(barAlpha, sliceStart, sliceEnd, true, grain, cornerRadiusPx, rim);
     }
 
-    private float resolveStatusBarCornerRadiusPx() {
-        if (mPreferences == null)
-            return 0f;
-        int configured = mPreferences.getStatusBarCornerRadius();
-        // -1 means "follow the style", which used to reach the drawable as a negative radius and
-        // silently squared the status surface off while the dock beside it was rounded.
-        return dpToPx(configured >= 0 ? configured
-            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_ROUNDED_SURFACE_CORNER_RADIUS_DP);
-    }
-
     @NonNull
     private Drawable buildGlassSurface(float barAlpha, float sliceStart, float sliceEnd,
                                       boolean withFoot, int grain) {
@@ -1666,7 +1655,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         baseLayer.setColor(withAlphaComponent(base, baseAlpha));
         baseLayer.setDither(true);
 
-        int[] sliceColors = dockGlassLightModelSlice(accent, topSheenAlpha, midSheenAlpha,
+        int[] sliceColors = DockGlassRendering.lightModelSlice(accent, topSheenAlpha, midSheenAlpha,
             bottomFootAlpha, sliceStart, sliceEnd);
         GradientDrawable lightLayer = new GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM, sliceColors);
@@ -1697,69 +1686,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return new LayerDrawable(layers.toArray(new Drawable[0]));
     }
 
-    /** Model stop positions for the vertical glass light model, matched to {@link #dockGlassLightModelColorAt}. */
-    private static final float[] DOCK_GLASS_MODEL_STOPS = {0f, 0.33f, 0.67f, 1f};
-
-    /**
-     * Samples the vertical glass light model over {@code [sliceStart, sliceEnd]} (fractions of the
-     * full model height) and returns the colors for a top-to-bottom gradient across that slice. The
-     * slice's own model stops are included so the sheen/foot shape is preserved rather than reduced
-     * to a straight two-color ramp.
-     */
-    @NonNull
-    private int[] dockGlassLightModelSlice(int accent, int topSheenAlpha, int midSheenAlpha,
-                                           int bottomFootAlpha, float sliceStart, float sliceEnd) {
-        float start = Math.max(0f, Math.min(1f, sliceStart));
-        float end = Math.max(start, Math.min(1f, sliceEnd));
-        java.util.List<Integer> colors = new java.util.ArrayList<>();
-        colors.add(dockGlassLightModelColorAt(start, accent, topSheenAlpha, midSheenAlpha, bottomFootAlpha));
-        for (float stop : DOCK_GLASS_MODEL_STOPS) {
-            if (stop > start && stop < end) {
-                colors.add(dockGlassLightModelColorAt(stop, accent, topSheenAlpha, midSheenAlpha, bottomFootAlpha));
-            }
-        }
-        colors.add(dockGlassLightModelColorAt(end, accent, topSheenAlpha, midSheenAlpha, bottomFootAlpha));
-        int[] result = new int[colors.size()];
-        for (int i = 0; i < result.length; i++) {
-            result[i] = colors.get(i);
-        }
-        return result;
-    }
-
-    /**
-     * Color of the vertical glass light model at {@code pos} in [0,1]: accent sheen at the top
-     * ([0,0.33]), fading to a clear see-through middle ([0.33,0.67]), then to a dark foot at the
-     * bottom ([0.67,1]). No broad white wash — a near-white sheen reads as frosted plastic.
-     */
-    private int dockGlassLightModelColorAt(float pos, int accent, int topSheenAlpha,
-                                           int midSheenAlpha, int bottomFootAlpha) {
-        int sheenTop = withAlphaComponent(accent, topSheenAlpha);
-        int sheenMid = withAlphaComponent(accent, midSheenAlpha);
-        int clear = Color.TRANSPARENT;
-        int foot = withAlphaComponent(Color.BLACK, bottomFootAlpha);
-        if (pos <= 0.33f) {
-            return lerpArgb(sheenTop, sheenMid, pos / 0.33f);
-        }
-        if (pos <= 0.67f) {
-            return lerpArgb(sheenMid, clear, (pos - 0.33f) / 0.34f);
-        }
-        return lerpArgb(clear, foot, (pos - 0.67f) / 0.33f);
-    }
-
-    /** Straight ARGB interpolation (alpha included) between two colors. */
-    private static int lerpArgb(int a, int b, float t) {
-        t = t < 0f ? 0f : (t > 1f ? 1f : t);
-        int aa = Color.alpha(a), ab = Color.alpha(b);
-        int ra = Color.red(a), rb = Color.red(b);
-        int ga = Color.green(a), gb = Color.green(b);
-        int ba = Color.blue(a), bb = Color.blue(b);
-        return Color.argb(
-            Math.round(aa + (ab - aa) * t),
-            Math.round(ra + (rb - ra) * t),
-            Math.round(ga + (gb - ga) * t),
-            Math.round(ba + (bb - ba) * t));
-    }
-
     /** A tiled grain layer whose strength is controlled only by the grain preference. */
     @NonNull
     private Drawable buildDockGrainLayer(int grainPercent) {
@@ -1771,14 +1697,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     static boolean dockBlurEnabled(int blurRadiusDp) {
-        return blurRadiusDp > 0;
+        return DockGlassRendering.blurEnabled(blurRadiusDp);
     }
 
     /** Literal opacity endpoint: 100% is an opaque material and 0% is fully transparent. */
     static final int DOCK_GLASS_BASE_MAX_ALPHA = 255;
     static int dockGlassBaseAlpha(float opacity) {
-        float clampedOpacity = Math.max(0f, Math.min(1f, opacity));
-        return Math.round(clampedOpacity * DOCK_GLASS_BASE_MAX_ALPHA);
+        return DockGlassRendering.baseAlpha(opacity);
     }
 
     /** Cached light-scatter filter applied to the blurred wallpaper backdrop. */

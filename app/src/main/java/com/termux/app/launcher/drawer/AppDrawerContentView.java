@@ -1695,10 +1695,6 @@ public final class AppDrawerContentView extends FrameLayout
             SystemClock.uptimeMillis());
     }
 
-    private boolean isGridScrollable() {
-        return mGrid.canScrollVertically(-1) || mGrid.canScrollVertically(1);
-    }
-
     private static boolean isScrollable(@NonNull RecyclerView recycler) {
         return recycler.canScrollVertically(-1) || recycler.canScrollVertically(1);
     }

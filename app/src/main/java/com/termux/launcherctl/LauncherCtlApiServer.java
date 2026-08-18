@@ -1296,7 +1296,7 @@ public class LauncherCtlApiServer {
         }
 
         String taiScript =
-            "#!/data/data/com.termux/files/usr/bin/sh\n" +
+            "#!" + TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/sh\n" +
             "set -eu\n" +
             "print_help() {\n" +
             "  cat <<'EOF'\n" +
@@ -1499,7 +1499,7 @@ public class LauncherCtlApiServer {
         // launcherctl survives the agent/MCP strip as a launch-only client: `launcherctl launch`
         // is what old tmux configs and shell binds call, and keeping it working costs one route.
         String launcherctlScript =
-            "#!/data/data/com.termux/files/usr/bin/sh\n" +
+            "#!" + TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/sh\n" +
             "set -eu\n" +
             "print_help() {\n" +
             "  cat <<'EOF'\n" +

@@ -1,7 +1,6 @@
 package com.termux.app.launcher.widget;
 
 import android.content.Context;
-import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.view.Gravity;
 import android.view.MotionEvent;
