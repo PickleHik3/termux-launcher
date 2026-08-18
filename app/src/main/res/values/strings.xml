@@ -1477,4 +1477,11 @@
     <string name="onboarding_page_three_tip_two">Tap CPU, memory, or weather for details</string>
     <string name="onboarding_page_three_footer">Long-press a surface to personalize it</string>
 
+    <!-- VAJ edition (io.vaj.tl) deprecation notice, shown once after the update that adds it. -->
+    <string name="vaj_deprecation_title">This edition is being deprecated</string>
+    <string name="vaj_deprecation_message">Hi. This VAJ build of Termux Launcher (io.vaj.tl) is planned for deprecation. It runs on a small APT repository I maintain by hand, and keeping its crucial packages updated has become almost impossible for one person. In an age where AI-generated code is running wild, packages that stop receiving security updates are a real risk, and I would rather not leave that on your phone.\n\nI highly recommend moving to the Nix edition of Termux Launcher, which is based on a Nix-on-Droid style fork of Termux. It installs alongside this build and pulls prebuilt packages straight from the official nixpkgs binary cache, so updates no longer depend on me.\n\nThe migration guide walks you through the switch. If you have a specific need the Nix edition does not cover, open a GitHub issue and tell me. Thank you for using it.</string>
+    <string name="vaj_deprecation_open_guide">Migration guide</string>
+    <string name="vaj_deprecation_dismiss">Dismiss</string>
+    <string name="vaj_deprecation_do_not_show_again">Do not show this again</string>
+
 </resources>
