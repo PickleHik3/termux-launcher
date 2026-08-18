@@ -16,6 +16,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -37,11 +38,26 @@ public final class FirstLaunchOnboarding {
     private FirstLaunchOnboarding() {}
 
     public static void showIfNeeded(@NonNull Activity activity, boolean force) {
+        showIfNeeded(activity, force, null);
+    }
+
+    /**
+     * @param onFinished run once the onboarding is out of the way — immediately when it is not
+     *                   needed, otherwise after it animates away — so a follow-up prompt never
+     *                   opens behind the full-screen pages.
+     */
+    public static void showIfNeeded(@NonNull Activity activity, boolean force,
+                                    @Nullable Runnable onFinished) {
         SharedPreferences preferences = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        if (!force && preferences.getInt(KEY_COMPLETED_VERSION, 0) >= CURRENT_VERSION) return;
+        if (!force && preferences.getInt(KEY_COMPLETED_VERSION, 0) >= CURRENT_VERSION) {
+            if (onFinished != null) onFinished.run();
+            return;
+        }
         ViewGroup host = activity.findViewById(android.R.id.content);
+        // An onboarding already on screen owns the callback of whoever started it; a second
+        // request must not run this one's follow-up early.
         if (host == null || host.findViewWithTag(Controller.ROOT_TAG) != null) return;
-        new Controller(activity, host, preferences).show();
+        new Controller(activity, host, preferences, onFinished).show();
     }
 
     private static final class Controller {
@@ -54,6 +70,7 @@ public final class FirstLaunchOnboarding {
         private final Activity activity;
         private final ViewGroup host;
         private final SharedPreferences preferences;
+        @Nullable private final Runnable onFinished;
         private final int oldStatusBarColor;
         private final int oldNavigationBarColor;
         private final int oldSystemUiVisibility;
@@ -63,10 +80,12 @@ public final class FirstLaunchOnboarding {
         private final LinearLayout dots;
         private final MaterialButton primaryButton;
 
-        Controller(Activity activity, ViewGroup host, SharedPreferences preferences) {
+        Controller(Activity activity, ViewGroup host, SharedPreferences preferences,
+                   @Nullable Runnable onFinished) {
             this.activity = activity;
             this.host = host;
             this.preferences = preferences;
+            this.onFinished = onFinished;
             Window window = activity.getWindow();
             oldStatusBarColor = window.getStatusBarColor();
             oldNavigationBarColor = window.getNavigationBarColor();
@@ -213,6 +232,7 @@ public final class FirstLaunchOnboarding {
                     window.setStatusBarColor(oldStatusBarColor);
                     window.setNavigationBarColor(oldNavigationBarColor);
                     window.getDecorView().setSystemUiVisibility(oldSystemUiVisibility);
+                    if (onFinished != null) onFinished.run();
                 }).start();
         }
 
