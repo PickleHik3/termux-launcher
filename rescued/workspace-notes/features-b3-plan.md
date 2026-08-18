@@ -230,7 +230,7 @@ present; column count computed from width minus the column).
 > showing the drawer open and where the target actually is. Where captures are expensive (HTC), hold the
 > pointer with `input motionevent DOWN` and inspect before releasing.
 
-**Nothing Phone `100.101.173.85:5555`** (1080x2412, rounded, full catalogue, fast capture) — the primary rig;
+**Nothing Phone `127.0.0.1:5555`** (1080x2412, rounded, full catalogue, fast capture) — the primary rig;
 capture freely. 1) B-1/B-2 regression sweep. 2) Rope on a slow open: captures at p≈0.4/0.7/0.95 — column absent
 below ~1/3 travel, enters from the right, **bottom letters visibly lag the top**, still settling in the last.
 3) Rope on a fast flick: captures right after release and ~150ms later — the tail must be on opposite sides of
