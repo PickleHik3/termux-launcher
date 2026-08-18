@@ -2,6 +2,7 @@ package com.termux.app.terminal;
 
 import android.content.Context;
 import android.graphics.Camera;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
@@ -70,6 +71,42 @@ public final class TerminalClockWidget extends View {
     private final Rect mTextBounds = new Rect();
     private final RectF mRect = new RectF();
     private final RectF mFlipMetaCell = new RectF();
+    /**
+     * Scratch rects and cached flip gradients.
+     *
+     * <p>The flip face repaints at vsync for as long as a digit is turning, and it used to build a
+     * fresh {@link LinearGradient} for every card half and every hinge clip on every one of those
+     * frames — six cards, four shaders each, forty times a second. Each one is a native Skia
+     * object held until the collector gets to it, which is what walked the process's native heap
+     * up into the hundreds of megabytes while the pane was open. The gradients depend on nothing
+     * but the card's vertical extent and the resolved palette, so they are built once and reused.
+     */
+    private final RectF mFlipHalfClip = new RectF();
+    private final RectF mFlipHingeLeft = new RectF();
+    private final RectF mFlipHingeRight = new RectF();
+    private int mFlipShaderGeneration;
+    @Nullable private Bitmap mFullHingeBitmap;
+    private int mFullHingeWidth;
+    private int mFullHingeHeight;
+    private int mFullHingePad;
+    private int mFullHingeGeneration = -1;
+    @Nullable private Bitmap mCompactHingeBitmap;
+    private int mCompactHingeWidth;
+    private int mCompactHingeHeight;
+    private int mCompactHingePad;
+    private int mCompactHingeGeneration = -1;
+    @Nullable private LinearGradient mUpperFlipShader;
+    private float mUpperFlipTop = Float.NaN;
+    private float mUpperFlipBottom = Float.NaN;
+    private int mUpperFlipShaderGeneration = -1;
+    @Nullable private LinearGradient mLowerFlipShader;
+    private float mLowerFlipTop = Float.NaN;
+    private float mLowerFlipBottom = Float.NaN;
+    private int mLowerFlipShaderGeneration = -1;
+    @Nullable private LinearGradient mHingeFlipShader;
+    private float mHingeFlipTop = Float.NaN;
+    private float mHingeFlipBottom = Float.NaN;
+    private int mHingeFlipShaderGeneration = -1;
     private final char[] mDigits = new char[4];
     private final char[] mOldDigits = new char[4];
     private final long[] mChangedAt = new long[4];
@@ -298,6 +335,8 @@ public final class TerminalClockWidget extends View {
 
     /** Card stock and hardware stay inside the resolved Material surface family. */
     private void resolveFlipColors() {
+        // Any repalette retires the cached gradients; they carry the old colours.
+        mFlipShaderGeneration++;
         mDarkFlipStock = ColorUtils.calculateLuminance(mSurfaceBase) < .5;
         if (mDarkFlipStock) {
             mUpperFlipColors[0] = mSurfacePanel;
@@ -801,16 +840,16 @@ public final class TerminalClockWidget extends View {
     private void drawFullFlipHalf(Canvas canvas, RectF card, boolean top, char digit,
                                   boolean drawDigit, float digitBaseline, float foldShade) {
         float split = card.centerY();
-        RectF clip = top
-            ? new RectF(card.left, card.top, card.right, split)
-            : new RectF(card.left, split, card.right, card.bottom);
+        if (top) {
+            mFlipHalfClip.set(card.left, card.top, card.right, split);
+        } else {
+            mFlipHalfClip.set(card.left, split, card.right, card.bottom);
+        }
         canvas.save();
-        canvas.clipRect(clip);
+        canvas.clipRect(mFlipHalfClip);
         mFillPaint.setShader(top
-            ? new LinearGradient(0f, card.top, 0f, split, mUpperFlipColors, UPPER_FLIP_STOPS,
-                Shader.TileMode.CLAMP)
-            : new LinearGradient(0f, split, 0f, card.bottom, mLowerFlipColors, LOWER_FLIP_STOPS,
-                Shader.TileMode.CLAMP));
+            ? upperFlipShader(card.top, split)
+            : lowerFlipShader(split, card.bottom));
         canvas.drawRoundRect(card, dp(1.5f), dp(1.5f), mFillPaint);
         mFillPaint.setShader(null);
         if (drawDigit) {
@@ -853,27 +892,16 @@ public final class TerminalClockWidget extends View {
 
         float clipWidth = dp(3.2f), clipHeight = dp(7.4f);
         float clipTop = split - clipHeight / 2f;
-        RectF leftClip = new RectF(card.left - 1f, clipTop,
+        mFlipHingeLeft.set(card.left - 1f, clipTop,
             card.left - 1f + clipWidth, clipTop + clipHeight);
-        RectF rightClip = new RectF(card.right + 1f - clipWidth, clipTop,
+        mFlipHingeRight.set(card.right + 1f - clipWidth, clipTop,
             card.right + 1f, clipTop + clipHeight);
-        drawFullFlipHingeClip(canvas, leftClip);
-        drawFullFlipHingeClip(canvas, rightClip);
+        drawFullFlipHingeClip(canvas, mFlipHingeLeft);
+        drawFullFlipHingeClip(canvas, mFlipHingeRight);
     }
 
     private void drawFullFlipHingeClip(Canvas canvas, RectF clip) {
-        mFillPaint.setStyle(Paint.Style.FILL);
-        mFillPaint.setShader(new LinearGradient(0f, clip.top, 0f, clip.bottom, mHingeFlipColors,
-            HINGE_FLIP_STOPS, Shader.TileMode.CLAMP));
-        mFillPaint.setShadowLayer(dp(.7f), 0f, dp(.35f), mFlipClipShadow);
-        canvas.drawRoundRect(clip, dp(.7f), dp(.7f), mFillPaint);
-        mFillPaint.clearShadowLayer();
-        mFillPaint.setShader(null);
-        mFillPaint.setStyle(Paint.Style.STROKE);
-        mFillPaint.setStrokeWidth(1f);
-        mFillPaint.setColor(mFlipClipOutline);
-        canvas.drawRoundRect(clip, dp(.7f), dp(.7f), mFillPaint);
-        mFillPaint.setStyle(Paint.Style.FILL);
+        drawCachedHingeClip(canvas, clip, dp(.7f), 0f, dp(.35f), dp(.7f), true);
     }
 
     private void drawFullFlipMetaColumn(Canvas canvas, float x, float digitBaseline, long now) {
@@ -1032,16 +1060,16 @@ public final class TerminalClockWidget extends View {
     private void drawCompactFlipHalf(Canvas canvas, RectF card, boolean top, char digit,
                                      boolean drawDigit, float digitBaseline, float foldShade) {
         float split = card.centerY();
-        RectF clip = top
-            ? new RectF(card.left, card.top, card.right, split)
-            : new RectF(card.left, split, card.right, card.bottom);
+        if (top) {
+            mFlipHalfClip.set(card.left, card.top, card.right, split);
+        } else {
+            mFlipHalfClip.set(card.left, split, card.right, card.bottom);
+        }
         canvas.save();
-        canvas.clipRect(clip);
+        canvas.clipRect(mFlipHalfClip);
         mFillPaint.setShader(top
-            ? new LinearGradient(0f, card.top, 0f, split, mUpperFlipColors, UPPER_FLIP_STOPS,
-                Shader.TileMode.CLAMP)
-            : new LinearGradient(0f, split, 0f, card.bottom, mLowerFlipColors, LOWER_FLIP_STOPS,
-                Shader.TileMode.CLAMP));
+            ? upperFlipShader(card.top, split)
+            : lowerFlipShader(split, card.bottom));
         canvas.drawRoundRect(card, dp(1f), dp(1f), mFillPaint);
         mFillPaint.setShader(null);
         if (drawDigit) {
@@ -1084,27 +1112,72 @@ public final class TerminalClockWidget extends View {
 
         float clipWidth = dp(2.2f), clipHeight = dp(5f);
         float clipTop = split - clipHeight / 2f;
-        RectF leftClip = new RectF(card.left - 1f, clipTop,
+        mFlipHingeLeft.set(card.left - 1f, clipTop,
             card.left - 1f + clipWidth, clipTop + clipHeight);
-        RectF rightClip = new RectF(card.right + 1f - clipWidth, clipTop,
+        mFlipHingeRight.set(card.right + 1f - clipWidth, clipTop,
             card.right + 1f, clipTop + clipHeight);
-        drawCompactFlipHingeClip(canvas, leftClip);
-        drawCompactFlipHingeClip(canvas, rightClip);
+        drawCompactFlipHingeClip(canvas, mFlipHingeLeft);
+        drawCompactFlipHingeClip(canvas, mFlipHingeRight);
     }
 
     private void drawCompactFlipHingeClip(Canvas canvas, RectF clip) {
-        mFillPaint.setStyle(Paint.Style.FILL);
-        mFillPaint.setShader(new LinearGradient(0f, clip.top, 0f, clip.bottom, mHingeFlipColors,
-            HINGE_FLIP_STOPS, Shader.TileMode.CLAMP));
-        mFillPaint.setShadowLayer(dp(.5f), 0f, dp(.25f), mFlipClipShadow);
-        canvas.drawRoundRect(clip, dp(.5f), dp(.5f), mFillPaint);
-        mFillPaint.clearShadowLayer();
-        mFillPaint.setShader(null);
-        mFillPaint.setStyle(Paint.Style.STROKE);
-        mFillPaint.setStrokeWidth(1f);
-        mFillPaint.setColor(mFlipClipOutline);
-        canvas.drawRoundRect(clip, dp(.5f), dp(.5f), mFillPaint);
-        mFillPaint.setStyle(Paint.Style.FILL);
+        drawCachedHingeClip(canvas, clip, dp(.5f), 0f, dp(.25f), dp(.5f), false);
+    }
+
+    /**
+     * The hinge clips are the same little rounded slab painted four times per card, and painting
+     * one costs a gradient, a blur mask ({@code setShadowLayer} rasterizes one per draw call) and
+     * two round rects. Every card is the same size, so render the slab once into a bitmap and blit
+     * it after that: the flip face draws 24 of these per frame while a digit turns.
+     */
+    private void drawCachedHingeClip(Canvas canvas, RectF clip, float shadowRadius,
+                                     float shadowDx, float shadowDy, float corner, boolean full) {
+        int width = Math.round(clip.width());
+        int height = Math.round(clip.height());
+        if (width <= 0 || height <= 0) return;
+        int pad = (int) Math.ceil(shadowRadius + Math.abs(shadowDy) + 1f);
+        Bitmap cached = full ? mFullHingeBitmap : mCompactHingeBitmap;
+        boolean stale = cached == null || cached.isRecycled()
+            || (full ? mFullHingeGeneration : mCompactHingeGeneration) != mFlipShaderGeneration
+            || (full ? mFullHingeWidth : mCompactHingeWidth) != width
+            || (full ? mFullHingeHeight : mCompactHingeHeight) != height;
+        if (stale) {
+            cached = Bitmap.createBitmap(width + pad * 2, height + pad * 2, Bitmap.Config.ARGB_8888);
+            Canvas into = new Canvas(cached);
+            RectF slab = new RectF(pad, pad, pad + width, pad + height);
+            mFillPaint.setStyle(Paint.Style.FILL);
+            // The cached gradient is keyed on absolute y; inside the bitmap the slab starts at pad.
+            mFillPaint.setShader(new LinearGradient(0f, slab.top, 0f, slab.bottom, mHingeFlipColors,
+                HINGE_FLIP_STOPS, Shader.TileMode.CLAMP));
+            mFillPaint.setShadowLayer(shadowRadius, shadowDx, shadowDy, mFlipClipShadow);
+            into.drawRoundRect(slab, corner, corner, mFillPaint);
+            mFillPaint.clearShadowLayer();
+            mFillPaint.setShader(null);
+            mFillPaint.setStyle(Paint.Style.STROKE);
+            mFillPaint.setStrokeWidth(1f);
+            mFillPaint.setColor(mFlipClipOutline);
+            into.drawRoundRect(slab, corner, corner, mFillPaint);
+            mFillPaint.setStyle(Paint.Style.FILL);
+            if (full) {
+                if (mFullHingeBitmap != null && !mFullHingeBitmap.isRecycled())
+                    mFullHingeBitmap.recycle();
+                mFullHingeBitmap = cached;
+                mFullHingeWidth = width;
+                mFullHingeHeight = height;
+                mFullHingePad = pad;
+                mFullHingeGeneration = mFlipShaderGeneration;
+            } else {
+                if (mCompactHingeBitmap != null && !mCompactHingeBitmap.isRecycled())
+                    mCompactHingeBitmap.recycle();
+                mCompactHingeBitmap = cached;
+                mCompactHingeWidth = width;
+                mCompactHingeHeight = height;
+                mCompactHingePad = pad;
+                mCompactHingeGeneration = mFlipShaderGeneration;
+            }
+        }
+        int offset = full ? mFullHingePad : mCompactHingePad;
+        canvas.drawBitmap(cached, clip.left - offset, clip.top - offset, null);
     }
 
     // ---- LCD --------------------------------------------------------------
@@ -1633,19 +1706,38 @@ public final class TerminalClockWidget extends View {
     }
 
     private static Typeface thinTypeface() {
-        return Typeface.create("sans-serif-thin", Typeface.NORMAL);
+        return cachedTypeface("sans-serif-thin", Typeface.NORMAL);
     }
 
     private static Typeface lightTypeface() {
-        return Typeface.create("sans-serif-light", Typeface.NORMAL);
+        return cachedTypeface("sans-serif-light", Typeface.NORMAL);
     }
 
     private static Typeface mediumTypeface() {
-        return Typeface.create("sans-serif-medium", Typeface.NORMAL);
+        return cachedTypeface("sans-serif-medium", Typeface.NORMAL);
+    }
+
+    /**
+     * {@link Typeface#create(String, int)} is not a lookup — it consults the system font list and
+     * builds a face — and the flip face asks for one on every card, on every frame. Memoize the
+     * handful of families this widget ever names.
+     */
+    private static final java.util.Map<String, Typeface> TYPEFACES =
+        new java.util.concurrent.ConcurrentHashMap<>(8);
+
+    @NonNull
+    private static Typeface cachedTypeface(@NonNull String family, int style) {
+        String key = family + '/' + style;
+        Typeface cached = TYPEFACES.get(key);
+        if (cached == null) {
+            cached = Typeface.create(family, style);
+            TYPEFACES.put(key, cached);
+        }
+        return cached;
     }
 
     private static Typeface condensedBoldTypeface() {
-        return Typeface.create("sans-serif-condensed", Typeface.BOLD);
+        return cachedTypeface("sans-serif-condensed", Typeface.BOLD);
     }
 
     private static Typeface condensedMediumTypeface() {
@@ -1713,6 +1805,45 @@ public final class TerminalClockWidget extends View {
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB: return "Slab";
             default: return "Flip";
         }
+    }
+
+    @NonNull
+    private LinearGradient upperFlipShader(float top, float bottom) {
+        if (mUpperFlipShader == null || mUpperFlipShaderGeneration != mFlipShaderGeneration
+            || mUpperFlipTop != top || mUpperFlipBottom != bottom) {
+            mUpperFlipShader = new LinearGradient(0f, top, 0f, bottom, mUpperFlipColors,
+                UPPER_FLIP_STOPS, Shader.TileMode.CLAMP);
+            mUpperFlipTop = top;
+            mUpperFlipBottom = bottom;
+            mUpperFlipShaderGeneration = mFlipShaderGeneration;
+        }
+        return mUpperFlipShader;
+    }
+
+    @NonNull
+    private LinearGradient lowerFlipShader(float top, float bottom) {
+        if (mLowerFlipShader == null || mLowerFlipShaderGeneration != mFlipShaderGeneration
+            || mLowerFlipTop != top || mLowerFlipBottom != bottom) {
+            mLowerFlipShader = new LinearGradient(0f, top, 0f, bottom, mLowerFlipColors,
+                LOWER_FLIP_STOPS, Shader.TileMode.CLAMP);
+            mLowerFlipTop = top;
+            mLowerFlipBottom = bottom;
+            mLowerFlipShaderGeneration = mFlipShaderGeneration;
+        }
+        return mLowerFlipShader;
+    }
+
+    @NonNull
+    private LinearGradient hingeFlipShader(float top, float bottom) {
+        if (mHingeFlipShader == null || mHingeFlipShaderGeneration != mFlipShaderGeneration
+            || mHingeFlipTop != top || mHingeFlipBottom != bottom) {
+            mHingeFlipShader = new LinearGradient(0f, top, 0f, bottom, mHingeFlipColors,
+                HINGE_FLIP_STOPS, Shader.TileMode.CLAMP);
+            mHingeFlipTop = top;
+            mHingeFlipBottom = bottom;
+            mHingeFlipShaderGeneration = mFlipShaderGeneration;
+        }
+        return mHingeFlipShader;
     }
 
     private boolean hasRunningAnimation(long now) {
