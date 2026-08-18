@@ -633,7 +633,13 @@ public final class ExtraKeysView extends GridLayout {
                     }
                 });
 
-                button.setText(buttonInfo.getDisplay());
+                CharSequence fullDisplay = buttonInfo.getDisplay();
+                String display = fullDisplay == null ? "" : fullDisplay.toString();
+                boolean landscapeCaps = getResources().getConfiguration().orientation
+                    == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+                button.setText(landscapeCaps && display.codePointCount(0, display.length()) > 4
+                    ? truncateDisplay(display, 3) + "…" : display);
+                button.setContentDescription(display);
                 button.setTextColor(mButtonTextColor);
                 button.setAllCaps(mButtonTextAllCaps);
                 // Keep multi-letter labels (SHFT, CTRL) on one line. The active/sticky background is
@@ -647,6 +653,11 @@ public final class ExtraKeysView extends GridLayout {
                 // clips the key to its top half. Zero it so the cap fills the full button height.
                 button.setInsetTop(0);
                 button.setInsetBottom(0);
+                if (landscapeCaps) {
+                    button.setMinWidth(dp(40));
+                    button.setMaxWidth(dp(80));
+                    button.setBackground(buildLandscapeKeyBackground(mButtonBackgroundColor, false));
+                }
                 button.setOnClickListener(view -> {
                     performExtraKeyButtonHapticFeedback(view, buttonInfo, button);
                     onAnyExtraKeyButtonClick(view, buttonInfo, button);
@@ -771,8 +782,11 @@ public final class ExtraKeysView extends GridLayout {
                 } else {
                     param.height = 0;
                 }
-                param.setMargins(0, 0, 0, 0);
-                param.columnSpec = GridLayout.spec(col, GridLayout.FILL, 1.f);
+                int keyGap = landscapeCaps ? dp(3) : 0;
+                param.setMargins(keyGap, keyGap, keyGap, keyGap);
+                float widthUnits = landscapeCaps
+                    ? Math.max(2f, Math.min(4f, display.codePointCount(0, display.length()))) : 1f;
+                param.columnSpec = GridLayout.spec(col, GridLayout.FILL, widthUnits);
                 param.rowSpec = GridLayout.spec(row, GridLayout.FILL, 1.f);
                 button.setLayoutParams(param);
                 addView(button);
@@ -954,7 +968,35 @@ public final class ExtraKeysView extends GridLayout {
         // Feedback is now the glyph glow, not a pill: keep the background flat in every state and let
         // the glow (plus the active text colour) carry the pressed / latched indication.
         button.setTextColor(activeText ? mButtonActiveTextColor : mButtonTextColor);
-        button.setBackground(new ColorDrawable(mButtonBackgroundColor));
+        boolean landscape = getResources().getConfiguration().orientation
+            == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        button.setBackground(landscape
+            ? buildLandscapeKeyBackground(activeText ? mButtonActiveBackgroundColor
+                : mButtonBackgroundColor, activeText)
+            : new ColorDrawable(mButtonBackgroundColor));
+    }
+
+    private GradientDrawable buildLandscapeKeyBackground(int color, boolean active) {
+        int sourceAlpha = Color.alpha(color);
+        int alpha = Math.max(sourceAlpha, active ? 176 : 118);
+        GradientDrawable glass = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+            new int[] {
+                Color.argb(Math.min(210, alpha + 28), 255, 255, 255),
+                Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
+            });
+        glass.setCornerRadius(dp(9));
+        glass.setStroke(dp(1), Color.argb(active ? 190 : 118, 255, 255, 255));
+        return glass;
+    }
+
+    private static String truncateDisplay(@NonNull String text, int codePoints) {
+        int end = text.offsetByCodePoints(0, Math.min(codePoints,
+            text.codePointCount(0, text.length())));
+        return text.substring(0, end);
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     private void animateKeyCapDip(@NonNull MaterialButton button, @NonNull KeyVisualState state) {

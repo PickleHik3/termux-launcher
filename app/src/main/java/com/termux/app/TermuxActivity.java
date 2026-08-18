@@ -4373,7 +4373,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (terminalToolbarViewPager != null) {
                 terminalToolbarViewPager.setVisibility(View.GONE);
             }
-            if (azRow != null) {
+            if (azRow != null && !isLandscapeOrientation()) {
                 azRow.setVisibility(View.GONE);
             }
             if (azFxOverlay != null) {
@@ -4409,7 +4409,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (appsBarViewPager != null) {
             appsBarViewPager.setVisibility(state.appsRowEnabled ? View.VISIBLE : View.GONE);
         }
-        if (!state.appsRowEnabled) {
+        if (!state.appsRowEnabled && !isLandscapeOrientation()) {
             mSuggestionBarExplicitSearchActive = false;
             resetAzGestureState(false, true);
         }
@@ -4421,7 +4421,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 state.extraKeysRowEnabled ? View.VISIBLE : View.GONE);
         }
         if (azRow != null) {
-            azRow.setVisibility(state.azRowEnabled ? View.VISIBLE : View.GONE);
+            azRow.setVisibility(isLandscapeOrientation()
+                && mPreferences != null && mPreferences.isAppLauncherAzRowEnabled()
+                ? View.VISIBLE : (state.azRowEnabled ? View.VISIBLE : View.GONE));
         }
         if (azFxUnderlay != null) {
             azFxUnderlay.setVisibility(View.GONE);
@@ -4710,12 +4712,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastDisplayCutoutInsetLeft = cutoutInsets.left;
         mLastDisplayCutoutInsetRight = cutoutInsets.right;
         mLastNavigationBarInsetBottom = insetsCompat.getInsets(Type.navigationBars()).bottom;
+        updateLandscapeStatusRail();
         boolean railActive = isDockRailActive();
         boolean railOnRight = isDockRailOnRight();
-        int leftContentInsetPx = railActive && !railOnRight
-            ? resolveDockRailWidthPx() : cutoutInsets.left;
-        int rightContentInsetPx = railActive && railOnRight
-            ? resolveDockRailWidthPx() : cutoutInsets.right;
+        int leftContentInsetPx;
+        int rightContentInsetPx;
+        if (isLandscapeOrientation()) {
+            int statusWidthPx = resolveLandscapeStatusRailWidthPx();
+            leftContentInsetPx = !railOnRight && railActive
+                ? resolveDockRailWidthPx() : statusWidthPx;
+            rightContentInsetPx = railOnRight && railActive
+                ? resolveDockRailWidthPx() : statusWidthPx;
+        } else {
+            leftContentInsetPx = cutoutInsets.left;
+            rightContentInsetPx = cutoutInsets.right;
+        }
         View rootRelativeLayout = findViewById(R.id.activity_termux_root_relative_layout);
         if (rootRelativeLayout != null
             && (rootRelativeLayout.getPaddingLeft() != leftContentInsetPx
@@ -5659,6 +5670,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncAzScrubLettersAndTint();
             updateDockRailView();
         });
+        mSuggestionBarView.setExternalRailChangedListener(() -> {
+            View rail = findViewById(R.id.dock_rail_scroll);
+            if (rail != null) rail.post(this::updateDockRailView);
+        });
         mSuggestionBarView.setNotificationPopupInteractionListener(
             new SuggestionBarView.NotificationPopupInteractionListener() {
                 @Override
@@ -6114,6 +6129,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @NonNull AzScrubRowView.GesturePhase phase
     ) {
         if (!isAzRowEnabled() || mSuggestionBarView == null || mAzScrubRowView == null) {
+            return;
+        }
+
+        if (isLandscapeOrientation()) {
+            if (letter == AzScrubRowView.PINNED_APPS_SYMBOL) {
+                mSuggestionBarView.clearAzPreview();
+            } else if (phase == AzScrubRowView.GesturePhase.UP) {
+                mSuggestionBarView.persistAzPreview(letter, 0);
+            } else {
+                mSuggestionBarView.previewAzLetter(letter, 0, false);
+            }
             return;
         }
 
@@ -9300,8 +9326,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the rounded corners, partly under it.
      */
     private static final float DOCK_RAIL_EDGE_MARGIN_DP = 10f;
-    private static final float DOCK_RAIL_ICON_SIZE_DP = 38f;
-    private static final float DOCK_RAIL_ICON_SPACING_DP = 10f;
+    private static final float DOCK_RAIL_ICON_SIZE_DP = 28f;
+    private static final float DOCK_RAIL_ICON_SPACING_DP = 1.5f;
+    private static final float STATUS_RAIL_CONTENT_WIDTH_DP = 58f;
+    private int mPortraitStatusHostVisibility = View.VISIBLE;
 
     /** Horizontal display-cutout insets from the last insets pass; the rail never draws narrower. */
     private int mLastDisplayCutoutInsetLeft;
@@ -9312,7 +9340,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean isDockRailActive() {
         return isLandscapeOrientation()
             && mPreferences != null
-            && mPreferences.isAppLauncherAppsRowEnabled();
+            && (mPreferences.isAppLauncherAppsRowEnabled()
+                || mPreferences.isAppLauncherAzRowEnabled());
     }
 
     private boolean isDockRailOnRight() {
@@ -9339,13 +9368,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * ran underneath them.
      */
     private int resolveDockRailWidthPx() {
-        return resolveDockRailEdgeInsetPx() + Math.max(Math.round(dpToPx(DOCK_RAIL_MIN_WIDTH_DP)),
+        return Math.max(Math.round(dpToPx(DOCK_RAIL_MIN_WIDTH_DP)),
             Math.round(dpToPx(DOCK_RAIL_ICON_SIZE_DP + 2 * DOCK_RAIL_EDGE_MARGIN_DP)));
     }
 
     /** The cutout inset on the edge the rail is docked to; zero on a device without one there. */
     private int resolveDockRailEdgeInsetPx() {
         return isDockRailOnRight() ? mLastDisplayCutoutInsetRight : mLastDisplayCutoutInsetLeft;
+    }
+
+    private int resolveLandscapeStatusRailWidthPx() {
+        return Math.round(dpToPx(STATUS_RAIL_CONTENT_WIDTH_DP));
     }
 
     /**
@@ -9397,59 +9430,173 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the padded content root, so it lives in the same column the terminal is inset from.
      */
     private void updateDockRailView() {
+        LinearLayout railContainer = findViewById(R.id.dock_rail_container);
         DockRailScrollView railScroll = findViewById(R.id.dock_rail_scroll);
         LinearLayout railList = findViewById(R.id.dock_rail_list);
-        if (railScroll == null || railList == null)
+        if (railContainer == null || railScroll == null || railList == null)
             return;
+        updateLandscapeStatusRail();
         if (!isDockRailActive() || mSuggestionBarView == null) {
             railScroll.setDrawerPullListener(null);
-            railScroll.setVisibility(View.GONE);
+            railContainer.setVisibility(View.GONE);
             railList.removeAllViews();
+            restoreAzRowToPortraitHost();
             return;
         }
-        int railWidthPx = resolveDockRailWidthPx();
-        ViewGroup.LayoutParams scrollParams = railScroll.getLayoutParams();
-        if (scrollParams != null && scrollParams.width != railWidthPx) {
-            scrollParams.width = railWidthPx;
-            railScroll.setLayoutParams(scrollParams);
-        }
-        if (scrollParams instanceof FrameLayout.LayoutParams) {
-            int gravity = (isDockRailOnRight() ? Gravity.END : Gravity.START) | Gravity.TOP;
-            FrameLayout.LayoutParams frameParams = (FrameLayout.LayoutParams) scrollParams;
-            if (frameParams.gravity != gravity) {
-                frameParams.gravity = gravity;
-                railScroll.setLayoutParams(frameParams);
-            }
-        }
+        int railContentWidthPx = resolveDockRailWidthPx();
+        int railCutoutPx = resolveDockRailEdgeInsetPx();
+        FrameLayout.LayoutParams containerParams =
+            (FrameLayout.LayoutParams) railContainer.getLayoutParams();
+        containerParams.width = railContentWidthPx + railCutoutPx;
+        containerParams.gravity = (isDockRailOnRight() ? Gravity.END : Gravity.START) | Gravity.TOP;
+        railContainer.setLayoutParams(containerParams);
+        railContainer.setTranslationX(isDockRailOnRight() ? railCutoutPx : -railCutoutPx);
         railScroll.setDrawerPullListener(mDockRailDrawerPullListener);
-        // Padded on all four sides rather than only vertically: the docked edge carries its cutout
-        // inset plus a margin, and the scroll range clears the status and navigation bars, so the
-        // first and last icons cannot end up under a system bar when the rail is scrolled.
+        railContainer.setBackground(buildDockGlassSurface(
+            mPreferences != null ? mPreferences.getAppBarOpacity() / 100f : .8f,
+            0f, 1f, false));
         int verticalPadPx = Math.round(dpToPx(10));
         int edgeMarginPx = Math.round(dpToPx(DOCK_RAIL_EDGE_MARGIN_DP));
-        int dockedEdgePadPx = resolveDockRailEdgeInsetPx() + edgeMarginPx;
-        railScroll.setPadding(isDockRailOnRight() ? edgeMarginPx : dockedEdgePadPx,
+        int dockedEdgePadPx = railCutoutPx + edgeMarginPx;
+        railContainer.setPadding(isDockRailOnRight() ? edgeMarginPx : dockedEdgePadPx,
             mLastStatusBarInsetTop + verticalPadPx,
             isDockRailOnRight() ? dockedEdgePadPx : edgeMarginPx,
             mLastNavigationBarInsetBottom + verticalPadPx);
-        railScroll.setClipToPadding(false);
         railList.removeAllViews();
         int iconSizePx = Math.round(dpToPx(DOCK_RAIL_ICON_SIZE_DP));
         int spacingPx = Math.round(dpToPx(DOCK_RAIL_ICON_SPACING_DP));
-        for (com.termux.app.launcher.model.LauncherAppEntry entry
-                : mSuggestionBarView.getDockRailEntries()) {
+        java.util.List<com.termux.app.launcher.model.LauncherAppEntry> railEntries =
+            mSuggestionBarView.getDockRailEntries();
+        for (int railIndex = 0; railIndex < railEntries.size(); railIndex++) {
+            com.termux.app.launcher.model.LauncherAppEntry entry = railEntries.get(railIndex);
             if (entry.icon == null)
                 continue;
             ImageView iconView = new ImageView(this);
             iconView.setImageDrawable(entry.icon);
             iconView.setContentDescription(entry.label);
+            if (mSuggestionBarView.isSearchSurfaceActive()
+                && railIndex == mSuggestionBarView.getTerminalSearchFocusIndex()) {
+                android.graphics.drawable.GradientDrawable focus =
+                    new android.graphics.drawable.GradientDrawable();
+                focus.setColor(Color.argb(44, 255, 255, 255));
+                focus.setCornerRadius(dpToPx(12));
+                focus.setStroke(Math.round(dpToPx(2)), resolveDockAccentColor());
+                iconView.setBackground(focus);
+                iconView.setPadding(Math.round(dpToPx(3)), Math.round(dpToPx(3)),
+                    Math.round(dpToPx(3)), Math.round(dpToPx(3)));
+            }
             LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(iconSizePx, iconSizePx);
             iconParams.topMargin = spacingPx;
             iconParams.bottomMargin = spacingPx;
             railList.addView(iconView, iconParams);
             iconView.setOnClickListener(v -> mSuggestionBarView.launchEntryFromRail(entry, v));
         }
-        railScroll.setVisibility(railList.getChildCount() > 0 ? View.VISIBLE : View.GONE);
+        boolean azVisible = mAzScrubRowView != null
+            && mPreferences != null && mPreferences.isAppLauncherAzRowEnabled();
+        if (azVisible) {
+            if (mAzScrubRowView.getParent() instanceof ViewGroup)
+                ((ViewGroup) mAzScrubRowView.getParent()).removeView(mAzScrubRowView);
+            mAzScrubRowView.setVertical(true);
+            mAzScrubRowView.setVisibility(View.VISIBLE);
+            railContainer.addView(mAzScrubRowView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        } else {
+            azVisible = false;
+            if (mAzScrubRowView != null && mAzScrubRowView.getParent() == railContainer)
+                railContainer.removeView(mAzScrubRowView);
+        }
+        railContainer.setVisibility((railList.getChildCount() > 0
+            || azVisible)
+            ? View.VISIBLE : View.GONE);
+    }
+
+    /** Landscape gives each edge one vertical glass rail and removes both horizontal bands. */
+    private void updateLandscapeStatusRail() {
+        View statusRail = findViewById(R.id.landscape_status_rail);
+        LinearLayout statusContent = findViewById(R.id.landscape_status_rail_content);
+        LinearLayout statusWidgets = findViewById(R.id.terminal_status_widgets);
+        View topHost = findViewById(R.id.terminal_window_bar_host);
+        if (statusRail == null || statusContent == null || statusWidgets == null || topHost == null)
+            return;
+        if (!isLandscapeOrientation()) {
+            statusRail.setVisibility(View.GONE);
+            LinearLayout row = findViewById(R.id.terminal_status_row);
+            if (row != null && statusWidgets.getParent() != row) {
+                if (statusWidgets.getParent() instanceof ViewGroup)
+                    ((ViewGroup) statusWidgets.getParent()).removeView(statusWidgets);
+                statusWidgets.setOrientation(LinearLayout.HORIZONTAL);
+                row.addView(statusWidgets, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            }
+            topHost.setVisibility(mPortraitStatusHostVisibility);
+            androidx.core.view.WindowInsetsControllerCompat controller =
+                androidx.core.view.WindowCompat.getInsetsController(getWindow(), topHost);
+            controller.show(Type.statusBars());
+            restoreAzRowToPortraitHost();
+            return;
+        }
+
+        if (topHost.getVisibility() != View.GONE)
+            mPortraitStatusHostVisibility = topHost.getVisibility();
+        topHost.setVisibility(View.GONE);
+        androidx.core.view.WindowCompat.getInsetsController(getWindow(), topHost).hide(Type.statusBars());
+
+        if (statusWidgets.getParent() != statusContent) {
+            if (statusWidgets.getParent() instanceof ViewGroup)
+                ((ViewGroup) statusWidgets.getParent()).removeView(statusWidgets);
+            statusWidgets.setOrientation(LinearLayout.VERTICAL);
+            statusContent.addView(statusWidgets, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+        for (int i = 0; i < statusWidgets.getChildCount(); i++) {
+            View child = statusWidgets.getChildAt(i);
+            if (child instanceof com.termux.app.statusbar.MaterialDotSeparatorView) {
+                child.setVisibility(View.GONE);
+                continue;
+            }
+            LinearLayout.LayoutParams childParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                Math.round(dpToPx(28)));
+            childParams.topMargin = Math.round(dpToPx(2));
+            childParams.bottomMargin = Math.round(dpToPx(2));
+            child.setLayoutParams(childParams);
+        }
+        com.termux.app.statusbar.VerticalStatusClockView clock =
+            findViewById(R.id.landscape_status_clock);
+        if (clock != null && mPreferences != null)
+            clock.setStyle(mPreferences.getTopPaneClockStyle(),
+                mPreferences.isTopPaneClockAmPmEnabled());
+
+        boolean statusOnRight = !isDockRailOnRight();
+        int statusCutout = statusOnRight
+            ? mLastDisplayCutoutInsetRight : mLastDisplayCutoutInsetLeft;
+        int statusWidth = resolveLandscapeStatusRailWidthPx() + statusCutout;
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) statusRail.getLayoutParams();
+        params.width = statusWidth;
+        params.gravity = (statusOnRight ? Gravity.END : Gravity.START) | Gravity.TOP;
+        statusRail.setLayoutParams(params);
+        statusRail.setTranslationX(statusOnRight ? statusCutout : -statusCutout);
+        statusRail.setPadding(statusOnRight ? 0 : statusCutout,
+            Math.round(dpToPx(6)), statusOnRight ? statusCutout : 0,
+            mLastNavigationBarInsetBottom + Math.round(dpToPx(6)));
+        statusRail.setBackground(buildDockGlassSurface(
+            mPreferences != null ? mPreferences.getAppBarOpacity() / 100f : .8f,
+            0f, 1f, false));
+        statusRail.setVisibility(View.VISIBLE);
+    }
+
+    private void restoreAzRowToPortraitHost() {
+        if (isLandscapeOrientation() || mAzScrubRowView == null) return;
+        ViewGroup portraitHost = findViewById(R.id.accessory_stack_container);
+        if (mAzScrubRowView.getParent() == portraitHost) return;
+        if (mAzScrubRowView.getParent() instanceof ViewGroup)
+            ((ViewGroup) mAzScrubRowView.getParent()).removeView(mAzScrubRowView);
+        mAzScrubRowView.setVertical(false);
+        // RelativeLayout owns the portrait row's position above the terminal toolbar.
+        android.widget.RelativeLayout.LayoutParams params = new android.widget.RelativeLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, Math.round(dpToPx(19)));
+        params.addRule(android.widget.RelativeLayout.ABOVE, R.id.terminal_toolbar_view_pager);
+        portraitHost.addView(mAzScrubRowView, params);
     }
 
     /**
@@ -13118,7 +13265,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View host = findViewById(R.id.terminal_window_bar_host);
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (host == null || bar == null) return;
-        boolean visible = isSplitPanesEnabled();
+        boolean visible = isSplitPanesEnabled() && !isLandscapeOrientation();
         host.setVisibility(visible ? View.VISIBLE : View.GONE);
         if (!visible) {
             applyTerminalSurfaceAppearance();
@@ -13505,14 +13652,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         if (cpuRamDot != null) {
-            boolean show = cpuOn && (ramOn || weatherOn);
+            boolean show = !isLandscapeOrientation() && cpuOn && (ramOn || weatherOn);
             cpuRamDot.setVisibility(show ? View.VISIBLE : View.GONE);
             cpuRamDot.setColorRole(ramOn
                 ? com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY
                 : com.termux.app.statusbar.StatusBarWidgetView.ColorRole.TERTIARY);
         }
         if (ramWeatherDot != null) {
-            ramWeatherDot.setVisibility(ramOn && weatherOn ? View.VISIBLE : View.GONE);
+            ramWeatherDot.setVisibility(!isLandscapeOrientation() && ramOn && weatherOn
+                ? View.VISIBLE : View.GONE);
             ramWeatherDot.setColorRole(
                 com.termux.app.statusbar.StatusBarWidgetView.ColorRole.TERTIARY);
         }

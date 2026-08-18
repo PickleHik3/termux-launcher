@@ -1656,25 +1656,73 @@
             android:visibility="gone" />
         </RelativeLayout>
 
-        <!-- Landscape-only vertical dock rail. A sibling of the padded content root so it can
-             occupy the display-cutout column the terminal is inset from. updateDockRailView()
-             sizes and populates it, and moves the gravity to the preferred edge. -->
-        <com.termux.app.launcher.drawer.DockRailScrollView
-            android:id="@+id/dock_rail_scroll"
-            android:layout_width="wrap_content"
+        <!-- One measured landscape rail. The weighted icon viewport and wrap-content A-Z column
+             share this parent, so painting, layout and hit-testing all agree on their boundary. -->
+        <LinearLayout
+            android:id="@+id/dock_rail_container"
+            android:layout_width="64dp"
             android:layout_height="match_parent"
             android:layout_gravity="start"
-            android:scrollbars="none"
-            android:overScrollMode="never"
+            android:orientation="vertical"
+            android:clipChildren="true"
+            android:clipToPadding="true"
+            android:background="@android:color/transparent"
+            android:visibility="gone">
+
+            <com.termux.app.launcher.drawer.DockRailScrollView
+                android:id="@+id/dock_rail_scroll"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:scrollbars="none"
+                android:overScrollMode="never"
+                android:fillViewport="true"
+                android:clipChildren="true"
+                android:clipToPadding="true"
+                android:background="@android:color/transparent">
+
+                <LinearLayout
+                    android:id="@+id/dock_rail_surface"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center">
+
+                    <LinearLayout
+                        android:id="@+id/dock_rail_list"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:gravity="center_horizontal" />
+                </LinearLayout>
+            </com.termux.app.launcher.drawer.DockRailScrollView>
+
+        </LinearLayout>
+
+        <!-- Landscape counterpart of the horizontal top pane. It always occupies the edge
+             opposite the app rail, letting the terminal use the full height between them. -->
+        <FrameLayout
+            android:id="@+id/landscape_status_rail"
+            android:layout_width="64dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="end"
+            android:background="@android:color/transparent"
             android:visibility="gone">
 
             <LinearLayout
-                android:id="@+id/dock_rail_list"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:id="@+id/landscape_status_rail_content"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
                 android:orientation="vertical"
-                android:gravity="center_horizontal" />
-        </com.termux.app.launcher.drawer.DockRailScrollView>
+                android:gravity="center"
+                android:paddingHorizontal="4dp">
+
+                <com.termux.app.statusbar.VerticalStatusClockView
+                    android:id="@+id/landscape_status_clock"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+        </FrameLayout>
 
         <!-- App drawer overlay plane. A full-bleed sibling of the padded content root, so it paints
              over the whole accessory stack while still losing to the command palette in z. It is

@@ -412,6 +412,8 @@ public final class SuggestionBarView extends GridLayout
     private int lastAzResolvedSlot = -1;
     @Nullable private LauncherUsageStatsStore usageStatsStore;
     @Nullable private Runnable appCatalogChangedListener;
+    @Nullable private Runnable externalRailChangedListener;
+    @NonNull private List<LauncherAppEntry> externalRailEntries = Collections.emptyList();
     @Nullable private Runnable drawerConfigChangedListener;
     /** A config change that landed while the folder popup was up; replayed when it closes. */
     private boolean pendingDrawerConfigRefresh;
@@ -1290,6 +1292,16 @@ public final class SuggestionBarView extends GridLayout
             index = Math.min(index, activeAzCandidates.size() - 1);
             launchEntry(activeAzCandidates.get(index), lastTerminalView);
             clearAzPreview();
+            return;
+        }
+
+        if (getResources().getConfiguration().orientation
+            == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+            int start = getAzPageStart(activeAzCandidates, activeAzPageIndex,
+                Math.max(1, maxButtonCount));
+            int end = Math.min(activeAzCandidates.size(), start + Math.max(1, maxButtonCount));
+            externalRailEntries = new ArrayList<>(activeAzCandidates.subList(start, end));
+            if (externalRailChangedListener != null) externalRailChangedListener.run();
             return;
         }
 
@@ -2209,6 +2221,11 @@ public final class SuggestionBarView extends GridLayout
                     if (!trimmed.equals(lastInput.trim()) || activeAzLetter != null) {
                         return;
                     }
+                    if (getResources().getConfiguration().orientation
+                        == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+                        publishLandscapeSearchResults(suggestionEntries);
+                        return;
+                    }
                     renderButtons(suggestionEntries, false);
                 });
             });
@@ -2427,6 +2444,10 @@ public final class SuggestionBarView extends GridLayout
             }
         }
 
+        externalRailEntries = new ArrayList<>(entries.subList(0,
+            Math.min(entries.size(), buttonCount)));
+        if (externalRailChangedListener != null) externalRailChangedListener.run();
+
         if (pendingPinnedMutationFeedback && !azPreview) {
             pendingPinnedMutationFeedback = false;
             post(this::animatePinnedMutationFeedback);
@@ -2517,12 +2538,26 @@ public final class SuggestionBarView extends GridLayout
         if (count == 0) return false;
         int previousFocusIndex = terminalSearchFocusIndex;
         terminalSearchFocusIndex = Math.floorMod(terminalSearchFocusIndex + delta, count);
+        if (externalRailChangedListener != null) externalRailChangedListener.run();
         if (rowHapticsEnabled && RowHapticTickHelper.isBoundaryCrossing(
             previousFocusIndex, terminalSearchFocusIndex)) {
             performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
         }
         applyTerminalSearchFocusOutline();
         return true;
+    }
+
+    public int getTerminalSearchFocusIndex() {
+        return terminalSearchFocusIndex;
+    }
+
+    private void publishLandscapeSearchResults(@NonNull List<LauncherAppEntry> results) {
+        clearTerminalSearchFocus();
+        int end = Math.min(results.size(), Math.max(1, maxButtonCount));
+        externalRailEntries = new ArrayList<>(results.subList(0, end));
+        terminalSearchEntries.addAll(externalRailEntries);
+        terminalSearchFocusIndex = terminalSearchEntries.isEmpty() ? -1 : 0;
+        if (externalRailChangedListener != null) externalRailChangedListener.run();
     }
 
     public void setRowHapticsEnabled(boolean enabled) {
@@ -3150,6 +3185,9 @@ public final class SuggestionBarView extends GridLayout
      */
     @NonNull
     public List<LauncherAppEntry> getDockRailEntries() {
+        if (activeAzLetter != null || !TextUtils.isEmpty(lastInput.trim())) {
+            return new ArrayList<>(externalRailEntries);
+        }
         List<PinnedItem> source = configRepository != null
             ? configRepository.loadPinnedItems() : pinnedItems;
         List<LauncherAppEntry> out = new ArrayList<>();
@@ -3159,6 +3197,10 @@ public final class SuggestionBarView extends GridLayout
             }
         }
         return out;
+    }
+
+    public void setExternalRailChangedListener(@Nullable Runnable listener) {
+        externalRailChangedListener = listener;
     }
 
     /** Launches an entry on behalf of an external dock surface (the landscape rail). */

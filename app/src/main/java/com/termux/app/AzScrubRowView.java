@@ -100,6 +100,8 @@ public final class AzScrubRowView extends AppCompatTextView {
     private boolean interactionRenderActive;
     private boolean rowHapticsEnabled = true;
     private int lastHapticLetterIndex = -1;
+    /** Landscape rail mode: upright letters mapped along Y instead of the portrait X track. */
+    private boolean vertical;
 
     public AzScrubRowView(Context context) {
         super(context);
@@ -135,6 +137,17 @@ public final class AzScrubRowView extends AppCompatTextView {
         doubleTapSlopPx = viewConfiguration.getScaledDoubleTapSlop();
     }
 
+    public void setVertical(boolean vertical) {
+        if (this.vertical == vertical) return;
+        this.vertical = vertical;
+        activeTouchX = -1f;
+        activeLetterIndex = -1;
+        waveStrength = 0f;
+        setSingleLine(!vertical);
+        requestLayout();
+        invalidate();
+    }
+
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
@@ -157,6 +170,21 @@ public final class AzScrubRowView extends AppCompatTextView {
         return letterContentWidth() / Math.max(1, visibleLetters.length);
     }
 
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        if (!vertical) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            return;
+        }
+        int desiredWidth = Math.max(getSuggestedMinimumWidth(), dp(24));
+        float slotHeight = Math.max(dp(5.5f), getTextSize() * .52f);
+        int desiredHeight = Math.max(getSuggestedMinimumHeight(),
+            Math.round(slotHeight * Math.max(1, visibleLetters.length))
+                + getPaddingTop() + getPaddingBottom());
+        setMeasuredDimension(resolveSize(desiredWidth, widthMeasureSpec),
+            resolveSize(desiredHeight, heightMeasureSpec));
+    }
+
     private float letterCenterX(int index) {
         float slot = letterSlotWidth();
         return letterInsetPx() + (slot * index) + (slot * 0.5f);
@@ -175,6 +203,11 @@ public final class AzScrubRowView extends AppCompatTextView {
         float width = getWidth();
         float height = getHeight();
         if (width <= 0 || height <= 0) return;
+
+        if (vertical) {
+            drawVertical(canvas, width, height);
+            return;
+        }
 
         int baseColor = getCurrentTextColor();
         int focusColor = resolveFocusLetterColor();
@@ -239,6 +272,31 @@ public final class AzScrubRowView extends AppCompatTextView {
             letterOutlinePaint.setColor(withAlpha(outlineBase, activeFocus ? 215 : 195));
             canvas.drawText(glyph, x, baseline, letterOutlinePaint);
             canvas.drawText(glyph, x, baseline, letterPaint);
+        }
+    }
+
+    private void drawVertical(@NonNull Canvas canvas, float width, float height) {
+        float slot = height / Math.max(1, visibleLetters.length);
+        float baseSize = Math.min(getTextSize(), slot * .72f);
+        letterPaint.setTextAlign(Paint.Align.CENTER);
+        letterOutlinePaint.setTextAlign(Paint.Align.CENTER);
+        for (int i = 0; i < visibleLetters.length; i++) {
+            boolean active = i == activeLetterIndex;
+            float size = baseSize * (active ? 1.18f : 1f);
+            letterPaint.setTextSize(size);
+            letterPaint.setTypeface(Typeface.create("sans-serif-medium",
+                active ? Typeface.BOLD : Typeface.NORMAL));
+            letterPaint.setColor(active ? resolveFocusLetterColor() : getCurrentTextColor());
+            letterPaint.getFontMetrics(letterFontMetrics);
+            float baseline = slot * (i + .5f)
+                - (letterFontMetrics.ascent + letterFontMetrics.descent) * .5f;
+            String glyph = visibleGlyphs[i];
+            letterOutlinePaint.setTextSize(size);
+            letterOutlinePaint.setTypeface(letterPaint.getTypeface());
+            letterOutlinePaint.setStrokeWidth(dp(1.2f));
+            letterOutlinePaint.setColor(withAlpha(OUTLINE_DARK, active ? 220 : 180));
+            canvas.drawText(glyph, width * .5f, baseline, letterOutlinePaint);
+            canvas.drawText(glyph, width * .5f, baseline, letterPaint);
         }
     }
 
@@ -427,6 +485,7 @@ public final class AzScrubRowView extends AppCompatTextView {
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (callback == null) return super.onTouchEvent(event);
+        if (vertical) return onVerticalTouchEvent(event);
         float x = Math.max(0f, Math.min(getWidth(), event.getX()));
         char letter = pickLetter(x, event.getActionMasked() != MotionEvent.ACTION_DOWN);
         int selectionIndex = Math.max(0,
@@ -514,6 +573,48 @@ public final class AzScrubRowView extends AppCompatTextView {
                 return true;
             default:
                 return super.onTouchEvent(event);
+        }
+    }
+
+    private boolean onVerticalTouchEvent(@NonNull MotionEvent event) {
+        float y = Math.max(0f, Math.min(Math.max(0, getHeight() - 1), event.getY()));
+        int index = Math.max(0, Math.min(visibleLetters.length - 1,
+            (int) (y / Math.max(1f, getHeight() / (float) visibleLetters.length))));
+        char letter = visibleLetters[index];
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                activeLetterIndex = index;
+                lastHapticLetterIndex = index;
+                invalidate();
+                callback.onScrub(letter, 0, event.getX(), event.getY(), event.getRawX(),
+                    event.getRawY(), event.getEventTime(), GesturePhase.DOWN);
+                return true;
+            case MotionEvent.ACTION_MOVE:
+                if (rowHapticsEnabled && RowHapticTickHelper.isBoundaryCrossing(
+                    lastHapticLetterIndex, index)) {
+                    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                }
+                lastHapticLetterIndex = index;
+                activeLetterIndex = index;
+                invalidate();
+                callback.onScrub(letter, 0, event.getX(), event.getY(), event.getRawX(),
+                    event.getRawY(), event.getEventTime(), GesturePhase.MOVE);
+                return true;
+            case MotionEvent.ACTION_UP:
+                callback.onScrub(letter, 0, event.getX(), event.getY(), event.getRawX(),
+                    event.getRawY(), event.getEventTime(), GesturePhase.UP);
+                activeLetterIndex = -1;
+                lastHapticLetterIndex = -1;
+                invalidate();
+                return true;
+            case MotionEvent.ACTION_CANCEL:
+                activeLetterIndex = -1;
+                lastHapticLetterIndex = -1;
+                callback.onCancel();
+                invalidate();
+                return true;
+            default:
+                return true;
         }
     }
 

@@ -89,4 +89,32 @@ public class AzScrubRowViewTest {
         view.onTouchEvent(MotionEvent.obtain(0, 20, MotionEvent.ACTION_MOVE, slotWidth + (slotWidth * 0.30f), 24f, 0));
         assertEquals('A', lastLetter[0]);
     }
+
+    @Test
+    public void verticalScrubMapping_usesTopToBottomLetters() {
+        AzScrubRowView view = new AzScrubRowView(RuntimeEnvironment.application);
+        view.setVertical(true);
+        view.measure(
+            android.view.View.MeasureSpec.makeMeasureSpec(48, android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(560, android.view.View.MeasureSpec.EXACTLY)
+        );
+        view.layout(0, 0, 48, 560);
+
+        final char[] lastLetter = {'?'};
+        view.setScrubCallback(new AzScrubRowView.ScrubCallback() {
+            @Override public void onScrub(char letter, int selectionIndex, float touchX,
+                                          float touchY, float rawX, float rawY,
+                                          long eventTimeMs,
+                                          AzScrubRowView.GesturePhase phase) {
+                lastLetter[0] = letter;
+            }
+
+            @Override public void onCancel() {}
+        });
+
+        view.onTouchEvent(MotionEvent.obtain(0, 10, MotionEvent.ACTION_DOWN, 24f, 0f, 0));
+        assertEquals(AzScrubRowView.PINNED_APPS_SYMBOL, lastLetter[0]);
+        view.onTouchEvent(MotionEvent.obtain(0, 20, MotionEvent.ACTION_MOVE, 24f, 559f, 0));
+        assertEquals('#', lastLetter[0]);
+    }
 }
