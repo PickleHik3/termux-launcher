@@ -129,16 +129,24 @@ public final class TerminalBindingConfig {
         /** Normalized sequences explicitly mentioned by map or unmap. */
         @NonNull public final List<String> overriddenSequences;
         @NonNull public final Map<String, Mode> modes;
+        /**
+         * Normalized {@code leader} stroke, or null when the file declares none. Every root
+         * {@code ctrl+alt+...} binding gains a {@code leader>...} spelling, so a keyboard that
+         * makes three-key chords awkward can reach the same actions tmux-style: prefix, then key.
+         */
+        @Nullable public final String leader;
         @NonNull public final List<String> errors;
 
         private Result(boolean filePresent, @NonNull List<Mapping> mappings,
                        @NonNull List<String> overriddenSequences,
                        @NonNull Map<String, Mode> modes,
+                       @Nullable String leader,
                        @NonNull List<String> errors) {
             this.filePresent = filePresent;
             this.mappings = Collections.unmodifiableList(new ArrayList<>(mappings));
             this.overriddenSequences = Collections.unmodifiableList(new ArrayList<>(overriddenSequences));
             this.modes = Collections.unmodifiableMap(new LinkedHashMap<>(modes));
+            this.leader = leader;
             this.errors = Collections.unmodifiableList(new ArrayList<>(errors));
         }
 
@@ -146,7 +154,7 @@ public final class TerminalBindingConfig {
             List<String> errors = error == null ? Collections.<String>emptyList()
                 : Collections.singletonList(error);
             return new Result(present, Collections.<Mapping>emptyList(),
-                Collections.<String>emptyList(), Collections.<String, Mode>emptyMap(), errors);
+                Collections.<String>emptyList(), Collections.<String, Mode>emptyMap(), null, errors);
         }
     }
 
@@ -191,6 +199,7 @@ public final class TerminalBindingConfig {
         LinkedHashMap<String, MutableMapping> mappings = new LinkedHashMap<>();
         LinkedHashMap<String, Mode> modes = new LinkedHashMap<>();
         List<String> overridden = new ArrayList<>();
+        String leader = null;
         String[] lines = content.split("\\r?\\n", -1);
         for (int i = 0; i < lines.length; i++) {
             int lineNumber = i + 1;
@@ -203,6 +212,25 @@ public final class TerminalBindingConfig {
             }
             if (words.isEmpty()) continue;
             String directive = words.get(0).toLowerCase(Locale.US);
+            if ("leader".equals(directive)) {
+                if (words.size() != 2) {
+                    errors.add("line " + lineNumber + ": leader needs one key stroke");
+                    continue;
+                }
+                String stroke = TerminalKeyBindingResolver.normalizeStrokeSpec(words.get(1));
+                if (!TerminalKeyBindingResolver.isValidStrokeSpec(stroke)) {
+                    errors.add("line " + lineNumber + ": invalid leader stroke '" + words.get(1) + "'");
+                    continue;
+                }
+                // First declaration wins, like a clashing map line, so a stray second leader
+                // cannot silently move every prefixed binding out from under the user.
+                if (leader != null) {
+                    errors.add("line " + lineNumber + ": leader is already set to '" + leader + "'");
+                    continue;
+                }
+                leader = stroke;
+                continue;
+            }
             if ("unmap".equals(directive)) {
                 int cursor = 1;
                 String mode = "";
@@ -226,7 +254,7 @@ public final class TerminalBindingConfig {
                 continue;
             }
             if (!"map".equals(directive)) {
-                errors.add("line " + lineNumber + ": expected map or unmap");
+                errors.add("line " + lineNumber + ": expected map, unmap or leader");
                 continue;
             }
 
@@ -394,7 +422,7 @@ public final class TerminalBindingConfig {
             result.add(new Mapping(mapping.mode, mapping.sequence, mapping.condition,
                 mapping.actions, mapping.label));
         }
-        return new Result(filePresent, result, overridden, modes, errors);
+        return new Result(filePresent, result, overridden, modes, leader, errors);
     }
 
     /**

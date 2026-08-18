@@ -316,6 +316,22 @@ map ctrl+alt+j send-text "git status\n"
 
 `--when` accepts `always`, `splits-on`, or `splits-off`.
 
+### tmux-style prefix
+
+`leader <stroke>` declares a prefix key. Every root `ctrl+alt+…` binding then also answers to the
+prefix followed by the same key, which is what makes the bindings reachable on a keyboard where
+holding three keys at once is awkward:
+
+```text
+leader ctrl+space
+```
+
+With that line, `Ctrl+Space` then `m` opens the action sheet, `Ctrl+Space` then `Shift+P` opens the
+command palette, and the Ctrl+Alt strokes keep working unchanged. The prefix behaves like any other
+chord: the pending stroke shows in the chord overlay, the keybind hint legend lists what the next
+key can be, and an unknown key or the chord timeout cancels it. A sequence the file spells out
+itself is never overwritten by the generated alias, and only the first `leader` line is used.
+
 `--label "Display name"` names a binding for the keybind hint legend, up to 32 characters. Without
 one the legend prints the action's own title, which reads well for the specific actions and says
 nothing useful for the generic ones: every app chord runs `app.launch`, so an unlabelled row reads

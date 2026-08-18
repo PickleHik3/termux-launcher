@@ -70,6 +70,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.drawerlayout.widget.DrawerLayout;
 
 public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
@@ -106,7 +107,12 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     /** Second retry for devices whose resumed window becomes IME-ready later. */
     private static final long KEYBOARD_RESUME_SECOND_RETRY_DELAY_MS = 320L;
     /** Matches kitty's default multi-key mapping timeout. */
-    private static final long KEY_CHORD_TIMEOUT_MS = 2_000L;
+    /**
+     * How long a pending sequence waits for its next stroke. Generous on purpose: the hint legend
+     * that a prefix raises is meant to be read, and a prefix is most useful exactly on the
+     * keyboards where the next key takes a moment to find.
+     */
+    private static final long KEY_CHORD_TIMEOUT_MS = 4_000L;
     private static final ExecutorService REPORT_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "termux-report-builder");
         thread.setDaemon(true);
@@ -118,6 +124,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     private final TerminalKeyChordOverlay mKeyChordOverlay;
     private final Runnable mKeyChordTimeout = this::cancelPendingKeyChord;
     private final Runnable mKeyModeTimeout = this::expireKeyMode;
+    /** Modifiers a physical keyboard is holding, for the keybind hint slab. */
+    private final HardwareModifierTracker mHardwareModifiers = new HardwareModifierTracker();
+    /** Prefix of a latched leader sequence, e.g. {@code "ctrl+space>"}, else null. */
+    @Nullable private String mPendingSequencePrefix;
 
     public TermuxTerminalViewClient(TermuxActivity activity, TermuxTerminalSessionActivityClient termuxTerminalSessionActivityClient) {
         this.mActivity = activity;
@@ -214,6 +224,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         cancelPendingKeyChord();
         TerminalKeyBindingResolver.getInstance().clearModes();
         mKeyChordHandler.removeCallbacks(mKeyModeTimeout);
+        mHardwareModifiers.clear();
+        refreshKeybindHints();
     }
 
     /**
@@ -337,6 +349,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         TerminalKeyInspector inspector = TerminalKeyInspector.active();
         if (inspector != null)
             inspector.recordEvent(e, true);
+        if (mHardwareModifiers.track(e))
+            refreshKeybindHints();
         // An open rename chip is a modal editor over one surface, so it outranks every other
         // consumer: while it is up, every stroke belongs to the name being typed.
         if (mActivity.handleTerminalRenameKey(keyCode, e))
@@ -443,7 +457,13 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (step.kind == TerminalKeyBindingResolver.Step.Kind.PENDING) {
             mKeyChordHandler.removeCallbacks(mKeyChordTimeout);
             mKeyChordHandler.postDelayed(mKeyChordTimeout, KEY_CHORD_TIMEOUT_MS);
-            mKeyChordOverlay.show(step.pendingSequence);
+            mPendingSequencePrefix = step.pendingSequence + ">";
+            refreshKeybindHints();
+            // The hint legend already names the pending prefix and every key it accepts, so the
+            // "waiting for key" chip would be a second, smaller copy of it. It stays only as the
+            // fallback for when the legend cannot be shown at all.
+            if (!mActivity.isKeybindHintPopupVisible())
+                mKeyChordOverlay.show(step.pendingSequence);
             return true;
         }
         clearPendingKeyChordUi();
@@ -571,6 +591,23 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     private void clearPendingKeyChordUi() {
         mKeyChordHandler.removeCallbacks(mKeyChordTimeout);
         mKeyChordOverlay.hide();
+        if (mPendingSequencePrefix != null) {
+            mPendingSequencePrefix = null;
+            refreshKeybindHints();
+        }
+    }
+
+    /**
+     * Pushes what the hint slab should be documenting right now. A latched leader sequence wins
+     * over a held Ctrl+Alt, since the sequence is the thing waiting for its next key; both are
+     * dead while hardware shortcuts are turned off, because no stroke would fire.
+     */
+    private void refreshKeybindHints() {
+        String prefix = mPendingSequencePrefix != null ? mPendingSequencePrefix
+            : (mHardwareModifiers.isCtrlAltHeld() ? "ctrl+alt+" : null);
+        if (prefix != null && mActivity.getProperties().areHardwareKeyboardShortcutsDisabled())
+            prefix = null;
+        mActivity.setHardwareKeybindHintPrefix(prefix, mHardwareModifiers.isShiftHeld());
     }
 
     private void refreshKeyModeUi(@NonNull TerminalKeyBindingResolver resolver) {
@@ -596,6 +633,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         TerminalKeyInspector inspector = TerminalKeyInspector.active();
         if (inspector != null)
             inspector.recordEvent(e, false);
+        if (mHardwareModifiers.track(e))
+            refreshKeybindHints();
         // Swallow the release of a stroke the palette consumed on the way down.
         if (mActivity.isCommandPaletteOpen())
             return true;

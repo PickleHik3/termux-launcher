@@ -8130,25 +8130,75 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     // ------------------------------------------------------------------ keybind hint popup
 
+    /** Prefix the in-app keyboard's latch is asking for, or null. */
+    @Nullable private String mInAppKeybindHintPrefix;
+    private boolean mInAppKeybindHintShift;
+    /** Prefix a physical keyboard is holding, or null. Outranks the in-app latch. */
+    @Nullable private String mHardwareKeybindHintPrefix;
+    private boolean mHardwareKeybindHintShift;
+
     /**
-     * While Ctrl+Alt (optionally +Shift) is latched on the in-app keyboard, the bound caps
-     * light up in their legend group's colour on the live keyboard itself, and a glass slab
-     * flush against the accessory stack shows a grouped legend of what each lit key does. Any
-     * other modifier state removes both, so they track latch, lock and release for free via
-     * onKeyboardModifiersChanged.
+     * While Ctrl+Alt (optionally +Shift) is held — latched on the in-app keyboard or held down on
+     * a physical one — the bound caps light up in their legend group's colour on the live
+     * keyboard, and a glass slab flush against the accessory stack shows a grouped legend of what
+     * each lit key does. A latched {@code leader} prefix shows the same slab for its own table.
+     * Any other modifier state removes both, so they track latch, lock and release for free via
+     * onKeyboardModifiersChanged and {@link #setHardwareKeybindHintPrefix}.
      *
      * <p>A prefix change while latched (Shift joining or leaving) never remounts the slab: the
      * legend re-runs its entry animation, the keyboard re-lights and the letters flip case.
      */
     private void updateKeybindHintPopup(
             @Nullable com.termux.app.terminal.inappkeyboard.TerminalModifiers modifiers) {
+        boolean latched = modifiers != null && modifiers.isCtrl() && modifiers.isAlt();
+        mInAppKeybindHintPrefix = latched ? "ctrl+alt+" : null;
+        mInAppKeybindHintShift = latched && modifiers.isShift();
+        refreshKeybindHintPopup();
+    }
+
+    /**
+     * The hardware twin of {@link #updateKeybindHintPopup}: a physical keyboard holding Ctrl+Alt,
+     * or a latched {@code leader} prefix waiting for its second key. Pushed by
+     * {@link com.termux.app.terminal.TermuxTerminalViewClient}, which is the only place hardware
+     * key events are seen.
+     *
+     * @param prefix the stroke prefix being documented, e.g. {@code "ctrl+alt+"} or
+     *     {@code "ctrl+space>"}, or null when nothing is held.
+     */
+    public void setHardwareKeybindHintPrefix(@Nullable String prefix, boolean shift) {
+        if (java.util.Objects.equals(prefix, mHardwareKeybindHintPrefix)
+            && shift == mHardwareKeybindHintShift)
+            return;
+        mHardwareKeybindHintPrefix = prefix;
+        mHardwareKeybindHintShift = shift;
+        refreshKeybindHintPopup();
+    }
+
+    /**
+     * A hardware hold outranks the in-app keyboard's latch: the keyboard reports "no modifiers"
+     * on every key it releases, and that callback must not tear down a slab the physical keyboard
+     * is still holding up.
+     */
+    private void refreshKeybindHintPopup() {
+        boolean hardware = mHardwareKeybindHintPrefix != null;
+        showKeybindHintPopup(hardware ? mHardwareKeybindHintPrefix : mInAppKeybindHintPrefix,
+            hardware ? mHardwareKeybindHintShift : mInAppKeybindHintShift);
+    }
+
+    /** Whether the hint legend is on screen, i.e. whether a pending prefix is already announced. */
+    public boolean isKeybindHintPopupVisible() {
+        View popup = findViewById(R.id.keybind_hint_popup);
+        return popup != null && popup.getVisibility() == View.VISIBLE;
+    }
+
+    private void showKeybindHintPopup(@Nullable String basePrefix, boolean shiftHeld) {
         android.widget.LinearLayout popup = findViewById(R.id.keybind_hint_popup);
         if (popup == null) return;
-        boolean show = modifiers != null && modifiers.isCtrl() && modifiers.isAlt()
-            && isInAppKeyboardShown() && isSplitPanesEnabled();
+        popup.removeCallbacks(mKeybindHintHide);
+        boolean show = basePrefix != null && isSplitPanesEnabled();
         Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> hints = null;
-        boolean shift = show && modifiers.isShift();
-        String prefix = shift ? "ctrl+alt+shift+" : "ctrl+alt+";
+        boolean shift = show && shiftHeld;
+        String prefix = shift ? basePrefix + "shift+" : basePrefix;
         if (show) {
             hints = com.termux.app.terminal.TerminalKeyBindingResolver.getInstance()
                 .hintsForPrefix(prefix,
@@ -8191,13 +8241,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /**
+     * Lingers before the legend goes: releasing the prefix is also how a stroke is typed, so
+     * fading the instant the modifier lifts blinks the slab away mid-read on every use.
+     */
+    private static final long KEYBIND_HINT_LINGER_MS = 450L;
+
+    private final Runnable mKeybindHintHide = this::performKeybindHintHide;
+
     private void hideKeybindHintPopup() {
+        View popup = findViewById(R.id.keybind_hint_popup);
+        if (popup == null || popup.getVisibility() != View.VISIBLE) {
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.setKeybindHintHighlights(null);
+            return;
+        }
+        popup.removeCallbacks(mKeybindHintHide);
+        popup.postDelayed(mKeybindHintHide, KEYBIND_HINT_LINGER_MS);
+    }
+
+    private void performKeybindHintHide() {
         if (mInAppKeyboard != null)
             mInAppKeyboard.setKeybindHintHighlights(null);
         View popup = findViewById(R.id.keybind_hint_popup);
         if (popup == null || popup.getVisibility() != View.VISIBLE) return;
         popup.setTag(null);
-        popup.animate().alpha(0f).setDuration(100L)
+        popup.animate().alpha(0f).setDuration(160L)
             .withEndAction(() -> popup.setVisibility(View.GONE)).start();
     }
 

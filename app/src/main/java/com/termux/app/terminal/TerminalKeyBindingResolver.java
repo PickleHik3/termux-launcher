@@ -141,6 +141,8 @@ public final class TerminalKeyBindingResolver {
     private final Map<String, Map<String, List<Claim>>> modalBindings;
     private final Map<String, Map<String, List<Claim>>> modalPrefixes;
     @NonNull private final Map<String, TerminalBindingConfig.Mode> modes;
+    /** The {@code leader} stroke from the user file, or null when none is declared. */
+    @Nullable private final String leaderStroke;
     /** Strokes claimed twice under conditions that can both hold. */
     private final Map<String, List<String>> conflicts;
     @NonNull private final List<String> configErrors;
@@ -214,6 +216,24 @@ public final class TerminalKeyBindingResolver {
                 continue;
             }
             claims.add(configured);
+        }
+
+        // tmux-style prefix: every root Ctrl+Alt stroke also answers to "<leader> then the same
+        // key", which is the whole point on a keyboard where holding three keys is awkward. The
+        // aliases are ordinary sequences, so the pending-chord overlay, the timeout and the
+        // cancel-on-unknown behaviour come for free. A sequence the file spells out itself is
+        // never overwritten.
+        leaderStroke = config.leader;
+        if (leaderStroke != null) {
+            String aliasPrefix = leaderStroke + ">";
+            for (Map.Entry<String, List<Claim>> entry
+                    : new ArrayList<>(map.entrySet())) {
+                String stroke = entry.getKey();
+                if (stroke.indexOf('>') >= 0 || !stroke.startsWith("ctrl+alt+")) continue;
+                String aliasSequence = aliasPrefix + stroke.substring("ctrl+alt+".length());
+                if (map.containsKey(aliasSequence)) continue;
+                map.put(aliasSequence, new ArrayList<>(entry.getValue()));
+            }
         }
 
         Map<String, List<Claim>> prefixMap = new LinkedHashMap<>();
@@ -374,6 +394,12 @@ public final class TerminalKeyBindingResolver {
         return hints;
     }
 
+    /** The configured tmux-style prefix stroke, or null when the file declares none. */
+    @Nullable
+    public String getLeaderStroke() {
+        return leaderStroke;
+    }
+
     /** Strokes claimed twice under conditions that can both hold. */
     @NonNull
     public Map<String, List<String>> getConflicts() {
@@ -497,6 +523,11 @@ public final class TerminalKeyBindingResolver {
     @NonNull
     public synchronized Step advance(@NonNull KeyEvent event,
                                      @NonNull LauncherToolRegistry.ActionContext context) {
+        // A modifier on its own is never a continuation: it is how the *next* stroke is being
+        // spelled. Reading it as an unknown key cancelled the sequence, which made "leader, then
+        // Shift+key" impossible to type — the Shift press killed the leader before the key landed.
+        if (isModifierKeyCode(event.getKeyCode())) return Step.none();
+
         if (!pendingStrokes.isEmpty() && event.getKeyCode() == KeyEvent.KEYCODE_ESCAPE) {
             pendingStrokes.clear();
             return Step.cancelled();
@@ -554,6 +585,28 @@ public final class TerminalKeyBindingResolver {
             }
         }
         return Step.none();
+    }
+
+    /** Whether a key code only ever modifies another key, and so can never end a sequence. */
+    static boolean isModifierKeyCode(int keyCode) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_CTRL_LEFT:
+            case KeyEvent.KEYCODE_CTRL_RIGHT:
+            case KeyEvent.KEYCODE_ALT_LEFT:
+            case KeyEvent.KEYCODE_ALT_RIGHT:
+            case KeyEvent.KEYCODE_SHIFT_LEFT:
+            case KeyEvent.KEYCODE_SHIFT_RIGHT:
+            case KeyEvent.KEYCODE_META_LEFT:
+            case KeyEvent.KEYCODE_META_RIGHT:
+            case KeyEvent.KEYCODE_SYM:
+            case KeyEvent.KEYCODE_FUNCTION:
+            case KeyEvent.KEYCODE_CAPS_LOCK:
+            case KeyEvent.KEYCODE_NUM_LOCK:
+            case KeyEvent.KEYCODE_SCROLL_LOCK:
+                return true;
+            default:
+                return false;
+        }
     }
 
     @Nullable

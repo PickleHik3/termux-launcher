@@ -184,6 +184,94 @@ public class TerminalKeyBindingResolverTest {
     }
 
     @Test
+    public void leaderDeclaration_mirrorsEveryCtrlAltStroke() {
+        TerminalBindingConfig.Result config = TerminalBindingConfig.parse(
+            "leader ctrl+space\n", LauncherToolRegistry.getInstance(), true);
+        assertTrue(config.errors.toString(), config.errors.isEmpty());
+        assertEquals("ctrl+space", config.leader);
+        TerminalKeyBindingResolver.installConfigForTesting(config);
+        resolver = TerminalKeyBindingResolver.getInstance();
+        assertEquals("ctrl+space", resolver.getLeaderStroke());
+
+        // Prefix, then the same key the Ctrl+Alt stroke uses.
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.PENDING,
+            resolver.advance(key(KeyEvent.KEYCODE_SPACE, KeyEvent.META_CTRL_ON), SPLITS_ON).kind);
+        TerminalKeyBindingResolver.Step sheet =
+            resolver.advance(key(KeyEvent.KEYCODE_M, 0), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, sheet.kind);
+        assertEquals("terminal.action_sheet", sheet.match.toolName);
+
+        // Shift is part of the second stroke, exactly as it is part of the Ctrl+Alt one.
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.PENDING,
+            resolver.advance(key(KeyEvent.KEYCODE_SPACE, KeyEvent.META_CTRL_ON), SPLITS_ON).kind);
+        TerminalKeyBindingResolver.Step palette =
+            resolver.advance(key(KeyEvent.KEYCODE_P, KeyEvent.META_SHIFT_ON), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, palette.kind);
+        assertEquals("app.command_palette", palette.match.toolName);
+        assertEquals("ctrl+space>shift+p", palette.match.stroke);
+
+        // The chord the prefix mirrors keeps working untouched.
+        assertEquals("terminal.action_sheet", tool(KeyEvent.KEYCODE_M, CTRL_ALT, SPLITS_ON));
+        // And the legend the hint slab draws lists the prefixed table.
+        assertTrue(resolver.hintsForPrefix("ctrl+space>", SPLITS_ON).containsKey("m"));
+    }
+
+    @Test
+    public void modifierPressAfterALeader_doesNotCancelTheSequence() {
+        TerminalBindingConfig.Result config = TerminalBindingConfig.parse(
+            "leader ctrl+space\n", LauncherToolRegistry.getInstance(), true);
+        TerminalKeyBindingResolver.installConfigForTesting(config);
+        resolver = TerminalKeyBindingResolver.getInstance();
+
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.PENDING,
+            resolver.advance(key(KeyEvent.KEYCODE_SPACE, KeyEvent.META_CTRL_ON), SPLITS_ON).kind);
+        // Reaching for Shift is how the *next* stroke is spelled, not an unknown continuation.
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.NONE,
+            resolver.advance(key(KeyEvent.KEYCODE_SHIFT_LEFT, KeyEvent.META_SHIFT_ON), SPLITS_ON).kind);
+        assertTrue(resolver.hasPendingSequence());
+
+        TerminalKeyBindingResolver.Step step =
+            resolver.advance(key(KeyEvent.KEYCODE_P, KeyEvent.META_SHIFT_ON), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, step.kind);
+        assertEquals("app.command_palette", step.match.toolName);
+        assertEquals("ctrl+space>shift+p", step.match.stroke);
+    }
+
+    @Test
+    public void leaderAliases_neverOverwriteASequenceTheFileSpellsOut() {
+        TerminalBindingConfig.Result config = TerminalBindingConfig.parse(
+            "leader ctrl+space\n"
+                + "map ctrl+space>m terminal.font_size_increase\n",
+            LauncherToolRegistry.getInstance(), true);
+        assertTrue(config.errors.toString(), config.errors.isEmpty());
+        TerminalKeyBindingResolver.installConfigForTesting(config);
+        resolver = TerminalKeyBindingResolver.getInstance();
+
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.PENDING,
+            resolver.advance(key(KeyEvent.KEYCODE_SPACE, KeyEvent.META_CTRL_ON), SPLITS_ON).kind);
+        TerminalKeyBindingResolver.Step step =
+            resolver.advance(key(KeyEvent.KEYCODE_M, 0), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, step.kind);
+        assertEquals("terminal.font_size_increase", step.match.toolName);
+    }
+
+    @Test
+    public void secondLeaderLine_isRejectedSoTheFirstKeepsItsTable() {
+        TerminalBindingConfig.Result config = TerminalBindingConfig.parse(
+            "leader ctrl+space\nleader ctrl+b\nleader nonsense+\n",
+            LauncherToolRegistry.getInstance(), true);
+        assertEquals("ctrl+space", config.leader);
+        assertEquals(2, config.errors.size());
+    }
+
+    @Test
+    public void noLeaderDeclared_leavesTheTableAsItWas() {
+        assertNull(resolver.getLeaderStroke());
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.NONE,
+            resolver.advance(key(KeyEvent.KEYCODE_SPACE, KeyEvent.META_CTRL_ON), SPLITS_ON).kind);
+    }
+
+    @Test
     public void userConfigOverridesDefaultsAndRunsMultipleActions() {
         TerminalBindingConfig.Result config = TerminalBindingConfig.parse(
             "unmap ctrl+alt+v\n"
