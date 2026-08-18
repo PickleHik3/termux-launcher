@@ -407,6 +407,8 @@
     <string name="msg_max_terminals_reached">Close down existing ones before creating new.</string>
 
     <string name="terminal_key_binding_failed">%1$s: %2$s</string>
+    <!-- Brief confirmation of the binding that just ran: stroke, then the action's name. -->
+    <string name="terminal_key_binding_ran">%1$s · %2$s</string>
     <string name="title_rename_session">Set session name (8 characters max)</string>
     <string name="title_rename_window">Set window name (14 characters max)</string>
     <string name="title_rename_pane">Set pane name</string>

@@ -54,6 +54,8 @@ public final class TerminalKeyBindingResolver {
         public final LauncherToolRegistry.BindingCondition condition;
         /** Empty for a root-keymap match. */
         @NonNull public final String mode;
+        /** The binding's {@code --label}, or null to let the caller name the action itself. */
+        @Nullable public final String label;
 
         Match(@NonNull Claim claim, @NonNull JSONObject arguments, @NonNull String stroke,
               @NonNull String mode) {
@@ -63,6 +65,7 @@ public final class TerminalKeyBindingResolver {
             this.stroke = stroke;
             this.condition = claim.condition;
             this.mode = mode;
+            this.label = claim.label;
         }
     }
 

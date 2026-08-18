@@ -481,6 +481,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             return true; // unbound Ctrl+Alt stroke: swallowed, as before
 
         boolean handled = runMatch(resolver, dispatcher, match);
+        if (handled) mKeyChordOverlay.showAction(match.stroke, bindingDisplayName(match));
         resolver.afterMatch(match);
         refreshKeyModeUi(resolver);
         return handled;
@@ -502,6 +503,16 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (!result.optBoolean("ok", false))
             Logger.logWarn(LOG_TAG, "Keyboard tool " + toolId + " failed: "
                 + result.optString("message"));
+    }
+
+    /** What to call the binding that just ran: its own label, else the action's title. */
+    @NonNull
+    private String bindingDisplayName(@NonNull TerminalKeyBindingResolver.Match match) {
+        if (match.label != null && !match.label.isEmpty()) return match.label;
+        LauncherToolRegistry.ToolMetadata tool =
+            LauncherToolRegistry.getInstance().getTool(match.toolName);
+        if (tool != null && tool.titleRes != 0) return mActivity.getString(tool.titleRes);
+        return match.toolName;
     }
 
     /** Runs every action of a resolved binding, in the order the config declared them. */
