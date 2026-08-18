@@ -8061,6 +8061,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Prefix a physical keyboard is holding, or null. Outranks the in-app latch. */
     @Nullable private String mHardwareKeybindHintPrefix;
     private boolean mHardwareKeybindHintShift;
+    /**
+     * Set when a binding under the shown prefix actually ran. The legend answers "what can I press
+     * now"; once something was pressed the answer is nothing, so it goes at once and stays gone
+     * until the prefix is let go and taken up again.
+     */
+    private boolean mKeybindHintSpent;
 
     /**
      * While Ctrl+Alt (optionally +Shift) is held — latched on the in-app keyboard or held down on
@@ -8106,8 +8112,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void refreshKeybindHintPopup() {
         boolean hardware = mHardwareKeybindHintPrefix != null;
-        showKeybindHintPopup(hardware ? mHardwareKeybindHintPrefix : mInAppKeybindHintPrefix,
+        String prefix = hardware ? mHardwareKeybindHintPrefix : mInAppKeybindHintPrefix;
+        // Letting the prefix go re-arms the legend for the next hold.
+        if (prefix == null) mKeybindHintSpent = false;
+        if (mKeybindHintSpent) {
+            performKeybindHintHide(false);
+            return;
+        }
+        showKeybindHintPopup(prefix,
             hardware ? mHardwareKeybindHintShift : mInAppKeybindHintShift);
+    }
+
+    /**
+     * Takes the legend down the moment a binding runs, with no linger: the slab is an answer to a
+     * question the keystroke just answered, and holding it over the action's own UI reads as a
+     * stuck popup. The lingering hide is for the other ending — the prefix released without
+     * pressing anything.
+     */
+    public void onKeybindHintConsumed() {
+        mKeybindHintSpent = true;
+        performKeybindHintHide(false);
     }
 
     /** Whether the hint legend is on screen, i.e. whether a pending prefix is already announced. */
@@ -8183,7 +8207,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private static final long KEYBIND_HINT_LINGER_MS = 450L;
 
-    private final Runnable mKeybindHintHide = this::performKeybindHintHide;
+    private final Runnable mKeybindHintHide = () -> performKeybindHintHide(true);
 
     private void hideKeybindHintPopup() {
         View popup = findViewById(R.id.keybind_hint_popup);
@@ -8196,12 +8220,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         popup.postDelayed(mKeybindHintHide, KEYBIND_HINT_LINGER_MS);
     }
 
-    private void performKeybindHintHide() {
+    private void performKeybindHintHide(boolean fade) {
         if (mInAppKeyboard != null)
             mInAppKeyboard.setKeybindHintHighlights(null);
         View popup = findViewById(R.id.keybind_hint_popup);
         if (popup == null || popup.getVisibility() != View.VISIBLE) return;
+        popup.removeCallbacks(mKeybindHintHide);
         popup.setTag(null);
+        if (!fade) {
+            popup.animate().cancel();
+            popup.setAlpha(1f);
+            popup.setVisibility(View.GONE);
+            return;
+        }
         popup.animate().alpha(0f).setDuration(160L)
             .withEndAction(() -> popup.setVisibility(View.GONE)).start();
     }

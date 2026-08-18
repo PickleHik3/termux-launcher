@@ -1,5 +1,7 @@
 package com.termux.app.terminal;
 
+import android.view.InputDevice;
+import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 
 import org.junit.Test;
@@ -16,8 +18,12 @@ public class HardwareModifierTrackerTest {
 
     private final HardwareModifierTracker tracker = new HardwareModifierTracker();
 
+    /** A physical keyboard's id: the six-argument KeyEvent constructor would say VIRTUAL_KEYBOARD. */
+    private static final int PHYSICAL_DEVICE_ID = 23;
+
     private static KeyEvent key(int action, int keyCode, int meta) {
-        return new KeyEvent(0, 0, action, keyCode, 0, meta);
+        return new KeyEvent(0, 0, action, keyCode, 0, meta, PHYSICAL_DEVICE_ID, 0, 0,
+            InputDevice.SOURCE_KEYBOARD);
     }
 
     private boolean down(int keyCode, int meta) {
@@ -78,8 +84,23 @@ public class HardwareModifierTrackerTest {
     }
 
     @Test
+    public void inAppKeyboardEvents_neverCountAsAPhysicalHold() {
+        // Same shape the in-app keyboard dispatches: VIRTUAL_KEYBOARD device, latched modifiers on
+        // the down and on the up alike.
+        int meta = KeyEvent.META_CTRL_ON | KeyEvent.META_ALT_ON;
+        KeyEvent down = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_M, 0, meta,
+            KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD);
+        KeyEvent up = new KeyEvent(0, 0, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_M, 0, meta,
+            KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD);
+        assertFalse(tracker.track(down));
+        assertFalse(tracker.track(up));
+        assertFalse(tracker.isCtrlAltHeld());
+    }
+
+    @Test
     public void nonPressActions_areIgnored() {
         assertEquals(false, tracker.track(new KeyEvent(0, 0, KeyEvent.ACTION_MULTIPLE,
-            KeyEvent.KEYCODE_CTRL_LEFT, 2, KeyEvent.META_CTRL_ON)));
+            KeyEvent.KEYCODE_CTRL_LEFT, 2, KeyEvent.META_CTRL_ON, PHYSICAL_DEVICE_ID, 0, 0,
+            InputDevice.SOURCE_KEYBOARD)));
     }
 }

@@ -462,6 +462,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             return true;
         }
         clearPendingKeyChordUi();
+        // Both endings retire the legend at once: a stroke that ran, and a stroke that turned out
+        // not to be bound. Only letting the prefix go keeps the lingering fade.
+        mActivity.onKeybindHintConsumed();
         if (step.kind == TerminalKeyBindingResolver.Step.Kind.CANCELLED) {
             mActivity.getWindow().getDecorView().playSoundEffect(
                 android.view.SoundEffectConstants.CLICK);

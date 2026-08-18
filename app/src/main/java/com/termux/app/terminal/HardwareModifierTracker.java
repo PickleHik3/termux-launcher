@@ -1,5 +1,6 @@
 package com.termux.app.terminal;
 
+import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 
 import androidx.annotation.NonNull;
@@ -28,6 +29,11 @@ public final class HardwareModifierTracker {
      *     from it.
      */
     public boolean track(@NonNull KeyEvent event) {
+        // The in-app keyboard bakes its latched modifiers into the metaState of both the down and
+        // the up it synthesizes, so reading those as a physical hold latches this tracker forever
+        // and the hint legend never goes away after a bind runs. That keyboard reports its own
+        // latch through onKeyboardModifiersChanged; this class is only about physical keys.
+        if (event.getDeviceId() == KeyCharacterMap.VIRTUAL_KEYBOARD) return false;
         boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
         if (event.getAction() != KeyEvent.ACTION_DOWN && event.getAction() != KeyEvent.ACTION_UP)
             return false;
