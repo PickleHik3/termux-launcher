@@ -378,7 +378,10 @@ public final class TerminalKeyBindingResolver {
             String stroke = entry.getKey();
             if (!stroke.startsWith(prefix)) continue;
             String suffix = stroke.substring(prefix.length());
-            if (suffix.isEmpty() || suffix.indexOf('+') >= 0 || suffix.indexOf(' ') >= 0) continue;
+            // '>' rules out a longer sequence that merely starts with this prefix: under
+            // "ctrl+alt+" the leader chord ctrl+alt+space>p is not a key you can press next.
+            if (suffix.isEmpty() || suffix.indexOf('+') >= 0 || suffix.indexOf(' ') >= 0
+                || suffix.indexOf('>') >= 0) continue;
             // Prefer the claim whose condition holds right now, but keep showing a configured
             // binding whose condition doesn't (splits off, nothing selected): the hint map
             // documents everything the config binds under the prefix, not just what would fire.

@@ -8124,11 +8124,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> hints = null;
         boolean shift = show && shiftHeld;
         String prefix = shift ? basePrefix + "shift+" : basePrefix;
+        // Bindings that are one plain Ctrl stroke — pane focus lives there now — are listed
+        // alongside the prefixed table. They are a different chord, so they are spelled out with
+        // their own "Ctrl+" caps and they never light a key: pressing that key under the prefix
+        // does something else.
+        Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> ctrlHints =
+            java.util.Collections.emptyMap();
         if (show) {
+            com.termux.launcherctl.LauncherToolRegistry.ActionContext context =
+                com.termux.app.terminal.TerminalActionDispatcher.getInstance().actionContext();
             hints = com.termux.app.terminal.TerminalKeyBindingResolver.getInstance()
-                .hintsForPrefix(prefix,
-                    com.termux.app.terminal.TerminalActionDispatcher.getInstance().actionContext());
+                .hintsForPrefix(prefix, context);
             show = !hints.isEmpty();
+            if (show && !"ctrl+".equals(basePrefix)) {
+                ctrlHints = com.termux.app.terminal.TerminalKeyBindingResolver.getInstance()
+                    .hintsForPrefix("ctrl+", context);
+            }
         }
         if (!show) {
             hideKeybindHintPopup();
@@ -8137,10 +8148,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean visible = popup.getVisibility() == View.VISIBLE;
         // Modifier callbacks repeat for the same latch state; only content changes repopulate,
         // so the lighting and entry animations are not restarted every callback.
-        String signature = prefix + '|' + hints;
+        String signature = prefix + '|' + hints + '|' + ctrlHints;
         if (visible && signature.equals(popup.getTag())) return;
         popup.setTag(signature);
-        Map<String, Integer> litTokens = populateKeybindHintPopup(popup, hints, shift);
+        Map<String, Integer> litTokens = populateKeybindHintPopup(popup, hints, ctrlHints, shift);
         if (mInAppKeyboard != null)
             mInAppKeyboard.setKeybindHintHighlights(litTokens);
         float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity() / 100f : 0.5f;
@@ -8212,11 +8223,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         String cap;
         final java.util.List<String> tokens = new java.util.ArrayList<>(4);
         final String label;
+        /** Chord spelled before the keycap, empty for the latched prefix's own keys. */
+        final String capPrefix;
 
-        KeybindHintEntry(String cap, String token, String label) {
+        KeybindHintEntry(String cap, String token, String label, String capPrefix) {
             this.cap = cap;
             this.tokens.add(token);
             this.label = label;
+            this.capPrefix = capPrefix;
         }
     }
 
@@ -8225,6 +8239,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private Map<String, Integer> populateKeybindHintPopup(
             @NonNull android.widget.LinearLayout popup,
             @NonNull Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> hints,
+            @NonNull Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> ctrlHints,
             boolean shift) {
         popup.removeAllViews();
         LauncherToolRegistry registry = LauncherToolRegistry.getInstance();
@@ -8247,53 +8262,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.Map<String, KeybindHintEntry> runEntryByTool = new java.util.HashMap<>();
         java.util.List<KeybindHintEntry> runEntries = new java.util.ArrayList<>();
         java.util.Map<String, Integer> litTokens = new java.util.LinkedHashMap<>();
-        int added = 0;
-        for (Map.Entry<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> hint
-                : hints.entrySet()) {
-            String token = hint.getKey();
-            String toolName = hint.getValue().toolName;
-            String label = keybindHintLabel(registry, toolName, hint.getValue().label);
-            // Runs merge on the printed label, not just the tool: nine app.launch digits named
-            // after nine different apps are nine bindings, not one "Launch app" row.
-            String runKey = toolName + ' ' + label;
-            com.termux.app.terminal.KeybindGroupPalette.Group group =
-                com.termux.app.terminal.KeybindGroupPalette.groupFor(toolName);
-            Integer groupColor = groupColors.get(group);
-            if (groupColor == null) {
-                groupColor = com.termux.app.terminal.KeybindGroupPalette
-                    .colorFor(group, primary, glassBase);
-                groupColors.put(group, groupColor);
-            }
-            // Lighting is never truncated: a bound cap that lights but has no legend row still
-            // tells the truth, a legend row for a dark cap would not.
-            litTokens.put(token, groupColor);
-            boolean run = keybindHintRunToken(token);
-            if (run) {
-                KeybindHintEntry merged = runEntryByTool.get(runKey);
-                if (merged != null) {
-                    merged.tokens.add(token);
-                    continue;
-                }
-            }
-            if (added >= KEYBIND_HINT_MAX) continue;
-            added++;
-            KeybindHintEntry entry = new KeybindHintEntry(
-                keybindHintCapText(token, shift), token, label);
-            if (run) {
-                runEntryByTool.put(runKey, entry);
-                runEntries.add(entry);
-            }
-            java.util.List<KeybindHintEntry> groupEntries = groups.get(group);
-            if (groupEntries == null) {
-                groupEntries = new java.util.ArrayList<>();
-                groups.put(group, groupEntries);
-            }
-            groupEntries.add(entry);
-        }
+        int added = collectKeybindHintEntries(hints, shift, "", true, registry, primary, glassBase,
+            groups, groupColors, runEntryByTool, runEntries, litTokens, 0);
+        collectKeybindHintEntries(ctrlHints, false, "Ctrl+", false, registry, primary, glassBase,
+            groups, groupColors, runEntryByTool, runEntries, litTokens, added);
         // A merged entry shows every key it absorbed: arrows as glyphs in ←↓↑→ order, digits as
         // the range they span.
         for (KeybindHintEntry entry : runEntries) {
-            if (entry.tokens.size() > 1) entry.cap = keybindHintRunCap(entry.tokens);
+            if (entry.tokens.size() > 1)
+                entry.cap = entry.capPrefix + keybindHintRunCap(entry.tokens);
         }
 
         int groupIndex = 0;
@@ -8320,6 +8297,76 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             groupIndex++;
         }
         return litTokens;
+    }
+
+    /**
+     * Folds one hint table into the legend groups.
+     *
+     * @param capPrefix printed before the keycap text, for a table reached by a different chord
+     *     than the latched prefix ({@code "Ctrl+"}).
+     * @param light whether these keys light up on the in-app keyboard. Only the latched prefix's
+     *     own table does: lighting a key for a stroke the prefix does not send would be a lie.
+     * @return the running legend-row count, so the row cap spans both tables.
+     */
+    private int collectKeybindHintEntries(
+            @NonNull Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> hints,
+            boolean shift,
+            @NonNull String capPrefix,
+            boolean light,
+            @NonNull LauncherToolRegistry registry,
+            int primary,
+            int glassBase,
+            @NonNull java.util.EnumMap<com.termux.app.terminal.KeybindGroupPalette.Group,
+                java.util.List<KeybindHintEntry>> groups,
+            @NonNull java.util.EnumMap<com.termux.app.terminal.KeybindGroupPalette.Group,
+                Integer> groupColors,
+            @NonNull java.util.Map<String, KeybindHintEntry> runEntryByTool,
+            @NonNull java.util.List<KeybindHintEntry> runEntries,
+            @NonNull java.util.Map<String, Integer> litTokens,
+            int added) {
+        for (Map.Entry<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> hint
+                : hints.entrySet()) {
+            String token = hint.getKey();
+            String toolName = hint.getValue().toolName;
+            String label = keybindHintLabel(registry, toolName, hint.getValue().label);
+            // Runs merge on the printed label, not just the tool: nine app.launch digits named
+            // after nine different apps are nine bindings, not one "Launch app" row.
+            String runKey = toolName + ' ' + label;
+            com.termux.app.terminal.KeybindGroupPalette.Group group =
+                com.termux.app.terminal.KeybindGroupPalette.groupFor(toolName);
+            Integer groupColor = groupColors.get(group);
+            if (groupColor == null) {
+                groupColor = com.termux.app.terminal.KeybindGroupPalette
+                    .colorFor(group, primary, glassBase);
+                groupColors.put(group, groupColor);
+            }
+            // Lighting is never truncated: a bound cap that lights but has no legend row still
+            // tells the truth, a legend row for a dark cap would not.
+            if (light) litTokens.put(token, groupColor);
+            boolean run = keybindHintRunToken(token);
+            if (run) {
+                KeybindHintEntry merged = runEntryByTool.get(runKey);
+                if (merged != null) {
+                    merged.tokens.add(token);
+                    continue;
+                }
+            }
+            if (added >= KEYBIND_HINT_MAX) continue;
+            added++;
+            KeybindHintEntry entry = new KeybindHintEntry(
+                capPrefix + keybindHintCapText(token, shift), token, label, capPrefix);
+            if (run) {
+                runEntryByTool.put(runKey, entry);
+                runEntries.add(entry);
+            }
+            java.util.List<KeybindHintEntry> groupEntries = groups.get(group);
+            if (groupEntries == null) {
+                groupEntries = new java.util.ArrayList<>();
+                groups.put(group, groupEntries);
+            }
+            groupEntries.add(entry);
+        }
+        return added;
     }
 
     /**

@@ -79,13 +79,21 @@ public class TerminalKeyBindingResolverTest {
     }
 
     @Test
-    public void arrowsBelongToTheMultiplexerWhenSplitsAreOn() {
+    public void arrowsNestOutwardsFromPanesToSessions() {
         int[] arrows = {KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN};
         for (int arrow : arrows) {
-            assertEquals("pane.focus_direction", tool(arrow, CTRL_ALT, SPLITS_ON));
+            // Innermost move, shortest stroke: no Alt, no prefix.
+            assertEquals("pane.focus_direction", tool(arrow, KeyEvent.META_CTRL_ON, SPLITS_ON));
             assertEquals("pane.resize", tool(arrow, CTRL_ALT_SHIFT, SPLITS_ON));
         }
+        // Prefixed horizontal arrows walk the windows of the session, vertical ones the sessions.
+        assertEquals("window.previous", tool(KeyEvent.KEYCODE_DPAD_LEFT, CTRL_ALT, SPLITS_ON));
+        assertEquals("window.next", tool(KeyEvent.KEYCODE_DPAD_RIGHT, CTRL_ALT, SPLITS_ON));
+        assertEquals("session.previous", tool(KeyEvent.KEYCODE_DPAD_UP, CTRL_ALT, SPLITS_ON));
+        assertEquals("session.next", tool(KeyEvent.KEYCODE_DPAD_DOWN, CTRL_ALT, SPLITS_ON));
+        // Pane focus needs panes: with splits off the plain Ctrl arrows stay the shell's.
+        assertNull(tool(KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.META_CTRL_ON, SPLITS_OFF));
     }
 
     // ---------------------------------------------------------------- splits off
@@ -147,14 +155,23 @@ public class TerminalKeyBindingResolverTest {
     }
 
     @Test
-    public void digitsSwitchSessionsByIndex() {
+    public void digitsPickWindowsAndShiftedDigitsPickSessions() {
         for (int digit = 1; digit <= 9; digit++) {
             int keyCode = KeyEvent.KEYCODE_0 + digit;
-            TerminalKeyBindingResolver.Match match = resolver.resolve(key(keyCode, CTRL_ALT), SPLITS_ON);
-            assertNotNull("digit " + digit, match);
-            assertEquals("session.activate_by_index", match.toolName);
+            // A plain digit picks a window inside the session...
+            TerminalKeyBindingResolver.Match window = resolver.resolve(key(keyCode, CTRL_ALT), SPLITS_ON);
+            assertNotNull("digit " + digit, window);
+            assertEquals("window.select", window.toolName);
             assertEquals("digit " + digit + " is a one-based label for a zero-based index",
-                digit - 1, match.arguments.optInt("index", -1));
+                digit - 1, window.arguments.optInt("index", -1));
+            // ...the shifted one picks the session itself.
+            TerminalKeyBindingResolver.Match session =
+                resolver.resolve(key(keyCode, CTRL_ALT_SHIFT), SPLITS_ON);
+            assertNotNull("shifted digit " + digit, session);
+            assertEquals("session.activate_by_index", session.toolName);
+            assertEquals(digit - 1, session.arguments.optInt("index", -1));
+            // With no windows to pick, the plain digit falls back to the session.
+            assertEquals("session.activate_by_index", tool(keyCode, CTRL_ALT, SPLITS_OFF));
         }
     }
 

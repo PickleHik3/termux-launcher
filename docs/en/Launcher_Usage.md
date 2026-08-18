@@ -137,10 +137,13 @@ Use the palette for these actions, or the default hardware-keyboard shortcuts:
 |---|---|
 | Split side by side | `Ctrl+Alt+v` |
 | Split top and bottom | `Ctrl+Alt+h` |
-| Focus a neighboring pane | `Ctrl+Alt+Arrow` |
+| Focus a neighboring pane | `Ctrl+Arrow` |
 | Resize the focused pane | `Ctrl+Alt+Shift+Arrow` |
 | New window | `Ctrl+Alt+c` |
-| Previous/next window | `Ctrl+Alt+[` / `Ctrl+Alt+]` |
+| Previous/next window | `Ctrl+Alt+[` / `Ctrl+Alt+]`, `Ctrl+Alt+Left` / `Ctrl+Alt+Right` |
+| Switch to window by number | `Ctrl+Alt+1` … `Ctrl+Alt+9` |
+| Previous/next session | `Ctrl+Alt+Up` / `Ctrl+Alt+Down` |
+| Switch to session by number | `Ctrl+Alt+Shift+1` … `Ctrl+Alt+Shift+9` |
 | Next automatic layout | `Ctrl+Alt+l` |
 | Float or dock the pane | `Ctrl+Alt+f` |
 | Rename the window | `Ctrl+Alt+r` |

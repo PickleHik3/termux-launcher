@@ -71,7 +71,9 @@ produced by the current keyboard layout.
 |---|---|---|
 | `Ctrl+Alt+v` | Split vertically (side by side) | Paste |
 | `Ctrl+Alt+h` | Split horizontally (stacked) | Sent to the shell if unclaimed |
-| `Ctrl+Alt+Arrow` | Focus the pane in that direction | Left/right opens or closes the session drawer; up/down changes session |
+| `Ctrl+Arrow` | Focus the pane in that direction | Sent to the shell if unclaimed |
+| `Ctrl+Alt+Left` / `Ctrl+Alt+Right` | Previous/next window | Opens or closes the session drawer |
+| `Ctrl+Alt+Up` / `Ctrl+Alt+Down` | Previous/next session | Previous/next session |
 | `Ctrl+Alt+Shift+Arrow` | Resize the focused pane | Sent to the shell if unclaimed |
 | `Ctrl+Alt+c` | New window | New session |
 | `Ctrl+Alt+x` | Close current window, after confirmation | Sent to the shell if unclaimed |
@@ -83,7 +85,8 @@ produced by the current keyboard layout.
 | `Ctrl+Alt+Shift+C` | New session | New session |
 | `Ctrl+Alt+Shift+X` | Close current session, after confirmation | Sent to the shell if unclaimed |
 | `Ctrl+Alt+n` / `Ctrl+Alt+p` | Next/previous session | Next/previous session |
-| `Ctrl+Alt+1` … `Ctrl+Alt+9` | Activate that drawer session | Activate that drawer session |
+| `Ctrl+Alt+1` … `Ctrl+Alt+9` | Activate that window in the session | Activate that drawer session |
+| `Ctrl+Alt+Shift+1` … `Ctrl+Alt+Shift+9` | Activate that drawer session | Activate that drawer session |
 | `Ctrl+Alt+k` | Toggle soft keyboard | Toggle soft keyboard |
 | `Ctrl+Alt++` / `Ctrl+Alt+-` | Increase/decrease font size | Increase/decrease font size |
 | `Ctrl+Alt+m` | Open terminal action sheet | Open terminal action sheet |
