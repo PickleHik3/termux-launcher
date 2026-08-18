@@ -1,0 +1,77 @@
+~ $ pkg upgrade -y
+Checking availability of current mirror:
+[*] https://packages-cf.termux.dev/apt/termux-main: ok
+Hit:1 https://packages-cf.termux.dev/apt/termux-main stable InRelease
+Reading package lists... Done
+Building dependency tree... Done
+27 packages can be upgraded. Run 'apt list --upgradable' to see them.
+Reading package lists... Done
+Building dependency tree... Done
+You might want to run 'apt --fix-broken install' to correct these.
+The following packages have unmet dependencies:
+ dpkg-perl : Depends: clang but it is not installed
+E: Unmet dependencies. Try 'apt --fix-broken install' with no packages (or specify a solution).
+~ $ apt --fix-broken install
+Reading package lists... Done
+Building dependency tree... Done
+Correcting dependencies... Done
+The following additional packages will be installed:
+  clang libcompiler-rt libllvm lld llvm ndk-sysroot
+The following NEW packages will be installed:
+  clang libcompiler-rt libllvm lld llvm ndk-sysroot
+0 upgraded, 6 newly installed, 0 to remove and 27 not upgraded.
+Need to get 83.1 MB of archives.
+After this operation, 525 MB of additional disk space will be used.
+Do you want to continue? [Y/n] y
+Get:1 https://packages-cf.termux.dev/apt/termux-main stable/main aarch64 libcompiler-rt aarch64 21.1.8-2 [2706 kB]
+Get:2 https://packages-cf.termux.dev/apt/termux-main stable/main aarch64 libllvm aarch64 21.1.8-2 [30.4 MB]
+Get:3 https://packages-cf.termux.dev/apt/termux-main stable/main aarch64 lld aarch64 21.1.8-2 [2814 kB]
+Get:4 https://packages-cf.termux.dev/apt/termux-main stable/main aarch64 llvm aarch64 21.1.8-2 [14.8 MB]
+Get:5 https://packages-cf.termux.dev/apt/termux-main stable/main aarch64 ndk-sysroot aarch64 29-2 [1952 kB]
+Get:6 https://packages-cf.termux.dev/apt/termux-main stable/main aarch64 clang aarch64 21.1.8-2 [30.4 MB]
+Fetched 83.1 MB in 4s (20.1 MB/s)
+^[[CSelecting previously unselected package libcompiler-rt.
+(Reading database ... 19702 files and directories currently installed.)
+Preparing to unpack .../0-libcompiler-rt_21.1.8-2_aarch64.deb ...
+Unpacking libcompiler-rt (21.1.8-2) ...
+dpkg: error processing archive /data/data/com.termux.launcher/files/usr/tmp/apt-dpkg-install-k3Mdz5/0-libcompiler-rt_21.1.8-2_aarch64.deb (--unpack):
+ unable to stat './data/data/com.termux' (which was about to be installed): Permission denied
+dpkg-deb: error: paste subprocess was killed by signal (Broken pipe)
+Selecting previously unselected package libllvm.
+Preparing to unpack .../1-libllvm_21.1.8-2_aarch64.deb ...
+Unpacking libllvm (21.1.8-2) ...
+dpkg: error processing archive /data/data/com.termux.launcher/files/usr/tmp/apt-dpkg-install-k3Mdz5/1-libllvm_21.1.8-2_aarch64.deb (--unpack):
+ unable to stat './data/data/com.termux' (which was about to be installed): Permission denied
+dpkg-deb: error: paste subprocess was killed by signal (Broken pipe)
+Selecting previously unselected package lld.
+Preparing to unpack .../2-lld_21.1.8-2_aarch64.deb ...
+Unpacking lld (21.1.8-2) ...
+dpkg: error processing archive /data/data/com.termux.launcher/files/usr/tmp/apt-dpkg-install-k3Mdz5/2-lld_21.1.8-2_aarch64.deb (--unpack):
+ unable to stat './data/data/com.termux' (which was about to be installed): Permission denied
+dpkg-deb: error: paste subprocess was killed by signal (Broken pipe)
+Selecting previously unselected package llvm.
+Preparing to unpack .../3-llvm_21.1.8-2_aarch64.deb ...
+Unpacking llvm (21.1.8-2) ...
+dpkg: error processing archive /data/data/com.termux.launcher/files/usr/tmp/apt-dpkg-install-k3Mdz5/3-llvm_21.1.8-2_aarch64.deb (--unpack):
+ unable to stat './data/data/com.termux' (which was about to be installed): Permission denied
+dpkg-deb: error: paste subprocess was killed by signal (Broken pipe)
+Selecting previously unselected package ndk-sysroot.
+Preparing to unpack .../4-ndk-sysroot_29-2_aarch64.deb ...
+Unpacking ndk-sysroot (29-2) ...
+dpkg: error processing archive /data/data/com.termux.launcher/files/usr/tmp/apt-dpkg-install-k3Mdz5/4-ndk-sysroot_29-2_aarch64.deb (--unpack):
+ unable to stat './data/data/com.termux' (which was about to be installed): Permission denied
+dpkg-deb: error: paste subprocess was killed by signal (Broken pipe)
+Selecting previously unselected package clang.
+Preparing to unpack .../5-clang_21.1.8-2_aarch64.deb ...
+Unpacking clang (21.1.8-2) ...
+dpkg: error processing archive /data/data/com.termux.launcher/files/usr/tmp/apt-dpkg-install-k3Mdz5/5-clang_21.1.8-2_aarch64.deb (--unpack):
+ unable to stat './data/data/com.termux' (which was about to be installed): Permission denied
+dpkg-deb: error: paste subprocess was killed by signal (Broken pipe)
+Errors were encountered while processing:
+ /data/data/com.termux.launcher/files/usr/tmp/apt-dpkg-install-k3Mdz5/0-libcompiler-rt_21.1.8-2_aarch64.deb
+ /data/data/com.termux.launcher/files/usr/tmp/apt-dpkg-install-k3Mdz5/1-libllvm_21.1.8-2_aarch64.deb
+ /data/data/com.termux.launcher/files/usr/tmp/apt-dpkg-install-k3Mdz5/2-lld_21.1.8-2_aarch64.deb
+ /data/data/com.termux.launcher/files/usr/tmp/apt-dpkg-install-k3Mdz5/3-llvm_21.1.8-2_aarch64.deb
+ /data/data/com.termux.launcher/files/usr/tmp/apt-dpkg-install-k3Mdz5/4-ndk-sysroot_29-2_aarch64.deb
+ /data/data/com.termux.launcher/files/usr/tmp/apt-dpkg-install-k3Mdz5/5-clang_21.1.8-2_aarch64.deb
+E: Sub-process /data/data/com.termux.launcher/files/usr/bin/dpkg returned an error code (1)

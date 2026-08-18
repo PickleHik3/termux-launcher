@@ -1,0 +1,159 @@
+diff --git a/apps/Android/MnnLlmChat/app/src/main/cpp/CMakeLists.txt b/apps/Android/MnnLlmChat/app/src/main/cpp/CMakeLists.txt
+index 469aba1..8ac2dd2 100644
+--- a/apps/Android/MnnLlmChat/app/src/main/cpp/CMakeLists.txt
++++ b/apps/Android/MnnLlmChat/app/src/main/cpp/CMakeLists.txt
+@@ -26,6 +26,7 @@ endif ()
+ add_library(${CMAKE_PROJECT_NAME} SHARED
+         # List C/C++ source files with relative paths to this CMakeLists.txt.
+         llm_mnn_jni.cpp
++        embedding_jni.cpp
+         mnn_wrapper_jni.cpp
+         llm_session.cpp
+         crash_util.cpp
+diff --git a/apps/Android/MnnLlmChat/app/src/main/cpp/llm_session.cpp b/apps/Android/MnnLlmChat/app/src/main/cpp/llm_session.cpp
+index 0638f17..e3aefd3 100644
+--- a/apps/Android/MnnLlmChat/app/src/main/cpp/llm_session.cpp
++++ b/apps/Android/MnnLlmChat/app/src/main/cpp/llm_session.cpp
+@@ -43,6 +43,7 @@ void restoreAndroidSteppingStatusIfNeeded(Llm* llm) {
+ }
+ 
+ struct AndroidSteppingStreamState {
++    Llm* llm;
+     std::stringstream& response_buffer;
+     const std::function<bool(const std::string&, bool is_eop)>& on_progress;
+     bool& generate_text_end;
+@@ -58,6 +59,13 @@ struct AndroidSteppingStreamState {
+             response_buffer << utf8Char;
+             if (on_progress) {
+                 stop_requested = stop_requested || on_progress(utf8Char, false);
++                if (stop_requested && llm != nullptr && llm->getContext() != nullptr) {
++                    // response(..., max_new_tokens) owns the complete generation call. Signal
++                    // cancellation through the engine context so speculative decoders stop at
++                    // their next accepted-token boundary without splitting Eagle state.
++                    auto* context = const_cast<MNN::Transformer::LlmContext*>(llm->getContext());
++                    context->status = MNN::Transformer::LlmStatus::USER_CANCEL;
++                }
+             }
+             return;
+         }
+@@ -254,6 +262,7 @@ const MNN::Transformer::LlmContext * LlmSession::Response(const std::string &pro
+     generate_text_end_ = false;
+     std::stringstream response_buffer;
+     AndroidSteppingStreamState stream_state{
++            llm_,
+             response_buffer,
+             on_progress,
+             generate_text_end_,
+@@ -309,19 +318,16 @@ const MNN::Transformer::LlmContext * LlmSession::Response(const std::string &pro
+         if (!multimodal_result.error_message.empty()) {
+             MNN_ERROR("Multimodal processing errors: %s", multimodal_result.error_message.c_str());
+         }
+-        // Prefill only. Stepping decode one token at a time via llm_->generate(1) keeps
+-        // streaming active without letting the engine mark the session as finished up front.
+-        llm_->response(multimodal_result.multimodal_prompt, &output_ostream, "<eop>", 0);
++        llm_->response(multimodal_result.multimodal_prompt, &output_ostream, "<eop>",
++                       max_new_tokens_);
+     } else {
+         MNN_DEBUG("No multimodal content detected, using regular text API");
+-        llm_->response(history_, &output_ostream, "<eop>", 0);
++        llm_->response(history_, &output_ostream, "<eop>", max_new_tokens_);
+     }
+-    resolveAndroidSteppingEop(llm_, stream_state, current_size, max_new_tokens_);
+-    while (!stop_requested_ && !generate_text_end_ && current_size < max_new_tokens_) {
+-        llm_->generate(1);
+-        current_size++;
+-        resolveAndroidSteppingEop(llm_, stream_state, current_size, max_new_tokens_);
++    if (llm_->getContext() != nullptr) {
++        current_size = llm_->getContext()->gen_seq_len;
+     }
++    resolveAndroidSteppingEop(llm_, stream_state, current_size, max_new_tokens_);
+     if (!stop_requested_ && enable_audio_output_) {
+         llm_->generateWavform();
+     }
+@@ -466,6 +472,7 @@ const MNN::Transformer::LlmContext * LlmSession::ResponseWithHistory(
+ 
+     // Stream processing logic without modifying history_ member
+     AndroidSteppingStreamState stream_state{
++            llm_,
+             response_buffer,
+             on_progress,
+             generate_text_end_,
+@@ -511,20 +518,17 @@ const MNN::Transformer::LlmContext * LlmSession::ResponseWithHistory(
+         if (!multimodal_result.error_message.empty()) {
+             MNN_ERROR("ResponseWithHistory: Multimodal processing errors: %s", multimodal_result.error_message.c_str());
+         }
+-        llm_->response(multimodal_result.multimodal_prompt, &output_ostream, "<eop>", 0);
++        llm_->response(multimodal_result.multimodal_prompt, &output_ostream, "<eop>",
++                       max_new_tokens_);
+     } else {
+         MNN_DEBUG("ResponseWithHistory: No multimodal content detected, using regular text API");
+-        llm_->response(temp_history, &output_ostream, "<eop>", 0);
++        llm_->response(temp_history, &output_ostream, "<eop>", max_new_tokens_);
+     }
+     size_t kv_before_decode = llm_->getCurrentHistory();
+-    resolveAndroidSteppingEop(llm_, stream_state, current_size, max_new_tokens_);
+-
+-    while (!stop_requested_ && !generate_text_end_ && current_size < max_new_tokens_) {
+-        llm_->generate(1);
+-        current_size++;
+-        resolveAndroidSteppingEop(llm_, stream_state, current_size, max_new_tokens_);
++    if (llm_->getContext() != nullptr) {
++        current_size = llm_->getContext()->gen_seq_len;
+     }
+-
++    resolveAndroidSteppingEop(llm_, stream_state, current_size, max_new_tokens_);
+     if (!stop_requested_ && enable_audio_output_) {
+         llm_->generateWavform();
+     }
+diff --git a/apps/Android/MnnLlmChat/app/src/main/cpp/utf8_stream_processor.hpp b/apps/Android/MnnLlmChat/app/src/main/cpp/utf8_stream_processor.hpp
+index e05bed9..0688764 100644
+--- a/apps/Android/MnnLlmChat/app/src/main/cpp/utf8_stream_processor.hpp
++++ b/apps/Android/MnnLlmChat/app/src/main/cpp/utf8_stream_processor.hpp
+@@ -1,5 +1,11 @@
++// Copyright 2018 Alibaba Group
++// Licensed under the Apache License, Version 2.0.
+ //
+ // Created by ruoyi.sjd on 2025/4/18.
++// Modified by Termux Launcher on 2026/06/24: validate UTF-8 continuation bytes before emitting a chunk, so a
++// malformed multibyte sequence produced by the model (e.g. an eagle/byte-BPE model emitting only
++// 3 of an emoji's 4 bytes followed by ',') can never reach JNI NewStringUTF, which aborts the
++// process (SIGABRT) on invalid Modified UTF-8. Malformed lead bytes are dropped instead.
+ //
+ #include <functional>
+ #include <string>
+@@ -15,9 +21,27 @@ public:
+         std::string completeChars;
+         while (i < utf8Buffer.size()) {
+             int length = utf8CharLength(static_cast<unsigned char>(utf8Buffer[i]));
+-            if (length == 0 || i + length > utf8Buffer.size()) {
++            if (length == 0) {
++                // Orphan/invalid lead byte: drop it rather than emit invalid UTF-8.
++                i += 1;
++                continue;
++            }
++            if (i + length > utf8Buffer.size()) {
++                // Incomplete trailing sequence: keep it buffered for the next chunk.
+                 break;
+             }
++            bool valid = true;
++            for (int k = 1; k < length; ++k) {
++                if ((static_cast<unsigned char>(utf8Buffer[i + k]) & 0xC0) != 0x80) {
++                    valid = false;
++                    break;
++                }
++            }
++            if (!valid) {
++                // Malformed continuation (e.g. truncated emoji): drop the lead byte.
++                i += 1;
++                continue;
++            }
+             completeChars.append(utf8Buffer, i, length);
+             i += length;
+         }
+@@ -39,4 +63,4 @@ private:
+     std::string utf8Buffer;
+     std::function<void(const std::string &)> callback;
+ };
+-}
+\ No newline at end of file
++}
