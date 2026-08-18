@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!--
      https://material.io/develop/android/theming/dark
     -->
@@ -58,6 +58,54 @@
         <item name="android:windowTranslucentNavigation">true</item>
         <item name="android:windowTranslucentStatus">true</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
+
+    <!--
+      Applied on top of Material's own personalized-colour overlay when the chrome is themed from
+      the terminal colour scheme; see LauncherSchemeTheme.
+
+      Material's overlay only rewires the Material role attributes. On API 30 the launcher's
+      termuxColor* attributes still point at the static palette (the ?attr/color* mapping only
+      exists in values-v31), so they are pointed back at the roles here — which makes this overlay a
+      no-op on API 31+, where the base theme already says the same thing.
+    -->
+    <style name="ThemeOverlay.Termux.SchemeColors" parent="">
+        <item name="termuxColorPrimary">?attr/colorPrimary</item>
+        <item name="termuxColorOnPrimary">?attr/colorOnPrimary</item>
+        <item name="termuxColorSecondary">?attr/colorSecondary</item>
+        <item name="termuxColorOnSecondary">?attr/colorOnSecondary</item>
+        <item name="termuxColorSurfaceBase">?attr/colorSurface</item>
+        <item name="termuxColorSurfacePanel">?attr/colorSurfaceContainer</item>
+        <item name="termuxColorSurfacePanelHigh">?attr/colorSurfaceContainerHigh</item>
+        <item name="termuxColorSurfacePanelHighest">?attr/colorSurfaceContainerHighest</item>
+        <item name="termuxColorOnSurface">?attr/colorOnSurface</item>
+        <item name="termuxColorOnSurfaceVariant">?attr/colorOnSurfaceVariant</item>
+        <item name="termuxColorOutlineVariant">?attr/colorOutlineVariant</item>
+        <item name="termuxColorAccentContainer">?attr/colorSecondaryContainer</item>
+        <item name="termuxColorOnAccentContainer">?attr/colorOnSecondaryContainer</item>
+        <item name="termuxColorPrimaryContainer">?attr/colorPrimaryContainer</item>
+        <item name="termuxColorOnPrimaryContainer">?attr/colorOnPrimaryContainer</item>
+        <item name="termuxColorTertiaryContainer">?attr/colorTertiaryContainer</item>
+        <item name="termuxColorOnTertiaryContainer">?attr/colorOnTertiaryContainer</item>
+        <item name="termuxColorError">?attr/colorError</item>
+        <item name="termuxColorErrorContainer">?attr/colorErrorContainer</item>
+        <item name="termuxColorOnErrorContainer">?attr/colorOnErrorContainer</item>
+        <!-- Not a Material role, so it gets its own overridable resource. -->
+        <item name="termuxColorScrollbar">@color/launcher_scheme_scrollbar</item>
+    </style>
+
+    <!--
+      Light/dark spellings of the same overlay. A scheme decides its own brightness, which need not
+      match the system night mode: a light scheme under a dark system theme still has to tell the
+      framework it is light, or ripples, edge effects and scrollbar thumbs stay tuned for the wrong
+      background.
+    -->
+    <style name="ThemeOverlay.Termux.SchemeColors.Light" parent="ThemeOverlay.Termux.SchemeColors">
+        <item name="android:isLightTheme" tools:targetApi="q">true</item>
+    </style>
+
+    <style name="ThemeOverlay.Termux.SchemeColors.Dark" parent="ThemeOverlay.Termux.SchemeColors">
+        <item name="android:isLightTheme" tools:targetApi="q">false</item>
     </style>
 
     <style name="Theme.TermuxCropImageActivity" parent="Theme.TermuxApp.DayNight.DarkActionBar">

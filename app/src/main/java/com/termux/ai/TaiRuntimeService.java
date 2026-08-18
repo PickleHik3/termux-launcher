@@ -33,6 +33,9 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 public final class TaiRuntimeService extends Service {
     private static final String CHANNEL_ID = "termux_ai_runtime";
@@ -50,6 +53,25 @@ public final class TaiRuntimeService extends Service {
     });
     private final Messenger messenger = new Messenger(new IncomingHandler());
     private volatile boolean foreground;
+    /** Slow enough to be invisible in battery stats, fast enough for a per-second countdown. */
+    private static final long PRESENCE_WATCH_INTERVAL_MS = 2_000L;
+    private final ScheduledExecutorService presenceScheduler =
+        Executors.newSingleThreadScheduledExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "tai-runtime-presence");
+            thread.setDaemon(true);
+            return thread;
+        });
+    @Nullable private ScheduledFuture<?> presenceWatch;
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        // Self-heal for builds where the category sort posted under this same id: its last frame
+        // could outlive both services and sit in the shade forever, ongoing and unswipeable. This
+        // id is ours, and nothing of ours is posted under it until ensureForeground() runs.
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        if (manager != null) manager.cancel(NOTIFICATION_ID);
+    }
 
     @Nullable
     @Override
@@ -60,6 +82,10 @@ public final class TaiRuntimeService extends Service {
 
     @Override
     public void onDestroy() {
+        // The process is going away with a model still resident only when it was killed; publishing
+        // the last known state keeps the UI glyph from counting down against a runtime that is gone.
+        stopPresenceWatch();
+        presenceScheduler.shutdownNow();
         executor.shutdownNow();
         controlExecutor.shutdownNow();
         super.onDestroy();
@@ -193,14 +219,41 @@ public final class TaiRuntimeService extends Service {
     private void updateForegroundAfterOperation() {
         try {
             TaiRuntimeState state = TaiManager.getRuntimeProcessInstance(this).getRuntimeState();
+            TaiRuntimePresence.publish(this, state);
             if (state.loaded || state.activeGeneration || "loading".equals(state.state) || "idle-warm".equals(state.state)) {
                 ensureForeground("TAI runtime", state.status);
+                startPresenceWatch();
             } else if (foreground) {
                 stopForeground(true);
                 foreground = false;
             }
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * Publishes the runtime state on a slow tick while a model is held. The idle unload fires on the
+     * runtime's own scheduler, with no operation to hang a publish off — without this watch, the
+     * status glyph in the UI process would keep counting down past a model that is already gone.
+     * The watch stops itself as soon as it publishes an idle runtime.
+     */
+    private synchronized void startPresenceWatch() {
+        if (presenceWatch != null && !presenceWatch.isCancelled()) return;
+        presenceWatch = presenceScheduler.scheduleWithFixedDelay(() -> {
+            try {
+                TaiRuntimeState state = TaiManager.getRuntimeProcessInstance(this).getRuntimeState();
+                TaiRuntimePresence.publish(this, state);
+                if (!state.loaded && !state.activeGeneration && !"loading".equals(state.state))
+                    stopPresenceWatch();
+            } catch (Exception ignored) {
+            }
+        }, PRESENCE_WATCH_INTERVAL_MS, PRESENCE_WATCH_INTERVAL_MS, TimeUnit.MILLISECONDS);
+    }
+
+    private synchronized void stopPresenceWatch() {
+        if (presenceWatch == null) return;
+        presenceWatch.cancel(false);
+        presenceWatch = null;
     }
 
     private void ensureForeground(@NonNull String title, @NonNull String text) {

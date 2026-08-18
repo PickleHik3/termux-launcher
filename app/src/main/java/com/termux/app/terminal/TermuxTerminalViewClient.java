@@ -1,26 +1,21 @@
 package com.termux.app.terminal;
 
 import android.annotation.SuppressLint;
-import androidx.appcompat.app.AlertDialog;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import android.content.ClipData;
-import android.content.ClipboardManager;
 import android.content.Context;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Environment;
+import android.graphics.PointF;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
-import android.text.TextUtils;
-import android.view.Gravity;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.EditText;
-import android.widget.ListView;
-import android.widget.Toast;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import com.termux.R;
 import com.termux.app.SuggestionBarCallback;
 import com.termux.app.TermuxActivity;
@@ -70,6 +65,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.drawerlayout.widget.DrawerLayout;
 
 public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
@@ -106,7 +102,12 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     /** Second retry for devices whose resumed window becomes IME-ready later. */
     private static final long KEYBOARD_RESUME_SECOND_RETRY_DELAY_MS = 320L;
     /** Matches kitty's default multi-key mapping timeout. */
-    private static final long KEY_CHORD_TIMEOUT_MS = 2_000L;
+    /**
+     * How long a pending sequence waits for its next stroke. Generous on purpose: the hint legend
+     * that a prefix raises is meant to be read, and a prefix is most useful exactly on the
+     * keyboards where the next key takes a moment to find.
+     */
+    private static final long KEY_CHORD_TIMEOUT_MS = 4_000L;
     private static final ExecutorService REPORT_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "termux-report-builder");
         thread.setDaemon(true);
@@ -118,6 +119,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     private final TerminalKeyChordOverlay mKeyChordOverlay;
     private final Runnable mKeyChordTimeout = this::cancelPendingKeyChord;
     private final Runnable mKeyModeTimeout = this::expireKeyMode;
+    /** Modifiers a physical keyboard is holding, for the keybind hint slab. */
+    private final HardwareModifierTracker mHardwareModifiers = new HardwareModifierTracker();
+    /** Prefix of a latched leader sequence, e.g. {@code "ctrl+space>"}, else null. */
+    @Nullable private String mPendingSequencePrefix;
 
     public TermuxTerminalViewClient(TermuxActivity activity, TermuxTerminalSessionActivityClient termuxTerminalSessionActivityClient) {
         this.mActivity = activity;
@@ -214,6 +219,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         cancelPendingKeyChord();
         TerminalKeyBindingResolver.getInstance().clearModes();
         mKeyChordHandler.removeCallbacks(mKeyModeTimeout);
+        mHardwareModifiers.clear();
+        refreshKeybindHints();
     }
 
     /**
@@ -337,9 +344,34 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         TerminalKeyInspector inspector = TerminalKeyInspector.active();
         if (inspector != null)
             inspector.recordEvent(e, true);
+        if (mHardwareModifiers.track(e))
+            refreshKeybindHints();
+        // An open rename chip is a modal editor over one surface, so it outranks every other
+        // consumer: while it is up, every stroke belongs to the name being typed.
+        if (mActivity.handleTerminalRenameKey(keyCode, e))
+            return true;
+        // The find strip is the same kind of claim: while it is up every stroke is either the query
+        // or a vim command over the transcript, and none of it belongs to the shell.
+        if (mActivity.handleScrollbackFindKey(keyCode, e))
+            return true;
+        // Back for the widget pane and the FULL status pane. Same order as onBackPressed(), and the
+        // same reason the drawer has a claim below: on a device the back key is consumed in this
+        // channel and never reaches onBackPressed().
+        if (mActivity.handleOverlayPaneKey(keyCode, e))
+            return true;
         // The palette overlay claims typing before the terminal writes it, the same point the
         // in-app keyboard's interceptor sits at. Checked first so nothing else can consume esc.
         if (mActivity.handleCommandPaletteKey(keyCode, e))
+            return true;
+        // The sheet plane, after the palette so it can never swallow the escape stroke the palette
+        // is checked first for, and before the drawer, which a sheet closes as it opens. On a device
+        // back is consumed here and never reaches onBackPressed(), so the plane needs both routes.
+        if (mActivity.handleTerminalSheetKey(keyCode, e))
+            return true;
+        // After the palette (which can be summoned over the drawer and therefore outranks it) and
+        // before the app-search hook, which reads the terminal's own input line — a line nothing
+        // typed into the drawer ever reaches.
+        if (mActivity.handleAppDrawerKey(keyCode, e))
             return true;
         if (mActivity.handleTerminalAppSearchKey(keyCode))
             return true;
@@ -420,10 +452,19 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (step.kind == TerminalKeyBindingResolver.Step.Kind.PENDING) {
             mKeyChordHandler.removeCallbacks(mKeyChordTimeout);
             mKeyChordHandler.postDelayed(mKeyChordTimeout, KEY_CHORD_TIMEOUT_MS);
-            mKeyChordOverlay.show(step.pendingSequence);
+            mPendingSequencePrefix = step.pendingSequence + ">";
+            refreshKeybindHints();
+            // The hint legend already names the pending prefix and every key it accepts, so the
+            // "waiting for key" chip would be a second, smaller copy of it. It stays only as the
+            // fallback for when the legend cannot be shown at all.
+            if (!mActivity.isKeybindHintPopupVisible())
+                mKeyChordOverlay.show(step.pendingSequence);
             return true;
         }
         clearPendingKeyChordUi();
+        // Both endings retire the legend at once: a stroke that ran, and a stroke that turned out
+        // not to be bound. Only letting the prefix go keeps the lingering fade.
+        mActivity.onKeybindHintConsumed();
         if (step.kind == TerminalKeyBindingResolver.Step.Kind.CANCELLED) {
             mActivity.getWindow().getDecorView().playSoundEffect(
                 android.view.SoundEffectConstants.CLICK);
@@ -440,6 +481,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             return true; // unbound Ctrl+Alt stroke: swallowed, as before
 
         boolean handled = runMatch(resolver, dispatcher, match);
+        if (handled) mKeyChordOverlay.showAction(match.stroke, bindingDisplayName(match));
         resolver.afterMatch(match);
         refreshKeyModeUi(resolver);
         return handled;
@@ -461,6 +503,16 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (!result.optBoolean("ok", false))
             Logger.logWarn(LOG_TAG, "Keyboard tool " + toolId + " failed: "
                 + result.optString("message"));
+    }
+
+    /** What to call the binding that just ran: its own label, else the action's title. */
+    @NonNull
+    private String bindingDisplayName(@NonNull TerminalKeyBindingResolver.Match match) {
+        if (match.label != null && !match.label.isEmpty()) return match.label;
+        LauncherToolRegistry.ToolMetadata tool =
+            LauncherToolRegistry.getInstance().getTool(match.toolName);
+        if (tool != null && tool.titleRes != 0) return mActivity.getString(tool.titleRes);
+        return match.toolName;
     }
 
     /** Runs every action of a resolved binding, in the order the config declared them. */
@@ -504,8 +556,13 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             JSONObject arguments = mergeArguments(action.arguments, match.arguments);
             JSONObject result = dispatcher.execute(action.value, arguments);
             if (!result.optBoolean("ok", false)) {
+                String message = result.optString("message");
                 Logger.logWarn(LOG_TAG, "Binding " + match.stroke + " -> " + action.value
-                    + " failed: " + result.optString("message"));
+                    + " failed: " + message);
+                // Say so on screen too: a swallowed stroke that logs and shows nothing is how a
+                // broken binding passes for an unbound one.
+                mKeyChordOverlay.showFailure(match.stroke,
+                    message.isEmpty() ? action.value : message);
                 handled = true;
                 continue;
             }
@@ -543,6 +600,23 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     private void clearPendingKeyChordUi() {
         mKeyChordHandler.removeCallbacks(mKeyChordTimeout);
         mKeyChordOverlay.hide();
+        if (mPendingSequencePrefix != null) {
+            mPendingSequencePrefix = null;
+            refreshKeybindHints();
+        }
+    }
+
+    /**
+     * Pushes what the hint slab should be documenting right now. A latched leader sequence wins
+     * over a held Ctrl+Alt, since the sequence is the thing waiting for its next key; both are
+     * dead while hardware shortcuts are turned off, because no stroke would fire.
+     */
+    private void refreshKeybindHints() {
+        String prefix = mPendingSequencePrefix != null ? mPendingSequencePrefix
+            : (mHardwareModifiers.isCtrlAltHeld() ? "ctrl+alt+" : null);
+        if (prefix != null && mActivity.getProperties().areHardwareKeyboardShortcutsDisabled())
+            prefix = null;
+        mActivity.setHardwareKeybindHintPrefix(prefix, mHardwareModifiers.isShiftHeld());
     }
 
     private void refreshKeyModeUi(@NonNull TerminalKeyBindingResolver resolver) {
@@ -568,8 +642,23 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         TerminalKeyInspector inspector = TerminalKeyInspector.active();
         if (inspector != null)
             inspector.recordEvent(e, false);
+        if (mHardwareModifiers.track(e))
+            refreshKeybindHints();
         // Swallow the release of a stroke the palette consumed on the way down.
         if (mActivity.isCommandPaletteOpen())
+            return true;
+        if (mActivity.isFolderRenameActive())
+            return true;
+        // The release of a back press a pane consumed on the way down.
+        if (mActivity.consumeOverlayPaneKeyUp(keyCode))
+            return true;
+        // Same for the sheet plane: onKeyDown claimed the press, and a release let through on its
+        // own would reach the shell behind a modal surface.
+        if (mActivity.isTerminalSheetOpen())
+            return true;
+        // Same for the drawer: onKeyDown claimed the press, and a release let through on its own
+        // would reach the shell behind a full-screen plane.
+        if (mActivity.isAppDrawerOpen())
             return true;
         // If emulator is not set, like if bootstrap installation failed and user dismissed the error
         // dialog, then just exit the activity, otherwise they will be stuck in a broken state.
@@ -631,14 +720,24 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         return state;
     }
 
+    /**
+     * Where the long press that started this interaction landed, in screen coordinates.
+     *
+     * <p>The action menu opens at the finger, but it is not the long press that opens it: the press
+     * starts text selection, and the menu arrives one step later from the selection toolbar's
+     * More button, which carries no coordinates of its own. So the point is kept here.
+     */
+    @androidx.annotation.Nullable private PointF mLastLongPressOnScreen;
+
     @Override
     public boolean onLongPress(MotionEvent event) {
+        mLastLongPressOnScreen = new PointF(event.getRawX(), event.getRawY());
         return false;
     }
 
     @Override
     public boolean onShowContextMenu(TerminalView view) {
-        return mActivity.showTerminalActionSheet();
+        return mActivity.showTerminalActionSheet(mLastLongPressOnScreen);
     }
 
     @Override
@@ -646,10 +745,23 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         TerminalKeyInspector inspector = TerminalKeyInspector.active();
         if (inspector != null)
             inspector.recordCodePoint(codePoint, ctrlDown);
+        // The rename chip's twin of its onKeyDown hook, in the same order: it outranks the rest.
+        if (mActivity.handleTerminalRenameCodePoint(codePoint, ctrlDown))
+            return true;
+        // The find strip's twin of its onKeyDown hook, in the same order.
+        if (mActivity.handleScrollbackFindCodePoint(codePoint, ctrlDown))
+            return true;
         // The twin of the palette hook in onKeyDown, and checked first for the same reason. A
         // system IME commits ordinary characters through the input connection without ever sending
         // a key event, so this is the only route by which typing reaches the overlay from one.
         if (mActivity.handleCommandPaletteCodePoint(codePoint, ctrlDown))
+            return true;
+        // The sheet plane's twin of the same hook, in the same order as onKeyDown.
+        if (mActivity.handleTerminalSheetCodePoint(codePoint, ctrlDown))
+            return true;
+        // The drawer's twin of the same hook, in the same order as onKeyDown: after the palette,
+        // before the enter-only app-search hook below.
+        if (mActivity.handleAppDrawerCodePoint(codePoint, ctrlDown))
             return true;
         // The AOSP keyboard and its descendants send ⏎ as text rather than as KEYCODE_ENTER — see
         // TerminalView#sendTextToTerminal — so the key-code-only app-search hook needs this twin
@@ -778,10 +890,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                                 return true;
                             case TermuxPropertyConstants.ACTION_SHORTCUT_RENAME_SESSION:
                                 if (mActivity.isSplitPanesEnabled())
-                                    mActivity.renameCurrentWindowSession();
+                                    mActivity.promptCurrentSessionRename();
                                 else
-                                    mTermuxTerminalSessionActivityClient.renameSession(
-                                        mActivity.getCurrentSession());
+                                    mTermuxTerminalSessionActivityClient.promptCurrentPaneRename();
                                 return true;
                         }
                     }
@@ -1065,16 +1176,26 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     private void showHyperlinkDialog(String uri) {
         String scheme = Uri.parse(uri).getScheme();
         boolean openable = scheme != null && OPENABLE_HYPERLINK_SCHEMES.contains(scheme.toLowerCase(Locale.ROOT));
-        AlertDialog.Builder builder = new MaterialAlertDialogBuilder(mActivity)
-            .setTitle(R.string.title_hyperlink_dialog)
-            .setMessage(uri)
-            .setNeutralButton(R.string.action_hyperlink_copy, (di, which) ->
-                ShareUtils.copyTextToClipboard(mActivity, uri, mActivity.getString(R.string.msg_select_url_copied_to_clipboard)))
-            .setNegativeButton(android.R.string.cancel, null);
+        TerminalSheetController sheet = mActivity.getTerminalSheetController();
+        LinearLayout body = TerminalSheetViews.body(mActivity);
+        TerminalSheetViews.addMessage(body, uri);
+        LinearLayout actions = TerminalSheetViews.addActionRow(body);
+        TerminalSheetViews.addAction(actions, mActivity.getString(android.R.string.cancel),
+            sheet::dismiss);
+        TerminalSheetViews.addAction(actions, mActivity.getString(R.string.action_hyperlink_copy),
+            () -> {
+                sheet.dismiss();
+                ShareUtils.copyTextToClipboard(mActivity, uri,
+                    mActivity.getString(R.string.msg_select_url_copied_to_clipboard));
+            });
         if (openable) {
-            builder.setPositiveButton(R.string.action_hyperlink_open, (di, which) -> ShareUtils.openUrl(mActivity, uri));
+            TerminalSheetViews.addAction(actions,
+                mActivity.getString(R.string.action_hyperlink_open), () -> {
+                    sheet.dismiss();
+                    ShareUtils.openUrl(mActivity, uri);
+                });
         }
-        builder.show();
+        sheet.show(mActivity.getString(R.string.title_hyperlink_dialog), body);
     }
 
     public void showUrlSelection() {
@@ -1083,30 +1204,37 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             return;
         String text = ShellUtils.getTerminalSessionTranscriptText(session, true, true);
         LinkedHashSet<CharSequence> urlSet = TermuxUrlUtils.extractUrls(text);
+        TerminalSheetController sheet = mActivity.getTerminalSheetController();
+        String title = mActivity.getString(R.string.action_select_url);
         if (urlSet.isEmpty()) {
-            new MaterialAlertDialogBuilder(mActivity).setMessage(R.string.title_select_url_none_found).show();
+            LinearLayout notice = TerminalSheetViews.body(mActivity);
+            TerminalSheetViews.addMessage(notice,
+                mActivity.getString(R.string.title_select_url_none_found));
+            sheet.show(title, notice);
             return;
         }
         final CharSequence[] urls = urlSet.toArray(new CharSequence[0]);
         // Latest first.
         Collections.reverse(Arrays.asList(urls));
-        // Click to copy url to clipboard:
-        final AlertDialog dialog = new MaterialAlertDialogBuilder(mActivity).setItems(urls, (di, which) -> {
-            String url = (String) urls[which];
-            ShareUtils.copyTextToClipboard(mActivity, url, mActivity.getString(R.string.msg_select_url_copied_to_clipboard));
-        }).setTitle(R.string.title_select_url_dialog).create();
-        // Long press to open URL:
-        dialog.setOnShowListener(di -> {
-            // this is a ListView with your "buds" in it
-            ListView lv = dialog.getListView();
-            lv.setOnItemLongClickListener((parent, view, position, id) -> {
-                dialog.dismiss();
-                String url = (String) urls[position];
+        LinearLayout body = TerminalSheetViews.body(mActivity);
+        // The instruction was the dialog's title; on a card it is the message, because the title
+        // line is a single ellipsized row and this sentence is what tells the two gestures apart.
+        TerminalSheetViews.addMessage(body, mActivity.getString(R.string.title_select_url_dialog));
+        for (CharSequence entry : urls) {
+            final String url = entry.toString();
+            // Tap copies, long press opens — the same split the list dialog had.
+            TextView row = TerminalSheetViews.addMenuRow(body, url, () -> {
+                sheet.dismiss();
+                ShareUtils.copyTextToClipboard(mActivity, url,
+                    mActivity.getString(R.string.msg_select_url_copied_to_clipboard));
+            });
+            row.setOnLongClickListener(view -> {
+                sheet.dismiss();
                 ShareUtils.openUrl(mActivity, url);
                 return true;
             });
-        });
-        dialog.show();
+        }
+        sheet.show(title, TerminalSheetViews.wrapScrolling(body));
     }
 
     /** Show the keyboard-addressable URL/path/hash/line-reference hint picker. */
@@ -1117,7 +1245,17 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         TerminalHintsOverlay.show(mActivity, text == null ? "" : text);
     }
 
+    /**
+     * Scrollback search: the strip above the dock, which leaves the transcript on screen with its
+     * matches lit. It falls back to {@link #showScrollbackSearchFallback()} by itself when there is
+     * no keyboard to type a query with.
+     */
     public void showScrollbackSearch() {
+        mActivity.beginScrollbackFind();
+    }
+
+    /** The compact sheet search, for when no keyboard can be raised to type into the strip. */
+    public void showScrollbackSearchFallback() {
         TerminalView view = mActivity.getTerminalView();
         if (view != null) TerminalScrollbackSearchOverlay.show(mActivity, view);
     }

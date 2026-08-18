@@ -71,7 +71,9 @@ produced by the current keyboard layout.
 |---|---|---|
 | `Ctrl+Alt+v` | Split vertically (side by side) | Paste |
 | `Ctrl+Alt+h` | Split horizontally (stacked) | Sent to the shell if unclaimed |
-| `Ctrl+Alt+Arrow` | Focus the pane in that direction | Left/right opens or closes the session drawer; up/down changes session |
+| `Ctrl+Arrow` | Focus the pane in that direction | Sent to the shell if unclaimed |
+| `Ctrl+Alt+Left` / `Ctrl+Alt+Right` | Previous/next window | Opens or closes the session drawer |
+| `Ctrl+Alt+Up` / `Ctrl+Alt+Down` | Previous/next session | Previous/next session |
 | `Ctrl+Alt+Shift+Arrow` | Resize the focused pane | Sent to the shell if unclaimed |
 | `Ctrl+Alt+c` | New window | New session |
 | `Ctrl+Alt+x` | Close current window, after confirmation | Sent to the shell if unclaimed |
@@ -83,7 +85,8 @@ produced by the current keyboard layout.
 | `Ctrl+Alt+Shift+C` | New session | New session |
 | `Ctrl+Alt+Shift+X` | Close current session, after confirmation | Sent to the shell if unclaimed |
 | `Ctrl+Alt+n` / `Ctrl+Alt+p` | Next/previous session | Next/previous session |
-| `Ctrl+Alt+1` … `Ctrl+Alt+9` | Activate that drawer session | Activate that drawer session |
+| `Ctrl+Alt+1` … `Ctrl+Alt+9` | Activate that window in the session | Activate that drawer session |
+| `Ctrl+Alt+Shift+1` … `Ctrl+Alt+Shift+9` | Activate that drawer session | Activate that drawer session |
 | `Ctrl+Alt+k` | Toggle soft keyboard | Toggle soft keyboard |
 | `Ctrl+Alt++` / `Ctrl+Alt+-` | Increase/decrease font size | Increase/decrease font size |
 | `Ctrl+Alt+m` | Open terminal action sheet | Open terminal action sheet |
@@ -91,6 +94,15 @@ produced by the current keyboard layout.
 | `Ctrl+Alt+s` | Search scrollback | Search scrollback |
 
 “Vertical split” means a vertical dividing line and therefore creates side-by-side panes.
+
+## Touch and mouse
+
+Touch handling differs from stock Termux: it is tuned for TUIs, not just shell prompts. Drags
+scroll — translated to scroll-wheel events inside mouse-aware apps — and taps click when the app
+tracks the mouse. **Press and hold briefly, then drag** to hold the mouse button down (a small
+haptic marks the handoff): from there, select text in vim, drag tmux splits, or resize TUI panes
+like a desktop mouse. A quick long-press without moving still opens ordinary text selection with
+the copy toolbar, and pinch changes only the focused pane's font size.
 
 ## Panes, windows, and layouts
 
@@ -244,13 +256,18 @@ The launcher installs its own configuration examples, so nothing has to be writt
 |---|---|---|
 | `~/.termux/termux-launcher-bindings.conf` | On install, only when absent | Bindings, chords, modal keymaps, launching apps from a chord |
 | `~/.termux/fonts.conf` | On install, only when absent | Faces, symbol maps, shaping, features, axes, cell metrics |
+| `~/.termux/termux.properties` | On install, only when absent | `TERM`, volume and back keys, extra keys, cursor, scrollback, margins, colours, app behaviour |
 | `~/.termux/keyboard/layout.xml` | Never — copy it yourself | In-app keyboard layout and space-bar swipe slots |
 | `~/.termux/launcher/examples/` | Refreshed at every app start | Pristine copies of all of the above, plus a `README.md` |
 
-The two seeded files arrive with every directive commented out, so a fresh install behaves exactly as
-it did before they existed — uncomment what you want. They are written only when missing, so app
+The three seeded files arrive with every directive commented out, so a fresh install behaves exactly
+as it did before they existed — uncomment what you want. They are written only when missing, so app
 updates never overwrite your edits. To start over, copy the file back from
 `~/.termux/launcher/examples/`.
+
+Only one properties file is ever read: `~/.termux/termux.properties` wins, and
+`~/.config/termux/termux.properties` applies only when the first is absent. A file already at that
+second path is therefore left in charge — the app seeds nothing rather than shadowing it.
 
 The keyboard layout is not seeded, because the moment `~/.termux/keyboard/layout.xml` exists it
 replaces the bundled layout. Opt in explicitly:
@@ -302,6 +319,33 @@ map ctrl+alt+j send-text "git status\n"
 
 `--when` accepts `always`, `splits-on`, or `splits-off`.
 
+### tmux-style prefix
+
+`leader <stroke>` declares a prefix key. Every root `ctrl+alt+…` binding then also answers to the
+prefix followed by the same key, which is what makes the bindings reachable on a keyboard where
+holding three keys at once is awkward:
+
+```text
+leader ctrl+space
+```
+
+With that line, `Ctrl+Space` then `m` opens the action sheet, `Ctrl+Space` then `Shift+P` opens the
+command palette, and the Ctrl+Alt strokes keep working unchanged. The prefix behaves like any other
+chord: the pending stroke shows in the chord overlay, the keybind hint legend lists what the next
+key can be, and an unknown key or the chord timeout cancels it. A sequence the file spells out
+itself is never overwritten by the generated alias, and only the first `leader` line is used.
+
+`--label "Display name"` names a binding for the keybind hint legend, up to 32 characters. Without
+one the legend prints the action's own title, which reads well for the specific actions and says
+nothing useful for the generic ones: every app chord runs `app.launch`, so an unlabelled row reads
+"Launch app" whichever app it starts. In a multi-line binding the first `--label` names the whole
+thing.
+
+```text
+map --label WhatsApp ctrl+alt+w app.launch com.whatsapp
+map --label "Repo status" ctrl+alt+j send-text "cd ~/src\n"
+```
+
 ### Action arguments
 
 Words after the action id are its arguments. Positional words fill the action's required arguments in
@@ -333,9 +377,12 @@ otherwise the launcher's fuzzy app ranking picks the best match, the same rankin
 uses.
 
 ```text
-map ctrl+alt+w app.launch com.whatsapp
-map ctrl+alt+shift+m app.launch Maps
+map --label WhatsApp ctrl+alt+w app.launch com.whatsapp
+map --label Maps ctrl+alt+shift+m app.launch Maps
 ```
+
+`--label` is what the keybind hint legend prints for the chord; without it every app row in the
+legend reads "Launch app".
 
 Installed apps also appear in the command palette under **Apps**: the most-used ones with no query,
 and the full ranked match list while filtering. Selecting a row runs `app.launch`.
@@ -345,8 +392,9 @@ and because the shortcut column is searchable, typing `ctrl+alt+w` finds the row
 
 You do not have to edit the file to bind one. **Long-press an app row** (or press `Ctrl+Alt+Enter` on
 the focused one) and the palette waits for a key combination: `⏎` saves, `⌫` clears, `Esc` cancels.
-The binding is written to `~/.termux/termux-launcher-bindings.conf` under a managed header, with your
-comments, blank lines and ordering preserved, and takes effect immediately.
+The binding is written to `~/.termux/termux-launcher-bindings.conf` under a managed header, labelled
+with the app name the row showed, with your comments, blank lines and ordering preserved, and takes
+effect immediately.
 
 Three details are worth knowing:
 

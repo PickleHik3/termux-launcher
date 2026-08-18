@@ -66,6 +66,18 @@
                 android:text="@string/termux_app_launcher_dock_style_rounded"
                 android:textSize="13sp"
                 android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/segmented_pill_third"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
         </LinearLayout>
     </FrameLayout>
 </LinearLayout>

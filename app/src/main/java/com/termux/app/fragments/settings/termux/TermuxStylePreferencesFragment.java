@@ -2,7 +2,6 @@ package com.termux.app.fragments.settings.termux;
 
 import android.app.WallpaperInfo;
 import android.app.WallpaperManager;
-import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
@@ -12,7 +11,6 @@ import android.os.Looper;
 import androidx.annotation.ColorInt;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
-import androidx.core.content.ContextCompat;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
@@ -20,25 +18,18 @@ import androidx.preference.SeekBarPreference;
 import androidx.preference.SwitchPreferenceCompat;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
+import com.termux.launcherctl.LauncherCtlNotificationStore;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.app.theme.LauncherSchemeTheme;
 import com.termux.shared.data.DataUtils;
-import com.termux.shared.file.FileUtils;
 import com.termux.shared.logger.Logger;
-import com.termux.shared.settings.properties.SharedProperties;
 import com.termux.shared.theme.ThemeUtils;
 import com.termux.shared.termux.theme.TermuxThemeUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.settings.properties.TermuxSharedProperties;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
-import java.io.File;
-import java.io.BufferedReader;
-import java.io.FileInputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Properties;
 
 @Keep
@@ -70,6 +61,7 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         }
         configureDockPreferencePresentation();
         configureTerminalContrastPreference();
+        configureUiColorSourcePreference();
         updateDockBlurAvailability();
     }
 
@@ -85,6 +77,49 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         }
         updateDockBlurAvailability();
         configureTerminalContrastPreference();
+        configureUiColorSourcePreference();
+    }
+
+    /**
+     * Availability and summary for the interface-colour source.
+     *
+     * <p>Both ways it can be unavailable are stated in the summary rather than hidden: on API 30
+     * and below the palette cannot be loaded into the activity's resources at all, and with no
+     * {@code colors.properties} on disk there is nothing to derive a palette from.
+     */
+    private void configureUiColorSourcePreference() {
+        androidx.preference.ListPreference source = findPreference("ui_color_source");
+        Preference hint = findPreference("ui_color_source_hint");
+        if (source == null) return;
+
+        boolean supported = LauncherSchemeTheme.isSupported();
+        boolean hasScheme = TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE.isFile();
+        source.setEnabled(supported && hasScheme);
+        if (hint != null) hint.setVisible(supported && hasScheme);
+
+        if (!supported) {
+            source.setSummary(R.string.settings_ui_color_source_unsupported);
+            return;
+        }
+        if (!hasScheme) {
+            source.setSummary(R.string.settings_ui_color_source_no_scheme);
+            return;
+        }
+        source.setSummary(LauncherSchemeTheme.COLOR_SOURCE_SCHEME.equals(source.getValue())
+            ? R.string.settings_ui_color_source_summary_scheme
+            : R.string.settings_ui_color_source_summary_wallpaper);
+        source.setOnPreferenceChangeListener((preference, value) -> {
+            source.setValue(String.valueOf(value));
+            if (LauncherSchemeTheme.COLOR_SOURCE_SCHEME.equals(String.valueOf(value))) {
+                // The data store has already turned wallpaper colours off — the terminal and the
+                // chrome share one palette — so the switch has to stop claiming otherwise.
+                SwitchPreferenceCompat dynamic = findPreference("terminal_dynamic_colors_enabled");
+                if (dynamic != null) dynamic.setChecked(false);
+                configureTerminalContrastPreference();
+            }
+            configureUiColorSourcePreference();
+            return true;
+        });
     }
 
     private void configureTerminalContrastPreference() {
@@ -104,6 +139,14 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
             boolean on = Boolean.TRUE.equals(value);
             contrast.setEnabled(on);
             updateTerminalContrastSummary(contrast, on);
+            androidx.preference.ListPreference source = findPreference("ui_color_source");
+            if (on && source != null
+                && LauncherSchemeTheme.COLOR_SOURCE_SCHEME.equals(source.getValue())) {
+                // Same coupling from the other side: the data store has already moved the chrome
+                // back to the wallpaper.
+                source.setValue(LauncherSchemeTheme.COLOR_SOURCE_WALLPAPER);
+                configureUiColorSourcePreference();
+            }
             return true;
         });
     }
@@ -212,6 +255,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
     private final TermuxAppSharedPreferences mPreferences;
     private boolean mPendingRecreateActivity;
     private final Runnable mStyleSyncRunnable;
+    private final Runnable mDrawerSyncRunnable;
 
     private static TermuxStylePreferencesDataStore mInstance;
     private static final String LOG_TAG = "TermuxStylePreferences";
@@ -224,6 +268,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             mPendingRecreateActivity = false;
             TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, recreateActivity);
         };
+        mDrawerSyncRunnable = () -> TermuxActivity.requestAppDrawerReloadOnNextResume(mContext);
     }
 
     public static synchronized TermuxStylePreferencesDataStore getInstance(Context context) {
@@ -237,6 +282,11 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         mPendingRecreateActivity = mPendingRecreateActivity || recreateActivity;
         MAIN_HANDLER.removeCallbacks(mStyleSyncRunnable);
         MAIN_HANDLER.postDelayed(mStyleSyncRunnable, STYLE_SYNC_DEBOUNCE_MS);
+    }
+
+    private void scheduleAppDrawerSync() {
+        MAIN_HANDLER.removeCallbacks(mDrawerSyncRunnable);
+        MAIN_HANDLER.postDelayed(mDrawerSyncRunnable, STYLE_SYNC_DEBOUNCE_MS);
     }
 
     @Override
@@ -264,6 +314,14 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 break;
             case "terminal_dynamic_colors_enabled":
                 mPreferences.setTerminalDynamicColorsEnabled(value);
+                if (value && LauncherSchemeTheme.COLOR_SOURCE_SCHEME.equals(mPreferences.getUiColorSource())) {
+                    // The scheme the chrome was following is no longer what the terminal shows, so
+                    // the chrome goes back to the wallpaper with it.
+                    mPreferences.setUiColorSource(LauncherSchemeTheme.COLOR_SOURCE_WALLPAPER);
+                    LauncherSchemeTheme.invalidate();
+                    scheduleTermuxActivityStylingSync(true);
+                    break;
+                }
                 scheduleTermuxActivityStylingSync(false);
                 break;
             case "app_launcher_bw_icons":
@@ -277,6 +335,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherAppsRowEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
+            case "app_launcher_extra_keys_row_enabled":
+                mPreferences.setAppLauncherExtraKeysRowEnabled(value);
+                scheduleTermuxActivityStylingSync(false);
+                break;
             case "app_launcher_display_app_names":
                 mPreferences.setAppLauncherDisplayAppNamesEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -285,6 +347,11 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherNotificationDotsEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
+            case "app_launcher_notification_history":
+                mPreferences.setAppLauncherNotificationHistoryEnabled(value);
+                // Turning it off means the captured message bodies go too, not just future ones.
+                if (!value) LauncherCtlNotificationStore.getInstance().clearAll();
+                break;
             case "app_launcher_most_used_page":
                 mPreferences.setAppLauncherMostUsedPageEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -292,6 +359,23 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_launcher_az_row_enabled":
                 mPreferences.setAppLauncherAzRowEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
+                break;
+            case "app_launcher_drawer_enabled":
+                mPreferences.setAppLauncherDrawerEnabled(value);
+                scheduleTermuxActivityStylingSync(false);
+                break;
+            case "extra_keys_text_all_caps":
+                // A property, not a preference: the row reads it from termux.properties, so the
+                // switch writes there and the reload picks it up like any hand edit would.
+                writeTermuxPropertyToProperties(
+                    TermuxPropertyConstants.KEY_EXTRA_KEYS_TEXT_ALL_CAPS,
+                    Boolean.toString(value));
+                scheduleTermuxActivityStylingSync(false);
+                break;
+            case "app_launcher_widget_pane_enabled":
+                mPreferences.setAppLauncherWidgetPaneEnabled(value);
+                // The pane is built once per activity, so it has to come back on a recreate.
+                scheduleTermuxActivityStylingSync(true);
                 break;
             case "app_launcher_row_haptics":
                 mPreferences.setAppLauncherRowHapticsEnabled(value);
@@ -327,14 +411,29 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isShowInRecentsWhenNotDefaultEnabled();
             case "app_launcher_apps_row_enabled":
                 return mPreferences.isAppLauncherAppsRowEnabled();
+            case "app_launcher_extra_keys_row_enabled":
+                return mPreferences.isAppLauncherExtraKeysRowEnabled();
             case "app_launcher_display_app_names":
                 return mPreferences.isAppLauncherDisplayAppNamesEnabled();
             case "app_launcher_notification_dots":
                 return mPreferences.isAppLauncherNotificationDotsEnabled();
+            case "app_launcher_notification_history":
+                return mPreferences.isAppLauncherNotificationHistoryEnabled();
             case "app_launcher_most_used_page":
                 return mPreferences.isAppLauncherMostUsedPageEnabled();
             case "app_launcher_az_row_enabled":
-                return mPreferences.isAppLauncherAzRowEnabled();
+                // Raw: the switch shows what the user picked, the apps row dependency greys it.
+                return mPreferences.isAppLauncherAzRowChosen();
+            case "app_launcher_drawer_enabled":
+                return mPreferences.isAppLauncherDrawerEnabled();
+            case "app_launcher_widget_pane_enabled":
+                return mPreferences.isAppLauncherWidgetPaneEnabled();
+            case "extra_keys_text_all_caps": {
+                String stored = loadTermuxProperties().getProperty(
+                    TermuxPropertyConstants.KEY_EXTRA_KEYS_TEXT_ALL_CAPS);
+                // Absent means the documented default-true behaviour of this property.
+                return stored == null || !"false".equals(stored.trim().toLowerCase(java.util.Locale.ROOT));
+            }
             case "app_launcher_row_haptics":
                 return mPreferences.isAppLauncherRowHapticsEnabled();
             case "app_launcher_az_double_tap_lock":
@@ -384,6 +483,26 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherDockCornerRadius(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
+            case "app_launcher_drawer_icon_size_dp":
+                mPreferences.setAppLauncherDrawerIconSizeDp(value);
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_grid_columns_vertical":
+                mPreferences.setAppLauncherDrawerGridColumnsVertical(value);
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_grid_columns_horizontal":
+                mPreferences.setAppLauncherDrawerGridColumnsHorizontal(value);
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_grid_rows_horizontal":
+                mPreferences.setAppLauncherDrawerGridRowsHorizontal(value);
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_grid_columns_categories":
+                mPreferences.setAppLauncherDrawerGridColumnsCategories(value);
+                scheduleAppDrawerSync();
+                break;
             default:
                 break;
         }
@@ -416,6 +535,16 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_launcher_dock_corner_radius":
                 int radius = mPreferences.getAppLauncherDockCornerRadius();
                 return radius < 0 ? 28 : radius;
+            case "app_launcher_drawer_icon_size_dp":
+                return mPreferences.getAppLauncherDrawerIconSizeDp();
+            case "app_launcher_drawer_grid_columns_vertical":
+                return mPreferences.getAppLauncherDrawerGridColumnsVertical();
+            case "app_launcher_drawer_grid_columns_horizontal":
+                return mPreferences.getAppLauncherDrawerGridColumnsHorizontal();
+            case "app_launcher_drawer_grid_rows_horizontal":
+                return mPreferences.getAppLauncherDrawerGridRowsHorizontal();
+            case "app_launcher_drawer_grid_columns_categories":
+                return mPreferences.getAppLauncherDrawerGridColumnsCategories();
             default:
                 return defValue;
         }
@@ -431,6 +560,18 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "terminal_contrast_level":
                 mPreferences.setTerminalContrastLevel(value);
                 scheduleTermuxActivityStylingSync(false);
+                break;
+            case "ui_color_source":
+                mPreferences.setUiColorSource(value);
+                if (LauncherSchemeTheme.COLOR_SOURCE_SCHEME.equals(value)) {
+                    // Chrome on the scheme and terminal on the wallpaper is not a state anyone asked
+                    // for: the two would sit side by side in different palettes.
+                    mPreferences.setTerminalDynamicColorsEnabled(false);
+                }
+                // The palette is loaded into the activity's Resources at theme time, so nothing
+                // short of a recreate can swap it.
+                LauncherSchemeTheme.invalidate();
+                scheduleTermuxActivityStylingSync(true);
                 break;
             case "theme_mode":
                 writeTermuxPropertyToProperties(TermuxPropertyConstants.KEY_NIGHT_MODE, value);
@@ -448,9 +589,46 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_launcher_az_lock_method":
                 mPreferences.setAppLauncherAzLockMethod(value);
                 break;
+            case "app_launcher_use_case_mode":
+                com.termux.app.launcher.LauncherUseCaseMode.applyMode(mPreferences, value);
+                // Flips the drawer, both dock rows and the widget pane at once: recreate so every
+                // surface is rebuilt against the new state instead of restyled in place.
+                scheduleTermuxActivityStylingSync(true);
+                break;
             case "app_launcher_dock_style":
                 mPreferences.setAppLauncherDockStyle(value);
                 scheduleTermuxActivityStylingSync(false);
+                break;
+            case "app_launcher_dock_rail_side":
+                mPreferences.setAppLauncherDockRailSide(value);
+                // The side moves the rail's layout gravity and the content root's cutout padding,
+                // both of which are applied from an insets pass; recreate rather than restyle so
+                // the terminal is re-inset from the edge the rail just left.
+                scheduleTermuxActivityStylingSync(true);
+                break;
+            case "app_launcher_drawer_view_type":
+                mPreferences.setAppLauncherDrawerViewType(value);
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_icon_size_dp":
+                mPreferences.setAppLauncherDrawerIconSizeDp(DataUtils.getIntFromString(value, 0));
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_grid_columns_vertical":
+                mPreferences.setAppLauncherDrawerGridColumnsVertical(DataUtils.getIntFromString(value, 0));
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_grid_columns_horizontal":
+                mPreferences.setAppLauncherDrawerGridColumnsHorizontal(DataUtils.getIntFromString(value, 0));
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_grid_rows_horizontal":
+                mPreferences.setAppLauncherDrawerGridRowsHorizontal(DataUtils.getIntFromString(value, 0));
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_grid_columns_categories":
+                mPreferences.setAppLauncherDrawerGridColumnsCategories(DataUtils.getIntFromString(value, 0));
+                scheduleAppDrawerSync();
                 break;
             case "app_launcher_default_buttons":
                 mPreferences.setAppLauncherDefaultButtons(value);
@@ -491,6 +669,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         switch (key) {
             case "terminal_contrast_level":
                 return mPreferences.getTerminalContrastLevel().value;
+            case "ui_color_source":
+                return mPreferences.getUiColorSource();
             case "theme_mode":
                 return TermuxSharedProperties.getNightMode(mContext);
             case "app_launcher_button_count":
@@ -499,8 +679,24 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getAppLauncherInputChar();
             case "app_launcher_az_lock_method":
                 return mPreferences.getAppLauncherAzLockMethod();
+            case "app_launcher_use_case_mode":
+                return com.termux.app.launcher.LauncherUseCaseMode.currentMode(mPreferences);
             case "app_launcher_dock_style":
                 return mPreferences.getAppLauncherDockStyle();
+            case "app_launcher_dock_rail_side":
+                return mPreferences.getAppLauncherDockRailSide();
+            case "app_launcher_drawer_view_type":
+                return mPreferences.getAppLauncherDrawerViewType();
+            case "app_launcher_drawer_icon_size_dp":
+                return Integer.toString(mPreferences.getAppLauncherDrawerIconSizeDp());
+            case "app_launcher_drawer_grid_columns_vertical":
+                return Integer.toString(mPreferences.getAppLauncherDrawerGridColumnsVertical());
+            case "app_launcher_drawer_grid_columns_horizontal":
+                return Integer.toString(mPreferences.getAppLauncherDrawerGridColumnsHorizontal());
+            case "app_launcher_drawer_grid_rows_horizontal":
+                return Integer.toString(mPreferences.getAppLauncherDrawerGridRowsHorizontal());
+            case "app_launcher_drawer_grid_columns_categories":
+                return Integer.toString(mPreferences.getAppLauncherDrawerGridColumnsCategories());
             case "app_launcher_default_buttons":
                 return mPreferences.getAppLauncherDefaultButtons();
             case "app_launcher_icon_pack_package":
@@ -526,50 +722,11 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
     }
 
     private Properties loadTermuxProperties() {
-        File propertiesFile = SharedProperties.getPropertiesFileFromList(TermuxConstants.TERMUX_PROPERTIES_FILE_PATHS_LIST, LOG_TAG);
-        if (propertiesFile == null) {
-            propertiesFile = TermuxConstants.TERMUX_PROPERTIES_PRIMARY_FILE;
-        }
-        Properties properties = SharedProperties.getPropertiesFromFile(mContext, propertiesFile, null);
-        return properties == null ? new Properties() : properties;
+        return com.termux.app.settings.TermuxPropertiesFile.load(mContext);
     }
 
     private void writeTermuxPropertyToProperties(@NonNull String propertyKey, @NonNull String propertyValue) {
-        File propertiesFile = SharedProperties.getPropertiesFileFromList(TermuxConstants.TERMUX_PROPERTIES_FILE_PATHS_LIST, LOG_TAG);
-        if (propertiesFile == null) {
-            propertiesFile = TermuxConstants.TERMUX_PROPERTIES_PRIMARY_FILE;
-        }
-        File parentDir = propertiesFile.getParentFile();
-        if (parentDir != null && !parentDir.exists()) {
-            //noinspection ResultOfMethodCallIgnored
-            parentDir.mkdirs();
-        }
-        List<String> lines = new ArrayList<>();
-        boolean updated = false;
-        if (propertiesFile.exists()) {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(propertiesFile), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    String trimmed = line.trim();
-                    if (!trimmed.startsWith("#") && trimmed.matches("^\\s*" + propertyKey + "\\s*=.*$")) {
-                        lines.add(propertyKey + "=" + propertyValue);
-                        updated = true;
-                    } else {
-                        lines.add(line);
-                    }
-                }
-            } catch (Exception e) {
-                Logger.logStackTraceWithMessage(LOG_TAG, "Failed to read termux.properties", e);
-            }
-        }
-        if (!updated) {
-            lines.add(propertyKey + "=" + propertyValue);
-        }
-        StringBuilder output = new StringBuilder();
-        for (String line : lines) {
-            output.append(line).append('\n');
-        }
-        FileUtils.writeTextToFile("termux.properties", propertiesFile.getAbsolutePath(), StandardCharsets.UTF_8, output.toString(), false);
+        com.termux.app.settings.TermuxPropertiesFile.write(propertyKey, propertyValue);
     }
 
     @ColorInt

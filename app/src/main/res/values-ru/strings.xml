@@ -3,12 +3,7 @@
 <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
 <!ENTITY TERMUX_APP_NAME "Termux:Launcher">
 <!ENTITY TERMUX_API_APP_NAME "Termux:API">
-<!ENTITY TERMUX_GUI_APP_NAME "Termux:GUI">
-<!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
-<!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
 <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
-<!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
-<!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
 ]>
 <resources>
     <string name="permission_run_command_label">Выполнять команды в &TERMUX_APP_NAME; среда</string>
@@ -27,49 +22,33 @@
     <string name="action_toggle_soft_keyboard">Клавиатура</string>
     <string name="msg_enabling_terminal_toolbar">Включение панели инструментов терминала</string>
     <string name="title_share_transcript_with">Отправить расшифровку по адресу:</string>
-    <string name="action_share_selected_text">Поделиться выделенным текстом</string>
     <string name="title_share_selected_text">Терминальный текст</string>
     <string name="title_share_selected_text_with">Отправить выделенный текст на:</string>
-    <string name="action_autofill_password">Автозаполнение пароля</string>
     <string name="action_reset_terminal">Сброс</string>
     <string name="msg_terminal_reset">Сброс терминала</string>
     <string name="action_kill_process">Убить процесс (%d)</string>
     <string name="title_confirm_kill_process">Реально убить эту сессию\?</string>
     <string name="action_style_terminal">Стиль</string>
-    <string name="action_font_and_color">Шрифт и цвет</string>
     <string name="action_set_background_image">Установить фоновое изображение</string>
-    <string name="action_toggle_keep_screen_on">Оставьте экран включенным</string>
-    <string name="action_open_help">Помощь</string>
     <string name="action_open_settings">Настройки</string>
-    <string name="action_report_issue">Сообщить о проблеме</string>
     <string name="msg_generating_report">Создание отчета</string>
     <string name="msg_add_termux_debug_info">Добавить &TERMUX_APP_NAME; отладочная информация для отчета\?</string>
-    <string name="error_styling_not_installed">&TERMUX_STYLING_APP_NAME; Приложение-плагин не установлено.</string>
     <string name="error_termux_service_unsupported_execution_command_shell_create_mode">Неподдерживаемый режим создания командной оболочки выполнения для TermuxService: `%1$s`</string>
     <string name="error_termux_service_execution_command_shell_name_unset">Имя оболочки не установлено, но режим создания оболочки `%1$s` пройден</string>
     <string name="error_run_command_service_invalid_intent_action">Недопустимое намерение для RunCommandService: `%1$s`</string>
     <string name="action_file_received_edit">Редактировать</string>
     <string name="action_file_received_open_directory">Открыть каталог</string>
-    <string name="title_restore_background_image">Обнаружено фоновое изображение. Вы хотите восстановить его\?</string>
-    <string name="error_background_image_loading_failed">Не удалось загрузить фоновое изображение. Установка цвета фона.</string>
-    <string name="error_background_image_loading_from_gallery_failed">Не удалось загрузить изображение. Попробуйте другое изображение.</string>
     <string name="title_activity_termux_settings">&TERMUX_APP_NAME; Настройки</string>
-    <string name="termux_preferences_summary">Настройки &TERMUX_APP_NAME; приложение</string>
     <string name="termux_debugging_preferences_title">Отладка</string>
     <string name="termux_terminal_view_key_logging_enabled_off">В журналах не будет записей для ключей просмотра терминала. (По умолчанию)</string>
     <string name="termux_terminal_view_key_logging_enabled_on">В журналах Logcat будут записи для ключей просмотра терминала. Они очень многословны и должны быть отключены при нормальных обстоятельствах, иначе это вызовет проблемы с производительностью.</string>
     <string name="termux_crash_report_notifications_enabled_title">Уведомления об отчетах о сбоях</string>
     <string name="termux_crash_report_notifications_enabled_off">Отключите уведомления для отчетов о сбоях.</string>
-    <string name="termux_terminal_io_preferences_title">Терминал ввода/вывода</string>
     <string name="termux_soft_keyboard_enabled_on">Мягкая клавиатура будет включена. (По умолчанию)</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Программная клавиатура, только если нет оборудования</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_off">Регулировка маржи терминала будет отключена.</string>
     <string name="termux_terminal_view_activity_remove_title">Запретить оставаться в недавних приложениях</string>
     <string name="termux_style_preferences_title">&TERMUX_APP_NAME; Появление</string>
-    <string name="termux_background_header">Фон</string>
-    <string name="termux_float_preferences_summary">Настройки для &TERMUX_FLOAT_APP_NAME; приложение</string>
-    <string name="termux_tasker_preferences_summary">Настройки для &TERMUX_TASKER_APP_NAME; приложение</string>
-    <string name="about_preference_title">О Нас</string>
     <string name="donate_preference_title">Пожертвовать</string>
     <string name="bootstrap_error_body">&TERMUX_APP_NAME; не удалось установить загрузочные пакеты.</string>
     <string name="bootstrap_error_abort">Прервать</string>
@@ -82,7 +61,6 @@
     <string name="msg_select_url_copied_to_clipboard">URL скопирован в буфер обмена</string>
     <string name="action_share_transcript">Поделиться расшифровкой</string>
     <string name="title_share_transcript">Терминальная стенограмма</string>
-    <string name="action_styling_install">Установить</string>
     <string name="notification_action_exit">Выход</string>
     <string name="notification_action_wake_lock">Получить пробуждение</string>
     <string name="notification_action_wake_unlock">Освободить пробуждение</string>
@@ -103,42 +81,20 @@
     <string name="termux_plugin_error_notifications_enabled_off">Отключите вспышки и уведомления об ошибках плагина.</string>
     <string name="termux_plugin_error_notifications_enabled_on">Показывать вспышки и уведомления об ошибках плагина. (По умолчанию)</string>
     <string name="termux_crash_report_notifications_enabled_on">Показывать уведомления для отчетов о сбоях. (По умолчанию)</string>
-    <string name="termux_terminal_io_preferences_summary">Предпочтения для терминального ввода/вывода</string>
     <string name="termux_keyboard_header">Клавиатура</string>
     <string name="termux_soft_keyboard_enabled_title">Программная клавиатура включена</string>
     <string name="termux_soft_keyboard_enabled_off">Программная клавиатура будет отключена.</string>
-    <string name="termux_background_image_enabled_title">Показать фоновое изображение</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Программная клавиатура будет включена, даже если подключена аппаратная клавиатура. (По умолчанию)</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">Программная клавиатура будет включена, только если аппаратная клавиатура не подключена.</string>
-    <string name="termux_terminal_view_preferences_title">Вид терминала</string>
-    <string name="termux_terminal_view_preferences_summary">Настройки для просмотра терминала</string>
     <string name="termux_terminal_view_view_header">Вид</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_title">Регулировка маржи терминала</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_on">Регулировка маржи терминала будет включена. Его следует включить, чтобы попытаться решить проблему, когда программная клавиатура закрывает часть дополнительных клавиш/вида терминала. Если это вызывает мерцание экрана на ваших устройствах, отключите его. (По умолчанию)</string>
-    <string name="termux_api_preferences_summary">Настройки для &TERMUX_API_APP_NAME; приложение</string>
     <string name="termux_terminal_view_activity_remove_off">После закрытия всех сеансов терминала &TERMUX_APP_NAME; закроется и останется видимым в недавних приложениях.</string>
-    <string name="termux_background_image_enabled_off">Фоновое изображение будет отключено. Чтобы включить его, убедитесь, что присутствуют соответствующие файлы портретной и альбомной ориентации. Если вы хотите установить новый фон, установите его из контекстного меню, нажав и удерживая Терминал. (По умолчанию)</string>
     <string name="termux_terminal_view_activity_remove_on">&TERMUX_APP_NAME; закроется и удалит себя из недавних приложений, если нет активных сеансов терминала. (По умолчанию)</string>
-    <string name="termux_background_image_enabled_on">Фоновое изображение будет включено.</string>
-    <string name="termux_style_preferences_summary">Настройки &TERMUX_APP_NAME; внешний вид и кастомизация</string>
-    <string name="termux_widget_preferences_summary">Настройки &TERMUX_WIDGET_APP_NAME; приложение</string>
     <string name="bootstrap_error_not_primary_user_message">&TERMUX_APP_NAME; может быть запущен только как основной пользователь.
 \nДвоичные файлы Bootstrap, скомпилированные для &TERMUX_APP_NAME; имеют жестко заданный путь $PREFIX и не могут быть установлены ни по какому другому пути, кроме:
 \n%1$s.</string>
     <string name="bootstrap_error_installed_on_portable_sd">&TERMUX_APP_NAME; нельзя установить на переносную/внешнюю/съемную SD-карту на вашем устройстве.
 \nДвоичные файлы Bootstrap, скомпилированные для &TERMUX_APP_NAME; имеют жестко заданный путь $PREFIX и не могут быть установлены ни по какому другому пути, кроме:
 \n%1$s.</string>
-    <string name="termux_extrakeys_blur_enabled_off">Экстра клавиши с размытым фоном будут отключены. Добавляет прозрачный и размытый фон к дополнительным клавишам. (Может повлиять на производительность) (По умолчанию)</string>
-    <string name="action_autofill_username">Автозаполнение имени пользователя</string>
-    <string name="termux_monet_background_enabled_off">Терминальный фон Material будет отключен. Превращает фон терминала в Material (По умолчанию)</string>
-    <string name="termux_monet_background_enabled_title">Фон Material (нестабильный)</string>
-    <string name="termux_monet_background_enabled_on">Будет включен фон Material.</string>
-    <string name="termux_extrakeys_blur_enabled_title">Дополнительные клавиши Размытый фон</string>
-    <string name="termux_extrakeys_blur_enabled_on">ExtraKeys Размытый фон будет включен.</string>
-    <string name="termux_sessions_blur_enabled_title">Сессии Размытый фон</string>
-    <string name="termux_sessions_blur_enabled_off">Размытый фон сеансов будет отключен. Добавляет прозрачный и размытый фон в меню сеансов. (Может повлиять на производительность) (По умолчанию)</string>
-    <string name="termux_gui_preferences_title">&amp;TERMUX_GUI_ПРИЛОЖЕНИЕ_НАЗВАНИЕ;</string>
-    <string name="termux_gui_preferences_summary">Предпочтения для &TERMUX_GUI_APP_NAME; приложение</string>
-    <string name="termux_sessions_header">Меню сеансов</string>
-    <string name="termux_sessions_blur_enabled_on">Сессии Размытый фон будут включены.</string>
 </resources>

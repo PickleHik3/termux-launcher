@@ -122,16 +122,22 @@ public final class LauncherRankingEngine {
         return Math.max(0, Math.round((float) PERFECT_MATCH_SCORE * (longest - distance) / longest));
     }
 
+    /**
+     * Every way the label can match outranks every way the package can, because a package is a
+     * vendor string the user never sees: typing "mo" used to put moe.shizuku.privileged.api above
+     * Mobilism and Moonlight. A whole-id match still wins outright — spelling out a package or
+     * component name is an unambiguous request for that one entry.
+     */
     private static int matchTier(@NonNull LauncherAppEntry entry, @NonNull String input, @NonNull String normalizedInput) {
         if (entry.packageLower.equals(input) || entry.activityLower.equals(input) || entry.stableIdLower.equals(input)) return 0;
         if (entry.labelLower.equals(input) || (!normalizedInput.isEmpty() && entry.labelNormalized.equals(normalizedInput))) return 1;
-        if (entry.packageLower.startsWith(input) || entry.activityLower.startsWith(input)) return 2;
-        if (entry.labelLower.startsWith(input) || (!normalizedInput.isEmpty() && entry.labelNormalized.startsWith(normalizedInput))) return 3;
+        if (entry.labelLower.startsWith(input) || (!normalizedInput.isEmpty() && entry.labelNormalized.startsWith(normalizedInput))) return 2;
         for (String word : entry.normalizedWords) {
-            if (!normalizedInput.isEmpty() && word.startsWith(normalizedInput)) return 4;
+            if (!normalizedInput.isEmpty() && word.startsWith(normalizedInput)) return 3;
         }
-        if (entry.packageLower.contains(input) || entry.activityLower.contains(input)) return 5;
-        if (entry.labelLower.contains(input) || (!normalizedInput.isEmpty() && entry.labelNormalized.contains(normalizedInput))) return 6;
+        if (entry.labelLower.contains(input) || (!normalizedInput.isEmpty() && entry.labelNormalized.contains(normalizedInput))) return 4;
+        if (entry.packageLower.startsWith(input) || entry.activityLower.startsWith(input)) return 5;
+        if (entry.packageLower.contains(input) || entry.activityLower.contains(input)) return 6;
         return -1;
     }
 

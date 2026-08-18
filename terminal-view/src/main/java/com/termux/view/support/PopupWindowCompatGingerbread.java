@@ -15,7 +15,6 @@
  */
 package com.termux.view.support;
 
-import android.util.Log;
 import android.widget.PopupWindow;
 import java.lang.reflect.Method;
 

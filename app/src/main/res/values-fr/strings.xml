@@ -3,24 +3,16 @@
 <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
 <!ENTITY TERMUX_APP_NAME "Termux:Launcher">
 <!ENTITY TERMUX_API_APP_NAME "Termux:API">
-<!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
-<!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
 <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
-<!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
-<!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
 ]>
 <resources>
     <string name="shared_user_label">&TERMUX_APP_NAME; utilisateur</string>
     <string name="permission_run_command_label">Exécutez les commandes dans &TERMUX_APP_NAME; environnement</string>
     <string name="permission_run_command_description">exécuter des commandes arbitraires dans &TERMUX_APP_NAME; environnement et accéder aux fichiers</string>
     <string name="action_open_settings">Paramètres</string>
-    <string name="action_report_issue">Signaler un problème</string>
-    <string name="action_styling_install">Installer</string>
     <string name="action_file_received_open_directory">Ouvrir le répertoire</string>
-    <string name="error_background_image_loading_from_gallery_failed">Échec du chargement de l\'image. Essayez une autre image.</string>
     <string name="error_termux_service_start_failed_bg">Échec du démarrage de TermuxService lorsque l\'application est en arrière-plan en raison de restrictions d\'arrière-plan Android.</string>
     <string name="title_activity_termux_settings">&amp;TERMUX_APP_NAME ; Paramètres</string>
-    <string name="termux_preferences_summary">Préférences pour &TERMUX_APP_NAME; application</string>
     <string name="termux_debugging_preferences_title">Débogage</string>
     <string name="termux_terminal_view_key_logging_enabled_off">Les journaux n\'auront pas d\'entrées pour les clés d\'affichage du terminal. (Défaut)</string>
     <string name="bootstrap_error_abort">Annuler</string>
@@ -42,8 +34,6 @@
     <string name="title_create_named_session">Nom de la nouvelle session</string>
     <string name="msg_enabling_terminal_toolbar">Activer de la barre d\'outils du terminal</string>
     <string name="title_select_url_dialog">Cliquez sur URL pour copier ou appuyez longuement pour ouvrir</string>
-    <string name="action_share_selected_text">Partager le texte sélectionné</string>
-    <string name="action_font_and_color">Police et couleur</string>
     <string name="msg_disabling_terminal_toolbar">Désactiver la barre d\'outils du terminal</string>
     <string name="action_select_url">Sélectionnez URL</string>
     <string name="title_select_url_none_found">Aucune URL trouvée dans le terminal.</string>
@@ -54,24 +44,18 @@
     <string name="title_share_transcript">Transcription du terminal</string>
     <string name="title_share_transcript_with">Envoyer la transcription à :</string>
     <string name="title_share_selected_text_with">Envoyer le texte sélectionné à :</string>
-    <string name="action_autofill_password">Saisir automatiquement le mot de passe</string>
     <string name="action_reset_terminal">Réinitialiser</string>
     <string name="msg_terminal_reset">Réinitialisation du terminal</string>
     <string name="action_kill_process">Tuer le processus (%d)</string>
     <string name="action_style_terminal">Style</string>
     <string name="action_set_background_image">Définir l\'image d\'arrière-plan</string>
-    <string name="action_toggle_keep_screen_on">Gardez l\'écran allumé</string>
-    <string name="action_open_help">Aide</string>
     <string name="bootstrap_error_title">Impossible d\'installer le bootstrap</string>
     <string name="title_rename_session">Définir le nom de la session</string>
     <string name="msg_generating_report">Générer un rapport</string>
     <string name="msg_add_termux_debug_info">Ajoutez &TERMUX_APP_NAME; informations de débogage à reporter \?</string>
-    <string name="error_styling_not_installed">Le &TERMUX_STYLING_APP_NAME; L\'application Plugin n\'est pas installée.</string>
     <string name="notification_action_exit">Quitter</string>
     <string name="title_file_received">Enregistrer le fichier dans ~/downloads/</string>
     <string name="action_file_received_edit">Modifier</string>
-    <string name="title_restore_background_image">Image d\'arrière-plan détectée. Voulez-vous la restaurer \?</string>
-    <string name="error_background_image_loading_failed">Impossible de charger l\'image d\'arrière-plan. Réglage de la couleur d\'arrière-plan.</string>
     <string name="error_termux_service_start_failed_general">Impossible de démarrer TermuxService. Vérifiez logcat pour le message d\'exception.</string>
     <string name="termux_debugging_preferences_summary">Préférences pour le débogage</string>
     <string name="termux_logging_header">Enregistrement</string>

@@ -3,11 +3,7 @@
 <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
 <!ENTITY TERMUX_APP_NAME "Termux:Launcher">
 <!ENTITY TERMUX_API_APP_NAME "Termux:API">
-<!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
-<!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
 <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
-<!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
-<!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
 ]>
 <resources>
     <string name="application_name">&TERMUX_APP_NAME;</string>
@@ -48,23 +44,16 @@
     <string name="action_share_transcript">Átirat megosztása</string>
     <string name="title_share_transcript">Terminál átirata</string>
     <string name="title_share_transcript_with">Átirat küldése ide:</string>
-    <string name="action_share_selected_text">Kiválasztott szöveg megosztása</string>
     <string name="title_share_selected_text">Terminál szövege</string>
     <string name="title_share_selected_text_with">A kijelölt szöveg küldése ide:</string>
-    <string name="action_autofill_password">Jelszó automatikus kitöltése</string>
     <string name="action_reset_terminal">Visszaállítás</string>
     <string name="msg_terminal_reset">Terminál visszaállítása</string>
     <string name="action_kill_process">Folyamat leállítása (%d)</string>
     <string name="title_confirm_kill_process">Tényleg leállítja ezt a munkamenetet\?</string>
     <string name="action_style_terminal">Stílus</string>
-    <string name="action_toggle_keep_screen_on">Képernyő bekapcsolva tartása</string>
-    <string name="action_open_help">Segítség</string>
     <string name="action_open_settings">Beállítások</string>
-    <string name="action_report_issue">Hibajelentés</string>
     <string name="msg_generating_report">Jelentés Generálása</string>
     <string name="msg_add_termux_debug_info">Hozzá ad &TERMUX_APP_NAME; hibakeresési információkat a jelentéshez\?</string>
-    <string name="error_styling_not_installed">A &TERMUX_STYLING_APP_NAME; Bővítmény App nincs telepítve.</string>
-    <string name="action_styling_install">Telepítés</string>
     <!-- Termux Notifications -->
     <string name="notification_action_exit">Kilépés</string>
     <string name="notification_action_wake_lock">Wakelock megszerzése</string>
@@ -90,8 +79,6 @@
     <!-- Termux Settings -->
     <string name="title_activity_termux_settings">&TERMUX_APP_NAME; Beállítások</string>
     <!-- Termux App Preferences -->
-    <string name="termux_preferences_title">&TERMUX_APP_NAME;</string>
-    <string name="termux_preferences_summary">Beállítások a &TERMUX_APP_NAME; alkalmazáshoz</string>
     <!-- Debugging Preferences -->
     <string name="termux_debugging_preferences_title">Debugolás</string>
     <string name="termux_debugging_preferences_summary">Debugolási beállítások</string>
@@ -112,8 +99,6 @@
     <string name="termux_crash_report_notifications_enabled_off">Az összeomlási jelentésekről szóló értesítések le vannak tiltva.</string>
     <string name="termux_crash_report_notifications_enabled_on">Az összeomlási jelentésekről szóló értesítések meg vannak jelenítve. (Alapértelmezett)</string>
     <!-- Terminal IO Preferences -->
-    <string name="termux_terminal_io_preferences_title">Terminál I/O</string>
-    <string name="termux_terminal_io_preferences_summary">Terminál I/O beállítások</string>
     <!-- Keyboard Category -->
     <string name="termux_keyboard_header">Billentyűzet</string>
     <!-- Soft Keyboard -->
@@ -127,8 +112,6 @@
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">A szoftveres billentyűzet csak akkor lesz engedélyezve,
                     ha nincs csatlakoztatva hardver billentyűzet.</string>
     <!-- Terminal View Preferences -->
-    <string name="termux_terminal_view_preferences_title">Terminálnézet</string>
-    <string name="termux_terminal_view_preferences_summary">A terminálnézet beállításai</string>
     <!-- View Category -->
     <string name="termux_terminal_view_view_header">Megtekintés</string>
     <!-- Terminal View Margin Adjustment -->
@@ -138,37 +121,16 @@
                     megoldani azt a problémát, hogy a lágy billentyűzet lefedi az extra billentyűk / terminálnézet egy részét. Ha ez a képernyő villogását okozza az
                     eszközökön, akkor tiltsa le. (Alapértelmezett)</string>
     <!-- Termux:API App Preferences -->
-    <string name="termux_api_preferences_title">&TERMUX_API_APP_NAME;</string>
-    <string name="termux_api_preferences_summary">Beállítások ehhez: &TERMUX_API_APP_NAME;</string>
     <!-- Termux:Float App Preferences -->
-    <string name="termux_float_preferences_title">&TERMUX_FLOAT_APP_NAME;</string>
-    <string name="termux_float_preferences_summary">Beállítások ehhez: &TERMUX_FLOAT_APP_NAME;</string>
     <!-- Termux:Tasker App Preferences -->
-    <string name="termux_tasker_preferences_title">&TERMUX_TASKER_APP_NAME;</string>
-    <string name="termux_tasker_preferences_summary">Beállítások ehhez: &TERMUX_TASKER_APP_NAME;</string>
     <!-- Termux:Widget App Preferences -->
-    <string name="termux_widget_preferences_title">&TERMUX_WIDGET_APP_NAME;</string>
-    <string name="termux_widget_preferences_summary">Beállítások ehhez: &TERMUX_WIDGET_APP_NAME;</string>
     <!-- About Preference -->
-    <string name="about_preference_title">Névjegy</string>
     <!-- Donate Preference -->
     <string name="donate_preference_title">Adományozás</string>
     <string name="extra_keys_command_hint">Parancs beszúrása…</string>
-    <string name="title_restore_background_image">Háttérkép észlelve. Szeretné visszaállítani\?</string>
-    <string name="error_background_image_loading_from_gallery_failed">Nem sikerült betölteni a képet. Próbálkozzon másik képpel.</string>
-    <string name="termux_style_preferences_summary">&TERMUX_APP_NAME; beállítások és személyre szabás</string>
-    <string name="termux_background_image_enabled_on">Háttérkép engedélyezve.</string>
     <string name="action_set_background_image">Háttérkép beállítása</string>
-    <string name="action_font_and_color">Betűtípus és Szín</string>
-    <string name="error_background_image_loading_failed">Nem sikerült betölteni a háttérképet. Háttérszín beállítása.</string>
     <string name="termux_terminal_view_activity_remove_off">Amint az összes terminál munkamenetet bezárta, &TERMUX_APP_NAME; bezáródik, és látható marad a legutóbbi alkalmazásoknál.</string>
     <string name="termux_terminal_view_activity_remove_title">A legutóbbi alkalmazások közötti maradás megakadályozása</string>
     <string name="termux_style_preferences_title">&TERMUX_APP_NAME; Kinézet</string>
-    <string name="termux_background_header">Háttér</string>
     <string name="termux_terminal_view_activity_remove_on">Amint az összes terminál munkamenetet bezárta, &TERMUX_APP_NAME; bezáródik, és nem marad látható a legutóbbi alkalmazásoknál. (Default)</string>
-    <string name="termux_background_image_enabled_title">Háttérkép megjelenítése</string>
-    <string name="termux_background_image_enabled_off">A háttérkép le van tiltva. Az engedélyezéshez győződjön meg arról, hogy léteznek megfelelő álló és fekvő képek. Új hátteret a kontextusmenüből tud beállítani, amit a Terminálon való hosszú érintéssel tud előhozni. (Alapértelmezett)</string>
-    <string name="termux_monet_background_enabled_title">Material Háttérkép (Instabil)</string>
-    <string name="termux_monet_background_enabled_off">A Terminal Material Háttérkép funkció letiltja a terminál háttérképet, és Material stílusúvá teszi (alapértelmett).</string>
-    <string name="termux_monet_background_enabled_on">A Material Háttérkép engedélyezve lesz</string>
 </resources>

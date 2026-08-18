@@ -11,7 +11,6 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RadialGradient;
 import android.graphics.Shader;
-import android.graphics.drawable.Drawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
@@ -36,7 +35,6 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
-import android.view.ViewPropertyAnimator;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.AccelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
@@ -44,7 +42,6 @@ import android.view.animation.OvershootInterpolator;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.GridLayout;
-import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
@@ -322,6 +319,10 @@ public final class ExtraKeysView extends GridLayout {
     private static final float KEY_GLOW_WHITE_MIX_HOLD = 0.45f;
     @Nullable private Animator mKeyGlowAnimator;
     @Nullable private MaterialButton mKeyGlowButton;
+    /** Page dots: index and count of the toolbar's key pages, 0/0 while there is only one page. */
+    private int mPageIndex;
+    private int mPageCount;
+    @Nullable private Paint mPageDotPaint;
     /** Swipe-up popup travel is active (finger is dragging the popup toward the secondary slot). */
     private boolean mBubbleArmed;
     /** The press has crossed into the persistent long-press/held state. */
@@ -932,15 +933,6 @@ public final class ExtraKeysView extends GridLayout {
         }
     }
 
-    private void setButtonVisualState(@NonNull MaterialButton button, @NonNull ExtraKeyButton buttonInfo,
-                                      @NonNull KeyVisualState state) {
-        if (state == KeyVisualState.RESTING) {
-            restoreButtonVisualState(button, buttonInfo);
-            return;
-        }
-        applyButtonVisualState(button, state, true);
-    }
-
     void updateSpecialButtonVisualState(@NonNull MaterialButton button, @NonNull SpecialButtonState state) {
         KeyVisualState visualState = state.isLocked
             ? KeyVisualState.STICKY_LOCKED
@@ -1126,6 +1118,39 @@ public final class ExtraKeysView extends GridLayout {
             mGlowPaint.setShader(null);
         }
         super.dispatchDraw(canvas);
+        drawPageIndicator(canvas);
+    }
+
+    /**
+     * Which key page this view is and how many there are. Drawn inside the row rather than added as
+     * its own band: the accessory stack is explicitly sized, and a new band would have to be folded
+     * into the combined height everywhere or it would clip invisibly.
+     */
+    public void setPageIndicator(int page, int pageCount) {
+        if (page == mPageIndex && pageCount == mPageCount) return;
+        mPageIndex = page;
+        mPageCount = pageCount;
+        invalidate();
+    }
+
+    private void drawPageIndicator(@NonNull Canvas canvas) {
+        if (mPageCount < 2) return;
+        float radius = dpToPx(1.6f);
+        float gap = dpToPx(5f);
+        float totalWidth = mPageCount * radius * 2 + (mPageCount - 1) * (gap - radius * 2);
+        float cx = (getWidth() - totalWidth) / 2f + radius;
+        float cy = getHeight() - dpToPx(2.6f);
+        if (mPageDotPaint == null) {
+            mPageDotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            mPageDotPaint.setStyle(Paint.Style.FILL);
+        }
+        int color = mButtonTextColor;
+        for (int i = 0; i < mPageCount; i++) {
+            mPageDotPaint.setColor(color);
+            mPageDotPaint.setAlpha(i == mPageIndex ? 150 : 55);
+            canvas.drawCircle(cx, cy, radius, mPageDotPaint);
+            cx += gap;
+        }
     }
 
     /** Glow the pressed key's glyphs up (a tap reads as a single tight pulse once it releases). */

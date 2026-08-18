@@ -8,16 +8,19 @@ import android.animation.ArgbEvaluator;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.app.Dialog;
 import android.app.Notification;
 import android.app.PendingIntent;
 import android.app.RemoteInput;
 import android.content.ClipData;
+import android.content.ClipDescription;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
@@ -32,7 +35,6 @@ import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
 import android.graphics.Point;
-import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
@@ -85,12 +87,15 @@ import android.widget.ListView;
 import android.widget.PopupWindow;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
+import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.github.mmin18.widget.RealtimeBlurView;
 import com.google.android.material.color.MaterialColors;
@@ -101,6 +106,11 @@ import com.termux.app.launcher.LauncherAppLauncher;
 import com.termux.app.launcher.PinnedAppsEditor;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherConfigRepository;
+import com.termux.app.launcher.data.LauncherConfigSnapshot;
+import com.termux.app.launcher.data.LauncherFolderMutator;
+import com.termux.app.launcher.folder.FolderRenameModel;
+import com.termux.app.launcher.folder.FolderRenameTitleView;
+import com.termux.app.launcher.folder.LauncherFolderPopupController;
 import com.termux.app.launcher.data.IconPack;
 import com.termux.app.launcher.data.IconPackDrawableItem;
 import com.termux.app.launcher.data.IconPackRepository;
@@ -108,6 +118,11 @@ import com.termux.app.launcher.data.LauncherIconResolver;
 import com.termux.app.launcher.notifications.LauncherNotificationBadgeStore;
 import com.termux.app.launcher.data.LauncherRankingEngine;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
+import com.termux.app.launcher.drawer.AppDrawerCategory;
+import com.termux.app.launcher.drawer.AppDrawerController;
+import com.termux.app.launcher.drawer.AppDrawerPickupDelegate;
+import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
+import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry;
 import com.termux.app.launcher.model.IconPackInfo;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
@@ -116,6 +131,7 @@ import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedFolderItem;
 import com.termux.app.launcher.model.PinnedItem;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.theme.ThemeUtils;
 import com.termux.view.TerminalView;
 import com.termux.launcherctl.LauncherCtlNotificationListener;
@@ -137,11 +153,55 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-public final class SuggestionBarView extends GridLayout {
+public final class SuggestionBarView extends GridLayout
+    implements AppDrawerController.AppDrawerDockChoreographyTarget {
 
     public interface LaunchRippleListener {
         void onLaunchRipple(@NonNull String packageName, @Nullable Drawable icon,
                             @Nullable View sourceView);
+    }
+
+    /**
+     * The dock's half of the app-drawer pull-down gesture.
+     *
+     * <p>The row arbitrates the touch stream — it is the only view that sees the whole gesture from
+     * {@code ACTION_DOWN} — but it knows nothing about the plane. Everything the claim depends on
+     * that lives outside the row (the preference, dock tuning, the palette, the drawer's own state)
+     * is asked for through this listener, and the claimed drag is handed straight back to
+     * {@code AppDrawerController} through it.
+     *
+     * <p>The four state queries are read once each, at {@code ACTION_DOWN}, into an
+     * {@link AppDrawerGestureArbiter.Eligibility} snapshot: half of them flip <em>because of</em>
+     * the gesture in flight, and re-reading them mid-drag would revoke the claim under a finger
+     * that is already dragging the plane.
+     */
+    public interface AppDrawerGestureListener {
+
+        /** The {@code app_launcher_drawer_enabled} preference. */
+        boolean isAppDrawerEnabled();
+
+        /** Dock tuning owns drags on the dock itself while it is up. */
+        boolean isDockTuningActive();
+
+        /** The command palette is a full-screen overlay of its own; it must not stack with one. */
+        boolean isCommandPaletteOpen();
+
+        /** True while the plane is open, dragging or still settling. */
+        boolean isAppDrawerEngaged();
+
+        /** FULL status geometry is modal relative to the drawer. */
+        default boolean isFullStatusPaneClosed() { return true; }
+
+        /** @param downRawY the gesture's {@code ACTION_DOWN} raw screen Y */
+        void onDrawerDragBegin(float downRawY);
+
+        /** @param rawY the current raw screen Y; the plane tracks this 1:1 */
+        void onDrawerDrag(float rawY);
+
+        /** @param velocityPxPerSec release velocity, positive downwards */
+        void onDrawerDragEnd(float velocityPxPerSec);
+
+        void onDrawerDragCancel();
     }
 
     private static final String LOG_TAG = "SuggestionBarView";
@@ -161,6 +221,23 @@ public final class SuggestionBarView extends GridLayout {
     private static final int PINNED_FOLDER_FILL_COLOR = 0x26FFFFFF;
     private static final int PINNED_FOLDER_STROKE_COLOR = 0x33FFFFFF;
 
+    /** Nothing owns the stream yet; the claim tests are still live. */
+    private static final int GESTURE_CLAIM_PENDING = 0;
+    /** The horizontal page swipe owns it. */
+    private static final int GESTURE_CLAIM_PAGE_SWIPE = 1;
+    /** The app drawer's pull-down owns it; every other branch stands down. */
+    private static final int GESTURE_CLAIM_DRAWER_DRAG = 2;
+    /** A child took it first — a shown context menu, a notification swipe, a pickup drag. */
+    private static final int GESTURE_CLAIM_CHILD_OWNED = 3;
+
+    /** Pinned icons leave in a wave; past this many the stagger stops growing. */
+    private static final int DRAWER_ICON_STAGGER_CAP = 8;
+    private static final float DRAWER_ICON_STAGGER_STEP = 0.012f;
+    private static final float DRAWER_ICON_FADE_START = 0.02f;
+    private static final float DRAWER_ICON_FADE_END = 0.30f;
+    private static final float DRAWER_ICON_EXIT_SCALE = 0.92f;
+    private static final float DRAWER_ICON_EXIT_LIFT_DP = 6f;
+
     private List<LauncherAppEntry> allApps = new ArrayList<>();
     @Nullable private LaunchRippleListener launchRippleListener;
     private final List<LauncherAppEntry> terminalSearchEntries = new ArrayList<>();
@@ -172,8 +249,29 @@ public final class SuggestionBarView extends GridLayout {
     @Nullable private ColorFilter appIconColorFilter;
     private static final int ICON_RENDER_PIPELINE_VERSION = 2;
     private static final int ICON_SHADOW_COLOR = 0x47000000;
-    /** Cache of harmonized icon drawables so resting and swipe-preview icons are identical (no size jump) and we don't rebuild bitmaps per frame. */
-    private final LruCache<String, Drawable> normalizedIconCache = new LruCache<>(96);
+    /** Smallest icon budget we will hand out, even on a memory-starved device: two dozen 192px pairs. */
+    private static final int ICON_CACHE_MIN_BYTES = 6 * 1024 * 1024;
+    /** Ceiling regardless of how generous the heap is — the drawer scrolls a whole catalogue past this cache. */
+    private static final int ICON_CACHE_MAX_BYTES = 16 * 1024 * 1024;
+    /** Fraction of the per-app heap the rendered-icon cache may hold (1/12th). */
+    private static final int ICON_CACHE_HEAP_DIVISOR = 12;
+    /**
+     * Cache of harmonized icon drawables so resting and swipe-preview icons are identical (no size
+     * jump) and we don't rebuild bitmaps per frame.
+     *
+     * <p>Budgeted in bytes rather than entries: keys carry {@code "@" + sizePx}, so the dock's 48dp
+     * icons and the drawer's grid icons share one cache at several sizes at once, and a count-based
+     * cap admits wildly different amounts of pixel data depending on which sizes happen to be live.
+     * A {@link RenderedIconDrawable} costs twice its display bitmap because it retains the clean
+     * pre-shadow artwork alongside it.
+     */
+    private final LruCache<String, Drawable> normalizedIconCache =
+        new LruCache<String, Drawable>(resolveIconCacheBudgetBytes(iconCacheMemoryClassMb(getContext()))) {
+            @Override
+            protected int sizeOf(String key, Drawable value) {
+                return renderedIconCacheEntrySize(value);
+            }
+        };
     /** Visible alpha bounds per drawable; avoids rescanning custom/icon-pack artwork on every drag event. */
     private final Map<Drawable, RectF> drawableVisibleBoundsCache = new WeakHashMap<>();
     private final Map<Drawable, FocusOutlineRenderer.Visual> focusOutlineVisualCache = new WeakHashMap<>();
@@ -217,7 +315,15 @@ public final class SuggestionBarView extends GridLayout {
     private List<SuggestionBarButton> injectedSuggestionButtons;
 
     private PopupWindow folderPopupWindow;
+    private final LauncherFolderPopupController sharedFolderPopup =
+        new LauncherFolderPopupController();
+    @Nullable private View activePinnedDragSourceView;
+    @Nullable private PinnedDragState activePinnedDragState;
+    @Nullable private FolderEntryDragState activeFolderEntryDragState;
+    /** Identifies a folder-member drag in windows the drag's local state does not reach. */
+    static final String FOLDER_ENTRY_CLIP_LABEL = "folder-entry";
     private PopupWindow appContextPopupWindow;
+    private PopupWindow categoryPickerPopupWindow;
     private PopupWindow shortcutsPopupWindow;
     private PopupWindow notificationPopupWindow;
     @Nullable private PopupWindow notificationInteractionPopup;
@@ -240,6 +346,24 @@ public final class SuggestionBarView extends GridLayout {
     private int pinnedItemsPerPage = 1;
     private float swipeDownX = 0f;
     private float swipeDownY = 0f;
+    /**
+     * The gesture's down point in screen coordinates. The drawer runs on raw values rather than the
+     * local ones the page swipe uses because the row's own parent is translated while the plane is
+     * dragging: local Y would then be measured against a moving origin.
+     */
+    private float swipeDownRawX = 0f;
+    private float swipeDownRawY = 0f;
+    private final AppDrawerGestureArbiter gestureArbiter = new AppDrawerGestureArbiter();
+    /**
+     * The latched owner of the current stream, mirrored from {@link #gestureArbiter} at the two
+     * points it is consulted. Replaces the {@code horizontalIntent} boolean the move handler used to
+     * recompute from scratch on every event — recomputation is what let one drag hand ownership
+     * back and forth, and fire both the page swipe and the drawer.
+     */
+    private int gestureClaim = GESTURE_CLAIM_PENDING;
+    @Nullable private AppDrawerGestureListener appDrawerGestureListener;
+    /** Last progress handed down by {@code AppDrawerController}; 0 means no transition on screen. */
+    private float drawerTransitionProgress = 0f;
     private float swipePagePosition = 0f;
     private boolean swipePageDragging = false;
     private float swipeVisualOffsetX = 0f;
@@ -257,6 +381,8 @@ public final class SuggestionBarView extends GridLayout {
     private boolean stableLayoutRerenderPosted = false;
     private boolean childLayoutPending = true;
     private long stableLayoutSuppressedSinceUptimeMs = 0L;
+    private static final int MAX_DEFERRED_RENDER_ATTEMPTS = 8;
+    private int deferredRenderAttempts;
     private int lastSurfaceRenderSignature = 0;
     private boolean pendingPinnedMutationFeedback = false;
     private boolean suppressContextLongPressForSwipe = false;
@@ -286,6 +412,21 @@ public final class SuggestionBarView extends GridLayout {
     private int lastAzResolvedSlot = -1;
     @Nullable private LauncherUsageStatsStore usageStatsStore;
     @Nullable private Runnable appCatalogChangedListener;
+    @Nullable private Runnable drawerConfigChangedListener;
+    /** A config change that landed while the folder popup was up; replayed when it closes. */
+    private boolean pendingDrawerConfigRefresh;
+    /** A catalogue swap that landed while the host was hidden; rows re-render on return. */
+    private boolean pendingCatalogRefreshRender;
+    private final LauncherConfigRepository.Listener configListener = snapshot -> post(() -> {
+        pinnedItems = new ArrayList<>(snapshot.dockItems);
+        invalidateRenderedIconCaches();
+        reloadWithInput("", lastTerminalView);
+        if (appCatalogChangedListener != null) appCatalogChangedListener.run();
+        // Recomposing the drawer dismisses its popups, so a change made from inside the folder
+        // popup (a rename, a removal) must not tear the popup down under the finger.
+        if (sharedFolderPopup.isShowing()) pendingDrawerConfigRefresh = true;
+        else notifyDrawerConfigChanged();
+    });
     @Nullable private OverflowInteractionListener overflowInteractionListener;
     private final ExecutorService searchExecutor = newIdleFriendlyExecutor();
     private int searchGeneration = 0;
@@ -350,6 +491,45 @@ public final class SuggestionBarView extends GridLayout {
         }
     }
 
+    /** Per-app heap ceiling in MB, or a conservative stand-in when the service is unavailable. */
+    private static int iconCacheMemoryClassMb(@Nullable Context context) {
+        try {
+            ActivityManager activityManager = context == null
+                ? null : (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+            if (activityManager != null) {
+                return activityManager.getMemoryClass();
+            }
+        } catch (Throwable ignored) {
+            // Fall through to the floor below; an unusable service is not a reason to render nothing.
+        }
+        return 0;
+    }
+
+    /** One twelfth of the per-app heap, clamped into [6MB, 16MB]. */
+    static int resolveIconCacheBudgetBytes(int memoryClassMb) {
+        long heapBytes = (long) Math.max(0, memoryClassMb) * 1024L * 1024L;
+        long budget = heapBytes / ICON_CACHE_HEAP_DIVISOR;
+        if (budget < ICON_CACHE_MIN_BYTES) budget = ICON_CACHE_MIN_BYTES;
+        if (budget > ICON_CACHE_MAX_BYTES) budget = ICON_CACHE_MAX_BYTES;
+        return (int) budget;
+    }
+
+    /**
+     * Byte cost of one cached icon. A {@link RenderedIconDrawable} retains its clean pre-shadow
+     * artwork at the same dimensions as the display bitmap, so it is charged twice. Anything without
+     * a bitmap (a placeholder, a vector) still costs 1 so that {@code size()} tracks occupancy and
+     * {@code evictAll()} returns to zero.
+     */
+    static int renderedIconCacheEntrySize(@Nullable Drawable value) {
+        if (!(value instanceof BitmapDrawable)) return 1;
+        Bitmap bitmap = ((BitmapDrawable) value).getBitmap();
+        if (bitmap == null) return 1;
+        boolean hasCleanArtwork = value instanceof RenderedIconDrawable;
+        long bytes = (long) bitmap.getAllocationByteCount() * (1 + (hasCleanArtwork ? 1 : 0));
+        if (bytes < 1L) return 1;
+        return bytes > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) bytes;
+    }
+
     public interface OverflowInteractionListener {
         void onOverflowInteractionChanged(boolean interacting);
         default void onOverflowPagePositionChanged(float pagePosition) {}
@@ -412,6 +592,7 @@ public final class SuggestionBarView extends GridLayout {
             }
         }
         attachNotificationBadgeListener();
+        if (configRepository != null) configRepository.addListener(configListener);
     }
 
     @Override
@@ -427,6 +608,7 @@ public final class SuggestionBarView extends GridLayout {
         super.onDetachedFromWindow();
         LauncherNotificationBadgeStore.removeListener(notificationBadgeListener);
         notificationBadgeListener = null;
+        if (configRepository != null) configRepository.removeListener(configListener);
     }
 
     @Override
@@ -457,6 +639,9 @@ public final class SuggestionBarView extends GridLayout {
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
+        // A genuine layout pass is new information: the bounded defer in renderButtons may try
+        // its full budget again.
+        if (changed) deferredRenderAttempts = 0;
         scheduleStableDrawReleaseIfPossible();
     }
 
@@ -502,6 +687,14 @@ public final class SuggestionBarView extends GridLayout {
         Drawable iconDrawable = imageView.getDrawable();
         if (iconDrawable != null) iconDrawable.clearColorFilter();
         imageView.invalidate();
+    }
+
+    /**
+     * Applies the dock's current icon tint treatment (monochrome mode included) to a view the dock
+     * does not own, so drawer cells never drift from the row above them.
+     */
+    public void applyIconColorFilter(@NonNull ImageView imageView) {
+        applyAppIconColorFilter(imageView);
     }
 
     private void invalidateRenderedIconCaches() {
@@ -579,6 +772,11 @@ public final class SuggestionBarView extends GridLayout {
     private int resolveLauncherTextColor() {
         return MaterialColors.getColor(this, com.google.android.material.R.attr.colorOnSurface,
             ContextCompat.getColor(getContext(), R.color.termux_on_surface));
+    }
+
+    /** The launcher's on-surface text colour, for surfaces rendered outside this view. */
+    public int getLauncherTextColor() {
+        return resolveLauncherTextColor();
     }
 
     private static int resolveLauncherTextColor(@NonNull View view) {
@@ -669,10 +867,79 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     public void setConfigRepository(@Nullable LauncherConfigRepository configRepository) {
+        if (this.configRepository != null) this.configRepository.removeListener(configListener);
         this.configRepository = configRepository;
         if (this.configRepository != null) {
+            this.configRepository.addListener(configListener);
             this.pinnedItems = this.configRepository.loadPinnedItems();
         }
+    }
+
+    @NonNull
+    public LauncherConfigSnapshot getLauncherConfigSnapshot() {
+        if (configRepository != null) return configRepository.loadSnapshot();
+        // Tests may construct the row without persistence; use an empty in-memory store.
+        return new LauncherConfigRepository(new LauncherConfigRepository.PreferencesStore() {
+            private String value = "{\"schemaVersion\":5,\"items\":[],\"folders\":[]}";
+            @Override public String getPinnedItemsV2() { return value; }
+            @Override public int getPinnedItemsSchemaVersion() { return 5; }
+            @Override public boolean commitPinnedItems(String next, int version) {
+                value = next;
+                return true;
+            }
+            @Override public String getLegacyDefaultButtons() { return ""; }
+        }).loadSnapshot();
+    }
+
+    public void openFolderFromDrawer(@NonNull String folderId, @Nullable View anchor) {
+        if (configRepository == null) return;
+        PinnedFolderItem folder = configRepository.loadSnapshot().folder(folderId);
+        if (folder != null) showFolderPopup(folder, anchor);
+    }
+
+    @Nullable
+    public LauncherAppEntry resolveFolderMemberForDrawer(@NonNull PinnedAppItem member) {
+        return resolvePinnedApp(member);
+    }
+
+    @NonNull
+    public LauncherConfigRepository.MutationResult createDrawerFolder(long revision,
+        @Nullable LauncherAppEntry target, @NonNull String sourceStableId) {
+        if (configRepository == null || target == null)
+            return LauncherConfigRepository.MutationResult.MISSING;
+        LauncherAppEntry source = findDrawerEntry(sourceStableId);
+        if (source == null) return LauncherConfigRepository.MutationResult.MISSING;
+        return configRepository.createFolder(revision, UUID.randomUUID().toString(),
+            new PinnedAppItem(target.appRef), new PinnedAppItem(source.appRef));
+    }
+
+    @NonNull
+    public LauncherConfigRepository.MutationResult addDrawerAppToFolder(long revision,
+        @NonNull String folderId, @NonNull String sourceStableId) {
+        if (configRepository == null) return LauncherConfigRepository.MutationResult.MISSING;
+        LauncherAppEntry source = findDrawerEntry(sourceStableId);
+        if (source == null) return LauncherConfigRepository.MutationResult.MISSING;
+        return configRepository.addAppToFolder(revision, folderId,
+            new PinnedAppItem(source.appRef));
+    }
+
+    /**
+     * Parks a drawer folder in front of a given app (or at the end of the list), which is what a
+     * folder tile dragged around the drawer persists.
+     */
+    @NonNull
+    public LauncherConfigRepository.MutationResult moveDrawerFolder(long revision,
+        @NonNull String folderId, @Nullable String anchorStableId) {
+        if (configRepository == null) return LauncherConfigRepository.MutationResult.MISSING;
+        return configRepository.setFolderDrawerAnchor(revision, folderId, anchorStableId);
+    }
+
+    @Nullable
+    private LauncherAppEntry findDrawerEntry(@NonNull String stableId) {
+        if (allApps == null) return null;
+        for (LauncherAppEntry entry : allApps)
+            if (stableId.equals(entry.appRef.stableId())) return entry;
+        return null;
     }
 
     public void setAppDataProvider(@Nullable LauncherAppDataProvider appDataProvider) {
@@ -681,6 +948,16 @@ public final class SuggestionBarView extends GridLayout {
 
     public void setAppCatalogChangedListener(@Nullable Runnable appCatalogChangedListener) {
         this.appCatalogChangedListener = appCatalogChangedListener;
+    }
+
+    /** The drawer's recompose hook for pin/folder mutations, which never touch the app catalog. */
+    public void setDrawerConfigChangedListener(@Nullable Runnable drawerConfigChangedListener) {
+        this.drawerConfigChangedListener = drawerConfigChangedListener;
+    }
+
+    private void notifyDrawerConfigChanged() {
+        pendingDrawerConfigRefresh = false;
+        if (drawerConfigChangedListener != null) drawerConfigChangedListener.run();
     }
 
     public void setOverflowInteractionListener(@Nullable OverflowInteractionListener listener) {
@@ -695,6 +972,10 @@ public final class SuggestionBarView extends GridLayout {
     public void setHostVisible(boolean visible) {
         hostVisible = visible;
         if (visible) {
+            if (pendingCatalogRefreshRender) {
+                pendingCatalogRefreshRender = false;
+                post(() -> reloadWithInput(lastInput, lastTerminalView));
+            }
             scheduleStableDrawReleaseIfPossible();
             return;
         }
@@ -713,7 +994,7 @@ public final class SuggestionBarView extends GridLayout {
 
     private LauncherUsageStatsStore getUsageStatsStore() {
         if (usageStatsStore == null) {
-            usageStatsStore = new LauncherUsageStatsStore(getContext());
+            usageStatsStore = LauncherUsageStatsStore.getInstance(getContext());
         }
         return usageStatsStore;
     }
@@ -824,6 +1105,60 @@ public final class SuggestionBarView extends GridLayout {
             appCatalogChangedListener.run();
         }
         invalidateAzRankCache();
+    }
+
+    /**
+     * Refreshes the catalogue in place after a package change: the current apps keep rendering
+     * while the provider rebuilds in the background, then everything swaps at once. This replaces
+     * the old clearAppCache()+reloadAllApps() flow on this path, whose synchronous wipe blanked
+     * the dock and drawer for the whole rebuild (seconds, every icon re-resolved).
+     *
+     * <p>{@code changedPackages} scopes the rebuild — entries of untouched packages are reused
+     * wholesale. Null forces a full rebuild. An update to the active icon pack itself widens to a
+     * full rebuild here, because reused entries would keep the pack's stale artwork.
+     */
+    void refreshAllApps(@Nullable Set<String> changedPackages) {
+        if (injectedSuggestionButtons != null
+            || appDataProvider == null || !appDataProvider.hasLoadedApps()) {
+            reloadAllApps();
+            return;
+        }
+        if (changedPackages != null && !changedPackages.isEmpty()) {
+            TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(getContext(), false);
+            if (preferences != null) {
+                String globalPack = preferences.getAppLauncherIconPackPackage();
+                String pinnedPack = preferences.getAppLauncherPinnedIconPackPackage();
+                if ((globalPack != null && changedPackages.contains(globalPack))
+                    || (pinnedPack != null && changedPackages.contains(pinnedPack))) {
+                    changedPackages = null;
+                }
+            }
+        }
+        if (changedPackages == null) {
+            // Full rebuild resolves every icon again — drop the parsed pack caches so it picks up
+            // the new pack resources instead of the 10s-TTL stale ones.
+            if (iconResolver != null) iconResolver.clearCache();
+            if (iconPackRepository != null) iconPackRepository.clearCache();
+        }
+        appDataProvider.refreshAsync(changedPackages, () -> {
+            allApps = appDataProvider.getAllApps();
+            resolvedRefCache.clear();
+            shortcutCache.clear();
+            invalidateRenderedIconCaches();
+            pruneUnavailablePinnedItems();
+            invalidateAzRankCache();
+            invalidateAzRenderState();
+            if (appCatalogChangedListener != null) {
+                appCatalogChangedListener.run();
+            }
+            if (hostVisible && isAttachedToWindow()) {
+                reloadWithInput(lastInput, lastTerminalView);
+            } else {
+                // The swap landed while the host was away; re-render the rows on return, or the
+                // dock would keep showing the pre-change catalogue with no later signal to fix it.
+                pendingCatalogRefreshRender = true;
+            }
+        });
     }
 
     /**
@@ -1538,22 +1873,47 @@ public final class SuggestionBarView extends GridLayout {
             if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
             swipeDownX = event.getX();
             swipeDownY = event.getY();
+            swipeDownRawX = event.getRawX();
+            swipeDownRawY = event.getRawY();
+            gestureClaim = GESTURE_CLAIM_PENDING;
+            gestureArbiter.begin(swipeDownRawX, swipeDownRawY, captureDrawerEligibility());
         } else if (action == MotionEvent.ACTION_MOVE) {
             setRowInteractionActive(true);
             if (swipeVelocityTracker != null) swipeVelocityTracker.addMovement(event);
             if (activeAzLetter != null) {
                 scheduleAzResetTimeout();
             }
+            if (gestureClaim == GESTURE_CLAIM_DRAWER_DRAG) {
+                if (appDrawerGestureListener != null)
+                    appDrawerGestureListener.onDrawerDrag(event.getRawY());
+                return true;
+            }
+            // The drawer test is inside evaluate() and runs before the page test; a child that has
+            // already taken the stream latches first so neither can steal it back.
+            if (isGestureOwnedByChild()) {
+                gestureClaim = toGestureClaim(gestureArbiter.claimChild());
+            } else {
+                int slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+                gestureClaim = toGestureClaim(
+                    gestureArbiter.evaluate(event.getRawX(), event.getRawY(), slop));
+            }
+            if (gestureClaim == GESTURE_CLAIM_DRAWER_DRAG) {
+                beginDrawerDrag(event);
+                return true;
+            }
             float dx = event.getX() - swipeDownX;
-            float dy = event.getY() - swipeDownY;
-            int slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
-            boolean horizontalIntent = Math.abs(dx) >= slop && Math.abs(dx) > (Math.abs(dy) * 1.1f);
-            if (horizontalIntent && TextUtils.isEmpty(lastInput.trim())) {
+            if (gestureClaim == GESTURE_CLAIM_PAGE_SWIPE && TextUtils.isEmpty(lastInput.trim())) {
                 suppressContextLongPressForSwipe = true;
                 cancelPendingContextLongPresses();
                 applySwipePageDragFeedback(dx);
             }
         } else if (action == MotionEvent.ACTION_UP) {
+            int claim = gestureClaim;
+            resetGestureClaim();
+            if (claim == GESTURE_CLAIM_DRAWER_DRAG) {
+                finishDrawerDrag(event, false);
+                return true;
+            }
             if (activeAzLetter != null) {
                 scheduleAzResetTimeout();
             }
@@ -1570,8 +1930,9 @@ public final class SuggestionBarView extends GridLayout {
                 && Math.abs(vx) > PAGE_SWIPE_FLING_VELOCITY_PX_PER_SEC
                 && Math.signum(dx) == Math.signum(vx);
             boolean swipeQualified = distanceCommit || velocityCommit;
-            if (swipeQualified && Math.abs(dx) > Math.abs(dy) * 1.2f &&
-                TextUtils.isEmpty(lastInput.trim())) {
+            if (claim == GESTURE_CLAIM_PAGE_SWIPE && swipeQualified
+                && Math.abs(dx) > Math.abs(dy) * 1.2f
+                && TextUtils.isEmpty(lastInput.trim())) {
                 int pageDelta = dx < 0 ? 1 : -1;
                 if (activeAzLetter != null) {
                     int totalPages = getAzPagesCount();
@@ -1615,6 +1976,12 @@ public final class SuggestionBarView extends GridLayout {
             }
             setRowInteractionActive(false);
         } else if (action == MotionEvent.ACTION_CANCEL) {
+            int claim = gestureClaim;
+            resetGestureClaim();
+            if (claim == GESTURE_CLAIM_DRAWER_DRAG) {
+                finishDrawerDrag(event, true);
+                return true;
+            }
             ViewParent parent = getParent();
             if (parent != null) parent.requestDisallowInterceptTouchEvent(false);
             if (swipeVelocityTracker != null) {
@@ -1626,8 +1993,173 @@ public final class SuggestionBarView extends GridLayout {
                 animateSwipePageDragBack();
             }
             setRowInteractionActive(false);
+        } else if (gestureClaim == GESTURE_CLAIM_DRAWER_DRAG) {
+            // Extra pointers during a claimed drag: swallowed rather than forwarded, so a second
+            // finger cannot start a second interaction on children this stream has already
+            // cancelled.
+            return true;
         }
         return super.dispatchTouchEvent(event);
+    }
+
+    public void setAppDrawerGestureListener(@Nullable AppDrawerGestureListener listener) {
+        appDrawerGestureListener = listener;
+    }
+
+    /**
+     * The dock row's bounds in screen coordinates — the rectangle the drawer's pull-down starts
+     * from, and the one the plane's seed rect has to agree with.
+     */
+    public void getAppsRowScreenRect(@NonNull Rect out) {
+        int[] location = new int[2];
+        getLocationOnScreen(location);
+        out.set(location[0], location[1], location[0] + getWidth(), location[1] + getHeight());
+    }
+
+    /**
+     * The eight vetoes, read once at {@code ACTION_DOWN}. Four are the row's own state and four come
+     * from the host through {@link AppDrawerGestureListener}; with no listener wired the drawer can
+     * never claim, which is what keeps every test and every non-launcher host on the old behaviour.
+     */
+    @NonNull
+    private AppDrawerGestureArbiter.Eligibility captureDrawerEligibility() {
+        AppDrawerGestureListener listener = appDrawerGestureListener;
+        boolean portrait = getResources().getConfiguration().orientation
+            != Configuration.ORIENTATION_LANDSCAPE;
+        // A pickup state or a folder-drag hover left over from the previous gesture means the row is
+        // still mid-interaction; the drawer stays out of it.
+        boolean noActivePickup = activeLongPressPickupState == null && folderDragHoverIndex < 0;
+        return new AppDrawerGestureArbiter.Eligibility(
+            listener != null && listener.isAppDrawerEnabled(),
+            // The filtered apps row used to veto the pull-down, forcing a search clear before the
+            // drawer could open. A vertical pull is unambiguous even over filtered results — the
+            // page swipe stays horizontal — so the veto slot is permanently clear.
+            true,
+            activeAzLetter == null,
+            portrait,
+            listener != null && !listener.isDockTuningActive(),
+            listener != null && !listener.isCommandPaletteOpen(),
+            noActivePickup,
+            listener != null && !listener.isAppDrawerEngaged(),
+            listener != null && listener.isFullStatusPaneClosed());
+    }
+
+    /** The child-owned cases, read live: all three begin <em>during</em> the stream, not before it. */
+    private boolean isGestureOwnedByChild() {
+        LongPressPickupState state = activeLongPressPickupState;
+        return state != null
+            && (state.menuShown || state.notificationSwipeStarted || state.dragStarted);
+    }
+
+    private static int toGestureClaim(@NonNull AppDrawerGestureArbiter.Claim claim) {
+        switch (claim) {
+            case PAGE_SWIPE: return GESTURE_CLAIM_PAGE_SWIPE;
+            case DRAWER_DRAG: return GESTURE_CLAIM_DRAWER_DRAG;
+            case CHILD_OWNED: return GESTURE_CLAIM_CHILD_OWNED;
+            case PENDING:
+            default: return GESTURE_CLAIM_PENDING;
+        }
+    }
+
+    private void resetGestureClaim() {
+        gestureClaim = GESTURE_CLAIM_PENDING;
+        gestureArbiter.reset();
+    }
+
+    /**
+     * Hands the stream to the drawer. The order here is not cosmetic:
+     *
+     * <ol>
+     *   <li>the long-press suppression flag goes up and the pending long-presses are cancelled, so
+     *       the context menu cannot open under the plane;
+     *   <li>any popup already on screen is dismissed — it is a window of its own and would outlive
+     *       the row it was anchored to;
+     *   <li><b>exactly one</b> synthetic {@code ACTION_CANCEL} goes down to the children. Every
+     *       later event of this stream is consumed here without reaching {@code super}, so without
+     *       it the pressed icon never sees an UP: {@code animateLaunchReleaseBounce} never runs and
+     *       {@code activeLongPressPickupState} is left pointing at a permanently pressed view. The
+     *       one-way latch is what guarantees "exactly one" — this method runs on the transition into
+     *       {@link #GESTURE_CLAIM_DRAWER_DRAG}, and the claim can never re-enter it;
+     *   <li>only then does the drag begin, from the <em>down</em> point rather than the current one,
+     *       so the plane's progress starts at zero.
+     * </ol>
+     */
+    private void beginDrawerDrag(@NonNull MotionEvent event) {
+        suppressContextLongPressForSwipe = true;
+        cancelPendingContextLongPresses();
+        dismissAppContextPopup();
+        dismissFolderPopup();
+        dismissShortcutsPopup();
+        MotionEvent cancel = MotionEvent.obtain(event);
+        cancel.setAction(MotionEvent.ACTION_CANCEL);
+        try {
+            super.dispatchTouchEvent(cancel);
+        } finally {
+            cancel.recycle();
+        }
+        if (appDrawerGestureListener != null) {
+            appDrawerGestureListener.onDrawerDragBegin(swipeDownRawY);
+            // The move that crossed the claim threshold is already drawer travel. This matters on
+            // the cold path: building the selected drawer content can occupy the rest of the input
+            // frame, leaving UP as the next delivered event. Dropping this move then releases at
+            // progress zero and makes that first otherwise-valid pull look swallowed.
+            appDrawerGestureListener.onDrawerDrag(event.getRawY());
+        }
+    }
+
+    /**
+     * Ends a drawer drag and — the part that is easy to lose — clears
+     * {@code suppressContextLongPressForSwipe}. The two places that used to clear it live further
+     * down the UP and CANCEL branches, which this path returns before reaching, and a flag left up
+     * makes every later long-press on the dock silently do nothing.
+     */
+    private void finishDrawerDrag(@NonNull MotionEvent event, boolean cancelled) {
+        float velocityPxPerSec = 0f;
+        if (swipeVelocityTracker != null) {
+            if (!cancelled) {
+                swipeVelocityTracker.addMovement(event);
+                swipeVelocityTracker.computeCurrentVelocity(1000);
+                velocityPxPerSec = swipeVelocityTracker.getYVelocity();
+            }
+            swipeVelocityTracker.recycle();
+            swipeVelocityTracker = null;
+        }
+        ViewParent parent = getParent();
+        if (parent != null) parent.requestDisallowInterceptTouchEvent(false);
+        suppressContextLongPressForSwipe = false;
+        setRowInteractionActive(false);
+        AppDrawerGestureListener listener = appDrawerGestureListener;
+        if (listener == null) return;
+        if (cancelled) listener.onDrawerDragCancel();
+        else listener.onDrawerDragEnd(velocityPxPerSec);
+    }
+
+    /**
+     * The pinned icons' exit, staggered by slot so the row empties as a wave rather than a block.
+     * Each icon's ramp is offset by its index, capped at {@link #DRAWER_ICON_STAGGER_CAP} so a long
+     * dock does not push the last icon's fade past the end of the transition.
+     *
+     * <p>This is the only thing the drawer's controller asks of the row, and the row is the only
+     * writer of these properties while a transition is on screen — see
+     * {@link #resetTransientVisualState()}.
+     */
+    @Override
+    public void setDrawerTransitionProgress(float progress) {
+        float p = clamp01(progress);
+        drawerTransitionProgress = p;
+        float lift = dp(DRAWER_ICON_EXIT_LIFT_DP);
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (child == null) continue;
+            float stagger = DRAWER_ICON_STAGGER_STEP * Math.min(i, DRAWER_ICON_STAGGER_CAP);
+            float r = AppDrawerTransitionGeometry.ramp(p,
+                DRAWER_ICON_FADE_START + stagger, DRAWER_ICON_FADE_END + stagger);
+            float scale = 1f + ((DRAWER_ICON_EXIT_SCALE - 1f) * r);
+            child.setAlpha(1f - r);
+            child.setScaleX(scale);
+            child.setScaleY(scale);
+            child.setTranslationY(lift * r);
+        }
     }
 
     void reloadWithInput(String input, final TerminalView terminalView) {
@@ -1714,6 +2246,13 @@ public final class SuggestionBarView extends GridLayout {
             if (pendingDeferredRender) {
                 return;
             }
+            // Bounded, not clock-bounded: a dock that can never stabilize (hidden, or measured
+            // 1x1 in a test fixture) must stop reposting, or the main queue never drains and
+            // Robolectric's idle() livelocks. The next real reload or size change retries.
+            if (deferredRenderAttempts >= MAX_DEFERRED_RENDER_ATTEMPTS) {
+                return;
+            }
+            deferredRenderAttempts++;
             pendingDeferredRender = true;
             final List<LauncherAppEntry> deferredEntries = new ArrayList<>(entries);
             final boolean deferredAzPreview = azPreview;
@@ -1727,6 +2266,7 @@ public final class SuggestionBarView extends GridLayout {
             return;
         }
         pendingDeferredRender = false;
+        deferredRenderAttempts = 0;
         int buttonCount = Math.max(1, maxButtonCount);
         int renderStartCol = 0;
         List<PinnedItem> pinnedForSlots = new ArrayList<>();
@@ -1987,6 +2527,15 @@ public final class SuggestionBarView extends GridLayout {
 
     public void setRowHapticsEnabled(boolean enabled) {
         rowHapticsEnabled = enabled;
+    }
+
+    /**
+     * Whether row haptics are on, so a letter tick raised by a surface the dock does not own — the
+     * drawer's A-Z column — honours the same preference as the dock's own A-Z row instead of keeping
+     * a second copy of it.
+     */
+    public boolean isRowHapticsEnabled() {
+        return rowHapticsEnabled;
     }
 
     public boolean launchFocusedTerminalSearchEntry() {
@@ -2286,6 +2835,21 @@ public final class SuggestionBarView extends GridLayout {
         return built != null ? built : raw;
     }
 
+    /**
+     * The same rendered, cached icon the dock draws, at an arbitrary size. Sharing the cache is the
+     * point: keys already carry the pixel size, so a drawer cell and a dock icon of the same size
+     * are literally the same drawable instance.
+     */
+    @Nullable
+    public Drawable getRenderedIcon(@NonNull LauncherAppEntry entry, int sizePx) {
+        return iconForDisplay(entry, sizePx);
+    }
+
+    /** Read-only budget shared by dock and drawer rendered icons. */
+    public int getRenderedIconCacheBudgetBytes() {
+        return normalizedIconCache.maxSize();
+    }
+
     private Drawable normalizeIcon(@Nullable Drawable src, int sizePx, boolean tuneSaturation,
                                    boolean cloneBadge) {
         if (src == null || sizePx <= 0) {
@@ -2547,6 +3111,26 @@ public final class SuggestionBarView extends GridLayout {
         } else {
             postDelayed(launch, launchDelay);
         }
+    }
+
+    /**
+     * Launches an entry on behalf of a surface the dock does not own (the app drawer grid).
+     *
+     * <p>Deliberately routed through {@link #launchEntryFromTouch} so the drawer inherits the whole
+     * ladder — clone/work-profile branch, activity fallbacks, launch transition, ripple, usage
+     * recording, popup dismissal — rather than a second, drifting copy of it.
+     *
+     * <p>It must <em>not</em> call {@code registerLaunchTarget}: those entries index the dock's
+     * launch-animation targets by component, and a drawer cell registering itself would redirect the
+     * dock's own return animation to a view that no longer exists once the drawer closes.
+     *
+     * @return true when the request was dispatched (the launch itself may still be deferred by the
+     *     touch-launch animation delay).
+     */
+    public boolean launchEntryFromDrawer(@Nullable View sourceView, @Nullable LauncherAppEntry entry) {
+        if (entry == null) return false;
+        launchEntryFromTouch(sourceView != null ? sourceView : this, entry, lastTerminalView);
+        return true;
     }
 
     public void setLaunchRippleListener(@Nullable LaunchRippleListener listener) {
@@ -2956,7 +3540,11 @@ public final class SuggestionBarView extends GridLayout {
         delete.setContentDescription("Delete folder");
         styleIconButton(delete, dp(4));
         delete.setOnClickListener(v -> {
-            removePinnedAt(folderIndex);
+            if (folderIndex >= 0) {
+                removePinnedAt(folderIndex);
+            } else {
+                dissolveDrawerFolder(folder.id);
+            }
             dialog.dismiss();
         });
         LinearLayout.LayoutParams deleteParams = new LinearLayout.LayoutParams(dp(28), dp(28));
@@ -3026,7 +3614,7 @@ public final class SuggestionBarView extends GridLayout {
             LauncherAppEntry e = resolvePinnedApp(folderApp);
             if (e == null || e.icon == null) continue;
             ImageView mini = new ImageView(getContext());
-            mini.setImageDrawable(e.icon);
+            mini.setImageDrawable(getRenderedIcon(e, miniSize));
             mini.setScaleType(ImageView.ScaleType.FIT_CENTER);
             GridLayout.LayoutParams params = new GridLayout.LayoutParams();
             params.width = miniSize;
@@ -3036,6 +3624,18 @@ public final class SuggestionBarView extends GridLayout {
             mini.setLayoutParams(params);
             miniGrid.addView(mini);
             placed++;
+        }
+        if (folder.apps.size() > 4) {
+            TextView overflow = new TextView(getContext());
+            overflow.setText("+" + (folder.apps.size() - 3));
+            overflow.setTextColor(Color.WHITE);
+            overflow.setTextSize(8f);
+            overflow.setGravity(Gravity.CENTER);
+            overflow.setBackgroundColor(0xB8000000);
+            FrameLayout.LayoutParams badge = new FrameLayout.LayoutParams(miniSize, miniSize,
+                Gravity.END | Gravity.BOTTOM);
+            badge.setMargins(0, 0, pinnedFolderMiniIconMarginPx(), pinnedFolderMiniIconMarginPx());
+            iconShell.addView(overflow, badge);
         }
         iconShell.addView(miniGrid, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
         root.addView(iconShell, new FrameLayout.LayoutParams(shellSize, shellSize, Gravity.CENTER));
@@ -3063,18 +3663,26 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private void changeFolderAppIcon(@NonNull AppMenuContext context) {
-        if (context.sourceFolder == null || context.folderEntryRef == null) return;
-        PinnedAppItem folderApp = findFolderApp(context.sourceFolder, context.folderEntryRef);
+        refreshPinnedItemsFromRepository();
+        if (context.sourceFolderId == null || context.folderEntryRef == null) return;
+        PinnedFolderItem folder = resolveLatestFolder(context.sourceFolderId);
+        if (folder == null) return;
+        PinnedAppItem folderApp = findFolderApp(folder, context.folderEntryRef);
         if (folderApp == null) return;
         showIconPackPicker(folderApp, override -> {
-            updateFolderAppIconOverride(context.sourceFolder, folderApp.appRef, override);
+            refreshPinnedItemsFromRepository();
+            PinnedFolderItem latest = resolveLatestFolder(context.sourceFolderId);
+            if (latest == null) return;
+            updateFolderAppIconOverride(latest, folderApp.appRef, override);
             persistPinsAndReload();
         });
     }
 
     private void resetFolderAppIcon(@NonNull AppMenuContext context) {
-        if (context.sourceFolder == null || context.folderEntryRef == null) return;
-        if (updateFolderAppIconOverride(context.sourceFolder, context.folderEntryRef, null)) {
+        refreshPinnedItemsFromRepository();
+        if (context.sourceFolderId == null || context.folderEntryRef == null) return;
+        PinnedFolderItem folder = resolveLatestFolder(context.sourceFolderId);
+        if (folder != null && updateFolderAppIconOverride(folder, context.folderEntryRef, null)) {
             persistPinsAndReload();
         }
     }
@@ -3423,190 +4031,21 @@ public final class SuggestionBarView extends GridLayout {
         }
     }
 
-    private void showReplacePinnedApp(int index) {
-        if (allApps == null || allApps.isEmpty()) reloadAllApps();
-        String[] labels = appLabels(allApps);
-        new MaterialAlertDialogBuilder(getContext())
-            .setTitle("Replace pinned app")
-            .setItems(labels, (dialog, which) -> {
-                AppRef ref = allApps.get(which).appRef;
-                if (index >= 0 && index < pinnedItems.size()) {
-                    pinnedItems.set(index, new PinnedAppItem(ref));
-                }
-                persistPinsAndReload();
-            })
-            .show();
-    }
-
-    private void showMovePinnedAppToFolder(int appIndex, PinnedAppItem item) {
-        List<PinnedFolderItem> folders = allFolders();
-        if (folders.isEmpty()) {
-            showCreateFolderWithSeed(appIndex, item);
-            return;
-        }
-        String[] names = new String[folders.size()];
-        for (int i = 0; i < folders.size(); i++) names[i] = folders.get(i).title;
-
-        new MaterialAlertDialogBuilder(getContext())
-            .setTitle("Move to folder")
-            .setItems(names, (dialog, which) -> {
-                PinnedFolderItem folder = folders.get(which);
-                addPinnedAppToFolderIfMissing(folder, item);
-                if (appIndex >= 0 && appIndex < pinnedItems.size()) {
-                    pinnedItems.remove(appIndex);
-                }
-                persistPinsAndReload();
-            })
-            .show();
-    }
-
-    private void showCreateFolderWithSeed(int appIndex, PinnedAppItem item) {
-        EditText titleInput = new EditText(getContext());
-        titleInput.setHint("Folder name");
-        new MaterialAlertDialogBuilder(getContext())
-            .setTitle("Create folder")
-            .setView(titleInput)
-            .setPositiveButton("Create", (dialog, which) -> {
-                String title = titleInput.getText() == null ? "Folder" : titleInput.getText().toString().trim();
-                if (title.isEmpty()) title = "Folder";
-                PinnedFolderItem folder = new PinnedFolderItem(UUID.randomUUID().toString(), title);
-                addPinnedAppToFolderIfMissing(folder, item);
-
-                if (appIndex >= 0 && appIndex < pinnedItems.size()) {
-                    pinnedItems.set(appIndex, folder);
-                } else {
-                    pinnedItems.add(folder);
-                }
-                persistPinsAndReload();
-            })
-            .setNegativeButton("Cancel", null)
-            .show();
-    }
-
-    private void showFolderAppEditor(PinnedFolderItem folder) {
-        if (allApps == null || allApps.isEmpty()) reloadAllApps();
-        boolean[] checked = new boolean[allApps.size()];
-        Set<String> existing = new HashSet<>();
-        for (PinnedAppItem folderApp : folder.apps) {
-            existing.add(resolveForSelectionId(folderApp.appRef));
-        }
-        for (int i = 0; i < allApps.size(); i++) {
-            checked[i] = existing.contains(allApps.get(i).appRef.stableId());
-        }
-
-        String[] labels = appLabels(allApps);
-        new MaterialAlertDialogBuilder(getContext())
-            .setTitle("Edit folder apps")
-            .setMultiChoiceItems(labels, checked, (dialog, which, isChecked) -> {
-                checked[which] = isChecked;
-            })
-            .setPositiveButton("Save", (dialog, which) -> {
-                Map<String, PinnedIconOverride> existingOverrides = folderIconOverridesByStableId(folder);
-                folder.apps.clear();
-                for (int i = 0; i < checked.length; i++) {
-                    if (checked[i]) {
-                        AppRef ref = resolveForSelectionRef(allApps.get(i).appRef);
-                        folder.apps.add(new PinnedAppItem(ref, existingOverrides.get(ref.stableId())));
-                    }
-                }
-                persistPinsAndReload();
-            })
-            .setNegativeButton("Cancel", null)
-            .show();
-    }
-
-    private void showFolderSettings(PinnedFolderItem folder) {
-        LinearLayout layout = new LinearLayout(getContext());
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(dp(16), dp(12), dp(16), dp(12));
-        GradientDrawable panel = new GradientDrawable();
-        panel.setCornerRadius(dp(14));
-        panel.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xEE));
-        panel.setStroke(dp(1), withAlphaComponent(resolveLauncherOutlineColor(), 0x66));
-        layout.setBackground(panel);
-
-        TextView title = new TextView(getContext());
-        title.setText("Folder settings");
-        title.setTextColor(resolveLauncherTextColor());
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setTextSize(14f);
-        title.setPadding(0, 0, 0, dp(8));
-
-        EditText nameInput = new EditText(getContext());
-        nameInput.setHint("Folder name");
-        nameInput.setText(TextUtils.isEmpty(folder.title) ? "Folder" : folder.title);
-
-        final int[] rowsValue = new int[] {clamp(folder.rows, 1, PinnedFolderItem.MAX_GRID)};
-        final int[] colsValue = new int[] {clamp(folder.cols, 1, PinnedFolderItem.MAX_GRID)};
-        LinearLayout rowsControl = buildStepperRow("Rows", rowsValue, 1, PinnedFolderItem.MAX_GRID);
-        LinearLayout colsControl = buildStepperRow("Columns", colsValue, 1, PinnedFolderItem.MAX_GRID);
-
-        EditText colorInput = new EditText(getContext());
-        colorInput.setHint("Tint color");
-        colorInput.setText(folder.tintOverrideEnabled ? String.format(Locale.US, "#%08X", folder.tintColor) : "");
-        colorInput.setSingleLine(true);
-        colorInput.setHint("#AARRGGBB or #RRGGBB");
-
-        LinearLayout buttons = new LinearLayout(getContext());
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        buttons.setGravity(Gravity.END);
-
-        Button cancel = new Button(getContext());
-        cancel.setText("Cancel");
-        styleGhostButton(cancel);
-
-        Button save = new Button(getContext());
-        save.setText("Save");
-        styleGhostButton(save);
-
-        buttons.addView(cancel);
-        buttons.addView(save);
-
-        layout.addView(title);
-        layout.addView(nameInput, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        layout.addView(rowsControl, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        layout.addView(colsControl, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        layout.addView(colorInput, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        layout.addView(buttons, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        AlertDialog dialog = new MaterialAlertDialogBuilder(getContext())
-            .setView(layout)
-            .create();
-
-        cancel.setOnClickListener(v -> dialog.dismiss());
-        save.setOnClickListener(v -> {
-            String newName = stringValue(nameInput.getText()).trim();
-            folder.title = newName.isEmpty() ? "Folder" : newName;
-            folder.rows = rowsValue[0];
-            folder.cols = colsValue[0];
-            String color = stringValue(colorInput.getText()).trim();
-            if (color.isEmpty()) {
-                folder.tintOverrideEnabled = false;
-            } else {
-                Integer parsed = parseColor(color);
-                if (parsed != null) {
-                    folder.tintOverrideEnabled = true;
-                    folder.tintColor = parsed;
-                }
-            }
-            dialog.dismiss();
-            persistPinsAndReload();
-        });
-
-        dialog.show();
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setSoftInputMode(
-                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE |
-                WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
-            );
-        }
-    }
-
     private void showFolderPopup(PinnedFolderItem folder, @Nullable View anchor) {
+        showFolderPopup(folder, anchor, false);
+    }
+
+    private void showFolderPopup(PinnedFolderItem folder, @Nullable View anchor,
+                                 boolean beginRename) {
         dismissFolderPopup();
         dismissAppContextPopup();
         dismissShortcutsPopup();
 
+        LauncherConfigSnapshot snapshot = configRepository == null ? null
+            : configRepository.loadSnapshot();
+        PinnedFolderItem resolvedFolder = snapshot == null ? folder : snapshot.folder(folder.id);
+        if (resolvedFolder == null) return;
+        folder = resolvedFolder;
         List<LauncherAppEntry> folderEntries = new ArrayList<>();
         for (PinnedAppItem folderApp : folder.apps) {
             LauncherAppEntry entry = resolvePinnedApp(folderApp);
@@ -3618,30 +4057,40 @@ public final class SuggestionBarView extends GridLayout {
 
         int rows = clamp(folder.rows, 1, PinnedFolderItem.MAX_GRID);
         int cols = clamp(folder.cols, 1, PinnedFolderItem.MAX_GRID);
-        int cellCount = rows * cols;
         int screenW = getResources().getDisplayMetrics().widthPixels;
         int screenH = getResources().getDisplayMetrics().heightPixels;
         int popupIconSize = computeFolderPopupIconSize(rows, cols, screenW, screenH);
 
-        GridLayout grid = new GridLayout(getContext());
-        grid.setColumnCount(cols);
-        grid.setRowCount(rows);
-        grid.setPadding(dp(3), dp(3), dp(3), dp(3));
-        grid.setUseDefaultMargins(false);
-        grid.setAlignmentMode(GridLayout.ALIGN_BOUNDS);
+        RecyclerView grid = new RecyclerView(getContext());
+        grid.setLayoutManager(new GridLayoutManager(getContext(), cols));
+        grid.setOverScrollMode(OVER_SCROLL_NEVER);
+        grid.setItemAnimator(null);
+        final String popupFolderId = folder.id;
+        grid.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+            @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(
+                @NonNull ViewGroup parent, int viewType) {
+                FrameLayout holder = new FrameLayout(parent.getContext());
+                holder.setLayoutParams(new RecyclerView.LayoutParams(popupIconSize + dp(8),
+                    popupIconSize + dp(8)));
+                return new RecyclerView.ViewHolder(holder) {};
+            }
 
-        for (int i = 0; i < folderEntries.size() && i < cellCount; i++) {
-            LauncherAppEntry entry = folderEntries.get(i);
-            View btn = createPopupEntryButton(entry, popupIconSize, folder);
-            GridLayout.LayoutParams params = new GridLayout.LayoutParams();
-            params.width = popupIconSize;
-            params.height = popupIconSize;
-            params.columnSpec = GridLayout.spec(i % cols);
-            params.rowSpec = GridLayout.spec(i / cols);
-            params.setMargins(dp(4), dp(4), dp(4), dp(4));
-            btn.setLayoutParams(params);
-            grid.addView(btn);
-        }
+            @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder,
+                                                   int position) {
+                ViewGroup root = (ViewGroup) holder.itemView;
+                root.removeAllViews();
+                View button = createPopupEntryButton(folderEntries.get(position), popupIconSize,
+                    popupFolderId);
+                root.addView(button, new FrameLayout.LayoutParams(popupIconSize, popupIconSize,
+                    Gravity.CENTER));
+            }
+
+            @Override public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder) {
+                ((ViewGroup) holder.itemView).removeAllViews();
+            }
+
+            @Override public int getItemCount() { return folderEntries.size(); }
+        });
 
         LinearLayout shell = new LinearLayout(getContext());
         shell.setOrientation(LinearLayout.VERTICAL);
@@ -3652,16 +4101,20 @@ public final class SuggestionBarView extends GridLayout {
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(4), dp(2), dp(4), dp(4));
 
-        TextView title = new TextView(getContext());
-        title.setText(TextUtils.isEmpty(folder.title) ? "Folder" : folder.title);
-        title.setTextColor(resolveLauncherTextColor());
-        title.setTextSize(12f);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
+        FolderRenameTitleView title = new FolderRenameTitleView(getContext());
+        title.setTextColor(getLauncherTextColor());
+        title.bind(new FolderRenameModel(TextUtils.isEmpty(folder.title) ? "Folder" : folder.title),
+            false);
         title.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         title.setClickable(true);
         title.setOnClickListener(v -> {
-            dismissFolderPopup();
-            showRenameFolderDialog(folder);
+            Context context = getContext();
+            LauncherConfigSnapshot latest = configRepository == null ? null
+                : configRepository.loadSnapshot();
+            PinnedFolderItem latestFolder = latest == null ? null : latest.folder(popupFolderId);
+            if (context instanceof TermuxActivity && latestFolder != null)
+                ((TermuxActivity) context).beginFolderRename(latest.revision, popupFolderId,
+                    latestFolder.title, title);
         });
 
         ImageButton gear = new ImageButton(getContext());
@@ -3670,24 +4123,36 @@ public final class SuggestionBarView extends GridLayout {
         int gearSize = dp(24);
         gear.setOnClickListener(v -> {
             dismissFolderPopup();
-            int folderIndex = findPinnedFolderIndex(folder);
-            if (folderIndex >= 0) {
-                showFolderContentsEditor(folderIndex, folder);
-            }
+            refreshPinnedItemsFromRepository();
+            PinnedFolderItem latestFolder = resolveLatestFolder(popupFolderId);
+            if (latestFolder == null) return;
+            // Drawer-only folders have no dock index (-1); the editor persists those through the
+            // shared folder entity instead of a dock slot, so the cog must not require a pin.
+            showFolderContentsEditor(findPinnedFolderIndex(latestFolder), latestFolder);
         });
 
         header.addView(title);
         header.addView(gear, new LinearLayout.LayoutParams(gearSize, gearSize));
         shell.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        shell.addView(grid, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        int visibleRows = Math.max(1, Math.min(rows,
+            (int) Math.ceil(folderEntries.size() / (float) cols)));
+        shell.addView(grid, new LinearLayout.LayoutParams(
+            Math.min(screenW, cols * (popupIconSize + dp(8))),
+            visibleRows * (popupIconSize + dp(8))));
 
         int overlayBase = folder.tintOverrideEnabled ? (folder.tintColor & 0x00FFFFFF) : (inheritedTintColor & 0x00FFFFFF);
-        folderPopupWindow = buildPopupWindow(shell, overlayBase, true, () -> {
+        folderPopupWindow = buildPopupWindow(shell, overlayBase, true, null);
+        final PopupWindow shownPopup = folderPopupWindow;
+        sharedFolderPopup.show(shownPopup, folder.id, () -> showPopupAtAnchorWithoutAnimation(
+            shownPopup, anchor), () -> {
+            if (getContext() instanceof TermuxActivity)
+                ((TermuxActivity) getContext()).cancelFolderRename();
             if (folderPopupWindow != null && !folderPopupWindow.isShowing()) {
                 folderPopupWindow = null;
             }
+            if (pendingDrawerConfigRefresh) notifyDrawerConfigChanged();
         });
-        showPopupAtAnchor(folderPopupWindow, anchor);
+        if (beginRename) title.post(title::performClick);
     }
 
     private void removePinnedAt(int index) {
@@ -3710,38 +4175,11 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private void dismissFolderPopup() {
+        if (getContext() instanceof TermuxActivity)
+            ((TermuxActivity) getContext()).cancelFolderRename();
         if (folderPopupWindow != null) {
-            final PopupWindow popup = folderPopupWindow;
-            dismissPopupWindowAnimated(popup, () -> {
-                if (folderPopupWindow == popup) folderPopupWindow = null;
-            });
+            sharedFolderPopup.dismiss();
         }
-    }
-
-    private List<PinnedFolderItem> allFolders() {
-        List<PinnedFolderItem> out = new ArrayList<>();
-        for (PinnedItem item : pinnedItems) {
-            if (item instanceof PinnedFolderItem) {
-                out.add((PinnedFolderItem) item);
-            }
-        }
-        return out;
-    }
-
-    private void showRenameFolderDialog(@NonNull PinnedFolderItem folder) {
-        EditText titleInput = new EditText(getContext());
-        titleInput.setHint("Folder name");
-        titleInput.setText(TextUtils.isEmpty(folder.title) ? "Folder" : folder.title);
-        new MaterialAlertDialogBuilder(getContext())
-            .setTitle("Rename folder")
-            .setView(titleInput)
-            .setPositiveButton("Save", (dialog, which) -> {
-                String updated = stringValue(titleInput.getText()).trim();
-                folder.title = updated.isEmpty() ? "Folder" : updated;
-                persistPinsAndReload();
-            })
-            .setNegativeButton("Cancel", null)
-            .show();
     }
 
     @NonNull
@@ -3766,10 +4204,60 @@ public final class SuggestionBarView extends GridLayout {
         Runnable notificationSwipeAction = pinnedIndex >= 0
             ? () -> showNotificationPopup(entry, pressTarget)
             : null;
+        // A folder member has no dock slot to drag, so its pickup starts a folder-entry drag that
+        // carries the member out of the folder instead of reordering a pinned index.
+        Runnable folderEntryPickup = sourceFolder != null && folderEntryRef != null
+            ? () -> startFolderEntryDrag(pressTarget, entry, sourceFolder.id)
+            : null;
         bindContextLongPressGesture(pressTarget, pinnedIndex, allowDragPickup, () -> {
             dismissShortcutsPopup();
-            showAppContextPopup(new AppMenuContext(entry, pressTarget, pinnedIndex, sourceFolder, folderEntryRef));
-        }, notificationSwipeAction, entry.appRef.packageName);
+            showAppContextPopup(new AppMenuContext(entry, pressTarget, pinnedIndex,
+                sourceFolder == null ? null : sourceFolder.id,
+                folderEntryRef));
+        }, notificationSwipeAction, entry.appRef.packageName, null, null, folderEntryPickup);
+    }
+
+    /**
+     * Binds the dock's app context menu onto a view the dock does not own (an app drawer cell).
+     *
+     * <p>This delegates to the one gesture implementation rather than reproducing any part of it:
+     * press-down animation, pickup state, slide-to-select, drag-back-to-cancel and the release
+     * bounce all come from {@link #bindContextLongPressGesture}, which is already parameterised for
+     * an unpinned, non-draggable target ({@code pinnedIndex = -1}, {@code allowDragPickup = false},
+     * no notification-swipe action) — exactly the configuration the A-Z preview and folder-popup
+     * icons use. {@code showAppContextPopup} recomputes the pinned index itself, so a drawer cell
+     * for an already-pinned app still gets the Unpin shape.
+     */
+    public void bindDrawerAppContextLongPress(@NonNull View pressTarget, @NonNull LauncherAppEntry entry) {
+        bindDrawerAppContextLongPress(pressTarget, entry, null);
+    }
+
+    public void bindDrawerAppContextLongPress(@NonNull View pressTarget,
+                                              @NonNull LauncherAppEntry entry,
+                                              @Nullable AppDrawerPickupDelegate pickupDelegate) {
+        bindDrawerAppContextLongPress(pressTarget, entry, pickupDelegate, null);
+    }
+
+    /**
+     * Same as the two-arg overload, but with a {@code categoryAction}: when non-null, the popup
+     * this opens drops its Pin/Unpin row and gains a "Category" row that runs it instead — the
+     * app-drawer categories grid's reassignment entry point, reusing this Material popup rather
+     * than jumping straight to a category picker.
+     */
+    public void bindDrawerAppContextLongPress(@NonNull View pressTarget,
+                                              @NonNull LauncherAppEntry entry,
+                                              @Nullable AppDrawerPickupDelegate pickupDelegate,
+                                              @Nullable Runnable categoryAction) {
+        bindContextLongPressGesture(pressTarget, -1, false,
+            () -> showDrawerAppContextPopup(pressTarget, entry, categoryAction),
+            null, null, pickupDelegate, entry, null);
+    }
+
+    /** Shows the Material app-context popup anchored to a drawer view, outside the long-press gesture. */
+    public void showDrawerAppContextPopup(@NonNull View anchor, @NonNull LauncherAppEntry entry,
+                                          @Nullable Runnable categoryAction) {
+        dismissShortcutsPopup();
+        showAppContextPopup(new AppMenuContext(entry, anchor, -1, null, null, categoryAction));
     }
 
     private void bindFolderContextLongPress(
@@ -3792,11 +4280,28 @@ public final class SuggestionBarView extends GridLayout {
         @Nullable Runnable notificationSwipeAction,
         @Nullable String notificationPackage
     ) {
+        bindContextLongPressGesture(pressTarget, pinnedIndex, allowDragPickup, showContextPopup,
+            notificationSwipeAction, notificationPackage, null, null, null);
+    }
+
+    private void bindContextLongPressGesture(
+        @NonNull View pressTarget,
+        int pinnedIndex,
+        boolean allowDragPickup,
+        @NonNull Runnable showContextPopup,
+        @Nullable Runnable notificationSwipeAction,
+        @Nullable String notificationPackage,
+        @Nullable AppDrawerPickupDelegate drawerPickup,
+        @Nullable LauncherAppEntry drawerPickupEntry,
+        @Nullable Runnable folderEntryPickup
+    ) {
         pressTarget.setLongClickable(true);
         pressTarget.setOnLongClickListener(v -> {
             if (suppressContextLongPressForSwipe) {
                 return true;
             }
+            if (drawerPickup != null && drawerPickupEntry != null
+                && !drawerPickup.claimContext(pressTarget, drawerPickupEntry)) return true;
             showContextPopup.run();
             LongPressPickupState state = activeLongPressPickupState;
             if (state == null || state.sourceView != pressTarget) {
@@ -3862,14 +4367,26 @@ public final class SuggestionBarView extends GridLayout {
                         && withinPickupWindow
                         && !state.definitiveYMovement
                         && absDx >= xPickupThreshold
-                        && pinnedIndex >= 0;
+                        && (pinnedIndex >= 0 || folderEntryPickup != null);
+                    if (drawerPickup != null) shouldStartPickup = withinPickupWindow
+                        && !state.definitiveYMovement && absDx >= xPickupThreshold;
 
                     if (shouldStartPickup) {
                         state.dragStarted = true;
                         clearMenuHighlight();
                         dismissAppContextPopup();
-                        dismissFolderPopup();
-                        startPinnedDrag(pressTarget, pinnedIndex);
+                        if (drawerPickup != null && drawerPickupEntry != null) {
+                            dismissFolderPopup();
+                            drawerPickup.startPickup(pressTarget, drawerPickupEntry);
+                        } else if (folderEntryPickup != null) {
+                            // The folder popup owns this drag's source window: start the drag
+                            // first, then hide (not dismiss) the popup so the window survives
+                            // until the drag ends (see startFolderEntryDrag).
+                            folderEntryPickup.run();
+                        } else {
+                            dismissFolderPopup();
+                            startPinnedDrag(pressTarget, pinnedIndex);
+                        }
                         activeLongPressPickupState = null;
                         return true;
                     }
@@ -3936,9 +4453,12 @@ public final class SuggestionBarView extends GridLayout {
         dismissAppContextPopup();
         List<ShortcutInfo> shortcuts = queryEntryShortcuts(context.entry);
         boolean hasShortcuts = !shortcuts.isEmpty();
-        boolean folderSource = context.sourceFolder != null && context.folderEntryRef != null;
+        PinnedFolderItem sourceFolder = resolveLatestFolder(context.sourceFolderId);
+        boolean folderSource = sourceFolder != null && context.folderEntryRef != null;
         int topPinnedIndex = context.pinnedIndex >= 0 ? context.pinnedIndex : findPinnedAppIndex(context.entry.appRef);
         boolean topPinned = topPinnedIndex >= 0;
+        // A category-context popup swaps its Pin/Unpin row for a Category row instead — see below.
+        boolean suppressPinRow = context.categoryAction != null;
 
         LinearLayout shell = new LinearLayout(getContext());
         shell.setOrientation(LinearLayout.VERTICAL);
@@ -3965,8 +4485,8 @@ public final class SuggestionBarView extends GridLayout {
         }
         shell.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        int tintBase = context.sourceFolder != null && context.sourceFolder.tintOverrideEnabled
-            ? (context.sourceFolder.tintColor & 0x00FFFFFF)
+        int tintBase = sourceFolder != null && sourceFolder.tintOverrideEnabled
+            ? (sourceFolder.tintColor & 0x00FFFFFF)
             : (inheritedTintColor & 0x00FFFFFF);
         activeMenuTintBase = tintBase;
 
@@ -3989,7 +4509,7 @@ public final class SuggestionBarView extends GridLayout {
         }, false));
 
         if (folderSource) {
-            PinnedAppItem folderApp = findFolderApp(context.sourceFolder, context.folderEntryRef);
+            PinnedAppItem folderApp = findFolderApp(sourceFolder, context.folderEntryRef);
             boolean folderHasCustomIcon = folderApp != null
                 && getIconResolver().loadOverride(folderApp.iconOverride) != null;
             TextView changeIconRow = addPopupActionRow(shell, "Change icon in folder", R.drawable.ic_dock_menu_change_icon, false, tintBase, () -> {
@@ -4080,23 +4600,27 @@ public final class SuggestionBarView extends GridLayout {
 
             addAppWideIconRows(shell, context.entry, tintBase);
 
-            TextView unpinRow = addPopupActionRow(shell, "Unpin", R.drawable.ic_dock_menu_pin, false, tintBase, () -> {
-                dismissAppContextPopup();
-                removePinnedAt(targetPinnedIndex);
-            });
-            appContextRows.add(new MenuActionRow(unpinRow, () -> {
-                dismissAppContextPopup();
-                removePinnedAt(targetPinnedIndex);
-            }, false));
+            if (!suppressPinRow) {
+                TextView unpinRow = addPopupActionRow(shell, "Unpin", R.drawable.ic_dock_menu_pin, false, tintBase, () -> {
+                    dismissAppContextPopup();
+                    removePinnedAt(targetPinnedIndex);
+                });
+                appContextRows.add(new MenuActionRow(unpinRow, () -> {
+                    dismissAppContextPopup();
+                    removePinnedAt(targetPinnedIndex);
+                }, false));
+            }
         } else {
-            TextView pinRow = addPopupActionRow(shell, "Pin", R.drawable.ic_dock_menu_pin, false, tintBase, () -> {
-                dismissAppContextPopup();
-                pinEntryToTopLevel(context.entry);
-            });
-            appContextRows.add(new MenuActionRow(pinRow, () -> {
-                dismissAppContextPopup();
-                pinEntryToTopLevel(context.entry);
-            }, false));
+            if (!suppressPinRow) {
+                TextView pinRow = addPopupActionRow(shell, "Pin", R.drawable.ic_dock_menu_pin, false, tintBase, () -> {
+                    dismissAppContextPopup();
+                    pinEntryToTopLevel(context.entry);
+                });
+                appContextRows.add(new MenuActionRow(pinRow, () -> {
+                    dismissAppContextPopup();
+                    pinEntryToTopLevel(context.entry);
+                }, false));
+            }
 
             TextView changeIconRow = addPopupActionRow(shell, "Change app icon", R.drawable.ic_dock_menu_change_icon, false, tintBase, () -> {
                 dismissAppContextPopup();
@@ -4107,6 +4631,20 @@ public final class SuggestionBarView extends GridLayout {
                 changeAppIconForEntry(context.entry);
             }, false));
             addResetAppIconRowIfNeeded(shell, context.entry, tintBase);
+        }
+
+        if (context.categoryAction != null) {
+            Runnable categoryAction = context.categoryAction;
+            TextView categoryRow = addPopupActionRow(shell,
+                getResources().getString(R.string.app_drawer_category_menu_entry),
+                R.drawable.ic_dock_menu_category, false, tintBase, () -> {
+                    dismissAppContextPopup();
+                    categoryAction.run();
+                });
+            appContextRows.add(new MenuActionRow(categoryRow, () -> {
+                dismissAppContextPopup();
+                categoryAction.run();
+            }, false));
         }
 
         if (hasShortcuts) {
@@ -4174,11 +4712,11 @@ public final class SuggestionBarView extends GridLayout {
 
         TextView renameRow = addPopupActionRow(shell, "Rename", tintBase, () -> {
             dismissAppContextPopup();
-            showRenameFolderDialog(folder);
+            showFolderPopup(folder, anchor, true);
         });
         appContextRows.add(new MenuActionRow(renameRow, () -> {
             dismissAppContextPopup();
-            showRenameFolderDialog(folder);
+            showFolderPopup(folder, anchor, true);
         }, false));
 
         TextView chooseAppsRow = addPopupActionRow(shell, "Choose apps", tintBase, () -> {
@@ -4247,8 +4785,9 @@ public final class SuggestionBarView extends GridLayout {
         }
         normalizePopupRowWidths(shortcutsRows);
 
-        int tintBase = context.sourceFolder != null && context.sourceFolder.tintOverrideEnabled
-            ? (context.sourceFolder.tintColor & 0x00FFFFFF)
+        PinnedFolderItem sourceFolder = resolveLatestFolder(context.sourceFolderId);
+        int tintBase = sourceFolder != null && sourceFolder.tintOverrideEnabled
+            ? (sourceFolder.tintColor & 0x00FFFFFF)
             : (inheritedTintColor & 0x00FFFFFF);
         shortcutsPopupWindow = buildPopupWindow(shell, tintBase, true, () -> {
             if (shortcutsPopupWindow != null && !shortcutsPopupWindow.isShowing()) {
@@ -4385,31 +4924,38 @@ public final class SuggestionBarView extends GridLayout {
             removePinnedAt(context.pinnedIndex);
             return;
         }
-        if (context.sourceFolder != null && context.folderEntryRef != null) {
+        if (context.sourceFolderId != null && context.folderEntryRef != null) {
             dismissFolderPopup();
-            removeAppFromFolder(context.sourceFolder, context.folderEntryRef);
-            persistPinsAndReload();
+            refreshPinnedItemsFromRepository();
+            PinnedFolderItem folder = resolveLatestFolder(context.sourceFolderId);
+            if (folder != null) {
+                removeAppFromFolder(folder, context.folderEntryRef);
+                persistPinsAndReload();
+            }
         }
     }
 
     private void moveContextEntryToDock(@NonNull AppMenuContext context) {
-        if (context.sourceFolder == null || context.folderEntryRef == null) {
+        if (context.sourceFolderId == null || context.folderEntryRef == null) {
             pinEntryToTopLevel(context.entry);
             return;
         }
 
         dismissFolderPopup();
+        refreshPinnedItemsFromRepository();
+        PinnedFolderItem sourceFolder = resolveLatestFolder(context.sourceFolderId);
+        if (sourceFolder == null) return;
         AppRef resolved = resolveForSelectionRef(context.folderEntryRef);
-        PinnedAppItem folderApp = findFolderApp(context.sourceFolder, resolved);
+        PinnedAppItem folderApp = findFolderApp(sourceFolder, resolved);
         int existingPinnedIndex = findPinnedAppIndex(resolved);
-        int sourceFolderIndex = findPinnedFolderIndex(context.sourceFolder);
-        removeAppFromFolder(context.sourceFolder, resolved);
+        int sourceFolderIndex = findPinnedFolderIndex(sourceFolder);
+        removeAppFromFolder(sourceFolder, resolved);
         if (existingPinnedIndex >= 0) {
             persistPinsAndReload();
             return;
         }
 
-        int survivingFolderIndex = findPinnedFolderIndex(context.sourceFolder);
+        int survivingFolderIndex = findPinnedFolderIndex(sourceFolder);
         int insertionIndex;
         if (survivingFolderIndex >= 0) {
             insertionIndex = survivingFolderIndex + 1;
@@ -4448,6 +4994,24 @@ public final class SuggestionBarView extends GridLayout {
             }
         }
         return null;
+    }
+
+    @Nullable
+    private PinnedFolderItem resolveLatestFolder(@Nullable String folderId) {
+        if (folderId == null) return null;
+        if (configRepository != null) {
+            PinnedFolderItem folder = configRepository.loadSnapshot().folder(folderId);
+            if (folder != null) return folder;
+        }
+        for (PinnedItem item : pinnedItems) {
+            if (item instanceof PinnedFolderItem
+                && folderId.equals(((PinnedFolderItem) item).id)) return (PinnedFolderItem) item;
+        }
+        return null;
+    }
+
+    private void refreshPinnedItemsFromRepository() {
+        if (configRepository != null) pinnedItems = configRepository.loadPinnedItems();
     }
 
     private void pinEntryToTopLevel(@NonNull LauncherAppEntry entry) {
@@ -4925,6 +5489,9 @@ public final class SuggestionBarView extends GridLayout {
         int alpha = clamp(Math.max(appBarOpacity, minimumOpacityPercent), 0, 100);
         int overlayColor = (((int) (255f * (alpha / 100f))) << 24) | (tintBase & 0x00FFFFFF);
         panelBg.setColor(overlayColor);
+        // Glass rim: the same hairline the drawer plane and FULL pane draw, so every elevated
+        // surface reads as the one material family.
+        panelBg.setStroke(Math.max(1, Math.round(dp(1.25f))), 0x3DFFFFFF);
         popupRoot.setBackground(panelBg);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             popupRoot.setClipToOutline(true);
@@ -4952,6 +5519,16 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private void showPopupAtAnchor(@NonNull PopupWindow popupWindow, @Nullable View anchor) {
+        showPopupAtAnchorInternal(popupWindow, anchor, true);
+    }
+
+    private void showPopupAtAnchorWithoutAnimation(@NonNull PopupWindow popupWindow,
+                                                    @Nullable View anchor) {
+        showPopupAtAnchorInternal(popupWindow, anchor, false);
+    }
+
+    private void showPopupAtAnchorInternal(@NonNull PopupWindow popupWindow,
+                                           @Nullable View anchor, boolean animate) {
         int screenW = getResources().getDisplayMetrics().widthPixels;
         int screenH = getResources().getDisplayMetrics().heightPixels;
         Rect visibleFrame = new Rect(0, 0, screenW, screenH);
@@ -4979,6 +5556,15 @@ public final class SuggestionBarView extends GridLayout {
                 x = anchorCenterX - (popupWidth / 2);
             }
             int y = location[1] - popupHeight - gap;
+            // Upward is the dock's placement and stays the default: a dock icon sits at the bottom
+            // of the screen and always has room above it, so this guard is unreachable for every
+            // dock call site and their coordinates are unchanged. An anchor near the top of the
+            // screen — an app drawer cell in the first row — has no room above, and the clamp below
+            // would otherwise drop the menu straight on top of the icon it belongs to. Flip it under
+            // the anchor first, then clamp as before.
+            if (y < visibleFrame.top) {
+                y = location[1] + anchor.getHeight() + gap;
+            }
             x = clamp(x, visibleFrame.left, Math.max(visibleFrame.left, visibleFrame.right - popupWidth));
             y = clamp(y, visibleFrame.top, Math.max(visibleFrame.top, visibleFrame.bottom - popupHeight));
             popupWindow.showAtLocation(this, Gravity.NO_GRAVITY, x, y);
@@ -4986,7 +5572,7 @@ public final class SuggestionBarView extends GridLayout {
             popupWindow.showAtLocation(this, Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM, 0, getHeight() + gap);
         }
         View root = popupWindow.getContentView();
-        if (root != null) {
+        if (root != null && animate) {
             root.setAlpha(0f);
             root.setTranslationY(dp(8));
             root.animate()
@@ -5074,6 +5660,104 @@ public final class SuggestionBarView extends GridLayout {
             dismissPopupWindowAnimated(popup, () -> {
                 if (shortcutsPopupWindow == popup) {
                     shortcutsPopupWindow = null;
+                }
+            });
+        }
+    }
+
+    /**
+     * Closes every context surface anchored to a launcher icon. Surfaces outside this view (the app
+     * drawer) call this when their own anchors go away — a recycled or scrolled-away cell would
+     * otherwise leave a menu floating over nothing.
+     */
+    public void dismissContextPopups() {
+        dismissAppContextPopup();
+        dismissFolderPopup();
+        dismissShortcutsPopup();
+        dismissCategoryPickerPopup();
+    }
+
+    /**
+     * The Material popup listing every non-synthetic {@link AppDrawerCategory} plus "Automatic",
+     * opened from the "Category" row of the drawer app-context popup. Replaces the old
+     * {@code AlertDialog}-based picker with the same glass/blur shell every other launcher popup uses.
+     */
+    public void showCategoryPickerPopup(
+        @NonNull LauncherAppEntry entry,
+        @NonNull View anchor,
+        @NonNull List<AppDrawerCategory> categories,
+        @Nullable AppDrawerCategory current,
+        @NonNull java.util.function.Consumer<AppDrawerCategory> onPick
+    ) {
+        dismissContextPopups();
+        LinearLayout shell = new LinearLayout(getContext());
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(dp(3), dp(3), dp(3), dp(3));
+
+        TextView header = new TextView(getContext());
+        header.setText(entry.label);
+        header.setTextColor(resolveLauncherTextColor());
+        header.setTextSize(12f);
+        header.setTypeface(Typeface.DEFAULT_BOLD);
+        header.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(8), dp(6), dp(8), dp(7));
+        shell.addView(header, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        int tintBase = inheritedTintColor & 0x00FFFFFF;
+        List<MenuActionRow> rows = new ArrayList<>();
+        rows.add(new MenuActionRow(addCategoryPickRow(shell,
+            getResources().getString(R.string.app_drawer_category_automatic), current == null, tintBase, () -> {
+                dismissCategoryPickerPopup();
+                onPick.accept(null);
+            }), () -> {}, false));
+        for (AppDrawerCategory category : categories) {
+            rows.add(new MenuActionRow(addCategoryPickRow(shell,
+                getResources().getString(category.labelRes), category == current, tintBase, () -> {
+                    dismissCategoryPickerPopup();
+                    onPick.accept(category);
+                }), () -> {}, false));
+        }
+
+        int rowWidth = normalizePopupRowWidths(rows);
+        constrainPopupHeaderWidth(header, rowWidth);
+
+        categoryPickerPopupWindow = buildPopupWindow(shell, tintBase, true, () -> {
+            if (categoryPickerPopupWindow != null && !categoryPickerPopupWindow.isShowing()) {
+                categoryPickerPopupWindow = null;
+            }
+        });
+        showPopupAtAnchor(categoryPickerPopupWindow, anchor);
+    }
+
+    @NonNull
+    private TextView addCategoryPickRow(@NonNull LinearLayout shell, @NonNull String title,
+                                        boolean checked, int tintBase, @NonNull Runnable action) {
+        TextView row = new TextView(getContext());
+        row.setText(title);
+        row.setTextColor(resolveLauncherTextColor());
+        row.setTextSize(12f);
+        row.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(8), dp(7), dp(8), dp(7));
+        row.setClickable(true);
+        if (checked) {
+            Drawable check = loadMenuIcon(R.drawable.ic_symbol_check_circle, dp(16), resolveLauncherTextColor());
+            row.setCompoundDrawablesRelative(null, null, check, null);
+            row.setCompoundDrawablePadding(dp(10));
+        }
+        stylePopupRow(row, false, tintBase);
+        row.setOnClickListener(v -> runPopupActionWithFeedback(row, action));
+        shell.addView(row, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return row;
+    }
+
+    private void dismissCategoryPickerPopup() {
+        if (categoryPickerPopupWindow != null) {
+            final PopupWindow popup = categoryPickerPopupWindow;
+            dismissPopupWindowAnimated(popup, () -> {
+                if (categoryPickerPopupWindow == popup) {
+                    categoryPickerPopupWindow = null;
                 }
             });
         }
@@ -5785,11 +6469,6 @@ public final class SuggestionBarView extends GridLayout {
         }
     }
 
-    private String[] appLabels(List<LauncherAppEntry> entries) {
-        List<String> displayLabels = buildDisplayLabels(entries);
-        return displayLabels.toArray(new String[0]);
-    }
-
     private static final class MenuActionRow {
         @NonNull final TextView rowView;
         @NonNull final Runnable action;
@@ -5806,21 +6485,34 @@ public final class SuggestionBarView extends GridLayout {
         final LauncherAppEntry entry;
         final View anchor;
         final int pinnedIndex;
-        @Nullable final PinnedFolderItem sourceFolder;
+        @Nullable final String sourceFolderId;
         @Nullable final AppRef folderEntryRef;
+        @Nullable final Runnable categoryAction;
 
         AppMenuContext(
             @NonNull LauncherAppEntry entry,
             @NonNull View anchor,
             int pinnedIndex,
-            @Nullable PinnedFolderItem sourceFolder,
+            @Nullable String sourceFolderId,
             @Nullable AppRef folderEntryRef
+        ) {
+            this(entry, anchor, pinnedIndex, sourceFolderId, folderEntryRef, null);
+        }
+
+        AppMenuContext(
+            @NonNull LauncherAppEntry entry,
+            @NonNull View anchor,
+            int pinnedIndex,
+            @Nullable String sourceFolderId,
+            @Nullable AppRef folderEntryRef,
+            @Nullable Runnable categoryAction
         ) {
             this.entry = entry;
             this.anchor = anchor;
             this.pinnedIndex = pinnedIndex;
-            this.sourceFolder = sourceFolder;
+            this.sourceFolderId = sourceFolderId;
             this.folderEntryRef = folderEntryRef;
+            this.categoryAction = categoryAction;
         }
     }
 
@@ -5959,6 +6651,7 @@ public final class SuggestionBarView extends GridLayout {
     private void applyNormalizedFolderSelection(int folderIndex, @NonNull PinnedFolderItem folder, @NonNull List<PinnedAppItem> selectedApps) {
         int resolvedIndex = folderIndex >= 0 ? folderIndex : findPinnedFolderIndex(folder);
         if (resolvedIndex < 0 || resolvedIndex >= pinnedItems.size()) {
+            applyDrawerFolderSelection(folder, selectedApps);
             return;
         }
         if (selectedApps.isEmpty()) {
@@ -5973,15 +6666,31 @@ public final class SuggestionBarView extends GridLayout {
         persistPinsAndReload();
     }
 
-    private boolean addPinnedAppToFolderIfMissing(@NonNull PinnedFolderItem folder, @NonNull PinnedAppItem app) {
-        AppRef resolved = resolveForSelectionRef(app.appRef);
-        for (PinnedAppItem existing : folder.apps) {
-            if (resolveForSelectionRef(existing.appRef).stableId().equals(resolved.stableId())) {
-                return false;
-            }
-        }
-        folder.apps.add(new PinnedAppItem(resolved, app.iconOverride));
-        return true;
+    /**
+     * Persists an edit to a drawer-only folder (one with no dock slot) by mutating the shared
+     * snapshot entity: {@code savePinnedItems} retains drawer entities and its normalize pass
+     * collapses folders left with fewer than two members.
+     */
+    private void applyDrawerFolderSelection(@NonNull PinnedFolderItem folder, @NonNull List<PinnedAppItem> selectedApps) {
+        if (configRepository == null) return;
+        PinnedFolderItem entity = resolveLatestFolder(folder.id);
+        if (entity == null) return;
+        entity.apps.clear();
+        entity.apps.addAll(selectedApps);
+        persistPinsAndReload();
+    }
+
+    /** Deletes a drawer-only folder entity; the repository publish recomposes dock and drawer. */
+    private void dissolveDrawerFolder(@NonNull String folderId) {
+        if (configRepository == null) return;
+        configRepository.dissolveFolder(configRepository.loadSnapshot().revision, folderId);
+    }
+
+
+    private void showFolderAppendRejected(@NonNull LauncherFolderMutator.AppendResult result) {
+        int message = result == LauncherFolderMutator.AppendResult.CAPACITY
+            ? R.string.folder_capacity_reached : R.string.folder_already_contains_app;
+        Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
     }
 
     private static void syncFolderChecks(@NonNull ListView listView, @NonNull List<LauncherAppEntry> apps, @NonNull Set<String> selectedIds) {
@@ -5993,7 +6702,11 @@ public final class SuggestionBarView extends GridLayout {
     private boolean startPinnedDrag(@NonNull View view, int sourceIndex) {
         ClipData clip = ClipData.newPlainText("pinned-item", Integer.toString(sourceIndex));
         PinnedDragState dragState = new PinnedDragState(sourceIndex);
-        View.DragShadowBuilder shadow = createRaisedDragShadow(view);
+        Drawable ghost = renderedDragGhost(sourceIndex, Math.max(1, iconSizePx()));
+        if (ghost == null) return false;
+        View.DragShadowBuilder shadow = createRaisedDragShadow(ghost, Math.max(1, iconSizePx()));
+        activePinnedDragSourceView = view;
+        activePinnedDragState = dragState;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             view.startDragAndDrop(clip, shadow, dragState, 0);
         } else {
@@ -6002,23 +6715,91 @@ public final class SuggestionBarView extends GridLayout {
         return true;
     }
 
+    /**
+     * Window-level drag out of the folder popup, mirroring {@link #startPinnedDrag}: the drag
+     * carries the member's folder id + ref instead of a dock index. The popup is hidden — not
+     * dismissed — so the system drag keeps its source window; the dock's drag listener finishes
+     * the dismissal on ACTION_DRAG_ENDED.
+     */
+    private boolean startFolderEntryDrag(@NonNull View view, @NonNull LauncherAppEntry entry,
+                                         @NonNull String sourceFolderId) {
+        int sizePx = Math.max(1, iconSizePx());
+        Drawable ghost = getRenderedIcon(entry, sizePx);
+        if (ghost == null) return false;
+        FolderEntryDragState dragState = new FolderEntryDragState(sourceFolderId,
+            resolveForSelectionRef(entry.appRef));
+        ClipData clip = ClipData.newPlainText(FOLDER_ENTRY_CLIP_LABEL, dragState.appRef.stableId());
+        View.DragShadowBuilder shadow = createRaisedDragShadow(ghost, sizePx);
+        activePinnedDragSourceView = view;
+        activeFolderEntryDragState = dragState;
+        boolean started;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            started = view.startDragAndDrop(clip, shadow, dragState, crossWindowDragFlags());
+        } else {
+            started = view.startDrag(clip, shadow, dragState, 0);
+        }
+        if (!started) {
+            activePinnedDragSourceView = null;
+            activeFolderEntryDragState = null;
+            return false;
+        }
+        sharedFolderPopup.hideForDrag();
+        return true;
+    }
+
     @NonNull
-    private View.DragShadowBuilder createRaisedDragShadow(@NonNull View view) {
-        return new View.DragShadowBuilder(view) {
+    private Drawable renderedDragGhost(int sourceIndex, int sizePx) {
+        if (sourceIndex < 0 || sourceIndex >= pinnedItems.size()) return null;
+        PinnedItem item = pinnedItems.get(sourceIndex);
+        PinnedAppItem app = item instanceof PinnedAppItem ? (PinnedAppItem) item
+            : item instanceof PinnedFolderItem && !((PinnedFolderItem) item).apps.isEmpty()
+                ? ((PinnedFolderItem) item).apps.get(0) : null;
+        LauncherAppEntry entry = app == null ? null : resolvePinnedApp(app);
+        return entry == null ? null : getRenderedIcon(entry, sizePx);
+    }
+
+    @NonNull
+    private View.DragShadowBuilder createRaisedDragShadow(@NonNull Drawable drawable, int sizePx) {
+        return new View.DragShadowBuilder() {
             @Override
             public void onProvideShadowMetrics(@NonNull Point outShadowSize, @NonNull Point outShadowTouchPoint) {
-                super.onProvideShadowMetrics(outShadowSize, outShadowTouchPoint);
-                if (outShadowSize.y > 1) {
-                    outShadowTouchPoint.y = Math.min(outShadowSize.y - 1, Math.round(outShadowSize.y * 0.86f));
-                }
+                outShadowSize.set(sizePx, sizePx);
+                outShadowTouchPoint.set(sizePx / 2, Math.min(sizePx - 1, Math.round(sizePx * 0.86f)));
+            }
+
+            @Override public void onDrawShadow(@NonNull Canvas canvas) {
+                Rect previous = new Rect(drawable.getBounds());
+                drawable.setBounds(0, 0, sizePx, sizePx);
+                drawable.draw(canvas);
+                drawable.setBounds(previous);
             }
         };
+    }
+
+    /** Invalidates pickup/local state before the dock row is hidden. */
+    public void cancelActiveDockDrag() {
+        PinnedDragState state = activePinnedDragState;
+        if (state != null) state.cancelled = true;
+        FolderEntryDragState folderState = activeFolderEntryDragState;
+        if (folderState != null) {
+            folderState.cancelled = true;
+            sharedFolderPopup.dismissImmediate();
+        }
+        View source = activePinnedDragSourceView;
+        if (source != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) source.cancelDragAndDrop();
+        activePinnedDragSourceView = null;
+        activePinnedDragState = null;
+        activeFolderEntryDragState = null;
+        activeLongPressPickupState = null;
+        clearFolderDragInsertionPreview();
     }
 
     private boolean handlePinnedBarDragEvent(@NonNull View targetView, @NonNull DragEvent event) {
         Object localState = event.getLocalState();
         boolean pinnedDrag = localState instanceof PinnedDragState;
-        if (!pinnedDrag) return false;
+        FolderEntryDragState folderEntry = resolveFolderEntryDrag(event);
+        boolean folderEntryDrag = folderEntry != null;
+        if (!pinnedDrag && !folderEntryDrag) return false;
 
         int slotCount = Math.max(1, maxButtonCount);
         float width = Math.max(1f, targetView.getWidth());
@@ -6053,10 +6834,18 @@ public final class SuggestionBarView extends GridLayout {
             case DragEvent.ACTION_DROP:
                 targetView.setAlpha(1f);
                 clearFolderDragInsertionPreview();
+                if (folderEntryDrag) {
+                    return applyFolderEntryDrop(folderEntry, targetIndex, targetItem, dropXRatio);
+                }
                 return applyPinnedDrop((PinnedDragState) localState, targetIndex, targetItem, dropXRatio);
             case DragEvent.ACTION_DRAG_ENDED:
                 targetView.setAlpha(1f);
                 clearFolderDragInsertionPreview();
+                // A folder-entry drag left its source popup hidden but alive; finish it now.
+                if (folderEntryDrag) sharedFolderPopup.dismissImmediate();
+                activePinnedDragSourceView = null;
+                activePinnedDragState = null;
+                activeFolderEntryDragState = null;
                 return true;
             default:
                 return false;
@@ -6064,6 +6853,7 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private boolean applyPinnedDrop(@NonNull PinnedDragState dragState, int targetIndex, @Nullable PinnedItem targetItem, float dropXRatio) {
+        if (dragState.cancelled) return false;
         if (dragState.sourceIndex < 0 || dragState.sourceIndex >= pinnedItems.size()) return false;
         if (targetIndex < 0 || targetIndex > pinnedItems.size()) return false;
 
@@ -6074,8 +6864,14 @@ public final class SuggestionBarView extends GridLayout {
 
         if (sourceIsApp && targetItem instanceof PinnedFolderItem) {
             PinnedFolderItem folder = (PinnedFolderItem) targetItem;
-            if (sourceApp != null) addPinnedAppToFolderIfMissing(folder, sourceApp);
-            pinnedItems.remove(dragState.sourceIndex);
+            LauncherFolderMutator.AppendResult result = sourceApp == null
+                ? LauncherFolderMutator.AppendResult.MISSING
+                : LauncherFolderMutator.moveTopLevelAppIntoFolder(pinnedItems,
+                    dragState.sourceIndex, folder, sourceApp);
+            if (result != LauncherFolderMutator.AppendResult.APPLIED) {
+                showFolderAppendRejected(result);
+                return false;
+            }
             persistPinsAndReload();
             return true;
         }
@@ -6104,6 +6900,52 @@ public final class SuggestionBarView extends GridLayout {
 
         int insertionIndex = computeInsertionIndex(targetIndex, targetItem, dropXRatio);
         return movePinnedItem(dragState.sourceIndex, insertionIndex);
+    }
+
+    /**
+     * Applies a folder-member drop onto the dock row: the member leaves its folder and lands on
+     * the hovered slot (top-level insert, or append when the slot holds another folder). Dropping
+     * back onto the source folder's own tile cancels. Folder collapse (0/1 members left) rides
+     * the repository's normalize pass during {@link #persistPinsAndReload}.
+     */
+    private boolean applyFolderEntryDrop(@NonNull FolderEntryDragState dragState, int targetIndex,
+                                         @Nullable PinnedItem targetItem, float dropXRatio) {
+        if (dragState.cancelled) return false;
+        PinnedFolderItem sourceFolder = resolveLatestFolder(dragState.folderId);
+        PinnedAppItem member = findFolderApp(sourceFolder, dragState.appRef);
+        if (sourceFolder == null || member == null) return false;
+        if (targetItem instanceof PinnedFolderItem
+            && sourceFolder.id.equals(((PinnedFolderItem) targetItem).id)) {
+            return false;
+        }
+        AppRef resolved = resolveForSelectionRef(member.appRef);
+        if (targetItem instanceof PinnedFolderItem) {
+            PinnedFolderItem destination = (PinnedFolderItem) targetItem;
+            if (destination.containsApp(resolved)) {
+                showFolderAppendRejected(LauncherFolderMutator.AppendResult.DUPLICATE);
+                return false;
+            }
+            if (destination.apps.size() >= PinnedFolderItem.MAX_APPS) {
+                showFolderAppendRejected(LauncherFolderMutator.AppendResult.CAPACITY);
+                return false;
+            }
+            destination.apps.add(new PinnedAppItem(resolved, member.iconOverride));
+            removeAppFromFolder(sourceFolder, resolved);
+            persistPinsAndReload();
+            return true;
+        }
+        if (findPinnedAppIndex(resolved) >= 0) {
+            // Already docked top-level: leaving the folder must not create a duplicate slot.
+            removeAppFromFolder(sourceFolder, resolved);
+            persistPinsAndReload();
+            return true;
+        }
+        int insertionIndex = computeInsertionIndex(targetIndex, targetItem, dropXRatio);
+        LauncherFolderMutator.AppendResult result = LauncherFolderMutator.moveFolderAppToTopLevel(
+            pinnedItems, sourceFolder, member.appRef.stableId(), insertionIndex);
+        if (result != LauncherFolderMutator.AppendResult.APPLIED) return false;
+        persistPinsAndReload();
+        return true;
     }
 
     private int computeInsertionIndex(int targetIndex, @Nullable PinnedItem targetItem, float dropXRatio) {
@@ -6199,51 +7041,85 @@ public final class SuggestionBarView extends GridLayout {
 
     private static final class PinnedDragState {
         final int sourceIndex;
+        boolean cancelled;
 
         PinnedDragState(int sourceIndex) {
             this.sourceIndex = sourceIndex;
         }
     }
 
-    private LinearLayout buildStepperRow(@NonNull String label, @NonNull int[] valueRef, int min, int max) {
-        LinearLayout row = new LinearLayout(getContext());
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(6), 0, dp(6));
+    /**
+     * The folder member leaves a {@link android.widget.PopupWindow}, and a plain (window-local)
+     * system drag is delivered only to the window it started in — so the dock row and the app
+     * drawer, which live in the activity window, never saw the drop. These flags let the drag cross
+     * our own windows; below API 34, where the same-application flag does not exist, the global
+     * flag is the only way to leave the popup window at all.
+     */
+    private static int crossWindowDragFlags() {
+        if (Build.VERSION.SDK_INT >= 34) return View.DRAG_FLAG_GLOBAL_SAME_APPLICATION;
+        return View.DRAG_FLAG_GLOBAL;
+    }
 
-        TextView title = new TextView(getContext());
-        title.setText(label);
-        title.setTextColor(resolveLauncherTextColor());
-        row.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+    /**
+     * A cross-window drag carries its local state only inside the source window, so the dock and
+     * drawer identify a folder-member drag by clip label plus the live drag this view owns.
+     *
+     * @return the in-flight folder-member drag this event belongs to, or null when the event is
+     *     some other drag.
+     */
+    @Nullable
+    private FolderEntryDragState resolveFolderEntryDrag(@NonNull DragEvent event) {
+        Object localState = event.getLocalState();
+        if (localState instanceof FolderEntryDragState) return (FolderEntryDragState) localState;
+        FolderEntryDragState active = activeFolderEntryDragState;
+        if (active == null || active.cancelled) return null;
+        ClipDescription description = event.getClipDescription();
+        CharSequence label = description == null ? null : description.getLabel();
+        return label != null && FOLDER_ENTRY_CLIP_LABEL.contentEquals(label) ? active : null;
+    }
 
-        ImageButton minus = new ImageButton(getContext());
-        minus.setImageResource(android.R.drawable.ic_media_previous);
-        styleIconButton(minus, dp(2));
-        row.addView(minus, new LinearLayout.LayoutParams(dp(24), dp(24)));
+    /** True while this event belongs to a member being dragged out of the shared folder popup. */
+    public boolean isFolderEntryDrag(@NonNull DragEvent event) {
+        return resolveFolderEntryDrag(event) != null;
+    }
 
-        TextView valueText = new TextView(getContext());
-        valueText.setTextColor(resolveLauncherTextColor());
-        valueText.setTypeface(Typeface.DEFAULT_BOLD);
-        valueText.setText(Integer.toString(valueRef[0]));
-        valueText.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams valueParams = new LinearLayout.LayoutParams(dp(32), ViewGroup.LayoutParams.WRAP_CONTENT);
-        valueParams.setMargins(dp(6), 0, dp(6), 0);
-        row.addView(valueText, valueParams);
+    /**
+     * Drops a folder member onto the app drawer: it leaves the folder and reappears in the drawer's
+     * plain list, since the drawer composer suppresses exactly the apps a folder holds. A folder
+     * left with fewer than two members collapses in the repository's normalize pass.
+     *
+     * @return true when the member was removed, so the drawer can consume the drop.
+     */
+    public boolean dropFolderEntryOnDrawer(@NonNull DragEvent event) {
+        FolderEntryDragState dragState = resolveFolderEntryDrag(event);
+        if (dragState == null || configRepository == null) return false;
+        LauncherConfigSnapshot snapshot = configRepository.loadSnapshot();
+        PinnedFolderItem folder = snapshot.folder(dragState.folderId);
+        PinnedAppItem member = findFolderApp(folder, dragState.appRef);
+        if (folder == null || member == null) return false;
+        LauncherConfigRepository.MutationResult result = configRepository.removeAppFromFolder(
+            snapshot.revision, folder.id, member.appRef.stableId());
+        if (result != LauncherConfigRepository.MutationResult.APPLIED) return false;
+        dragState.cancelled = true;
+        activeFolderEntryDragState = null;
+        activePinnedDragSourceView = null;
+        // The popup is only hidden while a drag is in flight, and the dock's own drag listener —
+        // the usual place that finishes it — may be hidden behind the open drawer.
+        sharedFolderPopup.dismissImmediate();
+        refreshPinnedItemsFromRepository();
+        return true;
+    }
 
-        ImageButton plus = new ImageButton(getContext());
-        plus.setImageResource(android.R.drawable.ic_input_add);
-        styleIconButton(plus, dp(2));
-        row.addView(plus, new LinearLayout.LayoutParams(dp(24), dp(24)));
+    /** Local drag state for a member dragged out of a folder popup. */
+    private static final class FolderEntryDragState {
+        @NonNull final String folderId;
+        @NonNull final AppRef appRef;
+        boolean cancelled;
 
-        minus.setOnClickListener(v -> {
-            valueRef[0] = clamp(valueRef[0] - 1, min, max);
-            valueText.setText(Integer.toString(valueRef[0]));
-        });
-        plus.setOnClickListener(v -> {
-            valueRef[0] = clamp(valueRef[0] + 1, min, max);
-            valueText.setText(Integer.toString(valueRef[0]));
-        });
-        return row;
+        FolderEntryDragState(@NonNull String folderId, @NonNull AppRef appRef) {
+            this.folderId = folderId;
+            this.appRef = appRef;
+        }
     }
 
     private static int parseInt(CharSequence value, int fallback) {
@@ -6696,6 +7572,27 @@ public final class SuggestionBarView extends GridLayout {
         swipePreviewFolderEntries = Collections.emptyList();
     }
 
+    /**
+     * The page commit, wrapped so it runs exactly once from whichever path the switch animation
+     * ends on — its own end, or a cancel.
+     *
+     * <p>Both switch animations used to commit the new page only from their end callback, and both
+     * drop that callback when cancelled: {@code ACTION_DOWN} on the row, a stable-draw release and
+     * {@link #resetTransientVisualState()} all cancel a switch that is still settling. The gesture
+     * had already qualified and the row had already played the whole slide, so the swipe looked
+     * committed and then silently landed back on the page it came from — the ghost swipe. A
+     * qualified swipe is a decision; the animation is only how it is shown.
+     */
+    @NonNull
+    private static Runnable pageCommitOnce(@Nullable Runnable commit) {
+        final boolean[] done = {false};
+        return () -> {
+            if (done[0]) return;
+            done[0] = true;
+            if (commit != null) commit.run();
+        };
+    }
+
     private void runSwipePreviewPageSwitch(
         int direction,
         long duration,
@@ -6713,6 +7610,7 @@ public final class SuggestionBarView extends GridLayout {
         final float distanceRatio = clamp01(Math.abs(targetOffset - startOffset) / Math.max(1f, getWidth()));
         final long settleDuration = clamp(Math.round(duration * (0.72f + (0.28f * distanceRatio))), 240, 420);
         swipePageDragging = true;
+        final Runnable commit = pageCommitOnce(updateContent);
         ValueAnimator settle = ValueAnimator.ofFloat(startOffset, targetOffset);
         swipePreviewReboundAnimator = settle;
         settle.setDuration(settleDuration);
@@ -6729,7 +7627,7 @@ public final class SuggestionBarView extends GridLayout {
                     return;
                 }
                 swipePreviewReboundAnimator = null;
-                if (updateContent != null) updateContent.run();
+                commit.run();
                 pageSwitchAnimating = false;
                 swipePageDragging = false;
                 swipePagePosition = resolveCurrentSwipePagePosition();
@@ -6746,6 +7644,10 @@ public final class SuggestionBarView extends GridLayout {
                 if (swipePreviewReboundAnimator == animation) {
                     swipePreviewReboundAnimator = null;
                 }
+                // Whoever cancelled owns the visual state that follows (a new gesture, a reset);
+                // the page the swipe asked for is committed here either way.
+                commit.run();
+                swipePagePosition = resolveCurrentSwipePagePosition();
             }
         });
         settle.start();
@@ -6854,6 +7756,7 @@ public final class SuggestionBarView extends GridLayout {
         final Interpolator settleInterpolator = pageSettleInterpolator();
         final long outgoingDuration = Math.max(92L, Math.round(duration * 0.44f));
         final long incomingDuration = Math.max(118L, duration - outgoingDuration);
+        final Runnable commit = pageCommitOnce(updateContent);
 
         animate()
             .translationX(-direction * (travel * 0.78f))
@@ -6862,19 +7765,24 @@ public final class SuggestionBarView extends GridLayout {
             .setInterpolator(settleInterpolator)
             .setListener(new AnimatorListenerAdapter() {
                 private boolean completed;
+                private boolean cancelled;
 
                 @Override
                 public void onAnimationCancel(Animator animation) {
+                    cancelled = true;
+                    // Commit before the reset: the page is the swipe's decision, and the incoming
+                    // half that would otherwise have carried it is not going to run.
+                    commit.run();
                     finish(false);
                 }
 
                 @Override
                 public void onAnimationEnd(Animator animation) {
-                    if (completed) {
+                    if (completed || cancelled) {
                         return;
                     }
                     completed = true;
-                    if (updateContent != null) updateContent.run();
+                    commit.run();
                     setTranslationX(direction * travel);
                     setAlpha(0f);
                     animate()
@@ -6939,7 +7847,8 @@ public final class SuggestionBarView extends GridLayout {
         animate().setListener(adapter);
     }
 
-    private View createPopupEntryButton(@NonNull LauncherAppEntry entry, int sizePx, @NonNull PinnedFolderItem sourceFolder) {
+    private View createPopupEntryButton(@NonNull LauncherAppEntry entry, int sizePx,
+                                        @NonNull String sourceFolderId) {
         ImageButton button = new ImageButton(getContext());
         Drawable icon = iconForDisplay(entry, sizePx);
         button.setImageDrawable(icon);
@@ -6952,7 +7861,9 @@ public final class SuggestionBarView extends GridLayout {
         button.setLayoutParams(new ViewGroup.LayoutParams(sizePx, sizePx));
         applyAppIconColorFilter(button);
         button.setOnClickListener(v -> launchEntryFromTouch(v, entry, lastTerminalView));
-        bindAppContextLongPress(button, entry, -1, sourceFolder, resolveForSelectionRef(entry.appRef), false);
+        PinnedFolderItem sourceFolder = resolveLatestFolder(sourceFolderId);
+        if (sourceFolder != null) bindAppContextLongPress(button, entry, -1, sourceFolder,
+            resolveForSelectionRef(entry.appRef), true);
         button.setContentDescription(entry.label);
         registerLaunchTarget(entry.appRef, button);
         return button;
@@ -7121,7 +8032,22 @@ public final class SuggestionBarView extends GridLayout {
         }
     }
 
+    /**
+     * Puts every transient transform on the row and its children back to rest.
+     *
+     * <p>Refuses to run while the app drawer's transition is on screen, and re-applies the current
+     * progress instead. Three callers reach here for reasons that have nothing to do with the drawer
+     * — {@code onAttachedToWindow}, a window turning visible, and the HOME intent — and each of them
+     * would otherwise reset the pinned icons to alpha 1 in the middle of a fade the controller is
+     * still driving, or, worse, land after the last frame and leave them at the alpha the
+     * <em>transition</em> wanted forever. The controller's own close path calls back with progress 0,
+     * which is what actually restores them.
+     */
     public void resetTransientVisualState() {
+        if (drawerTransitionProgress > 0f) {
+            setDrawerTransitionProgress(drawerTransitionProgress);
+            return;
+        }
         animate().cancel();
         cancelSwipePreviewRebound();
         swipePageDragging = false;

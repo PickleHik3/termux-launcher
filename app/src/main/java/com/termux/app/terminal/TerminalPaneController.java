@@ -1,8 +1,11 @@
 package com.termux.app.terminal;
 
 import android.animation.ValueAnimator;
+import android.graphics.BlurMaskFilter;
+import android.os.Build;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
@@ -11,6 +14,7 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -76,6 +80,7 @@ public class TerminalPaneController {
     private static final String STATE_WINDOW_ROOT = "root";
     private static final String STATE_WINDOW_ACTIVE = "active";
     private static final String STATE_WINDOW_LAYOUT = "layout_policy";
+    private static final String STATE_WINDOW_NAME = "window_name";
     private static final String STATE_WINDOW_FLOATS = "floats";
     private static final String STATE_FLOAT_LEFT = "float_left";
     private static final String STATE_FLOAT_TOP = "float_top";
@@ -107,6 +112,14 @@ public class TerminalPaneController {
     private static final int FLOAT_PILL_BUTTON_DP = 44;
     /** Above tiled panes and the interaction overlay, below the 6dp key chord overlay. */
     private static final int FLOAT_ELEVATION_DP = 4;
+    /** Matches pane_active_border.xml's corner radius, so the content clip and its border ring agree. */
+    private static final int FLOAT_CORNER_RADIUS_DP = 6;
+    /** How far the resize glow reaches in from the pane's edge. */
+    private static final float GLOW_DEPTH_DP = 12f;
+    /** Peak alpha of the glow body, at the edge itself. */
+    private static final int GLOW_ALPHA = 165;
+    /** Steps in the hand-ramped fallback glow, for the API levels without a blur mask filter. */
+    private static final int GLOW_RAMP_STEPS = 12;
 
     /** Callbacks into the hosting activity. */
     public interface Host {
@@ -201,6 +214,12 @@ public class TerminalPaneController {
          */
         @Nullable String layoutPolicy;
         /**
+         * User-given tab name, or null while the tab derives its label from the window's foreground
+         * process. Held per window rather than per shell so the label survives every pane change
+         * inside it — splitting, closing and refocusing panes all leave the name alone.
+         */
+        @Nullable String name;
+        /**
          * Panes detached from the tiled tree into freely positioned floats. List order is z-order
          * (last on top). A float always coexists with a non-empty tiled tree: the last tiled pane
          * can never float, and a dying tiled root promotes a float back into the tree.
@@ -222,6 +241,9 @@ public class TerminalPaneController {
     /** Floating chrome containers of the rendered window, rebuilt on every render. */
     private final Map<Leaf, FloatingPaneContainer> mFloatContainers = new HashMap<>();
     private final PaneInteractionOverlay mInteractionOverlay;
+
+    /** Nested controller-wide lease covering every source of transient host geometry. */
+    private int mHostSurfaceResizeDepth;
 
     @Nullable private Window mActiveWindow;
     @Nullable private Leaf mMaximizedLeaf;
@@ -291,7 +313,7 @@ public class TerminalPaneController {
                 frac.left, frac.top, frac.width(), frac.height()));
         }
         return new TerminalWorkspace.Window(active,
-            snapshotWorkspaceNode(window.root, capture), floats);
+            snapshotWorkspaceNode(window.root, capture), floats, window.name);
     }
 
     /**
@@ -323,6 +345,7 @@ public class TerminalPaneController {
         window.root = root;
         window.floating.addAll(floats);
         window.active = panes.get(definition.activePane);
+        window.name = TerminalNamePolicy.normalizeWindow(definition.name);
         mWindows.add(window);
         return window;
     }
@@ -370,6 +393,7 @@ public class TerminalPaneController {
         TerminalSession active = windowActiveSession(window);
         if (active != null) state.putString(STATE_WINDOW_ACTIVE, active.mHandle);
         if (window.layoutPolicy != null) state.putString(STATE_WINDOW_LAYOUT, window.layoutPolicy);
+        if (window.name != null) state.putString(STATE_WINDOW_NAME, window.name);
         if (!window.floating.isEmpty()) {
             ArrayList<Bundle> floats = new ArrayList<>();
             for (Leaf leaf : window.floating) {
@@ -421,6 +445,7 @@ public class TerminalPaneController {
         // window manually managed rather than wedge reapply on every later split.
         String layout = state.getString(STATE_WINDOW_LAYOUT);
         if (layout != null && isKnownLayout(layout)) window.layoutPolicy = layout;
+        window.name = TerminalNamePolicy.normalizeWindow(state.getString(STATE_WINDOW_NAME));
         mWindows.add(window);
         return window;
     }
@@ -617,15 +642,19 @@ public class TerminalPaneController {
 
     /** Coalesce a host-surface animation into one final PTY resize. */
     public void beginHostSurfaceResize() {
-        setPaneSizeUpdatesPaused(true);
+        mHostSurfaceResizeDepth++;
+        if (mHostSurfaceResizeDepth == 1) setAllPaneSizeUpdatesPaused(true, false);
     }
 
     /** Finish a host resize while keeping prompt/content attached to the bottom edge. */
     public void finishHostSurfaceResizeKeepingBottom() {
-        for (TerminalView view : getVisiblePaneViews()) {
-            view.setTerminalSizeUpdatesPaused(false, true);
-        }
+        if (mHostSurfaceResizeDepth == 0) return;
+        mHostSurfaceResizeDepth--;
+        if (mHostSurfaceResizeDepth == 0) setAllPaneSizeUpdatesPaused(false, true);
     }
+
+    /** True while any host surface owns transient terminal geometry. */
+    public boolean isHostSurfaceResizeInProgress() { return mHostSurfaceResizeDepth > 0; }
 
     /** The pane view showing {@code session}, if it is a leaf of the active window. */
     @Nullable public TerminalView getViewForSession(@Nullable TerminalSession session) {
@@ -898,6 +927,21 @@ public class TerminalPaneController {
         return mActiveWindow == null ? null : mActiveWindow.layoutPolicy;
     }
 
+    /** A window's user-given tab name, or null while its tab labels itself from its panes. */
+    @Nullable
+    public String windowName(@Nullable Window window) {
+        return window == null ? null : window.name;
+    }
+
+    /**
+     * Set or clear a window's tab name. An empty or blank name clears it, which puts the tab back on
+     * the derived process/directory label rather than leaving it blank.
+     */
+    public void setWindowName(@Nullable Window window, @Nullable CharSequence name) {
+        if (window == null) return;
+        window.name = TerminalNamePolicy.normalizeWindow(name);
+    }
+
     /**
      * Rebuild {@code window}'s tree into {@code layout}. Pure topology: no render, no host
      * notification, no policy bookkeeping, so both the public entry point and the automatic reapply
@@ -1093,7 +1137,7 @@ public class TerminalPaneController {
 
     /**
      * What the scratchpad shell was called before the name was shortened to fit
-     * {@link WindowSessionName#MAX_CODE_POINTS}. Existing shells keep this name for the life of
+     * {@link TerminalNamePolicy#SESSION_MAX_CODE_POINTS}. Existing shells keep this name for the life of
      * the process, so every recognition path has to accept both spellings.
      */
     public static final String LEGACY_SCRATCHPAD_SESSION_NAME = "scratchpad";
@@ -1374,10 +1418,21 @@ public class TerminalPaneController {
         FrameLayout.LayoutParams params = container.getLayoutParams() instanceof FrameLayout.LayoutParams
             ? (FrameLayout.LayoutParams) container.getLayoutParams()
             : new FrameLayout.LayoutParams(0, 0);
-        params.width = Math.round(frac.width() * hostWidth);
-        params.height = Math.round(frac.height() * hostHeight);
-        params.leftMargin = Math.round(frac.left * hostWidth);
-        params.topMargin = Math.round(frac.top * hostHeight);
+        int width = Math.round(frac.width() * hostWidth);
+        int height = Math.round(frac.height() * hostHeight);
+        int leftMargin = Math.round(frac.left * hostWidth);
+        int topMargin = Math.round(frac.top * hostHeight);
+        // Skip the no-op relayout: repeated host layout passes (keyboard settle, accessory band
+        // churn) would otherwise re-trigger a full measure of the float — and a PTY resize under a
+        // busy TUI — for bounds that did not actually change.
+        if (container.getLayoutParams() == params && params.width == width && params.height == height
+            && params.leftMargin == leftMargin && params.topMargin == topMargin) {
+            return;
+        }
+        params.width = width;
+        params.height = height;
+        params.leftMargin = leftMargin;
+        params.topMargin = topMargin;
         container.setLayoutParams(params);
     }
 
@@ -1608,6 +1663,7 @@ public class TerminalPaneController {
         if (frame == null) {
             frame = (FrameLayout) mInflater.inflate(R.layout.view_terminal_pane, mHostView, false);
             TerminalView view = frame.findViewById(R.id.terminal_view);
+            if (mHostSurfaceResizeDepth > 0) view.setTerminalSizeUpdatesPaused(true);
             mHost.configurePaneView(view);
             view.setOnTouchListener((v, ev) -> {
                 if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
@@ -1744,9 +1800,16 @@ public class TerminalPaneController {
         return activeCandidate >= 0 ? activeCandidate : nearest;
     }
 
-    private void setPaneSizeUpdatesPaused(boolean paused) {
-        for (TerminalView view : getVisiblePaneViews()) {
-            view.setTerminalSizeUpdatesPaused(paused);
+    private void setAllPaneSizeUpdatesPaused(boolean paused, boolean keepBottom) {
+        if (paused) {
+            for (TerminalView view : mPaneViews.values())
+                view.setTerminalSizeUpdatesPaused(true, false);
+            return;
+        }
+        java.util.HashSet<TerminalView> visible = new java.util.HashSet<>(getVisiblePaneViews());
+        for (TerminalView view : mPaneViews.values()) {
+            if (visible.contains(view)) view.setTerminalSizeUpdatesPaused(false, keepBottom);
+            else view.resumeTerminalSizeUpdatesDiscardingPending();
         }
     }
 
@@ -1763,6 +1826,10 @@ public class TerminalPaneController {
         private final RectF mHandleRect = new RectF();
         /** Scratch for pane rects read while drawing, and one for the control-tab geometry pass. */
         private final RectF mDrawPaneRect = new RectF();
+        private final RectF mGlowClipRect = new RectF();
+        private final RectF mGlowBorderRect = new RectF();
+        /** Built once: a mask filter allocated per frame would churn through a whole drag. */
+        @Nullable private BlurMaskFilter mGlowBlur;
         private final RectF mGeometryPaneRect = new RectF();
         /** Scratch for pane rects read while hit-testing a touch stream. */
         private final RectF mHitPaneRect = new RectF();
@@ -1846,7 +1913,7 @@ public class TerminalPaneController {
                     if (mBorderTapLeaf == null) mBorderTapLeaf = leafAtOrNearest(x, y);
                     if (mXSplit != null || mYSplit != null) {
                         mDraggingDivider = true;
-                        setPaneSizeUpdatesPaused(true);
+                        beginHostSurfaceResize();
                         if (mXSplit != null) {
                             mXWeightA = mXSplit.weightA;
                             mXWeightB = mXSplit.weightB;
@@ -1927,7 +1994,7 @@ public class TerminalPaneController {
                             snapSplitToCellGrid(mXSplit);
                             snapSplitToCellGrid(mYSplit);
                         }
-                        if (mDraggingDivider) setPaneSizeUpdatesPaused(false);
+                        if (mDraggingDivider) finishHostSurfaceResizeKeepingBottom();
                         resetTouchState();
                         showControls(leaf);
                         if (resized) mHost.onTreesChanged();
@@ -1936,7 +2003,7 @@ public class TerminalPaneController {
                     return false;
 
                 case MotionEvent.ACTION_CANCEL:
-                    if (mDraggingDivider) setPaneSizeUpdatesPaused(false);
+                    if (mDraggingDivider) finishHostSurfaceResizeKeepingBottom();
                     resetTouchState();
                     invalidate();
                     return true;
@@ -2231,11 +2298,14 @@ public class TerminalPaneController {
             int tertiary = MaterialColors.getColor(getContext(),
                 com.google.android.material.R.attr.colorTertiary, primary);
             if (mDraggingDivider) {
-                mPaint.setStyle(Paint.Style.STROKE);
-                mPaint.setStrokeWidth(dp(3));
-                mPaint.setColor(ColorUtils.setAlphaComponent(primary, 230));
-                drawActiveDivider(canvas, mXSplit);
-                drawActiveDivider(canvas, mYSplit);
+                // The edge being dragged glows on the focused pane instead of drawing a slab down
+                // the divider: a resize is a change to *this* pane's edge, and a 3dp accent line
+                // over the seam read as a second, thicker border appearing out of nowhere.
+                RectF focused = paneRect(mBorderTapLeaf, mDrawPaneRect);
+                if (focused != null) {
+                    drawEdgeGlow(canvas, focused, primary, edgeBandFor(focused, mXSplit, true));
+                    drawEdgeGlow(canvas, focused, primary, edgeBandFor(focused, mYSplit, false));
+                }
                 mPaint.setStyle(Paint.Style.FILL);
                 mPaint.setColor(tertiary);
                 mHandleRect.set(mHandleX - dp(5), mHandleY - dp(2),
@@ -2250,11 +2320,9 @@ public class TerminalPaneController {
             if (mBorderPressed && mBorderTapLeaf != null && !mDraggingDivider) {
                 RectF border = paneRect(mBorderTapLeaf, mDrawPaneRect);
                 if (border != null) {
-                    border.inset(dp(1.5f), dp(1.5f));
-                    mPaint.setStyle(Paint.Style.STROKE);
-                    mPaint.setStrokeWidth(dp(3));
-                    mPaint.setColor(ColorUtils.setAlphaComponent(primary, 230));
-                    canvas.drawRect(border, mPaint);
+                    // Grabbed but not yet moved: the whole border of the focused pane glows, so the
+                    // pane that will resize is named without drawing a frame around it.
+                    drawEdgeGlow(canvas, border, primary, null);
                     mPaint.setStyle(Paint.Style.FILL);
                     mPaint.setColor(tertiary);
                     mHandleRect.set(mHandleX - dp(5), mHandleY - dp(2),
@@ -2276,22 +2344,90 @@ public class TerminalPaneController {
             }
         }
 
-        private void drawActiveDivider(Canvas canvas, @Nullable Split split) {
-            if (split == null) return;
+        /**
+         * The band to clip a glow to so it lands on the one edge of {@code pane} that {@code split}
+         * moves, or null when this split does not touch the pane (or is not being dragged).
+         *
+         * <p>Which side it is comes from the divider's own position: the pane sits on whichever
+         * side of the seam is nearer, and that is the edge whose length is about to change.
+         */
+        @Nullable
+        private RectF edgeBandFor(@NonNull RectF pane, @Nullable Split split, boolean vertical) {
+            if (split == null) return null;
             LinearLayout layout = mSplitLayouts.get(split);
-            if (layout == null || layout.getChildCount() < 3) return;
+            if (layout == null || layout.getChildCount() < 3) return null;
             View divider = layout.getChildAt(1);
             int[] host = location(mHostView);
             int[] dividerLocation = location(divider);
-            float left = dividerLocation[0] - host[0];
-            float top = dividerLocation[1] - host[1];
-            if (split.orientation == LinearLayout.HORIZONTAL) {
-                float x = left + divider.getWidth() / 2f;
-                canvas.drawLine(x, top, x, top + divider.getHeight(), mPaint);
+            float reach = dp(GLOW_DEPTH_DP) + dp(2);
+            if (vertical) {
+                float seam = dividerLocation[0] - host[0] + divider.getWidth() / 2f;
+                boolean rightEdge = Math.abs(pane.right - seam) <= Math.abs(pane.left - seam);
+                float edge = rightEdge ? pane.right : pane.left;
+                mGlowClipRect.set(edge - reach, pane.top - reach, edge + reach, pane.bottom + reach);
             } else {
-                float y = top + divider.getHeight() / 2f;
-                canvas.drawLine(left, y, left + divider.getWidth(), y, mPaint);
+                float seam = dividerLocation[1] - host[1] + divider.getHeight() / 2f;
+                boolean bottomEdge = Math.abs(pane.bottom - seam) <= Math.abs(pane.top - seam);
+                float edge = bottomEdge ? pane.bottom : pane.top;
+                mGlowClipRect.set(pane.left - reach, edge - reach, pane.right + reach, edge + reach);
             }
+            return mGlowClipRect;
+        }
+
+        /**
+         * Lays a glow inside the pane's border: three concentric rounded strokes, widest and
+         * faintest first. Stroking the same rounded rect keeps the light on the 6dp corners instead
+         * of squaring them off the way an axis-aligned gradient band would, and it costs no
+         * shader allocation per frame during a drag.
+         *
+         * @param clip band to keep the glow inside, for a single edge; null glows the whole border.
+         */
+        private void drawEdgeGlow(Canvas canvas, @NonNull RectF pane, int color,
+                                  @Nullable RectF clip) {
+            float depth = dp(GLOW_DEPTH_DP);
+            float radius = dp(FLOAT_CORNER_RADIUS_DP);
+            int saved = canvas.save();
+            // Clip to the pane so the blur falls off inward only: light spilling across the seam
+            // would read as the neighbour lighting up too.
+            canvas.clipRect(pane);
+            if (clip != null) canvas.clipRect(clip);
+            mPaint.setStyle(Paint.Style.STROKE);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                if (mGlowBlur == null)
+                    mGlowBlur = new BlurMaskFilter(depth * 0.7f, BlurMaskFilter.Blur.NORMAL);
+                mGlowBorderRect.set(pane);
+                mGlowBorderRect.inset(depth * 0.3f, depth * 0.3f);
+                if (mGlowBorderRect.width() > 0f && mGlowBorderRect.height() > 0f) {
+                    mPaint.setMaskFilter(mGlowBlur);
+                    mPaint.setStrokeWidth(depth * 0.55f);
+                    mPaint.setColor(ColorUtils.setAlphaComponent(color, GLOW_ALPHA));
+                    canvas.drawRoundRect(mGlowBorderRect, radius, radius, mPaint);
+                    mPaint.setMaskFilter(null);
+                }
+            } else {
+                // No blur mask filter to lean on: ramp the alpha over enough steps that the bands
+                // stop reading as bands. Quadratic falloff, brightest at the edge.
+                for (int step = GLOW_RAMP_STEPS; step >= 1; step--) {
+                    float t = step / (float) GLOW_RAMP_STEPS;
+                    float width = depth * t;
+                    float fade = 1f - t;
+                    mGlowBorderRect.set(pane);
+                    mGlowBorderRect.inset(width / 2f, width / 2f);
+                    if (mGlowBorderRect.width() <= 0f || mGlowBorderRect.height() <= 0f) continue;
+                    mPaint.setStrokeWidth(depth / GLOW_RAMP_STEPS + dp(0.5f));
+                    mPaint.setColor(ColorUtils.setAlphaComponent(color,
+                        Math.round(GLOW_ALPHA * fade * fade)));
+                    canvas.drawRoundRect(mGlowBorderRect, radius, radius, mPaint);
+                }
+            }
+            // The edge itself stays crisp; without it the glow reads as a smudge rather than a lit
+            // border, and the pane's own 1dp focus ring is what the light is supposed to be on.
+            mGlowBorderRect.set(pane);
+            mGlowBorderRect.inset(dp(0.75f), dp(0.75f));
+            mPaint.setStrokeWidth(dp(1.5f));
+            mPaint.setColor(ColorUtils.setAlphaComponent(color, 235));
+            canvas.drawRoundRect(mGlowBorderRect, radius, radius, mPaint);
+            canvas.restoreToCount(saved);
         }
 
         private void drawControls(Canvas canvas, int primary, int tertiary) {
@@ -2437,6 +2573,15 @@ public class TerminalPaneController {
             content.setBackgroundColor(MaterialColors.getColor(getContext(),
                 com.termux.shared.R.attr.termuxColorSurfacePanel,
                 ContextCompat.getColor(getContext(), R.color.termux_surface_panel)));
+            // pane_active_border is a foreground stroke, not a clip — without this the terminal's
+            // own rectangular cell-background fill pokes a black triangle past each rounded corner.
+            final float cornerRadiusPx = dp(FLOAT_CORNER_RADIUS_DP);
+            content.setClipToOutline(true);
+            content.setOutlineProvider(new ViewOutlineProvider() {
+                @Override public void getOutline(View view, Outline outline) {
+                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cornerRadiusPx);
+                }
+            });
             content.addView(paneFrameFor(leaf.session), new LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             LayoutParams contentParams = new LayoutParams(
@@ -2631,8 +2776,8 @@ public class TerminalPaneController {
 
         /** Coalesce the resize drag into one final PTY resize, like divider drags do. */
         private void setSizeUpdatesPaused(boolean paused) {
-            TerminalView view = mPaneViews.get(mLeaf.session);
-            if (view != null) view.setTerminalSizeUpdatesPaused(paused);
+            if (paused) beginHostSurfaceResize();
+            else finishHostSurfaceResizeKeepingBottom();
         }
 
         private int dragModeAt(float x, float y) {

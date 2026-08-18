@@ -73,7 +73,8 @@ The template's layout — **which file owns what matters**:
 | `flake.nix` | flake wiring | inputs (nixpkgs, home-manager, the fork), overlays |
 | `nix-on-droid.nix` | system module | `environment.packages`, `user.shell`, `android-integration` |
 | `home.nix` | home-manager module | `home.packages`, dotfiles (`xdg.configFile`), activation hooks |
-| `config/` | plain files | the actual `config.fish`, oh-my-posh themes, `fastfetch/config.jsonc` |
+| `toolkits.nix` | plain booleans | which groups `home.nix` installs — see below |
+| `config/` | plain files | the actual `config.fish`, oh-my-posh themes, `fastfetch/config.jsonc`, the logo GIF |
 
 The split exists because two different configuration systems are wired
 together. `nix-on-droid.nix` is evaluated by nix-on-droid's own module
@@ -95,6 +96,127 @@ versa: `home.*` options and `lib.hm` only exist inside home-manager, so
 the switch fails with `error: attribute 'hm' missing` /
 "option `home' does not exist". System options and home options live in
 different files by design.
+
+### Choosing what gets installed: `setup-toolkits`
+
+The template groups its packages into toolkits, and `toolkits.nix` is the
+file that says which ones you want. `setup-toolkits` is a checklist over
+that file — it flips the booleans and runs the switch, which is exactly
+what you would do by hand:
+
+```sh
+setup-toolkits
+```
+
+```
+  Toolkits — /data/data/com.termux.launcher.nix/files/home/.config/nix-on-droid/toolkits.nix
+
+    ✓  shell         fish, oh-my-posh, eza, zoxide, yazi, fd, ripgrep, fzf
+    ✓  eye-candy     fastfetch with the animated GIF logo, timg, chafa
+    ✓  editor        neovim + setup-nvim (implies build tools)
+    ✓  build         cc, make, cmake, autotools, pkg-config, binutils — build from source
+    ✗  node          nodejs, npm, npx (npm -g installs into ~/.npm-global)
+    ✗  go            go (go install writes ~/go/bin)
+    ✗  python        python3, uv, uvx (uv tool install writes ~/.local/bin)
+    ✗  animated-logo patched fastfetch so the GIF animates — compiles ~20 min on device
+
+      1) everything            every toolkit above except the animated logo
+      2) shell essentials      shell + eye candy, nothing else
+      3) pick one by one
+      4) quit, change nothing
+```
+
+Option 3 walks the list and Enter keeps whatever a toolkit is set to
+now, so it doubles as a way to change one thing without answering for
+the rest.
+
+Non-interactive forms:
+
+```sh
+setup-toolkits --list                    # current selection, no changes
+setup-toolkits --all                     # everything prebuilt (not the animated logo)
+setup-toolkits --essentials              # shell + eye candy only
+setup-toolkits --enable node,go          # leaves every other toolkit as it is
+setup-toolkits --disable eyeCandy
+setup-toolkits --enable python --no-switch   # edit the file, switch later yourself
+```
+
+The defaults are shell, eye-candy, editor and build on; node, go and
+python off, because a toolchain nobody asked for is a few hundred MB of
+download. `editor` implies `build`: a Neovim distro compiles treesitter
+grammars on first launch.
+
+Editing `toolkits.nix` in `nvim` is equally valid, and the two cannot
+disagree — the script reads the same file it writes. Only the booleans
+matter to `home.nix` and `flake.nix`; comments are yours.
+
+Adding packages that are not in any toolkit stays a `home.nix` edit, as
+always — the toolkits are a starting set, not a boundary.
+
+### Global installs: `npm -g`, `go install`, `uv tool`
+
+The one place where "the file is the system" needs help is the *other*
+package managers. Their default global prefix is the nix profile, which
+is a read-only store path that the next switch replaces — `npm install
+-g` fails outright there, and anything that did land would disappear at
+the next `nix-collect-garbage`.
+
+So the template redirects each of them into your home directory and puts
+the result on `PATH`:
+
+| Tool | Global installs land in | Set by |
+|---|---|---|
+| `npm install -g`, `npx` | `~/.npm-global` (`bin/` on PATH) | `NPM_CONFIG_PREFIX` |
+| `go install` | `~/go/bin` | `GOPATH`, `GOBIN` |
+| `uv tool install`, `uvx` | `~/.local/bin` | uv's own default |
+
+Those directories are outside nix's bookkeeping, which is the point:
+they survive switches, rollbacks and garbage collection. The flip side
+is that nix cannot reproduce them on another phone — if you want a tool
+on every device, put it in `home.nix` instead, and use the global
+installs for the long tail nixpkgs does not carry.
+
+Two device-specific notes:
+
+- **Native npm modules** (`node-gyp`) need a compiler: keep the `build`
+  toolkit on, or `npm install -g` fails on any package with a C
+  addon.
+- **uv does not manage Pythons here.** Its downloaded interpreters are
+  `python-build-standalone` builds that expect a distro loader at
+  `/lib/ld-linux-aarch64.so.1`, which does not exist inside the proot —
+  the failure looks absurd ("no such file or directory" for a file that
+  is plainly there). The template therefore sets
+  `UV_PYTHON_DOWNLOADS=never` and `UV_PYTHON_PREFERENCE=only-system`, so
+  uv uses the nix `python3` from the `python` toolkit. `uv venv`,
+  `uv pip`, `uv tool install` and `uvx` all work against it; only
+  `uv python install` is off the table. For a different Python version,
+  add it to `home.nix` (`python312`, `python313`) and point `uv --python`
+  at it.
+
+### Building from source
+
+The `build` toolkit is the equivalent of a `base-devel` group: `gcc`,
+`make`, `cmake`, `autoconf`, `automake`, `libtool`, `pkg-config`,
+`binutils`, `patch`, `gettext`, `file`, and the `tar`/`gzip`/`xz`/`unzip`
+archivers. That is enough to `./configure && make && make install` an
+ordinary source tree on the phone.
+
+Libraries to build *against* deliberately stay out of the global
+profile: they are per-project, and a global `zlib` does not give you the
+headers anyway. Ask for them per shell:
+
+```sh
+nix shell nixpkgs#zlib.dev nixpkgs#openssl.dev nixpkgs#sqlite.dev
+```
+
+Inside that shell `pkg-config --cflags zlib` resolves, and the shell ends
+when you type `exit` — nothing is installed. `nix develop` does the same
+thing from a project's own flake, and is the better habit for anything
+you build more than once.
+
+Expect compilation to be slower than the CPU suggests: proot intercepts
+syscalls, and `configure` scripts are thousands of tiny `fork`/`exec`
+pairs. `make -j$(nproc)` still helps; a serial `configure` is just slow.
 
 ### Neovim / LazyVim
 
@@ -155,16 +277,26 @@ formats it can render itself, and deletions are permanent.
 
 ### Animated fastfetch logo
 
-`home.nix` already installs fastfetch and the config expects a GIF at
-`~/Pictures/gif/skel.gif` — drop any GIF there (fastfetch falls back to
-text output while it is missing). Stock nixpkgs fastfetch shows only the
-first frame; for full animation over the kitty graphics protocol, add
-the overlay from
-[`recipes/nix/fastfetch`](https://github.com/PickleHik3/termux-launcher/tree/dev/recipes/nix/fastfetch)
-(copy `overlay.nix` and the patch next to `flake.nix`, register it in
-the flake's `pkgs = import nixpkgs { ... overlays = [ ... ]; }`). It
-compiles on the device — serial build, roughly 20–50 minutes depending
-on the phone, app foregrounded.
+The template ships the GIF: the first switch copies a small animated
+launcher logo to `~/Pictures/gif/skel.gif`, which is the path
+`config/fastfetch/config.jsonc` points at. The file is a plain writable
+copy — replace it with any GIF of your own (`cp yours.gif
+~/Pictures/gif/skel.gif`, no switch needed) and an existing file is
+never overwritten. fastfetch falls back to text output if the path goes
+missing.
+
+Stock nixpkgs fastfetch draws only the first frame. Full animation over
+the kitty graphics protocol needs the patched build, which the template
+carries as `overlays.nix` and turns on from `toolkits.nix`:
+
+```sh
+setup-toolkits --animated-logo
+```
+
+or, by hand, `animatedFastfetchLogo = true;` and a switch. There is no
+binary cache entry for a patched fastfetch, so it compiles on the device
+— serial build, roughly 20–50 minutes depending on the phone, app
+foregrounded. Everything else about the logo works without it.
 
 ### SSH into the phone
 

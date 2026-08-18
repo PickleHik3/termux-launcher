@@ -2,16 +2,20 @@ package com.termux.app.terminal;
 
 import android.content.Context;
 import android.graphics.Camera;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.Typeface;
+import android.os.Build;
 import android.os.SystemClock;
 import android.util.AttributeSet;
+import android.view.MotionEvent;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -45,6 +49,7 @@ public final class TerminalClockWidget extends View {
     private static final String[] MONTHS = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN",
         "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
     private static final long FLIP_DURATION_MS = 560L;
+    private static final long SECONDS_FLIP_DURATION_MS = 340L;
     private static final long LCD_DURATION_MS = 280L;
     private static final long TEXT_DURATION_MS = 350L;
     private static final long LED_DURATION_MS = 320L;
@@ -54,15 +59,60 @@ public final class TerminalClockWidget extends View {
     private static final float RULE_GAP_DP = 7f;
     private static final float SLOT_HEIGHT_DP = 68f;
     private static final float TAPE_TRACK_BLOCK_DP = 12.5f;
+    private static final long[] FLIP_LOAD_STAGGER_MS = {300L, 430L, 560L, 690L};
+    private static final float[] UPPER_FLIP_STOPS = {0f, .55f, .88f, 1f};
+    private static final float[] LOWER_FLIP_STOPS = {0f, .07f, .28f, 1f};
+    private static final float[] HINGE_FLIP_STOPS = {0f, .07f, .17f, .33f, .64f, .9f, 1f};
 
     private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
     private final Paint mFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Matrix mMatrix = new Matrix();
     private final Camera mCamera = new Camera();
+    private final Rect mTextBounds = new Rect();
     private final RectF mRect = new RectF();
-    private final char[] mDigits = new char[6];
-    private final char[] mOldDigits = new char[6];
-    private final long[] mChangedAt = new long[6];
+    private final RectF mFlipMetaCell = new RectF();
+    /**
+     * Scratch rects and cached flip gradients.
+     *
+     * <p>The flip face repaints at vsync for as long as a digit is turning, and it used to build a
+     * fresh {@link LinearGradient} for every card half and every hinge clip on every one of those
+     * frames — six cards, four shaders each, forty times a second. Each one is a native Skia
+     * object held until the collector gets to it, which is what walked the process's native heap
+     * up into the hundreds of megabytes while the pane was open. The gradients depend on nothing
+     * but the card's vertical extent and the resolved palette, so they are built once and reused.
+     */
+    private final RectF mFlipHalfClip = new RectF();
+    private final RectF mFlipHingeLeft = new RectF();
+    private final RectF mFlipHingeRight = new RectF();
+    private int mFlipShaderGeneration;
+    @Nullable private Bitmap mFullHingeBitmap;
+    private int mFullHingeWidth;
+    private int mFullHingeHeight;
+    private int mFullHingePad;
+    private int mFullHingeGeneration = -1;
+    @Nullable private Bitmap mCompactHingeBitmap;
+    private int mCompactHingeWidth;
+    private int mCompactHingeHeight;
+    private int mCompactHingePad;
+    private int mCompactHingeGeneration = -1;
+    @Nullable private LinearGradient mUpperFlipShader;
+    private float mUpperFlipTop = Float.NaN;
+    private float mUpperFlipBottom = Float.NaN;
+    private int mUpperFlipShaderGeneration = -1;
+    @Nullable private LinearGradient mLowerFlipShader;
+    private float mLowerFlipTop = Float.NaN;
+    private float mLowerFlipBottom = Float.NaN;
+    private int mLowerFlipShaderGeneration = -1;
+    @Nullable private LinearGradient mHingeFlipShader;
+    private float mHingeFlipTop = Float.NaN;
+    private float mHingeFlipBottom = Float.NaN;
+    private int mHingeFlipShaderGeneration = -1;
+    private final char[] mDigits = new char[4];
+    private final char[] mOldDigits = new char[4];
+    private final long[] mChangedAt = new long[4];
+    private final char[] mSeconds = new char[2];
+    private final char[] mOldSeconds = new char[2];
+    private final long[] mSecondsChangedAt = new long[2];
     private final Runnable mTicker = new Runnable() {
         @Override public void run() {
             if (!mTickerRunning || !isAttachedToWindow()) return;
@@ -74,10 +124,12 @@ public final class TerminalClockWidget extends View {
     private final Runnable mSyncTicker = this::syncTicker;
 
     private String mStyle = TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_STYLE;
+    private String mAlignment = TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_ALIGNMENT;
     private TopPaneClockForm mForm = TopPaneClockForm.FULL;
     private ClockSnapshot mSnapshot;
     private boolean mTickerRunning;
     private boolean mUseAmPm;
+    private float mFullPresentationProgress;
 
     private int mPrimary;
     private int mSecondary;
@@ -88,6 +140,20 @@ public final class TerminalClockWidget extends View {
     private int mRuleColor;
     private int mTrackColor;
     private int mTrackLabel;
+    private int mSurfaceBase;
+    private int mSurfacePanel;
+    private int mSurfacePanelHigh;
+    private int mSurfacePanelHighest;
+    private int mOutlineVariant;
+    private final int[] mUpperFlipColors = new int[4];
+    private final int[] mLowerFlipColors = new int[4];
+    private final int[] mHingeFlipColors = new int[7];
+    private int mFlipRim;
+    private int mFlipSeam;
+    private int mFlipShadow;
+    private int mFlipClipOutline;
+    private int mFlipClipShadow;
+    private boolean mDarkFlipStock;
 
     public TerminalClockWidget(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -122,6 +188,30 @@ public final class TerminalClockWidget extends View {
         return mStyle;
     }
 
+    /**
+     * Horizontal placement of the FULL-form time band and date text; compact forms ignore it.
+     * The flip FULL face is the departure-board exception and keeps both independently centered.
+     */
+    public void setAlignment(@Nullable String alignment) {
+        String normalized = isKnownAlignment(alignment)
+            ? alignment : TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_LEFT;
+        if (normalized.equals(mAlignment)) return;
+        mAlignment = normalized;
+        requestLayout();
+        invalidate();
+    }
+
+    private static boolean isKnownAlignment(@Nullable String alignment) {
+        return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_LEFT.equals(alignment)
+            || TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_CENTER.equals(alignment)
+            || TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_RIGHT.equals(alignment);
+    }
+
+    @NonNull
+    String getAlignment() {
+        return mAlignment;
+    }
+
     /** Which grid form renders. Changing it re-measures, since the content width changes with it. */
     public void setForm(@NonNull TopPaneClockForm form) {
         if (mForm == form) return;
@@ -134,6 +224,17 @@ public final class TerminalClockWidget extends View {
     public TopPaneClockForm getForm() {
         return mForm;
     }
+
+    /** Host-owned presentation channel; the clock itself owns no competing animation loop. */
+    public void setFullPresentationProgress(float progress) {
+        float clamped = Float.isFinite(progress) ? Math.max(0f, Math.min(1f, progress)) : 0f;
+        if (Math.abs(clamped - mFullPresentationProgress) < .0001f) return;
+        mFullPresentationProgress = clamped;
+        requestLayout();
+        invalidate();
+    }
+
+    public float getFullPresentationProgress() { return mFullPresentationProgress; }
 
     public void setUseAmPm(boolean useAmPm) {
         if (mUseAmPm == useAmPm) return;
@@ -149,6 +250,10 @@ public final class TerminalClockWidget extends View {
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        if (mForm == TopPaneClockForm.FULL
+            && TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP.equals(mStyle)) {
+            seedFlipLoadFlourish(SystemClock.uptimeMillis());
+        }
         post(mSyncTicker);
     }
 
@@ -204,12 +309,80 @@ public final class TerminalClockWidget extends View {
         mPrimary = MaterialColors.getColor(context,
             com.termux.shared.R.attr.termuxColorPrimary,
             ContextCompat.getColor(context, R.color.termux_primary));
+        mSurfaceBase = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorSurfaceBase,
+            ContextCompat.getColor(context, R.color.termux_surface_base));
+        mSurfacePanel = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorSurfacePanel,
+            ContextCompat.getColor(context, R.color.termux_surface_panel));
+        mSurfacePanelHigh = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+            ContextCompat.getColor(context, R.color.termux_surface_panel_high));
+        mSurfacePanelHighest = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorSurfacePanelHighest,
+            ContextCompat.getColor(context, R.color.termux_surface_panel_highest));
+        mOutlineVariant = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorOutlineVariant,
+            ContextCompat.getColor(context, R.color.termux_outline_variant));
         mPrimaryLine = alpha(mPrimary, .45f);
         mSecondaryQuiet = alpha(mSecondary, .5f);
         mDateInk = alpha(mOnSurface, .62f);
         mRuleColor = alpha(mPrimary, .22f);
         mTrackColor = alpha(mSecondary, .18f);
         mTrackLabel = alpha(mSecondary, .45f);
+        resolveFlipColors();
+    }
+
+    /** Card stock and hardware stay inside the resolved Material surface family. */
+    private void resolveFlipColors() {
+        // Any repalette retires the cached gradients; they carry the old colours.
+        mFlipShaderGeneration++;
+        mDarkFlipStock = ColorUtils.calculateLuminance(mSurfaceBase) < .5;
+        if (mDarkFlipStock) {
+            mUpperFlipColors[0] = mSurfacePanel;
+            mUpperFlipColors[1] = mSurfacePanelHigh;
+            mUpperFlipColors[2] = mSurfacePanelHighest;
+            mUpperFlipColors[3] = ColorUtils.blendARGB(mSurfaceBase, Color.BLACK, .35f);
+            mLowerFlipColors[0] = ColorUtils.blendARGB(mSurfacePanelHighest, Color.WHITE, .22f);
+            mLowerFlipColors[1] = mSurfacePanelHighest;
+            mLowerFlipColors[2] = mSurfacePanelHigh;
+            mLowerFlipColors[3] = ColorUtils.blendARGB(mSurfacePanelHigh, mSurfacePanel, .35f);
+            mHingeFlipColors[0] = ColorUtils.blendARGB(mSurfacePanelHighest, Color.WHITE, .45f);
+            mHingeFlipColors[1] = ColorUtils.blendARGB(mSurfacePanelHighest, Color.WHITE, .25f);
+            mHingeFlipColors[2] = mSurfacePanelHighest;
+            mHingeFlipColors[3] = mSurfacePanelHigh;
+            mHingeFlipColors[4] = mSurfacePanel;
+            mHingeFlipColors[5] = ColorUtils.blendARGB(mSurfacePanelHigh,
+                mSurfacePanelHighest, .35f);
+            mHingeFlipColors[6] = ColorUtils.blendARGB(mSurfaceBase, Color.BLACK, .35f);
+            mFlipRim = Color.argb(199, 0, 0, 0);
+            mFlipSeam = Color.BLACK;
+            mFlipShadow = Color.argb(128, 0, 0, 0);
+            mFlipClipOutline = Color.BLACK;
+            mFlipClipShadow = Color.argb(128, 0, 0, 0);
+        } else {
+            mUpperFlipColors[0] = mSurfaceBase;
+            mUpperFlipColors[1] = mSurfacePanel;
+            mUpperFlipColors[2] = mSurfacePanelHigh;
+            mUpperFlipColors[3] = mOutlineVariant;
+            mLowerFlipColors[0] = ColorUtils.blendARGB(mSurfaceBase, Color.WHITE, .82f);
+            mLowerFlipColors[1] = ColorUtils.blendARGB(mSurfaceBase, Color.WHITE, .3f);
+            mLowerFlipColors[2] = mSurfacePanelHigh;
+            mLowerFlipColors[3] = ColorUtils.blendARGB(mSurfacePanelHigh,
+                mSurfacePanelHighest, .4f);
+            mHingeFlipColors[0] = Color.WHITE;
+            mHingeFlipColors[1] = ColorUtils.blendARGB(mSurfaceBase, Color.WHITE, .35f);
+            mHingeFlipColors[2] = ColorUtils.blendARGB(mOutlineVariant, mSurfaceBase, .5f);
+            mHingeFlipColors[3] = mOutlineVariant;
+            mHingeFlipColors[4] = ColorUtils.blendARGB(mOutlineVariant, mOnSurface, .18f);
+            mHingeFlipColors[5] = ColorUtils.blendARGB(mOutlineVariant, mSurfaceBase, .35f);
+            mHingeFlipColors[6] = ColorUtils.blendARGB(mOutlineVariant, mOnSurface, .38f);
+            mFlipRim = alpha(mOnSurface, .22f);
+            mFlipSeam = alpha(mOnSurface, .55f);
+            mFlipShadow = alpha(mOnSurface, .3f);
+            mFlipClipOutline = alpha(mOnSurface, .34f);
+            mFlipClipShadow = alpha(mOnSurface, .22f);
+        }
     }
 
     // ---- Measurement ------------------------------------------------------
@@ -241,41 +414,56 @@ public final class TerminalClockWidget extends View {
     }
 
     private float fullContentWidth() {
-        float timeRow;
+        float timeRow = fullTimeRowWidth();
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(mStyle)) {
+            // The tape folds its date onto the time row instead of using the date row below.
+            timeRow += dp(10f) + spacedTextWidth(mSnapshot.date, Typeface.MONOSPACE, 9f, .2f);
+        }
         float dateRow;
         switch (mStyle) {
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD:
-                timeRow = dp(94f) + dp(6f)
-                    + metaWidth(12f, 7f, 4f, Typeface.MONOSPACE, Typeface.MONOSPACE, .16f, true);
                 dateRow = spacedTextWidth(mSnapshot.date, Typeface.MONOSPACE, 9.5f, .2f);
                 break;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL:
-                timeRow = spacedTextWidth(timeText(), thinTypeface(), 38f, -.02f) + dp(6f)
-                    + metaWidth(15f, 7.5f, 6f, lightTypeface(), mediumTypeface(), .18f, false);
                 dateRow = spacedTextWidth(mSnapshot.date, Typeface.DEFAULT, 9.5f, .22f);
                 break;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED:
-                timeRow = dotTextWidth(timeText(), dp(3.4f)) + dp(7f) + ledMetaWidth(1.6f, 6.5f, 4f);
                 dateRow = dotTextWidth(mSnapshot.date, dp(1.3f));
                 break;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
-                timeRow = spacedTextWidth(timeText(), Typeface.MONOSPACE, 28f, -.02f) + dp(5f)
-                    + metaWidth(11f, 7f, 5f, Typeface.MONOSPACE, Typeface.MONOSPACE, .16f, false)
-                    + dp(10f) + spacedTextWidth(mSnapshot.date, Typeface.MONOSPACE, 9f, .2f);
                 dateRow = spacedTextWidth(trackLabelText(), Typeface.MONOSPACE, 6f, .2f);
                 break;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB:
-                timeRow = spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 39f, -.045f) + dp(6f)
-                    + stackedMetaWidth(11f, 7f, mediumTypeface(), Typeface.DEFAULT_BOLD, .16f);
                 dateRow = spacedTextWidth(mSnapshot.date, Typeface.DEFAULT_BOLD, 8.5f, .26f);
                 break;
             default:
-                timeRow = dp(94f) + dp(5f)
-                    + metaWidth(13f, 7.5f, 4f, Typeface.DEFAULT, mediumTypeface(), .16f, true);
-                dateRow = spacedTextWidth(mSnapshot.date, mediumTypeface(), 9.5f, .22f);
+                dateRow = spacedTextWidth(mSnapshot.date, condensedMediumTypeface(), 9.2f, .31f);
                 break;
         }
         return Math.max(timeRow, dateRow + dp(RULE_GAP_DP) + dp(24f));
+    }
+
+    /** Unscaled width the FULL time band (digits plus folded meta) actually paints. */
+    private float fullTimeRowWidth() {
+        switch (mStyle) {
+            case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD:
+                return dp(94f) + dp(6f)
+                    + metaWidth(12f, 7f, 4f, Typeface.MONOSPACE, Typeface.MONOSPACE, .16f, true);
+            case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL:
+                return spacedTextWidth(timeText(), thinTypeface(), 38f, -.02f) + dp(6f)
+                    + metaWidth(15f, 7.5f, 6f, lightTypeface(), mediumTypeface(), .18f, false);
+            case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED:
+                return dotTextWidth(timeText(), dp(3.4f)) + dp(7f) + ledMetaWidth(1.6f, 6.5f, 4f);
+            case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
+                return spacedTextWidth(timeText(), Typeface.MONOSPACE, 28f, -.02f) + dp(5f)
+                    + metaWidth(11f, 7f, 5f, Typeface.MONOSPACE, Typeface.MONOSPACE, .16f, false);
+            case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB:
+                return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 39f, -.045f) + dp(6f)
+                    + stackedMetaWidth(11f, 7f, mediumTypeface(), Typeface.DEFAULT_BOLD, .16f);
+            default:
+                // 26dp cards x4 + 5.7dp intra-pair gaps x2 + 13.5dp inter-pair gap.
+                return dp(128.9f + 6.7f) + fullFlipMetaWidth();
+        }
     }
 
     private float compactContentWidth() {
@@ -296,8 +484,9 @@ public final class TerminalClockWidget extends View {
                 return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 27f, -.045f) + dp(5f)
                     + stackedMetaWidth(9f, 6f, mediumTypeface(), Typeface.DEFAULT_BOLD, .16f);
             default:
-                return dp(64.5f) + dp(4f)
-                    + metaWidth(9.5f, 6.5f, 3f, Typeface.DEFAULT, mediumTypeface(), .16f, false);
+                // 15dp cards x4 + 1.5dp intra-pair gaps x2 + 4dp hour/minute gap.
+                return dp(67f) + dp(4f)
+                    + stackedMetaWidth(9.5f, 6.5f, Typeface.DEFAULT, mediumTypeface(), .16f);
         }
     }
 
@@ -333,6 +522,13 @@ public final class TerminalClockWidget extends View {
             spacedTextWidth(mSnapshot.period, periodFace, periodDp, periodSpacing));
     }
 
+    private float fullFlipMetaWidth() {
+        float seconds = dp(12f);
+        if (mSnapshot.period.isEmpty()) return seconds;
+        return Math.max(seconds,
+            spacedTextWidth(mSnapshot.period, condensedBoldTypeface(), 7.8f, .1f));
+    }
+
     private float ledMetaWidth(float secondsCellDp, float periodDp, float gapDp) {
         float width = dotTextWidth(mSnapshot.ss, dp(secondsCellDp));
         if (mSnapshot.period.isEmpty()) return width;
@@ -361,6 +557,39 @@ public final class TerminalClockWidget extends View {
         if (hasRunningAnimation(now)) postInvalidateOnAnimation();
     }
 
+    /**
+     * The slot lays this view out at the pane's full available width (so alignment can place the
+     * clock left/center/right within it), which leaves blank space beside the painted face. Gate
+     * the click listener to that painted region instead of the whole laid-out view.
+     */
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN
+            && !isInsidePaintedContent(event.getX(), event.getY())) {
+            return false;
+        }
+        return super.onTouchEvent(event);
+    }
+
+    private boolean isInsidePaintedContent(float x, float y) {
+        if (mSnapshot == null) return true;
+        switch (mForm) {
+            case MONO_CHIP:
+                return x >= 0f && x <= contentWidth();
+            case COMPACT: {
+                float scale = Math.min(1f, getHeight() / dp(compactColumnHeightDp()));
+                return x >= 0f && x <= contentWidth() * scale;
+            }
+            default: {
+                float columnDp = fullBandHeightDp() + fullDateGapDp() + fullDateBlockDp();
+                float scale = Math.min(1f, getHeight() / dp(columnDp));
+                float right = getWidth() / Math.max(.01f, scale);
+                float left = alignmentDx(right, contentWidth()) * scale;
+                return x >= left && x <= left + contentWidth() * scale;
+            }
+        }
+    }
+
     private void drawFull(Canvas canvas, long now) {
         float bandDp = fullBandHeightDp();
         float dateGapDp = fullDateGapDp();
@@ -372,27 +601,77 @@ public final class TerminalClockWidget extends View {
         float dateTop = dp(bandDp + dateGapDp);
         // The hairline and the tape track run to the pane gutter, so they need the unscaled edge.
         float right = getWidth() / Math.max(.01f, scale);
+        float bandDx = fullBandDx(right);
         switch (mStyle) {
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD:
-                drawFullLcd(canvas, now, dateTop, right);
+                drawFullLcd(canvas, now, dateTop, right, bandDx);
                 break;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL:
-                drawFullMinimal(canvas, now, dateTop, right);
+                drawFullMinimal(canvas, now, dateTop, right, bandDx);
                 break;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED:
-                drawFullLed(canvas, now, dateTop, right);
+                drawFullLed(canvas, now, dateTop, right, bandDx);
                 break;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
-                drawFullTape(canvas, now, dateTop, right);
+                drawFullTape(canvas, now, dateTop, right, bandDx);
                 break;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB:
-                drawFullSlab(canvas, now, dateTop, right);
+                drawFullSlab(canvas, now, dateTop, right, bandDx);
                 break;
             default:
-                drawFullFlip(canvas, now, dateTop, right);
+                drawFullFlip(canvas, now, dateTop, right, bandDx);
                 break;
         }
         canvas.restore();
+    }
+
+    /**
+     * Center Y, in view pixels, of the FULL-form date hairline — for the slot's edge-to-edge
+     * extensions. -1 when the current form/style draws no hairline (compact forms, tape).
+     */
+    public float fullRuleCenterYPx() {
+        if (mForm != TopPaneClockForm.FULL || getHeight() <= 0) return -1f;
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(mStyle)) {
+            return -1f;
+        }
+        float bandDp = fullBandHeightDp();
+        float dateGapDp = fullDateGapDp();
+        float columnDp = bandDp + dateGapDp + fullDateBlockDp();
+        float scale = Math.min(1f, getHeight() / dp(columnDp));
+        float translate = Math.max(0f, (getHeight() - dp(columnDp) * scale) / 2f);
+        return translate + dp(bandDp + dateGapDp + fullDateRowHeightDp() / 2f) * scale;
+    }
+
+    /** The FULL-form hairline's half thickness in view pixels, matching drawRule's 0.5dp. */
+    public float fullRuleHalfThicknessPx() {
+        float columnDp = fullBandHeightDp() + fullDateGapDp() + fullDateBlockDp();
+        float scale = getHeight() <= 0 ? 1f : Math.min(1f, getHeight() / dp(columnDp));
+        return (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP.equals(mStyle)
+            ? .5f : dp(.5f)) * scale;
+    }
+
+    /** The FULL-form hairline colour, for the slot's edge-to-edge extensions. */
+    public int fullRuleColor() { return mRuleColor; }
+
+    /** Horizontal offset placing a run of {@code width} against {@code right} per the alignment. */
+    private float alignmentDx(float right, float width) {
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_CENTER.equals(mAlignment))
+            return Math.max(0f, (right - width) / 2f);
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_RIGHT.equals(mAlignment))
+            return Math.max(0f, right - width);
+        return 0f;
+    }
+
+    /** Offset for the FULL time band; tape stops short of its right-pinned inline date label. */
+    private float fullBandDx(float right) {
+        float band = fullTimeRowWidth();
+        float dx = alignmentDx(right, band);
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(mStyle)) {
+            float limit = right - spacedTextWidth(mSnapshot.date, Typeface.MONOSPACE, 9f, .2f)
+                - dp(10f) - band;
+            dx = Math.min(dx, Math.max(0f, limit));
+        }
+        return dx;
     }
 
     private void drawCompact(Canvas canvas, long now) {
@@ -430,6 +709,8 @@ public final class TerminalClockWidget extends View {
                 return 26f;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
                 return 22f;
+            case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP:
+                return 35.5f;
             default:
                 return 34f;
         }
@@ -444,6 +725,8 @@ public final class TerminalClockWidget extends View {
                 return 6f;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
                 return 7f;
+            case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP:
+                return 13.8f;
             default:
                 return 5f;
         }
@@ -451,8 +734,16 @@ public final class TerminalClockWidget extends View {
 
     /** Tape trades the date row for a minute track plus its label; everyone else gets the date row. */
     private float fullDateBlockDp() {
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP.equals(mStyle)) {
+            return 11.7f;
+        }
         return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(mStyle)
             ? TAPE_TRACK_BLOCK_DP : DATE_ROW_DP;
+    }
+
+    private float fullDateRowHeightDp() {
+        return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP.equals(mStyle)
+            ? 11.7f : DATE_ROW_DP;
     }
 
     /** Compact drops the date row on every face; tape keeps a short minute track instead. */
@@ -474,82 +765,112 @@ public final class TerminalClockWidget extends View {
 
     // ---- Split-flap -------------------------------------------------------
 
-    private void drawFullFlip(Canvas canvas, long now, float dateTop, float right) {
-        float x = drawFlipCards(canvas, now, 22f, 34f, 27f, 2f);
-        drawMetaRow(canvas, x + dp(5f), dp(29f), 13f, 7.5f, 4f, Typeface.DEFAULT, mediumTypeface(),
-            .16f, true, now, FLIP_DURATION_MS);
-        drawDateRow(canvas, dateTop, right, mSnapshot.date, mediumTypeface(), 9.5f, .22f);
+    private void drawFullFlip(Canvas canvas, long now, float dateTop, float right, float bandDx) {
+        // The departure-board spec deliberately ignores alignment for the flip FULL face.
+        float digitBaseline = capCenteredBaseline(dp(35.5f) / 2f,
+            condensedBoldTypeface(), 30.5f);
+        float timeWidth = fullTimeRowWidth();
+        canvas.save();
+        canvas.translate(Math.max(0f, (right - timeWidth) / 2f), 0f);
+        float x = drawFullFlipCards(canvas, now, digitBaseline);
+        drawFullFlipMetaColumn(canvas, x + dp(6.7f), digitBaseline, now);
+        canvas.restore();
+        drawFullFlipDateRow(canvas, dateTop, right);
     }
 
-    private void drawCompactFlip(Canvas canvas, long now) {
-        float x = drawFlipCards(canvas, now, 15f, 24f, 19f, 1.5f);
-        drawMetaRow(canvas, x + dp(4f), dp(21f), 9.5f, 6.5f, 3f, Typeface.DEFAULT, mediumTypeface(),
-            .16f, false, now, FLIP_DURATION_MS);
-    }
-
-    /** Four evenly spaced cards: the refined face drops the colon so the row reads as one block. */
-    private float drawFlipCards(Canvas canvas, long now, float widthDp, float heightDp,
-                                float textDp, float gapDp) {
+    private float drawFullFlipCards(Canvas canvas, long now, float digitBaseline) {
         float x = 0f;
         for (int digit = 0; digit < 4; digit++) {
-            x = drawFlipDigit(canvas, digit, x, 0f, widthDp, heightDp, textDp, now);
-            if (digit < 3) x += dp(gapDp);
+            x = drawFullFlipDigit(canvas, digit, x, digitBaseline, now);
+            if (digit == 0 || digit == 2) x += dp(5.7f);
+            else if (digit == 1) x += dp(13.5f);
         }
         return x;
     }
 
-    private float drawFlipDigit(Canvas canvas, int digit, float x, float y,
-                                float widthDp, float heightDp, float textDp, long now) {
-        float w = dp(widthDp), h = dp(heightDp), half = h / 2f;
-        RectF card = new RectF(x, y, x + w, y + h);
+    private float drawFullFlipDigit(Canvas canvas, int digit, float x, float digitBaseline,
+                                    long now) {
+        // Wider than the handoff's 22dp: at 30.5dp the widest digits reach the hinge clips at the
+        // seam, so the card carries 2dp more clearance per side. Keep in step with the 128.9dp
+        // row width in fullTimeRowWidth().
+        float w = dp(26f), h = dp(35.5f);
+        RectF card = new RectF(x, 0f, x + w, h);
         float p = progress(digit, now, FLIP_DURATION_MS);
         boolean animating = p < 1f;
-        char bottom = animating ? mOldDigits[digit] : mDigits[digit];
 
-        drawFlipHalf(canvas, card, true, mDigits[digit], textDp);
-        drawFlipHalf(canvas, card, false, bottom, textDp);
-        if (animating && p < .5f) {
+        mFillPaint.setShader(null);
+        mFillPaint.setStyle(Paint.Style.FILL);
+        mFillPaint.setColor(mUpperFlipColors[0]);
+        // Below API 28 hardware setShadowLayer is text-only; API 26/27 are shadowless (accepted).
+        mFillPaint.setShadowLayer(dp(3.2f), 0f, dp(1.06f), mFlipShadow);
+        canvas.drawRoundRect(card, dp(1.5f), dp(1.5f), mFillPaint);
+        mFillPaint.clearShadowLayer();
+
+        if (!animating) {
+            drawFullFlipHalf(canvas, card, true, mDigits[digit], true, digitBaseline, 0f);
+            drawFullFlipHalf(canvas, card, false, mDigits[digit], true, digitBaseline, 0f);
+        } else if (p < .5f) {
             float local = p * 2f;
-            drawRotatedFlipHalf(canvas, card, true, mOldDigits[digit], textDp,
-                -90f * local * local);
-        } else if (animating) {
+            // The static top is deliberately blank while the old top flap covers it.
+            drawFullFlipHalf(canvas, card, true, mDigits[digit], false, digitBaseline, 0f);
+            drawFullFlipHalf(canvas, card, false, mOldDigits[digit], true, digitBaseline, 0f);
+            drawFullRotatedFlipHalf(canvas, card, true, mOldDigits[digit], digitBaseline,
+                -90f * local * local, local);
+        } else {
             float local = (p - .5f) * 2f;
             float eased = 1f - (1f - local) * (1f - local);
-            drawRotatedFlipHalf(canvas, card, false, mDigits[digit], textDp,
-                90f * (1f - eased));
+            drawFullFlipHalf(canvas, card, true, mDigits[digit], true, digitBaseline, 0f);
+            // The static bottom is deliberately blank while the new bottom flap covers it.
+            drawFullFlipHalf(canvas, card, false, mDigits[digit], false, digitBaseline, 0f);
+            drawFullRotatedFlipHalf(canvas, card, false, mDigits[digit], digitBaseline,
+                90f * (1f - eased), 1f - eased);
         }
 
         mFillPaint.setShader(null);
-        mFillPaint.setColor(Color.argb(140, 0, 0, 0));
-        canvas.drawRect(x, y + half - dp(.5f), x + w, y + half + dp(.5f), mFillPaint);
-        return x + w;
+        mFillPaint.setStyle(Paint.Style.STROKE);
+        mFillPaint.setStrokeWidth(1f);
+        mFillPaint.setColor(mFlipRim);
+        canvas.drawRoundRect(card, dp(1.5f), dp(1.5f), mFillPaint);
+        mFillPaint.setStyle(Paint.Style.FILL);
+        drawFullFlipHinge(canvas, card);
+        return card.right;
     }
 
-    private void drawFlipHalf(Canvas canvas, RectF card, boolean top, char digit, float textDp) {
-        float half = card.height() / 2f;
-        RectF clip = top
-            ? new RectF(card.left, card.top, card.right, card.top + half)
-            : new RectF(card.left, card.top + half, card.right, card.bottom);
+    /** The stock gradient belongs to the physical half; only the flying half receives fold wash. */
+    private void drawFullFlipHalf(Canvas canvas, RectF card, boolean top, char digit,
+                                  boolean drawDigit, float digitBaseline, float foldShade) {
+        float split = card.centerY();
+        if (top) {
+            mFlipHalfClip.set(card.left, card.top, card.right, split);
+        } else {
+            mFlipHalfClip.set(card.left, split, card.right, card.bottom);
+        }
         canvas.save();
-        canvas.clipRect(clip);
-        mFillPaint.setShader(new LinearGradient(0f, card.top, 0f, card.bottom,
-            alpha(mOnSurface, top ? .13f : .06f), alpha(mOnSurface, top ? .08f : .03f),
-            Shader.TileMode.CLAMP));
-        canvas.drawRoundRect(card, dp(4f), dp(4f), mFillPaint);
+        canvas.clipRect(mFlipHalfClip);
+        mFillPaint.setShader(top
+            ? upperFlipShader(card.top, split)
+            : lowerFlipShader(split, card.bottom));
+        canvas.drawRoundRect(card, dp(1.5f), dp(1.5f), mFillPaint);
         mFillPaint.setShader(null);
-        mPaint.setTypeface(mediumTypeface());
-        mPaint.setLetterSpacing(-.02f);
-        mPaint.setTextSize(dp(textDp));
-        mPaint.setColor(mOnSurface);
-        mPaint.setTextAlign(Paint.Align.CENTER);
-        float baseline = card.centerY() - (mPaint.ascent() + mPaint.descent()) / 2f;
-        canvas.drawText(String.valueOf(digit), card.centerX(), baseline, mPaint);
-        mPaint.setLetterSpacing(0f);
+        if (drawDigit) {
+            mPaint.setTypeface(condensedBoldTypeface());
+            mPaint.setLetterSpacing(0f);
+            mPaint.setTextSize(dp(30.5f));
+            mPaint.setColor(mOnSurface);
+            mPaint.setAlpha(255);
+            mPaint.setTextAlign(Paint.Align.CENTER);
+            canvas.drawText(String.valueOf(digit), card.centerX(), digitBaseline, mPaint);
+        }
+        if (foldShade > 0f) {
+            mFillPaint.setColor(Color.argb(Math.round(255f * .22f * clamp01(foldShade)),
+                0, 0, 0));
+            canvas.drawRoundRect(card, dp(1.5f), dp(1.5f), mFillPaint);
+        }
         canvas.restore();
     }
 
-    private void drawRotatedFlipHalf(Canvas canvas, RectF card, boolean top, char digit,
-                                     float textDp, float angle) {
+    private void drawFullRotatedFlipHalf(Canvas canvas, RectF card, boolean top, char digit,
+                                         float digitBaseline, float angle, float foldShade) {
         float pivotY = card.centerY();
         mCamera.save();
         mCamera.rotateX(angle);
@@ -559,16 +880,315 @@ public final class TerminalClockWidget extends View {
         mMatrix.postTranslate(card.centerX(), pivotY);
         canvas.save();
         canvas.concat(mMatrix);
-        drawFlipHalf(canvas, card, top, digit, textDp);
+        drawFullFlipHalf(canvas, card, top, digit, true, digitBaseline, foldShade);
         canvas.restore();
+    }
+
+    private void drawFullFlipHinge(Canvas canvas, RectF card) {
+        float split = card.centerY();
+        mFillPaint.setShader(null);
+        mFillPaint.setColor(mFlipSeam);
+        canvas.drawRect(card.left, split - .5f, card.right, split + .5f, mFillPaint);
+
+        float clipWidth = dp(3.2f), clipHeight = dp(7.4f);
+        float clipTop = split - clipHeight / 2f;
+        mFlipHingeLeft.set(card.left - 1f, clipTop,
+            card.left - 1f + clipWidth, clipTop + clipHeight);
+        mFlipHingeRight.set(card.right + 1f - clipWidth, clipTop,
+            card.right + 1f, clipTop + clipHeight);
+        drawFullFlipHingeClip(canvas, mFlipHingeLeft);
+        drawFullFlipHingeClip(canvas, mFlipHingeRight);
+    }
+
+    private void drawFullFlipHingeClip(Canvas canvas, RectF clip) {
+        drawCachedHingeClip(canvas, clip, dp(.7f), 0f, dp(.35f), dp(.7f), true);
+    }
+
+    private void drawFullFlipMetaColumn(Canvas canvas, float x, float digitBaseline, long now) {
+        Typeface face = condensedBoldTypeface();
+        mPaint.setTypeface(face);
+        mPaint.setLetterSpacing(0f);
+        mPaint.setTextSize(dp(10.6f));
+        mPaint.setTextAlign(Paint.Align.CENTER);
+        float secondsAscent = mPaint.ascent();
+        float secondsDescent = mPaint.descent();
+        float secondsCapHeight = capHeight(face, 10.6f);
+        float split = digitBaseline - secondsCapHeight / 2f;
+        float cellWidth = dp(6f);
+        for (int i = 0; i < 2; i++) {
+            mFlipMetaCell.set(x + i * cellWidth, digitBaseline + secondsAscent,
+                x + (i + 1) * cellWidth, digitBaseline + secondsDescent);
+            drawFullFlipSecond(canvas, i, mFlipMetaCell, split, digitBaseline, now);
+        }
+
+        if (mSnapshot.period.isEmpty()) return;
+        mPaint.setTypeface(face);
+        mPaint.setLetterSpacing(.1f);
+        mPaint.setTextSize(dp(7.8f));
+        float periodBaseline = digitBaseline + secondsAscent - dp(2f) - mPaint.descent();
+        mPaint.setColor(mPrimary);
+        mPaint.setAlpha(255);
+        mPaint.setTextAlign(Paint.Align.LEFT);
+        canvas.drawText(mSnapshot.period, x, periodBaseline, mPaint);
+        mPaint.setLetterSpacing(0f);
+    }
+
+    private void drawFullFlipSecond(Canvas canvas, int index, RectF cell, float split,
+                                    float baseline, long now) {
+        float p = secondsProgress(index, now, SECONDS_FLIP_DURATION_MS);
+        if (p >= 1f) {
+            drawFullFlipSecondHalf(canvas, cell, split, true, mSeconds[index], baseline);
+            drawFullFlipSecondHalf(canvas, cell, split, false, mSeconds[index], baseline);
+        } else if (p < .5f) {
+            float local = p * 2f;
+            drawFullFlipSecondHalf(canvas, cell, split, false, mOldSeconds[index], baseline);
+            drawFullRotatedSecondHalf(canvas, cell, split, true, mOldSeconds[index], baseline,
+                -90f * local * local);
+        } else {
+            float local = (p - .5f) * 2f;
+            float eased = 1f - (1f - local) * (1f - local);
+            drawFullFlipSecondHalf(canvas, cell, split, true, mSeconds[index], baseline);
+            drawFullRotatedSecondHalf(canvas, cell, split, false, mSeconds[index], baseline,
+                90f * (1f - eased));
+        }
+    }
+
+    private void drawFullFlipSecondHalf(Canvas canvas, RectF cell, float split, boolean top,
+                                        char digit, float baseline) {
+        canvas.save();
+        canvas.clipRect(cell.left, top ? cell.top : split, cell.right,
+            top ? split : cell.bottom);
+        mPaint.setTypeface(condensedBoldTypeface());
+        mPaint.setLetterSpacing(0f);
+        mPaint.setTextSize(dp(10.6f));
+        mPaint.setColor(mSecondaryQuiet);
+        mPaint.setTextAlign(Paint.Align.CENTER);
+        canvas.drawText(String.valueOf(digit), cell.centerX(), baseline, mPaint);
+        canvas.restore();
+    }
+
+    private void drawFullRotatedSecondHalf(Canvas canvas, RectF cell, float split, boolean top,
+                                           char digit, float baseline, float angle) {
+        mCamera.save();
+        mCamera.rotateX(angle);
+        mCamera.getMatrix(mMatrix);
+        mCamera.restore();
+        mMatrix.preTranslate(-cell.centerX(), -split);
+        mMatrix.postTranslate(cell.centerX(), split);
+        canvas.save();
+        canvas.concat(mMatrix);
+        drawFullFlipSecondHalf(canvas, cell, split, top, digit, baseline);
+        canvas.restore();
+    }
+
+    private void drawFullFlipDateRow(Canvas canvas, float top, float right) {
+        Typeface face = condensedMediumTypeface();
+        float textWidth = spacedTextWidth(mSnapshot.date, face, 9.2f, .31f);
+        float textX = Math.max(0f, (right - textWidth) / 2f);
+        drawLabel(canvas, mSnapshot.date, textX, baseline(top, dp(11.7f), face, 9.2f), 9.2f,
+            face, .31f, alpha(mOnSurface, mDarkFlipStock ? .68f : .7f));
+        float ruleY = top + dp(11.7f) / 2f;
+        mFillPaint.setShader(null);
+        mFillPaint.setColor(mRuleColor);
+        float gap = dp(7.5f);
+        if (textX - gap > 0f) canvas.drawRect(0f, ruleY - .5f, textX - gap,
+            ruleY + .5f, mFillPaint);
+        if (textX + textWidth + gap < right) canvas.drawRect(textX + textWidth + gap,
+            ruleY - .5f, right, ruleY + .5f, mFillPaint);
+    }
+
+    private void drawCompactFlip(Canvas canvas, long now) {
+        float digitBaseline = capCenteredBaseline(dp(24f) / 2f, condensedBoldTypeface(), 19f);
+        float x = drawCompactFlipCards(canvas, now, digitBaseline);
+        drawStackedMetaColumn(canvas, x + dp(4f), dp(21f), 9.5f, 6.5f, Typeface.DEFAULT,
+            mediumTypeface(), .16f, now, FLIP_DURATION_MS);
+    }
+
+    /** Same departure-board face as {@link #drawFullFlipCards}, at compact scale. */
+    private float drawCompactFlipCards(Canvas canvas, long now, float digitBaseline) {
+        float x = 0f;
+        for (int digit = 0; digit < 4; digit++) {
+            x = drawCompactFlipDigit(canvas, digit, x, digitBaseline, now);
+            if (digit == 0 || digit == 2) x += dp(1.5f);
+            else if (digit == 1) x += dp(4f);
+        }
+        return x;
+    }
+
+    private float drawCompactFlipDigit(Canvas canvas, int digit, float x, float digitBaseline,
+                                       long now) {
+        float w = dp(15f), h = dp(24f);
+        RectF card = new RectF(x, 0f, x + w, h);
+        float p = progress(digit, now, FLIP_DURATION_MS);
+        boolean animating = p < 1f;
+
+        mFillPaint.setShader(null);
+        mFillPaint.setStyle(Paint.Style.FILL);
+        mFillPaint.setColor(mUpperFlipColors[0]);
+        mFillPaint.setShadowLayer(dp(2.2f), 0f, dp(.7f), mFlipShadow);
+        canvas.drawRoundRect(card, dp(1f), dp(1f), mFillPaint);
+        mFillPaint.clearShadowLayer();
+
+        if (!animating) {
+            drawCompactFlipHalf(canvas, card, true, mDigits[digit], true, digitBaseline, 0f);
+            drawCompactFlipHalf(canvas, card, false, mDigits[digit], true, digitBaseline, 0f);
+        } else if (p < .5f) {
+            float local = p * 2f;
+            drawCompactFlipHalf(canvas, card, true, mDigits[digit], false, digitBaseline, 0f);
+            drawCompactFlipHalf(canvas, card, false, mOldDigits[digit], true, digitBaseline, 0f);
+            drawCompactRotatedFlipHalf(canvas, card, true, mOldDigits[digit], digitBaseline,
+                -90f * local * local, local);
+        } else {
+            float local = (p - .5f) * 2f;
+            float eased = 1f - (1f - local) * (1f - local);
+            drawCompactFlipHalf(canvas, card, true, mDigits[digit], true, digitBaseline, 0f);
+            drawCompactFlipHalf(canvas, card, false, mDigits[digit], false, digitBaseline, 0f);
+            drawCompactRotatedFlipHalf(canvas, card, false, mDigits[digit], digitBaseline,
+                90f * (1f - eased), 1f - eased);
+        }
+
+        mFillPaint.setShader(null);
+        mFillPaint.setStyle(Paint.Style.STROKE);
+        mFillPaint.setStrokeWidth(1f);
+        mFillPaint.setColor(mFlipRim);
+        canvas.drawRoundRect(card, dp(1f), dp(1f), mFillPaint);
+        mFillPaint.setStyle(Paint.Style.FILL);
+        drawCompactFlipHinge(canvas, card);
+        return card.right;
+    }
+
+    private void drawCompactFlipHalf(Canvas canvas, RectF card, boolean top, char digit,
+                                     boolean drawDigit, float digitBaseline, float foldShade) {
+        float split = card.centerY();
+        if (top) {
+            mFlipHalfClip.set(card.left, card.top, card.right, split);
+        } else {
+            mFlipHalfClip.set(card.left, split, card.right, card.bottom);
+        }
+        canvas.save();
+        canvas.clipRect(mFlipHalfClip);
+        mFillPaint.setShader(top
+            ? upperFlipShader(card.top, split)
+            : lowerFlipShader(split, card.bottom));
+        canvas.drawRoundRect(card, dp(1f), dp(1f), mFillPaint);
+        mFillPaint.setShader(null);
+        if (drawDigit) {
+            mPaint.setTypeface(condensedBoldTypeface());
+            mPaint.setLetterSpacing(0f);
+            mPaint.setTextSize(dp(19f));
+            mPaint.setColor(mOnSurface);
+            mPaint.setAlpha(255);
+            mPaint.setTextAlign(Paint.Align.CENTER);
+            canvas.drawText(String.valueOf(digit), card.centerX(), digitBaseline, mPaint);
+        }
+        if (foldShade > 0f) {
+            mFillPaint.setColor(Color.argb(Math.round(255f * .22f * clamp01(foldShade)),
+                0, 0, 0));
+            canvas.drawRoundRect(card, dp(1f), dp(1f), mFillPaint);
+        }
+        canvas.restore();
+    }
+
+    private void drawCompactRotatedFlipHalf(Canvas canvas, RectF card, boolean top, char digit,
+                                            float digitBaseline, float angle, float foldShade) {
+        float pivotY = card.centerY();
+        mCamera.save();
+        mCamera.rotateX(angle);
+        mCamera.getMatrix(mMatrix);
+        mCamera.restore();
+        mMatrix.preTranslate(-card.centerX(), -pivotY);
+        mMatrix.postTranslate(card.centerX(), pivotY);
+        canvas.save();
+        canvas.concat(mMatrix);
+        drawCompactFlipHalf(canvas, card, top, digit, true, digitBaseline, foldShade);
+        canvas.restore();
+    }
+
+    private void drawCompactFlipHinge(Canvas canvas, RectF card) {
+        float split = card.centerY();
+        mFillPaint.setShader(null);
+        mFillPaint.setColor(mFlipSeam);
+        canvas.drawRect(card.left, split - .5f, card.right, split + .5f, mFillPaint);
+
+        float clipWidth = dp(2.2f), clipHeight = dp(5f);
+        float clipTop = split - clipHeight / 2f;
+        mFlipHingeLeft.set(card.left - 1f, clipTop,
+            card.left - 1f + clipWidth, clipTop + clipHeight);
+        mFlipHingeRight.set(card.right + 1f - clipWidth, clipTop,
+            card.right + 1f, clipTop + clipHeight);
+        drawCompactFlipHingeClip(canvas, mFlipHingeLeft);
+        drawCompactFlipHingeClip(canvas, mFlipHingeRight);
+    }
+
+    private void drawCompactFlipHingeClip(Canvas canvas, RectF clip) {
+        drawCachedHingeClip(canvas, clip, dp(.5f), 0f, dp(.25f), dp(.5f), false);
+    }
+
+    /**
+     * The hinge clips are the same little rounded slab painted four times per card, and painting
+     * one costs a gradient, a blur mask ({@code setShadowLayer} rasterizes one per draw call) and
+     * two round rects. Every card is the same size, so render the slab once into a bitmap and blit
+     * it after that: the flip face draws 24 of these per frame while a digit turns.
+     */
+    private void drawCachedHingeClip(Canvas canvas, RectF clip, float shadowRadius,
+                                     float shadowDx, float shadowDy, float corner, boolean full) {
+        int width = Math.round(clip.width());
+        int height = Math.round(clip.height());
+        if (width <= 0 || height <= 0) return;
+        int pad = (int) Math.ceil(shadowRadius + Math.abs(shadowDy) + 1f);
+        Bitmap cached = full ? mFullHingeBitmap : mCompactHingeBitmap;
+        boolean stale = cached == null || cached.isRecycled()
+            || (full ? mFullHingeGeneration : mCompactHingeGeneration) != mFlipShaderGeneration
+            || (full ? mFullHingeWidth : mCompactHingeWidth) != width
+            || (full ? mFullHingeHeight : mCompactHingeHeight) != height;
+        if (stale) {
+            cached = Bitmap.createBitmap(width + pad * 2, height + pad * 2, Bitmap.Config.ARGB_8888);
+            Canvas into = new Canvas(cached);
+            RectF slab = new RectF(pad, pad, pad + width, pad + height);
+            mFillPaint.setStyle(Paint.Style.FILL);
+            // The cached gradient is keyed on absolute y; inside the bitmap the slab starts at pad.
+            mFillPaint.setShader(new LinearGradient(0f, slab.top, 0f, slab.bottom, mHingeFlipColors,
+                HINGE_FLIP_STOPS, Shader.TileMode.CLAMP));
+            mFillPaint.setShadowLayer(shadowRadius, shadowDx, shadowDy, mFlipClipShadow);
+            into.drawRoundRect(slab, corner, corner, mFillPaint);
+            mFillPaint.clearShadowLayer();
+            mFillPaint.setShader(null);
+            mFillPaint.setStyle(Paint.Style.STROKE);
+            mFillPaint.setStrokeWidth(1f);
+            mFillPaint.setColor(mFlipClipOutline);
+            into.drawRoundRect(slab, corner, corner, mFillPaint);
+            mFillPaint.setStyle(Paint.Style.FILL);
+            if (full) {
+                if (mFullHingeBitmap != null && !mFullHingeBitmap.isRecycled())
+                    mFullHingeBitmap.recycle();
+                mFullHingeBitmap = cached;
+                mFullHingeWidth = width;
+                mFullHingeHeight = height;
+                mFullHingePad = pad;
+                mFullHingeGeneration = mFlipShaderGeneration;
+            } else {
+                if (mCompactHingeBitmap != null && !mCompactHingeBitmap.isRecycled())
+                    mCompactHingeBitmap.recycle();
+                mCompactHingeBitmap = cached;
+                mCompactHingeWidth = width;
+                mCompactHingeHeight = height;
+                mCompactHingePad = pad;
+                mCompactHingeGeneration = mFlipShaderGeneration;
+            }
+        }
+        int offset = full ? mFullHingePad : mCompactHingePad;
+        canvas.drawBitmap(cached, clip.left - offset, clip.top - offset, null);
     }
 
     // ---- LCD --------------------------------------------------------------
 
-    private void drawFullLcd(Canvas canvas, long now, float dateTop, float right) {
+    private void drawFullLcd(Canvas canvas, long now, float dateTop, float right, float bandDx) {
+        canvas.save();
+        canvas.translate(bandDx, 0f);
         float x = drawLcdDigits(canvas, now, 19f, 34f, 3f, 3f, 6f, 17f, 4f, 1.75f);
         drawMetaRow(canvas, x + dp(6f), dp(30f), 12f, 7f, 4f, Typeface.MONOSPACE,
             Typeface.MONOSPACE, .16f, true, now, LCD_DURATION_MS);
+        canvas.restore();
         drawDateRow(canvas, dateTop, right, mSnapshot.date, Typeface.MONOSPACE, 9.5f, .2f);
     }
 
@@ -663,11 +1283,14 @@ public final class TerminalClockWidget extends View {
 
     // ---- Minimal ----------------------------------------------------------
 
-    private void drawFullMinimal(Canvas canvas, long now, float dateTop, float right) {
+    private void drawFullMinimal(Canvas canvas, long now, float dateTop, float right, float bandDx) {
         float baseline = baseline(0f, dp(34f), thinTypeface(), 38f);
+        canvas.save();
+        canvas.translate(bandDx, 0f);
         float x = drawFadingTime(canvas, now, thinTypeface(), 38f, -.02f, baseline);
         drawMetaRow(canvas, x + dp(6f), baseline, 15f, 7.5f, 6f, lightTypeface(), mediumTypeface(),
             .18f, false, now, TEXT_DURATION_MS);
+        canvas.restore();
         drawDateRow(canvas, dateTop, right, mSnapshot.date, Typeface.DEFAULT, 9.5f, .22f);
     }
 
@@ -680,11 +1303,14 @@ public final class TerminalClockWidget extends View {
 
     // ---- Slab -------------------------------------------------------------
 
-    private void drawFullSlab(Canvas canvas, long now, float dateTop, float right) {
+    private void drawFullSlab(Canvas canvas, long now, float dateTop, float right, float bandDx) {
         float baseline = baseline(0f, dp(34f), Typeface.DEFAULT_BOLD, 39f);
+        canvas.save();
+        canvas.translate(bandDx, 0f);
         float x = drawFadingTime(canvas, now, Typeface.DEFAULT_BOLD, 39f, -.045f, baseline);
         drawStackedMetaColumn(canvas, x + dp(6f), baseline, 11f, 7f, mediumTypeface(),
             Typeface.DEFAULT_BOLD, .16f, now, TEXT_DURATION_MS);
+        canvas.restore();
         drawDateRow(canvas, dateTop, right, mSnapshot.date, Typeface.DEFAULT_BOLD, 8.5f, .26f);
     }
 
@@ -697,13 +1323,16 @@ public final class TerminalClockWidget extends View {
 
     // ---- Tape -------------------------------------------------------------
 
-    private void drawFullTape(Canvas canvas, long now, float trackTop, float right) {
+    private void drawFullTape(Canvas canvas, long now, float trackTop, float right, float bandDx) {
         float baseline = baseline(0f, dp(22f), Typeface.MONOSPACE, 28f);
+        canvas.save();
+        canvas.translate(bandDx, 0f);
         float x = drawFadingTime(canvas, now, Typeface.MONOSPACE, 28f, -.02f, baseline);
         drawMetaRow(canvas, x + dp(5f), baseline, 11f, 7f, 5f, Typeface.MONOSPACE,
             Typeface.MONOSPACE, .16f, false, now, TEXT_DURATION_MS);
+        canvas.restore();
         float dateWidth = spacedTextWidth(mSnapshot.date, Typeface.MONOSPACE, 9f, .2f);
-        drawLabel(canvas, mSnapshot.date, Math.max(x, right - dateWidth), baseline, 9f,
+        drawLabel(canvas, mSnapshot.date, Math.max(x + bandDx, right - dateWidth), baseline, 9f,
             Typeface.MONOSPACE, .2f, mDateInk);
         drawMinuteTrack(canvas, trackTop, right, 1.5f);
         drawLabel(canvas, trackLabelText(), 0f,
@@ -735,15 +1364,21 @@ public final class TerminalClockWidget extends View {
 
     // ---- LED matrix -------------------------------------------------------
 
-    private void drawFullLed(Canvas canvas, long now, float dateTop, float right) {
+    private void drawFullLed(Canvas canvas, long now, float dateTop, float right, float bandDx) {
+        canvas.save();
+        canvas.translate(bandDx, 0f);
         float x = drawLedTime(canvas, now, 3.4f);
         drawLedMeta(canvas, now, x + dp(7f), 26f, 1.6f, 6.5f, 4f);
+        canvas.restore();
         float dateCell = dp(1.3f);
         int dateColor = alpha(mOnSurface, .6f);
-        drawLedText(canvas, mSnapshot.date, 0f, dateTop + (dp(DATE_ROW_DP) - dateCell * 7f) / 2f,
-            dateCell, dateColor);
-        drawRule(canvas, dotTextWidth(mSnapshot.date, dateCell) + dp(RULE_GAP_DP),
-            dateTop + dp(DATE_ROW_DP / 2f), right, mRuleColor);
+        float dateWidth = dotTextWidth(mSnapshot.date, dateCell);
+        float textX = alignmentDx(right, dateWidth);
+        drawLedText(canvas, mSnapshot.date, textX,
+            dateTop + (dp(DATE_ROW_DP) - dateCell * 7f) / 2f, dateCell, dateColor);
+        float ruleY = dateTop + dp(DATE_ROW_DP / 2f);
+        drawRule(canvas, 0f, ruleY, textX - dp(RULE_GAP_DP), mRuleColor);
+        drawRule(canvas, textX + dateWidth + dp(RULE_GAP_DP), ruleY, right, mRuleColor);
     }
 
     private void drawCompactLed(Canvas canvas, long now) {
@@ -777,7 +1412,7 @@ public final class TerminalClockWidget extends View {
         float top = dp(bandDp) - dp(1f) - secondsCell * 7f;
         float cursor = x;
         for (int i = 0; i < 2; i++) {
-            float eased = ease(progress(4 + i, now, LED_DURATION_MS));
+            float eased = ease(secondsProgress(i, now, LED_DURATION_MS));
             drawDotGlyph(canvas, mSnapshot.ss.charAt(i), cursor, top, secondsCell, mSecondary,
                 .84f + .16f * eased, 1f + 1.3f * (1f - eased));
             cursor += dotGlyphAdvance(secondsCell);
@@ -911,7 +1546,7 @@ public final class TerminalClockWidget extends View {
         mPaint.setTextAlign(Paint.Align.LEFT);
         float cursor = x;
         for (int i = 0; i < 2; i++) {
-            float eased = ease(progress(4 + i, now, duration));
+            float eased = ease(secondsProgress(i, now, duration));
             mPaint.setColor(mSecondaryQuiet);
             mPaint.setAlpha(Math.round(Color.alpha(mSecondaryQuiet) * eased));
             String c = String.valueOf(mSnapshot.ss.charAt(i));
@@ -960,7 +1595,7 @@ public final class TerminalClockWidget extends View {
         float secondsAscent = mPaint.ascent();
         float cursor = x;
         for (int i = 0; i < 2; i++) {
-            float eased = ease(progress(4 + i, now, duration));
+            float eased = ease(secondsProgress(i, now, duration));
             mPaint.setColor(mSecondaryQuiet);
             mPaint.setAlpha(Math.round(Color.alpha(mSecondaryQuiet) * eased));
             String c = String.valueOf(mSnapshot.ss.charAt(i));
@@ -997,13 +1632,20 @@ public final class TerminalClockWidget extends View {
         return x;
     }
 
-    /** Date text plus the hairline that carries it out to the right gutter. */
+    /**
+     * Date text plus the hairline(s) carrying it out to the pane gutter: trailing when the text
+     * leads, leading when it trails, both when centred. {@link #drawRule} drops any side whose run
+     * would be non-positive, so left keeps only the trailing rule and right only the leading one.
+     */
     private void drawDateRow(Canvas canvas, float top, float right, String text, Typeface typeface,
                              float textDp, float letterSpacing) {
-        drawLabel(canvas, text, 0f, baseline(top, dp(DATE_ROW_DP), typeface, textDp), textDp,
+        float textWidth = spacedTextWidth(text, typeface, textDp, letterSpacing);
+        float textX = alignmentDx(right, textWidth);
+        drawLabel(canvas, text, textX, baseline(top, dp(DATE_ROW_DP), typeface, textDp), textDp,
             typeface, letterSpacing, mDateInk);
-        drawRule(canvas, spacedTextWidth(text, typeface, textDp, letterSpacing) + dp(RULE_GAP_DP),
-            top + dp(DATE_ROW_DP / 2f), right, mRuleColor);
+        float ruleY = top + dp(DATE_ROW_DP / 2f);
+        drawRule(canvas, 0f, ruleY, textX - dp(RULE_GAP_DP), mRuleColor);
+        drawRule(canvas, textX + textWidth + dp(RULE_GAP_DP), ruleY, right, mRuleColor);
     }
 
     private void drawLabel(Canvas canvas, String text, float x, float baseline, float textDp,
@@ -1064,29 +1706,81 @@ public final class TerminalClockWidget extends View {
     }
 
     private static Typeface thinTypeface() {
-        return Typeface.create("sans-serif-thin", Typeface.NORMAL);
+        return cachedTypeface("sans-serif-thin", Typeface.NORMAL);
     }
 
     private static Typeface lightTypeface() {
-        return Typeface.create("sans-serif-light", Typeface.NORMAL);
+        return cachedTypeface("sans-serif-light", Typeface.NORMAL);
     }
 
     private static Typeface mediumTypeface() {
-        return Typeface.create("sans-serif-medium", Typeface.NORMAL);
+        return cachedTypeface("sans-serif-medium", Typeface.NORMAL);
+    }
+
+    /**
+     * {@link Typeface#create(String, int)} is not a lookup — it consults the system font list and
+     * builds a face — and the flip face asks for one on every card, on every frame. Memoize the
+     * handful of families this widget ever names.
+     */
+    private static final java.util.Map<String, Typeface> TYPEFACES =
+        new java.util.concurrent.ConcurrentHashMap<>(8);
+
+    @NonNull
+    private static Typeface cachedTypeface(@NonNull String family, int style) {
+        String key = family + '/' + style;
+        Typeface cached = TYPEFACES.get(key);
+        if (cached == null) {
+            cached = Typeface.create(family, style);
+            TYPEFACES.put(key, cached);
+        }
+        return cached;
+    }
+
+    private static Typeface condensedBoldTypeface() {
+        return cachedTypeface("sans-serif-condensed", Typeface.BOLD);
+    }
+
+    private static Typeface condensedMediumTypeface() {
+        // The condensed-medium family alias was added in API 27; avoid the regular fallback on 26.
+        return Build.VERSION.SDK_INT >= 27
+            ? Typeface.create("sans-serif-condensed-medium", Typeface.NORMAL)
+            : Typeface.create("sans-serif-condensed", Typeface.NORMAL);
+    }
+
+    private float capHeight(Typeface typeface, float textDp) {
+        mPaint.setTypeface(typeface);
+        mPaint.setLetterSpacing(0f);
+        mPaint.setTextSize(dp(textDp));
+        mPaint.getTextBounds("H", 0, 1, mTextBounds);
+        return Math.min(-mPaint.ascent(), mTextBounds.height());
+    }
+
+    private float capCenteredBaseline(float centerY, Typeface typeface, float textDp) {
+        return centerY + capHeight(typeface, textDp) / 2f;
     }
 
     private void updateTime(long wallTime, long animationTime) {
         ClockSnapshot next = snapshot(wallTime, TimeZone.getDefault(), mUseAmPm);
         char[] nextDigits = next.digits();
+        char[] nextSeconds = next.secondsDigits();
         if (mSnapshot == null) {
             System.arraycopy(nextDigits, 0, mDigits, 0, mDigits.length);
             System.arraycopy(nextDigits, 0, mOldDigits, 0, mOldDigits.length);
+            System.arraycopy(nextSeconds, 0, mSeconds, 0, mSeconds.length);
+            System.arraycopy(nextSeconds, 0, mOldSeconds, 0, mOldSeconds.length);
         } else {
             for (int i = 0; i < mDigits.length; i++) {
                 if (mDigits[i] != nextDigits[i]) {
                     mOldDigits[i] = mDigits[i];
                     mDigits[i] = nextDigits[i];
                     mChangedAt[i] = animationTime;
+                }
+            }
+            for (int i = 0; i < mSeconds.length; i++) {
+                if (mSeconds[i] != nextSeconds[i]) {
+                    mOldSeconds[i] = mSeconds[i];
+                    mSeconds[i] = nextSeconds[i];
+                    mSecondsChangedAt[i] = animationTime;
                 }
             }
         }
@@ -1113,10 +1807,69 @@ public final class TerminalClockWidget extends View {
         }
     }
 
+    @NonNull
+    private LinearGradient upperFlipShader(float top, float bottom) {
+        if (mUpperFlipShader == null || mUpperFlipShaderGeneration != mFlipShaderGeneration
+            || mUpperFlipTop != top || mUpperFlipBottom != bottom) {
+            mUpperFlipShader = new LinearGradient(0f, top, 0f, bottom, mUpperFlipColors,
+                UPPER_FLIP_STOPS, Shader.TileMode.CLAMP);
+            mUpperFlipTop = top;
+            mUpperFlipBottom = bottom;
+            mUpperFlipShaderGeneration = mFlipShaderGeneration;
+        }
+        return mUpperFlipShader;
+    }
+
+    @NonNull
+    private LinearGradient lowerFlipShader(float top, float bottom) {
+        if (mLowerFlipShader == null || mLowerFlipShaderGeneration != mFlipShaderGeneration
+            || mLowerFlipTop != top || mLowerFlipBottom != bottom) {
+            mLowerFlipShader = new LinearGradient(0f, top, 0f, bottom, mLowerFlipColors,
+                LOWER_FLIP_STOPS, Shader.TileMode.CLAMP);
+            mLowerFlipTop = top;
+            mLowerFlipBottom = bottom;
+            mLowerFlipShaderGeneration = mFlipShaderGeneration;
+        }
+        return mLowerFlipShader;
+    }
+
+    @NonNull
+    private LinearGradient hingeFlipShader(float top, float bottom) {
+        if (mHingeFlipShader == null || mHingeFlipShaderGeneration != mFlipShaderGeneration
+            || mHingeFlipTop != top || mHingeFlipBottom != bottom) {
+            mHingeFlipShader = new LinearGradient(0f, top, 0f, bottom, mHingeFlipColors,
+                HINGE_FLIP_STOPS, Shader.TileMode.CLAMP);
+            mHingeFlipTop = top;
+            mHingeFlipBottom = bottom;
+            mHingeFlipShaderGeneration = mFlipShaderGeneration;
+        }
+        return mHingeFlipShader;
+    }
+
+    /**
+     * Lazy mode swaps the digits instead of folding them. The fold is the launcher's only source of
+     * idle frames — a 340ms flip restarting every second on a 119Hz panel is a full-window repaint
+     * about forty times a second — so switching it off is what takes the idle cost to nothing.
+     */
+    public void setLazyMode(boolean lazy) {
+        if (mLazyMode == lazy) return;
+        mLazyMode = lazy;
+        invalidate();
+    }
+
+    private boolean mLazyMode;
+
     private boolean hasRunningAnimation(long now) {
+        if (mLazyMode) return false;
         long duration = styleDurationMs();
         for (long changedAt : mChangedAt) {
             if (changedAt > 0L && now - changedAt < duration) return true;
+        }
+        long secondsDuration = mForm == TopPaneClockForm.FULL
+            && TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP.equals(mStyle)
+            ? SECONDS_FLIP_DURATION_MS : duration;
+        for (long changedAt : mSecondsChangedAt) {
+            if (changedAt > 0L && now - changedAt < secondsDuration) return true;
         }
         return false;
     }
@@ -1137,6 +1890,19 @@ public final class TerminalClockWidget extends View {
     private float progress(int digit, long now, long duration) {
         if (mChangedAt[digit] <= 0L) return 1f;
         return clamp01((now - mChangedAt[digit]) / (float) duration);
+    }
+
+    private float secondsProgress(int digit, long now, long duration) {
+        if (mSecondsChangedAt[digit] <= 0L) return 1f;
+        return clamp01((now - mSecondsChangedAt[digit]) / (float) duration);
+    }
+
+    private void seedFlipLoadFlourish(long now) {
+        for (int i = 0; i < mDigits.length; i++) {
+            mOldDigits[i] = mDigits[i];
+            mChangedAt[i] = now + FLIP_LOAD_STAGGER_MS[i];
+        }
+        invalidate();
     }
 
     private float dp(float value) {
@@ -1216,7 +1982,11 @@ public final class TerminalClockWidget extends View {
         }
 
         char[] digits() {
-            return (hh + mm + ss).toCharArray();
+            return (hh + mm).toCharArray();
+        }
+
+        char[] secondsDigits() {
+            return ss.toCharArray();
         }
     }
 }

@@ -344,8 +344,21 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      * invalidate, so they compose; sharing one animator would stall the activity indication for the
      * length of every window switch.
      */
+    /**
+     * Lazy mode keeps the rim lit but stops it breathing: the animator invalidated the whole strip
+     * every vsync for as long as any shell was busy, which with a long-running agent meant forever.
+     */
+    public void setLazyMode(boolean lazy) {
+        if (mLazyMode == lazy) return;
+        mLazyMode = lazy;
+        mTabs.setLazyRim(lazy);
+        updateBusyAnimator();
+    }
+
+    private boolean mLazyMode;
+
     private void updateBusyAnimator() {
-        boolean wanted = mTabs.hasBusyWindow() && mAttached && mWindowVisible;
+        boolean wanted = mTabs.hasBusyWindow() && mAttached && mWindowVisible && !mLazyMode;
         if (!wanted) {
             if (mBusyAnimator != null) {
                 mBusyAnimator.cancel();
@@ -732,7 +745,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         private void drawBusyRims(@NonNull Canvas canvas) {
             if (!hasBusyWindow()) return;
             float density = getResources().getDisplayMetrics().density;
-            float phase = ShellActivityPulse.phase(busyElapsedMs());
+            // Lazy mode holds the breath at its peak rather than animating through it: a lit rim
+            // still says "working", and it costs one frame instead of sixty a second.
+            float phase = mLazyRim ? 0f : ShellActivityPulse.phase(busyElapsedMs());
             drawRimPass(canvas, density, mBusy, mBusyColor,
                 ShellActivityPulse.rimWeight(phase), 0f);
             // The attention rim breathes on its own curve — brighter floor, sharper peak — and carries
@@ -782,6 +797,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             return mGlowFilter;
         }
 
+        /** Holds the rim at its lit peak instead of breathing it. Set by the host's lazy mode. */
+        void setLazyRim(boolean lazy) {
+            if (mLazyRim == lazy) return;
+            mLazyRim = lazy;
+            invalidate();
+        }
+
+        private boolean mLazyRim;
+
         private long busyElapsedMs() {
             long now = android.os.SystemClock.uptimeMillis();
             if (mBusyStartMs == 0L) mBusyStartMs = now;
@@ -827,6 +851,16 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         return true;
     }
 
+    /**
+     * The selected tab's view, so a surface can anchor itself to the window it belongs to. Null
+     * before the row is populated or while nothing is selected.
+     */
+    @Nullable
+    public View selectedTabView() {
+        if (mSelectedIndex < 0 || mSelectedIndex >= mTabs.getChildCount()) return null;
+        return mTabs.getChildAt(mSelectedIndex);
+    }
+
     /** Process is represented only by a Nerd Font glyph; visible text is the compact directory. */
     @NonNull
     public static WindowItem itemFor(@Nullable TerminalSession session, int index) {
@@ -839,6 +873,18 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         String spokenProcess = process == null ? "terminal" : process;
         return new WindowItem(processGlyph(process) + " " + directory,
             spokenProcess + " in " + directory);
+    }
+
+    /**
+     * Build an item for a window the user has named. The name replaces the derived text but keeps
+     * the live process glyph, so a named tab still shows at a glance what is running in it — the
+     * name says which window it is, the glyph says what it is doing.
+     */
+    @NonNull
+    public static WindowItem itemForNamed(@NonNull String name, @Nullable String processName) {
+        String spokenProcess = processName == null ? "terminal" : processName;
+        return new WindowItem(processGlyph(processName) + " " + name,
+            name + ", " + spokenProcess);
     }
 
     /**
@@ -948,8 +994,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         }
     }
 
+    /** Public so a named tab can keep the process glyph the derived label would have picked. */
     @Nullable
-    private static String processName(@Nullable String title) {
+    public static String processName(@Nullable String title) {
         String cleaned = clean(title);
         if (cleaned == null) return null;
         int inDirectory = cleaned.indexOf(" in <");

@@ -1372,12 +1372,35 @@ public class Keyboard2View extends View
     return sublabel ? tc.subLabelColor : tc.labelColor;
   }
 
+  /**
+   * Keeps a latched Shift visible on caps that Ctrl or Alt already turned into key events.
+   *
+   * <p>Modifiers apply in ordinal order, so Ctrl and Alt run before Shift and
+   * [KeyModifier.turn_into_keyevent] has replaced the Char value by the time Shift is applied;
+   * Shift only upper-cases Char and String values, so Ctrl+Alt+Shift used to draw the same
+   * lower-case caps as Ctrl+Alt. Only the drawn symbol changes here: the key event the cap sends
+   * is untouched, because the shifted stroke rides in the event's meta state.
+   */
+  private KeyValue shiftedKeyeventLabel(KeyValue kv)
+  {
+    if (kv.getKind() != KeyValue.Kind.Keyevent
+        || _mods == null || !_mods.has(KeyValue.Modifier.SHIFT))
+      return kv;
+    String symbol = kv.getString();
+    if (symbol.length() != 1)
+      return kv;
+    char c = symbol.charAt(0);
+    char upper = Character.toUpperCase(c);
+    return (upper == c) ? kv : kv.withSymbol(String.valueOf(upper));
+  }
+
   private void drawLabel(Canvas canvas, KeyValue kv, float x, float y,
       float keyH, boolean isKeyDown, Theme.Computed.Key tc, Integer colorOverride)
   {
     kv = modifyKey(kv, _mods);
     if (kv == null)
       return;
+    kv = shiftedKeyeventLabel(kv);
     float textSize = scaleTextSize(kv, true);
     int color = colorOverride == null ? labelColor(kv, isKeyDown, false, tc) : colorOverride;
     Paint p = tc.label_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT), color, textSize);
@@ -1393,6 +1416,7 @@ public class Keyboard2View extends View
     kv = modifyKey(kv, _mods);
     if (kv == null)
       return;
+    kv = shiftedKeyeventLabel(kv);
     float textSize = scaleTextSize(kv, false);
     int color = colorOverride == null ? labelColor(kv, isKeyDown, true, tc) : colorOverride;
     Paint p = tc.sublabel_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT), color, textSize, a);

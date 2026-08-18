@@ -95,6 +95,6 @@ public class CommandPaletteCaptureModelTest {
         assertEquals(stroke, TerminalKeyBindingResolver.normalizeSequenceSpec(stroke));
         assertEquals("map ctrl+alt+w app.launch org.mozilla.firefox",
             TerminalBindingConfigWriter.formatMapLine(stroke, "app.launch",
-                java.util.Collections.singletonList("org.mozilla.firefox")));
+                java.util.Collections.singletonList("org.mozilla.firefox"), null));
     }
 }

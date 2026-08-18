@@ -47,6 +47,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
     private TopPaneSlotMode mMode = TopPaneSlotMode.CLOCK_ONLY;
     private int mPinnedCount;
+    private float mFullExpansionProgress;
 
     public TopPaneWidgetSlot(Context context) {
         this(context, null);
@@ -56,6 +57,34 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         super(context, attrs);
         setClipChildren(true);
         setClipToPadding(true);
+        setWillNotDraw(false);
+    }
+
+    private final android.graphics.Paint mRuleExtensionPaint = new android.graphics.Paint();
+
+    /**
+     * The clock's own date hairline stops at its view edges, one gutter short of the pane. These
+     * two segments carry it to the slot's edges so the line reads as spanning the whole plane.
+     */
+    @Override
+    protected void dispatchDraw(@NonNull android.graphics.Canvas canvas) {
+        super.dispatchDraw(canvas);
+        TerminalClockWidget clock = mClock;
+        if (clock == null || clock.getVisibility() != VISIBLE || clock.getAlpha() <= 0f) return;
+        float ruleY = clock.fullRuleCenterYPx();
+        if (ruleY < 0f) return;
+        float y = clock.getTop() + clock.getTranslationY() + ruleY;
+        float half = clock.fullRuleHalfThicknessPx();
+        int color = clock.fullRuleColor();
+        mRuleExtensionPaint.setColor(color);
+        mRuleExtensionPaint.setAlpha(Math.round(android.graphics.Color.alpha(color)
+            * clock.getAlpha()));
+        float left = clock.getLeft() + clock.getTranslationX();
+        float right = left + clock.getWidth();
+        if (left > 0f) canvas.drawRect(0f, y - half, left, y + half, mRuleExtensionPaint);
+        if (right < getWidth()) {
+            canvas.drawRect(right, y - half, getWidth(), y + half, mRuleExtensionPaint);
+        }
     }
 
     @Override
@@ -78,6 +107,17 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     public TopPaneSlotMode getSlotMode() {
         return mMode;
     }
+
+    /** One controller-owned channel; child bounds are pure functions of this value. */
+    public void setFullExpansionProgress(float progress) {
+        float clamped = Float.isFinite(progress) ? Math.max(0f, Math.min(1f, progress)) : 0f;
+        if (Math.abs(clamped - mFullExpansionProgress) < .0001f) return;
+        mFullExpansionProgress = clamped;
+        if (mClock != null) mClock.setFullPresentationProgress(clamped);
+        requestLayout();
+    }
+
+    public float getFullExpansionProgress() { return mFullExpansionProgress; }
 
     @Override
     protected void onAttachedToWindow() {
@@ -127,6 +167,19 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         }
 
         boolean modeChanged = mode != mMode || pinnedCount != mPinnedCount;
+        if (mFullExpansionProgress > 0f) {
+            // FULL owns every child bound. A feed update may change the mode, but no stale child
+            // animator is allowed to keep writing position while the row policy recomputes it.
+            if (mClockFade != null) mClockFade.cancel();
+            mClockFade = null;
+            mClock.animate().cancel();
+            mClock.setAlpha(1f);
+            mClock.setTranslationX(0f);
+            mClock.setTranslationY(0f);
+            if (mNotifications != null) mNotifications.animate().cancel();
+            if (mMedia != null) mMedia.animate().cancel();
+            animate = false;
+        }
         mMode = mode;
         mPinnedCount = pinnedCount;
         applyClockForm(mode.clockForm(pinnedCount), animate);
@@ -148,12 +201,15 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
             clock.setForm(form);
             return;
         }
+        // The update listeners keep the slot's hairline extensions tracking the clock's alpha.
         mClockFade = clock.animate().alpha(0f).setDuration(MEDIA_TRANSITION_MS / 2)
             .setInterpolator(INTERPOLATOR)
+            .setUpdateListener(animation -> invalidate())
             .withEndAction(() -> {
                 clock.setForm(form);
                 mClockFade = clock.animate().alpha(1f).setDuration(MEDIA_TRANSITION_MS / 2)
-                    .setInterpolator(INTERPOLATOR);
+                    .setInterpolator(INTERPOLATOR)
+                    .setUpdateListener(animation -> invalidate());
                 mClockFade.start();
             });
         mClockFade.start();
@@ -239,7 +295,10 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
         mNotificationBounds.setEmpty();
         mMediaBounds.setEmpty();
-        if (mMode == TopPaneSlotMode.CLOCK_ONLY) return;
+        if (mMode == TopPaneSlotMode.CLOCK_ONLY) {
+            applyFullRowPolicy(width, height, gutter, gap);
+            return;
+        }
 
         if (stacked) {
             int stackHeight = Math.min(height, Math.round(dp(STACK_HEIGHT_DP)));
@@ -249,6 +308,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
                 mNotifications.setHeaderInsetStart(clockWidth + gap);
                 measureExact(mNotifications, mNotificationBounds);
             }
+            applyFullRowPolicy(width, height, gutter, gap);
             return;
         }
 
@@ -290,9 +350,40 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         if (contentWidth <= 0) {
             mNotificationBounds.setEmpty();
             mMediaBounds.setEmpty();
+            applyFullRowPolicy(width, height, gutter, gap);
             return;
         }
         if (mNotifications != null && !mNotificationBounds.isEmpty()) {
+            measureExact(mNotifications, mNotificationBounds);
+        }
+        if (mMedia != null && !mMediaBounds.isEmpty()) measureExact(mMedia, mMediaBounds);
+        applyFullRowPolicy(width, height, gutter, gap);
+    }
+
+    private void applyFullRowPolicy(int width, int height, int gutter, int gap) {
+        if (mClock == null) return;
+        boolean stacked = mMode.showsNotifications()
+            && mPinnedCount >= TopPaneSlotMode.MAX_PINNED;
+        int normalHeaderInset = stacked ? mClockBounds.width() + gap : 0;
+        int clockDesired = Math.max(1, Math.round(mClock.contentWidth()));
+        int notificationDesired = mNotificationBounds.isEmpty() ? 0
+            : Math.max(Math.round(dp(112f)), Math.min(mNotificationBounds.width(),
+                Math.round(width * .42f)));
+        int mediaDesired = mMediaBounds.isEmpty() ? 0
+            : Math.max(Math.round(dp(112f)), Math.min(mMediaBounds.width(),
+                Math.round(width * .42f)));
+        TopPaneFullRowPolicy.Result result = TopPaneFullRowPolicy.calculate(mMode, mPinnedCount,
+            width, height, gutter, gap, clockDesired, notificationDesired, mediaDesired,
+            new Rect(mClockBounds), new Rect(mNotificationBounds), new Rect(mMediaBounds),
+            mFullExpansionProgress, getLayoutDirection() == LAYOUT_DIRECTION_RTL);
+        mClockBounds.set(result.clock);
+        mNotificationBounds.set(result.notifications);
+        mMediaBounds.set(result.media);
+        measureExact(mClock, mClockBounds);
+        if (mNotifications != null && !mNotificationBounds.isEmpty()) {
+            float p = Float.isFinite(mFullExpansionProgress)
+                ? Math.max(0f, Math.min(1f, mFullExpansionProgress)) : 0f;
+            mNotifications.setHeaderInsetStart(normalHeaderInset * (1f - p));
             measureExact(mNotifications, mNotificationBounds);
         }
         if (mMedia != null && !mMediaBounds.isEmpty()) measureExact(mMedia, mMediaBounds);

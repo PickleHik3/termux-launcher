@@ -2,7 +2,6 @@ package com.termux.app.fragments.settings;
 
 import android.content.Context;
 import android.os.Bundle;
-import android.os.Environment;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
@@ -13,7 +12,6 @@ import com.termux.app.models.UserAction;
 import com.termux.shared.activities.ReportActivity;
 import com.termux.shared.android.AndroidUtils;
 import com.termux.shared.android.PackageUtils;
-import com.termux.shared.file.FileUtils;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.models.ReportInfo;
 import com.termux.shared.termux.TermuxConstants;

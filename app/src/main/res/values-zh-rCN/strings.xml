@@ -3,11 +3,7 @@
 <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
 <!ENTITY TERMUX_APP_NAME "Termux:Launcher">
 <!ENTITY TERMUX_API_APP_NAME "Termux:API">
-<!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
-<!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
 <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
-<!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
-<!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
 ]>
 <!-- Chinese translation by zongou, yuxue0927 and hanxinhao000 --><resources>
     <string name="application_name">&TERMUX_APP_NAME;</string>
@@ -50,23 +46,16 @@
     <string name="action_share_transcript">分享终端抄本</string>
     <string name="title_share_transcript">终端抄本</string>
     <string name="title_share_transcript_with">发送文本到:</string>
-    <string name="action_share_selected_text">分享所选文本</string>
     <string name="title_share_selected_text">终端文本</string>
     <string name="title_share_selected_text_with">将选定的文本发送到:</string>
-    <string name="action_autofill_password">自动填充密码</string>
     <string name="action_reset_terminal">重置</string>
     <string name="msg_terminal_reset">终端重置.</string>
     <string name="action_kill_process">杀死会话 (%d)</string>
     <string name="title_confirm_kill_process">确定杀死这个会话吗?</string>
     <string name="action_style_terminal">样式</string>
-    <string name="action_toggle_keep_screen_on">保持屏幕常亮</string>
-    <string name="action_open_help">帮助</string>
     <string name="action_open_settings">设置</string>
-    <string name="action_report_issue">报告问题</string>
     <string name="msg_generating_report">生成报告</string>
     <string name="msg_add_termux_debug_info">添加 &TERMUX_APP_NAME; 调试信息以报告？</string>
-    <string name="error_styling_not_installed">未安装 &TERMUX_STYLING_APP_NAME; 插件.</string>
-    <string name="action_styling_install">安装</string>
     <!-- Termux Notifications -->
     <string name="notification_action_exit">退出</string>
     <string name="notification_action_wake_lock">开启唤醒锁</string>
@@ -92,8 +81,6 @@
     <!-- Termux Settings -->
     <string name="title_activity_termux_settings">&TERMUX_APP_NAME; 设置</string>
     <!-- Termux App Preferences -->
-    <string name="termux_preferences_title">&TERMUX_APP_NAME;</string>
-    <string name="termux_preferences_summary">配置文件在 &TERMUX_APP_NAME; app</string>
     <!-- Debugging Preferences -->
     <string name="termux_debugging_preferences_title">调试</string>
     <string name="termux_debugging_preferences_summary">调试首选项</string>
@@ -114,8 +101,6 @@
     <string name="termux_crash_report_notifications_enabled_off">禁用崩溃报告的通知。</string>
     <string name="termux_crash_report_notifications_enabled_on">显示崩溃报告的通知。（默认）</string>
     <!-- Terminal IO Preferences -->
-    <string name="termux_terminal_io_preferences_title">终端输入/输出</string>
-    <string name="termux_terminal_io_preferences_summary">终端 I/O 的首选项</string>
     <!-- Keyboard Category -->
     <string name="termux_keyboard_header">键盘</string>
     <!-- Soft Keyboard -->
@@ -127,8 +112,6 @@
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">即使连接了硬件键盘，也将启用软键盘。 （默认）</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">只有在没有连接硬件键盘时才会启用软键盘。</string>
     <!-- Terminal View Preferences -->
-    <string name="termux_terminal_view_preferences_title">终端视图</string>
-    <string name="termux_terminal_view_preferences_summary">终端视图的首选项</string>
     <!-- View Category -->
     <string name="termux_terminal_view_view_header">视图</string>
     <!-- Terminal View Margin Adjustment -->
@@ -140,32 +123,12 @@
     <string name="termux_terminal_view_activity_remove_off">一旦关闭所有终端会话，&TERMUX_APP_NAME; 将关闭并在最近的应用程序中保持可见。</string>
     <string name="termux_terminal_view_activity_remove_on">&TERMUX_APP_NAME; 如果没有活动的终端会话，将关闭并从最近的应用程序中删除自己。 （默认）</string>
     <!-- Termux:API App Preferences -->
-    <string name="termux_api_preferences_title">&TERMUX_API_APP_NAME;</string>
-    <string name="termux_api_preferences_summary">&TERMUX_API_APP_NAME; 应用偏好</string>
     <!-- Termux:Float App Preferences -->
-    <string name="termux_float_preferences_title">&TERMUX_FLOAT_APP_NAME;</string>
-    <string name="termux_float_preferences_summary">&TERMUX_FLOAT_APP_NAME; app 的首选项</string>
     <!-- Termux:Tasker App Preferences -->
-    <string name="termux_tasker_preferences_title">&TERMUX_TASKER_APP_NAME;</string>
-    <string name="termux_tasker_preferences_summary">&TERMUX_TASKER_APP_NAME; app 的首选项</string>
     <!-- Termux:Widget App Preferences -->
-    <string name="termux_widget_preferences_title">&TERMUX_WIDGET_APP_NAME;</string>
-    <string name="termux_widget_preferences_summary">&TERMUX_WIDGET_APP_NAME; app 的首选项</string>
     <!-- About Preference -->
-    <string name="about_preference_title">关于</string>
     <!-- Donate Preference -->
     <string name="donate_preference_title">捐赠</string>
-    <string name="action_font_and_color">字体和配色</string>
     <string name="action_set_background_image">设置背景图片</string>
-    <string name="error_background_image_loading_failed">无法加载背景图片，正在设置背景颜色。</string>
-    <string name="error_background_image_loading_from_gallery_failed">无法加载图片，尝试使用其他的图片。</string>
-    <string name="termux_background_header">背景</string>
-    <string name="title_restore_background_image">检测到背景图片，你想要恢复它吗？</string>
-    <string name="termux_style_preferences_summary">&TERMUX_APP_NAME; 的自定义外观设置</string>
     <string name="termux_style_preferences_title">&TERMUX_APP_NAME; 外观</string>
-    <string name="termux_background_image_enabled_title">显示背景图片</string>
-    <string name="termux_background_image_enabled_on">背景图片已启用。</string>
-    <string name="termux_background_image_enabled_off">背景图像已被禁用。要启用它，请确保存在适当的纵向和横向文件。如果要设置新的背景图片，请通过长按终端从上下文菜单中进行设置。 （默认）</string>
-    <string name="termux_monet_background_enabled_title">Material 背景（不稳定）</string>
-    <string name="termux_monet_background_enabled_off">终端 Material 背景将被禁用。将终端背景变为 Material（默认）</string>
 </resources>

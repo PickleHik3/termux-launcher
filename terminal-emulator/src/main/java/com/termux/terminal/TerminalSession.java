@@ -29,6 +29,14 @@ import java.util.UUID;
  */
 public final class TerminalSession extends TerminalOutput {
 
+    /** Per-session instrumentation seam; returning true consumes native resizing in tests. */
+    public interface SizeUpdateObserver {
+        boolean onUpdateSize(int columns, int rows, int cellWidthPixels, int cellHeightPixels,
+                             boolean keepCursorAtBottom);
+    }
+
+    private SizeUpdateObserver mSizeUpdateObserver;
+
     private static final int MSG_NEW_INPUT = 1;
 
     private static final int MSG_PROCESS_EXITED = 4;
@@ -133,6 +141,8 @@ public final class TerminalSession extends TerminalOutput {
     /** Inform the pty of a new size with an optional bottom-anchored row expansion. */
     public void updateSize(int columns, int rows, int cellWidthPixels, int cellHeightPixels,
                            boolean keepCursorAtBottom) {
+        if (mSizeUpdateObserver != null && mSizeUpdateObserver.onUpdateSize(columns, rows,
+            cellWidthPixels, cellHeightPixels, keepCursorAtBottom)) return;
         if (mEmulator == null) {
             initializeEmulator(columns, rows, cellWidthPixels, cellHeightPixels);
         } else {
@@ -140,6 +150,10 @@ public final class TerminalSession extends TerminalOutput {
             mEmulator.resize(columns, rows, cellWidthPixels, cellHeightPixels,
                 keepCursorAtBottom);
         }
+    }
+
+    public void setSizeUpdateObserverForTests(SizeUpdateObserver observer) {
+        mSizeUpdateObserver = observer;
     }
 
     /**

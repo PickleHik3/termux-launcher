@@ -52,6 +52,55 @@ public class LauncherCtlNotificationStoreTest {
     }
 
     @Test
+    public void jsonl_rotatesOnceItPassesTheByteCeiling() throws Exception {
+        File jsonl = LauncherCtlStorage.getNotificationsJsonlFile();
+        jsonl.getParentFile().mkdirs();
+        byte[] filler = new byte[(int) LauncherCtlNotificationStore.MAX_JSONL_BYTES + 1];
+        java.util.Arrays.fill(filler, (byte) 'x');
+        Files.write(jsonl.toPath(), filler);
+
+        LauncherCtlNotificationStore store = LauncherCtlNotificationStore.getInstance();
+        store.insertEvent(event("posted", 1000L, "pkg1", "A", ""));
+
+        File rotated = new File(jsonl.getParentFile(), jsonl.getName() + ".1");
+        assertTrue(rotated.isFile());
+        assertEquals(filler.length, rotated.length());
+        // The live stream restarts from the event that triggered the rotation.
+        assertEquals(1, Files.readAllLines(jsonl.toPath(), StandardCharsets.UTF_8).size());
+    }
+
+    @Test
+    public void jsonl_keepsAtMostOneRotation() throws Exception {
+        File jsonl = LauncherCtlStorage.getNotificationsJsonlFile();
+        jsonl.getParentFile().mkdirs();
+        byte[] filler = new byte[(int) LauncherCtlNotificationStore.MAX_JSONL_BYTES + 1];
+        java.util.Arrays.fill(filler, (byte) 'x');
+        LauncherCtlNotificationStore store = LauncherCtlNotificationStore.getInstance();
+
+        Files.write(jsonl.toPath(), filler);
+        store.insertEvent(event("posted", 1000L, "pkg1", "A", ""));
+        Files.write(jsonl.toPath(), filler);
+        store.insertEvent(event("posted", 2000L, "pkg2", "B", ""));
+
+        File[] streams = jsonl.getParentFile().listFiles((dir, name) -> name.startsWith(jsonl.getName()));
+        assertEquals(2, streams == null ? 0 : streams.length);
+    }
+
+    @Test
+    public void clearAll_removesRowsAndEveryStream() throws Exception {
+        LauncherCtlNotificationStore store = LauncherCtlNotificationStore.getInstance();
+        store.insertEvent(event("posted", 1000L, "pkg1", "A", ""));
+        File jsonl = LauncherCtlStorage.getNotificationsJsonlFile();
+        assertTrue(jsonl.isFile());
+
+        store.clearAll();
+
+        assertTrue(store.queryRecent(10).isEmpty());
+        assertTrue(!jsonl.exists());
+        assertTrue(!new File(jsonl.getParentFile(), jsonl.getName() + ".1").exists());
+    }
+
+    @Test
     public void queryRecent_returnsEventsInReverseChronologicalOrder() throws Exception {
         LauncherCtlNotificationStore store = LauncherCtlNotificationStore.getInstance();
         store.insertEvent(event("posted", 1000L, "pkg1", "A", ""));

@@ -65,10 +65,15 @@ public class ApiSecuritySeamsTest {
         JSONObject endpoint = server.endpointSettings(context);
         port = endpoint.getInt("activePort");
         token = endpoint.getString("token");
+
+        // importModel scopes local paths to the Termux home directory, which is not a real
+        // writable path on the test JVM; let fixtures import from the JVM temp dir instead.
+        TaiManager.setImportPathAllowedRootForTesting(System.getProperty("java.io.tmpdir"));
     }
 
     @After
     public void tearDown() throws Exception {
+        TaiManager.setImportPathAllowedRootForTesting(null);
         if (server != null) server.stop();
 
         Field taiInstance = TaiManager.class.getDeclaredField("instance");
@@ -121,13 +126,54 @@ public class ApiSecuritySeamsTest {
     }
 
     @Test
-    public void corsOrigin_presentButAuthStillGates() throws Exception {
+    public void corsOrigin_grantedToLoopbackPagesAndAuthStillGates() throws Exception {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        LauncherCtlApiServer.writeResponse(output, LauncherCtlApiServer.unauthorizedResponse());
-        String response = output.toString(StandardCharsets.UTF_8.name());
+        LauncherCtlApiServer.writeResponse(output, LauncherCtlApiServer.unauthorizedResponse(),
+            "http://127.0.0.1:3000");
+        String response = output.toString(StandardCharsets.UTF_8.name()).toLowerCase();
 
-        assertTrue(response.startsWith("HTTP/1.1 401 Unauthorized"));
-        assertTrue(response.toLowerCase().contains("access-control-allow-origin: *"));
+        assertTrue(response.startsWith("http/1.1 401 unauthorized"));
+        assertTrue(response.contains("access-control-allow-origin: http://127.0.0.1:3000"));
+        assertTrue(response.contains("vary: origin"));
+    }
+
+    @Test
+    public void corsOrigin_absentForNonBrowserCallers() throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        LauncherCtlApiServer.writeResponse(output, LauncherCtlApiServer.unauthorizedResponse(), null);
+        String response = output.toString(StandardCharsets.UTF_8.name()).toLowerCase();
+
+        assertFalse(response.contains("access-control-allow-origin"));
+    }
+
+    @Test
+    public void origins_onlyLoopbackPagesMayActAsBrowserClients() {
+        // No Origin at all is a non-browser caller; the bearer token governs those.
+        assertTrue(LauncherCtlApiServer.isAllowedOrigin(null));
+        assertTrue(LauncherCtlApiServer.isAllowedOrigin("http://localhost:8080"));
+        assertTrue(LauncherCtlApiServer.isAllowedOrigin("http://127.0.0.1:11434"));
+        assertTrue(LauncherCtlApiServer.isAllowedOrigin("https://[::1]:443"));
+
+        assertFalse(LauncherCtlApiServer.isAllowedOrigin("https://evil.example"));
+        assertFalse(LauncherCtlApiServer.isAllowedOrigin("http://127.0.0.1.evil.example"));
+        assertFalse(LauncherCtlApiServer.isAllowedOrigin("http://localhost.evil.example"));
+        assertFalse(LauncherCtlApiServer.isAllowedOrigin("null"));
+        assertFalse(LauncherCtlApiServer.isAllowedOrigin("file://"));
+    }
+
+    @Test
+    public void hosts_rebindingNamesAreRefused() {
+        assertTrue(LauncherCtlApiServer.isAllowedHost(null, TaiSettings.BIND_MODE_LOCALHOST));
+        assertTrue(LauncherCtlApiServer.isAllowedHost("127.0.0.1:8080", TaiSettings.BIND_MODE_LOCALHOST));
+        assertTrue(LauncherCtlApiServer.isAllowedHost("localhost", TaiSettings.BIND_MODE_LOCALHOST));
+        assertTrue(LauncherCtlApiServer.isAllowedHost("[::1]:8080", TaiSettings.BIND_MODE_LOCALHOST));
+
+        // A hostname resolving to loopback is exactly what a rebinding attack looks like.
+        assertFalse(LauncherCtlApiServer.isAllowedHost("rebind.example:8080", TaiSettings.BIND_MODE_LOCALHOST));
+        // The LAN listener answers on its own numeric address, but still not on a name.
+        assertTrue(LauncherCtlApiServer.isAllowedHost("192.168.1.20:8080", TaiSettings.BIND_MODE_LAN));
+        assertFalse(LauncherCtlApiServer.isAllowedHost("192.168.1.20:8080", TaiSettings.BIND_MODE_LOCALHOST));
+        assertFalse(LauncherCtlApiServer.isAllowedHost("rebind.example:8080", TaiSettings.BIND_MODE_LAN));
     }
 
     @Test

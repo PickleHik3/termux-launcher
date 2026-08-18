@@ -12,6 +12,18 @@ public final class AccessoryStackLayoutPolicy {
         return toolbar + apps + az + gap;
     }
 
+    /** Applies the three independent row switches before summing the explicitly-sized stack. */
+    public static int computeCombinedHeight(boolean appsRowEnabled, boolean azRowEnabled,
+                                            boolean extraKeysRowEnabled, int appsBarHeightPx,
+                                            int azRowHeightPx, int extraKeysRowHeightPx,
+                                            int appsAzGapPx) {
+        int apps = appsRowEnabled ? appsBarHeightPx : 0;
+        int az = azRowEnabled ? azRowHeightPx : 0;
+        int extraKeys = extraKeysRowEnabled ? extraKeysRowHeightPx : 0;
+        int gap = appsRowEnabled && azRowEnabled ? appsAzGapPx : 0;
+        return computeCombinedHeight(extraKeys, apps, az, gap);
+    }
+
     public static int computeAppsBarInterRowGapPx(boolean azEnabled, float density, float iconScale) {
         if (!azEnabled)
             return 0;

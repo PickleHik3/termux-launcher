@@ -799,14 +799,37 @@ public final class TaiModelDownloader {
         return data;
     }
 
+    private static final int MAX_REDIRECTS = 5;
+
+    /**
+     * Follows redirects manually instead of via {@code setInstanceFollowRedirects(true)} so the
+     * Hugging Face bearer token is re-evaluated per hop. Auto-follow reattaches every outgoing
+     * header including Authorization, so a redirect to a non-Hugging-Face host (a CDN, a
+     * compromised mirror) would otherwise leak the token off huggingface.co.
+     */
     private HttpURLConnection open(String url, @Nullable String authToken, long offset) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-        connection.setConnectTimeout(15_000);
-        connection.setReadTimeout(30_000);
-        connection.setInstanceFollowRedirects(true);
-        if (offset > 0L) connection.setRequestProperty("Range", "bytes=" + offset + "-");
-        if (shouldAttachBearerToken(url, authToken)) connection.setRequestProperty("Authorization", "Bearer " + authToken.trim());
-        return connection;
+        String currentUrl = url;
+        for (int redirect = 0; redirect < MAX_REDIRECTS; redirect++) {
+            HttpURLConnection connection = (HttpURLConnection) new URL(currentUrl).openConnection();
+            connection.setConnectTimeout(15_000);
+            connection.setReadTimeout(30_000);
+            connection.setInstanceFollowRedirects(false);
+            if (offset > 0L) connection.setRequestProperty("Range", "bytes=" + offset + "-");
+            if (shouldAttachBearerToken(currentUrl, authToken)) connection.setRequestProperty("Authorization", "Bearer " + authToken.trim());
+            int status = connection.getResponseCode();
+            if (status == HttpURLConnection.HTTP_MOVED_PERM || status == HttpURLConnection.HTTP_MOVED_TEMP
+                    || status == HttpURLConnection.HTTP_SEE_OTHER || status == 307 || status == 308) {
+                String location = connection.getHeaderField("Location");
+                connection.disconnect();
+                if (location == null || location.isEmpty()) {
+                    throw new java.io.IOException("Redirect from " + currentUrl + " carried no Location header");
+                }
+                currentUrl = new URL(new URL(currentUrl), location).toString();
+                continue;
+            }
+            return connection;
+        }
+        throw new java.io.IOException("Too many redirects resolving " + url);
     }
 
     private String sha256(File file) throws Exception {

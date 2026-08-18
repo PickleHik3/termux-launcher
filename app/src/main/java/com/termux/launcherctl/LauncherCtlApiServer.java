@@ -62,7 +62,7 @@ public class LauncherCtlApiServer {
     private static final String ENDPOINT_FILE_PATH = LAUNCHERCTL_DIR_PATH + "/endpoint";
     private static final String TAI_BIN_PATH = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/tai";
     private static final String LAUNCHERCTL_BIN_PATH = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/launcherctl";
-    static final String LAN_WARNING = "LAN exposure allows any device on your network to reach this endpoint when the token is known.";
+    static final String LAN_WARNING = TaiSettings.LAN_WARNING;
     static final String HEALTH_BODY = "Ollama is running";
 
     private static final int MAX_REQUEST_LINE_BYTES = 4096;
@@ -82,6 +82,9 @@ public class LauncherCtlApiServer {
     private volatile boolean starting;
     private volatile String token;
     private volatile boolean authRequired = true;
+    private volatile String bindMode = TaiSettings.BIND_MODE_LOCALHOST;
+    private volatile long lanSessionDeadlineMs;
+    private volatile boolean lanSessionExpiring;
     private volatile int port;
     private ServerSocket serverSocket;
     private Thread acceptThread;
@@ -107,8 +110,14 @@ public class LauncherCtlApiServer {
             initializeRateLimiters();
             appContext = context.getApplicationContext();
             TaiSettings settings = new TaiSettings(appContext);
+            expireLanSessionIfStale(settings);
             token = settings.getOrCreateApiToken();
             String bindMode = settings.getApiBindMode();
+            this.bindMode = bindMode;
+            long lanStartedAt = settings.getLanSessionStartedAt();
+            lanSessionDeadlineMs = TaiSettings.BIND_MODE_LAN.equals(bindMode) && lanStartedAt > 0
+                ? lanStartedAt + TaiSettings.LAN_SESSION_MAX_MS : 0L;
+            lanSessionExpiring = false;
             authRequired = effectiveAuthRequired(settings);
             serverSocket = createLoopbackServerSocket(settings.getApiPort(), bindMode);
             port = serverSocket.getLocalPort();
@@ -123,6 +132,51 @@ public class LauncherCtlApiServer {
         } finally {
             starting = false;
         }
+    }
+
+    /**
+     * Drops an expired LAN exposure back to loopback and burns the token it was reachable with.
+     *
+     * <p>Rotating matters as much as unbinding: the plaintext token may already have been captured
+     * off the network, and a loopback listener that still honours it is reachable from every other
+     * app on the device.
+     *
+     * @return true when a LAN session was expired by this call.
+     */
+    private boolean expireLanSessionIfStale(@NonNull TaiSettings settings) {
+        if (!settings.isLanSessionExpired()) return false;
+        settings.setApiBindMode(TaiSettings.BIND_MODE_LOCALHOST);
+        settings.rotateApiToken(random);
+        Logger.logInfo(LOG_TAG, "LAN exposure window elapsed; rebound to loopback and rotated the API token");
+        return true;
+    }
+
+    /**
+     * Tears the LAN listener down off the request path.
+     *
+     * <p>The expiry is noticed while serving a request, but a restart cannot run on the thread that
+     * is answering one: {@link #stop()} joins the accept loop this handler was dispatched from.
+     * Hand it to a separate thread and let the in-flight request finish with its 403.
+     */
+    private void beginLanSessionExpiry() {
+        if (lanSessionExpiring) return;
+        synchronized (this) {
+            if (lanSessionExpiring) return;
+            lanSessionExpiring = true;
+        }
+        final Context context = appContext;
+        Thread expiry = new Thread(() -> {
+            try {
+                if (context == null) return;
+                // applyEndpointSettings rebinds without tearing down the client executor, and
+                // start() runs expireLanSessionIfStale, which is what actually rotates the token.
+                applyEndpointSettings(context);
+            } catch (Exception e) {
+                Logger.logErrorExtended(LOG_TAG, "Failed to expire LAN session: " + e.getMessage());
+            }
+        }, "launcherctl-lan-expiry");
+        expiry.setDaemon(true);
+        expiry.start();
     }
 
     /**
@@ -260,20 +314,46 @@ public class LauncherCtlApiServer {
                 return;
             }
 
-            // CORS preflight and the health probe stay reachable without a token so browser
+            if (lanSessionDeadlineMs > 0 && System.currentTimeMillis() > lanSessionDeadlineMs) {
+                beginLanSessionExpiry();
+                writeResponse(output, forbiddenResponse("lan_session_expired",
+                    "The LAN exposure window has ended; re-enable LAN mode and collect the new token"));
+                return;
+            }
+
+            // A request that names a host we did not bind is a DNS rebinding attempt: the browser
+            // resolved an attacker-controlled name to a loopback/LAN address and is now speaking to
+            // us with the attacker's origin. Reject before any routing or auth work happens.
+            if (!isAllowedHost(request.headers.get("host"), bindMode)) {
+                writeResponse(output, forbiddenResponse("forbidden_host",
+                    "Request Host is not a bound address for this server"));
+                return;
+            }
+
+            // Only pages served from loopback may act as browser clients. Anything else is a remote
+            // site reaching into the device, so it gets neither a CORS grant nor a route -- the
+            // token cannot protect endpoints the browser attaches ambient authority to.
+            String origin = request.headers.get("origin");
+            if (!isAllowedOrigin(origin)) {
+                writeResponse(output, forbiddenResponse("forbidden_origin",
+                    "Cross-origin browser requests are not accepted"));
+                return;
+            }
+
+            // CORS preflight and the health probe stay reachable without a token so local browser
             // clients and stock Ollama tooling can discover the server.
             if ("OPTIONS".equals(request.method)) {
-                writeResponse(output, corsPreflightResponse());
+                writeResponse(output, corsPreflightResponse(), origin);
                 return;
             }
             if (isHealthPath(request)) {
-                writeResponse(output, healthResponse("HEAD".equals(request.method)));
+                writeResponse(output, healthResponse("HEAD".equals(request.method)), origin);
                 return;
             }
 
             if (authRequired && !isAuthorized(request.headers)) {
                 writeResponse(output, request.path.startsWith("/api/")
-                    ? ollamaUnauthorizedResponse() : unauthorizedResponse());
+                    ? ollamaUnauthorizedResponse() : unauthorizedResponse(), origin);
                 return;
             }
 
@@ -284,12 +364,12 @@ public class LauncherCtlApiServer {
                 rateLimitError.put("_statusCode", 429);
                 HttpResponse rateLimitResponse = request.path.startsWith("/api/")
                     ? ollamaJsonResponse(rateLimitError) : jsonResponse(rateLimitError);
-                writeResponse(output, withRateLimitHeaders(rateLimitResponse, limiter, retryAfter));
+                writeResponse(output, withRateLimitHeaders(rateLimitResponse, limiter, retryAfter), origin);
                 return;
             }
 
             HttpResponse response = routeRequest(context, request);
-            writeResponse(output, response);
+            writeResponse(output, response, origin);
 
         } catch (Exception e) {
             Logger.logErrorExtended(LOG_TAG, "Request handling failed: " + e.getMessage());
@@ -303,6 +383,97 @@ public class LauncherCtlApiServer {
     private static HttpResponse healthResponse(boolean headOnly) {
         byte[] body = headOnly ? new byte[0] : HEALTH_BODY.getBytes(StandardCharsets.UTF_8);
         return new HttpResponse(200, "text/plain; charset=utf-8", body, null);
+    }
+
+    /**
+     * Browser clients are accepted only when the page itself was served from loopback.
+     *
+     * <p>A {@code null} origin means the caller is not a browser (curl, an OpenAI SDK, the shell
+     * helpers) and is left alone: the bearer token is the control there. A browser, by contrast,
+     * attaches ambient authority to the request, so a remote page must never get a route even if
+     * the token happens to be disabled or leaked. The literal {@code "null"} origin (sandboxed
+     * iframe, {@code file://} document) is rejected because it cannot be attributed to loopback.
+     */
+    static boolean isAllowedOrigin(String origin) {
+        if (origin == null) return true;
+        String value = origin.trim();
+        if (value.isEmpty()) return true;
+        if ("null".equalsIgnoreCase(value)) return false;
+        int schemeEnd = value.indexOf("://");
+        if (schemeEnd < 0) return false;
+        String scheme = value.substring(0, schemeEnd).toLowerCase(Locale.ROOT);
+        if (!"http".equals(scheme) && !"https".equals(scheme)) return false;
+        return isLoopbackHost(hostWithoutPort(value.substring(schemeEnd + 3)));
+    }
+
+    /**
+     * The Host header must name an address this server actually bound.
+     *
+     * <p>Rebinding attacks work by pointing an attacker-owned hostname at 127.0.0.1 (or the LAN
+     * address) after the page has loaded, so the browser considers the attacker's site same-origin
+     * with us. Requiring a literal address -- or plain {@code localhost} -- removes the hostname
+     * indirection that attack depends on. Requests without a Host header are HTTP/1.0 clients that
+     * cannot be browsers, so they pass.
+     */
+    static boolean isAllowedHost(String host, String bindMode) {
+        if (host == null) return true;
+        String value = hostWithoutPort(host.trim());
+        if (value.isEmpty()) return true;
+        if (isLoopbackHost(value)) return true;
+        // A LAN listener answers on its own numeric address too; names are still refused.
+        return TaiSettings.BIND_MODE_LAN.equals(bindMode) && isIpLiteral(value);
+    }
+
+    static String hostWithoutPort(@NonNull String hostHeader) {
+        String value = hostHeader.trim();
+        int slash = value.indexOf('/');
+        if (slash >= 0) value = value.substring(0, slash);
+        if (value.startsWith("[")) {
+            int close = value.indexOf(']');
+            return close < 0 ? value : value.substring(1, close);
+        }
+        int colon = value.lastIndexOf(':');
+        // A bare IPv6 address has several colons and no port suffix.
+        if (colon > 0 && value.indexOf(':') == colon) return value.substring(0, colon);
+        return value;
+    }
+
+    private static boolean isLoopbackHost(String host) {
+        if (host == null) return false;
+        String value = host.trim().toLowerCase(Locale.ROOT);
+        if (value.isEmpty()) return false;
+        if ("localhost".equals(value) || "::1".equals(value) || "0:0:0:0:0:0:0:1".equals(value)) return true;
+        return value.startsWith("127.") && isIpv4Literal(value);
+    }
+
+    private static boolean isIpLiteral(String host) {
+        return isIpv4Literal(host) || host.indexOf(':') >= 0;
+    }
+
+    private static boolean isIpv4Literal(String host) {
+        String[] parts = host.split("\\.", -1);
+        if (parts.length != 4) return false;
+        for (String part : parts) {
+            if (part.isEmpty() || part.length() > 3) return false;
+            for (int i = 0; i < part.length(); i++) {
+                if (!Character.isDigit(part.charAt(i))) return false;
+            }
+            if (Integer.parseInt(part) > 255) return false;
+        }
+        return true;
+    }
+
+    static HttpResponse forbiddenResponse(String code, String message) {
+        JSONObject error = new JSONObject();
+        try {
+            error.put("ok", false);
+            error.put("error", code);
+            error.put("message", message);
+            withOpenAiErrorEnvelope(error, 403);
+        } catch (JSONException ignored) {
+        }
+        return new HttpResponse(403, "application/json; charset=utf-8",
+            error.toString().getBytes(StandardCharsets.UTF_8), null);
     }
 
     private static HttpResponse corsPreflightResponse() {
@@ -810,12 +981,26 @@ public class LauncherCtlApiServer {
     }
 
     static void writeResponse(OutputStream output, HttpResponse response) throws IOException {
+        writeResponse(output, response, null);
+    }
+
+    /**
+     * @param allowedOrigin the request Origin when it passed {@link #isAllowedOrigin(String)}, which
+     *                      is echoed back as the CORS grant. {@code null} (a non-browser caller)
+     *                      emits no CORS header at all, so a wildcard grant never escapes to a
+     *                      remote page.
+     */
+    static void writeResponse(OutputStream output, HttpResponse response, String allowedOrigin) throws IOException {
         BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(output, StandardCharsets.UTF_8));
         byte[] bytes = response.body;
         writer.write("HTTP/1.1 " + response.statusCode + " " + statusMessage(response.statusCode) + "\r\n");
         writer.write("Content-Type: " + response.contentType + "\r\n");
         writer.write("Connection: close\r\n");
-        writer.write("Access-Control-Allow-Origin: *\r\n");
+        writer.write("Vary: Origin\r\n");
+        if (allowedOrigin != null && !allowedOrigin.trim().isEmpty()) {
+            writer.write("Access-Control-Allow-Origin: " + allowedOrigin.trim() + "\r\n");
+            writer.write("Access-Control-Allow-Credentials: true\r\n");
+        }
         if (response.bodyWriter == null) {
             writer.write("Content-Length: " + bytes.length + "\r\n");
         }
@@ -1111,7 +1296,7 @@ public class LauncherCtlApiServer {
         }
 
         String taiScript =
-            "#!/data/data/io.vaj.tl/files/usr/bin/sh\n" +
+            "#!" + TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/sh\n" +
             "set -eu\n" +
             "print_help() {\n" +
             "  cat <<'EOF'\n" +
@@ -1314,7 +1499,7 @@ public class LauncherCtlApiServer {
         // launcherctl survives the agent/MCP strip as a launch-only client: `launcherctl launch`
         // is what old tmux configs and shell binds call, and keeping it working costs one route.
         String launcherctlScript =
-            "#!/data/data/io.vaj.tl/files/usr/bin/sh\n" +
+            "#!" + TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/sh\n" +
             "set -eu\n" +
             "print_help() {\n" +
             "  cat <<'EOF'\n" +

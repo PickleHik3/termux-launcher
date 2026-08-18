@@ -579,6 +579,23 @@ public final class TermuxInAppKeyboard {
             && mKeyboardView.getSpaceBarRectOnScreen(out);
     }
 
+    /**
+     * The whole keyboard container's bounds on screen, for overlays that must let touches through
+     * to the keys they type with; false while the keyboard is hidden.
+     */
+    public boolean getKeyboardRectOnScreen(@NonNull Rect out) {
+        if (!isVisible())
+            return false;
+        View container = mHost.getKeyboardContainer();
+        if (container == null || container.getWidth() <= 0 || !container.isShown())
+            return false;
+        int[] location = new int[2];
+        container.getLocationOnScreen(location);
+        out.set(location[0], location[1],
+            location[0] + container.getWidth(), location[1] + container.getHeight());
+        return true;
+    }
+
     /** Forwards the default-dock launch wave into the embedded key renderer. */
     public void animateLaunchWave(int color, float originXOnScreen, float originYOnScreen) {
         if (mKeyboardView == null || !isVisible()) return;

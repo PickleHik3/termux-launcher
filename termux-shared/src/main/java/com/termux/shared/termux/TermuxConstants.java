@@ -1491,6 +1491,10 @@ public final class TermuxConstants {
             // Default: "com.termux.app.reload_style"
             public static final String ACTION_RELOAD_STYLE = TermuxConstants.TERMUX_PACKAGE_NAME + ".app.reload_style";
 
+            /** Drawer-only layout refresh; must never enter the full styling/geometry path. */
+            public static final String ACTION_RELOAD_APP_DRAWER =
+                TermuxConstants.TERMUX_PACKAGE_NAME + ".app.reload_app_drawer";
+
             /**
              * Intent action to make termux restart its app process.
              */

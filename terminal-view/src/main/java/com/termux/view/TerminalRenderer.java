@@ -2,7 +2,6 @@ package com.termux.view;
 
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.DashPathEffect;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -11,10 +10,14 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import androidx.annotation.Nullable;
+import com.termux.terminal.KittyImagePlaceholder;
+import com.termux.terminal.KittyUnicodePlaceholder;
 import com.termux.terminal.TerminalBuffer;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalRow;
 import com.termux.terminal.TextStyle;
+
+import java.util.Arrays;
 
 /**
  * Renderer of a {@link TerminalEmulator} into a {@link Canvas}.
@@ -190,6 +193,52 @@ public final class TerminalRenderer {
         }
     }
 
+    /**
+     * Per-code-point ceilings on how many cells a private-use symbol may be drawn across, which is
+     * kitty's {@code narrow_symbols}. Ranges are consulted in declaration order and the last match
+     * wins, as kitty's {@code cell_cap_for_codepoint} does, so a later line can re-widen part of a
+     * range an earlier one narrowed.
+     */
+    public static final class SymbolExpansion {
+
+        public static final SymbolExpansion DEFAULT = new SymbolExpansion(null, null, null);
+
+        private final int[] first;
+        private final int[] last;
+        private final int[] columns;
+
+        /**
+         * @param first   inclusive range starts
+         * @param last    inclusive range ends, parallel to {@code first}
+         * @param columns cell ceiling per range, parallel to {@code first}
+         */
+        public SymbolExpansion(@Nullable int[] first, @Nullable int[] last,
+                               @Nullable int[] columns) {
+            final int size = first == null || last == null || columns == null ? 0
+                : Math.min(first.length, Math.min(last.length, columns.length));
+            this.first = size == 0 ? NO_BOUNDS : Arrays.copyOf(first, size);
+            this.last = size == 0 ? NO_BOUNDS : Arrays.copyOf(last, size);
+            this.columns = size == 0 ? NO_BOUNDS : Arrays.copyOf(columns, size);
+        }
+
+        /** The configured ceiling for this code point, or {@link Integer#MAX_VALUE} for none. */
+        int maxColumnsFor(int codePoint) {
+            int cap = Integer.MAX_VALUE;
+            for (int i = 0; i < first.length; i++) {
+                if (codePoint >= first[i] && codePoint <= last[i]) cap = columns[i];
+            }
+            return cap;
+        }
+    }
+
+    private static final int[] NO_BOUNDS = new int[0];
+
+    /**
+     * The most cells one private-use symbol may be drawn across, matching kitty's one cell plus
+     * {@code MAX_NUM_EXTRA_GLYPHS_PUA}.
+     */
+    static final int MAX_SYMBOL_EXPANSION_COLUMNS = 5;
+
     private static final SymbolMap[] NO_SYMBOL_MAPS = new SymbolMap[0];
 
     private static final Typeface[] NO_FALLBACK_TYPEFACES = new Typeface[0];
@@ -220,7 +269,11 @@ public final class TerminalRenderer {
 
     final BoxDrawingPolicy mBoxDrawingPolicy;
 
+    final SymbolExpansion mSymbolExpansion;
+
     private final Paint mTextPaint = new Paint();
+    /** Fills for the find overlay, kept off the text paint's per-run state. */
+    private final Paint mOverlayPaint = new Paint();
     private Typeface mCurrentTypeface;
 
     /** Memoized fallback-chain lookups; sized for this renderer's chain and never resized. */
@@ -283,6 +336,13 @@ public final class TerminalRenderer {
     /** Width cache for normal, bold, italic and bold-italic rendering. */
     private final float[][] mAsciiMeasures = new float[4][127];
     private final RectF mSixelRect = new RectF();
+
+    /** Reused by the Unicode-placeholder image path so drawing a cell allocates nothing. */
+    private final KittyImagePlaceholder mKittyPlaceholder = new KittyImagePlaceholder();
+    private final Rect mKittySourceRect = new Rect();
+    private final RectF mKittyDestRect = new RectF();
+    private final RectF mKittyCellRect = new RectF();
+    private final Paint mKittyImagePaint = new Paint(Paint.FILTER_BITMAP_FLAG);
 
     /** Reused when drawing curly underlines, to keep the render loop allocation free. */
     private final Path mDecorationPath = new Path();
@@ -412,8 +472,29 @@ public final class TerminalRenderer {
                             @Nullable FontMetricsAdjustments fontMetricsAdjustments,
                             @Nullable BoxDrawingPolicy boxDrawingPolicy,
                             @Nullable Typeface[] fallbackTypefaces) {
+        this(textSize, typeface, boldTypeface, italicTypeface, boldItalicTypeface, symbolMaps,
+            ligaturePolicy, fontFeatures, fontVariations, fontMetricsAdjustments, boxDrawingPolicy,
+            fallbackTypefaces, SymbolExpansion.DEFAULT);
+    }
+
+    /**
+     * Construct a renderer with every control, including the per-code-point ceilings on how far a
+     * private-use symbol may spread into the blank cells after it.
+     */
+    public TerminalRenderer(int textSize, Typeface typeface, @Nullable Typeface boldTypeface,
+                            @Nullable Typeface italicTypeface,
+                            @Nullable Typeface boldItalicTypeface,
+                            @Nullable SymbolMap[] symbolMaps,
+                            @Nullable LigaturePolicy ligaturePolicy,
+                            @Nullable FontFeatures fontFeatures,
+                            @Nullable FontVariations fontVariations,
+                            @Nullable FontMetricsAdjustments fontMetricsAdjustments,
+                            @Nullable BoxDrawingPolicy boxDrawingPolicy,
+                            @Nullable Typeface[] fallbackTypefaces,
+                            @Nullable SymbolExpansion symbolExpansion) {
         mBoxDrawingPolicy = boxDrawingPolicy == null
             ? BoxDrawingPolicy.DEFAULT : boxDrawingPolicy;
+        mSymbolExpansion = symbolExpansion == null ? SymbolExpansion.DEFAULT : symbolExpansion;
         mFallbackTypefaces = fallbackTypefaces == null || fallbackTypefaces.length == 0
             ? NO_FALLBACK_TYPEFACES : fallbackTypefaces.clone();
         mFallbackResolver = new FallbackFontResolver(mFallbackTypefaces.length);
@@ -570,6 +651,8 @@ public final class TerminalRenderer {
             // consulted for the rows that have them.
             final boolean rowHasDecorationColors = lineObject.hasDecorationColors();
             final boolean rowHasHyperlinks = lineObject.hasHyperlinks();
+            KittyUnicodePlaceholder.Cell previousPlaceholder = null;
+            int previousPlaceholderColumn = -2;
             for (int column = 0; column < columns; ) {
                 final char charAtIndex = line[currentCharIndex];
                 final boolean charIsHighsurrogate = Character.isHighSurrogate(charAtIndex);
@@ -579,6 +662,8 @@ public final class TerminalRenderer {
                 final int decorationColor = rowHasDecorationColors ? lineObject.getDecorationColor(column) : TextStyle.DECORATION_COLOR_DEFAULT;
                 final int hyperlinkId = rowHasHyperlinks ? lineObject.getHyperlinkId(column) : 0;
                 if (TextStyle.isBitmap(style)) {
+                    previousPlaceholder = null;
+                    previousPlaceholderColumn = -2;
                     // Flush the text run accumulated to the left of this image cell. Without this
                     // a row that mixes text and image cells — which a z<0 kitty placement produces
                     // routinely — silently dropped its text.
@@ -622,6 +707,71 @@ public final class TerminalRenderer {
                     lastRunSymbolVariations = null;
                     continue;
                 }
+                if (codePoint == KittyUnicodePlaceholder.CODE_POINT) {
+                    // A placeholder remains normal text in the buffer (so tmux and editors can
+                    // move it), but its grapheme is renderer control data rather than a glyph.
+                    if (column > 0 && column != lastRunStartColumn) {
+                        final int columnWidthSinceLastRun = column - lastRunStartColumn;
+                        final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
+                        int runCursorColor = lastRunInsideCursor
+                            ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
+                        boolean invertRunTextColor = lastRunInsideCursor
+                            && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
+                        drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
+                            columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
+                            measuredWidthForRun, runCursorColor, cursorShape, lastRunStyle,
+                            boldWithBright, reverseVideo || invertRunTextColor
+                                || lastRunInsideSelection,
+                            horizontalOffset, lastRunDecorationColor,
+                            lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface,
+                            lastRunFallbackTypeface, lastRunSymbolFeatures,
+                            lastRunSymbolVariations, false);
+                    }
+                    int clusterEnd = currentCharIndex + charsForCodePoint;
+                    while (clusterEnd < charsUsedInLine
+                        && lineObject.getDisplayWidthAt(clusterEnd) <= 0) {
+                        clusterEnd += Character.isHighSurrogate(line[clusterEnd]) ? 2 : 1;
+                    }
+                    KittyUnicodePlaceholder.Cell inherited = previousPlaceholderColumn == column - 1
+                        ? previousPlaceholder : null;
+                    KittyUnicodePlaceholder.Cell placeholderCell = KittyUnicodePlaceholder.decode(
+                        line, currentCharIndex + charsForCodePoint, clusterEnd,
+                        TextStyle.decodeForeColor(style), decorationColor,
+                        TextStyle.DECORATION_COLOR_DEFAULT, inherited);
+                    if (placeholderCell != null) {
+                        previousPlaceholder = placeholderCell;
+                        previousPlaceholderColumn = column;
+                        if (mEmulator.getKittyImagePlaceholder(placeholderCell.imageId,
+                            placeholderCell.placementId, mKittyPlaceholder)) {
+                            drawKittyPlaceholderCell(canvas, placeholderCell, column, heightOffset,
+                                horizontalOffset);
+                        }
+                    } else {
+                        previousPlaceholder = null;
+                        previousPlaceholderColumn = -2;
+                    }
+                    if (cursorX == column && cursorVisible)
+                        drawPlaceholderCursor(canvas, column, heightOffset, horizontalOffset,
+                            cursorShape, palette[TextStyle.COLOR_INDEX_CURSOR]);
+                    column++;
+                    currentCharIndex = clusterEnd;
+                    measuredWidthForRun = 0.f;
+                    lastRunStyle = 0;
+                    lastRunInsideCursor = false;
+                    lastRunInsideSelection = false;
+                    lastRunStartColumn = column;
+                    lastRunStartIndex = currentCharIndex;
+                    lastRunFontWidthMismatch = false;
+                    lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
+                    lastRunHyperlinkId = 0;
+                    lastRunSymbolTypeface = null;
+                    lastRunFallbackTypeface = null;
+                    lastRunSymbolFeatures = null;
+                    lastRunSymbolVariations = null;
+                    continue;
+                }
+                previousPlaceholder = null;
+                previousPlaceholderColumn = -2;
                 final int codePointWcWidth = lineObject.getDisplayWidthAt(currentCharIndex);
                 final boolean insideCursor = (cursorX == column || (codePointWcWidth == 2 && cursorX == column + 1));
                 final boolean insideSelection = column >= selx1 && column <= selx2;
@@ -699,21 +849,38 @@ public final class TerminalRenderer {
                     ? mAsciiMeasures[faceStyle][codePoint]
                     : mTextPaint.measureText(line, currentCharIndex, charsForCodePoint);
                 final boolean fontWidthMismatch = Math.abs(measuredCodePointWidth / mFontWidth - codePointWcWidth) > 0.01;
-                // Kitty's private-use expansion: a PUA symbol whose neighbour is a same-styled
-                // blank gets both cells, so an icon wcwidth() calls narrow is not stamped into a
-                // single square. The space is consumed; the background pass painted its fill.
-                if (symbolTypeface != null && codePointWcWidth == 1 && isPrivateUse(codePoint)
-                    && !insideCursor && !insideSelection && column + 1 < columns
-                    && cursorX != column + 1 && !(column + 1 >= selx1 && column + 1 <= selx2)) {
-                    final int spaceIndex = currentCharIndex + charsForCodePoint;
-                    if (spaceIndex < charsUsedInLine && line[spaceIndex] == ' '
-                        && lineObject.getDisplayWidthAt(spaceIndex) == 1
-                        && lineObject.getStyle(column + 1) == style
+                // Kitty's private-use expansion (its fonts.c): a PUA symbol whose own glyph is
+                // wider than one cell, and which is followed by blanks that paint the same, is
+                // drawn across those cells instead of being squeezed into a single narrow square.
+                // The blanks are consumed; the background pass already painted their fill.
+                final int wantedColumns = symbolTypeface != null && codePointWcWidth == 1
+                    && isPrivateUse(codePoint) && !insideCursor && !insideSelection
+                    ? symbolExpansionColumns(measuredCodePointWidth, mFontWidth,
+                        mSymbolExpansion.maxColumnsFor(codePoint))
+                    : 1;
+                if (wantedColumns > 1) {
+                    int expandedColumns = 1;
+                    int blankIndex = currentCharIndex + charsForCodePoint;
+                    while (expandedColumns < wantedColumns && column + expandedColumns < columns
+                        && blankIndex < charsUsedInLine
+                        && isExpansionBlank(line[blankIndex])
+                        && lineObject.getDisplayWidthAt(blankIndex) == 1
+                        && cursorX != column + expandedColumns
+                        && !(column + expandedColumns >= selx1
+                            && column + expandedColumns <= selx2)
+                        && blankCellPaintsAlike(style,
+                            lineObject.getStyle(column + expandedColumns),
+                            palette, boldWithBright, reverseVideo)
                         && (rowHasDecorationColors
-                            ? lineObject.getDecorationColor(column + 1)
+                            ? lineObject.getDecorationColor(column + expandedColumns)
                             : TextStyle.DECORATION_COLOR_DEFAULT) == decorationColor
-                        && (rowHasHyperlinks ? lineObject.getHyperlinkId(column + 1) : 0)
+                        && (rowHasHyperlinks
+                            ? lineObject.getHyperlinkId(column + expandedColumns) : 0)
                             == hyperlinkId) {
+                        expandedColumns++;
+                        blankIndex++;
+                    }
+                    if (expandedColumns > 1) {
                         if (column > 0 && column != lastRunStartColumn) {
                             final int columnWidthSinceLastRun = column - lastRunStartColumn;
                             final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
@@ -731,13 +898,13 @@ public final class TerminalRenderer {
                                 lastRunFallbackTypeface, lastRunSymbolFeatures,
                                 lastRunSymbolVariations, false);
                         }
-                        drawTextRun(canvas, line, palette, heightOffset, column, 2,
+                        drawTextRun(canvas, line, palette, heightOffset, column, expandedColumns,
                             currentCharIndex, charsForCodePoint, measuredCodePointWidth, 0,
                             cursorShape, style, boldWithBright, reverseVideo, horizontalOffset,
                             decorationColor, hyperlinkId != 0, 0, symbolTypeface, null,
                             symbolFeatures, symbolVariations, false);
-                        column += 2;
-                        currentCharIndex = spaceIndex + 1;
+                        column += expandedColumns;
+                        currentCharIndex = blankIndex;
                         while (currentCharIndex < charsUsedInLine
                             && lineObject.getDisplayWidthAt(currentCharIndex) <= 0) {
                             currentCharIndex +=
@@ -827,6 +994,57 @@ public final class TerminalRenderer {
                 lastRunSymbolVariations, false);
         }
         drawExtraCursors(mEmulator, canvas, screen, palette, topRow, endRow, boldWithBright, reverseVideo, horizontalOffset);
+    }
+
+    /** Draw the image slice addressed by one placeholder cell, clipped to that cell. */
+    private void drawKittyPlaceholderCell(Canvas canvas, KittyUnicodePlaceholder.Cell cell,
+                                          int screenColumn, float bottom,
+                                          float horizontalOffset) {
+        int imageColumns = mKittyPlaceholder.columns > 0 ? mKittyPlaceholder.columns
+            : Math.max(1, (int) Math.ceil(mKittyPlaceholder.sourceWidth / mFontWidth));
+        int imageRows = mKittyPlaceholder.rows > 0 ? mKittyPlaceholder.rows
+            : Math.max(1, (int) Math.ceil((double) mKittyPlaceholder.sourceHeight
+                / mFontLineSpacing));
+        if (cell.column >= imageColumns || cell.row >= imageRows) return;
+
+        float boxWidth = imageColumns * mFontWidth;
+        float boxHeight = imageRows * mFontLineSpacing;
+        float scale = Math.min(boxWidth / mKittyPlaceholder.sourceWidth,
+            boxHeight / mKittyPlaceholder.sourceHeight);
+        float drawnWidth = mKittyPlaceholder.sourceWidth * scale;
+        float drawnHeight = mKittyPlaceholder.sourceHeight * scale;
+        float boxLeft = horizontalOffset + (screenColumn - cell.column) * mFontWidth;
+        float boxTop = bottom - mFontLineSpacing - cell.row * mFontLineSpacing;
+        mKittyDestRect.set(boxLeft + (boxWidth - drawnWidth) / 2f,
+            boxTop + (boxHeight - drawnHeight) / 2f,
+            boxLeft + (boxWidth + drawnWidth) / 2f,
+            boxTop + (boxHeight + drawnHeight) / 2f);
+        mKittyCellRect.set(horizontalOffset + screenColumn * mFontWidth,
+            bottom - mFontLineSpacing,
+            horizontalOffset + (screenColumn + 1) * mFontWidth, bottom);
+        mKittySourceRect.set(mKittyPlaceholder.sourceX, mKittyPlaceholder.sourceY,
+            mKittyPlaceholder.sourceX + mKittyPlaceholder.sourceWidth,
+            mKittyPlaceholder.sourceY + mKittyPlaceholder.sourceHeight);
+        canvas.save();
+        canvas.clipRect(mKittyCellRect);
+        canvas.drawBitmap(mKittyPlaceholder.bitmap, mKittySourceRect, mKittyDestRect,
+            mKittyImagePaint);
+        canvas.restore();
+    }
+
+    /** Kitty specifies that the cursor is drawn over placeholder images. */
+    private void drawPlaceholderCursor(Canvas canvas, int column, float bottom,
+                                       float horizontalOffset, int cursorShape,
+                                       int cursorColor) {
+        float left = horizontalOffset + column * mFontWidth;
+        float right = left + mFontWidth;
+        float top = bottom - mFontLineSpacing;
+        if (cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE)
+            top = bottom - mFontLineSpacing / 4f;
+        else if (cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR)
+            right = left + mFontWidth / 4f;
+        mTextPaint.setColor(cursorColor);
+        canvas.drawRect(left, top, right, bottom, mTextPaint);
     }
 
     private void drawTextRun(Canvas canvas, char[] text, int[] palette, float y, int startColumn,
@@ -1079,6 +1297,44 @@ public final class TerminalRenderer {
      * and reverse video — packed as {@code (foreground << 32) | background}. The single source of
      * truth for both the background pass and the glyph pass, so the two cannot disagree.
      */
+    /**
+     * Whether a blank cell carrying {@code blank} paints exactly what a blank cell carrying
+     * {@code symbol} would: the background, plus any underline or strikethrough drawn across it.
+     *
+     * A space shows nothing of its foreground colour or its face, so comparing whole styles — as
+     * the private-use expansion first did — refused the common case of a coloured icon followed by
+     * an uncoloured separator, and every such icon stayed squeezed into one narrow cell. What must
+     * still match is anything the expanded run would then draw differently over the second cell.
+     */
+    static boolean blankCellPaintsAlike(long symbol, long blank, int[] palette,
+                                        boolean boldWithBright, boolean reverseVideo) {
+        if ((int) resolveRunColors(symbol, palette, boldWithBright, reverseVideo)
+            != (int) resolveRunColors(blank, palette, boldWithBright, reverseVideo)) return false;
+        if (TextStyle.decodeUnderlineStyle(symbol) != TextStyle.decodeUnderlineStyle(blank))
+            return false;
+        final int decorations = TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE
+            | TextStyle.CHARACTER_ATTRIBUTE_STRIKETHROUGH;
+        return (TextStyle.decodeEffect(symbol) & decorations)
+            == (TextStyle.decodeEffect(blank) & decorations);
+    }
+
+    /**
+     * How many cells a private-use symbol wants, from its own advance: kitty's
+     * {@code ceil(glyph_width / cell_width)}, bounded by a {@code narrow_symbols} ceiling and by
+     * {@link #MAX_SYMBOL_EXPANSION_COLUMNS}. A glyph that already fits its cell wants exactly one,
+     * so it is neither grown nor re-centred over a neighbour it does not need.
+     */
+    static int symbolExpansionColumns(float advance, float cellWidth, int cap) {
+        if (!(cellWidth > 0f) || !(advance > cellWidth * 1.01f)) return 1;
+        final int wanted = (int) Math.ceil(advance / cellWidth - 0.01f);
+        return Math.max(1, Math.min(Math.min(wanted, cap), MAX_SYMBOL_EXPANSION_COLUMNS));
+    }
+
+    /** The blanks a symbol may spread into: a space, or the en-space kitty also accepts. */
+    static boolean isExpansionBlank(char c) {
+        return c == ' ' || c == '\u2002';
+    }
+
     static long resolveRunColors(long textStyle, int[] palette, boolean boldWithBright, boolean reverseVideo) {
         int foreColor = TextStyle.decodeForeColor(textStyle);
         final int effect = TextStyle.decodeEffect(textStyle);
@@ -1311,6 +1567,82 @@ public final class TerminalRenderer {
             canvas.drawRect(segments.shadeRects[offset], segments.shadeRects[offset + 1],
                 segments.shadeRects[offset + 2], segments.shadeRects[offset + 3], mTextPaint);
         }
+    }
+
+    /**
+     * Paints a find session over the transcript that has just been rendered: the selection under
+     * everything, then every match with the current one lit brighter, then the copy-mode cursor.
+     *
+     * <p>It runs as its own pass rather than through the selection channel the screen render
+     * already has, because that channel carries exactly one range and inverts the cells it covers.
+     * A find highlight has to be able to cover dozens of ranges at once and must stay readable, so
+     * these are translucent fills laid over the glyphs, in the row geometry the render loop uses.</p>
+     */
+    public final void renderFindOverlay(TerminalEmulator emulator, Canvas canvas, int topRow,
+                                        TerminalFindOverlay overlay, float horizontalOffset,
+                                        int extraRows) {
+        if (emulator == null || overlay == null || overlay.isEmpty()) return;
+        final int endRow = Math.min(topRow + emulator.mRows + extraRows, emulator.mRows);
+        final int columns = emulator.mColumns;
+        // Same origin as the screen render's first row, so a highlight lands on its own cells.
+        final float firstRowTop = mFontLineSpacingAndAscent;
+
+        if (overlay.selectionMode != TerminalFindOverlay.SELECTION_NONE && overlay.cursorVisible) {
+            int first = Math.min(overlay.anchorRow, overlay.cursorRow);
+            int last = Math.max(overlay.anchorRow, overlay.cursorRow);
+            for (int row = Math.max(topRow, first); row <= Math.min(endRow - 1, last); row++) {
+                int start;
+                int end;
+                switch (overlay.selectionMode) {
+                    case TerminalFindOverlay.SELECTION_LINE:
+                        start = 0;
+                        end = columns - 1;
+                        break;
+                    case TerminalFindOverlay.SELECTION_BLOCK:
+                        start = Math.min(overlay.anchorColumn, overlay.cursorColumn);
+                        end = Math.max(overlay.anchorColumn, overlay.cursorColumn);
+                        break;
+                    default:
+                        // Charwise runs from the anchor to the cursor, whole rows in between.
+                        boolean forward = overlay.cursorRow > overlay.anchorRow
+                            || (overlay.cursorRow == overlay.anchorRow
+                            && overlay.cursorColumn >= overlay.anchorColumn);
+                        int startRow = forward ? overlay.anchorRow : overlay.cursorRow;
+                        int startCol = forward ? overlay.anchorColumn : overlay.cursorColumn;
+                        int endRowSel = forward ? overlay.cursorRow : overlay.anchorRow;
+                        int endCol = forward ? overlay.cursorColumn : overlay.anchorColumn;
+                        start = row == startRow ? startCol : 0;
+                        end = row == endRowSel ? endCol : columns - 1;
+                        break;
+                }
+                drawOverlayRect(canvas, row, topRow, firstRowTop, start, end, horizontalOffset,
+                    overlay.selectionColor);
+            }
+        }
+
+        for (int i = 0; i < overlay.spans.size(); i++) {
+            TerminalFindOverlay.Span span = overlay.spans.get(i);
+            if (span.row < topRow || span.row >= endRow) continue;
+            drawOverlayRect(canvas, span.row, topRow, firstRowTop, span.startColumn, span.endColumn,
+                horizontalOffset, i == overlay.currentSpan ? overlay.currentMatchColor
+                    : overlay.matchColor);
+        }
+
+        if (overlay.cursorVisible && overlay.cursorRow >= topRow && overlay.cursorRow < endRow) {
+            drawOverlayRect(canvas, overlay.cursorRow, topRow, firstRowTop, overlay.cursorColumn,
+                overlay.cursorColumn, horizontalOffset, overlay.cursorColor);
+        }
+    }
+
+    private void drawOverlayRect(Canvas canvas, int row, int topRow, float firstRowTop,
+                                 int startColumn, int endColumn, float horizontalOffset, int color) {
+        if (endColumn < startColumn) return;
+        float top = firstRowTop + (row - topRow) * mFontLineSpacing;
+        // Its own paint: the text paint carries per-run typeface, skew and effects, and this pass
+        // runs between frames of that state rather than inside it.
+        mOverlayPaint.setColor(color);
+        canvas.drawRect(horizontalOffset + startColumn * mFontWidth, top,
+            horizontalOffset + (endColumn + 1) * mFontWidth, top + mFontLineSpacing, mOverlayPaint);
     }
 
     private void drawCellRect(Canvas canvas, int startColumn, int endColumn, float top, float bottom,

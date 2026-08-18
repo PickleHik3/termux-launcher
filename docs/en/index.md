@@ -46,6 +46,7 @@ access; skip it if command-line tools do not need your shared files.
 - [Nix beginner's guide](Nix_Getting_Started.md) — start here if `nix` is new to you
 - [Nix package management](Nix_Package_Management.md)
 - [Nix fork differences](Nix_Fork_Differences.md)
+- [Migrating from the VAJ edition](VAJ_To_Nix_Migration.md) — moving `io.vaj.tl` off the deprecated APT repo
 
 ## Optional local AI
 

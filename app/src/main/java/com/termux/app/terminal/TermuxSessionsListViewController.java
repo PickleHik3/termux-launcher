@@ -51,7 +51,7 @@ public class TermuxSessionsListViewController extends ArrayAdapter<TermuxSession
             sessionTitleView.setText("null session");
             return sessionRowView;
         }
-        String name = mActivity.getWindowSessionName(sessionAtRow);
+        String name = mActivity.getSessionNameFor(sessionAtRow);
         String sessionTitle = sessionAtRow.getTitle();
         String numberPart = "[" + (position + 1) + "] ";
         String sessionNamePart = (TextUtils.isEmpty(name) ? "" : name);
@@ -87,10 +87,12 @@ public class TermuxSessionsListViewController extends ArrayAdapter<TermuxSession
     @Override
     public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id) {
         final TermuxSession selectedSession = getItem(position);
+        // A drawer row is a session while split panes are on and a bare shell with them off, so the
+        // long-press renames whichever the row actually stands for.
         if (mActivity.isSplitPanesEnabled())
-            mActivity.renameWindowSession(selectedSession.getTerminalSession());
+            mActivity.beginSessionRenameFor(selectedSession.getTerminalSession());
         else
-            mActivity.getTermuxTerminalSessionClient().renameSession(selectedSession.getTerminalSession());
+            mActivity.getTermuxTerminalSessionClient().promptCurrentPaneRename();
         return true;
     }
 }

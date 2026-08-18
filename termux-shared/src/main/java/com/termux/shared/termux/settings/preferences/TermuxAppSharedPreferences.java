@@ -188,6 +188,128 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             false);
     }
 
+    public boolean isAppLauncherDrawerEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ENABLED,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_ENABLED);
+    }
+
+    public void setAppLauncherDrawerEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ENABLED, value, false);
+    }
+
+    public String getAppLauncherDrawerViewType() {
+        return normalizeAppLauncherDrawerViewType(SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_VIEW_TYPE, true));
+    }
+
+    public void setAppLauncherDrawerViewType(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE,
+            normalizeAppLauncherDrawerViewType(value), false);
+    }
+
+    public int getAppLauncherDrawerGridColumnsVertical() {
+        return sanitizeDrawerColumns(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_VERTICAL,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_GRID_COLUMNS_VERTICAL));
+    }
+
+    public void setAppLauncherDrawerGridColumnsVertical(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_VERTICAL,
+            sanitizeDrawerColumns(value), false);
+    }
+
+    public int getAppLauncherDrawerGridColumnsHorizontal() {
+        return sanitizeDrawerColumns(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_HORIZONTAL,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_GRID_COLUMNS_HORIZONTAL));
+    }
+
+    public void setAppLauncherDrawerGridColumnsHorizontal(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_HORIZONTAL,
+            sanitizeDrawerColumns(value), false);
+    }
+
+    public int getAppLauncherDrawerGridRowsHorizontal() {
+        return sanitizeDrawerRows(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL));
+    }
+
+    public void setAppLauncherDrawerGridRowsHorizontal(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL,
+            sanitizeDrawerRows(value), false);
+    }
+
+    public int getAppLauncherDrawerIconSizeDp() {
+        return sanitizeDrawerIconSize(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ICON_SIZE_DP,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_ICON_SIZE_DP));
+    }
+
+    public void setAppLauncherDrawerIconSizeDp(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ICON_SIZE_DP, sanitizeDrawerIconSize(value), false);
+    }
+
+    public int getAppLauncherDrawerGridColumnsCategories() {
+        return sanitizeDrawerCategoryColumns(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_CATEGORIES,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_GRID_COLUMNS_CATEGORIES));
+    }
+
+    public void setAppLauncherDrawerGridColumnsCategories(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_CATEGORIES,
+            sanitizeDrawerCategoryColumns(value), false);
+    }
+
+    private static String normalizeAppLauncherDrawerViewType(String value) {
+        if (TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL.equals(value))
+            return TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL;
+        if (TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_CATEGORIES.equals(value))
+            return TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_CATEGORIES;
+        return TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL;
+    }
+
+    private static int sanitizeDrawerColumns(int value) {
+        return value >= TERMUX_APP.MIN_APP_LAUNCHER_DRAWER_GRID_COLUMNS
+            && value <= TERMUX_APP.MAX_APP_LAUNCHER_DRAWER_GRID_COLUMNS ? value : 0;
+    }
+
+    private static int sanitizeDrawerRows(int value) {
+        return value >= TERMUX_APP.MIN_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL
+            && value <= TERMUX_APP.MAX_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL ? value : 0;
+    }
+
+    private static int sanitizeDrawerIconSize(int value) {
+        return value == 36 || value == 40 || value == 44 || value == 48 ? value : 0;
+    }
+
+    private static int sanitizeDrawerCategoryColumns(int value) {
+        return value >= TERMUX_APP.MIN_APP_LAUNCHER_DRAWER_GRID_COLUMNS_CATEGORIES
+            && value <= TERMUX_APP.MAX_APP_LAUNCHER_DRAWER_GRID_COLUMNS_CATEGORIES ? value : 0;
+    }
+
+    public int getAppLauncherDrawerCornerRadius() {
+        int value = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_CORNER_RADIUS,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_CORNER_RADIUS);
+        if (value < 0) return TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_CORNER_RADIUS;
+        return Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DRAWER_CORNER_RADIUS, value);
+    }
+
+    public void setAppLauncherDrawerCornerRadius(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_CORNER_RADIUS,
+            value < 0 ? TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_CORNER_RADIUS
+                : Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DRAWER_CORNER_RADIUS, value),
+            false);
+    }
+
     public int getStatusBarBlurRadius() {
         int fallback = mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS)
             ? TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS : getExtraKeysBlurRadius();
@@ -277,6 +399,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             clampSurfaceHorizontalInset(value), false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_LAZY_MODE}. */
+    public boolean isLazyModeEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_LAZY_MODE,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_LAZY_MODE);
+    }
+
     public boolean isStatusWidgetCpuEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_STATUS_WIDGET_CPU, TERMUX_APP.DEFAULT_STATUS_WIDGET_CPU);
@@ -302,6 +431,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setStatusWidgetWeatherEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_WEATHER, value, false);
+    }
+
+    public boolean isStatusWidgetWeatherFahrenheit() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_WEATHER_FAHRENHEIT, TERMUX_APP.DEFAULT_STATUS_WIDGET_WEATHER_FAHRENHEIT);
+    }
+
+    public void setStatusWidgetWeatherFahrenheit(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_WEATHER_FAHRENHEIT, value, false);
     }
 
     public boolean isTerminalCursorTrailEnabled() {
@@ -366,6 +504,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_PINNED_ITEMS_SCHEMA_VERSION, version, true);
     }
 
+    /** Commits the normalized launcher payload and its schema marker as one durable transaction. */
+    public boolean commitAppLauncherPinnedItems(String value, int version) {
+        return mSharedPreferences.edit()
+            .putString(TERMUX_APP.KEY_APP_LAUNCHER_PINNED_ITEMS_V2, value)
+            .putInt(TERMUX_APP.KEY_APP_LAUNCHER_PINNED_ITEMS_SCHEMA_VERSION, version)
+            .commit();
+    }
+
     public boolean isAppLauncherAppsRowEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_APPS_ROW_ENABLED,
             TERMUX_APP.DEFAULT_APP_LAUNCHER_APPS_ROW_ENABLED);
@@ -373,9 +519,84 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setAppLauncherAppsRowEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_APPS_ROW_ENABLED, value, false);
-        if (!value) {
-            setAppLauncherAzRowEnabled(false);
-        }
+    }
+
+    /** @return {@code "left"} or {@code "right"}; anything else stored reads back as the default. */
+    public String getAppLauncherDockRailSide() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_RAIL_SIDE,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_RAIL_SIDE, true);
+        return TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_RIGHT.equals(value)
+            ? TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_RIGHT
+            : TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_LEFT;
+    }
+
+    public void setAppLauncherDockRailSide(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_RAIL_SIDE,
+            TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_RIGHT.equals(value)
+                ? TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_RIGHT
+                : TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_LEFT, false);
+    }
+
+    /** @return true when the landscape rail sits on the right, i.e. the drawer pull runs left. */
+    public boolean isAppLauncherDockRailOnRight() {
+        return TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_RIGHT.equals(getAppLauncherDockRailSide());
+    }
+
+    public boolean isAppLauncherExtraKeysRowEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_EXTRA_KEYS_ROW_ENABLED,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_EXTRA_KEYS_ROW_ENABLED);
+    }
+
+    public void setAppLauncherExtraKeysRowEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_EXTRA_KEYS_ROW_ENABLED, value, false);
+    }
+
+    public boolean isAppLauncherWidgetPaneEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_PANE_ENABLED,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_PANE_ENABLED);
+    }
+
+    public void setAppLauncherWidgetPaneEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_PANE_ENABLED, value, false);
+    }
+
+    public String getAppLauncherUseCaseMode() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_MODE,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_USE_CASE_MODE, true);
+        return TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL.equals(value)
+            ? TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL
+            : TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_LAUNCHER;
+    }
+
+    public void setAppLauncherUseCaseMode(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_MODE,
+            TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL.equals(value)
+                ? TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL
+                : TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_LAUNCHER, false);
+    }
+
+    public boolean isTerminalOnlyUseCase() {
+        return TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL.equals(getAppLauncherUseCaseMode());
+    }
+
+    public String getAppLauncherUseCaseSnapshot() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_SNAPSHOT,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_USE_CASE_SNAPSHOT, true);
+    }
+
+    public void setAppLauncherUseCaseSnapshot(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_SNAPSHOT,
+            value == null ? TERMUX_APP.DEFAULT_APP_LAUNCHER_USE_CASE_SNAPSHOT : value, false);
     }
 
     public boolean isAppLauncherNotificationDotsEnabled() {
@@ -390,6 +611,20 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_NOTIFICATION_DOTS, value, false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_APP_LAUNCHER_NOTIFICATION_HISTORY}. */
+    public boolean isAppLauncherNotificationHistoryEnabled() {
+        return SharedPreferenceUtils.getBoolean(
+            mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_NOTIFICATION_HISTORY,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_NOTIFICATION_HISTORY
+        );
+    }
+
+    public void setAppLauncherNotificationHistoryEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_NOTIFICATION_HISTORY, value, false);
+    }
+
     public boolean isAppLauncherMostUsedPageEnabled() {
         return isAppLauncherAppsRowEnabled() && SharedPreferenceUtils.getBoolean(
             mSharedPreferences,
@@ -402,8 +637,19 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_MOST_USED_PAGE, value, false);
     }
 
+    /**
+     * The A-Z index scrolls the apps row, so it is meaningless on its own: with the apps row off
+     * it is a strip of letters that scrubs nothing. Coupled the same way the notification dots and
+     * most-used page are, so the stored choice survives the apps row being toggled off and back.
+     */
     public boolean isAppLauncherAzRowEnabled() {
-        return isAppLauncherAppsRowEnabled() && SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_AZ_ROW_ENABLED,
+        return isAppLauncherAppsRowEnabled() && isAppLauncherAzRowChosen();
+    }
+
+    /** The stored A-Z choice, ignoring the apps row coupling — for settings and for snapshots. */
+    public boolean isAppLauncherAzRowChosen() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_AZ_ROW_ENABLED,
             TERMUX_APP.DEFAULT_APP_LAUNCHER_AZ_ROW_ENABLED);
     }
 
@@ -844,6 +1090,23 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_OPACITY, value);
     }
 
+    public int getInAppKeyboardBackgroundOpacity() {
+        return clampInAppKeyboardBackgroundOpacity(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY));
+    }
+
+    public void setInAppKeyboardBackgroundOpacity(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY,
+            clampInAppKeyboardBackgroundOpacity(value), false);
+    }
+
+    public static int clampInAppKeyboardBackgroundOpacity(int value) {
+        return Math.max(TERMUX_APP.MIN_IN_APP_KEYBOARD_BACKGROUND_OPACITY,
+            Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKGROUND_OPACITY, value));
+    }
+
     public boolean isSoftKeyboardEnabledOnlyIfNoHardware() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_SOFT_KEYBOARD_ENABLED_ONLY_IF_NO_HARDWARE, TERMUX_APP.DEFAULT_VALUE_KEY_SOFT_KEYBOARD_ENABLED_ONLY_IF_NO_HARDWARE);
     }
@@ -904,6 +1167,27 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             return value;
         }
         return TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP;
+    }
+
+    public String getTopPaneClockAlignment() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_TOP_PANE_CLOCK_ALIGNMENT,
+            TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_ALIGNMENT, true);
+        return normalizeTopPaneClockAlignment(value);
+    }
+
+    public void setTopPaneClockAlignment(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_TOP_PANE_CLOCK_ALIGNMENT,
+            normalizeTopPaneClockAlignment(value), false);
+    }
+
+    private static String normalizeTopPaneClockAlignment(String value) {
+        if (TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_CENTER.equals(value)
+            || TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_RIGHT.equals(value)) {
+            return value;
+        }
+        return TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_LEFT;
     }
 
     public boolean isTopPaneClockAmPmEnabled() {
@@ -1260,6 +1544,18 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setTerminalDynamicColorsEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_DYNAMIC_COLORS_ENABLED, value, false);
+    }
+
+    /** Where the launcher chrome takes its colours from: {@code wallpaper} or {@code scheme}. */
+    @NonNull
+    public String getUiColorSource() {
+        return SharedPreferenceUtils.getString(mSharedPreferences, TERMUX_APP.KEY_UI_COLOR_SOURCE,
+            TERMUX_APP.DEFAULT_VALUE_UI_COLOR_SOURCE, true);
+    }
+
+    public void setUiColorSource(@Nullable String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_UI_COLOR_SOURCE,
+            value == null ? TERMUX_APP.DEFAULT_VALUE_UI_COLOR_SOURCE : value, false);
     }
 
     @NonNull

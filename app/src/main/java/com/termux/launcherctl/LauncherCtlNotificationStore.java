@@ -30,6 +30,7 @@ public final class LauncherCtlNotificationStore {
     private static final String LOG_TAG = "LauncherCtlNotifStore";
     private static final String TABLE_NAME = "notification_events";
     private static final int MAX_ROWS = 10_000;
+    static final long MAX_JSONL_BYTES = 4L * 1024 * 1024;
     private static final int DEFAULT_WRITE_TIMEOUT_MS = 5_000;
 
     private static LauncherCtlNotificationStore sInstance;
@@ -130,6 +131,35 @@ public final class LauncherCtlNotificationStore {
             pruneOldRows();
         } catch (Exception e) {
             Log.w(LOG_TAG, "Failed to insert notification event: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Deletes everything this store has written: rows, the live JSONL stream and its rotation.
+     *
+     * <p>Called when the user turns notification history off. Leaving the previously captured
+     * message bodies on disk would make the switch a promise about future notifications only,
+     * which is not what turning it off means.
+     */
+    public synchronized void clearAll() {
+        try {
+            SQLiteDatabase database = getDb();
+            if (database != null) database.execSQL("DELETE FROM " + TABLE_NAME);
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "Failed to clear notification history rows: " + e.getMessage());
+        }
+        File jsonlFile = LauncherCtlStorage.getNotificationsJsonlFile();
+        deleteQuietly(jsonlFile);
+        deleteQuietly(new File(jsonlFile.getParentFile(), jsonlFile.getName() + ".1"));
+    }
+
+    private static void deleteQuietly(File file) {
+        try {
+            if (file.exists() && !file.delete()) {
+                Log.w(LOG_TAG, "Failed to delete " + file.getName());
+            }
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "Failed to delete " + file.getName() + ": " + e.getMessage());
         }
     }
 
@@ -294,12 +324,37 @@ public final class LauncherCtlNotificationStore {
 
     private void appendJsonlEvent(LauncherCtlNotificationEvent event) {
         File jsonlFile = LauncherCtlStorage.getNotificationsJsonlFile();
+        rotateJsonlIfLarge(jsonlFile);
         try (FileOutputStream fos = new FileOutputStream(jsonlFile, true);
              BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(fos, StandardCharsets.UTF_8))) {
             writer.write(event.toJson().toString());
             writer.newLine();
         } catch (IOException | JSONException e) {
             Log.w(LOG_TAG, "Failed to append notification JSONL event: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Keeps the append-only stream bounded at one live file plus one rotated file.
+     *
+     * <p>SQLite is capped by {@link #pruneOldRows()}, but the JSONL mirror had no ceiling at all: a
+     * chatty app could grow it until internal storage filled, and every line in it is notification
+     * content that outlives the SQLite retention window. Rotation happens by rename so a reader
+     * that already opened the stream keeps reading a consistent file, and the previous rotation is
+     * dropped rather than kept forever.
+     */
+    private void rotateJsonlIfLarge(File jsonlFile) {
+        try {
+            if (!jsonlFile.isFile() || jsonlFile.length() < MAX_JSONL_BYTES) return;
+            File rotated = new File(jsonlFile.getParentFile(), jsonlFile.getName() + ".1");
+            if (rotated.exists() && !rotated.delete()) {
+                Log.w(LOG_TAG, "Failed to remove previous notification JSONL rotation");
+            }
+            if (!jsonlFile.renameTo(rotated) && !jsonlFile.delete()) {
+                Log.w(LOG_TAG, "Failed to rotate notification JSONL stream");
+            }
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "Failed to rotate notification JSONL stream: " + e.getMessage());
         }
     }
 

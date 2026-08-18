@@ -21,7 +21,7 @@
     "hideCursor": true,
     "brightColor": false,
     "key": {
-      "width": 12,
+      "width": 4,
       "type": "string"
     },
     "size": {
@@ -39,7 +39,12 @@
   //     so bold is a real instance rather than smeared synthetic bold.
   //   - Italic is a separate face file; bold+italic combines both.
   //   - Icons are Nerd Font 3.4 material glyphs (SPUA-A) routed to the static NF face
-  //     by the symbol_map lines in fonts.conf.
+  //     by the symbol_map lines in fonts.conf. They are the whole key: no text label, so
+  //     the narrow phone terminal keeps its columns for values. Fastfetch counts such a
+  //     glyph as two cells while the terminal draws one, which is why key.width is 4 for
+  //     two visible spaces after the icon.
+  //   - Maple Mono's italic draws `a` and `l` as handwritten forms; `+cv31 +cv35` in
+  //     ~/.termux/fonts.conf turns those two back into plain slanted shapes.
   //   - Operator pairs in the values are real Maple `calt` ligatures, and zeros are
   //     slashed by the `+zero` feature.
   "modules": [
@@ -53,24 +58,24 @@
     },
     {
       "type": "os",
-      "key": "{#dim_light_blue}󰀲{#} {#light_blue}os{#}",
+      "key": "{#dim_light_blue}󰀲{#}",
       "format": "{#light_white}{name} {#bold_light_white}{version}{#} {#dim_light_black}->{#} {#italic_light_blue}{arch}{#}"
     },
     {
       "type": "host",
-      "key": "{#dim_light_blue}󰄜{#} {#light_blue}device{#}",
+      "key": "{#dim_light_blue}󰄜{#}",
       "outputColor": "light_white"
     },
     {
       "type": "command",
-      "key": "{#dim_light_blue}󰌽{#} {#light_blue}kernel{#}",
+      "key": "{#dim_light_blue}󰌽{#}",
       "outputColor": "light_white",
       "text": "uname -r | cut -d- -f1-2",
       "format": "{}"
     },
     {
       "type": "uptime",
-      "key": "{#dim_light_blue}󰥔{#} {#light_blue}uptime{#}",
+      "key": "{#dim_light_blue}󰥔{#}",
       "format": "{#light_white}{days}{#}{#dim_light_black}d{#} {#light_white}{hours}{#}{#dim_light_black}h{#} {#light_white}{minutes}{#}{#dim_light_black}m{#}"
     },
     {
@@ -79,25 +84,25 @@
     },
     {
       "type": "cpu",
-      "key": "{#dim_light_cyan}󰻠{#} {#light_cyan}cpu{#}",
+      "key": "{#dim_light_cyan}󰻠{#}",
       "format": "{#bold_light_white}{cores-logical}{#}{#italic_light_cyan}x{#} {#dim_light_black}=>{#} {#light_white}{freq-max}{#}",
       "temp": false
     },
     {
       "type": "memory",
-      "key": "{#dim_light_cyan}󰍛{#} {#light_cyan}memory{#}",
+      "key": "{#dim_light_cyan}󰍛{#}",
       "format": "{#light_white}{used}{#} {#dim_light_black}/{#} {#light_white}{total}{#} {#dim_light_black}·{#} {#bold_light_cyan}{percentage}{#}"
     },
     {
       "type": "command",
-      "key": "{#dim_light_cyan}󰋊{#} {#light_cyan}disk{#}",
+      "key": "{#dim_light_cyan}󰋊{#}",
       "outputColor": "light_white",
       "text": "df -h /data/data/com.termux/files/home | awk 'NR==2 {print $3 \" / \" $2 \" \\u00b7 \" $5}'",
       "format": "{}"
     },
     {
       "type": "battery",
-      "key": "{#dim_light_cyan}󰁹{#} {#light_cyan}power{#}",
+      "key": "{#dim_light_cyan}󰁹{#}",
       "format": "{#light_white}{capacity}{#} {#dim_light_black}·{#} {#italic_light_cyan}{status}{#}"
     }
   ]

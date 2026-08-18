@@ -1,5 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/settings_terminal_key_row_header">
+        <Preference
+            app:key="edit_extra_keys_row"
+            app:persistent="false"
+            app:title="@string/settings_edit_extra_keys_title"
+            app:summary="@string/settings_edit_extra_keys_summary" />
+        <SwitchPreferenceCompat
+            app:key="app_launcher_extra_keys_row_enabled"
+            app:title="@string/settings_show_extra_keys_row_title"
+            app:summary="@string/settings_show_extra_keys_row_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="extra_keys_text_all_caps"
+            app:title="@string/settings_extra_keys_all_caps_title"
+            app:summary="@string/settings_extra_keys_all_caps_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_input_method_header">
         <ListPreference

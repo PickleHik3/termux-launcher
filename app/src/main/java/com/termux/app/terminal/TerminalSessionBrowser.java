@@ -1,74 +1,59 @@
 package com.termux.app.terminal;
 
 import android.content.Context;
-import android.text.Editable;
 import android.text.TextUtils;
-import android.text.TextWatcher;
+import android.view.Gravity;
 import android.view.LayoutInflater;
-import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.AdapterView;
 import android.widget.BaseAdapter;
 import android.widget.CheckBox;
-import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ListView;
-import android.widget.PopupMenu;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
 
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
-import com.termux.shared.termux.interact.TextInputDialogUtils;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/** Searchable Material surface for inspecting and managing sessions, windows, and panes. */
+/**
+ * Searchable surface for inspecting and managing sessions, windows, and panes, and everything it
+ * prompts for on the way.
+ *
+ * <p>All of it runs on {@link TerminalSheetController} rather than on {@code AlertDialog} and
+ * {@code PopupMenu}. The browser was the last terminal surface that opened windows of its own, and
+ * its search box was the worst of them: a focused {@code EditText} took the {@code InputConnection}
+ * off {@code TerminalView}, which collapsed the in-app keyboard and resized the terminal twice just
+ * to type a filter. On the sheet plane nothing takes focus and the search field is typed from the
+ * key channel, exactly like the palette and the rename chip.
+ */
 public final class TerminalSessionBrowser {
-
-    private static final int MENU_ACTIVATE = 1;
-    private static final int MENU_CLONE = 2;
-    private static final int MENU_RENAME = 3;
-    private static final int MENU_CLOSE = 4;
 
     private TerminalSessionBrowser() {}
 
     /** Shows the browser. Must be called on the main thread. */
     public static void show(@NonNull TermuxActivity activity) {
         View container = activity.getLayoutInflater().inflate(R.layout.session_browser, null);
-        EditText search = container.findViewById(R.id.session_browser_search);
+        TextView search = container.findViewById(R.id.session_browser_search);
         ListView list = container.findViewById(R.id.session_browser_list);
         TextView empty = container.findViewById(R.id.session_browser_empty);
         BrowserAdapter adapter = new BrowserAdapter(activity);
         list.setAdapter(adapter);
         list.setEmptyView(empty);
-
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
-            .setTitle(R.string.session_browser_title)
-            .setView(container)
-            .setNegativeButton(android.R.string.cancel, null)
-            .create();
-
-        search.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
-            @Override public void afterTextChanged(Editable editable) {
-                adapter.setQuery(editable.toString());
-            }
-        });
+        TerminalSheetController sheet = activity.getTerminalSheetController();
 
         list.setOnItemClickListener((parent, view, position, id) -> {
             SessionBrowserModel.Session session = adapter.entryAt(position);
-            if (session != null && activity.activateBrowserSession(session.index)) dialog.dismiss();
+            // Activating leaves the browser describing a layout the user has just left, so the
+            // whole stack goes rather than only this card.
+            if (session != null && activity.activateBrowserSession(session.index)) sheet.dismissAll();
         });
 
         container.findViewById(R.id.session_browser_new).setOnClickListener(v -> {
@@ -81,72 +66,74 @@ public final class TerminalSessionBrowser {
         });
         container.findViewById(R.id.session_browser_save).setOnClickListener(v -> promptSave(activity));
 
-        adapter.setMenuListener((anchor, session) -> showSessionMenu(activity, adapter, dialog,
-            anchor, session));
+        adapter.setMenuListener((anchor, session) -> showSessionMenu(activity, adapter, session));
+        // Subscribed only once the sheet is actually up: a callback registered against a surface
+        // that never opened would keep reloading a browser nobody can see.
+        if (!sheet.show(activity.getString(R.string.session_browser_title), container, true,
+            new TerminalSheetController.TextField(search,
+                activity.getString(R.string.session_browser_search_hint), adapter::setQuery),
+            () -> activity.setSessionBrowserRefreshCallback(null))) return;
         activity.setSessionBrowserRefreshCallback(adapter::reload);
-        dialog.setOnDismissListener(ignored -> activity.setSessionBrowserRefreshCallback(null));
-        dialog.show();
         activity.requestSessionBrowserForegroundRefresh();
     }
 
+    /**
+     * The per-row actions, as a sheet stacked on the browser rather than as a {@code PopupMenu}
+     * anchored to the row. The anchor is gone with the popup: a menu window over a plane that is
+     * itself an in-activity view had no reason to be a window.
+     */
     private static void showSessionMenu(@NonNull TermuxActivity activity,
                                         @NonNull BrowserAdapter adapter,
-                                        @NonNull AlertDialog browser,
-                                        @NonNull View anchor,
                                         @NonNull SessionBrowserModel.Session session) {
-        PopupMenu popup = new PopupMenu(activity, anchor);
-        Menu menu = popup.getMenu();
-        menu.add(Menu.NONE, MENU_ACTIVATE, 0, R.string.session_browser_activate);
-        menu.add(Menu.NONE, MENU_CLONE, 1, R.string.session_browser_clone);
-        menu.add(Menu.NONE, MENU_RENAME, 2, R.string.session_browser_rename);
-        menu.add(Menu.NONE, MENU_CLOSE, 3, R.string.session_browser_close);
-        popup.setOnMenuItemClickListener(item -> {
-            switch (item.getItemId()) {
-                case MENU_ACTIVATE:
-                    if (activity.activateBrowserSession(session.index)) browser.dismiss();
-                    else showActionFailed(activity);
-                    return true;
-                case MENU_CLONE:
-                    if (activity.cloneBrowserSession(session.index)) adapter.reload();
-                    else showActionFailed(activity);
-                    return true;
-                case MENU_RENAME:
-                    promptRename(activity, adapter, session);
-                    return true;
-                case MENU_CLOSE:
-                    confirmClose(activity, adapter, session);
-                    return true;
-                default:
-                    return false;
-            }
+        TerminalSheetController sheet = activity.getTerminalSheetController();
+        LinearLayout body = TerminalSheetViews.body(activity);
+        TerminalSheetViews.addMenuRow(body, activity.getString(R.string.session_browser_activate), () -> {
+            if (activity.activateBrowserSession(session.index)) sheet.dismissAll();
+            else showActionFailed(activity);
         });
-        popup.show();
+        TerminalSheetViews.addMenuRow(body, activity.getString(R.string.session_browser_clone), () -> {
+            sheet.dismiss();
+            if (activity.cloneBrowserSession(session.index)) adapter.reload();
+            else showActionFailed(activity);
+        });
+        TerminalSheetViews.addMenuRow(body, activity.getString(R.string.session_browser_rename),
+            () -> promptRename(activity, adapter, session));
+        TerminalSheetViews.addMenuRow(body, activity.getString(R.string.session_browser_close), () -> {
+            sheet.dismiss();
+            confirmClose(activity, adapter, session);
+        });
+        sheet.show(displayName(activity, session), body);
     }
 
+    /**
+     * Renames through the anchored editor rather than a prompt, so the browser's rename costs no
+     * system-IME swap either. {@code beginTerminalRename} closes the sheet stack on the way — the
+     * chip anchors to the session indicator, which sits behind a modal sheet — and the adapter
+     * reloads when the editor ends, through the activity's own refresh.
+     */
     private static void promptRename(@NonNull TermuxActivity activity,
                                      @NonNull BrowserAdapter adapter,
                                      @NonNull SessionBrowserModel.Session session) {
-        TextInputDialogUtils.textInput(activity, R.string.title_rename_window_session, session.name,
-            R.string.action_rename_session_confirm, text -> {
-                if (activity.renameBrowserSession(session.index, text)) adapter.reload();
-                else showActionFailed(activity);
-            }, -1, null, -1, null, null);
+        if (activity.beginSessionRenameAtIndex(session.index)) adapter.reload();
+        else showActionFailed(activity);
     }
 
     private static void confirmClose(@NonNull TermuxActivity activity,
                                      @NonNull BrowserAdapter adapter,
                                      @NonNull SessionBrowserModel.Session session) {
-        String title = displayName(activity, session);
-        new MaterialAlertDialogBuilder(activity)
-            .setTitle(activity.getString(R.string.session_browser_close_title, title))
-            .setMessage(activity.getResources().getQuantityString(
-                R.plurals.session_browser_close_message, session.paneCount(), session.paneCount()))
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.session_browser_close, (dialog, which) -> {
-                if (activity.closeBrowserSession(session.index)) adapter.reload();
-                else showActionFailed(activity);
-            })
-            .show();
+        TerminalSheetController sheet = activity.getTerminalSheetController();
+        LinearLayout body = TerminalSheetViews.body(activity);
+        TerminalSheetViews.addMessage(body, activity.getResources().getQuantityString(
+            R.plurals.session_browser_close_message, session.paneCount(), session.paneCount()));
+        LinearLayout actions = TerminalSheetViews.addActionRow(body);
+        TerminalSheetViews.addAction(actions, activity.getString(android.R.string.cancel), sheet::dismiss);
+        TerminalSheetViews.addAction(actions, activity.getString(R.string.session_browser_close), () -> {
+            sheet.dismiss();
+            if (activity.closeBrowserSession(session.index)) adapter.reload();
+            else showActionFailed(activity);
+        });
+        sheet.show(activity.getString(R.string.session_browser_close_title,
+            displayName(activity, session)), body);
     }
 
     /** Extra-keys/palette entry: the same save-name prompt the browser's Save button shows. */
@@ -171,26 +158,23 @@ public final class TerminalSessionBrowser {
             Toast.makeText(activity, R.string.workspace_picker_empty, Toast.LENGTH_SHORT).show();
             return;
         }
-        LinearLayout list = dialogFrame(activity);
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
-            .setTitle(R.string.workspace_picker_title)
-            .setView(wrapScrolling(list))
-            .setNegativeButton(android.R.string.cancel, null)
-            .create();
+        LinearLayout list = new LinearLayout(activity);
+        list.setOrientation(LinearLayout.VERTICAL);
         for (com.termux.app.terminal.TerminalWorkspaceStore.Entry entry : entries) {
-            addToFrame(list, workspaceRow(activity, entry.name, dialog));
+            TerminalSheetViews.addToFrame(list, workspaceRow(activity, entry.name));
         }
-        dialog.show();
+        activity.getTerminalSheetController().show(
+            activity.getString(R.string.workspace_picker_title), TerminalSheetViews.wrapScrolling(list));
     }
 
     /** One picker row: the name loads it, the trailing button deletes it. */
     @NonNull
-    private static View workspaceRow(@NonNull TermuxActivity activity, @NonNull String name,
-                                     @NonNull AlertDialog picker) {
+    private static View workspaceRow(@NonNull TermuxActivity activity, @NonNull String name) {
+        TerminalSheetController sheet = activity.getTerminalSheetController();
         int density = Math.round(activity.getResources().getDisplayMetrics().density);
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView label = new TextView(activity);
         label.setText(name);
@@ -198,9 +182,9 @@ public final class TerminalSessionBrowser {
         label.setSingleLine(true);
         label.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
         label.setMinHeight(48 * density);
-        label.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        label.setGravity(Gravity.CENTER_VERTICAL);
         label.setOnClickListener(v -> {
-            picker.dismiss();
+            sheet.dismiss();
             promptWorkspaceLoadMode(activity, name);
         });
         row.addView(label, new LinearLayout.LayoutParams(
@@ -211,7 +195,7 @@ public final class TerminalSessionBrowser {
         delete.setBackgroundColor(0x00000000);
         delete.setContentDescription(activity.getString(R.string.workspace_delete_description, name));
         delete.setOnClickListener(v -> {
-            picker.dismiss();
+            sheet.dismiss();
             promptWorkspaceDelete(activity, name);
         });
         row.addView(delete, new LinearLayout.LayoutParams(40 * density, 40 * density));
@@ -221,32 +205,27 @@ public final class TerminalSessionBrowser {
     /** Deleting a workspace file cannot be undone, so it is always confirmed by name. */
     private static void promptWorkspaceDelete(@NonNull TermuxActivity activity,
                                               @NonNull String name) {
-        new MaterialAlertDialogBuilder(activity)
-            .setTitle(activity.getString(R.string.workspace_delete_title, name))
-            .setMessage(R.string.workspace_delete_message)
-            .setNegativeButton(android.R.string.cancel,
-                (dialog, which) -> showWorkspacePicker(activity))
-            .setPositiveButton(R.string.workspace_delete_confirm, (dialog, which) -> {
-                try {
-                    activity.deleteWorkspace(name);
-                    Toast.makeText(activity, activity.getString(
-                        R.string.workspace_deleted, name), Toast.LENGTH_SHORT).show();
-                } catch (TerminalWorkspace.WorkspaceException e) {
-                    Toast.makeText(activity, activity.getString(
-                        R.string.workspace_picker_failed, e.getMessage()), Toast.LENGTH_SHORT).show();
-                }
-                showWorkspacePicker(activity);
-            })
-            .show();
-    }
-
-    /** Keeps a long workspace list reachable on a short screen. */
-    @NonNull
-    private static View wrapScrolling(@NonNull View content) {
-        ScrollView scroll = new ScrollView(content.getContext());
-        scroll.addView(content, new ScrollView.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        return scroll;
+        TerminalSheetController sheet = activity.getTerminalSheetController();
+        LinearLayout body = TerminalSheetViews.body(activity);
+        TerminalSheetViews.addMessage(body, activity.getString(R.string.workspace_delete_message));
+        LinearLayout actions = TerminalSheetViews.addActionRow(body);
+        TerminalSheetViews.addAction(actions, activity.getString(android.R.string.cancel), () -> {
+            sheet.dismiss();
+            showWorkspacePicker(activity);
+        });
+        TerminalSheetViews.addAction(actions, activity.getString(R.string.workspace_delete_confirm), () -> {
+            sheet.dismiss();
+            try {
+                activity.deleteWorkspace(name);
+                Toast.makeText(activity, activity.getString(
+                    R.string.workspace_deleted, name), Toast.LENGTH_SHORT).show();
+            } catch (TerminalWorkspace.WorkspaceException e) {
+                Toast.makeText(activity, activity.getString(
+                    R.string.workspace_picker_failed, e.getMessage()), Toast.LENGTH_SHORT).show();
+            }
+            showWorkspacePicker(activity);
+        });
+        sheet.show(activity.getString(R.string.workspace_delete_title, name), body);
     }
 
     private static void promptWorkspaceLoadMode(@NonNull TermuxActivity activity,
@@ -259,26 +238,24 @@ public final class TerminalSessionBrowser {
         } catch (TerminalWorkspace.WorkspaceException ignored) {
             // Loading proper will surface the failure; the checkbox simply stays hidden.
         }
-        final CheckBox runCommands;
-        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity)
-            .setTitle(name)
-            .setMessage(activity.getString(R.string.workspace_picker_mode_message, name));
-        if (commandCount == 0) {
-            runCommands = null;
-        } else {
-            LinearLayout frame = dialogFrame(activity);
-            runCommands = addCheckBox(frame, activity.getResources().getQuantityString(
-                    R.plurals.workspace_load_run_commands, commandCount, commandCount),
-                activity.getString(R.string.workspace_load_run_commands_summary));
-            builder.setView(frame);
-        }
-        builder
-            .setPositiveButton(R.string.workspace_picker_replace,
-                (dialog, which) -> loadWorkspace(activity, name, true, isChecked(runCommands)))
-            .setNeutralButton(R.string.workspace_picker_append,
-                (dialog, which) -> loadWorkspace(activity, name, false, isChecked(runCommands)))
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
+        TerminalSheetController sheet = activity.getTerminalSheetController();
+        LinearLayout body = TerminalSheetViews.body(activity);
+        TerminalSheetViews.addMessage(body, activity.getString(R.string.workspace_picker_mode_message, name));
+        final CheckBox runCommands = commandCount == 0 ? null : addCheckBox(body,
+            activity.getResources().getQuantityString(
+                R.plurals.workspace_load_run_commands, commandCount, commandCount),
+            activity.getString(R.string.workspace_load_run_commands_summary));
+        LinearLayout actions = TerminalSheetViews.addActionRow(body);
+        TerminalSheetViews.addAction(actions, activity.getString(android.R.string.cancel), sheet::dismiss);
+        TerminalSheetViews.addAction(actions, activity.getString(R.string.workspace_picker_append), () -> {
+            sheet.dismiss();
+            loadWorkspace(activity, name, false, isChecked(runCommands));
+        });
+        TerminalSheetViews.addAction(actions, activity.getString(R.string.workspace_picker_replace), () -> {
+            sheet.dismiss();
+            loadWorkspace(activity, name, true, isChecked(runCommands));
+        });
+        sheet.show(name, body);
     }
 
     private static void loadWorkspace(@NonNull TermuxActivity activity, @NonNull String name,
@@ -294,40 +271,37 @@ public final class TerminalSessionBrowser {
     }
 
     private static void promptSave(@NonNull TermuxActivity activity) {
-        LinearLayout frame = dialogFrame(activity);
-        EditText nameField = new EditText(activity);
-        nameField.setSingleLine();
-        nameField.setHint(R.string.session_browser_workspace_name);
-        addToFrame(frame, nameField);
-        CheckBox captureCommands = addCheckBox(frame,
+        TerminalSheetController sheet = activity.getTerminalSheetController();
+        LinearLayout body = TerminalSheetViews.body(activity);
+        TextView nameField = new TextView(activity);
+        nameField.setTextSize(16f);
+        nameField.setSingleLine(true);
+        nameField.setMinHeight(Math.round(
+            44 * activity.getResources().getDisplayMetrics().density));
+        nameField.setGravity(Gravity.CENTER_VERTICAL);
+        TerminalSheetViews.addToFrame(body, nameField);
+        CheckBox captureCommands = addCheckBox(body,
             activity.getString(R.string.workspace_save_capture_commands),
             activity.getString(R.string.workspace_save_capture_commands_summary));
-        new MaterialAlertDialogBuilder(activity)
-            .setTitle(R.string.session_browser_workspace_name)
-            .setView(frame)
-            .setPositiveButton(android.R.string.ok, (dialog, which) -> saveWorkspace(activity,
-                nameField.getText().toString(), false, captureCommands.isChecked()))
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
+        // Held in a one-slot array because the field and the action that reads it are mutually
+        // recursive: ⏎ on the field saves, and saving has to ask the field for the name.
+        final TerminalSheetController.TextField[] field = new TerminalSheetController.TextField[1];
+        Runnable save = () -> {
+            String name = field[0].value();
+            sheet.dismiss();
+            saveWorkspace(activity, name, false, captureCommands.isChecked());
+        };
+        field[0] = new TerminalSheetController.TextField(nameField,
+            activity.getString(R.string.session_browser_workspace_name), null, save);
+        LinearLayout actions = TerminalSheetViews.addActionRow(body);
+        TerminalSheetViews.addAction(actions, activity.getString(android.R.string.cancel), sheet::dismiss);
+        TerminalSheetViews.addAction(actions, activity.getString(android.R.string.ok), save);
+        sheet.show(activity.getString(R.string.session_browser_save_workspace_title), body, false,
+            field[0], null);
     }
 
     private static boolean isChecked(@Nullable CheckBox box) {
         return box != null && box.isChecked();
-    }
-
-    /** A vertical dialog body with the inset a Material dialog expects around its content. */
-    @NonNull
-    private static LinearLayout dialogFrame(@NonNull Context context) {
-        int density = Math.round(context.getResources().getDisplayMetrics().density);
-        LinearLayout frame = new LinearLayout(context);
-        frame.setOrientation(LinearLayout.VERTICAL);
-        frame.setPadding(24 * density, 8 * density, 24 * density, 0);
-        return frame;
-    }
-
-    private static void addToFrame(@NonNull LinearLayout frame, @NonNull View child) {
-        frame.addView(child, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     }
 
     /**
@@ -341,7 +315,7 @@ public final class TerminalSessionBrowser {
         int density = Math.round(context.getResources().getDisplayMetrics().density);
         CheckBox box = new CheckBox(context);
         box.setText(title);
-        addToFrame(frame, box);
+        TerminalSheetViews.addToFrame(frame, box);
 
         TextView explanation = new TextView(context);
         explanation.setText(summary);
@@ -365,14 +339,18 @@ public final class TerminalSessionBrowser {
         } catch (TerminalWorkspace.WorkspaceException e) {
             if (!overwrite && "conflict".equals(e.code)) {
                 final String requested = name == null ? "" : name.trim();
-                new MaterialAlertDialogBuilder(activity)
-                    .setTitle(activity.getString(
-                        R.string.session_browser_workspace_overwrite_title, requested))
-                    .setMessage(R.string.session_browser_workspace_overwrite_message)
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .setPositiveButton(R.string.session_browser_overwrite,
-                        (dialog, which) -> saveWorkspace(activity, requested, true, captureCommands))
-                    .show();
+                TerminalSheetController sheet = activity.getTerminalSheetController();
+                LinearLayout body = TerminalSheetViews.body(activity);
+                TerminalSheetViews.addMessage(body, activity.getString(
+                    R.string.session_browser_workspace_overwrite_message));
+                LinearLayout actions = TerminalSheetViews.addActionRow(body);
+                TerminalSheetViews.addAction(actions, activity.getString(android.R.string.cancel), sheet::dismiss);
+                TerminalSheetViews.addAction(actions, activity.getString(R.string.session_browser_overwrite), () -> {
+                    sheet.dismiss();
+                    saveWorkspace(activity, requested, true, captureCommands);
+                });
+                sheet.show(activity.getString(
+                    R.string.session_browser_workspace_overwrite_title, requested), body);
             } else {
                 Toast.makeText(activity, e.getMessage(), Toast.LENGTH_LONG).show();
             }
