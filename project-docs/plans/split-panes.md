@@ -218,7 +218,7 @@ inflates one `view_terminal_pane.xml` per tree leaf. Unlimited recursive splits 
 - `onSessionFinished` routes through `controller.onSessionFinished`: pane-with-siblings → drop pane + re-key tab if primary exited; only-pane → clean tree + fall through to normal session close.
 - Compat mode: `collapseAll()` kills secondaries, restores single panes.
 
-**Verified on device (100.101.173.85):** startup (no crash, nerd font), Ctrl+Alt+V side-by-side,
+**Verified on device (the test device):** startup (no crash, nerd font), Ctrl+Alt+V side-by-side,
 Ctrl+Alt+H stacked → 3 recursive panes, Ctrl+Alt+arrow directional focus, `exit` clean collapse +
 reflow + primary re-key, thin Material active-pane border. Build: `:app:assembleDebug` green.
 

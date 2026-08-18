@@ -5,7 +5,7 @@
 # extracted — a fresh install from this APK would have no bootstrap.
 set -euo pipefail
 
-DEVICE="${DEVICE:-100.101.173.85:5555}"
+DEVICE="${DEVICE:-127.0.0.1:5555}"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 APK="$REPO/app/build/outputs/apk/debug/termux-app_apt-android-7-debug_arm64-v8a.apk"
 BT="$(ls -d "${ANDROID_HOME:-$HOME/android-sdk}"/build-tools/* | sort -V | tail -1)"
