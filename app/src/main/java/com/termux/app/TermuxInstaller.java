@@ -1,7 +1,6 @@
 package com.termux.app;
 
 import android.app.Activity;
-import androidx.appcompat.app.AlertDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import android.app.ProgressDialog;
 import android.content.Context;

@@ -5,6 +5,7 @@ import android.content.Context;
 import androidx.test.core.app.ApplicationProvider;
 
 import com.termux.launcherctl.LauncherToolRegistry;
+import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -32,6 +33,9 @@ public class LauncherExampleConfigsTest {
         "^#\\s?((?:font_family|bold_font|italic_font|bold_italic_font|symbol_map|fallback_font"
             + "|disable_ligatures|font_features|font_variations|modify_font|box_drawing_scale"
             + "|box_drawing|powerline_symbols)\\s.*)$");
+    /** A commented `key = value` line, as opposed to the prose around it. */
+    private static final Pattern PROPERTY_DIRECTIVE =
+        Pattern.compile("^#\\s?([a-z][a-z0-9.\\-]*\\s*=.*)$");
 
     @Test
     public void everyCommentedBindingDirectiveParses() throws Exception {
@@ -60,6 +64,22 @@ public class LauncherExampleConfigsTest {
         String layout = asset("keyboard-layout.xml");
         assertTrue(layout.contains("tool:app.command_palette"));
         juloo.keyboard2.KeyboardData.load_string_exn(layout);
+    }
+
+    @Test
+    public void everyCommentedPropertyIsARealKey() throws Exception {
+        String directives = uncomment("termux.properties", PROPERTY_DIRECTIVE);
+        assertTrue("no properties found in the shipped example",
+            directives.split("\n").length > 10);
+
+        boolean sawTerm = false;
+        for (String line : directives.split("\n")) {
+            String key = line.substring(0, line.indexOf('=')).trim();
+            assertTrue("the shipped example names a property termux does not load: " + key,
+                TermuxPropertyConstants.TERMUX_APP_PROPERTIES_LIST.contains(key));
+            sawTerm |= TermuxPropertyConstants.KEY_TERMINAL_TERM.equals(key);
+        }
+        assertTrue("terminal-term is missing from the shipped example", sawTerm);
     }
 
     private static String uncomment(String name, Pattern directive) throws IOException {

@@ -20,6 +20,7 @@ public final class AppDrawerCategoryTileAdapter
     @NonNull private List<AppDrawerCategoryBucket> buckets = new ArrayList<>();
     @Nullable private AppDrawerCategoryGridMetrics metrics;
     @Nullable private AppDrawerCategoryTileView.ExpansionListener expansionListener;
+    @Nullable private AppDrawerCategoryChoiceListener categoryChoiceListener;
     @NonNull private AppDrawerAppCellView.ClickGate clickGate = AppDrawerAppCellView.ALLOW_CLICKS;
 
     public AppDrawerCategoryTileAdapter(@Nullable SuggestionBarView dock) {
@@ -35,6 +36,9 @@ public final class AppDrawerCategoryTileAdapter
     @Nullable AppDrawerCategoryGridMetrics getMetrics() { return metrics; }
     public void setExpansionListener(@Nullable AppDrawerCategoryTileView.ExpansionListener listener) {
         expansionListener = listener;
+    }
+    public void setCategoryChoiceListener(@Nullable AppDrawerCategoryChoiceListener listener) {
+        categoryChoiceListener = listener;
     }
     public void setClickGate(@NonNull AppDrawerAppCellView.ClickGate gate) { clickGate = gate; }
     public void submit(@NonNull List<AppDrawerCategoryBucket> buckets) {
@@ -69,7 +73,7 @@ public final class AppDrawerCategoryTileAdapter
             holder.tile.unbind();
             return;
         }
-        holder.tile.bind(dock, buckets.get(position), current, listener, clickGate);
+        holder.tile.bind(dock, buckets.get(position), current, listener, clickGate, categoryChoiceListener);
     }
 
     @Override public void onViewRecycled(@NonNull Holder holder) {

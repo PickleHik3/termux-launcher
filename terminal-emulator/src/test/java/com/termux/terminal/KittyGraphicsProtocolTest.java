@@ -239,11 +239,36 @@ public class KittyGraphicsProtocolTest extends TerminalTestCase {
         assertEquals(0, offset[0]);
     }
 
-    public void testUnicodePlaceholdersAnswerEnosys() {
-        assertEnteringStringGivesResponse("\033_Gi=3,a=T,U=1,f=24,s=1,v=1;AAAA\033\\",
-            "\033_Gi=3;ENOSYS:unicode placeholders are not supported\033\\");
-        assertEnteringStringGivesResponse("\033_Gi=3,a=p,U=1\033\\",
-            "\033_Gi=3;ENOSYS:unicode placeholders are not supported\033\\");
+    public void testUnicodePlaceholderVirtualPlacementsAreStoredAndDeletedById() {
+        enterString("\033_Gi=3,a=t,q=2,f=24,s=2,v=2;" + base64(new byte[12]) + "\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=3,p=7,a=p,U=1,c=2,r=2\033\\",
+            "\033_Gi=3,p=7;OK\033\\");
+        assertTrue(mTerminal.hasKittyVirtualPlacement(3, 7));
+
+        assertEnteringStringGivesResponse("\033_Gi=3,p=7,a=d,d=i\033\\",
+            "\033_Gi=3,p=7;OK\033\\");
+        assertFalse(mTerminal.hasKittyVirtualPlacement(3, 7));
+        // Lowercase deletion removed the prototype, not the stored image.
+        assertEnteringStringGivesResponse("\033_Gi=3,p=8,a=p,U=1,c=2,r=2\033\\",
+            "\033_Gi=3,p=8;OK\033\\");
+        // Location-based deletion never touches invisible virtual placements, even in free mode.
+        assertEnteringStringGivesResponse("\033_Ga=d,d=A\033\\", "");
+        assertTrue(mTerminal.hasKittyVirtualPlacement(3, 8));
+        assertEnteringStringGivesResponse("\033_Gi=3,p=8,a=d,d=I\033\\",
+            "\033_Gi=3,p=8;OK\033\\");
+        assertFalse(mTerminal.hasKittyVirtualPlacement(3, 8));
+        assertEnteringStringGivesResponse("\033_Gi=3,a=p\033\\",
+            "\033_Gi=3;ENOENT:image not found\033\\");
+    }
+
+    public void testTransmitAndDisplayCanCreateVirtualPlacementWithoutStampingCells() {
+        enterString("\033_Gi=4,p=9,a=T,U=1,q=2,f=24,s=2,v=2,c=2,r=2;"
+            + base64(new byte[12]) + "\033\\");
+        assertTrue(mTerminal.hasKittyVirtualPlacement(4, 9));
+        assertEquals("virtual placement must not write bitmap cells", 0,
+            mTerminal.getScreen().getKittyImageBytes());
+        assertEnteringStringGivesResponse("\033_Gi=4,a=p,U=2\033\\",
+            "\033_Gi=4;EINVAL:unsupported unicode placeholder mode\033\\");
     }
 
     public void testDeleteFormsValidateTheirRequiredKeys() {

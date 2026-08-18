@@ -510,16 +510,25 @@ public class LauncherToolRegistryTest {
         assertEquals(4, registry.getTool("pane.resize").defaultBindings.size());
         // terminal.state has no keybind today.
         assertTrue(registry.getTool("terminal.state").defaultBindings.isEmpty());
-        // Session switching records its legacy letter plus the compatibility-mode arrow, the
-        // latter conditioned so it cannot lie. The space bar swipe is not here: swipes live in
-        // the keyboard layout file as tool: keys, not as strokes in this table.
+        // Session switching records its legacy letter plus the prefixed down arrow, which means
+        // the same thing in both modes now that pane focus sits on the unprefixed Ctrl+Arrow. The
+        // space bar swipe is not here: swipes live in the keyboard layout file as tool: keys, not
+        // as strokes in this table.
         assertEquals(2, registry.getTool("session.next").defaultBindings.size());
         assertEquals("ctrl+alt+n", registry.getTool("session.next").defaultBindings.get(0).stroke);
         assertEquals(LauncherToolRegistry.BindingCondition.ALWAYS,
             registry.getTool("session.next").defaultBindings.get(0).condition);
         assertEquals("ctrl+alt+down", registry.getTool("session.next").defaultBindings.get(1).stroke);
-        assertEquals(LauncherToolRegistry.BindingCondition.SPLITS_OFF,
+        assertEquals(LauncherToolRegistry.BindingCondition.ALWAYS,
             registry.getTool("session.next").defaultBindings.get(1).condition);
+        // The three navigation levels, each on its own chord: Ctrl+Arrow inside the window,
+        // prefixed arrows across windows and sessions, digits for direct picks.
+        for (LauncherToolRegistry.Binding binding
+                : registry.getTool("pane.focus_direction").defaultBindings)
+            assertTrue(binding.stroke, binding.stroke.startsWith("ctrl+")
+                && !binding.stroke.startsWith("ctrl+alt+"));
+        assertEquals(9, registry.getTool("window.select").defaultBindings.size());
+        assertEquals(18, registry.getTool("session.activate_by_index").defaultBindings.size());
         // No default binding anywhere names a keyboard gesture any more.
         for (LauncherToolRegistry.ToolMetadata tool : registry.getTools())
             for (LauncherToolRegistry.Binding binding : tool.defaultBindings)

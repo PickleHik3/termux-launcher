@@ -3,11 +3,7 @@
 <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
 <!ENTITY TERMUX_APP_NAME "Termux:Launcher">
 <!ENTITY TERMUX_API_APP_NAME "Termux:API">
-<!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
-<!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
 <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
-<!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
-<!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
 ]>
 <resources>
     <string name="action_new_session">نشست جدید</string>
@@ -20,17 +16,13 @@
     <string name="action_select_url">گزیدن نشانی</string>
     <string name="title_select_url_none_found">هیچ نشانی‌ای در پایانه یافت نشد.</string>
     <string name="msg_select_url_copied_to_clipboard">نشانی در تخته‌گیره رونوشت شد</string>
-    <string name="action_share_selected_text">هم‌رسانی متن گزیده شده</string>
     <string name="title_share_selected_text">متن پایانه</string>
     <string name="title_share_selected_text_with">ارسال متن گزیده شده به:</string>
     <string name="action_reset_terminal">بازنشانی</string>
     <string name="msg_terminal_reset">بازنشانی پایانه</string>
     <string name="action_kill_process">کشتن فرایند (%d)</string>
     <string name="title_confirm_kill_process">واقعا این نشست را می‌کشید؟</string>
-    <string name="action_font_and_color">فونت و رنگ</string>
     <string name="action_set_background_image">نشاندن تصویر پس‌زمینه</string>
-    <string name="action_open_help">راهنما</string>
-    <string name="action_styling_install">نصب</string>
     <string name="notification_action_exit">خروج</string>
     <string name="notification_action_wake_lock">اندوختن بیداری</string>
     <string name="notification_action_wake_unlock">ارائۀ بیداری</string>
@@ -41,7 +33,6 @@
     <string name="msg_generating_report">در حال تولید گزارش</string>
     <string name="title_file_received">ذخیرۀ پرونده در ‎‪~/downloads/‬</string>
     <string name="action_file_received_open_directory">باز کردن شاخه</string>
-    <string name="title_restore_background_image">تصویر پس‌زمینه تشخیص داده شد. آیا می‌خواهید آن را بازیابی کنید؟</string>
     <string name="action_rename_session_confirm">نشاندن</string>
     <string name="permission_run_command_label">Run commands in &TERMUX_APP_NAME; environment</string>
 </resources>

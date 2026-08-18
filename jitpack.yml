@@ -1,8 +1,4 @@
 jdk:
   - openjdk17
 env:
-<<<<<<< HEAD
-  JITPACK_NDK_VERSION: "26.3.11579264"
-=======
   JITPACK_NDK_VERSION: "29.0.14206865"
->>>>>>> upstream/master

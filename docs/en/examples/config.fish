@@ -121,10 +121,8 @@ if status is-interactive
 
     # Oh My Posh prompt. Keep this after the Material colors are sourced.
     # The compact Aliens-derived theme follows the launcher's Material palette.
-    # termux-launcher remains available as the fuller alternate theme.
     if type -q oh-my-posh
         set -l omp_theme "$HOME/.config/ohmyposh/aliens-material.omp.json"
-        test -f "$omp_theme"; or set omp_theme "$HOME/.config/ohmyposh/termux-launcher.omp.json"
 
         if test -f "$omp_theme"
             oh-my-posh --config "$omp_theme" init fish | source

@@ -8,6 +8,39 @@ system keyboard. Landscape is usable for the first time.
 
 ### Added
 
+- **Narrow symbols.** `narrow_symbols U+E0A0-U+E0A3,U+E0C0-U+E0C7 1` in `~/.termux/fonts.conf` caps
+  how many cells a private-use symbol may be drawn across, kitty's directive with kitty's syntax.
+  The count defaults to one, the maximum is five, and for a code point matched by several lines the
+  last one wins.
+- **Kitty graphics Unicode placeholders.** `U=1` virtual placements and U+10EEEE
+  row/column/image-id decoding now draw stored images through ordinary text cells, enabling the
+  tmux path used by Neovim image plugins while retaining animation-frame updates.
+- **A configurable terminal name.** Set `terminal-term = xterm-kitty` (or another terminfo name) in
+  `~/.termux/termux.properties` for new sessions, then run `termux-reload-settings` and open a new
+  session. Unconfigured installs remain `TERM=xterm-256color`, and an explicit per-session
+  environment value still wins. Capability detection continues to work through XTVERSION,
+  `TERM_PROGRAM` and XTSMGRAPHICS, so this is only for programs that string-match the name.
+- **The key row and keyboard layout ship in the app.** The launcher's extra-keys row is the built-in
+  default, now including session switching as swipe-up popups on the window keys, and the in-app
+  keyboard layout is bundled as before. Neither needs a file, a download, or a setup script. An
+  `extra-keys` value in `~/.termux/termux.properties` — which is what the in-app editor writes — and
+  a `~/.termux/keyboard/layout.xml` both still win outright, and nothing in an app update rewrites
+  either, so an upgrade cannot cost you a customised row or layout. The second key page now ships
+  empty, since the in-app keyboard's Fn layer already reaches F1-F12; add keys to `extra-keys2` to
+  bring it back.
+- **A seeded `~/.termux/termux.properties`.** The app now ships a commented properties file
+  alongside the bindings and fonts examples, documenting `terminal-term` and the rest of the
+  launcher-relevant properties in place, so no download is needed to discover them. It is written
+  only when absent, every line is a comment so seeding changes no behaviour, and it is skipped
+  entirely when `~/.config/termux/termux.properties` exists — seeding the primary path would
+  otherwise silently disable a file kept at the secondary one.
+- **Host cross-build recipes**, in `recipes/cross`. The on-device recipes now have a counterpart
+  that builds the same pinned sources for `aarch64` Termux from a Linux host, using the Android NDK
+  and a sysroot assembled from published Termux `.deb` packages — no Docker image and no
+  `termux-packages` checkout. They add `kitten`, kitty's client binary, which cannot practically be
+  built on a phone: kitty's generated Go sources come from a generator that needs a built kitty.
+  `kitten icat` therefore works here, including through Unicode placeholders inside tmux.
+
 - **A full-screen app drawer.** Swipe down on the pinned apps row for an alphabetical grid of
   everything installed, with a search field and an A-Z rope down the side that scrubs to a
   section and dims the letters you are not on. The drawer is an overlay sibling of the root
@@ -141,6 +174,14 @@ system keyboard. Landscape is usable for the first time.
   the app the folder sits in front of, not an index, so installing and uninstalling apps does not
   drift it, and a folder whose anchor app is uninstalled falls back to sitting beside its first
   member.
+- **Named key bindings.** `map --label "Display name" …` in
+  `~/.termux/termux-launcher-bindings.conf` gives a binding the name the keybind hint legend prints
+  while Ctrl+Alt is latched. It matters for the generic actions: every app chord runs the one
+  `app.launch` action, so the legend used to read "Launch app" for all of them, whichever app each
+  one actually started. Bindings captured by long-pressing an app row in the command palette are
+  written with that row's app name as their label, so the chords most people have get named without
+  editing anything. Labels are capped at 32 characters, the width of a legend row, and an
+  unlabelled binding still shows its action's own title.
 
 ### Changed
 
@@ -153,6 +194,20 @@ system keyboard. Landscape is usable for the first time.
   virtual Ctrl and Fn by default, and a launcher that swallows the rocker leaves no way to
   change the volume from the home screen. `volume-keys = virtual` restores upstream's
   behaviour, and a test pins the value because an upstream merge could quietly take it back.
+- **`setup-launcher` asks a better question.** Three choices now: everything, the shell essentials
+  (fish, Oh My Posh, zoxide, eza), or one item at a time. "Everything" adds Neovim with AstroNvim
+  themed from the wallpaper palette, and the showcase binaries — sigye, the animated-logo fastfetch,
+  and kitten — installed into `~/.local/bin` from
+  [termux-launcher-binaries](https://github.com/PickleHik3/termux-launcher-binaries), each checked
+  against a pinned sha256. An unpublished binary is skipped with the recipe that builds it, never
+  installed unverified. That repository carries the licences, the patches and the build recipes,
+  including the corresponding source for the GPL-3.0-only `kitten`.
+- **`setup-launcher` no longer writes to `~/.termux`.** The script installed `termux.properties` and
+  the keyboard layout by replacing whichever files were there; now that the app seeds the former and
+  the in-app editor writes an `extra-keys` row into it, a wholesale rewrite would throw that row
+  away. It also stopped installing `termux-launcher.omp.json` — `aliens-material.omp.json` is the
+  prompt theme, and the older one is kept only for the deprecated `setup-tmux-btop`. Four pinned
+  templates remain, down from seven.
 - **The dock moves as one plane.** A single slab transform everything on it inherits, replacing
   a glass slab and an icon row on channels of their own: the capsule free-floats with its press
   dip, the edge-to-edge bar hinges at the screen edge, and the tilt cap comes down from 4 to 3
@@ -187,6 +242,47 @@ system keyboard. Landscape is usable for the first time.
 
 ### Fixed
 
+- **Nerd Font icons drawn at half their height.** A Nerd Font glyph sits on a full em square while a
+  text cell is narrower than its em — Maple Mono's is 0.6 em — so a symbol squeezed into one cell
+  came out markedly shorter than the capitals beside it. Following kitty, a private-use symbol whose
+  glyph is wider than one cell now spreads into the blank cells after it: it asks for
+  `ceil(advance / cell width)` cells, takes as many as there are blanks, and never exceeds five.
+  The expansion existed before but required the trailing blank to carry the whole same style, which
+  no real icon does — fetch tools and prompts colour the icon and not the space after it. Only what
+  a blank can actually show now has to match: its background, and any underline or strikethrough
+  drawn across it. Powerline separators are unaffected, being geometry rather than shaped text.
+- **The clock claimed clicks from empty space.** Its slot lays the view out at the pane's full
+  width so alignment can place the face left, centre or right inside it, which left the click
+  listener covering blank pane either side of the painted clock. Touches are now gated to the
+  painted region for each form.
+- **The compact flip clock looked nothing like the full one.** It kept an older evenly-spaced card
+  row with flat halves, while the full face had moved on to the departure-board look: paired cards
+  with a wider hour/minute gap, per-half convex lighting, a cast shadow down the lower half, hinge
+  clips at the pivot, and the stacked meta column. The compact face is drawn from the same face
+  now, at compact scale, and its measured width follows the cards it actually draws.
+- **A cross-built Fastfetch ignored `~/.config/fastfetch`.** Bionic answers `getpwuid()` for an app
+  uid with `pw_dir="/data"`, and Fastfetch trusts passwd over `$HOME`, so the host-built binary
+  looked for its config in `/data/.config/fastfetch`, never found it, and fell back to the built-in
+  ASCII logo with no error. Termux's own package builds avoid this because termux-packages patches
+  `pwd.h` inside its copy of the NDK sysroot; `recipes/cross/build-fastfetch.sh` now force-includes
+  an equivalent polyfill and fails the build if it did not take effect.
+- **The animated Fastfetch logo was stretched vertically.** The kitty-animation patch sent both a
+  column and a row count, and a terminal given both stretches the image to fill exactly that cell
+  box — the row count being a whole number of cells, a 294 px logo was stretched into a 310 px box.
+  It now sends the column count alone and lets the terminal derive the height from the image's own
+  aspect ratio. The image cache key moved with it, so a stretched cached logo is not replayed.
+- **`setup-launcher` installed Fastfetch without its runtime dependencies.** The published build
+  links `libandroid-glob` and dlopens ImageMagick, Chafa and zlib; without the first it does not
+  start at all, and without the others there is no image logo. They are installed with it now, and
+  a build reporting no `imagemagick7` support says so.
+
+- **Ghost swipes on the pinned apps row.** A swipe played its whole slide and then landed back on
+  the page it came from. Both page-switch animations committed the new page only from their end
+  callback, and both drop that callback when something cancels them mid-settle — a second finger
+  on the row, the host's transient-state reset, the stable-draw release that follows a re-render.
+  The swipe had already qualified and the haptic had already fired, so everything about it looked
+  committed except the result. A qualified swipe is now committed exactly once from whichever
+  path the animation ends on, cancel included.
 - **A hand-written `~/.termux/colors.properties` no longer loses in silence (#11).** Dynamic
   Material colours default on, and that branch never opens the file; applying a scheme from
   Termux:Styling now turns *Use wallpaper colors* off by itself, and a hint under the switch

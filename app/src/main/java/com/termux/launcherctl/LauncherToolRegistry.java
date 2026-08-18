@@ -489,11 +489,16 @@ public final class LauncherToolRegistry {
                 .withEnum("direction", new String[]{"left", "right", "up", "down"}, true, "left")
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            // Ctrl+Arrow, with no Alt and no prefix: moving between the panes of one window is
+            // the innermost move of the three, so it gets the shortest stroke, and the prefixed
+            // arrows are freed for the two outer ones (windows, then sessions). The cost is that
+            // Ctrl+Left/Right no longer reaches the shell's word-wise cursor movement while split
+            // panes are on.
             CATEGORY_PANE, R.string.tool_pane_focus_direction, 0, Arrays.asList(
-                Binding.of("ctrl+alt+left", BindingCondition.SPLITS_ON),
-                Binding.of("ctrl+alt+right", BindingCondition.SPLITS_ON),
-                Binding.of("ctrl+alt+up", BindingCondition.SPLITS_ON),
-                Binding.of("ctrl+alt+down", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
+                Binding.of("ctrl+left", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+right", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+up", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+down", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
         addUi(map, TOOL_PANE_RESIZE,
             "Grow the focused pane toward a direction.",
             schemaObject()
@@ -578,15 +583,17 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_WINDOW, R.string.tool_window_next, R.string.tool_desc_window_next,
-            Collections.singletonList(
-                Binding.of("ctrl+alt+]", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
+            Arrays.asList(
+                Binding.of("ctrl+alt+]", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+right", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
         addUi(map, TOOL_WINDOW_PREVIOUS,
             "Switch to the previous window in the current session.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_WINDOW, R.string.tool_window_previous, R.string.tool_desc_window_previous,
-            Collections.singletonList(
-                Binding.of("ctrl+alt+[", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
+            Arrays.asList(
+                Binding.of("ctrl+alt+[", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+left", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
         addUi(map, TOOL_SESSION_NEW,
             "Create a new terminal session, optionally named or fail-safe.",
             schemaObject()
@@ -615,25 +622,21 @@ public final class LauncherToolRegistry {
             ToolRisk.MEDIUM, true, ToolExecutor.TERMINAL,
             CATEGORY_SESSION, R.string.tool_session_clone_current,
             R.string.tool_desc_session_clone_current, null, REQUIRES_SESSION);
-        // Ctrl+Alt+Down/Up is deliberately absent here. Today it means "next/previous
-        // session" only while split panes are off; with splits on the multiplexer
-        // claims it for pane focus first. Until defaultBindings can express that
-        // condition, recording it would advertise a binding that often does
-        // something else.
+        // Ctrl+Alt+Down/Up means "next/previous session" in both modes now: pane focus moved to
+        // the unprefixed Ctrl+Arrow, so the prefixed vertical arrows are free to mean the same
+        // thing whether or not split panes are on.
         addUi(map, TOOL_SESSION_NEXT,
             "Switch to the next terminal session.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
-            CATEGORY_SESSION, R.string.tool_session_next, R.string.tool_desc_session_next, Arrays.asList(
-                Binding.of("ctrl+alt+n"),
-                Binding.of("ctrl+alt+down", BindingCondition.SPLITS_OFF)));
+            CATEGORY_SESSION, R.string.tool_session_next, R.string.tool_desc_session_next,
+            Binding.all("ctrl+alt+n", "ctrl+alt+down"));
         addUi(map, TOOL_SESSION_PREVIOUS,
             "Switch to the previous terminal session.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
-            CATEGORY_SESSION, R.string.tool_session_previous, R.string.tool_desc_session_previous, Arrays.asList(
-                Binding.of("ctrl+alt+p"),
-                Binding.of("ctrl+alt+up", BindingCondition.SPLITS_OFF)));
+            CATEGORY_SESSION, R.string.tool_session_previous, R.string.tool_desc_session_previous,
+            Binding.all("ctrl+alt+p", "ctrl+alt+up"));
         addUi(map, TOOL_SESSION_CLOSE_CURRENT,
             "Close the current session, including all of its windows and panes.",
             schemaEmpty(),
@@ -708,7 +711,17 @@ public final class LauncherToolRegistry {
                 .withInteger("index", "Zero-based window index", 0, 64, 0, true)
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
-            CATEGORY_WINDOW, R.string.tool_window_select, 0, null, REQUIRES_SPLITS);
+            // The digit supplies the index, the same way it does for the session tool below.
+            CATEGORY_WINDOW, R.string.tool_window_select, 0, Arrays.asList(
+                Binding.of("ctrl+alt+1", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+2", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+3", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+4", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+5", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+6", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+7", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+8", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+9", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
         // The three rename tools name the three things the UI names, and nothing else:
         // session.rename a drawer row, window.rename a window-bar tab, pane.rename one shell. The
         // ids used to be rotated one step — window.rename renamed the session and session.rename
@@ -803,9 +816,23 @@ public final class LauncherToolRegistry {
                 .withInteger("index", "Zero-based session index", 0, 64, 0, true)
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
-            CATEGORY_SESSION, R.string.tool_session_activate_by_index, 0,
-            Binding.all("ctrl+alt+1", "ctrl+alt+2", "ctrl+alt+3", "ctrl+alt+4", "ctrl+alt+5",
-                "ctrl+alt+6", "ctrl+alt+7", "ctrl+alt+8", "ctrl+alt+9"));
+            // Shifted digits with split panes on, where the plain digits pick a window inside the
+            // session; plain digits with them off, where there are no windows to pick.
+            CATEGORY_SESSION, R.string.tool_session_activate_by_index, 0, Arrays.asList(
+                Binding.of("ctrl+alt+shift+1"), Binding.of("ctrl+alt+shift+2"),
+                Binding.of("ctrl+alt+shift+3"), Binding.of("ctrl+alt+shift+4"),
+                Binding.of("ctrl+alt+shift+5"), Binding.of("ctrl+alt+shift+6"),
+                Binding.of("ctrl+alt+shift+7"), Binding.of("ctrl+alt+shift+8"),
+                Binding.of("ctrl+alt+shift+9"),
+                Binding.of("ctrl+alt+1", BindingCondition.SPLITS_OFF),
+                Binding.of("ctrl+alt+2", BindingCondition.SPLITS_OFF),
+                Binding.of("ctrl+alt+3", BindingCondition.SPLITS_OFF),
+                Binding.of("ctrl+alt+4", BindingCondition.SPLITS_OFF),
+                Binding.of("ctrl+alt+5", BindingCondition.SPLITS_OFF),
+                Binding.of("ctrl+alt+6", BindingCondition.SPLITS_OFF),
+                Binding.of("ctrl+alt+7", BindingCondition.SPLITS_OFF),
+                Binding.of("ctrl+alt+8", BindingCondition.SPLITS_OFF),
+                Binding.of("ctrl+alt+9", BindingCondition.SPLITS_OFF)));
         // Prompt variants open the anchored rename editor; the argument-taking window.rename /
         // session.rename / pane.rename remain the remote and scripted path.
         //

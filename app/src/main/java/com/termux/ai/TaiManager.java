@@ -82,6 +82,15 @@ public final class TaiManager {
         return getInstance(context);
     }
 
+    /**
+     * Registers an extra path root that {@code importModel} accepts, for tests only: unit tests run
+     * on a JVM where {@link com.termux.shared.termux.TermuxConstants#TERMUX_HOME_DIR_PATH} is not a
+     * real, writable directory, so fixtures need somewhere else to put their fake model files.
+     */
+    public static void setImportPathAllowedRootForTesting(@Nullable String root) {
+        TaiMediaAccess.setExtraAllowedRootForTesting(root);
+    }
+
     private boolean shouldDelegateRuntime() {
         return !runtimeProcess && runtime == null;
     }
@@ -194,7 +203,21 @@ public final class TaiManager {
         JSONObject request = parseBody(body);
         String path = request.optString("path", "").trim();
         if (path.isEmpty()) return error(400, "bad_request", "Missing model path");
-        File modelFile = new File(path);
+        String resolvedPath;
+        try {
+            // Import runs over the same network-reachable API as chat, so a path here is a read
+            // primitive too; scope it the same way TaiMediaAccess scopes chat media references.
+            resolvedPath = TaiMediaAccess.resolveLocalPath(path);
+        } catch (JSONException e) {
+            String message = e.getMessage() == null ? "Media path is not readable through this endpoint" : e.getMessage();
+            int colon = message.indexOf(':');
+            String code = colon > 0 ? message.substring(0, colon) : "media_access_denied";
+            String detail = colon > 0 ? message.substring(colon + 1) : message;
+            JSONObject denied = error(403, code, detail);
+            denied.put("path", path);
+            return denied;
+        }
+        File modelFile = new File(resolvedPath);
         if (!modelFile.isFile() || !modelFile.canRead()) {
             JSONObject error = error(404, "model_file_not_readable", "Model file does not exist or is not readable by the app process");
             error.put("path", path);

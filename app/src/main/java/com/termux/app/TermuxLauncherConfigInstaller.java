@@ -24,9 +24,9 @@ import java.util.Arrays;
  * hand-edited bindings or font settings.
  *
  * <p>The seeded files ship with every directive commented out, so seeding one changes no
- * behavior — an all-comment file parses to zero mappings and zero faces, which is what an
- * absent file already meant. {@code keyboard/layout.xml} is not seeded at all, because a
- * present layout file replaces the bundled keyboard layout outright.
+ * behavior — an all-comment file parses to zero mappings, zero faces, and zero properties,
+ * which is what an absent file already meant. {@code keyboard/layout.xml} is not seeded at
+ * all, because a present layout file replaces the bundled keyboard layout outright.
  */
 final class TermuxLauncherConfigInstaller {
 
@@ -36,17 +36,28 @@ final class TermuxLauncherConfigInstaller {
     /** Relative to {@code ~/.termux}. */
     static final String EXAMPLES_RELATIVE_PATH = "launcher/examples";
 
+    private static final String PROPERTIES_FILE_NAME = "termux.properties";
+
+    /**
+     * The other path Termux reads properties from, relative to {@code ~}. See
+     * {@link TermuxConstants#TERMUX_PROPERTIES_SECONDARY_FILE_PATH}.
+     */
+    private static final String SECONDARY_PROPERTIES_RELATIVE_PATH =
+        ".config/termux/" + PROPERTIES_FILE_NAME;
+
     private static final String[] EXAMPLE_NAMES = {
         "README.md",
         "termux-launcher-bindings.conf",
         "fonts.conf",
-        "keyboard-layout.xml"
+        "keyboard-layout.xml",
+        PROPERTIES_FILE_NAME
     };
 
     /** Asset name to live file name, relative to {@code ~/.termux}. */
     private static final String[][] SEEDED_FILES = {
         {"termux-launcher-bindings.conf", "termux-launcher-bindings.conf"},
-        {"fonts.conf", "fonts.conf"}
+        {"fonts.conf", "fonts.conf"},
+        {PROPERTIES_FILE_NAME, PROPERTIES_FILE_NAME}
     };
 
     private TermuxLauncherConfigInstaller() {}
@@ -87,12 +98,27 @@ final class TermuxLauncherConfigInstaller {
         }
         for (String[] seed : SEEDED_FILES) {
             File target = new File(termuxDataHome, seed[1]);
-            if (target.exists()) continue;
+            if (target.exists() || shadowsExistingProperties(termuxDataHome, seed[1])) continue;
             writeFile(target, readAsset(context, seed[0]));
             restrictFileToOwner(target);
             written++;
         }
         return written;
+    }
+
+    /**
+     * Whether seeding {@code name} would hide a file the user already relies on.
+     *
+     * <p>Termux reads the first readable file in
+     * {@link TermuxConstants#TERMUX_PROPERTIES_FILE_PATHS_LIST} and ignores the rest, so
+     * writing an all-comment {@code ~/.termux/termux.properties} would silently disable a
+     * {@code ~/.config/termux/termux.properties} the user keeps there. Nothing else this
+     * class seeds has a second location.
+     */
+    private static boolean shadowsExistingProperties(File termuxDataHome, String name) {
+        if (!PROPERTIES_FILE_NAME.equals(name)) return false;
+        File home = termuxDataHome.getParentFile();
+        return home != null && new File(home, SECONDARY_PROPERTIES_RELATIVE_PATH).isFile();
     }
 
     private static byte[] readAsset(Context context, String name) throws IOException {

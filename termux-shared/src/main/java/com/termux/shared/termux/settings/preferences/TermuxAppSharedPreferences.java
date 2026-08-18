@@ -399,6 +399,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             clampSurfaceHorizontalInset(value), false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_LAZY_MODE}. */
+    public boolean isLazyModeEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_LAZY_MODE,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_LAZY_MODE);
+    }
+
     public boolean isStatusWidgetCpuEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_STATUS_WIDGET_CPU, TERMUX_APP.DEFAULT_STATUS_WIDGET_CPU);

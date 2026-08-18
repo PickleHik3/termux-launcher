@@ -3,6 +3,7 @@ package com.termux.ai;
 import android.os.Environment;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.shared.termux.TermuxConstants;
 
@@ -54,6 +55,17 @@ final class TaiMediaAccess {
     private static final String[] DENIED_SUBPATHS = {
         TermuxConstants.TERMUX_HOME_DIR_PATH + "/.launcherctl",
     };
+
+    /**
+     * Extra allowed root for unit tests, which run on a JVM where {@link TermuxConstants#TERMUX_HOME_DIR_PATH}
+     * is not a real, writable directory. Production code never touches this.
+     */
+    @Nullable
+    private static volatile String extraAllowedRootForTesting;
+
+    static void setExtraAllowedRootForTesting(@Nullable String root) {
+        extraAllowedRootForTesting = root;
+    }
 
     private TaiMediaAccess() {
     }
@@ -218,11 +230,11 @@ final class TaiMediaAccess {
     @NonNull
     private static String[] allowedRoots() {
         File shared = Environment.getExternalStorageDirectory();
-        if (shared == null) return ALLOWED_ROOTS;
-        String[] roots = new String[ALLOWED_ROOTS.length + 1];
-        System.arraycopy(ALLOWED_ROOTS, 0, roots, 0, ALLOWED_ROOTS.length);
-        roots[ALLOWED_ROOTS.length] = shared.getAbsolutePath();
-        return roots;
+        String testRoot = extraAllowedRootForTesting;
+        java.util.List<String> roots = new java.util.ArrayList<>(java.util.Arrays.asList(ALLOWED_ROOTS));
+        if (shared != null) roots.add(shared.getAbsolutePath());
+        if (testRoot != null) roots.add(testRoot);
+        return roots.toArray(new String[0]);
     }
 
     private static boolean isWithin(@NonNull String canonicalPath, @NonNull String rawRoot) {

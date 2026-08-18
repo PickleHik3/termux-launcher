@@ -34,6 +34,8 @@ public final class TerminalBindingConfig {
     static final long MAX_FILE_BYTES = 256 * 1024;
     static final int MAX_LINES = 4096;
     static final int MAX_LINE_CHARS = 4096;
+    /** A legend row is one line beside a keycap; longer display names would be truncated anyway. */
+    static final int MAX_LABEL_CHARS = 32;
 
     public enum ActionType { TOOL, SEND_TEXT, SEND_KEY, PUSH_MODE, POP_MODE }
 
@@ -103,14 +105,21 @@ public final class TerminalBindingConfig {
         public final String sequence;
         public final LauncherToolRegistry.BindingCondition condition;
         @NonNull public final List<Action> actions;
+        /**
+         * Display name from {@code --label}, or null to let the UI name the action itself. The
+         * action id alone reads badly for the generic actions: every app chord is
+         * {@code app.launch}, so the keybind legend would print "Launch app" for all of them.
+         */
+        @Nullable public final String label;
 
         private Mapping(@NonNull String mode, @NonNull String sequence,
                         @NonNull LauncherToolRegistry.BindingCondition condition,
-                        @NonNull List<Action> actions) {
+                        @NonNull List<Action> actions, @Nullable String label) {
             this.mode = mode;
             this.sequence = sequence;
             this.condition = condition;
             this.actions = Collections.unmodifiableList(new ArrayList<>(actions));
+            this.label = label;
         }
     }
 
@@ -120,16 +129,24 @@ public final class TerminalBindingConfig {
         /** Normalized sequences explicitly mentioned by map or unmap. */
         @NonNull public final List<String> overriddenSequences;
         @NonNull public final Map<String, Mode> modes;
+        /**
+         * Normalized {@code leader} stroke, or null when the file declares none. Every root
+         * {@code ctrl+alt+...} binding gains a {@code leader>...} spelling, so a keyboard that
+         * makes three-key chords awkward can reach the same actions tmux-style: prefix, then key.
+         */
+        @Nullable public final String leader;
         @NonNull public final List<String> errors;
 
         private Result(boolean filePresent, @NonNull List<Mapping> mappings,
                        @NonNull List<String> overriddenSequences,
                        @NonNull Map<String, Mode> modes,
+                       @Nullable String leader,
                        @NonNull List<String> errors) {
             this.filePresent = filePresent;
             this.mappings = Collections.unmodifiableList(new ArrayList<>(mappings));
             this.overriddenSequences = Collections.unmodifiableList(new ArrayList<>(overriddenSequences));
             this.modes = Collections.unmodifiableMap(new LinkedHashMap<>(modes));
+            this.leader = leader;
             this.errors = Collections.unmodifiableList(new ArrayList<>(errors));
         }
 
@@ -137,7 +154,7 @@ public final class TerminalBindingConfig {
             List<String> errors = error == null ? Collections.<String>emptyList()
                 : Collections.singletonList(error);
             return new Result(present, Collections.<Mapping>emptyList(),
-                Collections.<String>emptyList(), Collections.<String, Mode>emptyMap(), errors);
+                Collections.<String>emptyList(), Collections.<String, Mode>emptyMap(), null, errors);
         }
     }
 
@@ -182,6 +199,7 @@ public final class TerminalBindingConfig {
         LinkedHashMap<String, MutableMapping> mappings = new LinkedHashMap<>();
         LinkedHashMap<String, Mode> modes = new LinkedHashMap<>();
         List<String> overridden = new ArrayList<>();
+        String leader = null;
         String[] lines = content.split("\\r?\\n", -1);
         for (int i = 0; i < lines.length; i++) {
             int lineNumber = i + 1;
@@ -194,6 +212,25 @@ public final class TerminalBindingConfig {
             }
             if (words.isEmpty()) continue;
             String directive = words.get(0).toLowerCase(Locale.US);
+            if ("leader".equals(directive)) {
+                if (words.size() != 2) {
+                    errors.add("line " + lineNumber + ": leader needs one key stroke");
+                    continue;
+                }
+                String stroke = TerminalKeyBindingResolver.normalizeStrokeSpec(words.get(1));
+                if (!TerminalKeyBindingResolver.isValidStrokeSpec(stroke)) {
+                    errors.add("line " + lineNumber + ": invalid leader stroke '" + words.get(1) + "'");
+                    continue;
+                }
+                // First declaration wins, like a clashing map line, so a stray second leader
+                // cannot silently move every prefixed binding out from under the user.
+                if (leader != null) {
+                    errors.add("line " + lineNumber + ": leader is already set to '" + leader + "'");
+                    continue;
+                }
+                leader = stroke;
+                continue;
+            }
             if ("unmap".equals(directive)) {
                 int cursor = 1;
                 String mode = "";
@@ -217,7 +254,7 @@ public final class TerminalBindingConfig {
                 continue;
             }
             if (!"map".equals(directive)) {
-                errors.add("line " + lineNumber + ": expected map or unmap");
+                errors.add("line " + lineNumber + ": expected map, unmap or leader");
                 continue;
             }
 
@@ -225,6 +262,7 @@ public final class TerminalBindingConfig {
             LauncherToolRegistry.BindingCondition condition = LauncherToolRegistry.BindingCondition.ALWAYS;
             String mode = "";
             String newMode = null;
+            String label = null;
             long timeoutMillis = 2_000L;
             UnknownKeyPolicy onUnknown = UnknownKeyPolicy.BEEP;
             boolean endOnAction = false;
@@ -256,6 +294,14 @@ public final class TerminalBindingConfig {
                         break;
                     case "--mode": mode = value; break;
                     case "--new-mode": newMode = value; break;
+                    case "--label":
+                        label = value.trim();
+                        if (label.isEmpty() || label.length() > MAX_LABEL_CHARS) {
+                            errors.add("line " + lineNumber + ": label must be 1 to "
+                                + MAX_LABEL_CHARS + " characters");
+                            badOption = true;
+                        }
+                        break;
                     case "--timeout":
                         try {
                             double seconds = Double.parseDouble(value);
@@ -361,6 +407,9 @@ public final class TerminalBindingConfig {
                 target = new MutableMapping(mode, sequence, condition);
                 mappings.put(identity, target);
             }
+            // Repeated map lines build one ordered action list, which is one binding and so takes
+            // one name: the first --label among them wins, wherever in the run it appears.
+            if (target.label == null) target.label = label;
             target.actions.add(action);
         }
 
@@ -370,9 +419,10 @@ public final class TerminalBindingConfig {
                 errors.add("mode '" + mapping.mode + "' is used but never defined");
                 continue;
             }
-            result.add(new Mapping(mapping.mode, mapping.sequence, mapping.condition, mapping.actions));
+            result.add(new Mapping(mapping.mode, mapping.sequence, mapping.condition,
+                mapping.actions, mapping.label));
         }
-        return new Result(filePresent, result, overridden, modes, errors);
+        return new Result(filePresent, result, overridden, modes, leader, errors);
     }
 
     /**
@@ -551,6 +601,7 @@ public final class TerminalBindingConfig {
         final String sequence;
         final LauncherToolRegistry.BindingCondition condition;
         final List<Action> actions = new ArrayList<>();
+        @Nullable String label;
 
         MutableMapping(String mode, String sequence, LauncherToolRegistry.BindingCondition condition) {
             this.mode = mode;

@@ -3,11 +3,7 @@
 <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
 <!ENTITY TERMUX_APP_NAME "Termux:Launcher">
 <!ENTITY TERMUX_API_APP_NAME "Termux:API">
-<!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
-<!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
 <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
-<!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
-<!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
 ]>
 <resources>
     <string name="application_name">&TERMUX_APP_NAME;</string>
@@ -51,25 +47,17 @@
     <string name="action_share_transcript">Compartilhar transcrição</string>
     <string name="title_share_transcript">Transcrição do terminal</string>
     <string name="title_share_transcript_with">Enviar transcrição para:</string>
-    <string name="action_share_selected_text">Compartilhar seleção</string>
     <string name="title_share_selected_text">Texto do Terminal</string>
     <string name="title_share_selected_text_with">Enviar texto selecionado para:</string>
-    <string name="action_autofill_password">Autopreencher senhas</string>
     <string name="action_reset_terminal">Resetar</string>
     <string name="msg_terminal_reset">Terminal resetado</string>
     <string name="action_kill_process">Destruir sessão (%d)</string>
     <string name="title_confirm_kill_process">Deseja realmente destruir esta sessão?</string>
     <string name="action_style_terminal">Aparência</string>
-    <string name="action_font_and_color">Fontes e Cores</string>
     <string name="action_set_background_image">Definir Papel de parede</string>
-    <string name="action_toggle_keep_screen_on">Manter a tela ativa</string>
-    <string name="action_open_help">Ajuda</string>
     <string name="action_open_settings">Configurações</string>
-    <string name="action_report_issue">Reportar problema</string>
     <string name="msg_generating_report">Gerando relatório</string>
     <string name="msg_add_termux_debug_info">Incluir informações de depuração no relatório?</string>
-    <string name="error_styling_not_installed">A aplicação do plugin &TERMUX_STYLING_APP_NAME; não foi instalada.</string>
-    <string name="action_styling_install">Instalar</string>
     <!-- Termux Notifications -->
     <string name="notification_action_exit">Sair</string>
     <string name="notification_action_wake_lock">Obter wakelock</string>
@@ -97,8 +85,6 @@
     <!-- Termux Settings -->
     <string name="title_activity_termux_settings">Configurações do &TERMUX_APP_NAME;</string>
     <!-- Termux App Preferences -->
-    <string name="termux_preferences_title">&TERMUX_APP_NAME;</string>
-    <string name="termux_preferences_summary">Preferências para a aplicação &TERMUX_APP_NAME;</string>
     <!-- Debugging Preferences -->
     <string name="termux_debugging_preferences_title">Depuração</string>
     <string name="termux_debugging_preferences_summary">Preferências de Depuração</string>
@@ -120,8 +106,6 @@
     <string name="termux_crash_report_notifications_enabled_off">Desabilitar notificações de relatórios de falhas.</string>
     <string name="termux_crash_report_notifications_enabled_on">Habilitar notificações de relatórios de falhas. (Padrão)</string>
     <!-- Terminal IO Preferences -->
-    <string name="termux_terminal_io_preferences_title">Entradas e saídas do Terminal</string>
-    <string name="termux_terminal_io_preferences_summary">Preferências de entradas e saídas do Terminal</string>
     <!-- Keyboard Category -->
     <string name="termux_keyboard_header">Teclado</string>
     <!-- Soft Keyboard -->
@@ -135,8 +119,6 @@
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">O Teclado Virtual será habilitado somente caso
                     nenhum teclado físico esteja conectado.</string>
     <!-- Terminal View Preferences -->
-    <string name="termux_terminal_view_preferences_title">Vista do Terminal</string>
-    <string name="termux_terminal_view_preferences_summary">Preferências da Vista do Terminal</string>
     <!-- View Category -->
     <string name="termux_terminal_view_view_header">Vista do Terminal</string>
     <!-- Terminal View Margin Adjustment -->
@@ -151,32 +133,13 @@
     <string name="termux_terminal_view_activity_remove_on">&TERMUX_APP_NAME; irá fechar e não permanecerá nos apps recentes quando não houverem sessões de terminal ativas. (Padrão)</string>
     <!-- Termux Style Preferences -->
     <string name="termux_style_preferences_title">Aparência de &TERMUX_APP_NAME;</string>
-    <string name="termux_style_preferences_summary">Preferências para a aparência e customização de &TERMUX_APP_NAME;</string>
     <!-- Background Category -->
-    <string name="termux_background_header">Papel de parede</string>
     <!-- Background Image -->
-    <string name="termux_background_image_enabled_title">Exibir imagem de Papel de parede</string>
-    <string name="termux_background_image_enabled_off">O Papel de parede será desabilitado.
-                    Para habilitá-lo, certifique-se de que os arquivos de retrato e paisagem estão presentes.
-                    Se você deseja definir um novo Papel de parede, defina-o através do menu de contexto ao pressionar longamente no Terminal. (Padrão)</string>
-    <string name="termux_background_image_enabled_on">O Papel de parede será habilitado.</string>
     <!-- Termux:API App Preferences -->
-    <string name="termux_api_preferences_title">&TERMUX_API_APP_NAME;</string>
-    <string name="termux_api_preferences_summary">Preferências para a aplicação &TERMUX_API_APP_NAME;</string>
     <!-- Termux:Float App Preferences -->
-    <string name="termux_float_preferences_title">&TERMUX_FLOAT_APP_NAME;</string>
-    <string name="termux_float_preferences_summary">Preferências para a aplicação &TERMUX_FLOAT_APP_NAME;</string>
     <!-- Termux:Tasker App Preferences -->
-    <string name="termux_tasker_preferences_title">&TERMUX_TASKER_APP_NAME;</string>
-    <string name="termux_tasker_preferences_summary">Preferências para a aplicação &TERMUX_TASKER_APP_NAME;</string>
     <!-- Termux:Widget App Preferences -->
-    <string name="termux_widget_preferences_title">&TERMUX_WIDGET_APP_NAME;</string>
-    <string name="termux_widget_preferences_summary">Preferências para a aplicação &TERMUX_WIDGET_APP_NAME;</string>
     <!-- About Preference -->
-    <string name="about_preference_title">Sobre</string>
     <!-- Donate Preference -->
     <string name="donate_preference_title">Doar</string>
-    <string name="title_restore_background_image">Plano de fundo encontrado. você gostaria de restaurá-lo\?</string>
-    <string name="error_background_image_loading_failed">Não foi possível carregar o plano de fundo. Utilizando plano de fundo de cor sólida.</string>
-    <string name="error_background_image_loading_from_gallery_failed">Não foi possível carregar esta imagem. Tente utilizar outra imagem.</string>
 </resources>

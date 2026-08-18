@@ -54,6 +54,8 @@ public final class TerminalKeyBindingResolver {
         public final LauncherToolRegistry.BindingCondition condition;
         /** Empty for a root-keymap match. */
         @NonNull public final String mode;
+        /** The binding's {@code --label}, or null to let the caller name the action itself. */
+        @Nullable public final String label;
 
         Match(@NonNull Claim claim, @NonNull JSONObject arguments, @NonNull String stroke,
               @NonNull String mode) {
@@ -63,6 +65,7 @@ public final class TerminalKeyBindingResolver {
             this.stroke = stroke;
             this.condition = claim.condition;
             this.mode = mode;
+            this.label = claim.label;
         }
     }
 
@@ -96,16 +99,39 @@ public final class TerminalKeyBindingResolver {
         final String toolName;
         final LauncherToolRegistry.BindingCondition condition;
         @NonNull final List<TerminalBindingConfig.Action> actions;
+        /** Display name the user gave this binding with {@code --label}, else null. */
+        @Nullable final String label;
 
         Claim(@NonNull String toolName, @NonNull LauncherToolRegistry.BindingCondition condition) {
-            this(Collections.singletonList(TerminalBindingConfig.Action.tool(toolName)), condition);
+            this(Collections.singletonList(TerminalBindingConfig.Action.tool(toolName)), condition,
+                null);
         }
 
         Claim(@NonNull List<TerminalBindingConfig.Action> actions,
-              @NonNull LauncherToolRegistry.BindingCondition condition) {
+              @NonNull LauncherToolRegistry.BindingCondition condition, @Nullable String label) {
             this.toolName = actions.isEmpty() ? "unmap" : actions.get(0).diagnosticName();
             this.condition = condition;
             this.actions = Collections.unmodifiableList(new ArrayList<>(actions));
+            this.label = label;
+        }
+    }
+
+    /** What a stroke under a latched prefix does, as the keybind hint legend needs to print it. */
+    public static final class Hint {
+        @NonNull public final String toolName;
+        /** The binding's {@code --label}, or null to fall back to the action's own title. */
+        @Nullable public final String label;
+
+        Hint(@NonNull String toolName, @Nullable String label) {
+            this.toolName = toolName;
+            this.label = label;
+        }
+
+        /** Part of the popup's repopulate signature, so a renamed binding redraws the legend. */
+        @NonNull
+        @Override
+        public String toString() {
+            return label == null ? toolName : toolName + "=" + label;
         }
     }
 
@@ -118,6 +144,8 @@ public final class TerminalKeyBindingResolver {
     private final Map<String, Map<String, List<Claim>>> modalBindings;
     private final Map<String, Map<String, List<Claim>>> modalPrefixes;
     @NonNull private final Map<String, TerminalBindingConfig.Mode> modes;
+    /** The {@code leader} stroke from the user file, or null when none is declared. */
+    @Nullable private final String leaderStroke;
     /** Strokes claimed twice under conditions that can both hold. */
     private final Map<String, List<String>> conflicts;
     @NonNull private final List<String> configErrors;
@@ -172,7 +200,7 @@ public final class TerminalKeyBindingResolver {
                 claims = new ArrayList<>(2);
                 map.put(mapping.sequence, claims);
             }
-            Claim configured = new Claim(mapping.actions, mapping.condition);
+            Claim configured = new Claim(mapping.actions, mapping.condition, mapping.label);
             Claim clashing = null;
             for (Claim existing : claims) {
                 if (existing.condition.overlaps(configured.condition)) {
@@ -191,6 +219,24 @@ public final class TerminalKeyBindingResolver {
                 continue;
             }
             claims.add(configured);
+        }
+
+        // tmux-style prefix: every root Ctrl+Alt stroke also answers to "<leader> then the same
+        // key", which is the whole point on a keyboard where holding three keys is awkward. The
+        // aliases are ordinary sequences, so the pending-chord overlay, the timeout and the
+        // cancel-on-unknown behaviour come for free. A sequence the file spells out itself is
+        // never overwritten.
+        leaderStroke = config.leader;
+        if (leaderStroke != null) {
+            String aliasPrefix = leaderStroke + ">";
+            for (Map.Entry<String, List<Claim>> entry
+                    : new ArrayList<>(map.entrySet())) {
+                String stroke = entry.getKey();
+                if (stroke.indexOf('>') >= 0 || !stroke.startsWith("ctrl+alt+")) continue;
+                String aliasSequence = aliasPrefix + stroke.substring("ctrl+alt+".length());
+                if (map.containsKey(aliasSequence)) continue;
+                map.put(aliasSequence, new ArrayList<>(entry.getValue()));
+            }
         }
 
         Map<String, List<Claim>> prefixMap = new LinkedHashMap<>();
@@ -228,7 +274,7 @@ public final class TerminalKeyBindingResolver {
                 claims = new ArrayList<>(2);
                 table.put(mapping.sequence, claims);
             }
-            Claim configured = new Claim(mapping.actions, mapping.condition);
+            Claim configured = new Claim(mapping.actions, mapping.condition, mapping.label);
             Claim clashing = null;
             for (Claim existing : claims) {
                 if (existing.condition.overlaps(configured.condition)) {
@@ -323,19 +369,22 @@ public final class TerminalKeyBindingResolver {
 
     /**
      * Root-keymap bindings exactly one key beyond {@code prefix} (e.g. {@code "ctrl+alt+"}), as
-     * suffix key -> claiming tool name under {@code context}, in registration order. Suffixes
-     * that add another modifier or start a sequence are excluded. Drives the in-app keyboard's
-     * modifier hint popup.
+     * suffix key -> claiming tool name and display name under {@code context}, in registration
+     * order. Suffixes that add another modifier or start a sequence are excluded. Drives the
+     * in-app keyboard's modifier hint popup.
      */
     @NonNull
-    public Map<String, String> hintsForPrefix(@NonNull String prefix,
-                                              @NonNull LauncherToolRegistry.ActionContext context) {
-        Map<String, String> hints = new LinkedHashMap<>();
+    public Map<String, Hint> hintsForPrefix(@NonNull String prefix,
+                                            @NonNull LauncherToolRegistry.ActionContext context) {
+        Map<String, Hint> hints = new LinkedHashMap<>();
         for (Map.Entry<String, List<Claim>> entry : bindings.entrySet()) {
             String stroke = entry.getKey();
             if (!stroke.startsWith(prefix)) continue;
             String suffix = stroke.substring(prefix.length());
-            if (suffix.isEmpty() || suffix.indexOf('+') >= 0 || suffix.indexOf(' ') >= 0) continue;
+            // '>' rules out a longer sequence that merely starts with this prefix: under
+            // "ctrl+alt+" the leader chord ctrl+alt+space>p is not a key you can press next.
+            if (suffix.isEmpty() || suffix.indexOf('+') >= 0 || suffix.indexOf(' ') >= 0
+                || suffix.indexOf('>') >= 0) continue;
             // Prefer the claim whose condition holds right now, but keep showing a configured
             // binding whose condition doesn't (splits off, nothing selected): the hint map
             // documents everything the config binds under the prefix, not just what would fire.
@@ -346,9 +395,15 @@ public final class TerminalKeyBindingResolver {
                 }
             }
             if (claim == null || "unmap".equals(claim.toolName)) continue;
-            hints.put(suffix, claim.toolName);
+            hints.put(suffix, new Hint(claim.toolName, claim.label));
         }
         return hints;
+    }
+
+    /** The configured tmux-style prefix stroke, or null when the file declares none. */
+    @Nullable
+    public String getLeaderStroke() {
+        return leaderStroke;
     }
 
     /** Strokes claimed twice under conditions that can both hold. */
@@ -474,6 +529,11 @@ public final class TerminalKeyBindingResolver {
     @NonNull
     public synchronized Step advance(@NonNull KeyEvent event,
                                      @NonNull LauncherToolRegistry.ActionContext context) {
+        // A modifier on its own is never a continuation: it is how the *next* stroke is being
+        // spelled. Reading it as an unknown key cancelled the sequence, which made "leader, then
+        // Shift+key" impossible to type — the Shift press killed the leader before the key landed.
+        if (isModifierKeyCode(event.getKeyCode())) return Step.none();
+
         if (!pendingStrokes.isEmpty() && event.getKeyCode() == KeyEvent.KEYCODE_ESCAPE) {
             pendingStrokes.clear();
             return Step.cancelled();
@@ -531,6 +591,28 @@ public final class TerminalKeyBindingResolver {
             }
         }
         return Step.none();
+    }
+
+    /** Whether a key code only ever modifies another key, and so can never end a sequence. */
+    static boolean isModifierKeyCode(int keyCode) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_CTRL_LEFT:
+            case KeyEvent.KEYCODE_CTRL_RIGHT:
+            case KeyEvent.KEYCODE_ALT_LEFT:
+            case KeyEvent.KEYCODE_ALT_RIGHT:
+            case KeyEvent.KEYCODE_SHIFT_LEFT:
+            case KeyEvent.KEYCODE_SHIFT_RIGHT:
+            case KeyEvent.KEYCODE_META_LEFT:
+            case KeyEvent.KEYCODE_META_RIGHT:
+            case KeyEvent.KEYCODE_SYM:
+            case KeyEvent.KEYCODE_FUNCTION:
+            case KeyEvent.KEYCODE_CAPS_LOCK:
+            case KeyEvent.KEYCODE_NUM_LOCK:
+            case KeyEvent.KEYCODE_SCROLL_LOCK:
+                return true;
+            default:
+                return false;
+        }
     }
 
     @Nullable

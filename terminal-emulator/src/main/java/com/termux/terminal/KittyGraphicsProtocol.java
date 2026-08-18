@@ -96,8 +96,12 @@ final class KittyGraphicsProtocol {
             reply(command, "ENOSYS:unsupported action", true, false);
             return;
         }
-        if (command.placeholder != 0) {
-            reply(command, "ENOSYS:unicode placeholders are not supported", true, false);
+        if (command.placeholder != 0 && command.placeholder != 1) {
+            reply(command, "EINVAL:unsupported unicode placeholder mode", true, false);
+            return;
+        }
+        if (command.placeholder == 1 && command.action != 'T') {
+            reply(command, "EINVAL:U is only valid for display commands", true, false);
             return;
         }
         if (command.medium != 'd') {
@@ -260,6 +264,18 @@ final class KittyGraphicsProtocol {
         }
         boolean storeRequested = command.imageId != 0 || command.number != 0;
         long effectiveId = command.imageId;
+        KittyImageStore.VirtualPlacement virtualPlacement = null;
+        if (command.placeholder == 1) {
+            if (!storeRequested) {
+                reply(command, "EINVAL:unicode placement requires i or I", true, true);
+                return;
+            }
+            virtualPlacement = createVirtualPlacement(command, sourceWidth, sourceHeight);
+            if (virtualPlacement == null) {
+                reply(command, "EINVAL:invalid unicode placement", true, false);
+                return;
+            }
+        }
         if (command.action == 't' && !storeRequested) {
             reply(command, "EINVAL:storing an image requires i or I", true, true);
             return;
@@ -268,7 +284,7 @@ final class KittyGraphicsProtocol {
             if (effectiveId == 0) effectiveId = store.assignFreeId();
             int estimate = (int) pixelBytes;
             if (store.wouldExceedLimits(effectiveId, estimate)) {
-                if (command.action == 't') {
+                if (command.action == 't' || command.placeholder == 1) {
                     reply(command, "ENOSPC:image store is full", true, false, effectiveId);
                     return;
                 }
@@ -276,14 +292,16 @@ final class KittyGraphicsProtocol {
                 // a=p for this id answers ENOENT exactly as if the image had been evicted.
                 storeRequested = false;
             } else {
-                if (command.action == 't') {
+                if (command.action == 't' || command.placeholder == 1) {
                     // Retransmission replaces the image, and its placements go with it.
                     emulator.deleteKittyImageEverywhere(effectiveId);
                 }
                 store.reserve(effectiveId, command.number, sourceWidth, sourceHeight, estimate);
+                if (virtualPlacement != null)
+                    store.putVirtualPlacement(store.get(effectiveId), virtualPlacement);
             }
         }
-        if (command.action == 't') {
+        if (command.action == 't' || command.placeholder == 1) {
             submitStoreOnly(command, transmittedBytes, effectiveId, producer);
         } else {
             submitDecode(command, transmittedBytes, effectiveId, storeRequested, sourceWidth, sourceHeight,
@@ -462,14 +480,24 @@ final class KittyGraphicsProtocol {
      * from real clients safe with an asynchronous decoder.
      */
     private void handlePlacement(Command command) {
-        if (command.placeholder != 0) {
-            reply(command, "ENOSYS:unicode placeholders are not supported", true, false);
-            return;
-        }
         final long id = store.resolveId(command.imageId, command.number);
         KittyImageStore.Entry entry = id == 0 ? null : store.get(id);
         if (entry == null) {
             reply(command, "ENOENT:image not found", true, false);
+            return;
+        }
+        if (command.placeholder == 1) {
+            KittyImageStore.VirtualPlacement placement = createVirtualPlacement(command,
+                entry.width, entry.height);
+            if (placement == null) {
+                reply(command, "EINVAL:invalid unicode placement", true, false, id);
+                return;
+            }
+            store.putVirtualPlacement(entry, placement);
+            reply(command, "OK", false, false, id);
+            return;
+        } else if (command.placeholder != 0) {
+            reply(command, "EINVAL:unsupported unicode placeholder mode", true, false, id);
             return;
         }
         final int[] crop = computeCrop(entry.width, entry.height,
@@ -556,6 +584,38 @@ final class KittyGraphicsProtocol {
                 });
             });
         }));
+    }
+
+    private static KittyImageStore.VirtualPlacement createVirtualPlacement(Command command,
+                                                                            int imageWidth,
+                                                                            int imageHeight) {
+        int[] crop = computeCrop(imageWidth, imageHeight, command.srcX, command.srcY,
+            command.srcW, command.srcH);
+        if (crop == null || command.displayColumns < 0 || command.displayRows < 0) return null;
+        return new KittyImageStore.VirtualPlacement(command.placementId, crop[0], crop[1],
+            crop[2], crop[3], command.displayColumns, command.displayRows);
+    }
+
+    /** Fill a reusable renderer result for a Unicode-placeholder cell. */
+    boolean getPlaceholder(long imageId, long placementId, KittyImagePlaceholder out) {
+        KittyImageStore.Entry entry = store.get(imageId);
+        if (entry == null || out == null) return false;
+        KittyImageStore.VirtualPlacement placement = KittyImageStore.virtualPlacement(entry, placementId);
+        Bitmap bitmap = KittyImageStore.frameBitmap(entry, entry.currentFrame + 1);
+        if (placement == null || bitmap == null) return false;
+        out.bitmap = bitmap;
+        out.sourceX = placement.sourceX;
+        out.sourceY = placement.sourceY;
+        out.sourceWidth = placement.sourceWidth;
+        out.sourceHeight = placement.sourceHeight;
+        out.columns = placement.columns;
+        out.rows = placement.rows;
+        return true;
+    }
+
+    boolean hasVirtualPlacement(long imageId, long placementId) {
+        KittyImageStore.Entry entry = store.get(imageId);
+        return entry != null && KittyImageStore.virtualPlacement(entry, placementId) != null;
     }
 
     /**
@@ -956,7 +1016,7 @@ final class KittyGraphicsProtocol {
         switch (form) {
             case 'a':
                 emulator.deleteKittyPlacements((bitmap, column, row) -> true, true);
-                if (free) store.clear();
+                if (free) store.removeImagesWithoutVirtualPlacements();
                 break;
             case 'i':
             case 'n': {
@@ -971,10 +1031,14 @@ final class KittyGraphicsProtocol {
                     return;
                 }
                 if (id != 0) {
+                    KittyImageStore.Entry entry = store.get(id);
+                    if (entry != null)
+                        KittyImageStore.removeVirtualPlacements(entry, command.placementId);
                     emulator.deleteKittyPlacements((bitmap, column, row) ->
                         bitmap.kittyImageId == id
                             && (command.placementId == 0 || bitmap.kittyPlacementId == command.placementId), true);
-                    if (free && command.placementId == 0) store.remove(id);
+                    if (free && emulator.kittyPlacementsFor(id).isEmpty())
+                        store.removeIfNoVirtualPlacements(id);
                 }
                 break;
             }
@@ -994,7 +1058,7 @@ final class KittyGraphicsProtocol {
                     if (free) {
                         emulator.deleteKittyPlacements((bitmap, column, row) ->
                             bitmap.kittyImageId == id, true);
-                        store.remove(id);
+                        store.removeIfNoVirtualPlacements(id);
                     }
                 } else if (entry.currentFrame != before) {
                     renderAnimationFrame(entry);
@@ -1068,7 +1132,8 @@ final class KittyGraphicsProtocol {
         // does not leave orphan cells behind.
         emulator.deleteKittyPlacements((bitmap, cellColumn, cellRow) -> hits.contains(bitmap), true);
         if (free) {
-            for (TerminalBitmap bitmap : hits) store.remove(bitmap.kittyImageId);
+            for (TerminalBitmap bitmap : hits)
+                store.removeIfNoVirtualPlacements(bitmap.kittyImageId);
         }
     }
 

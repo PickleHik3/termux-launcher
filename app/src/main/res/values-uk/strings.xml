@@ -3,18 +3,12 @@
 <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
 <!ENTITY TERMUX_APP_NAME "Termux:Launcher">
 <!ENTITY TERMUX_API_APP_NAME "Termux:API">
-<!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
-<!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
 <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
-<!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
-<!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
 ]>
 <resources>
     <string name="title_file_received">Зберегти файл у ~/downloads/</string>
     <string name="action_file_received_edit">Змінити</string>
     <string name="action_file_received_open_directory">Відкрити каталог</string>
-    <string name="title_restore_background_image">Виявлено фонове зображення. Ви хочете відновити його\?</string>
-    <string name="error_background_image_loading_failed">Неможливо ввантажити фонове зображення. Встановлення кольору фону.</string>
     <string name="bootstrap_error_title">Не вдалося встановити bootstrap</string>
     <string name="bootstrap_error_body">&TERMUX_APP_NAME; не зміг встановити пакети bootstrap.</string>
     <string name="bootstrap_error_abort">Перервати</string>
@@ -33,13 +27,9 @@
     <string name="termux_crash_report_notifications_enabled_off">Вимкнути сповіщення для звітів про збої.</string>
     <string name="termux_crash_report_notifications_enabled_on">Показуються сповіщення про збої. (За замовчуванням)</string>
     <string name="termux_keyboard_header">Клавіатура</string>
-    <string name="termux_terminal_view_preferences_title">Вигляд терміналу</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_title">Коригування краю терміналу</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_off">Коригування краю терміналу буде вимкнено.</string>
     <string name="termux_terminal_view_activity_remove_on">&TERMUX_APP_NAME; закриється і вилучить себе з нещодавніх програм, якщо немає активних сеансів терміналу. (За замовчуванням)</string>
-    <string name="termux_background_header">Фон</string>
-    <string name="termux_background_image_enabled_title">Показувати фонове зображення</string>
-    <string name="termux_background_image_enabled_on">Фонове зображення буде увімкнено.</string>
     <string name="donate_preference_title">Пожертвувати</string>
     <string name="shared_user_label">&TERMUX_APP_NAME; користувач</string>
     <string name="permission_run_command_label">Запуск команд у середовищі &TERMUX_APP_NAME;</string>
@@ -51,7 +41,6 @@
     <string name="bootstrap_error_not_primary_user_message">&TERMUX_APP_NAME; можна запускати лише від імені головного користувача.
 \nБінарники bootstrap, скомпільовані для &TERMUX_APP_NAME;, мають жорстко запрограмований шлях $PREFIX і не можуть бути встановлені за будь-яким іншим шляхом, окрім:
 \n%1$s.</string>
-    <string name="error_background_image_loading_from_gallery_failed">Не вдалося ввантажити зображення. Спробуйте інше зображення.</string>
     <string name="bootstrap_error_installed_on_portable_sd">&TERMUX_APP_NAME; не може бути встановлено на переносну/зовнішню/зйомну sd-карту на вашому пристрої.
 \nБінарники bootstrap, скомпільовані для &TERMUX_APP_NAME;, мають жорстко запрограмований шлях $PREFIX і не можуть бути встановлені за будь-яким іншим шляхом, окрім:
 \n%1$s.</string>
@@ -73,22 +62,14 @@
     <string name="error_termux_service_invalid_execution_command_runner">Недійсне виконання переходу команди в TermuxService: `%1$s`</string>
     <string name="title_share_selected_text">Текст терміналу</string>
     <string name="title_share_selected_text_with">Надіслати вибраний текст в:</string>
-    <string name="action_autofill_password">Автозаповнення паролю</string>
-    <string name="action_share_selected_text">Поділитися вибраним текстом</string>
     <string name="action_reset_terminal">Скинути</string>
     <string name="msg_terminal_reset">Скидання терміналу</string>
     <string name="action_kill_process">Завершити процес (%d)</string>
     <string name="action_style_terminal">Стиль</string>
     <string name="action_set_background_image">Встановити фонове зображення</string>
-    <string name="action_font_and_color">Шрифт і колір</string>
-    <string name="action_toggle_keep_screen_on">Тримати екран увімкненим</string>
-    <string name="action_open_help">Допомога</string>
     <string name="msg_generating_report">Формування звіту</string>
     <string name="action_open_settings">Налаштування</string>
-    <string name="action_report_issue">Звіт про проблему</string>
     <string name="msg_add_termux_debug_info">Додати &TERMUX_APP_NAME; налагоджувальну інформацію до звіту\?</string>
-    <string name="error_styling_not_installed">&TERMUX_STYLING_APP_NAME; Плагін не встановлено.</string>
-    <string name="action_styling_install">Встановити</string>
     <string name="notification_action_exit">Вийти</string>
     <string name="error_run_command_service_invalid_execution_command_runner">Недійсне виконання переходу команди в RunCommandService: `%1$s`</string>
     <string name="notification_action_wake_lock">Утримувати засинання</string>
@@ -96,35 +77,24 @@
     <string name="error_termux_service_start_failed_general">Не вдалося запустити TermuxService. Перевірте logcat на повідомлення про виключення.</string>
     <string name="error_termux_service_start_failed_bg">Не вдалося запустити TermuxService у фоні через фонові обмеження Android.</string>
     <string name="title_activity_termux_settings">&TERMUX_APP_NAME; Налаштування</string>
-    <string name="termux_preferences_summary">Параметри для програми &TERMUX_APP_NAME;</string>
     <string name="termux_log_level_title">Рівень логу</string>
     <string name="termux_terminal_view_key_logging_enabled_off">У логах не буде записів для клавіш терміналу. (За замовчуванням)</string>
     <string name="termux_terminal_view_key_logging_enabled_title">Логування клавіші терміналу</string>
     <string name="error_display_over_other_apps_permission_not_granted_to_start_terminal">&TERMUX_APP_NAME; потребує дозволу \"Показувати поверх інших додатків\" для запуску сеансів терміналу у фоні на Android &gt;= 10. Надайте його у додаткових налаштуваннях -&gt; додатку -&gt; &TERMUX_APP_NAME; -&gt;</string>
-    <string name="termux_terminal_io_preferences_title">Термінал ввід/вивід</string>
     <string name="termux_terminal_view_key_logging_enabled_on">До логів Logcat буде внесено записи для клавіш терміналу. Вони дуже багатослівні і їх слід вимкнути за звичайних обставин, інакше це призведе до проблем продуктивності.</string>
     <string name="termux_plugin_error_notifications_enabled_title">Сповіщення помилки плагіна</string>
     <string name="termux_plugin_error_notifications_enabled_off">Вимкнуто повідомлення та сповіщення про помилки плагіна.</string>
     <string name="termux_plugin_error_notifications_enabled_on">Показуються повідомлення та сповіщення про помилки плагіна. (За замовчуванням)</string>
     <string name="termux_crash_report_notifications_enabled_title">Сповіщення про збій</string>
-    <string name="termux_terminal_io_preferences_summary">Параметри для вводу/виводу терміналу</string>
     <string name="termux_soft_keyboard_enabled_title">Увімкнення програмної клавіатури</string>
     <string name="termux_soft_keyboard_enabled_off">Програмну клавіатуру буде вимкнено.</string>
     <string name="termux_soft_keyboard_enabled_on">Програмну клавіатуру буде увімкнено. (За замовчуванням)</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Програмна клавіатура лише якщо немає апаратної</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Програмна клавіатура буде увімкнена навіть якщо апаратна клавіатура підключена. (За замовчуванням)</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">Програмна клавіатура буде увімкнена лише якщо апаратна клавіатура не підключена.</string>
-    <string name="termux_terminal_view_preferences_summary">Параметри для вигляду терміналу</string>
     <string name="termux_terminal_view_view_header">Вигляд</string>
     <string name="termux_terminal_view_activity_remove_title">Заборонити залишатися в нещодавніх програмах</string>
     <string name="termux_style_preferences_title">&TERMUX_APP_NAME; Вигляд</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_on">Коригування краю терміналу буде увімкнено. Слід увімкнути, щоб спробувати вирішити проблему, коли програмна клавіатура закриває частину додаткових клавіш/вигляду терміналу. Якщо спричиняє мерехтіння екрану на ваших пристроях, вимкніть. (За замовчуванням)</string>
-    <string name="termux_style_preferences_summary">Параметри для вигляду та персоналізації &TERMUX_APP_NAME;</string>
     <string name="termux_terminal_view_activity_remove_off">Після закриття всіх сеансів терміналу, &TERMUX_APP_NAME; закриється і залишиться видимим у нещодавніх програмах.</string>
-    <string name="termux_background_image_enabled_off">Фонове зображення буде вимкнено. Щоб увімкнути його, переконайтеся в наявності відповідних файлів портретної та ландшафтної орієнтації. Якщо ви хочете встановити новий фон, встановіть його з контекстного меню довгим натисканням на Терміналі. (За замовчуванням)</string>
-    <string name="termux_float_preferences_summary">Параметри для &TERMUX_FLOAT_APP_NAME; додатку</string>
-    <string name="termux_api_preferences_summary">Параметри для &TERMUX_API_APP_NAME; додатку</string>
-    <string name="termux_tasker_preferences_summary">Параметри для &TERMUX_TASKER_APP_NAME; додатку</string>
-    <string name="termux_widget_preferences_summary">Параметри для &TERMUX_WIDGET_APP_NAME; додатку</string>
-    <string name="about_preference_title">Про додаток</string>
 </resources>

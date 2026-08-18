@@ -3907,6 +3907,16 @@ public final class TerminalEmulator {
         return mMainBuffer.getKittyImageBytes() + mAltBuffer.getKittyImageBytes();
     }
 
+    /** Resolve the stored image and virtual placement referenced by a U+10EEEE cell. */
+    public boolean getKittyImagePlaceholder(long imageId, long placementId,
+                                            KittyImagePlaceholder out) {
+        return mKittyGraphics.getPlaceholder(imageId, placementId, out);
+    }
+
+    boolean hasKittyVirtualPlacement(long imageId, long placementId) {
+        return mKittyGraphics.hasVirtualPlacement(imageId, placementId);
+    }
+
     boolean placeKittyGraphics(Bitmap bitmap, KittyGraphicsProtocol.Command command, long imageId,
                                int row, int col, int cellWidth, int cellHeight, int[] transform) {
         if (command.action == 'p') {

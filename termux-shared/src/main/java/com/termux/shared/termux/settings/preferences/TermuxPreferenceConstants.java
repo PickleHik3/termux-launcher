@@ -615,6 +615,14 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_VALUE_COMPATIBILITY_MODE = false;
 
+        /**
+         * Trades the launcher's idle animation for battery: the clock swaps its digits instead of
+         * folding them and the busy-window rim stops breathing, so nothing repaints the window while
+         * you are only looking at it. Sampling also backs off. Off by default.
+         */
+        public static final String KEY_LAZY_MODE = "lazy_mode";
+        public static final boolean DEFAULT_VALUE_LAZY_MODE = false;
+
         /** Clock renderer shown in the modular widget slot above the terminal window row. */
         public static final String KEY_TOP_PANE_CLOCK_STYLE = "top_pane_clock_style";
 
@@ -854,113 +862,4 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_VALUE_KEY_LAST_PENDING_INTENT_REQUEST_CODE = 0;
     }
 
-    /**
-     * Termux:Boot app constants.
-     */
-    public static final class TERMUX_BOOT_APP {
-
-        /**
-         * Defines the key for current log level.
-         */
-        public static final String KEY_LOG_LEVEL = "log_level";
-    }
-
-    /**
-     * Termux:Float app constants.
-     */
-    public static final class TERMUX_FLOAT_APP {
-
-        /**
-         * The float window x coordinate.
-         */
-        public static final String KEY_WINDOW_X = "window_x";
-
-        /**
-         * The float window y coordinate.
-         */
-        public static final String KEY_WINDOW_Y = "window_y";
-
-        /**
-         * The float window width.
-         */
-        public static final String KEY_WINDOW_WIDTH = "window_width";
-
-        /**
-         * The float window height.
-         */
-        public static final String KEY_WINDOW_HEIGHT = "window_height";
-
-        /**
-         * Defines the key for font size of termux terminal view.
-         */
-        public static final String KEY_FONTSIZE = "fontsize";
-
-        /**
-         * Defines the key for current log level.
-         */
-        public static final String KEY_LOG_LEVEL = "log_level";
-
-        /**
-         * Defines the key for whether termux terminal view key logging is enabled or not
-         */
-        public static final String KEY_TERMINAL_VIEW_KEY_LOGGING_ENABLED = "terminal_view_key_logging_enabled";
-
-        public static final boolean DEFAULT_VALUE_TERMINAL_VIEW_KEY_LOGGING_ENABLED = false;
-    }
-
-    /**
-     * Termux:Styling app constants.
-     */
-    public static final class TERMUX_STYLING_APP {
-
-        /**
-         * Defines the key for current log level.
-         */
-        public static final String KEY_LOG_LEVEL = "log_level";
-    }
-
-    /**
-     * Termux:Tasker app constants.
-     */
-    public static final class TERMUX_TASKER_APP {
-
-        /**
-         * Defines the key for current log level.
-         */
-        public static final String KEY_LOG_LEVEL = "log_level";
-
-        /**
-         * Defines the key for last used PendingIntent request code.
-         */
-        public static final String KEY_LAST_PENDING_INTENT_REQUEST_CODE = "last_pending_intent_request_code";
-
-        public static final int DEFAULT_VALUE_KEY_LAST_PENDING_INTENT_REQUEST_CODE = 0;
-    }
-
-    /**
-     * Termux:GUI app constants.
-     */
-    public static final class TERMUX_GUI_APP {
-
-        /**
-         * Defines the key for current log level.
-         */
-        public static final String KEY_LOG_LEVEL = "log_level";
-    }
-
-    /**
-     * Termux:Widget app constants.
-     */
-    public static final class TERMUX_WIDGET_APP {
-
-        /**
-         * Defines the key for current log level.
-         */
-        public static final String KEY_LOG_LEVEL = "log_level";
-
-        /**
-         * Defines the key for current token for shortcuts.
-         */
-        public static final String KEY_TOKEN = "token";
-    }
 }

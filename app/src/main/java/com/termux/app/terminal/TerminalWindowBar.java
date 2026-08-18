@@ -344,8 +344,21 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      * invalidate, so they compose; sharing one animator would stall the activity indication for the
      * length of every window switch.
      */
+    /**
+     * Lazy mode keeps the rim lit but stops it breathing: the animator invalidated the whole strip
+     * every vsync for as long as any shell was busy, which with a long-running agent meant forever.
+     */
+    public void setLazyMode(boolean lazy) {
+        if (mLazyMode == lazy) return;
+        mLazyMode = lazy;
+        mTabs.setLazyRim(lazy);
+        updateBusyAnimator();
+    }
+
+    private boolean mLazyMode;
+
     private void updateBusyAnimator() {
-        boolean wanted = mTabs.hasBusyWindow() && mAttached && mWindowVisible;
+        boolean wanted = mTabs.hasBusyWindow() && mAttached && mWindowVisible && !mLazyMode;
         if (!wanted) {
             if (mBusyAnimator != null) {
                 mBusyAnimator.cancel();
@@ -732,7 +745,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         private void drawBusyRims(@NonNull Canvas canvas) {
             if (!hasBusyWindow()) return;
             float density = getResources().getDisplayMetrics().density;
-            float phase = ShellActivityPulse.phase(busyElapsedMs());
+            // Lazy mode holds the breath at its peak rather than animating through it: a lit rim
+            // still says "working", and it costs one frame instead of sixty a second.
+            float phase = mLazyRim ? 0f : ShellActivityPulse.phase(busyElapsedMs());
             drawRimPass(canvas, density, mBusy, mBusyColor,
                 ShellActivityPulse.rimWeight(phase), 0f);
             // The attention rim breathes on its own curve — brighter floor, sharper peak — and carries
@@ -781,6 +796,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             }
             return mGlowFilter;
         }
+
+        /** Holds the rim at its lit peak instead of breathing it. Set by the host's lazy mode. */
+        void setLazyRim(boolean lazy) {
+            if (mLazyRim == lazy) return;
+            mLazyRim = lazy;
+            invalidate();
+        }
+
+        private boolean mLazyRim;
 
         private long busyElapsedMs() {
             long now = android.os.SystemClock.uptimeMillis();

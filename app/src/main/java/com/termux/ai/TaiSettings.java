@@ -651,41 +651,4 @@ public final class TaiSettings {
         return json;
     }
 
-    @Nullable
-    private Integer getNullableInteger(String key) {
-        String value = preferences.getString(key, AUTO);
-        if (value == null || value.trim().isEmpty() || AUTO.equals(value)) return null;
-        try {
-            return Integer.parseInt(value.trim());
-        } catch (NumberFormatException e) {
-            return null;
-        }
-    }
-
-    @Nullable
-    private Double getNullableDouble(String key) {
-        String value = preferences.getString(key, AUTO);
-        if (value == null || value.trim().isEmpty() || AUTO.equals(value)) return null;
-        try {
-            return Double.parseDouble(value.trim());
-        } catch (NumberFormatException e) {
-            return null;
-        }
-    }
-
-    @Nullable
-    private String getAutoNullableString(String key) {
-        String value = preferences.getString(key, AUTO);
-        if (value == null || value.trim().isEmpty() || AUTO.equals(value)) return null;
-        return value;
-    }
-
-    @Nullable
-    private Boolean getNullableBoolean(String key) {
-        String value = preferences.getString(key, AUTO);
-        if (value == null || value.trim().isEmpty() || AUTO.equals(value)) return null;
-        if ("true".equals(value)) return true;
-        if ("false".equals(value)) return false;
-        return null;
-    }
 }

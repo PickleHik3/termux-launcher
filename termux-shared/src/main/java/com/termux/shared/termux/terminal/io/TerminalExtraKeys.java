@@ -3,7 +3,6 @@ package com.termux.shared.termux.terminal.io;
 import android.os.Build;
 import android.view.KeyEvent;
 import android.view.View;
-import androidx.annotation.NonNull;
 import com.google.android.material.button.MaterialButton;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;

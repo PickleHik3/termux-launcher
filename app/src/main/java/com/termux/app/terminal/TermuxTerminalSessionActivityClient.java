@@ -2,9 +2,6 @@ package com.termux.app.terminal;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.content.ClipData;
-import android.content.ClipboardManager;
-import android.content.Context;
 import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
 import android.media.SoundPool;
@@ -169,7 +166,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (!mPendingScreenUpdateSessions.add(changedSession))
             return;
         mTerminalScreenUpdatePending = true;
-        mUiHandler.post(() -> {
+        Runnable redraw = () -> {
             mPendingScreenUpdateSessions.remove(changedSession);
             mTerminalScreenUpdatePending = !mPendingScreenUpdateSessions.isEmpty();
             if (!mActivity.isVisible())
@@ -177,7 +174,29 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             com.termux.view.TerminalView view = mActivity.getTerminalViewForSession(changedSession);
             if (view != null)
                 view.onScreenUpdated();
-        });
+        };
+        // Under a flood of output the main thread is mostly *parsing* bytes, and where this redraw is
+        // posted decides how it interleaves with that parsing. Measured over four configurations:
+        //
+        //   - With the status clock animating, the frame clock is already ticking, so a plain post
+        //     yields many thin frames (median 5ms, 1.9% janky) — the best of the four.
+        //   - In lazy mode nothing else animates, and a plain post lands behind the queued parsing:
+        //     the screen refreshed ~15 times a second in 15ms frames with 47ms gaps, 11% janky.
+        //     Posting to the frame clock instead interleaves redraw with parsing, which brings that
+        //     to 2.7% janky with a quarter of the slow-UI-thread events.
+        //   - Using the frame clock while the clock animates is slightly worse than the plain post
+        //     (median 7ms, 3% janky): it competes with an already-ticking frame source.
+        //
+        // So: the frame clock exactly when nothing else is driving frames.
+        boolean pumpFrames = mActivity.getPreferences() != null
+            && mActivity.getPreferences().isLazyModeEnabled();
+        if (pumpFrames) {
+            com.termux.view.TerminalView pendingView =
+                mActivity.getTerminalViewForSession(changedSession);
+            pendingView.postOnAnimation(redraw);
+        } else {
+            mUiHandler.post(redraw);
+        }
     }
 
     private boolean shouldDeferForegroundScreenRefresh() {
@@ -769,7 +788,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                     v.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic,
                         faces.symbolMaps, faces.ligaturePolicy, faces.fontFeatures,
                         faces.fontVariations, faces.fontMetricsAdjustments,
-                        faces.boxDrawingPolicy, fallbackTypefaces(faces));
+                        faces.boxDrawingPolicy, fallbackTypefaces(faces),
+                        faces.symbolExpansion);
             }
             mActivity.requestTerminalFlushDockGeometryUpdate();
         } catch (Exception e) {
@@ -787,7 +807,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             view.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic,
                 faces.symbolMaps, faces.ligaturePolicy, faces.fontFeatures,
                 faces.fontVariations, faces.fontMetricsAdjustments,
-                faces.boxDrawingPolicy, fallbackTypefaces(faces));
+                faces.boxDrawingPolicy, fallbackTypefaces(faces), faces.symbolExpansion);
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyFontToView()", e);
         }

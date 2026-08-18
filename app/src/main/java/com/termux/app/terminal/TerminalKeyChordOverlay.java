@@ -78,6 +78,30 @@ final class TerminalKeyChordOverlay {
         shown.postDelayed(hideRunnable, FAILURE_VISIBLE_MS);
     }
 
+    /**
+     * Confirms the binding that just ran, then gets out of the way. Several actions change nothing
+     * visible on their own — a rename prompt on a pane already named, a layout cycle between two
+     * similar layouts — and without this the stroke and a dead key look the same.
+     */
+    void showAction(@NonNull String stroke, @NonNull String name) {
+        FrameLayout host = activity.findViewById(R.id.terminal_root_container);
+        if (host == null) return;
+        if (label == null) label = createLabel();
+        if (label.getParent() != host) {
+            if (label.getParent() instanceof ViewGroup)
+                ((ViewGroup) label.getParent()).removeView(label);
+            host.addView(label);
+        }
+        label.setText(activity.getString(R.string.terminal_key_binding_ran,
+            displaySequence(stroke), name));
+        label.setVisibility(TextView.VISIBLE);
+        label.announceForAccessibility(label.getText());
+        TextView shown = label;
+        shown.removeCallbacks(hideRunnable);
+        shown.postDelayed(hideRunnable, ACTION_VISIBLE_MS);
+    }
+
+    private static final long ACTION_VISIBLE_MS = 950L;
     private static final long FAILURE_VISIBLE_MS = 2400L;
     private final Runnable hideRunnable = this::hide;
 

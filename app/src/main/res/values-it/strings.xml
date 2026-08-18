@@ -3,64 +3,45 @@
 <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
 <!ENTITY TERMUX_APP_NAME "Termux:Launcher">
 <!ENTITY TERMUX_API_APP_NAME "Termux:API">
-<!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
-<!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
 <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
-<!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
-<!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
 ]>
 <resources>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Tastiera virtuale solo se non è presente una tastiera hardware</string>
     <string name="extra_keys_command_hint">Inserisci comando…</string>
     <string name="msg_select_url_copied_to_clipboard">URL copiato negli appunti</string>
-    <string name="title_restore_background_image">Sfondo rilevato. Vuoi ripristinarlo\?</string>
     <string name="error_run_command_service_invalid_execution_command_runner">Comando di esecuzione non valido per RunCommandService: `%1$s`</string>
     <string name="msg_disabling_terminal_toolbar">Disabilita la barra degli strumenti del terminale</string>
     <string name="error_run_command_service_mandatory_extra_missing">Parametro obbligatorio mancante per RunCommandService: \"%1$s\"</string>
-    <string name="action_toggle_keep_screen_on">Mantieni lo schermo acceso</string>
     <string name="termux_plugin_error_notifications_enabled_on">Mostra avvisi e notifiche per gli errori del plugin. (Predefinito)</string>
-    <string name="termux_style_preferences_summary">Preferenze per l\'aspetto e la personalizzazione di &TERMUX_APP_NAME;</string>
     <string name="error_termux_service_start_failed_general">Impossibile avviare TermuxService. Controlla logcat per il messaggio di eccezione.</string>
     <string name="termux_terminal_view_activity_remove_off">Una volta chiusa tutte le sessioni del terminale, &TERMUX_APP_NAME; si chiuderà e rimarrà visibile tra le app recenti.</string>
-    <string name="about_preference_title">Informazioni</string>
     <string name="termux_terminal_view_activity_remove_title">Impedisci di rimanere tra le app recenti</string>
     <string name="termux_style_preferences_title">Aspetto di &TERMUX_APP_NAME;</string>
     <string name="action_reset_terminal">Resetta</string>
-    <string name="action_open_help">Guida</string>
     <string name="action_create_named_session_confirm">Crea</string>
-    <string name="action_autofill_password">Riempimento automatico della password</string>
     <string name="termux_soft_keyboard_enabled_title">Tastiera virtuale abilitata</string>
-    <string name="termux_background_image_enabled_title">Visualizza l\'immagine di sfondo</string>
     <string name="termux_debugging_preferences_title">Debug</string>
     <string name="termux_crash_report_notifications_enabled_on">Mostra le notifiche per le segnalazioni crash. (Predefinito)</string>
     <string name="title_confirm_kill_process">Vuoi davvero terminare questa sessione\?</string>
-    <string name="termux_background_header">Sfondo</string>
-    <string name="termux_terminal_io_preferences_title">I/O del terminale</string>
     <string name="notification_action_wake_lock">Ottieni wakelock</string>
     <string name="termux_soft_keyboard_enabled_on">La tastiera virtuale sarà abilitata. (Predefinito)</string>
     <string name="termux_debugging_preferences_summary">Preferenze per il debug</string>
-    <string name="termux_preferences_summary">Preferenze per l\'app &TERMUX_APP_NAME;</string>
     <string name="bootstrap_error_title">Impossibile installare il pacchetto di avvio</string>
     <string name="bootstrap_error_abort">Annulla</string>
     <string name="termux_terminal_view_key_logging_enabled_on">I registri di Logcat conterranno voci relative ai tasti della vista del terminale. Questi sono molto dettagliati e dovrebbero essere disabilitati in circostanze normali o causeranno problemi di prestazioni.</string>
     <string name="bootstrap_installer_body">Installazione dei pacchetti di avvio…</string>
-    <string name="termux_api_preferences_summary">Preferenze per l\'app &TERMUX_API_APP_NAME;</string>
     <string name="msg_terminal_reset">Reset del terminale</string>
     <string name="msg_max_terminals_reached">Chiudere quelli esistenti prima di crearne di nuovi.</string>
-    <string name="termux_tasker_preferences_summary">Preferenze per l\'app &TERMUX_TASKER_APP_NAME;</string>
     <string name="action_style_terminal">Stile</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">La tastiera virtuale sarà abilitata solo se non è presente una tastiera hardware.</string>
     <string name="action_open_settings">Impostazioni</string>
     <string name="termux_keyboard_header">Tastiera</string>
     <string name="error_termux_service_execution_command_shell_name_unset">Nome shell non impostato ma modalità di creazione dello shell `%1$s` passata</string>
     <string name="termux_soft_keyboard_enabled_off">La tastiera virtuale sarà disabilitata.</string>
-    <string name="termux_float_preferences_summary">Preferenze per l\'app &TERMUX_FLOAT_APP_NAME;</string>
     <string name="action_file_received_open_directory">Apri directory</string>
     <string name="action_new_session_failsafe">Modalità di emergenza</string>
     <string name="action_toggle_soft_keyboard">Tastiera</string>
     <string name="termux_terminal_view_key_logging_enabled_off">I registri non conterranno voci relative ai tasti della vista del terminale. (Predefinito)</string>
-    <string name="termux_terminal_view_preferences_summary">Preferenze per la vista del terminale</string>
-    <string name="termux_terminal_view_preferences_title">Vista del terminale</string>
     <string name="termux_terminal_view_view_header">Vista</string>
     <string name="bootstrap_error_body">&TERMUX_APP_NAME; non è stato in grado di installare i pacchetti di avvio.</string>
     <string name="title_select_url_dialog">Fai clic sull\'URL per copiarlo o tieni premuto per aprirlo</string>
@@ -68,10 +49,8 @@
     <string name="termux_terminal_view_terminal_margin_adjustment_on">La regolazione del margine del terminale sarà abilitata. Dovrebbe essere abilitata per cercare di risolvere il problema in cui la tastiera virtuale copre parte dei tasti aggiuntivi/della vista del terminale. Se causa sfarfallio dello schermo sui tuoi dispositivi, disabilitala. (Predefinito)</string>
     <string name="termux_terminal_view_activity_remove_on">&TERMUX_APP_NAME; si chiuderà e rimuoverà dalla lista delle app recenti se non ci sono sessioni terminali attive. (Predefinito)</string>
     <string name="notification_action_wake_unlock">Rilascia wakelock</string>
-    <string name="termux_background_image_enabled_off">L\'immagine di sfondo sarà disabilitata. Per abilitarla, assicurati che siano presenti i file appropriati in modalità ritratto e panoramica. Se desideri impostare un nuovo sfondo, fallo dal menu contestuale con un lungo clic sul Terminale. (Predefinito)</string>
     <string name="title_activity_termux_settings">Impostazioni di &TERMUX_APP_NAME;</string>
     <string name="action_select_url">Seleziona URL</string>
-    <string name="action_share_selected_text">Condividi il testo selezionato</string>
     <string name="title_share_transcript">Trascrizione del terminale</string>
     <string name="error_termux_service_unsupported_execution_command_shell_create_mode">Modalità di creazione dello shell non supportata per TermuxService: `%1$s`</string>
     <string name="termux_log_level_title">Livello di registro</string>
@@ -79,8 +58,6 @@
     <string name="action_set_background_image">Imposta l\'immagine di sfondo</string>
     <string name="title_share_selected_text_with">Invia il testo selezionato a:</string>
     <string name="termux_crash_report_notifications_enabled_off">Disabilita le notifiche per le segnalazioni crash.</string>
-    <string name="termux_terminal_io_preferences_summary">Preferenze per l\'I/O del terminale</string>
-    <string name="termux_widget_preferences_summary">Preferenze per l\'app &TERMUX_WIDGET_APP_NAME;</string>
     <string name="msg_add_termux_debug_info">Aggiungere le informazioni di debug di &TERMUX_APP_NAME; al rapporto\?</string>
     <string name="permission_run_command_label">Eseguire comandi nell\'ambiente &TERMUX_APP_NAME;</string>
     <string name="action_share_transcript">Condividi la trascrizione</string>
@@ -100,20 +77,15 @@
     <string name="title_create_named_session">Nuova sessione con nome</string>
     <string name="title_select_url_none_found">Nessun URL trovato nel terminale.</string>
     <string name="action_file_received_edit">Modifica</string>
-    <string name="error_background_image_loading_from_gallery_failed">Impossibile caricare l\'immagine. Prova un\'altra immagine.</string>
     <string name="termux_plugin_error_notifications_enabled_title">Notifiche di errore del plugin</string>
-    <string name="action_font_and_color">Carattere e colore</string>
     <string name="title_file_received">Salva il file in ~/downloads/</string>
     <string name="permission_run_command_description">Eseguire comandi arbitrari all\'interno dell\'ambiente &TERMUX_APP_NAME; e accedere ai file</string>
     <string name="title_share_selected_text">Testo del terminale</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">La tastiera virtuale sarà abilitata anche se è collegata una tastiera hardware. (Predefinito)</string>
-    <string name="error_background_image_loading_failed">Impossibile caricare l\'immagine di sfondo. Impostazione del colore di sfondo.</string>
     <string name="termux_crash_report_notifications_enabled_title">Notifiche di segnalazione crash</string>
     <string name="notification_action_exit">Esci</string>
     <string name="error_display_over_other_apps_permission_not_granted_to_start_terminal">&TERMUX_APP_NAME; richiede il permesso \"Mostra sopra le altre app\" per avviare sessioni terminali in background su Android &gt;= 10. Concedilo da Impostazioni -&gt; App -&gt; &TERMUX_APP_NAME; -&gt; Avanzate</string>
-    <string name="termux_background_image_enabled_on">L\'immagine di sfondo sarà abilitata.</string>
     <string name="error_run_command_service_invalid_intent_action">Azione dell\'intent non valida per RunCommandService: `%1$s`</string>
-    <string name="action_report_issue">Segnala un problema</string>
     <string name="bootstrap_error_installed_on_portable_sd">&TERMUX_APP_NAME; non può essere installato su una scheda SD portatile/esterna/rimovibile sul tuo dispositivo._x000D_
 \nI binari di avvio compilati per &TERMUX_APP_NAME; hanno il percorso $PREFIX codificato e non possono essere installati in un percorso diverso da:_x000D_
 \n%1$s.</string>
@@ -123,8 +95,6 @@
 \n%1$s.</string>
     <string name="title_rename_session">Imposta il nome della sessione</string>
     <string name="shared_user_label">&TERMUX_APP_NAME; utente</string>
-    <string name="error_styling_not_installed">Il plugin dell\'app &TERMUX_STYLING_APP_NAME; non è installato.</string>
-    <string name="action_styling_install">Installa</string>
     <string name="action_kill_process">Uccidi il processo (%d)</string>
     <string name="termux_terminal_view_key_logging_enabled_title">Registrazione dei tasti nella vista del terminale</string>
 </resources>

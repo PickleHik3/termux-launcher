@@ -65,10 +65,15 @@ public class ApiSecuritySeamsTest {
         JSONObject endpoint = server.endpointSettings(context);
         port = endpoint.getInt("activePort");
         token = endpoint.getString("token");
+
+        // importModel scopes local paths to the Termux home directory, which is not a real
+        // writable path on the test JVM; let fixtures import from the JVM temp dir instead.
+        TaiManager.setImportPathAllowedRootForTesting(System.getProperty("java.io.tmpdir"));
     }
 
     @After
     public void tearDown() throws Exception {
+        TaiManager.setImportPathAllowedRootForTesting(null);
         if (server != null) server.stop();
 
         Field taiInstance = TaiManager.class.getDeclaredField("instance");

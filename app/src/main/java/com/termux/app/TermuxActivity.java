@@ -79,7 +79,6 @@ import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import com.github.mmin18.widget.AndroidStockBlurImpl;
 import com.github.mmin18.widget.RealtimeBlurView;
-import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -277,6 +276,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * window, which makes the raw CPU reading less spiky before any smoothing is applied.
      */
     private static final long STATS_BAR_INTERVAL_MS = 6000L;
+    /** Lazy-mode multipliers for the two sampling cadences; the readings are the same, just rarer. */
+    private static final long STATS_LAZY_MULTIPLIER = 3L;
     @Nullable private com.termux.app.statusbar.WeatherController mWeatherController;
     @Nullable private com.termux.app.statusbar.WeatherCardView mWeatherCardView;
     /** Fork-native sessions list dropped beneath the status-row session chip. */
@@ -1626,16 +1627,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return buildGlassSurface(barAlpha, sliceStart, sliceEnd, true, grain, cornerRadiusPx, rim);
     }
 
-    private float resolveStatusBarCornerRadiusPx() {
-        if (mPreferences == null)
-            return 0f;
-        int configured = mPreferences.getStatusBarCornerRadius();
-        // -1 means "follow the style", which used to reach the drawable as a negative radius and
-        // silently squared the status surface off while the dock beside it was rounded.
-        return dpToPx(configured >= 0 ? configured
-            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_ROUNDED_SURFACE_CORNER_RADIUS_DP);
-    }
-
     @NonNull
     private Drawable buildGlassSurface(float barAlpha, float sliceStart, float sliceEnd,
                                       boolean withFoot, int grain) {
@@ -1666,7 +1657,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         baseLayer.setColor(withAlphaComponent(base, baseAlpha));
         baseLayer.setDither(true);
 
-        int[] sliceColors = dockGlassLightModelSlice(accent, topSheenAlpha, midSheenAlpha,
+        int[] sliceColors = DockGlassRendering.lightModelSlice(accent, topSheenAlpha, midSheenAlpha,
             bottomFootAlpha, sliceStart, sliceEnd);
         GradientDrawable lightLayer = new GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM, sliceColors);
@@ -1697,69 +1688,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return new LayerDrawable(layers.toArray(new Drawable[0]));
     }
 
-    /** Model stop positions for the vertical glass light model, matched to {@link #dockGlassLightModelColorAt}. */
-    private static final float[] DOCK_GLASS_MODEL_STOPS = {0f, 0.33f, 0.67f, 1f};
-
-    /**
-     * Samples the vertical glass light model over {@code [sliceStart, sliceEnd]} (fractions of the
-     * full model height) and returns the colors for a top-to-bottom gradient across that slice. The
-     * slice's own model stops are included so the sheen/foot shape is preserved rather than reduced
-     * to a straight two-color ramp.
-     */
-    @NonNull
-    private int[] dockGlassLightModelSlice(int accent, int topSheenAlpha, int midSheenAlpha,
-                                           int bottomFootAlpha, float sliceStart, float sliceEnd) {
-        float start = Math.max(0f, Math.min(1f, sliceStart));
-        float end = Math.max(start, Math.min(1f, sliceEnd));
-        java.util.List<Integer> colors = new java.util.ArrayList<>();
-        colors.add(dockGlassLightModelColorAt(start, accent, topSheenAlpha, midSheenAlpha, bottomFootAlpha));
-        for (float stop : DOCK_GLASS_MODEL_STOPS) {
-            if (stop > start && stop < end) {
-                colors.add(dockGlassLightModelColorAt(stop, accent, topSheenAlpha, midSheenAlpha, bottomFootAlpha));
-            }
-        }
-        colors.add(dockGlassLightModelColorAt(end, accent, topSheenAlpha, midSheenAlpha, bottomFootAlpha));
-        int[] result = new int[colors.size()];
-        for (int i = 0; i < result.length; i++) {
-            result[i] = colors.get(i);
-        }
-        return result;
-    }
-
-    /**
-     * Color of the vertical glass light model at {@code pos} in [0,1]: accent sheen at the top
-     * ([0,0.33]), fading to a clear see-through middle ([0.33,0.67]), then to a dark foot at the
-     * bottom ([0.67,1]). No broad white wash — a near-white sheen reads as frosted plastic.
-     */
-    private int dockGlassLightModelColorAt(float pos, int accent, int topSheenAlpha,
-                                           int midSheenAlpha, int bottomFootAlpha) {
-        int sheenTop = withAlphaComponent(accent, topSheenAlpha);
-        int sheenMid = withAlphaComponent(accent, midSheenAlpha);
-        int clear = Color.TRANSPARENT;
-        int foot = withAlphaComponent(Color.BLACK, bottomFootAlpha);
-        if (pos <= 0.33f) {
-            return lerpArgb(sheenTop, sheenMid, pos / 0.33f);
-        }
-        if (pos <= 0.67f) {
-            return lerpArgb(sheenMid, clear, (pos - 0.33f) / 0.34f);
-        }
-        return lerpArgb(clear, foot, (pos - 0.67f) / 0.33f);
-    }
-
-    /** Straight ARGB interpolation (alpha included) between two colors. */
-    private static int lerpArgb(int a, int b, float t) {
-        t = t < 0f ? 0f : (t > 1f ? 1f : t);
-        int aa = Color.alpha(a), ab = Color.alpha(b);
-        int ra = Color.red(a), rb = Color.red(b);
-        int ga = Color.green(a), gb = Color.green(b);
-        int ba = Color.blue(a), bb = Color.blue(b);
-        return Color.argb(
-            Math.round(aa + (ab - aa) * t),
-            Math.round(ra + (rb - ra) * t),
-            Math.round(ga + (gb - ga) * t),
-            Math.round(ba + (bb - ba) * t));
-    }
-
     /** A tiled grain layer whose strength is controlled only by the grain preference. */
     @NonNull
     private Drawable buildDockGrainLayer(int grainPercent) {
@@ -1771,14 +1699,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     static boolean dockBlurEnabled(int blurRadiusDp) {
-        return blurRadiusDp > 0;
+        return DockGlassRendering.blurEnabled(blurRadiusDp);
     }
 
     /** Literal opacity endpoint: 100% is an opaque material and 0% is fully transparent. */
     static final int DOCK_GLASS_BASE_MAX_ALPHA = 255;
     static int dockGlassBaseAlpha(float opacity) {
-        float clampedOpacity = Math.max(0f, Math.min(1f, opacity));
-        return Math.round(clampedOpacity * DOCK_GLASS_BASE_MAX_ALPHA);
+        return DockGlassRendering.baseAlpha(opacity);
     }
 
     /** Cached light-scatter filter applied to the blurred wallpaper backdrop. */
@@ -8143,30 +8070,120 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     // ------------------------------------------------------------------ keybind hint popup
 
+    /** Prefix the in-app keyboard's latch is asking for, or null. */
+    @Nullable private String mInAppKeybindHintPrefix;
+    private boolean mInAppKeybindHintShift;
+    /** Prefix a physical keyboard is holding, or null. Outranks the in-app latch. */
+    @Nullable private String mHardwareKeybindHintPrefix;
+    private boolean mHardwareKeybindHintShift;
     /**
-     * While Ctrl+Alt (optionally +Shift) is latched on the in-app keyboard, the bound caps
-     * light up in their legend group's colour on the live keyboard itself, and a glass slab
-     * flush against the accessory stack shows a grouped legend of what each lit key does. Any
-     * other modifier state removes both, so they track latch, lock and release for free via
-     * onKeyboardModifiersChanged.
+     * Set when a binding under the shown prefix actually ran. The legend answers "what can I press
+     * now"; once something was pressed the answer is nothing, so it goes at once and stays gone
+     * until the prefix is let go and taken up again.
+     */
+    private boolean mKeybindHintSpent;
+    /** Effective prefix at the last refresh, to notice a fresh one being taken up. */
+    @Nullable private String mKeybindHintLastPrefix;
+
+    /**
+     * While Ctrl+Alt (optionally +Shift) is held — latched on the in-app keyboard or held down on
+     * a physical one — the bound caps light up in their legend group's colour on the live
+     * keyboard, and a glass slab flush against the accessory stack shows a grouped legend of what
+     * each lit key does. A latched {@code leader} prefix shows the same slab for its own table.
+     * Any other modifier state removes both, so they track latch, lock and release for free via
+     * onKeyboardModifiersChanged and {@link #setHardwareKeybindHintPrefix}.
      *
      * <p>A prefix change while latched (Shift joining or leaving) never remounts the slab: the
      * legend re-runs its entry animation, the keyboard re-lights and the letters flip case.
      */
     private void updateKeybindHintPopup(
             @Nullable com.termux.app.terminal.inappkeyboard.TerminalModifiers modifiers) {
+        boolean latched = modifiers != null && modifiers.isCtrl() && modifiers.isAlt();
+        mInAppKeybindHintPrefix = latched ? "ctrl+alt+" : null;
+        mInAppKeybindHintShift = latched && modifiers.isShift();
+        refreshKeybindHintPopup();
+    }
+
+    /**
+     * The hardware twin of {@link #updateKeybindHintPopup}: a physical keyboard holding Ctrl+Alt,
+     * or a latched {@code leader} prefix waiting for its second key. Pushed by
+     * {@link com.termux.app.terminal.TermuxTerminalViewClient}, which is the only place hardware
+     * key events are seen.
+     *
+     * @param prefix the stroke prefix being documented, e.g. {@code "ctrl+alt+"} or
+     *     {@code "ctrl+space>"}, or null when nothing is held.
+     */
+    public void setHardwareKeybindHintPrefix(@Nullable String prefix, boolean shift) {
+        if (java.util.Objects.equals(prefix, mHardwareKeybindHintPrefix)
+            && shift == mHardwareKeybindHintShift)
+            return;
+        mHardwareKeybindHintPrefix = prefix;
+        mHardwareKeybindHintShift = shift;
+        refreshKeybindHintPopup();
+    }
+
+    /**
+     * A hardware hold outranks the in-app keyboard's latch: the keyboard reports "no modifiers"
+     * on every key it releases, and that callback must not tear down a slab the physical keyboard
+     * is still holding up.
+     */
+    private void refreshKeybindHintPopup() {
+        boolean hardware = mHardwareKeybindHintPrefix != null;
+        String prefix = hardware ? mHardwareKeybindHintPrefix : mInAppKeybindHintPrefix;
+        // Re-arm on both edges of the gap: letting the prefix go, and taking a new one up. Only
+        // the first was checked, and the spend is recorded *after* the release pass for a leader
+        // chord, so the flag survived into the next prefix and swallowed its legend.
+        if (prefix == null || mKeybindHintLastPrefix == null) mKeybindHintSpent = false;
+        mKeybindHintLastPrefix = prefix;
+        if (mKeybindHintSpent) {
+            performKeybindHintHide(false);
+            return;
+        }
+        showKeybindHintPopup(prefix,
+            hardware ? mHardwareKeybindHintShift : mInAppKeybindHintShift);
+    }
+
+    /**
+     * Takes the legend down the moment a binding runs, with no linger: the slab is an answer to a
+     * question the keystroke just answered, and holding it over the action's own UI reads as a
+     * stuck popup. The lingering hide is for the other ending — the prefix released without
+     * pressing anything.
+     */
+    public void onKeybindHintConsumed() {
+        mKeybindHintSpent = true;
+        performKeybindHintHide(false);
+    }
+
+    /** Whether the hint legend is on screen, i.e. whether a pending prefix is already announced. */
+    public boolean isKeybindHintPopupVisible() {
+        View popup = findViewById(R.id.keybind_hint_popup);
+        return popup != null && popup.getVisibility() == View.VISIBLE;
+    }
+
+    private void showKeybindHintPopup(@Nullable String basePrefix, boolean shiftHeld) {
         android.widget.LinearLayout popup = findViewById(R.id.keybind_hint_popup);
         if (popup == null) return;
-        boolean show = modifiers != null && modifiers.isCtrl() && modifiers.isAlt()
-            && isInAppKeyboardShown() && isSplitPanesEnabled();
-        Map<String, String> hints = null;
-        boolean shift = show && modifiers.isShift();
-        String prefix = shift ? "ctrl+alt+shift+" : "ctrl+alt+";
+        popup.removeCallbacks(mKeybindHintHide);
+        boolean show = basePrefix != null && isSplitPanesEnabled();
+        Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> hints = null;
+        boolean shift = show && shiftHeld;
+        String prefix = shift ? basePrefix + "shift+" : basePrefix;
+        // Bindings that are one plain Ctrl stroke — pane focus lives there now — are listed
+        // alongside the prefixed table. They are a different chord, so they are spelled out with
+        // their own "Ctrl+" caps and they never light a key: pressing that key under the prefix
+        // does something else.
+        Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> ctrlHints =
+            java.util.Collections.emptyMap();
         if (show) {
+            com.termux.launcherctl.LauncherToolRegistry.ActionContext context =
+                com.termux.app.terminal.TerminalActionDispatcher.getInstance().actionContext();
             hints = com.termux.app.terminal.TerminalKeyBindingResolver.getInstance()
-                .hintsForPrefix(prefix,
-                    com.termux.app.terminal.TerminalActionDispatcher.getInstance().actionContext());
+                .hintsForPrefix(prefix, context);
             show = !hints.isEmpty();
+            if (show && !"ctrl+".equals(basePrefix)) {
+                ctrlHints = com.termux.app.terminal.TerminalKeyBindingResolver.getInstance()
+                    .hintsForPrefix("ctrl+", context);
+            }
         }
         if (!show) {
             hideKeybindHintPopup();
@@ -8175,10 +8192,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean visible = popup.getVisibility() == View.VISIBLE;
         // Modifier callbacks repeat for the same latch state; only content changes repopulate,
         // so the lighting and entry animations are not restarted every callback.
-        String signature = prefix + '|' + hints;
+        String signature = prefix + '|' + hints + '|' + ctrlHints;
         if (visible && signature.equals(popup.getTag())) return;
         popup.setTag(signature);
-        Map<String, Integer> litTokens = populateKeybindHintPopup(popup, hints, shift);
+        Map<String, Integer> litTokens = populateKeybindHintPopup(popup, hints, ctrlHints, shift);
         if (mInAppKeyboard != null)
             mInAppKeyboard.setKeybindHintHighlights(litTokens);
         float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity() / 100f : 0.5f;
@@ -8204,13 +8221,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /**
+     * Lingers before the legend goes: releasing the prefix is also how a stroke is typed, so
+     * fading the instant the modifier lifts blinks the slab away mid-read on every use.
+     */
+    private static final long KEYBIND_HINT_LINGER_MS = 450L;
+
+    private final Runnable mKeybindHintHide = () -> performKeybindHintHide(true);
+
     private void hideKeybindHintPopup() {
+        View popup = findViewById(R.id.keybind_hint_popup);
+        if (popup == null || popup.getVisibility() != View.VISIBLE) {
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.setKeybindHintHighlights(null);
+            return;
+        }
+        popup.removeCallbacks(mKeybindHintHide);
+        popup.postDelayed(mKeybindHintHide, KEYBIND_HINT_LINGER_MS);
+    }
+
+    private void performKeybindHintHide(boolean fade) {
         if (mInAppKeyboard != null)
             mInAppKeyboard.setKeybindHintHighlights(null);
         View popup = findViewById(R.id.keybind_hint_popup);
         if (popup == null || popup.getVisibility() != View.VISIBLE) return;
+        popup.removeCallbacks(mKeybindHintHide);
         popup.setTag(null);
-        popup.animate().alpha(0f).setDuration(100L)
+        if (!fade) {
+            popup.animate().cancel();
+            popup.setAlpha(1f);
+            popup.setVisibility(View.GONE);
+            return;
+        }
+        popup.animate().alpha(0f).setDuration(160L)
             .withEndAction(() -> popup.setVisibility(View.GONE)).start();
     }
 
@@ -8231,11 +8274,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         String cap;
         final java.util.List<String> tokens = new java.util.ArrayList<>(4);
         final String label;
+        /** Chord spelled before the keycap, empty for the latched prefix's own keys. */
+        final String capPrefix;
 
-        KeybindHintEntry(String cap, String token, String label) {
+        KeybindHintEntry(String cap, String token, String label, String capPrefix) {
             this.cap = cap;
             this.tokens.add(token);
             this.label = label;
+            this.capPrefix = capPrefix;
         }
     }
 
@@ -8243,7 +8289,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private Map<String, Integer> populateKeybindHintPopup(
             @NonNull android.widget.LinearLayout popup,
-            @NonNull Map<String, String> hints, boolean shift) {
+            @NonNull Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> hints,
+            @NonNull Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> ctrlHints,
+            boolean shift) {
         popup.removeAllViews();
         LauncherToolRegistry registry = LauncherToolRegistry.getInstance();
         boolean animate = !isReducedMotionEnabled();
@@ -8265,48 +8313,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.Map<String, KeybindHintEntry> runEntryByTool = new java.util.HashMap<>();
         java.util.List<KeybindHintEntry> runEntries = new java.util.ArrayList<>();
         java.util.Map<String, Integer> litTokens = new java.util.LinkedHashMap<>();
-        int added = 0;
-        for (Map.Entry<String, String> hint : hints.entrySet()) {
-            String token = hint.getKey();
-            String toolName = hint.getValue();
-            com.termux.app.terminal.KeybindGroupPalette.Group group =
-                com.termux.app.terminal.KeybindGroupPalette.groupFor(toolName);
-            Integer groupColor = groupColors.get(group);
-            if (groupColor == null) {
-                groupColor = com.termux.app.terminal.KeybindGroupPalette
-                    .colorFor(group, primary, glassBase);
-                groupColors.put(group, groupColor);
-            }
-            // Lighting is never truncated: a bound cap that lights but has no legend row still
-            // tells the truth, a legend row for a dark cap would not.
-            litTokens.put(token, groupColor);
-            boolean run = keybindHintRunToken(token);
-            if (run) {
-                KeybindHintEntry merged = runEntryByTool.get(toolName);
-                if (merged != null) {
-                    merged.tokens.add(token);
-                    continue;
-                }
-            }
-            if (added >= KEYBIND_HINT_MAX) continue;
-            added++;
-            KeybindHintEntry entry = new KeybindHintEntry(
-                keybindHintCapText(token, shift), token, keybindHintLabel(registry, toolName));
-            if (run) {
-                runEntryByTool.put(toolName, entry);
-                runEntries.add(entry);
-            }
-            java.util.List<KeybindHintEntry> groupEntries = groups.get(group);
-            if (groupEntries == null) {
-                groupEntries = new java.util.ArrayList<>();
-                groups.put(group, groupEntries);
-            }
-            groupEntries.add(entry);
-        }
+        int added = collectKeybindHintEntries(hints, shift, "", true, registry, primary, glassBase,
+            groups, groupColors, runEntryByTool, runEntries, litTokens, 0);
+        collectKeybindHintEntries(ctrlHints, false, "Ctrl+", false, registry, primary, glassBase,
+            groups, groupColors, runEntryByTool, runEntries, litTokens, added);
         // A merged entry shows every key it absorbed: arrows as glyphs in ←↓↑→ order, digits as
         // the range they span.
         for (KeybindHintEntry entry : runEntries) {
-            if (entry.tokens.size() > 1) entry.cap = keybindHintRunCap(entry.tokens);
+            if (entry.tokens.size() > 1)
+                entry.cap = entry.capPrefix + keybindHintRunCap(entry.tokens);
         }
 
         int groupIndex = 0;
@@ -8333,6 +8348,76 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             groupIndex++;
         }
         return litTokens;
+    }
+
+    /**
+     * Folds one hint table into the legend groups.
+     *
+     * @param capPrefix printed before the keycap text, for a table reached by a different chord
+     *     than the latched prefix ({@code "Ctrl+"}).
+     * @param light whether these keys light up on the in-app keyboard. Only the latched prefix's
+     *     own table does: lighting a key for a stroke the prefix does not send would be a lie.
+     * @return the running legend-row count, so the row cap spans both tables.
+     */
+    private int collectKeybindHintEntries(
+            @NonNull Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> hints,
+            boolean shift,
+            @NonNull String capPrefix,
+            boolean light,
+            @NonNull LauncherToolRegistry registry,
+            int primary,
+            int glassBase,
+            @NonNull java.util.EnumMap<com.termux.app.terminal.KeybindGroupPalette.Group,
+                java.util.List<KeybindHintEntry>> groups,
+            @NonNull java.util.EnumMap<com.termux.app.terminal.KeybindGroupPalette.Group,
+                Integer> groupColors,
+            @NonNull java.util.Map<String, KeybindHintEntry> runEntryByTool,
+            @NonNull java.util.List<KeybindHintEntry> runEntries,
+            @NonNull java.util.Map<String, Integer> litTokens,
+            int added) {
+        for (Map.Entry<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> hint
+                : hints.entrySet()) {
+            String token = hint.getKey();
+            String toolName = hint.getValue().toolName;
+            String label = keybindHintLabel(registry, toolName, hint.getValue().label);
+            // Runs merge on the printed label, not just the tool: nine app.launch digits named
+            // after nine different apps are nine bindings, not one "Launch app" row.
+            String runKey = toolName + ' ' + label;
+            com.termux.app.terminal.KeybindGroupPalette.Group group =
+                com.termux.app.terminal.KeybindGroupPalette.groupFor(toolName);
+            Integer groupColor = groupColors.get(group);
+            if (groupColor == null) {
+                groupColor = com.termux.app.terminal.KeybindGroupPalette
+                    .colorFor(group, primary, glassBase);
+                groupColors.put(group, groupColor);
+            }
+            // Lighting is never truncated: a bound cap that lights but has no legend row still
+            // tells the truth, a legend row for a dark cap would not.
+            if (light) litTokens.put(token, groupColor);
+            boolean run = keybindHintRunToken(token);
+            if (run) {
+                KeybindHintEntry merged = runEntryByTool.get(runKey);
+                if (merged != null) {
+                    merged.tokens.add(token);
+                    continue;
+                }
+            }
+            if (added >= KEYBIND_HINT_MAX) continue;
+            added++;
+            KeybindHintEntry entry = new KeybindHintEntry(
+                capPrefix + keybindHintCapText(token, shift), token, label, capPrefix);
+            if (run) {
+                runEntryByTool.put(runKey, entry);
+                runEntries.add(entry);
+            }
+            java.util.List<KeybindHintEntry> groupEntries = groups.get(group);
+            if (groupEntries == null) {
+                groupEntries = new java.util.ArrayList<>();
+                groups.put(group, groupEntries);
+            }
+            groupEntries.add(entry);
+        }
+        return added;
     }
 
     /**
@@ -8499,7 +8584,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @NonNull
     private String keybindHintLabel(@NonNull LauncherToolRegistry registry,
-                                    @NonNull String toolName) {
+                                    @NonNull String toolName, @Nullable String label) {
+        // A --label in the binding file wins: only the user knows that Ctrl+Alt+W is "WhatsApp"
+        // rather than the generic "Launch app" every app chord would otherwise print.
+        if (label != null && !label.isEmpty()) return label;
         LauncherToolRegistry.ToolMetadata tool = registry.getTool(toolName);
         if (tool != null && tool.titleRes != 0) return getString(tool.titleRes);
         return toolName;
@@ -12824,6 +12912,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         bar.setOnCreateWindowListener(this::createNewWindow);
         bar.setOnEdgeOverswipeListener(collapsed -> setTopStatusBarCollapsed(collapsed, true));
+        com.termux.app.terminal.TerminalWindowBar lazyWindowBar =
+            findViewById(R.id.terminal_window_bar);
+        if (lazyWindowBar != null && mPreferences != null)
+            lazyWindowBar.setLazyMode(mPreferences.isLazyModeEnabled());
+
         com.termux.app.statusbar.SessionsIndicatorView sessionsIndicator =
             findViewById(R.id.terminal_sessions_indicator);
         if (sessionsIndicator != null) {
@@ -13098,6 +13191,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 clock.setStyle(mPreferences.getTopPaneClockStyle());
                 clock.setAlignment(mPreferences.getTopPaneClockAlignment());
                 clock.setUseAmPm(mPreferences.isTopPaneClockAmPmEnabled());
+                clock.setLazyMode(mPreferences.isLazyModeEnabled());
             }
             // Only reachable while the panel is expanded: the widget slot the clock lives in is GONE
             // in the collapsed bar, so this needs no state check of its own.
@@ -13483,7 +13577,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (cpuOn || ramOn) {
             boolean cardShowing = mStatusCardHost.isShowing() && mStatsCardView != null;
             ensureStatsController().start(
-                cardShowing ? STATS_CARD_INTERVAL_MS : STATS_BAR_INTERVAL_MS, cardShowing);
+                statsInterval(cardShowing ? STATS_CARD_INTERVAL_MS : STATS_BAR_INTERVAL_MS),
+                cardShowing);
         } else if (mStatsController != null) {
             mStatsController.stop();
         }
@@ -13520,6 +13615,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     @NonNull
+    /** The sampling cadence, stretched in lazy mode. */
+    private long statsInterval(long normalMs) {
+        return mPreferences != null && mPreferences.isLazyModeEnabled()
+            ? normalMs * STATS_LAZY_MULTIPLIER : normalMs;
+    }
+
     private com.termux.app.statusbar.SystemStatsController ensureStatsController() {
         if (mStatsController == null) {
             mStatsController = new com.termux.app.statusbar.SystemStatsController(this, this::onStatsUpdated);
@@ -13562,7 +13663,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         detachFromParent(mStatsCardView);
         mStatsCardView.bind(ensureStatsController().latest());
-        ensureStatsController().start(STATS_CARD_INTERVAL_MS, true);
+        ensureStatsController().start(statsInterval(STATS_CARD_INTERVAL_MS), true);
         setWidgetAccent(anchor, true);
         mStatusCardHost.setDropEdge(findViewById(R.id.terminal_window_bar_host));
         mStatusCardHost.show(anchor, mStatsCardView, statusCardStyleProvider(), () -> {
@@ -13570,7 +13671,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mStatsController != null
                 && mPreferences != null
                 && (mPreferences.isStatusWidgetCpuEnabled() || mPreferences.isStatusWidgetRamEnabled())) {
-                mStatsController.start(STATS_BAR_INTERVAL_MS, false);
+                mStatsController.start(statsInterval(STATS_BAR_INTERVAL_MS), false);
             }
         });
     }

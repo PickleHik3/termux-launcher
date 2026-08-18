@@ -10,3 +10,8 @@
 -dontobfuscate
 #-renamesourcefileattribute SourceFile
 #-keepattributes SourceFile,LineNumberTable
+
+# Settings sub-screens are instantiated reflectively via app:fragment="..." strings in
+# res/xml preference screens, which AAPT2 does not emit keep rules for. shrinkResources
+# alone can drop an unreferenced fragment class before that string is resolved at runtime.
+-keep class com.termux.app.fragments.settings.** extends androidx.fragment.app.Fragment

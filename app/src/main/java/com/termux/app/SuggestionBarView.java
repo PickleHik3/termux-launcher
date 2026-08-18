@@ -35,7 +35,6 @@ import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
 import android.graphics.Point;
-import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
@@ -119,6 +118,7 @@ import com.termux.app.launcher.data.LauncherIconResolver;
 import com.termux.app.launcher.notifications.LauncherNotificationBadgeStore;
 import com.termux.app.launcher.data.LauncherRankingEngine;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
+import com.termux.app.launcher.drawer.AppDrawerCategory;
 import com.termux.app.launcher.drawer.AppDrawerController;
 import com.termux.app.launcher.drawer.AppDrawerPickupDelegate;
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
@@ -323,6 +323,7 @@ public final class SuggestionBarView extends GridLayout
     /** Identifies a folder-member drag in windows the drag's local state does not reach. */
     static final String FOLDER_ENTRY_CLIP_LABEL = "folder-entry";
     private PopupWindow appContextPopupWindow;
+    private PopupWindow categoryPickerPopupWindow;
     private PopupWindow shortcutsPopupWindow;
     private PopupWindow notificationPopupWindow;
     @Nullable private PopupWindow notificationInteractionPopup;
@@ -4030,180 +4031,6 @@ public final class SuggestionBarView extends GridLayout
         }
     }
 
-    private void showReplacePinnedApp(int index) {
-        if (allApps == null || allApps.isEmpty()) reloadAllApps();
-        String[] labels = appLabels(allApps);
-        new MaterialAlertDialogBuilder(getContext())
-            .setTitle("Replace pinned app")
-            .setItems(labels, (dialog, which) -> {
-                AppRef ref = allApps.get(which).appRef;
-                if (index >= 0 && index < pinnedItems.size()) {
-                    pinnedItems.set(index, new PinnedAppItem(ref));
-                }
-                persistPinsAndReload();
-            })
-            .show();
-    }
-
-    private void showMovePinnedAppToFolder(int appIndex, PinnedAppItem item) {
-        List<PinnedFolderItem> folders = allFolders();
-        if (folders.isEmpty()) {
-            showCreateFolderWithSeed(appIndex, item);
-            return;
-        }
-        String[] names = new String[folders.size()];
-        for (int i = 0; i < folders.size(); i++) names[i] = folders.get(i).title;
-
-        new MaterialAlertDialogBuilder(getContext())
-            .setTitle("Move to folder")
-            .setItems(names, (dialog, which) -> {
-                PinnedFolderItem folder = folders.get(which);
-                PinnedAppItem normalized = new PinnedAppItem(resolveForSelectionRef(item.appRef),
-                    item.iconOverride);
-                LauncherFolderMutator.AppendResult result =
-                    LauncherFolderMutator.moveTopLevelAppIntoFolder(pinnedItems, appIndex, folder,
-                        normalized);
-                if (result == LauncherFolderMutator.AppendResult.APPLIED) persistPinsAndReload();
-                else showFolderAppendRejected(result);
-            })
-            .show();
-    }
-
-    private void showCreateFolderWithSeed(int appIndex, PinnedAppItem item) {
-        EditText titleInput = new EditText(getContext());
-        titleInput.setHint("Folder name");
-        new MaterialAlertDialogBuilder(getContext())
-            .setTitle("Create folder")
-            .setView(titleInput)
-            .setPositiveButton("Create", (dialog, which) -> {
-                String title = titleInput.getText() == null ? "Folder" : titleInput.getText().toString().trim();
-                if (title.isEmpty()) title = "Folder";
-                PinnedFolderItem folder = new PinnedFolderItem(UUID.randomUUID().toString(), title);
-                addPinnedAppToFolderIfMissing(folder, item);
-
-                if (appIndex >= 0 && appIndex < pinnedItems.size()) {
-                    pinnedItems.set(appIndex, folder);
-                } else {
-                    pinnedItems.add(folder);
-                }
-                persistPinsAndReload();
-            })
-            .setNegativeButton("Cancel", null)
-            .show();
-    }
-
-    private void showFolderAppEditor(PinnedFolderItem folder) {
-        if (allApps == null || allApps.isEmpty()) reloadAllApps();
-        boolean[] checked = new boolean[allApps.size()];
-        Set<String> existing = new HashSet<>();
-        for (PinnedAppItem folderApp : folder.apps) {
-            existing.add(resolveForSelectionId(folderApp.appRef));
-        }
-        for (int i = 0; i < allApps.size(); i++) {
-            checked[i] = existing.contains(allApps.get(i).appRef.stableId());
-        }
-
-        String[] labels = appLabels(allApps);
-        new MaterialAlertDialogBuilder(getContext())
-            .setTitle("Edit folder apps")
-            .setMultiChoiceItems(labels, checked, (dialog, which, isChecked) -> {
-                checked[which] = isChecked;
-            })
-            .setPositiveButton("Save", (dialog, which) -> {
-                Map<String, PinnedIconOverride> existingOverrides = folderIconOverridesByStableId(folder);
-                folder.apps.clear();
-                for (int i = 0; i < checked.length; i++) {
-                    if (checked[i]) {
-                        AppRef ref = resolveForSelectionRef(allApps.get(i).appRef);
-                        folder.apps.add(new PinnedAppItem(ref, existingOverrides.get(ref.stableId())));
-                    }
-                }
-                persistPinsAndReload();
-            })
-            .setNegativeButton("Cancel", null)
-            .show();
-    }
-
-    private void showFolderSettings(PinnedFolderItem folder) {
-        LinearLayout layout = new LinearLayout(getContext());
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(dp(16), dp(12), dp(16), dp(12));
-        GradientDrawable panel = new GradientDrawable();
-        panel.setCornerRadius(dp(14));
-        panel.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xEE));
-        panel.setStroke(dp(1), withAlphaComponent(resolveLauncherOutlineColor(), 0x66));
-        layout.setBackground(panel);
-
-        TextView title = new TextView(getContext());
-        title.setText("Folder settings");
-        title.setTextColor(resolveLauncherTextColor());
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setTextSize(14f);
-        title.setPadding(0, 0, 0, dp(8));
-
-        final int[] rowsValue = new int[] {clamp(folder.rows, 1, PinnedFolderItem.MAX_GRID)};
-        final int[] colsValue = new int[] {clamp(folder.cols, 1, PinnedFolderItem.MAX_GRID)};
-        LinearLayout rowsControl = buildStepperRow("Rows", rowsValue, 1, PinnedFolderItem.MAX_GRID);
-        LinearLayout colsControl = buildStepperRow("Columns", colsValue, 1, PinnedFolderItem.MAX_GRID);
-
-        EditText colorInput = new EditText(getContext());
-        colorInput.setHint("Tint color");
-        colorInput.setText(folder.tintOverrideEnabled ? String.format(Locale.US, "#%08X", folder.tintColor) : "");
-        colorInput.setSingleLine(true);
-        colorInput.setHint("#AARRGGBB or #RRGGBB");
-
-        LinearLayout buttons = new LinearLayout(getContext());
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        buttons.setGravity(Gravity.END);
-
-        Button cancel = new Button(getContext());
-        cancel.setText("Cancel");
-        styleGhostButton(cancel);
-
-        Button save = new Button(getContext());
-        save.setText("Save");
-        styleGhostButton(save);
-
-        buttons.addView(cancel);
-        buttons.addView(save);
-
-        layout.addView(title);
-        layout.addView(rowsControl, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        layout.addView(colsControl, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        layout.addView(colorInput, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        layout.addView(buttons, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        AlertDialog dialog = new MaterialAlertDialogBuilder(getContext())
-            .setView(layout)
-            .create();
-
-        cancel.setOnClickListener(v -> dialog.dismiss());
-        save.setOnClickListener(v -> {
-            folder.rows = rowsValue[0];
-            folder.cols = colsValue[0];
-            String color = stringValue(colorInput.getText()).trim();
-            if (color.isEmpty()) {
-                folder.tintOverrideEnabled = false;
-            } else {
-                Integer parsed = parseColor(color);
-                if (parsed != null) {
-                    folder.tintOverrideEnabled = true;
-                    folder.tintColor = parsed;
-                }
-            }
-            dialog.dismiss();
-            persistPinsAndReload();
-        });
-
-        dialog.show();
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setSoftInputMode(
-                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE |
-                WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
-            );
-        }
-    }
-
     private void showFolderPopup(PinnedFolderItem folder, @Nullable View anchor) {
         showFolderPopup(folder, anchor, false);
     }
@@ -4355,16 +4182,6 @@ public final class SuggestionBarView extends GridLayout
         }
     }
 
-    private List<PinnedFolderItem> allFolders() {
-        List<PinnedFolderItem> out = new ArrayList<>();
-        for (PinnedItem item : pinnedItems) {
-            if (item instanceof PinnedFolderItem) {
-                out.add((PinnedFolderItem) item);
-            }
-        }
-        return out;
-    }
-
     @NonNull
     private static View resolvePrimaryPressTarget(@NonNull View view) {
         if (view instanceof FrameLayout) {
@@ -4418,10 +4235,29 @@ public final class SuggestionBarView extends GridLayout
     public void bindDrawerAppContextLongPress(@NonNull View pressTarget,
                                               @NonNull LauncherAppEntry entry,
                                               @Nullable AppDrawerPickupDelegate pickupDelegate) {
-        bindContextLongPressGesture(pressTarget, -1, false, () -> {
-            dismissShortcutsPopup();
-            showAppContextPopup(new AppMenuContext(entry, pressTarget, -1, null, null));
-        }, null, null, pickupDelegate, entry, null);
+        bindDrawerAppContextLongPress(pressTarget, entry, pickupDelegate, null);
+    }
+
+    /**
+     * Same as the two-arg overload, but with a {@code categoryAction}: when non-null, the popup
+     * this opens drops its Pin/Unpin row and gains a "Category" row that runs it instead — the
+     * app-drawer categories grid's reassignment entry point, reusing this Material popup rather
+     * than jumping straight to a category picker.
+     */
+    public void bindDrawerAppContextLongPress(@NonNull View pressTarget,
+                                              @NonNull LauncherAppEntry entry,
+                                              @Nullable AppDrawerPickupDelegate pickupDelegate,
+                                              @Nullable Runnable categoryAction) {
+        bindContextLongPressGesture(pressTarget, -1, false,
+            () -> showDrawerAppContextPopup(pressTarget, entry, categoryAction),
+            null, null, pickupDelegate, entry, null);
+    }
+
+    /** Shows the Material app-context popup anchored to a drawer view, outside the long-press gesture. */
+    public void showDrawerAppContextPopup(@NonNull View anchor, @NonNull LauncherAppEntry entry,
+                                          @Nullable Runnable categoryAction) {
+        dismissShortcutsPopup();
+        showAppContextPopup(new AppMenuContext(entry, anchor, -1, null, null, categoryAction));
     }
 
     private void bindFolderContextLongPress(
@@ -4621,6 +4457,8 @@ public final class SuggestionBarView extends GridLayout
         boolean folderSource = sourceFolder != null && context.folderEntryRef != null;
         int topPinnedIndex = context.pinnedIndex >= 0 ? context.pinnedIndex : findPinnedAppIndex(context.entry.appRef);
         boolean topPinned = topPinnedIndex >= 0;
+        // A category-context popup swaps its Pin/Unpin row for a Category row instead — see below.
+        boolean suppressPinRow = context.categoryAction != null;
 
         LinearLayout shell = new LinearLayout(getContext());
         shell.setOrientation(LinearLayout.VERTICAL);
@@ -4762,23 +4600,27 @@ public final class SuggestionBarView extends GridLayout
 
             addAppWideIconRows(shell, context.entry, tintBase);
 
-            TextView unpinRow = addPopupActionRow(shell, "Unpin", R.drawable.ic_dock_menu_pin, false, tintBase, () -> {
-                dismissAppContextPopup();
-                removePinnedAt(targetPinnedIndex);
-            });
-            appContextRows.add(new MenuActionRow(unpinRow, () -> {
-                dismissAppContextPopup();
-                removePinnedAt(targetPinnedIndex);
-            }, false));
+            if (!suppressPinRow) {
+                TextView unpinRow = addPopupActionRow(shell, "Unpin", R.drawable.ic_dock_menu_pin, false, tintBase, () -> {
+                    dismissAppContextPopup();
+                    removePinnedAt(targetPinnedIndex);
+                });
+                appContextRows.add(new MenuActionRow(unpinRow, () -> {
+                    dismissAppContextPopup();
+                    removePinnedAt(targetPinnedIndex);
+                }, false));
+            }
         } else {
-            TextView pinRow = addPopupActionRow(shell, "Pin", R.drawable.ic_dock_menu_pin, false, tintBase, () -> {
-                dismissAppContextPopup();
-                pinEntryToTopLevel(context.entry);
-            });
-            appContextRows.add(new MenuActionRow(pinRow, () -> {
-                dismissAppContextPopup();
-                pinEntryToTopLevel(context.entry);
-            }, false));
+            if (!suppressPinRow) {
+                TextView pinRow = addPopupActionRow(shell, "Pin", R.drawable.ic_dock_menu_pin, false, tintBase, () -> {
+                    dismissAppContextPopup();
+                    pinEntryToTopLevel(context.entry);
+                });
+                appContextRows.add(new MenuActionRow(pinRow, () -> {
+                    dismissAppContextPopup();
+                    pinEntryToTopLevel(context.entry);
+                }, false));
+            }
 
             TextView changeIconRow = addPopupActionRow(shell, "Change app icon", R.drawable.ic_dock_menu_change_icon, false, tintBase, () -> {
                 dismissAppContextPopup();
@@ -4789,6 +4631,20 @@ public final class SuggestionBarView extends GridLayout
                 changeAppIconForEntry(context.entry);
             }, false));
             addResetAppIconRowIfNeeded(shell, context.entry, tintBase);
+        }
+
+        if (context.categoryAction != null) {
+            Runnable categoryAction = context.categoryAction;
+            TextView categoryRow = addPopupActionRow(shell,
+                getResources().getString(R.string.app_drawer_category_menu_entry),
+                R.drawable.ic_dock_menu_category, false, tintBase, () -> {
+                    dismissAppContextPopup();
+                    categoryAction.run();
+                });
+            appContextRows.add(new MenuActionRow(categoryRow, () -> {
+                dismissAppContextPopup();
+                categoryAction.run();
+            }, false));
         }
 
         if (hasShortcuts) {
@@ -5818,6 +5674,93 @@ public final class SuggestionBarView extends GridLayout
         dismissAppContextPopup();
         dismissFolderPopup();
         dismissShortcutsPopup();
+        dismissCategoryPickerPopup();
+    }
+
+    /**
+     * The Material popup listing every non-synthetic {@link AppDrawerCategory} plus "Automatic",
+     * opened from the "Category" row of the drawer app-context popup. Replaces the old
+     * {@code AlertDialog}-based picker with the same glass/blur shell every other launcher popup uses.
+     */
+    public void showCategoryPickerPopup(
+        @NonNull LauncherAppEntry entry,
+        @NonNull View anchor,
+        @NonNull List<AppDrawerCategory> categories,
+        @Nullable AppDrawerCategory current,
+        @NonNull java.util.function.Consumer<AppDrawerCategory> onPick
+    ) {
+        dismissContextPopups();
+        LinearLayout shell = new LinearLayout(getContext());
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(dp(3), dp(3), dp(3), dp(3));
+
+        TextView header = new TextView(getContext());
+        header.setText(entry.label);
+        header.setTextColor(resolveLauncherTextColor());
+        header.setTextSize(12f);
+        header.setTypeface(Typeface.DEFAULT_BOLD);
+        header.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(8), dp(6), dp(8), dp(7));
+        shell.addView(header, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        int tintBase = inheritedTintColor & 0x00FFFFFF;
+        List<MenuActionRow> rows = new ArrayList<>();
+        rows.add(new MenuActionRow(addCategoryPickRow(shell,
+            getResources().getString(R.string.app_drawer_category_automatic), current == null, tintBase, () -> {
+                dismissCategoryPickerPopup();
+                onPick.accept(null);
+            }), () -> {}, false));
+        for (AppDrawerCategory category : categories) {
+            rows.add(new MenuActionRow(addCategoryPickRow(shell,
+                getResources().getString(category.labelRes), category == current, tintBase, () -> {
+                    dismissCategoryPickerPopup();
+                    onPick.accept(category);
+                }), () -> {}, false));
+        }
+
+        int rowWidth = normalizePopupRowWidths(rows);
+        constrainPopupHeaderWidth(header, rowWidth);
+
+        categoryPickerPopupWindow = buildPopupWindow(shell, tintBase, true, () -> {
+            if (categoryPickerPopupWindow != null && !categoryPickerPopupWindow.isShowing()) {
+                categoryPickerPopupWindow = null;
+            }
+        });
+        showPopupAtAnchor(categoryPickerPopupWindow, anchor);
+    }
+
+    @NonNull
+    private TextView addCategoryPickRow(@NonNull LinearLayout shell, @NonNull String title,
+                                        boolean checked, int tintBase, @NonNull Runnable action) {
+        TextView row = new TextView(getContext());
+        row.setText(title);
+        row.setTextColor(resolveLauncherTextColor());
+        row.setTextSize(12f);
+        row.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(8), dp(7), dp(8), dp(7));
+        row.setClickable(true);
+        if (checked) {
+            Drawable check = loadMenuIcon(R.drawable.ic_symbol_check_circle, dp(16), resolveLauncherTextColor());
+            row.setCompoundDrawablesRelative(null, null, check, null);
+            row.setCompoundDrawablePadding(dp(10));
+        }
+        stylePopupRow(row, false, tintBase);
+        row.setOnClickListener(v -> runPopupActionWithFeedback(row, action));
+        shell.addView(row, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return row;
+    }
+
+    private void dismissCategoryPickerPopup() {
+        if (categoryPickerPopupWindow != null) {
+            final PopupWindow popup = categoryPickerPopupWindow;
+            dismissPopupWindowAnimated(popup, () -> {
+                if (categoryPickerPopupWindow == popup) {
+                    categoryPickerPopupWindow = null;
+                }
+            });
+        }
     }
 
     private void showNotificationPopup(
@@ -6526,11 +6469,6 @@ public final class SuggestionBarView extends GridLayout
         }
     }
 
-    private String[] appLabels(List<LauncherAppEntry> entries) {
-        List<String> displayLabels = buildDisplayLabels(entries);
-        return displayLabels.toArray(new String[0]);
-    }
-
     private static final class MenuActionRow {
         @NonNull final TextView rowView;
         @NonNull final Runnable action;
@@ -6549,6 +6487,7 @@ public final class SuggestionBarView extends GridLayout
         final int pinnedIndex;
         @Nullable final String sourceFolderId;
         @Nullable final AppRef folderEntryRef;
+        @Nullable final Runnable categoryAction;
 
         AppMenuContext(
             @NonNull LauncherAppEntry entry,
@@ -6557,11 +6496,23 @@ public final class SuggestionBarView extends GridLayout
             @Nullable String sourceFolderId,
             @Nullable AppRef folderEntryRef
         ) {
+            this(entry, anchor, pinnedIndex, sourceFolderId, folderEntryRef, null);
+        }
+
+        AppMenuContext(
+            @NonNull LauncherAppEntry entry,
+            @NonNull View anchor,
+            int pinnedIndex,
+            @Nullable String sourceFolderId,
+            @Nullable AppRef folderEntryRef,
+            @Nullable Runnable categoryAction
+        ) {
             this.entry = entry;
             this.anchor = anchor;
             this.pinnedIndex = pinnedIndex;
             this.sourceFolderId = sourceFolderId;
             this.folderEntryRef = folderEntryRef;
+            this.categoryAction = categoryAction;
         }
     }
 
@@ -6735,17 +6686,6 @@ public final class SuggestionBarView extends GridLayout
         configRepository.dissolveFolder(configRepository.loadSnapshot().revision, folderId);
     }
 
-    private boolean addPinnedAppToFolderIfMissing(@NonNull PinnedFolderItem folder, @NonNull PinnedAppItem app) {
-        if (folder.apps.size() >= PinnedFolderItem.MAX_APPS) return false;
-        AppRef resolved = resolveForSelectionRef(app.appRef);
-        for (PinnedAppItem existing : folder.apps) {
-            if (resolveForSelectionRef(existing.appRef).stableId().equals(resolved.stableId())) {
-                return false;
-            }
-        }
-        folder.apps.add(new PinnedAppItem(resolved, app.iconOverride));
-        return true;
-    }
 
     private void showFolderAppendRejected(@NonNull LauncherFolderMutator.AppendResult result) {
         int message = result == LauncherFolderMutator.AppendResult.CAPACITY
@@ -7180,47 +7120,6 @@ public final class SuggestionBarView extends GridLayout
             this.folderId = folderId;
             this.appRef = appRef;
         }
-    }
-
-    private LinearLayout buildStepperRow(@NonNull String label, @NonNull int[] valueRef, int min, int max) {
-        LinearLayout row = new LinearLayout(getContext());
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(6), 0, dp(6));
-
-        TextView title = new TextView(getContext());
-        title.setText(label);
-        title.setTextColor(resolveLauncherTextColor());
-        row.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-        ImageButton minus = new ImageButton(getContext());
-        minus.setImageResource(android.R.drawable.ic_media_previous);
-        styleIconButton(minus, dp(2));
-        row.addView(minus, new LinearLayout.LayoutParams(dp(24), dp(24)));
-
-        TextView valueText = new TextView(getContext());
-        valueText.setTextColor(resolveLauncherTextColor());
-        valueText.setTypeface(Typeface.DEFAULT_BOLD);
-        valueText.setText(Integer.toString(valueRef[0]));
-        valueText.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams valueParams = new LinearLayout.LayoutParams(dp(32), ViewGroup.LayoutParams.WRAP_CONTENT);
-        valueParams.setMargins(dp(6), 0, dp(6), 0);
-        row.addView(valueText, valueParams);
-
-        ImageButton plus = new ImageButton(getContext());
-        plus.setImageResource(android.R.drawable.ic_input_add);
-        styleIconButton(plus, dp(2));
-        row.addView(plus, new LinearLayout.LayoutParams(dp(24), dp(24)));
-
-        minus.setOnClickListener(v -> {
-            valueRef[0] = clamp(valueRef[0] - 1, min, max);
-            valueText.setText(Integer.toString(valueRef[0]));
-        });
-        plus.setOnClickListener(v -> {
-            valueRef[0] = clamp(valueRef[0] + 1, min, max);
-            valueText.setText(Integer.toString(valueRef[0]));
-        });
-        return row;
     }
 
     private static int parseInt(CharSequence value, int fallback) {
@@ -7673,6 +7572,27 @@ public final class SuggestionBarView extends GridLayout
         swipePreviewFolderEntries = Collections.emptyList();
     }
 
+    /**
+     * The page commit, wrapped so it runs exactly once from whichever path the switch animation
+     * ends on — its own end, or a cancel.
+     *
+     * <p>Both switch animations used to commit the new page only from their end callback, and both
+     * drop that callback when cancelled: {@code ACTION_DOWN} on the row, a stable-draw release and
+     * {@link #resetTransientVisualState()} all cancel a switch that is still settling. The gesture
+     * had already qualified and the row had already played the whole slide, so the swipe looked
+     * committed and then silently landed back on the page it came from — the ghost swipe. A
+     * qualified swipe is a decision; the animation is only how it is shown.
+     */
+    @NonNull
+    private static Runnable pageCommitOnce(@Nullable Runnable commit) {
+        final boolean[] done = {false};
+        return () -> {
+            if (done[0]) return;
+            done[0] = true;
+            if (commit != null) commit.run();
+        };
+    }
+
     private void runSwipePreviewPageSwitch(
         int direction,
         long duration,
@@ -7690,6 +7610,7 @@ public final class SuggestionBarView extends GridLayout
         final float distanceRatio = clamp01(Math.abs(targetOffset - startOffset) / Math.max(1f, getWidth()));
         final long settleDuration = clamp(Math.round(duration * (0.72f + (0.28f * distanceRatio))), 240, 420);
         swipePageDragging = true;
+        final Runnable commit = pageCommitOnce(updateContent);
         ValueAnimator settle = ValueAnimator.ofFloat(startOffset, targetOffset);
         swipePreviewReboundAnimator = settle;
         settle.setDuration(settleDuration);
@@ -7706,7 +7627,7 @@ public final class SuggestionBarView extends GridLayout
                     return;
                 }
                 swipePreviewReboundAnimator = null;
-                if (updateContent != null) updateContent.run();
+                commit.run();
                 pageSwitchAnimating = false;
                 swipePageDragging = false;
                 swipePagePosition = resolveCurrentSwipePagePosition();
@@ -7723,6 +7644,10 @@ public final class SuggestionBarView extends GridLayout
                 if (swipePreviewReboundAnimator == animation) {
                     swipePreviewReboundAnimator = null;
                 }
+                // Whoever cancelled owns the visual state that follows (a new gesture, a reset);
+                // the page the swipe asked for is committed here either way.
+                commit.run();
+                swipePagePosition = resolveCurrentSwipePagePosition();
             }
         });
         settle.start();
@@ -7831,6 +7756,7 @@ public final class SuggestionBarView extends GridLayout
         final Interpolator settleInterpolator = pageSettleInterpolator();
         final long outgoingDuration = Math.max(92L, Math.round(duration * 0.44f));
         final long incomingDuration = Math.max(118L, duration - outgoingDuration);
+        final Runnable commit = pageCommitOnce(updateContent);
 
         animate()
             .translationX(-direction * (travel * 0.78f))
@@ -7839,19 +7765,24 @@ public final class SuggestionBarView extends GridLayout
             .setInterpolator(settleInterpolator)
             .setListener(new AnimatorListenerAdapter() {
                 private boolean completed;
+                private boolean cancelled;
 
                 @Override
                 public void onAnimationCancel(Animator animation) {
+                    cancelled = true;
+                    // Commit before the reset: the page is the swipe's decision, and the incoming
+                    // half that would otherwise have carried it is not going to run.
+                    commit.run();
                     finish(false);
                 }
 
                 @Override
                 public void onAnimationEnd(Animator animation) {
-                    if (completed) {
+                    if (completed || cancelled) {
                         return;
                     }
                     completed = true;
-                    if (updateContent != null) updateContent.run();
+                    commit.run();
                     setTranslationX(direction * travel);
                     setAlpha(0f);
                     animate()

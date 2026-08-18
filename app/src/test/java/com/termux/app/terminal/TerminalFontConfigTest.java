@@ -368,4 +368,50 @@ public class TerminalFontConfigTest {
         assertTrue(result.faces.isEmpty());
         assertTrue(result.errors.isEmpty());
     }
+
+    @Test
+    public void narrowSymbolsDefaultsToOneCellAndKeepsDeclarationOrder() {
+        TerminalFontConfig.Result result = TerminalFontConfig.parse(
+            "narrow_symbols U+E0A0-U+E0A3,U+E0C0-U+E0C7\n"
+                + "narrow_symbols U+F0000-U+FFFFD 3\n", true);
+
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+        assertEquals(2, result.narrowSymbols.size());
+        assertEquals(1, result.narrowSymbols.get(0).cells);
+        assertEquals(2, result.narrowSymbols.get(0).ranges.size());
+        assertEquals(0xE0A0, result.narrowSymbols.get(0).ranges.get(0).first);
+        assertEquals(0xE0A3, result.narrowSymbols.get(0).ranges.get(0).last);
+        assertEquals(0xE0C7, result.narrowSymbols.get(0).ranges.get(1).last);
+        assertEquals(3, result.narrowSymbols.get(1).cells);
+        assertEquals(0xFFFFD, result.narrowSymbols.get(1).ranges.get(0).last);
+    }
+
+    @Test
+    public void narrowSymbolsRejectsCellCountsOutsideKittysRange() {
+        TerminalFontConfig.Result zero =
+            TerminalFontConfig.parse("narrow_symbols U+E000-U+F8FF 0\n", true);
+        assertFalse(zero.errors.isEmpty());
+        assertTrue(zero.narrowSymbols.isEmpty());
+
+        TerminalFontConfig.Result tooMany =
+            TerminalFontConfig.parse("narrow_symbols U+E000-U+F8FF 6\n", true);
+        assertFalse(tooMany.errors.isEmpty());
+        assertTrue(tooMany.narrowSymbols.isEmpty());
+
+        TerminalFontConfig.Result notANumber =
+            TerminalFontConfig.parse("narrow_symbols U+E000-U+F8FF two\n", true);
+        assertFalse(notANumber.errors.isEmpty());
+        assertTrue(notANumber.narrowSymbols.isEmpty());
+
+        TerminalFontConfig.Result noRanges = TerminalFontConfig.parse("narrow_symbols\n", true);
+        assertFalse(noRanges.errors.isEmpty());
+        assertTrue(noRanges.narrowSymbols.isEmpty());
+    }
+
+    @Test
+    public void narrowSymbolsIsAbsentWithoutTheDirective() {
+        TerminalFontConfig.Result result =
+            TerminalFontConfig.parse("font_family path=~/.termux/font.ttf\n", true);
+        assertTrue(result.narrowSymbols.isEmpty());
+    }
 }

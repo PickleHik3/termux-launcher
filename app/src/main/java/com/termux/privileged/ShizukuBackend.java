@@ -4,9 +4,8 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.util.Log;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import androidx.annotation.Nullable;
+
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
@@ -440,34 +439,44 @@ public class ShizukuBackend implements PrivilegedBackend {
 
             Process process = (Process) processObject;
 
-            // Both pipes are drained on their own threads BEFORE anything waits on the process.
-            // Reading them after the wait deadlocks as soon as the child writes more than the
-            // pipe buffer holds (the stats card's ps+top output does): the child blocks on a
-            // full pipe while this thread waits for it to exit, until the timeout fires and the
-            // sample is thrown away as "stale".
-            ProcessOutputPump stdout = ProcessOutputPump.start(
-                "shizuku-stdout", process.getInputStream());
-            ProcessOutputPump stderr = ProcessOutputPump.start(
-                "shizuku-stderr", process.getErrorStream());
+            // A ShizukuRemoteProcess is a binder proxy, and it is registered with the Shizuku
+            // client the moment it is created. Letting it fall out of scope after the command exits
+            // leaves the proxy, its death recipient and the client's bookkeeping entry behind: the
+            // stats sampler runs several commands every few seconds, so the process accumulated
+            // about forty of these a minute for as long as the launcher was on screen. Release it
+            // on every path, exit code or not.
+            try {
+                // Both pipes are drained on their own threads BEFORE anything waits on the process.
+                // Reading them after the wait deadlocks as soon as the child writes more than the
+                // pipe buffer holds (the stats card's ps+top output does): the child blocks on a
+                // full pipe while this thread waits for it to exit, until the timeout fires and the
+                // sample is thrown away as "stale".
+                ProcessOutputPump stdout = ProcessOutputPump.start(
+                    "shizuku-stdout", process.getInputStream());
+                ProcessOutputPump stderr = ProcessOutputPump.start(
+                    "shizuku-stderr", process.getErrorStream());
 
-            boolean finished = waitForProcessExit(process, COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-            if (!finished) {
-                // Forcibly killing the child closes its pipes, which is what lets the pumps finish.
-                process.destroyForcibly();
-                stdout.await(PUMP_DRAIN_TIMEOUT_MS);
-                stderr.await(PUMP_DRAIN_TIMEOUT_MS);
-                return "Error: command timed out";
+                boolean finished = waitForProcessExit(process, COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                if (!finished) {
+                    // Forcibly killing the child closes its pipes, which is what lets the pumps finish.
+                    process.destroyForcibly();
+                    stdout.await(PUMP_DRAIN_TIMEOUT_MS);
+                    stderr.await(PUMP_DRAIN_TIMEOUT_MS);
+                    return "Error: command timed out";
+                }
+
+                String output = stdout.await(PUMP_DRAIN_TIMEOUT_MS);
+                String errorOutput = stderr.await(PUMP_DRAIN_TIMEOUT_MS);
+                int exitCode = process.exitValue();
+                if (exitCode != 0) {
+                    String errorMessage = errorOutput.isEmpty() ? ("Exit code: " + exitCode) : errorOutput;
+                    return "Error (" + exitCode + "): " + errorMessage;
+                }
+
+                return output;
+            } finally {
+                releaseRemoteProcess(process);
             }
-
-            String output = stdout.await(PUMP_DRAIN_TIMEOUT_MS);
-            String errorOutput = stderr.await(PUMP_DRAIN_TIMEOUT_MS);
-            int exitCode = process.exitValue();
-            if (exitCode != 0) {
-                String errorMessage = errorOutput.isEmpty() ? ("Exit code: " + exitCode) : errorOutput;
-                return "Error (" + exitCode + "): " + errorMessage;
-            }
-
-            return output;
 
         } catch (NoSuchMethodException e) {
             Log.e(TAG, "Shizuku newProcess API is not available on this runtime", e);
@@ -475,6 +484,30 @@ public class ShizukuBackend implements PrivilegedBackend {
         } catch (Exception e) {
             Log.e(TAG, "Failed to execute Shizuku command", e);
             return "Error: " + e.getMessage();
+        }
+    }
+
+    /**
+     * Drops a finished remote process: closes its three pipes and destroys it, which is what
+     * unregisters the binder proxy on the Shizuku client's side.
+     */
+    private void releaseRemoteProcess(@Nullable Process process) {
+        if (process == null) return;
+        closeQuietly(process.getInputStream());
+        closeQuietly(process.getErrorStream());
+        closeQuietly(process.getOutputStream());
+        try {
+            process.destroy();
+        } catch (Throwable ignored) {
+            // Already gone, or the remote refuses a second destroy; either way it is released.
+        }
+    }
+
+    private static void closeQuietly(@Nullable java.io.Closeable closeable) {
+        if (closeable == null) return;
+        try {
+            closeable.close();
+        } catch (Throwable ignored) {
         }
     }
 
@@ -493,16 +526,4 @@ public class ShizukuBackend implements PrivilegedBackend {
         return false;
     }
 
-    private String readStream(java.io.InputStream inputStream) throws IOException {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-        StringBuilder output = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) {
-            if (output.length() > 0) {
-                output.append("\n");
-            }
-            output.append(line);
-        }
-        return output.toString();
-    }
 }
