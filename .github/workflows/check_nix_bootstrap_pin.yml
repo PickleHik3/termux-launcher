@@ -1,0 +1,74 @@
+name: Check nix bootstrap pin
+
+# The Nix edition downloads its bootstrap from the `nix-bootstrap` release tag, but first
+# boot then evaluates PickleHik3/nix-on-droid at whatever `launcher-nix` points to that
+# day. Both sides carry the same hardcoded proot store path, and the moment they disagree
+# first boot dies while evaluating packages:
+#
+#   error: path '/nix/store/...-proot-termux-static-...' does not exist and cannot be created
+#
+# The patched proot is a fork build, so it is in neither the upstream binary cache nor
+# buildable on the phone — a skewed pair is unrecoverable for the user. That is what every
+# fresh install got between the AT_PHDR proot commit on 2026-08-11 and the republish on
+# 2026-08-19. This job compares the two so the gap is a red run rather than a support
+# thread: when it fails, re-run "Build nix bootstrap" and upload its zips to the
+# `nix-bootstrap` tag.
+
+on:
+  push:
+    branches:
+      - nix-edition
+  pull_request:
+    branches:
+      - nix-edition
+  workflow_dispatch:
+  schedule:
+    # Monday morning, to catch a fork commit that lands without an app commit behind it.
+    - cron: '0 6 * * 1'
+
+jobs:
+  bootstrap-pin:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Compare the pinned proot against the published bootstrap
+        run: |
+          set -euo pipefail
+
+          curl --fail --silent --show-error --location \
+            --output login-default.nix \
+            https://raw.githubusercontent.com/PickleHik3/nix-on-droid/launcher-nix/modules/environment/login/default.nix
+
+          status=0
+          for arch in aarch64 x86_64; do
+            pattern="proot-termux-static-$arch-unknown-linux-android"
+
+            pinned=$(grep -oE "/nix/store/[a-z0-9]{32}-$pattern[^\"]*" login-default.nix | head -1 || true)
+            if [ -z "$pinned" ]; then
+              echo "::error::Could not read the pinned $arch proot path out of the login module. Has modules/environment/login/default.nix changed shape?"
+              status=1
+              continue
+            fi
+
+            curl --fail --silent --show-error --location \
+              --output "bootstrap-$arch.zip" \
+              "https://github.com/PickleHik3/termux-launcher/releases/download/nix-bootstrap/bootstrap-nix-$arch.zip"
+
+            shipped=$(unzip -Z1 "bootstrap-$arch.zip" | grep -oE "nix/store/[a-z0-9]{32}-$pattern[^/]*" | sort -u | head -1 || true)
+            if [ -z "$shipped" ]; then
+              echo "::error::The published bootstrap-nix-$arch.zip contains no $pattern store path at all."
+              status=1
+              continue
+            fi
+            shipped="/$shipped"
+
+            echo "$arch: login module pins      $pinned"
+            echo "$arch: published bootstrap has $shipped"
+
+            if [ "$pinned" != "$shipped" ]; then
+              echo "::error::$arch: the published bootstrap and launcher-nix disagree on proot, so first boot will fail with \"does not exist and cannot be created\". Re-run the \"Build nix bootstrap\" workflow and upload its zips to the nix-bootstrap release tag."
+              status=1
+            fi
+          done
+
+          exit $status
