@@ -127,6 +127,22 @@ Services & permissions**:
 
 Tap **Fix** only for features you intend to use. Weather data is provided by Open-Meteo.
 
+## The launcher uses CPU or battery while it sits idle
+
+Turn on **Settings → Terminal & status → Battery → Lazy mode**, then leave the launcher on screen
+and check again.
+
+By default the clock folds its seconds, which means the launcher redraws continuously for as long
+as it is on screen, whether or not anything else is happening. Lazy mode swaps the digits instead,
+holds the working-window rim lit rather than breathing it, samples the status readings less often,
+and rests the weather icon on its last frame — so the screen only repaints when something changes.
+It is expected to become the default; trying it now and reporting anything that looks stale is what
+gets it there.
+
+If idle cost stays high with Lazy mode on, something else is drawing. A shell producing output
+keeps the terminal repainting, and so does a long-running agent or job holding a window in its
+working state. Check what the visible session is running before treating it as a launcher problem.
+
 ## Blur, wallpaper colors, or transparency look wrong
 
 Open **Settings → Appearance → Surface editor** and test against the real home screen.
