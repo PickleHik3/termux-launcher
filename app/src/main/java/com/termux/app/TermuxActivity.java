@@ -526,6 +526,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mDockPlankWidth = 0f;
     private float mDockPlankHeight = 0f;
     private final int[] mDockPlankLocation = new int[2];
+    private final int[] mDockPlankKeySurfaceLocation = new int[2];
+    /**
+     * The key surfaces that ride on the dock plank. Touches on these never drive the plank
+     * physics — see {@link #isOnDockPlankKeySurface(float, float)}.
+     */
+    private static final int[] DOCK_PLANK_KEY_SURFACE_IDS = {
+        R.id.inapp_keyboard_container,
+        R.id.terminal_toolbar_view_pager,
+    };
 
     private float mTerminalToolbarDefaultHeight;
     private final Handler mAzGestureHandler = new Handler(Looper.getMainLooper());
@@ -1070,7 +1079,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 float x = ev.getRawX();
                 float y = ev.getRawY();
                 if (x >= mDockPlankLeft && x <= mDockPlankLeft + mDockPlankWidth
-                    && y >= mDockPlankTop && y <= mDockPlankTop + mDockPlankHeight) {
+                    && y >= mDockPlankTop && y <= mDockPlankTop + mDockPlankHeight
+                    && !isOnDockPlankKeySurface(x, y)) {
                     mDockPlankTouchInside = true;
                     controller.onPointerDown(
                         (x - mDockPlankLeft) / mDockPlankWidth,
@@ -1095,6 +1105,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             default:
                 break;
         }
+    }
+
+    /**
+     * Whether a touch lands on one of the key surfaces the plank carries rather than on the dock.
+     *
+     * <p>While the in-app keyboard is up the plank target is the whole accessory surface, and that
+     * surface holds the keyboard and the extra-keys row alongside the dock. Feeding those touches
+     * to the springs tilted and slid the entire plane on every keystroke, so the dock swayed while
+     * you typed. The physics belong to pushing the dock, not to pressing a key.</p>
+     */
+    private boolean isOnDockPlankKeySurface(float rawX, float rawY) {
+        for (int viewId : DOCK_PLANK_KEY_SURFACE_IDS) {
+            View view = findViewById(viewId);
+            if (view == null || view.getVisibility() != View.VISIBLE
+                || view.getWidth() <= 0 || view.getHeight() <= 0) {
+                continue;
+            }
+            view.getLocationOnScreen(mDockPlankKeySurfaceLocation);
+            float left = mDockPlankKeySurfaceLocation[0];
+            float top = mDockPlankKeySurfaceLocation[1];
+            if (rawX >= left && rawX <= left + view.getWidth()
+                && rawY >= top && rawY <= top + view.getHeight()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
