@@ -756,11 +756,9 @@ public final class TerminalView extends View {
             ClipboardManager clipboard = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
             ClipData clip = ClipData.newPlainText("screen text", getText());
             clipboard.setPrimaryClip(clip);
-            Toast toast = Toast.makeText(
-                getContext(),
-                getResources().getText(R.string.copied_to_clipboard_text),
-                Toast.LENGTH_SHORT);
-            toast.show();
+            CharSequence copied = getResources().getText(R.string.copied_to_clipboard_text);
+            if (mClient != null) mClient.onShowNotice(copied);
+            else Toast.makeText(getContext(), copied, Toast.LENGTH_SHORT).show();
 
             return true;
         } else if (action == R.id.a11y_speak_cursor_position && mEmulator != null) {

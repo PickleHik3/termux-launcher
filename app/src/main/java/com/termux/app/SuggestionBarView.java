@@ -87,7 +87,6 @@ import android.widget.ListView;
 import android.widget.PopupWindow;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -101,6 +100,7 @@ import com.github.mmin18.widget.RealtimeBlurView;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.launcher.LauncherAppLauncher;
 import com.termux.app.launcher.PinnedAppsEditor;
@@ -6690,7 +6690,7 @@ public final class SuggestionBarView extends GridLayout
     private void showFolderAppendRejected(@NonNull LauncherFolderMutator.AppendResult result) {
         int message = result == LauncherFolderMutator.AppendResult.CAPACITY
             ? R.string.folder_capacity_reached : R.string.folder_already_contains_app;
-        Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
+        AppNotice.show(getContext(), message, false);
     }
 
     private static void syncFolderChecks(@NonNull ListView listView, @NonNull List<LauncherAppEntry> apps, @NonNull Set<String> selectedIds) {

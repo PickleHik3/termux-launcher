@@ -62,12 +62,12 @@
             app:key="status_widget_cpu"
             app:title="@string/settings_cpu_usage_title"
             app:summary="@string/termux_status_widget_cpu_summary"
-            app:defaultValue="true" />
+            app:defaultValue="false" />
         <SwitchPreferenceCompat
             app:key="status_widget_ram"
             app:title="@string/settings_memory_usage_title"
             app:summary="@string/settings_memory_usage_summary"
-            app:defaultValue="true" />
+            app:defaultValue="false" />
         <SwitchPreferenceCompat
             app:key="status_widget_weather"
             app:title="@string/settings_weather_title"

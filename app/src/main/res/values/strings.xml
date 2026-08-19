@@ -473,6 +473,15 @@
     <string name="msg_wallpaper_read_permission">The glass status bar, dock and keyboard blur a crop of your wallpaper, and this device won\'t hand it over without storage access. Allow it to turn the blur on. Setting a wallpaper from within the launcher works without this permission.</string>
     <string name="action_wallpaper_read_permission_allow">Allow</string>
     <string name="action_wallpaper_read_permission_dismiss">Not now</string>
+    <string name="title_weather_location_permission">Weather needs a rough location</string>
+    <string name="msg_weather_location_permission">The status bar can show the temperature where you are. It asks for coarse location only — city-level, never a precise fix — and the lookup runs only while the weather widget is switched on. Decline and everything else works exactly the same.</string>
+    <string name="action_weather_location_permission_allow">Allow</string>
+    <string name="action_weather_location_permission_dismiss">Not now</string>
+    <string name="status_widget_needs_shizuku_title">Shizuku isn\'t connected</string>
+    <string name="status_widget_needs_shizuku_message">%1$s reads far better with the privileged backend: per-core CPU, detailed memory and the top-process list all come from it. Without it the CPU figure is a best-effort /proc estimate that some ROMs refuse outright, and the widget can end up blank. Set Shizuku up, or turn the widget on anyway and take the unprivileged reading.</string>
+    <string name="status_widget_needs_shizuku_guide">Read the guide</string>
+    <string name="status_widget_needs_shizuku_connect">Connect</string>
+    <string name="status_widget_needs_shizuku_enable_anyway">Enable anyway</string>
     <string name="action_open_settings">Settings</string>
     <string name="action_glass_lab">Edit surfaces</string>
     <string name="msg_generating_report">Generating Report</string>

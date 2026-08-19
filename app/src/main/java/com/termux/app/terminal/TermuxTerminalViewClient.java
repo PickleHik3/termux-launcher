@@ -16,6 +16,8 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import com.termux.app.notice.AppNotice;
+import com.termux.app.notice.AppNoticeItem;
 import com.termux.R;
 import com.termux.app.SuggestionBarCallback;
 import com.termux.app.TermuxActivity;
@@ -738,6 +740,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     @Override
     public boolean onShowContextMenu(TerminalView view) {
         return mActivity.showTerminalActionSheet(mLastLongPressOnScreen);
+    }
+
+    @Override
+    public void onShowNotice(CharSequence text) {
+        AppNotice.show(mActivity, AppNoticeItem.Kind.SUCCESS, "⧉", text, null, false);
     }
 
     @Override

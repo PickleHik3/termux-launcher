@@ -328,12 +328,20 @@ public final class TermuxPreferenceConstants {
             "in_app_keyboard_horizontal_inset";
         public static final String KEY_STATUS_BAR_HORIZONTAL_INSET = "status_bar_horizontal_inset";
 
-        /** Optional trailing system widgets on the status row. */
+        /**
+         * Optional trailing system widgets on the status row.
+         *
+         * <p>CPU and RAM default off. Both read best on a device with the privileged backend
+         * connected — without it the CPU figure is a best-effort /proc estimate that several ROMs
+         * refuse outright — so they are opt-in, and turning either on walks the user past a Shizuku
+         * check first. Existing installs keep whatever they already chose; only a fresh install
+         * starts with them off.
+         */
         public static final String KEY_STATUS_WIDGET_CPU = "status_widget_cpu";
-        public static final boolean DEFAULT_STATUS_WIDGET_CPU = true;
+        public static final boolean DEFAULT_STATUS_WIDGET_CPU = false;
 
         public static final String KEY_STATUS_WIDGET_RAM = "status_widget_ram";
-        public static final boolean DEFAULT_STATUS_WIDGET_RAM = true;
+        public static final boolean DEFAULT_STATUS_WIDGET_RAM = false;
 
         public static final String KEY_STATUS_WIDGET_WEATHER = "status_widget_weather";
         public static final boolean DEFAULT_STATUS_WIDGET_WEATHER = true;

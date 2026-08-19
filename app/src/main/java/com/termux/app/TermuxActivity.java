@@ -72,7 +72,6 @@ import android.widget.RelativeLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import android.widget.Toast;
 import android.widget.ArrayAdapter;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.PickVisualMediaRequest;
@@ -87,6 +86,7 @@ import com.canhub.cropper.CropImageContract;
 import com.canhub.cropper.CropImageContractOptions;
 import com.canhub.cropper.CropImageOptions;
 import com.canhub.cropper.CropImageView;
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.api.file.FileReceiverActivity;
 import com.termux.app.fragments.settings.SegmentedPillPreference;
@@ -431,10 +431,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     };
     private final Runnable mLauncherCatalogWarmRunnable = this::runLauncherCatalogWarmup;
 
-    /**
-     * The last toast shown, used cancel current toast before showing new in {@link #showToast(String, boolean)}.
-     */
-    Toast mLastToast;
 
     /** Which shells have produced output recently; drives the "working" indication. */
     private final com.termux.app.statusbar.ShellActivityTracker mShellActivityTracker =
@@ -464,6 +460,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final Handler mBackgroundProcessHandler = new Handler(Looper.getMainLooper());
     /** Height the transient notice chip is occupying above the stack; 0 when it is not showing. */
     private int mNoticeOccupancyPx;
+    /** Height the in-app notice chip is occupying above both of them; 0 when it is not showing. */
+    private int mAppNoticeOccupancyPx;
+    /** True between the onboarding finishing and the last of its permission dialogs closing. */
+    private boolean mFirstRunPermissionChainActive;
+    /**
+     * Nesting depth of {@link #runWithoutNotices}. Creating a window or a pane touches the focused
+     * shell, which several unrelated listeners read as a session change worth announcing; the user
+     * sees the result of the split on screen already, so the whole operation runs silent.
+     */
+    private int mNoticeSuppressionDepth;
     /**
      * Shells that rang while the user was elsewhere, so their window pill can say so. Kept by pid
      * rather than by session object: the flag has to survive the pane tree being rearranged under it.
@@ -930,11 +936,108 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // app has been opened.
         TermuxUtils.sendTermuxOpenedBroadcast(this);
         registerPreferredHomeChangeReceiver();
+        ensureAppNoticeHost();
         if (savedInstanceState == null) {
             boolean forceOnboarding = getIntent().getBooleanExtra(EXTRA_SHOW_ONBOARDING, false);
             View contentView = findViewById(android.R.id.content);
-            contentView.post(() -> FirstLaunchOnboarding.showIfNeeded(this, forceOnboarding));
+            contentView.post(() -> FirstLaunchOnboarding.showIfNeeded(this, forceOnboarding,
+                this::startFirstRunPermissionChain));
         }
+    }
+
+    /**
+     * The permissions the launcher wants but cannot function without, asked for once, in order,
+     * immediately after the onboarding's last page.
+     *
+     * <p>Both used to be asked reactively — the wallpaper one only after a read had already failed
+     * and the surface had drawn wrong, the location one at the moment the user first opened the
+     * weather card. Asking at the end of the introduction instead means the user has just been told
+     * what the wallpaper-aware surface and the weather widget are, so the dialogs have a reason
+     * attached, and the first real frame is already correct.
+     *
+     * <p>Strictly sequential: two runtime permission dialogs requested in the same frame means the
+     * second one is dropped by the framework, so the location step is started from the wallpaper
+     * step's result rather than beside it.
+     */
+    private void startFirstRunPermissionChain() {
+        if (isFinishing() || isDestroyed()) return;
+        mFirstRunPermissionChainActive = true;
+        if (!requestWallpaperReadPermissionForFirstRun()) {
+            requestWeatherLocationPermissionForFirstRun();
+        }
+    }
+
+    /** @return true when a dialog was raised, so the chain continues from its result instead. */
+    private boolean requestWallpaperReadPermissionForFirstRun() {
+        if (mPreferences == null) return false;
+        boolean granted = androidx.core.content.ContextCompat.checkSelfPermission(this,
+            android.Manifest.permission.READ_EXTERNAL_STORAGE)
+            == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        if (granted || mPreferences.isWallpaperReadPermissionPrompted()) return false;
+        mWallpaperReadPermissionPromptShowing = true;
+        new MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.title_wallpaper_read_permission)
+            .setMessage(R.string.msg_wallpaper_read_permission)
+            .setPositiveButton(R.string.action_wallpaper_read_permission_allow, (dialog, which) -> {
+                mPreferences.setWallpaperReadPermissionPrompted(true);
+                androidx.core.app.ActivityCompat.requestPermissions(this,
+                    new String[] {android.Manifest.permission.READ_EXTERNAL_STORAGE},
+                    REQUEST_CODE_WALLPAPER_READ_PERMISSION);
+            })
+            .setNegativeButton(R.string.action_wallpaper_read_permission_dismiss, (dialog, which) -> {
+                mPreferences.setWallpaperReadPermissionPrompted(true);
+                requestWeatherLocationPermissionForFirstRun();
+            })
+            .setOnDismissListener(dialog -> mWallpaperReadPermissionPromptShowing = false)
+            .show();
+        return true;
+    }
+
+    /**
+     * Second link in the chain: coarse location, which is the only thing the weather widget needs.
+     * Skipped when the widget is switched off — a permission for a feature the user is not running
+     * is exactly the kind of prompt that gets denied out of hand.
+     */
+    private void requestWeatherLocationPermissionForFirstRun() {
+        if (!mFirstRunPermissionChainActive || isFinishing() || isDestroyed()) return;
+        mFirstRunPermissionChainActive = false;
+        if (mPreferences == null || !mPreferences.isStatusWidgetWeatherEnabled()) return;
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        new MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.title_weather_location_permission)
+            .setMessage(R.string.msg_weather_location_permission)
+            .setPositiveButton(R.string.action_weather_location_permission_allow, (dialog, which) ->
+                androidx.core.app.ActivityCompat.requestPermissions(this,
+                    new String[] {android.Manifest.permission.ACCESS_COARSE_LOCATION},
+                    REQUEST_CODE_WEATHER_LOCATION))
+            .setNegativeButton(R.string.action_weather_location_permission_dismiss, null)
+            .show();
+    }
+
+    /**
+     * Creates the in-app notice chip up front and joins it to the top-trailing column, so the
+     * session-switch chip and the background-process stack move down under it while a notice is up
+     * rather than being drawn over.
+     */
+    private void ensureAppNoticeHost() {
+        com.termux.app.notice.AppNoticeHostView host = AppNotice.hostFor(this);
+        if (host == null) return;
+        host.setOccupancyListener(height -> {
+            mAppNoticeOccupancyPx = height;
+            applyNoticeColumnOffsets();
+        });
+    }
+
+    /** One column, three tenants: notice chip on top, session chip under it, then the stack. */
+    private void applyNoticeColumnOffsets() {
+        if (mSessionSwitchIndicator != null)
+            mSessionSwitchIndicator.setTranslationY(mAppNoticeOccupancyPx);
+        if (mBackgroundProcessStack != null)
+            mBackgroundProcessStack.setNoticeOccupancyPx(mAppNoticeOccupancyPx + mNoticeOccupancyPx);
     }
 
     @Override
@@ -6911,7 +7014,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 try {
                     startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
                 } catch (ActivityNotFoundException e) {
-                    Toast.makeText(this, R.string.termux_app_launcher_set_home_unavailable, Toast.LENGTH_SHORT).show();
+                    AppNotice.show(this, R.string.termux_app_launcher_set_home_unavailable, false);
                 }
             })
             .show());
@@ -11406,16 +11509,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Show a toast and dismiss the last one if still visible.
+     * Raise a transient notice in the top-trailing chip.
+     *
+     * <p>Was a stock toast with {@code setGravity(TOP)}, which Android 11 quietly stopped honouring
+     * for text toasts — the notices had been landing bottom-centre over the prompt and the keyboard
+     * ever since. {@link AppNotice} owns the placement now, and queues rather than cancelling, so a
+     * burst is read in order instead of only its last line surviving.
      */
     public void showToast(String text, boolean longDuration) {
-        if (text == null || text.isEmpty())
+        if (text == null || text.isEmpty() || mNoticeSuppressionDepth > 0)
             return;
-        if (mLastToast != null)
-            mLastToast.cancel();
-        mLastToast = Toast.makeText(TermuxActivity.this, text, longDuration ? Toast.LENGTH_LONG : Toast.LENGTH_SHORT);
-        mLastToast.setGravity(Gravity.TOP, 0, 0);
-        mLastToast.show();
+        AppNotice.show(this, text, longDuration);
     }
 
     /**
@@ -11424,11 +11528,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * terminal surface instead of a stock Android toast.
      */
     public void showSessionSwitchIndicator(@Nullable String text) {
-        if (text == null || text.isEmpty() || isFinishing())
+        if (text == null || text.isEmpty() || isFinishing() || mNoticeSuppressionDepth > 0)
             return;
         com.termux.app.terminal.SessionSwitchIndicatorView indicator = obtainSessionSwitchIndicator();
         if (indicator != null)
             indicator.show(text);
+    }
+
+    /**
+     * Runs {@code body} with every transient notice swallowed.
+     *
+     * <p>Window and pane creation are visible in themselves — a new pane appears, the window bar
+     * grows a pill — so announcing them was pure noise, and worse, the new shell also tripped the
+     * session-change notice, so one keypress raised two chips at once. Only session switches and
+     * new sessions are worth a chip, and neither goes through here.
+     */
+    private void runWithoutNotices(@NonNull Runnable body) {
+        mNoticeSuppressionDepth++;
+        try {
+            body.run();
+        } finally {
+            mNoticeSuppressionDepth--;
+        }
+    }
+
+    /** True while a window/pane operation is deliberately running silent. */
+    public boolean areNoticesSuppressed() {
+        return mNoticeSuppressionDepth > 0;
     }
 
     @Nullable
@@ -11442,9 +11568,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // follows it down and back up — one column, never a reserved gap.
             mSessionSwitchIndicator.setOccupancyListener(height -> {
                 mNoticeOccupancyPx = height;
-                if (mBackgroundProcessStack != null)
-                    mBackgroundProcessStack.setNoticeOccupancyPx(height);
+                applyNoticeColumnOffsets();
             });
+            mSessionSwitchIndicator.setTranslationY(mAppNoticeOccupancyPx);
         }
         if (mSessionSwitchIndicator.getParent() == null) {
             host.addView(mSessionSwitchIndicator,
@@ -11462,8 +11588,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mBackgroundProcessStack.getParent() == null) {
             host.addView(mBackgroundProcessStack,
                 com.termux.app.statusbar.BackgroundProcessStackView.buildHostLayoutParams(this));
-            // The notice can already be up when the first background command appears.
-            mBackgroundProcessStack.setNoticeOccupancyPx(mNoticeOccupancyPx);
+            // A notice can already be up when the first background command appears.
+            mBackgroundProcessStack.setNoticeOccupancyPx(mAppNoticeOccupancyPx + mNoticeOccupancyPx);
         }
         return mBackgroundProcessStack;
     }
@@ -11578,7 +11704,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         if (getPackageManager().resolveActivity(recognition,
                 android.content.pm.PackageManager.MATCH_DEFAULT_ONLY) == null) {
-            Toast.makeText(this, R.string.voice_typing_unavailable, Toast.LENGTH_SHORT).show();
+            AppNotice.show(this, R.string.voice_typing_unavailable, false);
             return;
         }
         Intent launch = createVoiceTypingIntent(this, chooser);
@@ -11587,7 +11713,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             startActivityForResult(launch, REQUEST_CODE_VOICE_TYPING);
         } catch (android.content.ActivityNotFoundException e) {
             mVoiceTypingTargetSession = null;
-            Toast.makeText(this, R.string.voice_typing_unavailable, Toast.LENGTH_SHORT).show();
+            AppNotice.show(this, R.string.voice_typing_unavailable, false);
         }
     }
 
@@ -11617,6 +11743,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 clearCachedAccessoryWallpaperBlur();
                 scheduleAccessoryRenderSync("wallpaper:permission");
             }
+            // Granted or denied, the first-run chain moves on: the two permissions are unrelated.
+            requestWeatherLocationPermissionForFirstRun();
         }
     }
 
@@ -14056,13 +14184,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             showSessionSwitchIndicator(getString(R.string.msg_no_session_to_split));
             return;
         }
-        // Successful pane creation says so too: with the notice chip carrying the refusals, silence
-        // on success would be the only unlabelled outcome.
-        if (mPaneController.split(orientation)) {
-            int panes = mPaneController.getVisiblePaneViews().size();
-            showSessionSwitchIndicator(getResources().getQuantityString(
-                R.plurals.msg_pane_count, panes, panes));
-        }
+        // No notice on success: the new pane is the feedback. The refusal above still speaks,
+        // because nothing visible happens when there is no shell to split.
+        runWithoutNotices(() -> mPaneController.split(orientation));
     }
 
     /** Move focus to the pane in the given arrow direction (Ctrl+Alt+arrow). No-op if none. */
@@ -14168,13 +14292,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         TerminalSession cur = getCurrentSession();
         TerminalSession shell = createShellForCwd(cur != null ? cur.getCwd() : null);
         if (shell == null) return;
-        com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.newWindow(shell);
-        mCurrentWSession.windows.add(w);
-        mCurrentWSession.current = mCurrentWSession.windows.size() - 1;
-        mPaneController.showWindow(w);
-        animateTerminalWindowArrival(1);
-        showSessionSwitchIndicator(getString(R.string.msg_window_position,
-            mCurrentWSession.current + 1, mCurrentWSession.windows.size()));
+        runWithoutNotices(() -> {
+            com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.newWindow(shell);
+            mCurrentWSession.windows.add(w);
+            mCurrentWSession.current = mCurrentWSession.windows.size() - 1;
+            mPaneController.showWindow(w);
+            animateTerminalWindowArrival(1);
+        });
         rebuildDrawerSessions();
     }
 

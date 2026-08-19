@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tag key used to remember the AppNoticeHostView already attached to an activity's anchor. -->
+    <item name="app_notice_host" type="id" />
+</resources>

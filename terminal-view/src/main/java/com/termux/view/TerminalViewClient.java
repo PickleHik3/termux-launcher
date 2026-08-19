@@ -41,6 +41,15 @@ public interface TerminalViewClient {
 
     boolean onLongPress(MotionEvent event);
 
+    /**
+     * Raise a transient notice to the user. The view has no opinion on how it is drawn; the client
+     * owns that surface, so accessibility actions taken here surface the same way as every other
+     * notice in the app rather than as a stock toast.
+     */
+    default void onShowNotice(CharSequence text) {
+        // No-op by default: a host that has no notice surface simply says nothing.
+    }
+
     default boolean onShowContextMenu(TerminalView view) {
         return false;
     }

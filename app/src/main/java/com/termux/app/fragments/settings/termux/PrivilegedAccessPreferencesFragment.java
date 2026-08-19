@@ -2,7 +2,6 @@ package com.termux.app.fragments.settings.termux;
 
 import android.content.Context;
 import android.os.Bundle;
-import android.widget.Toast;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
@@ -11,6 +10,7 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
 
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
@@ -77,7 +77,7 @@ public class PrivilegedAccessPreferencesFragment extends MaterialPreferenceFragm
                         String message = requested ?
                             getString(R.string.termux_privileged_request_permission_requested) :
                             getString(R.string.termux_privileged_request_permission_unavailable);
-                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
+                        AppNotice.show(context, message, false);
                         refreshStatusSummary();
                     });
                 }

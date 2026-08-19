@@ -9,7 +9,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.format.DateUtils;
-import android.widget.Toast;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
@@ -19,6 +18,7 @@ import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceManager;
 
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.ai.TaiModelSpec;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
@@ -258,8 +258,7 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
     private void surfaceTerminalError(@NonNull Context context) {
         String error = LauncherCategorySortService.getErrorMessage();
         if (error == null || error.trim().isEmpty()) return;
-        Toast.makeText(context,
-            getString(R.string.settings_app_drawer_category_sort_failed, error),
-            Toast.LENGTH_LONG).show();
+        AppNotice.show(context,
+            getString(R.string.settings_app_drawer_category_sort_failed, error), true);
     }
 }

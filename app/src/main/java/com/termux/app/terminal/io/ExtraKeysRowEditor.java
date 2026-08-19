@@ -19,7 +19,6 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -29,6 +28,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.settings.TermuxPropertiesFile;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
@@ -924,8 +924,7 @@ public final class ExtraKeysRowEditor {
         save.setOnClickListener(v -> {
             if (!dirty) return;
             save();
-            Toast.makeText(context, R.string.settings_extra_keys_editor_saved_toast,
-                Toast.LENGTH_SHORT).show();
+            AppNotice.show(context, R.string.settings_extra_keys_editor_saved_toast, false);
             dialog.dismiss();
         });
         saveButton = save;
