@@ -1817,6 +1817,28 @@
             android:focusable="false"
             android:elevation="20dp"
             android:visibility="gone" />
+
+        <!-- Names the action a key just ran. Tool keys draw a glyph, so what a swipe or a cap
+             actually does is otherwise only discoverable by trying it. Not clickable and above
+             everything else: it is a read-out, never a target. -->
+        <TextView
+            android:id="@+id/terminal_action_hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="12dp"
+            android:paddingLeft="12dp"
+            android:paddingTop="6dp"
+            android:paddingRight="12dp"
+            android:paddingBottom="6dp"
+            android:textSize="12sp"
+            android:singleLine="true"
+            android:clickable="false"
+            android:focusable="false"
+            android:elevation="22dp"
+            android:alpha="0"
+            android:visibility="gone" />
     </FrameLayout>
 
     <FrameLayout

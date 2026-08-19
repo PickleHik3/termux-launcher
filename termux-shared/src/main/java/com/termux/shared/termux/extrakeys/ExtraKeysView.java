@@ -21,6 +21,7 @@ import android.util.AttributeSet;
 import android.util.TypedValue;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -48,6 +49,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import com.google.android.material.button.MaterialButton;
 import com.termux.shared.R;
+import com.termux.shared.termux.font.NerdFontSpans;
 import com.termux.shared.termux.terminal.io.TerminalExtraKeys;
 import com.termux.shared.theme.ThemeUtils;
 
@@ -540,6 +542,30 @@ public final class ExtraKeysView extends GridLayout {
     }
 
     /**
+     * Sets a key-cap label with Nerd Font code points routed to the bundled symbols face, so an
+     * icon key never shows tofu. A plain label keeps the stock all-caps transformation; a label
+     * that needed spans gets uppercased manually instead, because the all-caps transformation
+     * re-creates the text as a plain string and would silently drop the typeface spans. Icon code
+     * points have no case, so the visible result is identical either way.
+     */
+    private void setKeyCapText(@NonNull TextView view, @Nullable CharSequence display) {
+        CharSequence label = display == null ? "" : display;
+        CharSequence spanned = NerdFontSpans.span(getContext(), label);
+        if (spanned == label) {
+            view.setAllCaps(mButtonTextAllCaps);
+            view.setText(label);
+            return;
+        }
+        view.setAllCaps(false);
+        if (mButtonTextAllCaps) {
+            // Case mapping can change the length (ß → SS), which would misplace the spans; span
+            // the uppercased text from scratch.
+            spanned = NerdFontSpans.span(getContext(), label.toString().toUpperCase(Locale.ROOT));
+        }
+        view.setText(spanned);
+    }
+
+    /**
      * Get {@link #mLongPressTimeout}.
      */
     public int getLongPressTimeout() {
@@ -633,9 +659,8 @@ public final class ExtraKeysView extends GridLayout {
                     }
                 });
 
-                button.setText(buttonInfo.getDisplay());
+                setKeyCapText(button, buttonInfo.getDisplay());
                 button.setTextColor(mButtonTextColor);
-                button.setAllCaps(mButtonTextAllCaps);
                 // Keep multi-letter labels (SHFT, CTRL) on one line. The active/sticky background is
                 // an InsetDrawable whose padding shrinks the content box; without this the last
                 // letter wrapped to a second row when the key took on its pressed/active background.
@@ -1301,11 +1326,10 @@ public final class ExtraKeysView extends GridLayout {
         tv.setIncludeFontPadding(false);
         tv.setSingleLine(true);
         tv.setMaxLines(1);
-        tv.setAllCaps(mButtonTextAllCaps);
         tv.setTextSize(TypedValue.COMPLEX_UNIT_PX, button.getTextSize() * 1.25f);
         tv.setTypeface(button.getTypeface());
         tv.setTextColor(activeTextColor());
-        tv.setText(mTravelSecondaryText);
+        setKeyCapText(tv, mTravelSecondaryText);
         mTravelBubbleBg = buildFloatingSecondaryKeyBackground();
         tv.setBackground(mTravelBubbleBg);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -1356,7 +1380,7 @@ public final class ExtraKeysView extends GridLayout {
         // never the source glyph (regardless of how far up/down the finger has travelled).
         if (!mTravelShowingSecondary) {
             mTravelShowingSecondary = true;
-            mTravelBubble.setText(mTravelSecondaryText);
+            setKeyCapText(mTravelBubble, mTravelSecondaryText);
         }
         mTravelBubble.setShadowLayer(dpToPx(KEY_GLOW_RADIUS_HOLD_DP), 0f, 0f,
             withAlpha(keyGlowColor(KEY_GLOW_WHITE_MIX_HOLD), 255));

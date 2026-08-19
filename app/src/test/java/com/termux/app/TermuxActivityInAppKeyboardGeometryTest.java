@@ -179,6 +179,17 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     }
 
     @Test
+    public void matchAllSurfacesOutranksAnEditedKeyboardBackground() {
+        // An edited scheme or a moved opacity slider owns the keyboard surface on its own...
+        assertTrue(TermuxActivity.hasInAppKeyboardBackgroundOverride(false, 0xFF203040, 100));
+        assertTrue(TermuxActivity.hasInAppKeyboardBackgroundOverride(false, null, 60));
+        assertFalse(TermuxActivity.hasInAppKeyboardBackgroundOverride(false, null, 100));
+        // ...but not while surfaces are normalized, which is what left the keyboard lighter than
+        // every other surface until the keyboard section was reset by hand.
+        assertFalse(TermuxActivity.hasInAppKeyboardBackgroundOverride(true, 0xFF203040, 60));
+    }
+
+    @Test
     public void blurredUnifiedKeyboardRevealWaitsOnlyForDestinationBackdrop() {
         assertTrue(TermuxActivity.shouldDeferInAppKeyboardReveal(
             true, true, true, false));

@@ -21,22 +21,31 @@ public class DefaultExtraKeysTest {
             TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE, ExtraKeysConstants.CONTROL_CHARS_ALIASES);
         ExtraKeyButton[][] matrix = info.getMatrix();
         assertEquals(1, matrix.length);
+        // Window and session switching moved to the in-app keyboard's space-bar swipes, so the
+        // row only carries what no key on that keyboard can reach.
         String[] expectedKeys = {
             "KEYBOARD",
+            "tool:session.new",
+            "tool:pane.split_vertical",
+            "tool:terminal.jump_previous_prompt",
+            "tool:terminal.search_scrollback",
             "tool:workspace.picker",
-            "tool:workspace.save_prompt",
-            "tool:window.previous",
-            "tool:window.next",
-            "tool:pane.move_to_edge:edge=left",
             "tool:terminal.toggle_scratchpad",
         };
+        String[] expectedPopups = {
+            "tool:terminal.select_at_cursor",
+            "tool:window.new",
+            "tool:pane.split_horizontal",
+            "tool:terminal.jump_next_prompt",
+            "tool:terminal.hints",
+            "tool:workspace.save_prompt",
+            "tool:pane.toggle_float",
+        };
         assertEquals(expectedKeys.length, matrix[0].length);
-        for (int i = 0; i < expectedKeys.length; i++)
+        for (int i = 0; i < expectedKeys.length; i++) {
             assertEquals(expectedKeys[i], matrix[0][i].getKey());
-
-        // Session switching hangs off the window keys as swipe-up popups.
-        assertEquals("tool:session.previous", matrix[0][3].getPopup().getKey());
-        assertEquals("tool:session.next", matrix[0][4].getPopup().getKey());
+            assertEquals(expectedPopups[i], matrix[0][i].getPopup().getKey());
+        }
     }
 
     @Test

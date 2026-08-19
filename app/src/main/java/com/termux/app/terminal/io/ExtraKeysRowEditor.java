@@ -34,6 +34,7 @@ import com.termux.app.settings.TermuxPropertiesFile;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
+import com.termux.shared.termux.font.NerdFontSpans;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
 import java.util.ArrayList;
@@ -368,7 +369,7 @@ public final class ExtraKeysRowEditor {
 
         TextView popup = new TextView(context);
         // Kept in the tree even when empty so every cap has the same height (F-06).
-        popup.setText(key.popup == null ? "" : "↑ " + capText(key.popup));
+        popup.setText(key.popup == null ? "" : capLabel("↑ " + capText(key.popup)));
         popup.setTextColor(colorSubtle);
         popup.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
         popup.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -377,7 +378,7 @@ public final class ExtraKeysRowEditor {
         cap.addView(popup);
 
         TextView label = new TextView(context);
-        label.setText(capText(key));
+        label.setText(capLabel(capText(key)));
         label.setTextColor(colorText);
         label.setGravity(Gravity.CENTER_HORIZONTAL);
         applyCapLabelSizing(label);
@@ -412,6 +413,12 @@ public final class ExtraKeysRowEditor {
     @NonNull
     private String capText(@NonNull ExtraKeysLayoutModel.Key key) {
         return ExtraKeyButton.resolveDisplay(key.key, key.display, displayMap);
+    }
+
+    /** Cap text with Nerd Font code points swapped onto the bundled symbols face. */
+    @NonNull
+    private CharSequence capLabel(@NonNull CharSequence text) {
+        return NerdFontSpans.span(context, text);
     }
 
     /**
@@ -552,14 +559,15 @@ public final class ExtraKeysRowEditor {
         display.setSingleLine(true);
         display.setTextColor(colorText);
         display.setHintTextColor(colorSubtle);
-        if (key.display != null) display.setText(key.display);
+        if (key.display != null) display.setText(capLabel(key.display));
         display.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
             @Override public void afterTextChanged(Editable s) {
+                NerdFontSpans.applyTo(context, s);
                 String text = s.toString().trim();
                 key.display = text.isEmpty() ? null : text;
-                if (selectedCapLabel != null) selectedCapLabel.setText(capText(key));
+                if (selectedCapLabel != null) selectedCapLabel.setText(capLabel(capText(key)));
                 markDirty();
             }
         });
@@ -580,11 +588,12 @@ public final class ExtraKeysRowEditor {
             popupDisplay.setSingleLine(true);
             popupDisplay.setTextColor(colorText);
             popupDisplay.setHintTextColor(colorSubtle);
-            if (popupKey.display != null) popupDisplay.setText(popupKey.display);
+            if (popupKey.display != null) popupDisplay.setText(capLabel(popupKey.display));
             popupDisplay.addTextChangedListener(new TextWatcher() {
                 @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
                 @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
                 @Override public void afterTextChanged(Editable s) {
+                    NerdFontSpans.applyTo(context, s);
                     String text = s.toString().trim();
                     popupKey.display = text.isEmpty() ? null : text;
                     markDirty();

@@ -149,6 +149,9 @@
     <string name="settings_extra_keys_glyph_category_powerline">Powerline</string>
     <string name="settings_extra_keys_glyph_category_technical">Technical</string>
     <string name="settings_extra_keys_glyph_category_terminal_marks">Terminal marks</string>
+    <string name="settings_extra_keys_glyph_category_nerd_font">Nerd Font icons</string>
+    <string name="settings_extra_keys_glyph_more_results">%1$d more — search by name, e.g. \"keyboard\" or \"nf-md-folder\"</string>
+    <string name="settings_extra_keys_glyph_paste_hint">Nerd Font icons are bundled: search them above, or paste any icon straight into a key label.</string>
     <string name="settings_edit_extra_keys_title">Edit extra keys</string>
     <string name="settings_edit_extra_keys_summary">Keys, swipe-up actions and pages of the extra keys row.</string>
     <string name="settings_terminal_key_row_header">Extra keys</string>
@@ -1186,6 +1189,8 @@
     <string name="tool_terminal_font_size_increase">Increase font size</string>
     <string name="tool_terminal_font_size_decrease">Decrease font size</string>
     <string name="tool_terminal_select_url">Select URL</string>
+    <string name="tool_terminal_select_at_cursor">Select at cursor</string>
+    <string name="tool_terminal_select_all">Select all</string>
     <string name="tool_terminal_hints">Hints</string>
     <string name="tool_terminal_search_scrollback">Search scrollback</string>
     <string name="tool_terminal_share_transcript">Share transcript</string>
@@ -1260,6 +1265,8 @@
     <string name="tool_desc_terminal_font_size_increase">Make the terminal text larger.</string>
     <string name="tool_desc_terminal_font_size_decrease">Make the terminal text smaller.</string>
     <string name="tool_desc_terminal_select_url">Pick a link from the terminal scrollback.</string>
+    <string name="tool_desc_terminal_select_at_cursor">Start a text selection at the shell cursor, on the word under it.</string>
+    <string name="tool_desc_terminal_select_all">Select the whole buffer, scrollback included.</string>
     <string name="tool_desc_terminal_hints">Open or copy URLs, paths, hashes, and source line references by keyboard label.</string>
     <string name="terminal_hints_title">Terminal hints</string>
     <string name="terminal_hints_instructions">Press a label to open a URL or copy another item. Hold Shift while pressing a label to copy anything.</string>

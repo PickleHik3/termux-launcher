@@ -1521,6 +1521,56 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    // -------------------------------------------------------------- "what did that key just do"
+    //
+    // Tool keys draw a glyph and nothing else, so the row and the keyboard's space-bar swipes are
+    // only as discoverable as the guesses people make about them. Every action the dispatcher runs
+    // names itself here for a beat, top-right, out of the way of the shell prompt.
+
+    private static final long ACTION_HINT_HOLD_MS = 1100L;
+    private static final long ACTION_HINT_FADE_IN_MS = 110L;
+    private static final long ACTION_HINT_FADE_OUT_MS = 200L;
+
+    @Nullable private Runnable mActionHintHideRunnable;
+
+    /** Names a dispatched tool in the corner chip; a no-op for tools with no UI title. */
+    public void showTerminalActionHint(@NonNull String toolName) {
+        TextView chip = findViewById(R.id.terminal_action_hint);
+        if (chip == null) return;
+        LauncherToolRegistry.ToolMetadata tool = LauncherToolRegistry.getInstance().getTool(toolName);
+        if (tool == null || tool.titleRes == 0) return;
+        showTerminalActionHint(chip, getString(tool.titleRes));
+    }
+
+    private void showTerminalActionHint(@NonNull TextView chip, @NonNull CharSequence label) {
+        if (mActionHintHideRunnable != null)
+            chip.removeCallbacks(mActionHintHideRunnable);
+
+        chip.setText(label);
+        chip.setTextColor(getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
+            R.color.termux_on_surface));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(withAlphaComponent(resolveAccessoryGlassBaseColor(), 235));
+        background.setCornerRadius(dpToPx(14));
+        background.setStroke(Math.max(1, Math.round(dpToPx(1))),
+            withAlphaComponent(resolveAccessoryOutlineColor(), 120));
+        chip.setBackground(background);
+        // The window draws under the status bar, so the chip clears it by its measured inset
+        // rather than by a guessed margin that would sit on the clock on one device and float on
+        // another.
+        chip.setTranslationY(mLastStatusBarInsetTop);
+
+        chip.animate().cancel();
+        chip.setVisibility(View.VISIBLE);
+        chip.animate().alpha(1f).setDuration(ACTION_HINT_FADE_IN_MS).start();
+
+        mActionHintHideRunnable = () -> chip.animate().alpha(0f)
+            .setDuration(ACTION_HINT_FADE_OUT_MS)
+            .withEndAction(() -> chip.setVisibility(View.GONE))
+            .start();
+        chip.postDelayed(mActionHintHideRunnable, ACTION_HINT_HOLD_MS);
+    }
+
     private int resolveAccessoryGlassBaseColor() {
         if (isNightThemeActive()) {
             return resolveMaterialDarkBackgroundColor();
@@ -3251,10 +3301,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY;
     }
 
-    /** True when the scheme's background color or the opacity slider repaints the surface. */
+    /**
+     * True when the scheme's background color or the opacity slider repaints the surface.
+     *
+     * <p>"Match all surfaces" outranks both. An edited keyboard scheme sets a background swatch,
+     * which used to drop the keyboard onto its own local surface painted in that colour — a
+     * surface no dock/status opacity write reaches, so the keyboard sat visibly lighter than
+     * every other surface until the keyboard section was reset. While surfaces are normalized the
+     * keyboard renders the shared material and the scheme keeps only its key colours.</p>
+     */
     private boolean hasInAppKeyboardBackgroundOverride() {
-        return resolveInAppKeyboardSchemeBackgroundColor() != null
-            || getInAppKeyboardBackgroundOpacityPercent()
+        return hasInAppKeyboardBackgroundOverride(isSurfaceTuningNormalized(),
+            resolveInAppKeyboardSchemeBackgroundColor(),
+            getInAppKeyboardBackgroundOpacityPercent());
+    }
+
+    static boolean hasInAppKeyboardBackgroundOverride(boolean surfacesNormalized,
+                                                     @Nullable Integer schemeBackgroundColor,
+                                                     int backgroundOpacityPercent) {
+        if (surfacesNormalized)
+            return false;
+        return schemeBackgroundColor != null
+            || backgroundOpacityPercent
                 != TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY;
     }
 
@@ -3395,8 +3463,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                          boolean capsule, boolean glassTheme,
                                                          float cornerRadiusPx) {
         java.util.List<Drawable> layers = new java.util.ArrayList<>();
-        Integer schemeBackground = resolveInAppKeyboardSchemeBackgroundColor();
-        int backgroundAlpha = Math.round(
+        // While surfaces are normalized the keyboard is the dock's material, so its own background
+        // colour and opacity are ignored here exactly as they are in the unified path.
+        boolean normalized = isSurfaceTuningNormalized();
+        Integer schemeBackground = normalized ? null : resolveInAppKeyboardSchemeBackgroundColor();
+        int backgroundAlpha = normalized ? 255 : Math.round(
             255f * getInAppKeyboardBackgroundOpacityPercent() / 100f);
         if (glassTheme) {
             if (state.blurEnabled) {
@@ -9562,7 +9633,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The embedded keyboard suspends flush absorption: its height is user-scaled and its
         // surface defines its own boundary, so the split remainder halves would surface as
         // wallpaper bands above the gesture-navigation inset instead of hiding in dock glass.
-        int terminalFlushPaddingPx = state.keyboardShown || !state.toolbarShown ? 0
+        // Tiled splits couple mTerminalView's window position to the very accessory geometry this
+        // padding feeds back into (its pane reflows every time the stack resizes), so the modulo
+        // calc below never settles — it just chases its own tail and flickers the bottom pane/dock.
+        // Skip it whenever more than one pane is tiled, same as the keyboard-shown/toolbar-hidden cases.
+        int terminalFlushPaddingPx = state.keyboardShown || !state.toolbarShown || visiblePaneCount() > 1 ? 0
             : resolveTerminalFlushDockPaddingPx(accessoryContentHeightPx, accessoryBottomMarginPx);
         mAppliedTerminalFlushPaddingPx = terminalFlushPaddingPx;
         int combinedHeight = computeAccessoryStackHeight(
@@ -13522,7 +13597,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (cpu != null) {
             cpu.setVisibility(cpuOn ? View.VISIBLE : View.GONE);
             cpu.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
-            cpu.setIconResource(R.drawable.ic_stat_cpu);
+            cpu.setIconGlyph("\uf4bc");   // nf-oct-cpu
             if (cpu.getTag() == null) {
                 cpu.setTag("wired");
                 cpu.setOnClickListener(v -> toggleStatsCard(v));
@@ -13531,7 +13606,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (ram != null) {
             ram.setVisibility(ramOn ? View.VISIBLE : View.GONE);
             ram.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
-            ram.setIconResource(R.drawable.ic_stat_ram);
+            ram.setIconGlyph("\uefc5");   // nf-fa-memory
             if (ram.getTag() == null) {
                 ram.setTag("wired");
                 ram.setOnClickListener(v -> toggleStatsCard(v));
@@ -13542,7 +13617,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             weather.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.TERTIARY);
             if (weather.getTag() == null) {
                 weather.setTag("wired");
-                weather.setIconResource(R.drawable.ic_weather_clear_day);
+                weather.setIconAnimation(
+                    com.termux.app.statusbar.WeatherController.animationAssetFor(0, true));
                 weather.setValue("--");
                 weather.setOnClickListener(v -> toggleWeatherCard(v));
             }
@@ -13846,7 +13922,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.statusbar.StatusBarWidgetView widget = findViewById(R.id.terminal_status_widget_weather);
         if (widget != null && widget.getVisibility() == View.VISIBLE) {
             if (weather.valid) {
-                widget.setIconResource(com.termux.app.statusbar.WeatherController.iconFor(
+                widget.setIconAnimation(com.termux.app.statusbar.WeatherController.animationAssetFor(
                     weather.currentCode, weather.currentIsDay));
                 widget.setValue(com.termux.app.statusbar.WeatherController.formatTemp(weather.currentC,
                     mPreferences != null && mPreferences.isStatusWidgetWeatherFahrenheit()));

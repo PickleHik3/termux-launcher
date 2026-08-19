@@ -419,8 +419,11 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         tab.setIncludeFontPadding(false);
         tab.setTextAlignment(TEXT_ALIGNMENT_CENTER);
         tab.setEllipsize(TextUtils.TruncateAt.END);
-        // Spanned only where a symbol_map claims a code point; a plain ASCII label is set as it is.
-        tab.setText(TerminalLabelSymbolSpans.apply(label, mSymbolMaps));
+        // Bundled symbols face first, symbol_map faces second: both spans land on a shared PUA
+        // run, and the later-applied user-configured face wins at draw time — the bundled Nerd
+        // Font glyphs only ever fill runs no symbol_map claims.
+        tab.setText(TerminalLabelSymbolSpans.apply(
+            com.termux.shared.termux.font.NerdFontSpans.span(context, label), mSymbolMaps));
         tab.setTextColor(selected ? mSelectedTextColor : mUnselectedTextColor);
         tab.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
         tab.setTypeface(mTerminalTypeface, selected ? Typeface.BOLD : Typeface.NORMAL);

@@ -2527,6 +2527,17 @@ public final class TerminalView extends View {
         invalidate();
     }
 
+    /** Start selecting text at the shell cursor, expanded to the word under it. */
+    public void startTextSelectionAtCursor() {
+        if (mEmulator == null || !requestFocus())
+            return;
+        // Selection works in row coordinates, so it may not be started while a row is half scrolled.
+        clearScrollOffset();
+        getTextSelectionCursorController().selectAtCursor();
+        mClient.copyModeChanged(isSelectingText());
+        invalidate();
+    }
+
     /** Select the complete active terminal buffer, including scrollback. */
     public void selectAllText() {
         if (mEmulator == null || !requestFocus())

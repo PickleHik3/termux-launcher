@@ -10,7 +10,6 @@ import android.os.Looper;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.DrawableRes;
 import androidx.core.content.ContextCompat;
 
 import com.termux.R;
@@ -277,23 +276,72 @@ public final class WeatherController {
         return Math.round(fahrenheit ? celsius * 9 / 5 + 32 : celsius) + "°";
     }
 
-    /** Material vector icon for a WMO weather code, including clear/partly-cloudy day/night. */
-    @DrawableRes
-    public static int iconFor(int code, boolean isDay) {
-        if (code == 0) return isDay ? R.drawable.ic_weather_clear_day : R.drawable.ic_weather_clear_night;
-        if (code == 1 || code == 2) {
-            return isDay ? R.drawable.ic_weather_partly_cloudy_day
-                : R.drawable.ic_weather_partly_cloudy_night;
+    /**
+     * Directory under {@code assets/} holding the bundled Meteocons animations, one Lottie JSON
+     * per icon name. MIT licensed; the licence ships beside them.
+     */
+    public static final String WEATHER_ANIMATION_ASSET_DIR = "weather";
+
+    /**
+     * Meteocons animation name for a WMO weather code, day/night aware.
+     *
+     * <p>The Material vector set this replaced had one file per condition, so it collapsed the
+     * whole WMO table into eight shapes and only told day from night for a clear or partly clear
+     * sky; the Nerd Font set that briefly replaced <em>that</em> read too small at status-bar
+     * size. Meteocons carries a day and a night cut of every condition that looks different after
+     * dark, at whatever size the view gives it.
+     *
+     * <p>Codes that describe the same sky share a name on purpose — drizzle intensity (51/53/55)
+     * is a rate, not a different sky. Conditions with no sun or moon in frame (overcast, rime fog,
+     * snow grains) return one name for both, because a day/night split there would be a
+     * difference the sky does not have.
+     *
+     * @param isDay from the provider's own is_day flag, not from the device clock
+     * @return the asset's base name, without the {@code .json} suffix
+     */
+    @NonNull
+    public static String animationFor(int code, boolean isDay) {
+        switch (code) {
+            case 0:                       // clear sky
+            case 1:                       // mainly clear
+                return isDay ? "clear-day" : "clear-night";
+            case 2:                       // partly cloudy
+                return isDay ? "partly-cloudy-day" : "partly-cloudy-night";
+            case 3:                       // overcast
+                return "overcast";
+            case 45:                      // fog
+                return isDay ? "fog-day" : "fog-night";
+            case 48:                      // depositing rime fog
+                return "overcast-fog";
+            case 51: case 53: case 55:    // drizzle
+                return isDay ? "partly-cloudy-day-drizzle" : "partly-cloudy-night-drizzle";
+            case 56: case 57:             // freezing drizzle
+                return isDay ? "partly-cloudy-day-sleet" : "partly-cloudy-night-sleet";
+            case 61: case 63: case 65:    // rain
+                return isDay ? "overcast-day-rain" : "overcast-night-rain";
+            case 66: case 67:             // freezing rain
+                return isDay ? "overcast-day-sleet" : "overcast-night-sleet";
+            case 71: case 73: case 75:    // snow
+                return isDay ? "overcast-day-snow" : "overcast-night-snow";
+            case 77:                      // snow grains
+                return "snowflake";
+            case 80: case 81: case 82:    // rain showers: broken cloud, not an overcast lid
+                return isDay ? "partly-cloudy-day-rain" : "partly-cloudy-night-rain";
+            case 85: case 86:             // snow showers
+                return isDay ? "partly-cloudy-day-snow" : "partly-cloudy-night-snow";
+            case 95:                      // thunderstorm
+                return isDay ? "thunderstorms-day" : "thunderstorms-night";
+            case 96: case 99:             // thunderstorm with hail
+                return isDay ? "thunderstorms-day-hail" : "thunderstorms-night-hail";
+            default:
+                return "not-available";   // an unknown code is not "cloudy"
         }
-        if (code == 3) return R.drawable.ic_weather_cloudy;
-        if (code == 45 || code == 48) return R.drawable.ic_weather_fog;
-        if (code >= 51 && code <= 57) return R.drawable.ic_weather_drizzle;
-        if (code >= 61 && code <= 67) return R.drawable.ic_weather_rain;
-        if (code >= 71 && code <= 77) return R.drawable.ic_weather_snow;
-        if (code >= 80 && code <= 82) return R.drawable.ic_weather_rain;
-        if (code >= 85 && code <= 86) return R.drawable.ic_weather_snow;
-        if (code >= 95) return R.drawable.ic_weather_thunderstorm;
-        return R.drawable.ic_weather_cloudy;
+    }
+
+    /** The asset path {@code LottieAnimationView.setAnimation(String)} takes. */
+    @NonNull
+    public static String animationAssetFor(int code, boolean isDay) {
+        return WEATHER_ANIMATION_ASSET_DIR + "/" + animationFor(code, isDay) + ".json";
     }
 
     @NonNull
@@ -308,6 +356,7 @@ public final class WeatherController {
         if (code >= 71 && code <= 77) return "Snow";
         if (code >= 80 && code <= 82) return "Showers";
         if (code >= 85 && code <= 86) return "Snow showers";
+        if (code == 96 || code == 99) return "Thunderstorm with hail";
         if (code >= 95) return "Thunderstorm";
         return "—";
     }

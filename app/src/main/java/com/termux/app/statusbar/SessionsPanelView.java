@@ -22,6 +22,7 @@ import androidx.core.graphics.ColorUtils;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.terminal.SessionBrowserModel;
+import com.termux.shared.termux.font.NerdFontSpans;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -265,7 +266,7 @@ public final class SessionsPanelView extends LinearLayout {
             HeaderHolder holder = mHeaders.get(session.id);
             if (holder != null) {
                 boolean expanded = mExpandedSessionId != null && mExpandedSessionId == session.id;
-                holder.title.setText(sessionTitle(session));
+                holder.title.setText(NerdFontSpans.span(getContext(), sessionTitle(session)));
                 holder.title.setTypeface(null, session.current ? Typeface.BOLD : Typeface.NORMAL);
                 holder.subtitle.setText(counts(session));
                 holder.chevron.setText(expanded ? "⌄" : "›");
@@ -280,7 +281,7 @@ public final class SessionsPanelView extends LinearLayout {
             for (SessionBrowserModel.Window window : session.windows) {
                 WindowHolder child = mWindows.get(window.id);
                 if (child == null) continue;
-                child.title.setText(windowTitle(window));
+                child.title.setText(NerdFontSpans.span(getContext(), windowTitle(window)));
                 child.title.setTypeface(null, window.current ? Typeface.BOLD : Typeface.NORMAL);
                 child.subtitle.setText(getResources().getQuantityString(
                     R.plurals.session_browser_pane_count, window.panes.size(), window.panes.size()));

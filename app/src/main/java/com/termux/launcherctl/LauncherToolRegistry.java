@@ -368,6 +368,8 @@ public final class LauncherToolRegistry {
     public static final String TOOL_TERMINAL_FONT_SIZE_INCREASE = "terminal.font_size_increase";
     public static final String TOOL_TERMINAL_FONT_SIZE_DECREASE = "terminal.font_size_decrease";
     public static final String TOOL_TERMINAL_SELECT_URL = "terminal.select_url";
+    public static final String TOOL_TERMINAL_SELECT_AT_CURSOR = "terminal.select_at_cursor";
+    public static final String TOOL_TERMINAL_SELECT_ALL = "terminal.select_all";
     public static final String TOOL_TERMINAL_HINTS = "terminal.hints";
     public static final String TOOL_TERMINAL_SEARCH_SCROLLBACK = "terminal.search_scrollback";
     public static final String TOOL_TERMINAL_SHARE_TRANSCRIPT = "terminal.share_transcript";
@@ -673,6 +675,22 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_TERMINAL, R.string.tool_terminal_select_url, R.string.tool_desc_terminal_select_url,
+            null, REQUIRES_SESSION);
+        // Text selection had no entry point outside a long-press, which left copy_selected and
+        // share_selected unreachable from a key, a tool, or the palette.
+        addUi(map, TOOL_TERMINAL_SELECT_AT_CURSOR,
+            "Start selecting terminal text at the shell cursor, expanded to the word under it.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_TERMINAL, R.string.tool_terminal_select_at_cursor,
+            R.string.tool_desc_terminal_select_at_cursor,
+            null, REQUIRES_SESSION);
+        addUi(map, TOOL_TERMINAL_SELECT_ALL,
+            "Select the whole terminal buffer, including scrollback.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_TERMINAL, R.string.tool_terminal_select_all,
+            R.string.tool_desc_terminal_select_all,
             null, REQUIRES_SESSION);
         addUi(map, TOOL_TERMINAL_HINTS,
             "Show keyboard labels for URLs, paths, hashes, and source line references in scrollback.",

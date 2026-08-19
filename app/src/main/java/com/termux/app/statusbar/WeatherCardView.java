@@ -3,7 +3,6 @@ package com.termux.app.statusbar;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
-import android.content.res.ColorStateList;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -11,15 +10,15 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.HorizontalScrollView;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
-import androidx.core.widget.ImageViewCompat;
 
+import com.airbnb.lottie.LottieAnimationView;
+import com.airbnb.lottie.LottieDrawable;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -45,7 +44,7 @@ public final class WeatherCardView extends LinearLayout {
     private final int mTertiary;
     private final int mPanel;
 
-    private final ImageView mCurrentIcon;
+    private final LottieAnimationView mCurrentIcon;
     private final TextView mCurrent;
     private final TextView mDayToggle;
     private final TextView mWeekToggle;
@@ -78,7 +77,7 @@ public final class WeatherCardView extends LinearLayout {
         header.setGravity(Gravity.CENTER_VERTICAL);
         addView(header, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
 
-        mCurrentIcon = weatherIcon(context, 20);
+        mCurrentIcon = weatherAnimation(context, true);
         LayoutParams currentIconParams = new LayoutParams(dp(20), dp(20));
         currentIconParams.setMarginEnd(dp(7));
         header.addView(mCurrentIcon, currentIconParams);
@@ -150,8 +149,8 @@ public final class WeatherCardView extends LinearLayout {
         }
         mAttribution.setVisibility(VISIBLE);
         mCurrentIcon.setVisibility(VISIBLE);
-        mCurrentIcon.setImageResource(WeatherController.iconFor(
-            weather.currentCode, weather.currentIsDay));
+        playAnimation(mCurrentIcon,
+            WeatherController.animationAssetFor(weather.currentCode, weather.currentIsDay));
         mCurrent.setText(String.format(Locale.ROOT, "%s  %s",
             fmtTemp(weather.currentC), WeatherController.describe(weather.currentCode)));
         rebuildList();
@@ -177,8 +176,9 @@ public final class WeatherCardView extends LinearLayout {
         if (!mWeather.valid) return;
         if (mWeekMode) {
             for (WeatherController.Daily d : mWeather.daily) {
+                // A daily summary has no hour, so it is drawn as its daytime cut.
                 mList.addView(row(weekdayLabel(d.date),
-                    WeatherController.iconFor(d.code, true),
+                    WeatherController.animationAssetFor(d.code, true),
                     String.format(Locale.ROOT, "%s / %s", fmtTemp(d.maxC), fmtTemp(d.minC))));
             }
         } else {
@@ -187,21 +187,22 @@ public final class WeatherCardView extends LinearLayout {
             for (WeatherController.Hourly h : mWeather.hourly) {
                 if (h.iso.compareTo(cutoff) < 0) continue;   // ISO strings sort chronologically
                 mList.addView(row(hourLabel(h.iso),
-                    WeatherController.iconFor(h.code, h.isDay), fmtTemp(h.tempC)));
+                    WeatherController.animationAssetFor(h.code, h.isDay), fmtTemp(h.tempC)));
                 if (++shown >= 12) break;
             }
             if (shown == 0) {
                 // All hourly entries are in the past (stale cache) — fall back to showing the first few.
                 for (WeatherController.Hourly h : mWeather.hourly) {
                     mList.addView(row(hourLabel(h.iso),
-                        WeatherController.iconFor(h.code, h.isDay), fmtTemp(h.tempC)));
+                        WeatherController.animationAssetFor(h.code, h.isDay), fmtTemp(h.tempC)));
                     if (++shown >= 12) break;
                 }
             }
         }
     }
 
-    private View row(@NonNull String label, int iconRes, @NonNull String value) {
+    private View row(@NonNull String label, @NonNull String animationAsset,
+                     @NonNull String value) {
         LinearLayout row = new LinearLayout(getContext());
         row.setOrientation(VERTICAL);
         row.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -214,9 +215,9 @@ public final class WeatherCardView extends LinearLayout {
         time.setText(label);
         row.addView(time, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
 
-        ImageView icon = weatherIcon(getContext(), 17);
-        icon.setImageResource(iconRes);
-        LayoutParams iconParams = new LayoutParams(LayoutParams.MATCH_PARENT, dp(19));
+        LottieAnimationView icon = weatherAnimation(getContext(), false);
+        playAnimation(icon, animationAsset);
+        LayoutParams iconParams = new LayoutParams(LayoutParams.MATCH_PARENT, dp(26));
         iconParams.topMargin = dp(4);
         iconParams.bottomMargin = dp(3);
         row.addView(icon, iconParams);
@@ -235,14 +236,26 @@ public final class WeatherCardView extends LinearLayout {
         return row;
     }
 
-    private ImageView weatherIcon(@NonNull Context context, int sizeDp) {
-        ImageView icon = new ImageView(context);
-        icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+    /**
+     * Bundled Meteocons animation cell, the same set the status-bar widget plays.
+     *
+     * @param loop true for the single headline icon, which animates for as long as the card is
+     *             open. The hourly and weekly cells pass false: a dozen looping animations behind
+     *             a scrolling strip is a redraw of the whole card every frame, and they are read
+     *             as a row of conditions rather than watched one at a time.
+     */
+    private LottieAnimationView weatherAnimation(@NonNull Context context, boolean loop) {
+        LottieAnimationView icon = new LottieAnimationView(context);
+        icon.setRepeatCount(loop ? LottieDrawable.INFINITE : 0);
         icon.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        ImageViewCompat.setImageTintList(icon, ColorStateList.valueOf(mTertiary));
-        icon.setMinimumWidth(dp(sizeDp));
-        icon.setMinimumHeight(dp(sizeDp));
         return icon;
+    }
+
+    /** Loads and starts an asset, tolerating a missing file rather than taking the card down. */
+    private void playAnimation(@NonNull LottieAnimationView view, @NonNull String assetPath) {
+        view.setFailureListener(error -> view.setVisibility(INVISIBLE));
+        view.setAnimation(assetPath);
+        view.playAnimation();
     }
 
     private TextView toggleChip(@NonNull Context context, @NonNull String text) {

@@ -90,6 +90,8 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_TERMINAL_FONT_SIZE_INCREASE = "terminal.font_size_increase";
     public static final String TOOL_TERMINAL_FONT_SIZE_DECREASE = "terminal.font_size_decrease";
     public static final String TOOL_TERMINAL_SELECT_URL = "terminal.select_url";
+    public static final String TOOL_TERMINAL_SELECT_AT_CURSOR = "terminal.select_at_cursor";
+    public static final String TOOL_TERMINAL_SELECT_ALL = "terminal.select_all";
     public static final String TOOL_TERMINAL_HINTS = "terminal.hints";
     public static final String TOOL_TERMINAL_SEARCH_SCROLLBACK = "terminal.search_scrollback";
     public static final String TOOL_TERMINAL_SHARE_TRANSCRIPT = "terminal.share_transcript";
@@ -201,6 +203,8 @@ public final class TerminalActionDispatcher {
             case TOOL_TERMINAL_FONT_SIZE_INCREASE:
             case TOOL_TERMINAL_FONT_SIZE_DECREASE:
             case TOOL_TERMINAL_SELECT_URL:
+            case TOOL_TERMINAL_SELECT_AT_CURSOR:
+            case TOOL_TERMINAL_SELECT_ALL:
             case TOOL_TERMINAL_HINTS:
             case TOOL_TERMINAL_SEARCH_SCROLLBACK:
             case TOOL_TERMINAL_SHARE_TRANSCRIPT:
@@ -335,8 +339,24 @@ public final class TerminalActionDispatcher {
         return completed != null ? completed : error(500, "execution_failed", "Terminal action returned nothing");
     }
 
+    /**
+     * Runs the action and, when it worked, lets the UI say which action that was. Every caller —
+     * an extra key, a space-bar swipe, a key binding, the palette, the agent — arrives here, so
+     * this is the one place the hint can be raised without each entry point remembering to.
+     */
     @NonNull
     private JSONObject executeOnMainThread(@NonNull String toolName, @NonNull JSONObject arguments) {
+        JSONObject result = executeOnMainThreadInternal(toolName, arguments);
+        if (result != null && result.optBoolean("ok", false)) {
+            TermuxActivity activity = currentActivity();
+            if (activity != null) activity.showTerminalActionHint(toolName);
+        }
+        return result;
+    }
+
+    @NonNull
+    private JSONObject executeOnMainThreadInternal(@NonNull String toolName,
+                                                   @NonNull JSONObject arguments) {
         TermuxActivity activity = currentActivity();
         if (activity == null) {
             return error(409, "activity_not_running",
@@ -764,6 +784,21 @@ public final class TerminalActionDispatcher {
                     String storedName = activity.getBrowserSessionName(sessionIndex);
                     return ok().put("index", sessionIndex)
                         .put("name", storedName == null ? JSONObject.NULL : storedName);
+                }
+
+                case TOOL_TERMINAL_SELECT_AT_CURSOR:
+                case TOOL_TERMINAL_SELECT_ALL: {
+                    // Selection lives on the view, not the view client: it has no session-level
+                    // side effects, and the view is the only thing that knows the cursor cell.
+                    com.termux.view.TerminalView selectView = activity.getTerminalView();
+                    if (selectView == null) return error(503, "unavailable", "Terminal view is not ready");
+                    if (activity.getCurrentSession() == null) return noSession(toolName);
+                    if (TOOL_TERMINAL_SELECT_ALL.equals(toolName)) {
+                        selectView.selectAllText();
+                    } else {
+                        selectView.startTextSelectionAtCursor();
+                    }
+                    return ok().put("selecting", selectView.isSelectingText());
                 }
 
                 case TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD:
