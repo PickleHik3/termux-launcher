@@ -25,6 +25,7 @@ import com.airbnb.lottie.LottieAnimationView;
 import com.airbnb.lottie.LottieDrawable;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.shared.termux.font.NerdFontSpans;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.text.SimpleDateFormat;
@@ -77,6 +78,11 @@ public final class WeatherCardView extends LinearLayout {
     private final TextView mConditionLine;
     private final TextView mRangeLine;
     private final LottieAnimationView mCurrentIcon;
+    private final LinearLayout mStatsRow;
+    private final TextView mWindValue;
+    private final TextView mHumidityValue;
+    private final TextView mRainValue;
+    private final TextView mUvValue;
     private final WeatherHourlyGraphView mGraph;
     private final LinearLayout mWeekList;
     private final LinearLayout mFooter;
@@ -198,6 +204,20 @@ public final class WeatherCardView extends LinearLayout {
         iconParams.setMarginStart(dp(12));
         headline.addView(mCurrentIcon, iconParams);
 
+        // ---- current conditions: wind, humidity, rain chance and UV in one strip
+        mStatsRow = new LinearLayout(context);
+        mStatsRow.setOrientation(HORIZONTAL);
+        mStatsRow.setPadding(dp(10), dp(8), dp(10), dp(8));
+        mStatsRow.setBackground(pill(ColorUtils.setAlphaComponent(mPanel, 38), 0, 14));
+        LayoutParams statsParams = new LayoutParams(
+            LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
+        statsParams.topMargin = dp(12);
+        addView(mStatsRow, statsParams);
+        mWindValue = statCell(context, R.string.weather_card_stat_wind);
+        mHumidityValue = statCell(context, R.string.weather_card_stat_humidity);
+        mRainValue = statCell(context, R.string.weather_card_stat_rain);
+        mUvValue = statCell(context, R.string.weather_card_stat_uv);
+
         // ---- forecast: one of these two is visible at a time
         mGraph = new WeatherHourlyGraphView(context);
         mGraph.setColors(mTertiary, mOnSurface);
@@ -316,6 +336,7 @@ public final class WeatherCardView extends LinearLayout {
         playAnimation(mCurrentIcon,
             WeatherController.animationAssetFor(weather.currentCode, weather.currentIsDay));
 
+        bindStats(weather);
         bindFooter(weather);
         mAttribution.setText(attributionLine(weather));
         rebuildForecast();
@@ -337,6 +358,7 @@ public final class WeatherCardView extends LinearLayout {
     private void setVisibleSections(boolean valid) {
         mUnavailable.setVisibility(valid ? GONE : VISIBLE);
         mHeadline.setVisibility(valid ? VISIBLE : GONE);
+        if (!valid) mStatsRow.setVisibility(GONE);
         mFooter.setVisibility(valid ? VISIBLE : GONE);
         mAttribution.setVisibility(valid ? VISIBLE : GONE);
         mLocation.setVisibility(valid ? VISIBLE : GONE);
@@ -373,6 +395,46 @@ public final class WeatherCardView extends LinearLayout {
         long ageMinutes = Math.max(0,
             (System.currentTimeMillis() - weather.fetchedAtMs) / 60_000L);
         return getContext().getString(R.string.weather_card_attribution, ageMinutes);
+    }
+
+    /**
+     * The conditions strip. Each cell hides alone when its figure is missing, and the strip goes
+     * with them when every cell is empty, so a lean provider answer never leaves a blank band.
+     */
+    private void bindStats(@NonNull WeatherController.Weather weather) {
+        boolean any = false;
+        any |= bindStat(mWindValue, "", Double.isNaN(weather.windKmh) ? null
+            : getContext().getString(R.string.weather_card_stat_wind_value,
+                Math.round(weather.windKmh)));
+        any |= bindStat(mHumidityValue, "", Double.isNaN(weather.humidityPct) ? null
+            : Math.round(weather.humidityPct) + "%");
+        int rain = nextHourPrecipProb();
+        any |= bindStat(mRainValue, "", rain < 0 ? null : rain + "%");
+        any |= bindStat(mUvValue, "", Double.isNaN(weather.uvIndexMax) ? null
+            : String.valueOf(Math.round(weather.uvIndexMax)));
+        mStatsRow.setVisibility(any ? VISIBLE : GONE);
+    }
+
+    private boolean bindStat(@NonNull TextView value, @NonNull String glyph,
+                             @Nullable String text) {
+        View cell = (View) value.getParent();
+        if (text == null) {
+            cell.setVisibility(GONE);
+            return false;
+        }
+        cell.setVisibility(VISIBLE);
+        value.setText(NerdFontSpans.span(getContext(), glyph + " " + text));
+        return true;
+    }
+
+    /** Precipitation probability for the hour being lived through, -1 when the data lacks it. */
+    private int nextHourPrecipProb() {
+        String cutoff = hourCutoff();
+        for (WeatherController.Hourly h : mWeather.hourly) {
+            if (h.iso.compareTo(cutoff) < 0) continue;
+            return h.precipProb;
+        }
+        return -1;
     }
 
     private void bindFooter(@NonNull WeatherController.Weather weather) {
@@ -459,7 +521,7 @@ public final class WeatherCardView extends LinearLayout {
     private WeatherHourlyGraphView.Point point(boolean first, @NonNull WeatherController.Hourly h) {
         return new WeatherHourlyGraphView.Point(
             first ? getContext().getString(R.string.weather_card_now) : hourLabel(h.iso),
-            fmtTemp(h.tempC), h.tempC);
+            fmtTemp(h.tempC), h.tempC, h.precipProb);
     }
 
     private void rebuildWeek() {
@@ -497,6 +559,15 @@ public final class WeatherCardView extends LinearLayout {
         label.setLetterSpacing(0.1f);
         label.setTextColor(today ? mOnSurface : ColorUtils.setAlphaComponent(mOnSurface, 153));
         row.addView(label, new LayoutParams(dp(42), LayoutParams.WRAP_CONTENT));
+
+        // The day's sky, so the week reads as weather and not as a bare table of numbers.
+        TextView glyph = new TextView(getContext());
+        glyph.setText(NerdFontSpans.span(getContext(),
+            WeatherController.glyphFor(day.code)));
+        glyph.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        glyph.setGravity(Gravity.CENTER);
+        glyph.setTextColor(today ? mTertiary : ColorUtils.setAlphaComponent(mOnSurface, 179));
+        row.addView(glyph, new LayoutParams(dp(24), LayoutParams.WRAP_CONTENT));
 
         TextView low = new TextView(getContext());
         low.setText(fmtTemp(day.minC));
@@ -543,6 +614,33 @@ public final class WeatherCardView extends LinearLayout {
         view.setFailureListener(error -> view.setVisibility(INVISIBLE));
         view.setAnimation(assetPath);
         view.playAnimation();
+    }
+
+    /** One column of the conditions strip: the reading over its small label. Returns the value. */
+    private TextView statCell(@NonNull Context context, int labelRes) {
+        LinearLayout cell = new LinearLayout(context);
+        cell.setOrientation(VERTICAL);
+        cell.setGravity(Gravity.CENTER_HORIZONTAL);
+        mStatsRow.addView(cell, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView value = new TextView(context);
+        value.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+        value.setTextColor(ColorUtils.setAlphaComponent(mOnSurface, 230));
+        value.setSingleLine(true);
+        cell.addView(value, new LayoutParams(
+            LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
+
+        TextView label = new TextView(context);
+        label.setText(labelRes);
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8.5f);
+        label.setTypeface(Typeface.MONOSPACE);
+        label.setLetterSpacing(0.12f);
+        label.setTextColor(ColorUtils.setAlphaComponent(mOnSurface, 128));
+        LayoutParams labelParams = new LayoutParams(
+            LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
+        labelParams.topMargin = dp(2);
+        cell.addView(label, labelParams);
+        return value;
     }
 
     private TextView footerClock(@NonNull Context context) {

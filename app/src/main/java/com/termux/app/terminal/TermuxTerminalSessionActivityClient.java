@@ -416,9 +416,19 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     public void setCurrentSession(TerminalSession session) {
         if (session == null)
             return;
+        // Which way the session list was walked, for the vertical arrival: sessions move on the
+        // other axis from windows, so the animation itself says which switch just happened.
+        // Captured before the switch, and only when both ends are real tabs — a brand-new shell
+        // arriving is not travel between two sessions.
+        TerminalSession previous = mActivity.getCurrentTabPrimary();
+        if (previous == null) previous = mActivity.getCurrentSession();
+        int fromIndex = previous == null ? -1 : mActivity.getDrawerIndexOfSession(previous);
+        int toIndex = mActivity.getDrawerIndexOfSession(session);
         // Route through the split-pane model: shows the session's tab (primary + optional
         // secondary pane) and focuses the pane displaying this session.
         if (mActivity.activateSessionInPanes(session)) {
+            if (fromIndex >= 0 && toIndex >= 0 && fromIndex != toIndex)
+                mActivity.animateTerminalSessionArrival(toIndex >= fromIndex ? 1 : -1);
             // notify about switched session if not already displaying the session
             notifyOfSessionChange();
         }

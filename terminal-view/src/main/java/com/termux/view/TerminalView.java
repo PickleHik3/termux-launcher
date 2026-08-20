@@ -2093,6 +2093,15 @@ public final class TerminalView extends View {
         return Math.max(0f, (getWidth() - contentWidth) / 2f);
     }
 
+    /**
+     * Hide or show this pane's own text cursor. Used by the split-pane layer so only the focused
+     * pane carries one, and so both ends of a cursor smear can be dark while the smear itself is
+     * the cursor in flight.
+     */
+    public void setCursorSuppressed(boolean suppressed) {
+        if (mRenderer != null && mRenderer.setCursorSuppressed(suppressed)) invalidate();
+    }
+
     public int getTopRow() {
         return mTopRow;
     }

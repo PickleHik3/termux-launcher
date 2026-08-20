@@ -315,6 +315,34 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_STATUS_BAR_CORNER_RADIUS = 40;
 
         /**
+         * Terminal glass pane, available while the terminal border is on: wallpaper blur radius
+         * (dp, 0 disables) and film grain (percent) localised to the bordered terminal area.
+         * Both default off so the border alone stays the plain outline it always was.
+         */
+        public static final String KEY_TERMINAL_GLASS_BLUR_RADIUS = "terminal_glass_blur_radius";
+        public static final int DEFAULT_TERMINAL_GLASS_BLUR_RADIUS = 0;
+        public static final String KEY_TERMINAL_GLASS_GRAIN = "terminal_glass_grain";
+        public static final int DEFAULT_TERMINAL_GLASS_GRAIN = 0;
+
+        /**
+         * Opacity of the wallpaper behind every surface (percent): 100 shows the wallpaper as-is,
+         * lower values dim it toward black before any surface tint is painted over it. Needed once
+         * the terminal tint could be localised to its own glass pane — until then the terminal
+         * opacity doubled as the whole-window dim.
+         */
+        public static final String KEY_WALLPAPER_BACKDROP_OPACITY = "wallpaper_backdrop_opacity";
+        public static final int DEFAULT_WALLPAPER_BACKDROP_OPACITY = 100;
+
+        /**
+         * Gap between tiled terminal panes in dp — the surface editor's Inner padding. The old
+         * fixed 1dp hairline is the default; with the glass panes on, the gap is what makes each
+         * pane read as its own floating terminal rather than a cell of one sheet.
+         */
+        public static final String KEY_TERMINAL_PANE_GAP = "terminal_pane_gap";
+        public static final int DEFAULT_TERMINAL_PANE_GAP = 1;
+        public static final int MAX_TERMINAL_PANE_GAP = 24;
+
+        /**
          * Symmetric left/right inset in dp between a surface and the physical screen edges. The
          * default matches the floating capsule's redline outer margin; the edge-to-edge default
          * shape only honours whatever is configured beyond that baseline.

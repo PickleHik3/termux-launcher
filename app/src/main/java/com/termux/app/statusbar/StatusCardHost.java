@@ -24,12 +24,22 @@ import androidx.annotation.Nullable;
 
 /**
  * Hosts the single status-bar detail card or dropdown panel. Exactly one is shown at a time; opening a new one
- * dismisses the previous. The card is a {@link PopupWindow} anchored beneath the tapped widget and
+ * dismisses the previous. The card is a {@link PopupWindow} that drops beneath the status bar and
  * dismisses on an outside tap, on Back, or whenever {@link #dismiss()} is called (e.g. a window
  * change). Width is constrained to the portrait-screen bounds; the popup itself keeps the card on
  * screen vertically.
+ *
+ * <p>Every detail card opens in the same place — horizontally centred in the window at
+ * {@link #STANDARD_WIDTH_DP}, just below the bar — regardless of which widget was tapped. The bar's
+ * widgets are entry points to one shared surface, not owners of their own popups; a card that
+ * jumped to sit under whichever icon happened to be hit would read as several unrelated windows.
+ * Only the leading-edge panel (the sessions list) keeps its anchor alignment, since it is a
+ * dropdown of the chip itself.
  */
 public final class StatusCardHost {
+
+    /** One width for every detail card, so the stats, weather and future cards share a silhouette. */
+    public static final int STANDARD_WIDTH_DP = 360;
 
     /** Supplies the current status-bar styling so the card matches Default glass or the capsule. */
     public interface StyleProvider {
@@ -45,6 +55,7 @@ public final class StatusCardHost {
 
     @Nullable private PopupWindow mPopup;
     @Nullable private View mAnchor;
+    @Nullable private View mContent;
     @Nullable private View mContainer;
     @Nullable private View mDropEdge;
 
@@ -66,18 +77,22 @@ public final class StatusCardHost {
     }
 
     /**
-     * Show {@code content} in a card anchored beneath {@code anchor}. Any currently open card is
-     * dismissed first. {@code onDismiss} runs when this card goes away for any reason.
+     * Whether {@code content} is the view inside the open card. The toggle identity for cards that
+     * several widgets open — CPU and RAM both lead to the stats card, and a toggle keyed on the
+     * tapped widget would close-and-reopen the same card instead of just closing it.
+     */
+    public boolean isShowingContent(@Nullable View content) {
+        return isShowing() && content != null && mContent == content;
+    }
+
+    /**
+     * Show {@code content} in the standard card: {@link #STANDARD_WIDTH_DP} wide, centred beneath
+     * the bar. Any currently open card is dismissed first. {@code onDismiss} runs when this card
+     * goes away for any reason.
      */
     public void show(@NonNull View anchor, @NonNull View content, @NonNull StyleProvider style,
                      @Nullable Runnable onDismiss) {
-        show(anchor, content, style, 300, onDismiss);
-    }
-
-    /** Variant with a caller-selected portrait width; used by the horizontal weather forecast. */
-    public void show(@NonNull View anchor, @NonNull View content, @NonNull StyleProvider style,
-                     int desiredWidthDp, @Nullable Runnable onDismiss) {
-        show(anchor, content, style, desiredWidthDp, false, false, onDismiss);
+        show(anchor, content, style, STANDARD_WIDTH_DP, false, false, onDismiss);
     }
 
     /**
@@ -125,6 +140,7 @@ public final class StatusCardHost {
             if (mPopup == popup) {
                 mPopup = null;
                 mAnchor = null;
+                mContent = null;
                 mContainer = null;
             }
             if (dismissCallback != null) dismissCallback.run();
@@ -132,6 +148,7 @@ public final class StatusCardHost {
 
         mPopup = popup;
         mAnchor = anchor;
+        mContent = content;
         mContainer = container;
 
         if (animate) {
@@ -150,10 +167,10 @@ public final class StatusCardHost {
             });
         }
 
-        // Anchor the card's right edge under the widget so trailing widgets open cards that stay on
-        // screen, then drop it just below the status row. Panels instead keep the anchor's leading
-        // edge, which is where the leading session chip lives.
-        int xOffset = alignStart ? 0 : anchorRightAlignedXOffset(anchor, maxWidth);
+        // Cards open centred in the window — the standard place, whichever widget was tapped —
+        // and drop just below the status row. Panels instead keep the anchor's leading edge,
+        // which is where the leading session chip lives.
+        int xOffset = alignStart ? 0 : windowCenteredXOffset(anchor, maxWidth);
         popup.showAsDropDown(anchor, xOffset, dropYOffset(anchor), Gravity.START);
         if (animate) {
             container.requestFocus();
@@ -166,6 +183,7 @@ public final class StatusCardHost {
             PopupWindow popup = mPopup;
             mPopup = null;   // guard against re-entrancy through the dismiss listener
             mAnchor = null;
+            mContent = null;
             mContainer = null;
             popup.dismiss();
         }
@@ -181,6 +199,7 @@ public final class StatusCardHost {
         }
         mPopup = null;
         mAnchor = null;
+        mContent = null;
         mContainer = null;
         container.animate().cancel();
         container.animate()
@@ -224,10 +243,15 @@ public final class StatusCardHost {
         return offset;
     }
 
-    private static int anchorRightAlignedXOffset(@NonNull View anchor, int cardWidth) {
-        // showAsDropDown aligns the popup's start to the anchor's start; shift left so the card's
-        // right edge lines up with the anchor's right edge (keeps trailing-widget cards on screen).
-        return anchor.getWidth() - cardWidth;
+    private static int windowCenteredXOffset(@NonNull View anchor, int cardWidth) {
+        // showAsDropDown aligns the popup's start to the anchor's start; shift so the card sits
+        // centred in the window no matter where in the bar the tapped widget lives.
+        int[] location = new int[2];
+        anchor.getLocationInWindow(location);
+        View root = anchor.getRootView();
+        int windowWidth = root != null && root.getWidth() > 0 ? root.getWidth()
+            : anchor.getResources().getDisplayMetrics().widthPixels;
+        return (windowWidth - cardWidth) / 2 - location[0];
     }
 
     private static int portraitMaxWidthPx(@NonNull Context context, int desiredWidthDp) {

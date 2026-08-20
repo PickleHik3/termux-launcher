@@ -33,11 +33,15 @@ public final class WeatherHourlyGraphView extends android.view.View {
         @NonNull final String hourLabel;
         @NonNull final String tempLabel;
         final double tempC;
+        /** Precipitation probability in percent, -1 when unknown. */
+        final int precipProb;
 
-        public Point(@NonNull String hourLabel, @NonNull String tempLabel, double tempC) {
+        public Point(@NonNull String hourLabel, @NonNull String tempLabel, double tempC,
+                     int precipProb) {
             this.hourLabel = hourLabel;
             this.tempLabel = tempLabel;
             this.tempC = tempC;
+            this.precipProb = precipProb;
         }
     }
 
@@ -48,15 +52,21 @@ public final class WeatherHourlyGraphView extends android.view.View {
     /** Vertical room the dots may travel through, inside the label bands above and below. */
     private static final float PLOT_HEIGHT_DP = 34f;
     private static final float HEIGHT_DP = 96f;
+    /** Extra band under the hours for rain chances, taken only when there is one to print. */
+    private static final float PRECIP_BAND_DP = 13f;
+    /** A chance below this reads as dry; printing "0%" five times says nothing. */
+    private static final int PRECIP_MIN_PERCENT = 10;
 
     private final List<Point> mPoints = new ArrayList<>();
     private final Paint mDotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mHaloPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint mTempPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint mHourPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+    private final TextPaint mPrecipPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
 
     private int mAccent;
     private int mOnSurface;
+    private boolean mShowPrecip;
 
     public WeatherHourlyGraphView(@NonNull Context context) {
         super(context);
@@ -65,6 +75,9 @@ public final class WeatherHourlyGraphView extends android.view.View {
         mHourPaint.setTextAlign(Paint.Align.CENTER);
         mHourPaint.setTextSize(sp(10.5f));
         mHourPaint.setTypeface(Typeface.MONOSPACE);
+        mPrecipPaint.setTextAlign(Paint.Align.CENTER);
+        mPrecipPaint.setTextSize(sp(9f));
+        mPrecipPaint.setTypeface(Typeface.MONOSPACE);
     }
 
     /** @param accent colour of the current hour's dot and label; the rest fade back from it. */
@@ -76,12 +89,18 @@ public final class WeatherHourlyGraphView extends android.view.View {
 
     public void setPoints(@Nullable List<Point> points) {
         mPoints.clear();
+        boolean showPrecip = false;
         if (points != null) {
             for (Point p : points) {
                 if (Double.isNaN(p.tempC)) continue;
                 mPoints.add(p);
+                showPrecip |= p.precipProb >= PRECIP_MIN_PERCENT;
                 if (mPoints.size() >= MAX_POINTS) break;
             }
+        }
+        if (showPrecip != mShowPrecip) {
+            mShowPrecip = showPrecip;
+            requestLayout();
         }
         invalidate();
     }
@@ -92,7 +111,8 @@ public final class WeatherHourlyGraphView extends android.view.View {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        setMeasuredDimension(resolveSize(0, widthMeasureSpec), Math.round(dp(HEIGHT_DP)));
+        setMeasuredDimension(resolveSize(0, widthMeasureSpec),
+            Math.round(dp(HEIGHT_DP) + (mShowPrecip ? dp(PRECIP_BAND_DP) : 0f)));
     }
 
     @Override
@@ -146,6 +166,14 @@ public final class WeatherHourlyGraphView extends android.view.View {
 
             mHourPaint.setColor(now ? mAccent : ColorUtils.setAlphaComponent(mOnSurface, 133));
             canvas.drawText(point.hourLabel, x, y + dp(21f), mHourPaint);
+
+            // Rain chance rides under its hour, and only when it is worth an umbrella thought;
+            // a row of "0%" would spend the band saying the sky is dry five different ways.
+            if (mShowPrecip && point.precipProb >= PRECIP_MIN_PERCENT) {
+                mPrecipPaint.setColor(ColorUtils.setAlphaComponent(mAccent, 200));
+                canvas.drawText(point.precipProb + "%", x, y + dp(21f) + dp(PRECIP_BAND_DP),
+                    mPrecipPaint);
+            }
         }
     }
 

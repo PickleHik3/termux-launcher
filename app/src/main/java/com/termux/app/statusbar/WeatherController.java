@@ -48,11 +48,14 @@ public final class WeatherController {
         public final double tempC;
         public final int code;
         public final boolean isDay;
-        Hourly(@NonNull String iso, double tempC, int code, boolean isDay) {
+        /** Precipitation probability in percent, -1 when the provider omitted it. */
+        public final int precipProb;
+        Hourly(@NonNull String iso, double tempC, int code, boolean isDay, int precipProb) {
             this.iso = iso;
             this.tempC = tempC;
             this.code = code;
             this.isDay = isDay;
+            this.precipProb = precipProb;
         }
     }
 
@@ -77,6 +80,12 @@ public final class WeatherController {
         public double feelsLikeC = Double.NaN;
         public int currentCode;
         public boolean currentIsDay = true;
+        /** Current relative humidity in percent, NaN when the provider omitted it. */
+        public double humidityPct = Double.NaN;
+        /** Current 10m wind speed in km/h, NaN when the provider omitted it. */
+        public double windKmh = Double.NaN;
+        /** Today's UV index maximum, NaN when the provider omitted it. */
+        public double uvIndexMax = Double.NaN;
         @NonNull public List<Hourly> hourly = new ArrayList<>();
         @NonNull public List<Daily> daily = new ArrayList<>();
         /** Today's local sunrise/sunset as {@code HH:mm}, empty when unknown. */
@@ -163,8 +172,10 @@ public final class WeatherController {
             String url = String.format(Locale.ROOT,
                 "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f"
                     + "&current=temperature_2m,apparent_temperature,weather_code,is_day"
-                    + "&hourly=temperature_2m,weather_code,is_day"
+                    + ",relative_humidity_2m,wind_speed_10m"
+                    + "&hourly=temperature_2m,weather_code,is_day,precipitation_probability"
                     + "&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset"
+                    + ",uv_index_max"
                     + "&timezone=auto&forecast_days=7",
                 location.getLatitude(), location.getLongitude());
             String body = httpGet(url);
@@ -189,6 +200,8 @@ public final class WeatherController {
             w.feelsLikeC = current.optDouble("apparent_temperature", Double.NaN);
             w.currentCode = current.optInt("weather_code", 0);
             w.currentIsDay = current.optInt("is_day", 1) != 0;
+            w.humidityPct = current.optDouble("relative_humidity_2m", Double.NaN);
+            w.windKmh = current.optDouble("wind_speed_10m", Double.NaN);
         }
         JSONObject hourly = root.optJSONObject("hourly");
         if (hourly != null) {
@@ -196,10 +209,12 @@ public final class WeatherController {
             JSONArray temp = hourly.optJSONArray("temperature_2m");
             JSONArray code = hourly.optJSONArray("weather_code");
             JSONArray isDay = hourly.optJSONArray("is_day");
+            JSONArray precip = hourly.optJSONArray("precipitation_probability");
             if (time != null && temp != null && code != null) {
                 for (int i = 0; i < time.length(); i++) {
                     w.hourly.add(new Hourly(time.optString(i), temp.optDouble(i), code.optInt(i),
-                        isDay == null || isDay.optInt(i, 1) != 0));
+                        isDay == null || isDay.optInt(i, 1) != 0,
+                        precip == null ? -1 : precip.optInt(i, -1)));
                 }
             }
         }
@@ -217,6 +232,8 @@ public final class WeatherController {
             // Today's pair only: the card draws the daylight track for the day it is showing.
             w.sunrise = clockOf(daily.optJSONArray("sunrise"));
             w.sunset = clockOf(daily.optJSONArray("sunset"));
+            JSONArray uv = daily.optJSONArray("uv_index_max");
+            if (uv != null && uv.length() > 0) w.uvIndexMax = uv.optDouble(0, Double.NaN);
         }
     }
 
@@ -368,6 +385,9 @@ public final class WeatherController {
         dst.locationName = src.locationName;
         dst.currentCode = src.currentCode;
         dst.currentIsDay = src.currentIsDay;
+        dst.humidityPct = src.humidityPct;
+        dst.windKmh = src.windKmh;
+        dst.uvIndexMax = src.uvIndexMax;
         dst.hourly = src.hourly;
         dst.daily = src.daily;
         dst.fetchedAtMs = src.fetchedAtMs;
@@ -473,5 +493,26 @@ public final class WeatherController {
         if (code == 96 || code == 99) return "Thunderstorm with hail";
         if (code >= 95) return "Thunderstorm";
         return "—";
+    }
+
+    /**
+     * Bundled Nerd Font weather glyph for a WMO code, for the card's week rows, where a Lottie
+     * view per row would be seven animations deep. Day variants throughout: a daily code
+     * describes the day, not a moment with an is_day flag.
+     */
+    @NonNull
+    public static String glyphFor(int code) {
+        if (code == 0) return "";                  // clear
+        if (code == 1) return "";                  // mainly clear
+        if (code == 2) return "";                  // partly cloudy
+        if (code == 3) return "";                  // overcast
+        if (code == 45 || code == 48) return "";   // fog
+        if (code >= 51 && code <= 57) return "";   // drizzle
+        if (code >= 61 && code <= 67) return "";   // rain
+        if (code >= 71 && code <= 77) return "";   // snow
+        if (code >= 80 && code <= 82) return "";   // showers
+        if (code >= 85 && code <= 86) return "";   // snow showers
+        if (code >= 95) return "";                 // thunderstorm
+        return "";
     }
 }

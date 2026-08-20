@@ -8,6 +8,7 @@ import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -16,17 +17,22 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.animation.DecelerateInterpolator;
+import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
+import androidx.core.view.OneShotPreDrawListener;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.DockPlankController;
 import com.termux.terminal.TerminalSession;
+import com.termux.terminal.TerminalEmulator;
+import com.termux.terminal.TextStyle;
 import com.termux.view.TerminalView;
 
 import java.util.ArrayList;
@@ -120,6 +126,30 @@ public class TerminalPaneController {
     private static final int GLOW_ALPHA = 165;
     /** Steps in the hand-ramped fallback glow, for the API levels without a blur mask filter. */
     private static final int GLOW_RAMP_STEPS = 12;
+
+    /**
+     * How the panes dress themselves as glass. Supplied by the activity, which owns the shared
+     * pre-blurred wallpaper frame, the terminal tint and the surface-editor preferences; the
+     * controller only asks what to paint and how far apart to sit.
+     */
+    public interface PaneSurfaceStyle {
+        /** True while each pane should carry its own glass slab (frost, tint, grain, rim). */
+        boolean isPaneGlassActive();
+        /** The shared pre-blurred wallpaper frame at the configured radius, or null for none. */
+        @Nullable android.graphics.Bitmap paneGlassBlurFrame();
+        /** That frame's rect in screen coordinates. */
+        @NonNull android.graphics.Rect paneGlassBlurFrameRect();
+        /** Vibrancy filter applied to the frost, shared with every other glass surface. */
+        @Nullable android.graphics.ColorFilter paneGlassFrostFilter();
+        /** The terminal tint painted over the frost. */
+        int paneGlassTintColor();
+        /** Film grain layer for one pane, or null while grain is off. */
+        @Nullable android.graphics.drawable.Drawable paneGlassGrainLayer();
+        /** Corner radius of a pane slab, in px. */
+        float paneGlassCornerRadiusPx();
+        /** Gap between tiled panes, in dp — the surface editor's Inner padding. */
+        int paneGapDp();
+    }
 
     /** Callbacks into the hosting activity. */
     public interface Host {
@@ -229,6 +259,7 @@ public class TerminalPaneController {
     }
 
     private final Host mHost;
+    @Nullable private PaneSurfaceStyle mSurfaceStyle;
     private final FrameLayout mHostView;
     private final LayoutInflater mInflater;
 
@@ -241,6 +272,8 @@ public class TerminalPaneController {
     /** Floating chrome containers of the rendered window, rebuilt on every render. */
     private final Map<Leaf, FloatingPaneContainer> mFloatContainers = new HashMap<>();
     private final PaneInteractionOverlay mInteractionOverlay;
+    /** Ghosts of closed panes and the cursor's flight between panes; above everything. */
+    private final PaneMotionOverlayView mMotionOverlay;
 
     /** Nested controller-wide lease covering every source of transient host geometry. */
     private int mHostSurfaceResizeDepth;
@@ -248,13 +281,18 @@ public class TerminalPaneController {
     @Nullable private Window mActiveWindow;
     @Nullable private Leaf mMaximizedLeaf;
 
+    /** Fallback gap between tiled panes when no surface style is attached. */
     private static final int DIVIDER_DP = 1;
+
+    /** Radius a pane slab takes when the style has no opinion. */
+    private static final int PANE_GLASS_RADIUS_DP = 10;
 
     public TerminalPaneController(Host host, FrameLayout hostView, LayoutInflater inflater) {
         mHost = host;
         mHostView = hostView;
         mInflater = inflater;
         mInteractionOverlay = new PaneInteractionOverlay();
+        mMotionOverlay = new PaneMotionOverlayView(hostView.getContext());
         // Fractional float bounds only become pixels against the live host size, so a rotation or
         // keyboard resize must re-lay every float; the clamp keeps each drag handle reachable.
         mHostView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
@@ -537,6 +575,14 @@ public class TerminalPaneController {
     /** Make {@code w} the visible window and render its pane tree. */
     public void showWindow(Window w) {
         if (w == null) return;
+        // A different window is different content: a cursor flight or ghost captured against the
+        // outgoing one would finish over panes it never belonged to. The focusSession() that
+        // follows a window switch is also refused a flight — its geometry belongs to a tree that
+        // has just been rebuilt, and the window arrival already carries the movement.
+        if (mActiveWindow != w) {
+            mMotionOverlay.clearMotion();
+            mSuppressNextCursorFlight = true;
+        }
         mActiveWindow = w;
         if (LAYOUT_STACK.equals(w.layoutPolicy) && w.active != null) {
             // Stack lives in the foreground-presentation field, not the tree, so re-entering a
@@ -666,6 +712,9 @@ public class TerminalPaneController {
         if (mActiveWindow == null) return;
         Leaf leaf = findLeafInWindow(mActiveWindow, session);
         if (leaf != null) {
+            TerminalSession previous = mActiveWindow.active != null
+                ? mActiveWindow.active.session : null;
+            flyCursorBetweenPanes(previous, session);
             mActiveWindow.active = leaf;
             if (mMaximizedLeaf != null) mMaximizedLeaf = leaf;
             bringFloatToFront(mActiveWindow, leaf);
@@ -737,6 +786,7 @@ public class TerminalPaneController {
         // insertion just produced. This is what makes the layout a policy rather than a one-shot.
         reapplyLayoutPolicy(mActiveWindow);
         render();
+        animatePaneEntry(newSession);
         // Splitting resizes the old pane (fewer cols/rows), which reflows its buffer and can
         // leave the view scrolled up (prompt jumps to the top). Once the resize settles, scroll
         // the old pane back to the bottom so its prompt stays where the shell repainted it.
@@ -761,6 +811,9 @@ public class TerminalPaneController {
         }
         if (owningLeaf == null) return FINISHED_UNKNOWN;
         if (mMaximizedLeaf == owningLeaf) mMaximizedLeaf = null;
+        // Captured before any of the branches below detach the view: the ghost needs the bounds
+        // the pane still has.
+        if (owner == mActiveWindow) ghostRemovedPane(session);
 
         if (owner.floating.contains(owningLeaf)) {
             // A float leaves no hole in the tree; drop it and its chrome, then refocus the tree.
@@ -1293,22 +1346,44 @@ public class TerminalPaneController {
             return;
         }
         mHidingScratchpadLeaf = leaf;
+        // Removal runs from a listener rather than withEndAction, because withEndAction is skipped
+        // on cancel — and render() tears this container out from under the animation. Left on
+        // withEndAction, a render during the hide re-attached a fresh container at full opacity (the
+        // scratchpad popped back, then vanished), and a cancel that never ran the action wedged
+        // mHidingScratchpadLeaf so toggleScratchpad answered HIDDEN for the rest of the session.
+        final Runnable onceOnly = new Runnable() {
+            private boolean done;
+            @Override public void run() {
+                if (done) return;
+                done = true;
+                if (mHidingScratchpadLeaf == leaf) mHidingScratchpadLeaf = null;
+                remove.run();
+            }
+        };
         container.animate().cancel();
         container.animate()
             .alpha(0f)
             .translationY(dp(10))
             .scaleX(0.97f).scaleY(0.97f)
             .setDuration(SCRATCHPAD_HIDE_DURATION_MS)
-            .setInterpolator(new android.view.animation.PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
-            .withEndAction(remove)
+            .setInterpolator(PaneMotionOverlayView.standardInterpolator())
+            .setListener(new android.animation.AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(android.animation.Animator a) {
+                    onceOnly.run();
+                }
+            })
             .start();
     }
 
+    /**
+     * Reduce-motion check. {@link ValueAnimator#areAnimatorsEnabled()} is the framework's own
+     * cached read of the same setting; the previous {@code Settings.Global} lookup hit the content
+     * resolver on every focus change, which is every tap on a pane.
+     */
     private boolean arePaneAnimationsEnabled() {
         try {
-            return android.provider.Settings.Global.getFloat(
-                mHostView.getContext().getContentResolver(),
-                android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f;
+            return Build.VERSION.SDK_INT < Build.VERSION_CODES.O
+                || android.animation.ValueAnimator.areAnimatorsEnabled();
         } catch (Throwable t) {
             return true;
         }
@@ -1328,7 +1403,7 @@ public class TerminalPaneController {
             .translationY(0f)
             .scaleX(1f).scaleY(1f)
             .setDuration(SCRATCHPAD_SHOW_DURATION_MS)
-            .setInterpolator(new android.view.animation.PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
+            .setInterpolator(PaneMotionOverlayView.standardInterpolator())
             .start();
     }
 
@@ -1415,6 +1490,13 @@ public class TerminalPaneController {
             // what ratcheted the scratchpad smaller every time the keyboard opened and closed.
             leaf.appliedFloatFrac = new RectF(frac);
         }
+        // The frost is positioned in screen space and a float moves by its container's params, so
+        // the pane frame's own layout coordinates never change — nothing would tell its glass that
+        // it is now sampling a different part of the wallpaper.
+        FrameLayout movedFrame = mPaneFrames.get(leaf.session);
+        PaneGlassBackdropView movedGlass = movedFrame == null
+            ? null : movedFrame.findViewById(R.id.terminal_pane_glass);
+        if (movedGlass != null) movedGlass.invalidateGlassPosition();
         FrameLayout.LayoutParams params = container.getLayoutParams() instanceof FrameLayout.LayoutParams
             ? (FrameLayout.LayoutParams) container.getLayoutParams()
             : new FrameLayout.LayoutParams(0, 0);
@@ -1566,9 +1648,13 @@ public class TerminalPaneController {
     // --- Rendering ---
 
     private void render() {
+        captureMoveOrigins();
         mHostView.removeAllViews();
         mSplitLayouts.clear();
         mFloatContainers.clear();
+        // Whatever the scratchpad's hide animation was holding has just been detached; its guard
+        // must not outlive it or the scratchpad can never be shown again.
+        mHidingScratchpadLeaf = null;
         if (mActiveWindow == null) {
             mHost.onPanesRendered();
             return;
@@ -1591,8 +1677,14 @@ public class TerminalPaneController {
         if (mMaximizedLeaf == null) {
             for (Leaf leaf : mActiveWindow.floating) attachFloatContainer(leaf);
         }
+        // Last child: a ghost or a cursor flight has to draw over the panes and the floats both.
+        if (mMotionOverlay.getParent() instanceof ViewGroup)
+            ((ViewGroup) mMotionOverlay.getParent()).removeView(mMotionOverlay);
+        mHostView.addView(mMotionOverlay, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         updateActiveBorders();
         focusActiveView();
+        animateMoveFromOrigins();
         mHost.onPanesRendered();
     }
 
@@ -1601,6 +1693,9 @@ public class TerminalPaneController {
         FloatingPaneContainer container = new FloatingPaneContainer(leaf);
         mFloatContainers.put(leaf, container);
         mHostView.addView(container, new FrameLayout.LayoutParams(0, 0));
+        // render() puts the motion overlay last on purpose; a float attached afterwards (the cheap
+        // addFloatOnly path) would otherwise draw over the ghosts and smears it must sit under.
+        if (mMotionOverlay.getParent() == mHostView) mHostView.bringChildToFront(mMotionOverlay);
         applyFloatBounds(leaf, container);
         maybeAnimateFloatEntry(leaf, container);
     }
@@ -1631,6 +1726,421 @@ public class TerminalPaneController {
         return true;
     }
 
+    // --- Movement: niri's render-offset model, as FLIP ---
+
+    /** How long a pane takes to slide from where it was to where the layout put it. */
+    private static final long PANE_MOVE_MS = 240L;
+
+    /** Screen bounds of every live pane frame, captured just before a re-render replaces them. */
+    private final Map<TerminalSession, Rect> mMoveOrigins = new HashMap<>();
+
+    /**
+     * Remember where every pane is, so the next layout can be animated from here.
+     *
+     * <p>niri's model: layout is always final, and motion is a render offset that decays to zero —
+     * never a series of layouts. On Android that is FLIP: read the old bounds, let layout happen
+     * once, then set {@code translationX/Y} to the difference and animate it away. Because layout
+     * runs exactly once, a moving pane reflows its PTY once, which is the whole reason not to
+     * animate this by re-laying out repeatedly.
+     */
+    private void captureMoveOrigins() {
+        mMoveOrigins.clear();
+        if (!arePaneAnimationsEnabled()) return;
+        int[] location = new int[2];
+        for (Map.Entry<TerminalSession, FrameLayout> entry : mPaneFrames.entrySet()) {
+            FrameLayout frame = entry.getValue();
+            if (!canAnimateView(frame)) continue;
+            frame.getLocationOnScreen(location);
+            mMoveOrigins.put(entry.getKey(), new Rect(location[0], location[1],
+                location[0] + frame.getWidth(), location[1] + frame.getHeight()));
+        }
+    }
+
+    /**
+     * Slide each surviving pane from where it used to be to where it now is.
+     *
+     * <p>Position only. A size change would need niri's two-texture crossfade, and this code has
+     * already — correctly — refused to hold full-pane bitmaps, so a pane that resizes simply
+     * arrives at its new size while it travels.
+     */
+    private void animateMoveFromOrigins() {
+        if (mMoveOrigins.isEmpty()) return;
+        final Map<TerminalSession, Rect> origins = new HashMap<>(mMoveOrigins);
+        mMoveOrigins.clear();
+        OneShotPreDrawListener.add(mHostView, () -> {
+            int[] location = new int[2];
+            for (Map.Entry<TerminalSession, Rect> entry : origins.entrySet()) {
+                FrameLayout frame = mPaneFrames.get(entry.getKey());
+                if (!canAnimateView(frame)) continue;
+                // The plank owns this frame's translation while a finger is on it; two owners of
+                // one property is a fight the user can see.
+                if (mPressedPlank != null && mPanePlanks.get(frame) == mPressedPlank) continue;
+                frame.getLocationOnScreen(location);
+                float dx = entry.getValue().left - location[0];
+                float dy = entry.getValue().top - location[1];
+                // Sub-pixel moves are layout noise, not movement. niri refuses anything under
+                // 10px for the same reason.
+                if (Math.abs(dx) < 1f && Math.abs(dy) < 1f) continue;
+                frame.animate().cancel();
+                frame.setTranslationX(dx);
+                frame.setTranslationY(dy);
+                frame.animate()
+                    .translationX(0f)
+                    .translationY(0f)
+                    .setDuration(PANE_MOVE_MS)
+                    .setInterpolator(PaneMotionOverlayView.standardInterpolator())
+                    .start();
+            }
+        });
+    }
+
+    // --- Pane appearance / disappearance / cursor travel ---
+
+    /** Hyprland-ish open: the pane pops in from slightly small rather than blinking into place. */
+    private static final long PANE_ENTER_MS = 200L;
+    private static final float PANE_ENTER_SCALE = 0.92f;
+
+    /**
+     * Play the entry animation on one pane frame. Runs after layout, because a freshly rendered
+     * frame has no size yet and a scale about an unmeasured centre lands in the wrong place.
+     */
+    private void animatePaneEntry(@Nullable TerminalSession session) {
+        if (session == null || !arePaneAnimationsEnabled()) return;
+        FrameLayout frame = mPaneFrames.get(session);
+        if (frame == null) return;
+        // The start state is set now, not inside the posted runnable. render() has only just added
+        // the frame and asked for a traversal, so a post runs BEFORE layout: the old version read a
+        // width of 0 and dropped the animation, and in the other ordering it flashed the pane at
+        // full opacity for a frame first. The float path (attachFloatContainer) always did this
+        // correctly; this is the same discipline.
+        frame.setAlpha(0f);
+        frame.setScaleX(PANE_ENTER_SCALE);
+        frame.setScaleY(PANE_ENTER_SCALE);
+        OneShotPreDrawListener.add(frame, () -> {
+            frame.animate().cancel();
+            frame.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(PANE_ENTER_MS)
+                .setInterpolator(PaneMotionOverlayView.standardInterpolator())
+                .withEndAction(() -> resetFrameTransform(frame))
+                .start();
+        });
+    }
+
+    /**
+     * Neutralise a frame's animated state. Frames are cached per session and re-attached by later
+     * renders, so an interrupted entry would otherwise hand back a permanently dimmed pane; this
+     * runs where frames are handed out, not only when an animation completes on its own.
+     */
+    private static void resetFrameTransform(@NonNull View frame) {
+        frame.animate().cancel();
+        frame.setAlpha(1f);
+        frame.setScaleX(1f);
+        frame.setScaleY(1f);
+        frame.setTranslationX(0f);
+        frame.setTranslationY(0f);
+    }
+
+    /**
+     * Leave a shrinking ghost where a pane was, before the tree closes over its space.
+     *
+     * <p>Captured as a rect rather than as a bitmap of the pane: a full-pane bitmap is several
+     * megabytes on a phone panel, allocated at the one moment the layout is already busy, and at
+     * this duration the frame's own outline is what the eye follows anyway.
+     */
+    private void ghostRemovedPane(@Nullable TerminalSession session) {
+        if (session == null || !arePaneAnimationsEnabled()) return;
+        FrameLayout frame = mPaneFrames.get(session);
+        // A pane nobody could see leaves no hole to fill: in stack or maximized layout every
+        // unfocused pane is off screen, and ghosting one paints a shrinking rectangle over content
+        // that never held it. niri skips closing an inactive tab for exactly this reason.
+        if (!canAnimateView(frame) || !canAnimateView(mMotionOverlay)) return;
+        int[] frameLocation = new int[2];
+        int[] overlayLocation = new int[2];
+        frame.getLocationOnScreen(frameLocation);
+        mMotionOverlay.getLocationOnScreen(overlayLocation);
+        RectF bounds = new RectF(frameLocation[0] - overlayLocation[0],
+            frameLocation[1] - overlayLocation[1],
+            frameLocation[0] - overlayLocation[0] + frame.getWidth(),
+            frameLocation[1] - overlayLocation[1] + frame.getHeight());
+        int fill = paneGlassActive() && mSurfaceStyle != null
+            ? mSurfaceStyle.paneGlassTintColor() : 0;
+        int rim = MaterialColors.getColor(mHostView.getContext(),
+            com.google.android.material.R.attr.colorOutlineVariant,
+            ContextCompat.getColor(mHostView.getContext(), R.color.termux_outline_variant));
+        mMotionOverlay.ghostPane(bounds, paneGlassRadiusPx(), fill, rim);
+    }
+
+    /**
+     * The cursor's flight between panes, the way neovide and kitty smear a cursor across a jump.
+     * Only for a real change of pane: a focus call that lands on the pane already focused, or on a
+     * pane whose cursor is scrolled out of view, has nothing to travel between.
+     */
+    private void flyCursorBetweenPanes(@Nullable TerminalSession from, @Nullable TerminalSession to) {
+        if (from == null || to == null || from == to) return;
+        if (mSuppressNextCursorFlight) {
+            mSuppressNextCursorFlight = false;
+            return;
+        }
+        if (!arePaneAnimationsEnabled() || !canAnimateView(mMotionOverlay)) return;
+        TerminalView source = mPaneViews.get(from);
+        TerminalView target = mPaneViews.get(to);
+        RectF fromRect = cursorRectInOverlay(source);
+        RectF toRect = cursorRectInOverlay(target);
+        if (fromRect == null || toRect == null) return;
+        // Both ends go dark for the flight: the smear IS the cursor while it travels, and a smear
+        // drawn between two cursors that stay lit reads as decoration flying between them rather
+        // than as one cursor moving. kitty masks the live cursor cell out of its trail to the same
+        // end. updateActiveBorders() restores the focused pane when the smear settles.
+        source.setCursorSuppressed(true);
+        target.setCursorSuppressed(true);
+        mMotionOverlay.flyCursor(fromRect, toRect, cursorColorOf(target),
+            target.getTerminalCellWidthPixels(), target.getTerminalCellHeightPixels(),
+            this::applyCursorOwnership);
+    }
+
+    /**
+     * Only the focused pane paints a cursor.
+     *
+     * <p>{@code TerminalEmulator.shouldCursorBeVisible} has no focus term, so without this every
+     * visible pane carries its own lit block and nothing on screen says which one the keyboard is
+     * talking to. Suppression is per view, so two panes showing the same session still resolve
+     * independently.
+     */
+    private void applyCursorOwnership() {
+        TerminalSession active = getActiveSession();
+        for (Map.Entry<TerminalSession, TerminalView> entry : mPaneViews.entrySet()) {
+            TerminalView view = entry.getValue();
+            if (view == null) continue;
+            view.setCursorSuppressed(entry.getKey() != active);
+        }
+    }
+
+    /**
+     * Whether this view may take part in an animation at all: attached, on screen, and measured.
+     *
+     * <p>The size test alone is the trap — a detached pane keeps its last measured width and
+     * height, so it passes, while {@code getLocationOnScreen} returns {@code 0,0} and every rect
+     * derived from it lands at the top-left corner of the screen. Maximized and stack layouts keep
+     * every unfocused pane detached, so that was not a corner case.
+     */
+    private boolean canAnimateView(@Nullable View view) {
+        return view != null && PaneMotionMath.canAnimate(view.isAttachedToWindow(), view.isShown(),
+            view.getWidth(), view.getHeight());
+    }
+
+    /** One pane's cursor cell, in the motion overlay's coordinates, or null when it is not visible. */
+    @Nullable
+    private RectF cursorRectInOverlay(@Nullable TerminalView view) {
+        if (!canAnimateView(view)) return null;
+        TerminalEmulator emulator = view.mEmulator;
+        if (emulator == null) return null;
+        int row = emulator.getCursorRow() - view.getTopRow();
+        if (row < 0 || row >= emulator.mRows) return null;
+        float cellWidth = view.getTerminalCellWidthPixels();
+        float cellHeight = view.getTerminalCellHeightPixels();
+        if (cellWidth <= 0f || cellHeight <= 0f) return null;
+        int[] viewLocation = new int[2];
+        int[] overlayLocation = new int[2];
+        view.getLocationOnScreen(viewLocation);
+        mMotionOverlay.getLocationOnScreen(overlayLocation);
+        float left = viewLocation[0] - overlayLocation[0] + view.getPointX(emulator.getCursorCol());
+        float top = viewLocation[1] - overlayLocation[1] + row * cellHeight;
+        return new RectF(left, top, left + cellWidth, top + cellHeight);
+    }
+
+    private int cursorColorOf(@Nullable TerminalView view) {
+        TerminalEmulator emulator = view == null ? null : view.mEmulator;
+        if (emulator != null) {
+            int color = emulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR];
+            if (android.graphics.Color.alpha(color) > 0) return color;
+        }
+        return MaterialColors.getColor(mHostView.getContext(),
+            com.google.android.material.R.attr.colorPrimary,
+            ContextCompat.getColor(mHostView.getContext(), R.color.termux_primary));
+    }
+
+    /**
+     * Per-pane glass physics. Each pane frame gets its own spring rig, so touching one slab tips
+     * that slab — frost, text and rim together, since the transform sits on their common frame —
+     * and the others stay put. One shared rig would tilt the whole split as a sheet, which is the
+     * reading the separate slabs exist to break.
+     *
+     * <p>Tuned far gentler than the dock's: a pane is tall, and the dock's 3° on this surface reads
+     * as the screen keeling over.
+     */
+    private static final float PANE_TILT_DEG = 1.1f;
+    private static final float PANE_SHIFT_DP = 2f;
+    private static final float PANE_PRESS_DIP = 0.006f;
+
+    private final Map<FrameLayout, DockPlankController> mPanePlanks = new HashMap<>();
+    @Nullable private DockPlankController mPressedPlank;
+    /** Set by a window switch so the focus change it triggers does not smear across the rebuild. */
+    private boolean mSuppressNextCursorFlight;
+    private float mPlankLeft;
+    private float mPlankTop;
+    private float mPlankWidth;
+    private float mPlankHeight;
+
+    /**
+     * Feed one touch to whichever pane it landed on. Observes only — the event is never consumed,
+     * so terminal scrolling, selection and the float drags all still see it.
+     */
+    public void dispatchPaneGlassTouch(@NonNull MotionEvent ev, boolean reducedMotion) {
+        if (!paneGlassActive()) {
+            releasePressedPlank();
+            return;
+        }
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN: {
+                releasePressedPlank();
+                FrameLayout frame = paneFrameAt(ev.getRawX(), ev.getRawY());
+                if (frame == null) return;
+                DockPlankController plank = mPanePlanks.get(frame);
+                if (plank == null) {
+                    plank = new DockPlankController(frame, null, null,
+                        PANE_TILT_DEG, PANE_SHIFT_DP, PANE_PRESS_DIP);
+                    plank.setHingeMode(false);
+                    plank.setMotionEnabled(true);
+                    mPanePlanks.put(frame, plank);
+                }
+                plank.setReducedMotion(reducedMotion);
+                plank.setEnabled(true);
+                mPressedPlank = plank;
+                plank.onPointerDown((ev.getRawX() - mPlankLeft) / mPlankWidth,
+                    (ev.getRawY() - mPlankTop) / mPlankHeight);
+                break;
+            }
+            case MotionEvent.ACTION_MOVE:
+                if (mPressedPlank != null && mPlankWidth > 0f && mPlankHeight > 0f) {
+                    mPressedPlank.onPointerMove((ev.getRawX() - mPlankLeft) / mPlankWidth,
+                        (ev.getRawY() - mPlankTop) / mPlankHeight);
+                }
+                break;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                releasePressedPlank();
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** Let go of whatever slab is pressed, for a gesture another surface has taken over. */
+    public void cancelPaneGlassTouch() {
+        releasePressedPlank();
+    }
+
+    private void releasePressedPlank() {
+        if (mPressedPlank == null) return;
+        mPressedPlank.onPointerUp();
+        mPressedPlank = null;
+    }
+
+    /**
+     * The visible pane frame under a screen point. Later frames win, which puts the topmost float
+     * ahead of the tiled pane it covers — the same z-order the touch itself follows.
+     */
+    @Nullable
+    private FrameLayout paneFrameAt(float rawX, float rawY) {
+        FrameLayout hit = null;
+        int[] location = new int[2];
+        for (FrameLayout frame : mPaneFrames.values()) {
+            if (frame.getVisibility() != View.VISIBLE || frame.getWindowToken() == null
+                || frame.getWidth() <= 0 || frame.getHeight() <= 0) continue;
+            frame.getLocationOnScreen(location);
+            if (rawX < location[0] || rawX > location[0] + frame.getWidth()
+                || rawY < location[1] || rawY > location[1] + frame.getHeight()) continue;
+            hit = frame;
+            mPlankLeft = location[0];
+            mPlankTop = location[1];
+            mPlankWidth = frame.getWidth();
+            mPlankHeight = frame.getHeight();
+        }
+        return hit;
+    }
+
+    /** Drop the rig of a pane that is going away, and neutralise a slab left mid-tilt. */
+    private void releasePanePlank(@Nullable FrameLayout frame) {
+        if (frame == null) return;
+        DockPlankController plank = mPanePlanks.remove(frame);
+        if (plank == null) return;
+        if (mPressedPlank == plank) mPressedPlank = null;
+        plank.setEnabled(false);
+        plank.reset();
+    }
+
+    /**
+     * Attach the activity's glass supplier. Panes are re-dressed immediately, so a slider drag in
+     * the surface editor lands on every pane without rebuilding the tree.
+     */
+    public void setSurfaceStyle(@Nullable PaneSurfaceStyle style) {
+        mSurfaceStyle = style;
+        applyPaneGlass();
+    }
+
+    /**
+     * Re-lay the tiled tree, for a change only layout can express — the inner padding between
+     * panes. The pane frames and their shells are reused, so nothing reflows a PTY that did not
+     * change size.
+     */
+    public void refreshPaneLayout() {
+        if (mActiveWindow == null) return;
+        render();
+    }
+
+    /** The configured gap between tiled panes, in dp. */
+    private int paneGapDp() {
+        return mSurfaceStyle != null ? Math.max(0, mSurfaceStyle.paneGapDp()) : DIVIDER_DP;
+    }
+
+    private float paneGlassRadiusPx() {
+        float radius = mSurfaceStyle != null ? mSurfaceStyle.paneGlassCornerRadiusPx() : 0f;
+        return radius > 0f ? radius : dp(PANE_GLASS_RADIUS_DP);
+    }
+
+    private boolean paneGlassActive() {
+        return mSurfaceStyle != null && mSurfaceStyle.isPaneGlassActive();
+    }
+
+    /**
+     * Dress (or undress) every live pane frame as a glass slab. Idempotent and cheap: the backdrop
+     * view is created once per pane and only re-fed here, so this can run on every editor slider
+     * tick and on every frost refresh.
+     */
+    public void applyPaneGlass() {
+        boolean glass = paneGlassActive();
+        float radiusPx = paneGlassRadiusPx();
+        for (FrameLayout frame : mPaneFrames.values()) {
+            PaneGlassBackdropView backdrop = frame.findViewById(R.id.terminal_pane_glass);
+            if (backdrop == null) continue;
+            if (!glass) {
+                backdrop.setVisibility(View.GONE);
+                frame.setClipToOutline(false);
+                frame.setOutlineProvider(ViewOutlineProvider.BOUNDS);
+                releasePanePlank(frame);
+                continue;
+            }
+            backdrop.setGlass(mSurfaceStyle.paneGlassBlurFrame(),
+                mSurfaceStyle.paneGlassBlurFrameRect(), mSurfaceStyle.paneGlassTintColor(),
+                mSurfaceStyle.paneGlassGrainLayer(), radiusPx,
+                mSurfaceStyle.paneGlassFrostFilter());
+            backdrop.setVisibility(View.VISIBLE);
+            // The terminal paints rectangular cell backgrounds; without the clip they poke past
+            // the slab's rounded corners exactly as they did past the float's.
+            final float paneRadiusPx = radiusPx;
+            frame.setOutlineProvider(new ViewOutlineProvider() {
+                @Override public void getOutline(View view, Outline outline) {
+                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), paneRadiusPx);
+                }
+            });
+            frame.setClipToOutline(true);
+        }
+        updateActiveBorders();
+    }
+
     private View buildView(Node node) {
         if (node instanceof Leaf) {
             return paneFrameFor(((Leaf) node).session);
@@ -1651,8 +2161,11 @@ public class TerminalPaneController {
         View divider = new View(mHostView.getContext());
         divider.setBackground(ContextCompat.getDrawable(mHostView.getContext(),
             R.drawable.pane_divider));
+        // Inner padding: the gap is what turns two panes into two slabs rather than one sheet with
+        // a line through it, so it is user-tunable rather than the old fixed hairline.
+        int gapPx = dp(paneGapDp());
         ll.addView(divider, new LinearLayout.LayoutParams(
-            vertical ? match : dp(DIVIDER_DP), vertical ? dp(DIVIDER_DP) : match));
+            vertical ? match : gapPx, vertical ? gapPx : match));
         ll.addView(vb, new LinearLayout.LayoutParams(
             vertical ? match : 0, vertical ? 0 : match, split.weightB));
         return ll;
@@ -1676,8 +2189,22 @@ public class TerminalPaneController {
             mHost.configureAttachedPaneView(view, session);
             mPaneFrames.put(session, frame);
             mPaneViews.put(session, view);
-        } else if (frame.getParent() instanceof ViewGroup) {
-            ((ViewGroup) frame.getParent()).removeView(frame);
+            PaneGlassBackdropView backdrop = frame.findViewById(R.id.terminal_pane_glass);
+            if (backdrop != null) {
+                // A pane moves for reasons that never redraw it (a sibling's divider drag, a float
+                // being dragged, the host resizing under the keyboard), and the frost is positioned
+                // in screen space, so every move has to re-aim the matrix.
+                backdrop.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or2, ob) -> {
+                    if (l != ol || t != ot || r != or2 || b != ob)
+                        ((PaneGlassBackdropView) v).invalidateGlassPosition();
+                });
+            }
+            applyPaneGlass();
+        } else {
+            // A cached frame may still carry a half-finished entry animation's alpha/scale.
+            resetFrameTransform(frame);
+            if (frame.getParent() instanceof ViewGroup)
+                ((ViewGroup) frame.getParent()).removeView(frame);
         }
         TerminalView attachedView = mPaneViews.get(session);
         if (attachedView != null) {
@@ -1711,6 +2238,7 @@ public class TerminalPaneController {
 
     private void detachPaneView(TerminalSession session) {
         FrameLayout frame = mPaneFrames.remove(session);
+        releasePanePlank(frame);
         mPaneViews.remove(session);
         if (frame != null && frame.getParent() instanceof ViewGroup)
             ((ViewGroup) frame.getParent()).removeView(frame);
@@ -1731,18 +2259,41 @@ public class TerminalPaneController {
             FrameLayout frame = mPaneFrames.get(v.getCurrentSession());
             if (frame == null) continue;
             boolean floating = floatingSessions.contains(v.getCurrentSession());
-            if (!split && mMaximizedLeaf == null && !floating) { frame.setForeground(null); continue; }
+            if (!split && mMaximizedLeaf == null && !floating && !paneGlassActive()) {
+                frame.setForeground(null);
+                continue;
+            }
             boolean isActive = v.getCurrentSession() == activeSession;
             // Same Material primary hue for every pane, but the focused pane's border is at full
-            // strength while the rest are dimmed — an unambiguous, theme-proof focus cue.
-            android.graphics.drawable.Drawable border =
-                ContextCompat.getDrawable(mHostView.getContext(), R.drawable.pane_active_border);
-            if (border != null) {
-                border = border.mutate();
-                border.setAlpha(isActive ? 255 : 64);
+            // strength while the rest are dimmed — an unambiguous, theme-proof focus cue. On glass
+            // the stroke gives way to the shared lit rim, which is the slab's own edge; a drawn
+            // outline over frost reads as a box sitting on the material.
+            android.graphics.drawable.Drawable border;
+            if (paneGlassActive()) {
+                // Unlike the dock's white glass edge, a pane's rim is also its focus indicator, so
+                // it carries a Material colour and a wide alpha spread: the focused pane glows in
+                // the accent, the rest fall back to a dim neutral outline. A white rim at two
+                // alphas could not say which pane has the keyboard.
+                int rimColor = MaterialColors.getColor(mHostView.getContext(),
+                    isActive ? com.google.android.material.R.attr.colorPrimary
+                        : com.google.android.material.R.attr.colorOutlineVariant,
+                    ContextCompat.getColor(mHostView.getContext(),
+                        isActive ? R.color.termux_primary : R.color.termux_outline_variant));
+                border = new com.termux.app.GlassRimDrawable(
+                    mHostView.getResources().getDisplayMetrics().density, paneGlassRadiusPx(),
+                    rimColor);
+                border.setAlpha(isActive ? 255 : 110);
+            } else {
+                border = ContextCompat.getDrawable(mHostView.getContext(),
+                    R.drawable.pane_active_border);
+                if (border != null) {
+                    border = border.mutate();
+                    border.setAlpha(isActive ? 255 : 64);
+                }
             }
             frame.setForeground(border);
         }
+        applyCursorOwnership();
         // The float handle pill dims with focus like the pane borders do.
         for (FloatingPaneContainer container : mFloatContainers.values()) container.invalidate();
     }
@@ -1870,6 +2421,12 @@ public class TerminalPaneController {
 
         void onTreeRendered() {
             resetTouchState();
+            // A dismiss still in flight would overwrite whatever is assigned below on its next
+            // frame, fading the controls off a pane that has just been maximized.
+            if (mControlAnimator != null) {
+                mControlAnimator.cancel();
+                mControlAnimator = null;
+            }
             if (mMaximizedLeaf != null) {
                 mControlLeaf = mMaximizedLeaf;
                 mControlsShown = true;
@@ -2570,12 +3127,17 @@ public class TerminalPaneController {
             // the surface color lives on a wrapper rather than the shared pane frame, which
             // must stay unstyled for tiled rendering.
             FrameLayout content = new FrameLayout(getContext());
-            content.setBackgroundColor(MaterialColors.getColor(getContext(),
-                com.termux.shared.R.attr.termuxColorSurfacePanel,
-                ContextCompat.getColor(getContext(), R.color.termux_surface_panel)));
+            // On glass the float's fill would sit between the frost and the text and flatten the
+            // slab back to a panel; the pane's own glass is the float's surface instead.
+            if (!paneGlassActive()) {
+                content.setBackgroundColor(MaterialColors.getColor(getContext(),
+                    com.termux.shared.R.attr.termuxColorSurfacePanel,
+                    ContextCompat.getColor(getContext(), R.color.termux_surface_panel)));
+            }
             // pane_active_border is a foreground stroke, not a clip — without this the terminal's
             // own rectangular cell-background fill pokes a black triangle past each rounded corner.
-            final float cornerRadiusPx = dp(FLOAT_CORNER_RADIUS_DP);
+            final float cornerRadiusPx = paneGlassActive()
+                ? paneGlassRadiusPx() : dp(FLOAT_CORNER_RADIUS_DP);
             content.setClipToOutline(true);
             content.setOutlineProvider(new ViewOutlineProvider() {
                 @Override public void getOutline(View view, Outline outline) {

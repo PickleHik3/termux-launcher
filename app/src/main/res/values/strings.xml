@@ -1045,6 +1045,8 @@
                 <string name="termux_dock_tuning_section_dock">Dock</string>
                 <string name="termux_dock_tuning_section_terminal">Terminal</string>
                 <string name="termux_dock_tuning_section_sessions">Sessions</string>
+                <string name="termux_dock_tuning_section_wallpaper">Wallpaper</string>
+                <string name="termux_dock_tuning_terminal_inner_padding">Inner padding</string>
                 <string name="termux_dock_tuning_done">Done</string>
                 <string name="termux_dock_tuning_cancel">Close</string>
                 <string name="termux_dock_tuning_value_dp">%1$d dp</string>
@@ -1470,6 +1472,11 @@
     <string name="weather_card_condition_feels">%1$s · feels %2$s</string>
     <string name="weather_card_range">H %1$s · L %2$s</string>
     <string name="weather_card_now">NOW</string>
+    <string name="weather_card_stat_wind">WIND</string>
+    <string name="weather_card_stat_wind_value">%1$d km/h</string>
+    <string name="weather_card_stat_humidity">HUMIDITY</string>
+    <string name="weather_card_stat_rain">RAIN</string>
+    <string name="weather_card_stat_uv">UV MAX</string>
     <string name="weather_card_today">TODAY</string>
     <string name="weather_card_unavailable">Weather unavailable</string>
     <string name="weather_card_unavailable_location">Weather needs a location fix</string>

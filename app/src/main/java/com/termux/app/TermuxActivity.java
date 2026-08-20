@@ -533,6 +533,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mDockPlankHeight = 0f;
     private final int[] mDockPlankLocation = new int[2];
 
+    /** True while every terminal pane is a glass slab with its own physics. */
+    private boolean mTerminalGlassActive = false;
+    /** The blur frame the panes are painting from; kept out of the cache's recycler. */
+    @Nullable private Bitmap mPaneGlassFrame;
+
     private float mTerminalToolbarDefaultHeight;
     private final Handler mAzGestureHandler = new Handler(Looper.getMainLooper());
     private enum AzGestureMode {
@@ -1144,6 +1149,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
         feedDockPlank(ev);
+        feedTerminalPlank(ev);
         return super.dispatchTouchEvent(ev);
     }
 
@@ -1309,11 +1315,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (wallpaperMode) {
             boolean showSurface = shouldShowTerminalOverlaySurface();
             int terminalSurfaceColor = showSurface ? resolveTerminalSurfaceColor() : Color.TRANSPARENT;
-            // Unify the background: apply the terminal-opacity dim to the full-screen root so the
-            // terminal area, the space under the floating dock, and the gesture-pill strip all read
-            // as one continuous surface (the dock then floats on top of it). The bounded
-            // terminal_background overlay is retired so the dim isn't applied twice.
-            applyUnifiedBackgroundDim(terminalSurfaceColor);
+            int wallpaperDim = resolveWallpaperBackdropDimColor();
+            boolean glassPane = isTerminalPaneGlassActive();
+            if (glassPane) {
+                // The terminal tint lives on each pane's own glass slab now; the root carries only
+                // the wallpaper dim, so the gaps between panes — and the margin around them — show
+                // the wallpaper at whatever opacity the Wallpaper control asks for.
+                applyUnifiedBackgroundDim(wallpaperDim);
+            } else {
+                // Unify the background: apply the terminal-opacity dim to the full-screen root so the
+                // terminal area, the space under the floating dock, and the gesture-pill strip all read
+                // as one continuous surface (the dock then floats on top of it). The bounded
+                // terminal_background overlay is retired so the dim isn't applied twice. The wallpaper
+                // dim composes underneath it.
+                applyUnifiedBackgroundDim(androidx.core.graphics.ColorUtils.compositeColors(
+                    terminalSurfaceColor, wallpaperDim));
+            }
             terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
             terminalBodySurface.setBackgroundColor(Color.TRANSPARENT);
             terminalBodySurface.setVisibility(View.GONE);
@@ -1387,7 +1404,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // against the outer one.
         boolean preferBorder = mPreferences.isTerminalBorderEnabled();
         boolean singlePane = visiblePaneCount() <= 1;
-        boolean enabled = preferBorder && singlePane;
+        // With glass on, each pane carries its own lit rim, and a second frame drawn around the
+        // whole terminal would box the floating slabs inside a sheet — the exact reading the glass
+        // is there to break. So the outer line is the plain-border case only.
+        boolean glass = isTerminalPaneGlassActive();
+        boolean enabled = preferBorder && singlePane && !glass;
         borderView.setVisibility(enabled ? View.VISIBLE : View.GONE);
         boolean capsule = isRoundedDockStyle();
         int capsuleMarginPx = resolveDockHorizontalInsetPx();
@@ -1399,7 +1420,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         //
         // Keyed off the preference rather than off `enabled`, so splitting a window does not shift
         // the terminal: the pane borders land exactly where the terminal border was.
-        int borderVerticalInsetPx = preferBorder
+        int borderVerticalInsetPx = preferBorder || glass
             ? Math.round(dpToPx(TERMINAL_BORDER_VERTICAL_INSET_DP)) : 0;
 
         ViewGroup.LayoutParams borderParams = borderView.getLayoutParams();
@@ -1415,7 +1436,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 borderView.setLayoutParams(marginParams);
             }
         }
-
         int strokePx = Math.max(1, Math.round(dpToPx(1)));
         float cornerRadiusPx = capsule ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
 
@@ -1447,11 +1467,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         if (!enabled) {
             borderView.setBackground(null);
+            if (borderView instanceof TerminalGlassFrameView) {
+                ((TerminalGlassFrameView) borderView).setRim(false, 0f);
+            }
             applyPaneHostCornerPadding(paneHost, 0);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 paneHost.setOutlineProvider(ViewOutlineProvider.BOUNDS);
-                paneHost.setClipToOutline(false);
+                paneHost.setClipToOutline(glass);
             }
+            setupTerminalPlankFx(glass);
+            updateTerminalGlassFrost();
             return;
         }
 
@@ -1464,6 +1489,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         border.setCornerRadius(cornerRadiusPx);
         border.setStroke(strokePx, withAlphaComponent(resolveAccessoryOutlineColor(), 150));
         borderView.setBackground(border);
+        if (borderView instanceof TerminalGlassFrameView) {
+            ((TerminalGlassFrameView) borderView).setRim(false, 0f);
+        }
+
+        setupTerminalPlankFx(false);
+        updateTerminalGlassFrost();
 
         float innerRadiusPx = capsule ? Math.max(0f, cornerRadiusPx - paneInsetPx) : 0f;
         // A rounded rect of radius r reaches r·(1 - 1/√2) ≈ 0.293r past its own corner along the
@@ -1501,6 +1532,142 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && paneHost.getPaddingBottom() == paddingPx)
             return;
         paneHost.setPadding(paddingPx, paddingPx, paddingPx, paddingPx);
+    }
+
+    /**
+     * Whether the terminal's glass pane is configured on: border enabled with a blur radius or a
+     * grain amount behind it, in wallpaper mode. The pane-count gate lives with the border's own
+     * ({@code applyTerminalBorderAppearance} folds both in), since glass and border share a frame.
+     */
+    private boolean isTerminalGlassConfigured() {
+        return mPreferences != null
+            && shouldUseWallpaperPassthroughMode()
+            && (mPreferences.getTerminalGlassBlurRadius() > 0
+                || mPreferences.getTerminalGlassGrain() > 0);
+    }
+
+    /**
+     * Whether every terminal pane is currently a glass slab of its own.
+     *
+     * <p>Gated on the border switch because the border is conceptually the pane's edge: with glass
+     * on, each pane's lit rim <em>is</em> that border, drawn per pane instead of once around the
+     * whole terminal. Deliberately not gated on the pane count — one pane is simply one slab, which
+     * is what makes a split read as several floating terminals rather than a sheet with lines on it.
+     */
+    private boolean isTerminalPaneGlassActive() {
+        return isTerminalGlassConfigured() && mPreferences.isTerminalBorderEnabled();
+    }
+
+    /**
+     * The glass supplier the pane controller paints from. Every value it reads is the same one the
+     * dock and status surfaces use, so "Match all surfaces" moves the panes with everything else.
+     */
+    @NonNull
+    private com.termux.app.terminal.TerminalPaneController.PaneSurfaceStyle paneSurfaceStyle() {
+        return new com.termux.app.terminal.TerminalPaneController.PaneSurfaceStyle() {
+            @Override public boolean isPaneGlassActive() {
+                return isTerminalPaneGlassActive();
+            }
+
+            @Override @Nullable public Bitmap paneGlassBlurFrame() {
+                return obtainTerminalPaneGlassFrame();
+            }
+
+            @Override @NonNull public Rect paneGlassBlurFrameRect() {
+                return mCachedAccessoryWallpaperBlurFrameRect;
+            }
+
+            @Override @Nullable public ColorFilter paneGlassFrostFilter() {
+                return glassFrostFilter();
+            }
+
+            @Override public int paneGlassTintColor() {
+                return shouldShowTerminalOverlaySurface()
+                    ? resolveTerminalSurfaceColor() : Color.TRANSPARENT;
+            }
+
+            @Override @Nullable public Drawable paneGlassGrainLayer() {
+                int grain = mPreferences != null ? mPreferences.getTerminalGlassGrain() : 0;
+                return grain > 0 ? buildDockGrainLayer(grain) : null;
+            }
+
+            @Override public float paneGlassCornerRadiusPx() {
+                return isRoundedDockStyle()
+                    ? Math.min(dpToPx(14), resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE))
+                    : dpToPx(4);
+            }
+
+            @Override public int paneGapDp() {
+                return mPreferences != null ? mPreferences.getTerminalPaneGap()
+                    : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP;
+            }
+        };
+    }
+
+    /**
+     * The shared pre-blurred wallpaper frame the panes draw, remembered so the blur cache never
+     * recycles a bitmap a pane is still painting from (the panes hold it in a custom view rather
+     * than an ImageView, so the frost-in-use scan cannot find it by drawable).
+     */
+    @Nullable
+    private Bitmap obtainTerminalPaneGlassFrame() {
+        int radiusDp = mPreferences != null ? mPreferences.getTerminalGlassBlurRadius() : 0;
+        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+        if (radiusDp <= 0 || wallpaperFrame == null || !isTerminalPaneGlassActive()) {
+            mPaneGlassFrame = null;
+            return null;
+        }
+        Bitmap frame = obtainCachedAccessoryWallpaperBlur(radiusDp, wallpaperFrame);
+        mPaneGlassFrame = frame != null && !frame.isRecycled() ? frame : null;
+        return mPaneGlassFrame;
+    }
+
+    /**
+     * Dresses the terminal glass backdrop: the shared pre-blurred wallpaper frame shown through the
+     * bordered rect (matrix-positioned, so a resize never allocates a terminal-sized bitmap the way
+     * a crop would — this surface resizes on every keyboard toggle), with the terminal tint and the
+     * film grain layered as its foreground. Localises what used to be the full-screen dim.
+     */
+    /**
+     * Re-dress the panes' glass. Every pane draws the shared pre-blurred wallpaper frame through
+     * its own rect, so a wallpaper change, a blur-radius change or a layout move all resolve here
+     * rather than in a per-surface bitmap.
+     */
+    private void updateTerminalGlassFrost() {
+        if (mPaneController == null) return;
+        mPaneController.setSurfaceStyle(paneSurfaceStyle());
+    }
+
+    /**
+     * Arms or disarms the panes' glass physics. The rigs themselves live per pane in
+     * {@link com.termux.app.terminal.TerminalPaneController}, since with glass on each pane is its
+     * own slab and must tip alone.
+     */
+    private void setupTerminalPlankFx(boolean active) {
+        mTerminalGlassActive = active;
+    }
+
+    /**
+     * Observes (never consumes) touches over the terminal and hands them to the pane under the
+     * finger, so scrolling, selecting text or just pressing a pane tips that one physical slab.
+     * Overlays that own the screen (drawer, palette, surface editor, FULL status) mute it, so their
+     * gestures never tilt the surface underneath.
+     */
+    private void feedTerminalPlank(MotionEvent ev) {
+        if (!mTerminalGlassActive || mPaneController == null) return;
+        if (isAppDrawerEngaged() || mDockTuningMode || isCommandPaletteOpen()
+            || isFullStatusBarEngaged()) {
+            mPaneController.cancelPaneGlassTouch();
+            return;
+        }
+        mPaneController.dispatchPaneGlassTouch(ev, isReducedMotionEnabled());
+    }
+
+    /** Black dim over the wallpaper, behind every surface: 100% shows the wallpaper untouched. */
+    private int resolveWallpaperBackdropDimColor() {
+        int opacity = mPreferences != null ? mPreferences.getWallpaperBackdropOpacity() : 100;
+        int alpha = Math.round((100 - Math.max(0, Math.min(100, opacity))) / 100f * 255f);
+        return alpha << 24;   // black at the complementary alpha
     }
 
     /**
@@ -4037,14 +4204,45 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     /**
      * Extra magnification the system applies when it renders the static wallpaper, about the
-     * display center. Measured with a coordinate-grid wallpaper: Nothing OS draws at a fixed
-     * 1.10x regardless of the zoom-out the launcher requests, which displaced every glass crop
-     * by ~10% of its distance from the center (a few dp at the dock, most under the keyboard).
-     * ROMs that honor {@code setWallpaperZoomOut(0)} render at 1.0 and need no compensation.
+     * display center. ROMs that honor {@code setWallpaperZoomOut(0)} render at 1.0 and need no
+     * compensation; Nothing OS applies its own regardless of what the launcher asks for.
+     *
+     * <p>Re-measured 2026-08-20 and corrected from 1.10 to
+     * {@link #NOTHING_OS_WALLPAPER_RENDER_ZOOM}. The method: set the wallpaper through the in-app
+     * picker, which keeps a byte-exact copy of the source, then fit the mapping
+     * {@code source = ((screen - centre) / zoom + centre) / fillScale} against the sharp wallpaper
+     * still visible in a screenshot's margins. 1.03 fit to a mean squared error of 4 with no pan
+     * term; 1.00 gave 355 and the old 1.10 gave 564. Over-compensating by those seven percent
+     * displaced every frost by ~7% of its distance from the centre — around 75px at the status
+     * bar — which is what "the blur is offset" was.
+     *
+     * <p>If a future ROM changes this again, that measurement is how to re-derive it: the numbers
+     * above are the fit quality to beat, not a value to nudge by eye.
      */
     private float systemWallpaperRenderZoom() {
-        return "nothing".equalsIgnoreCase(Build.MANUFACTURER) ? 1.10f : 1f;
+        return "nothing".equalsIgnoreCase(Build.MANUFACTURER)
+            ? NOTHING_OS_WALLPAPER_RENDER_ZOOM : 1f;
     }
+
+    /**
+     * Extra magnification Nothing OS applies at composite time, on top of whatever scaling is
+     * already baked into the stored wallpaper bitmap.
+     *
+     * <p>Why one constant covers both a wallpaper this app set and one the system cropped: the
+     * frost samples {@code WallpaperManager.getDrawable()}, which returns the bitmap <em>as the
+     * system stored it</em>, not the file the user picked. The ROM upscales what it is given until
+     * the stored bitmap is ~1.10x the display and shows the middle — with a 1250x2500 image applied
+     * through the system picker on a 1080x2412 panel, {@code dumpsys wallpaper} reports
+     * {@code mCropHint=Rect(0, 0 - 1328, 2654)}, and 2654 / 2412 = 1.1003. That 1.10 is therefore
+     * already present in the pixels handed to us, and re-applying it was the bug: it double-counted
+     * the store-scale. What remains is the composite zoom, measured at 1.03 (see
+     * {@link #systemWallpaperRenderZoom()} for the method and the fit quality).
+     *
+     * <p>The in-app picker is the well-defined case regardless: it hands the system a bitmap
+     * already in the display's aspect and a crop hint covering all of it, so the store-scale is a
+     * no-op and only this composite zoom applies.
+     */
+    private static final float NOTHING_OS_WALLPAPER_RENDER_ZOOM = 1.03f;
 
     /**
      * The glass bands blur a crop of the system wallpaper read through {@link WallpaperManager}.
@@ -4334,6 +4532,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (frame == null) {
             return false;
         }
+        if (frame == mPaneGlassFrame) {
+            return true;   // a pane is drawing it right now; recycling it would crash its next draw
+        }
         int[] frostIds = {R.id.command_palette_wallpaper_backdrop,
             R.id.app_drawer_wallpaper_backdrop, R.id.terminal_window_bar_wallpaper_backdrop};
         for (int frostId : frostIds) {
@@ -4363,6 +4564,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mCachedAccessoryWallpaperBlurManagedLastModified = -1L;
         mCachedAccessoryWallpaperBlurManagedLength = -1L;
         mTopPaneFrostDirty = true;
+        mPaneGlassFrame = null;
     }
 
     private void updateAccessoryRenderEffectBackdrop(@NonNull AccessoryRenderState state) {
@@ -4990,6 +5192,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the blur views' own visibility passes so its GONE wins while frost is active.
      */
     private void updateTopPaneWallpaperFrost() {
+        // Ride the same triggers: every state change that can move or restyle the top-pane frost
+        // can move the terminal's glass pane too.
+        updateTerminalGlassFrost();
         ImageView statusFrost = findViewById(R.id.terminal_status_bar_wallpaper_backdrop);
         ImageView paneFrost = findViewById(R.id.terminal_window_bar_wallpaper_backdrop);
         if (statusFrost == null || paneFrost == null) return;
@@ -7063,6 +7268,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.widget.FrameLayout paneHost = findViewById(R.id.terminal_pane_host);
         mPaneController = new com.termux.app.terminal.TerminalPaneController(
             new PaneHost(), paneHost, getLayoutInflater());
+        mPaneController.setSurfaceStyle(paneSurfaceStyle());
         // Bootstrap a sessionless pane so the many single-view call sites (in-app keyboard,
         // font setup) have a non-null active view before the first session/tab is shown.
         mTerminalView = mPaneController.createBootstrapView();
@@ -7142,6 +7348,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         SeekBar terminal = findViewById(R.id.dock_tuning_terminal_slider);
         com.google.android.material.materialswitch.MaterialSwitch terminalBorder =
             findViewById(R.id.dock_tuning_terminal_border_switch);
+        View terminalGlassGroup = findViewById(R.id.dock_tuning_terminal_glass_group);
+        SeekBar terminalGlassBlur = findViewById(R.id.dock_tuning_terminal_blur_slider);
+        SeekBar terminalGlassGrain = findViewById(R.id.dock_tuning_terminal_grain_slider);
+        TextView terminalGlassBlurValue = findViewById(R.id.dock_tuning_terminal_blur_value);
+        TextView terminalGlassGrainValue = findViewById(R.id.dock_tuning_terminal_grain_value);
+        SeekBar terminalGap = findViewById(R.id.dock_tuning_terminal_gap_slider);
+        TextView terminalGapValue = findViewById(R.id.dock_tuning_terminal_gap_value);
+        SeekBar wallpaperOpacity = findViewById(R.id.dock_tuning_wallpaper_opacity_slider);
+        TextView wallpaperOpacityValue = findViewById(R.id.dock_tuning_wallpaper_opacity_value);
         MaterialButtonToggleGroup terminalContrast =
             findViewById(R.id.dock_tuning_terminal_contrast_group);
         TextView terminalContrastHint = findViewById(R.id.dock_tuning_terminal_contrast_hint);
@@ -7209,6 +7424,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final int initialDockRadius = mPreferences.getAppLauncherDockCornerRadius();
         final int initialTerminal = mPreferences.getTerminalBackgroundOpacity();
         final boolean initialTerminalBorder = mPreferences.isTerminalBorderEnabled();
+        final int initialTerminalGlassBlur = mPreferences.getTerminalGlassBlurRadius();
+        final int initialTerminalGlassGrain = mPreferences.getTerminalGlassGrain();
+        final int initialTerminalGap = mPreferences.getTerminalPaneGap();
+        final int initialWallpaperOpacity = mPreferences.getWallpaperBackdropOpacity();
         final String initialTerminalContrast = mPreferences.getTerminalContrastLevel().value;
         final int initialSessions = mPreferences.getSessionsOpacity();
         final float initialBarHeight = mPreferences.getAppLauncherBarHeightScale();
@@ -7242,6 +7461,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             terminalBorder.setOnCheckedChangeListener(null);
             terminalBorder.setChecked(mPreferences.isTerminalBorderEnabled());
         }
+        if (terminalGlassGroup != null) {
+            terminalGlassGroup.setVisibility(
+                mPreferences.isTerminalBorderEnabled() ? View.VISIBLE : View.GONE);
+        }
+        if (terminalGlassBlur != null) terminalGlassBlur.setProgress(initialTerminalGlassBlur);
+        if (terminalGlassGrain != null) terminalGlassGrain.setProgress(initialTerminalGlassGrain);
+        if (terminalGlassBlurValue != null) terminalGlassBlurValue.setText(
+            getString(R.string.termux_dock_tuning_value_dp, initialTerminalGlassBlur));
+        if (terminalGlassGrainValue != null) terminalGlassGrainValue.setText(
+            getString(R.string.termux_dock_tuning_value_percent, initialTerminalGlassGrain));
+        if (terminalGap != null) terminalGap.setProgress(initialTerminalGap);
+        if (terminalGapValue != null) terminalGapValue.setText(
+            getString(R.string.termux_dock_tuning_value_dp, initialTerminalGap));
+        if (wallpaperOpacity != null) wallpaperOpacity.setProgress(initialWallpaperOpacity);
+        if (wallpaperOpacityValue != null) wallpaperOpacityValue.setText(
+            getString(R.string.termux_dock_tuning_value_percent, initialWallpaperOpacity));
         syncTerminalContrastGroup(terminalContrast, terminalContrastHint);
         sessions.setProgress(initialSessions);
         size.setProgress(initialSizeIndex);
@@ -7341,15 +7576,69 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 terminalValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
                 if (fromUser) {
-                    mPreferences.setTerminalBackgroundOpacity(progress);
-                    requestDockTuningPreview(TUNING_PREVIEW_SURFACES);
+                    writeSurfaceOpacity(SURFACE_TUNING_TARGET_TERMINAL, progress);
+                    requestDockTuningPreview(TUNING_PREVIEW_SURFACES | TUNING_PREVIEW_KEYBOARD);
                 }
             }
         });
         if (terminalBorder != null) {
             terminalBorder.setOnCheckedChangeListener((button, isChecked) -> {
                 mPreferences.setTerminalBorderEnabled(isChecked);
+                if (terminalGlassGroup != null) {
+                    terminalGlassGroup.setVisibility(isChecked ? View.VISIBLE : View.GONE);
+                }
                 applyDockTuningStructuralPreview();
+            });
+        }
+        if (terminalGlassBlur != null) {
+            terminalGlassBlur.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    if (terminalGlassBlurValue != null) terminalGlassBlurValue.setText(
+                        getString(R.string.termux_dock_tuning_value_dp, progress));
+                    if (fromUser) {
+                        writeSurfaceBlur(SURFACE_TUNING_TARGET_TERMINAL, progress);
+                        requestDockTuningPreview(TUNING_PREVIEW_SURFACES);
+                    }
+                }
+            });
+        }
+        if (terminalGlassGrain != null) {
+            terminalGlassGrain.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    if (terminalGlassGrainValue != null) terminalGlassGrainValue.setText(
+                        getString(R.string.termux_dock_tuning_value_percent, progress));
+                    if (fromUser) {
+                        writeSurfaceGrain(SURFACE_TUNING_TARGET_TERMINAL, progress);
+                        requestDockTuningPreview(TUNING_PREVIEW_SURFACES);
+                    }
+                }
+            });
+        }
+        if (terminalGap != null) {
+            terminalGap.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    if (terminalGapValue != null) terminalGapValue.setText(
+                        getString(R.string.termux_dock_tuning_value_dp, progress));
+                    if (fromUser) {
+                        mPreferences.setTerminalPaneGap(progress);
+                        // The gap is laid out by the split tree, so it needs a re-render rather
+                        // than a restyle; the panes and their shells are reused across it.
+                        if (mPaneController != null) mPaneController.refreshPaneLayout();
+                        requestDockTuningPreview(TUNING_PREVIEW_SURFACES);
+                    }
+                }
+            });
+        }
+        if (wallpaperOpacity != null) {
+            wallpaperOpacity.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    if (wallpaperOpacityValue != null) wallpaperOpacityValue.setText(
+                        getString(R.string.termux_dock_tuning_value_percent, progress));
+                    if (fromUser) {
+                        mPreferences.setWallpaperBackdropOpacity(progress);
+                        requestDockTuningPreview(TUNING_PREVIEW_SURFACES);
+                    }
+                }
             });
         }
         if (terminalContrast != null) {
@@ -7366,8 +7655,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 sessionsValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
                 if (fromUser) {
-                    mPreferences.setSessionsOpacity(progress);
-                    requestDockTuningPreview(TUNING_PREVIEW_SURFACES);
+                    // Normalized, this levels every surface; otherwise it is the sessions panel's
+                    // own control, exactly as before.
+                    if (isSurfaceTuningNormalized()) {
+                        writeSurfaceOpacity(SURFACE_TUNING_TARGET_DOCK, progress);
+                    } else {
+                        mPreferences.setSessionsOpacity(progress);
+                    }
+                    requestDockTuningPreview(TUNING_PREVIEW_SURFACES | TUNING_PREVIEW_KEYBOARD);
                 }
             }
         });
@@ -7458,7 +7753,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // Leaving 100 also flips the keyboard off the unified dock material, which the
                 // coalesced glass re-render (backdrop dirty + accessory sync) already handles.
                 if (fromUser) {
-                    mPreferences.setInAppKeyboardBackgroundOpacity(progress);
+                    if (isSurfaceTuningNormalized()) writeSurfaceOpacity(SURFACE_TUNING_TARGET_DOCK, progress);
+                    else mPreferences.setInAppKeyboardBackgroundOpacity(progress);
                     requestDockTuningPreview(TUNING_PREVIEW_GLASS);
                 }
             }
@@ -7545,6 +7841,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_SESSIONS_OPACITY);
                 mPreferences.setTerminalBorderEnabled(
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERMINAL_BORDER_ENABLED);
+                mPreferences.setTerminalGlassBlurRadius(
+                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_GLASS_BLUR_RADIUS);
+                mPreferences.setTerminalGlassGrain(
+                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_GLASS_GRAIN);
+                mPreferences.setWallpaperBackdropOpacity(
+                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_WALLPAPER_BACKDROP_OPACITY);
+                mPreferences.setTerminalPaneGap(
+                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP);
+                if (mPaneController != null) mPaneController.refreshPaneLayout();
                 mPreferences.setTerminalContrastLevel(
                     com.termux.shared.termux.settings.preferences.TerminalContrastLevel
                         .DEFAULT.value);
@@ -7579,6 +7884,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             terminal.setProgress(mPreferences.getTerminalBackgroundOpacity());
             if (terminalBorder != null)
                 terminalBorder.setChecked(mPreferences.isTerminalBorderEnabled());
+            if (terminalGlassGroup != null) terminalGlassGroup.setVisibility(
+                mPreferences.isTerminalBorderEnabled() ? View.VISIBLE : View.GONE);
+            if (terminalGlassBlur != null)
+                terminalGlassBlur.setProgress(mPreferences.getTerminalGlassBlurRadius());
+            if (terminalGlassGrain != null)
+                terminalGlassGrain.setProgress(mPreferences.getTerminalGlassGrain());
+            if (terminalGap != null)
+                terminalGap.setProgress(mPreferences.getTerminalPaneGap());
+            if (wallpaperOpacity != null)
+                wallpaperOpacity.setProgress(mPreferences.getWallpaperBackdropOpacity());
             syncTerminalContrastGroup(terminalContrast, terminalContrastHint);
             sessions.setProgress(mPreferences.getSessionsOpacity());
             syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_DOCK);
@@ -7596,6 +7911,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.setAppLauncherDockCornerRadius(initialDockRadius);
                 mPreferences.setTerminalBackgroundOpacity(initialTerminal);
                 mPreferences.setTerminalBorderEnabled(initialTerminalBorder);
+                mPreferences.setTerminalGlassBlurRadius(initialTerminalGlassBlur);
+                mPreferences.setTerminalGlassGrain(initialTerminalGlassGrain);
+                mPreferences.setWallpaperBackdropOpacity(initialWallpaperOpacity);
+                if (mPreferences.getTerminalPaneGap() != initialTerminalGap) {
+                    mPreferences.setTerminalPaneGap(initialTerminalGap);
+                    if (mPaneController != null) mPaneController.refreshPaneLayout();
+                }
                 if (!initialTerminalContrast.equals(
                         mPreferences.getTerminalContrastLevel().value)) {
                     mPreferences.setTerminalContrastLevel(initialTerminalContrast);
@@ -7714,6 +8036,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int SURFACE_TUNING_TARGET_DOCK = 0;
     private static final int SURFACE_TUNING_TARGET_KEYBOARD = 1;
     private static final int SURFACE_TUNING_TARGET_STATUS = 2;
+    private static final int SURFACE_TUNING_TARGET_TERMINAL = 3;
+    /** The terminal glass slider's own ceiling; the dock's blur range runs further. */
+    private static final int TERMINAL_GLASS_MAX_BLUR_DP = 30;
 
     // ---------------------------------------------------- surface glass, one writer per control
     //
@@ -7749,6 +8074,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPreferences.getStatusBarGrain());
         setSeekBarProgress(R.id.surface_tuning_status_radius_slider,
             mPreferences.getStatusBarCornerRadius());
+        setSeekBarProgress(R.id.dock_tuning_terminal_blur_slider,
+            mPreferences.getTerminalGlassBlurRadius());
+        setSeekBarProgress(R.id.dock_tuning_terminal_grain_slider,
+            mPreferences.getTerminalGlassGrain());
+        setSeekBarProgress(R.id.dock_tuning_terminal_slider,
+            mPreferences.getTerminalBackgroundOpacity());
+        setSeekBarProgress(R.id.dock_tuning_sessions_slider, mPreferences.getSessionsOpacity());
+        setSeekBarProgress(R.id.surface_tuning_keyboard_bg_opacity_slider,
+            mPreferences.getInAppKeyboardBackgroundOpacity());
     }
 
     private void setSeekBarProgress(int sliderId, int progress) {
@@ -7763,16 +8097,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPreferences.setExtraKeysBlurRadius(value);
         if (isSurfaceTuningNormalized() || target == SURFACE_TUNING_TARGET_STATUS)
             mPreferences.setStatusBarBlurRadius(value);
+        if (isSurfaceTuningNormalized() || target == SURFACE_TUNING_TARGET_TERMINAL)
+            mPreferences.setTerminalGlassBlurRadius(
+                Math.min(value, TERMINAL_GLASS_MAX_BLUR_DP));
         if (isSurfaceTuningNormalized()) syncSurfaceGlassSliders();
     }
 
+    /**
+     * "Match all surfaces" means every surface, which now includes the ones that were left out:
+     * the terminal's own tint, the keyboard's background and the sessions panel. Leaving them out
+     * is what made the switch feel unreliable — a slider moved two surfaces, and only toggling the
+     * switch off and on levelled the rest, because the toggle re-levels everything through these
+     * same writers while a slider only wrote its own target.
+     */
     private void writeSurfaceOpacity(int target, int value) {
         if (mPreferences == null) return;
-        if (isSurfaceTuningNormalized() || target == SURFACE_TUNING_TARGET_DOCK)
+        boolean all = isSurfaceTuningNormalized();
+        if (all || target == SURFACE_TUNING_TARGET_DOCK)
             mPreferences.setAppBarOpacity(value);
-        if (isSurfaceTuningNormalized() || target == SURFACE_TUNING_TARGET_STATUS)
+        if (all || target == SURFACE_TUNING_TARGET_STATUS)
             mPreferences.setStatusBarOpacity(value);
-        if (isSurfaceTuningNormalized()) syncSurfaceGlassSliders();
+        if (all || target == SURFACE_TUNING_TARGET_TERMINAL)
+            mPreferences.setTerminalBackgroundOpacity(value);
+        if (all) {
+            mPreferences.setInAppKeyboardBackgroundOpacity(value);
+            mPreferences.setSessionsOpacity(value);
+            syncSurfaceGlassSliders();
+        }
     }
 
     private void writeSurfaceGrain(int target, int value) {
@@ -7781,6 +8132,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPreferences.setDockGlassGrain(value);
         if (isSurfaceTuningNormalized() || target == SURFACE_TUNING_TARGET_STATUS)
             mPreferences.setStatusBarGrain(value);
+        // The terminal's panes are a surface like any other: with "Match all surfaces" on they take
+        // the same grain, which is the whole point of the switch.
+        if (isSurfaceTuningNormalized() || target == SURFACE_TUNING_TARGET_TERMINAL)
+            mPreferences.setTerminalGlassGrain(value);
         if (isSurfaceTuningNormalized()) syncSurfaceGlassSliders();
     }
 
@@ -7872,6 +8227,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 setSurfaceTuningInsetDp(SURFACE_TUNING_TARGET_STATUS,
                     mPreferences.getStatusBarHorizontalInset());
                 syncSurfaceGlassSliders();
+                if (mInAppKeyboard != null) mInAppKeyboard.onPreferencesReloaded();
             }
             applyDockTuningStructuralPreview();
         });
@@ -13851,7 +14207,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void toggleStatsCard(@NonNull View anchor) {
         if (mStatusCardHost.isShowing()) {
-            boolean same = mStatusCardHost.isShowingFor(anchor);
+            // Keyed on the card, not the tapped widget: CPU and RAM both open this one card.
+            boolean same = mStatusCardHost.isShowingContent(mStatsCardView);
             mStatusCardHost.dismiss();
             if (same) return;
         }
@@ -14096,7 +14453,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void toggleWeatherCard(@NonNull View anchor) {
         if (mStatusCardHost.isShowing()) {
-            boolean same = mStatusCardHost.isShowingFor(anchor);
+            boolean same = mStatusCardHost.isShowingContent(mWeatherCardView);
             mStatusCardHost.dismiss();
             if (same) return;
         }
@@ -14115,7 +14472,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ensureWeatherController().refreshIfStale();
         setWidgetAccent(anchor, true);
         mStatusCardHost.setDropEdge(findViewById(R.id.terminal_window_bar_host));
-        mStatusCardHost.show(anchor, mWeatherCardView, statusCardStyleProvider(), 360,
+        mStatusCardHost.show(anchor, mWeatherCardView, statusCardStyleProvider(),
             () -> setWidgetAccent(anchor, false));
     }
 
@@ -14132,15 +14489,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         animateTerminalWindowArrival(index >= previous ? 1 : -1);
     }
 
+    /**
+     * Travel distance for a workspace arrival. Enough to read as a slide, short of the full-width
+     * push a compositor can afford — the panes here keep running while they move, and a long throw
+     * of live terminals reads as lag rather than as motion.
+     */
+    private static final int WORKSPACE_SLIDE_DP = 34;
+
+    /**
+     * A window arrives sideways, a session arrives vertically. The two axes are the whole point:
+     * Hyprland gives workspaces on one axis and groups on another, and once both switches animate
+     * the axis is what tells the user which of the two just happened, without reading a label.
+     */
     private void animateTerminalWindowArrival(int direction) {
+        animateTerminalArrival(direction, true);
+    }
+
+    /** Session switch: the same arrival on the vertical axis. */
+    public void animateTerminalSessionArrival(int direction) {
+        animateTerminalArrival(direction, false);
+    }
+
+    private void animateTerminalArrival(int direction, boolean horizontal) {
         View terminal = findViewById(R.id.terminal_surface_host);
-        if (terminal == null) return;
+        if (terminal == null || isReducedMotionEnabled()) return;
+        float offset = (direction < 0 ? -1f : 1f) * dpToPx(WORKSPACE_SLIDE_DP);
         terminal.animate().cancel();
         terminal.setAlpha(0.78f);
-        terminal.setTranslationX((direction < 0 ? -1f : 1f) * dpToPx(34));
+        terminal.setTranslationX(horizontal ? offset : 0f);
+        terminal.setTranslationY(horizontal ? 0f : offset);
         terminal.animate()
             .alpha(1f)
             .translationX(0f)
+            .translationY(0f)
             .setDuration(com.termux.app.terminal.TerminalWindowBar
                 .WINDOW_SWITCH_ANIMATION_DURATION_MS)
             .setInterpolator(Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
