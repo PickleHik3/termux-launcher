@@ -456,6 +456,26 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             return true;
         }
 
+        // '?' under a latched leader asks the same question, tmux-style: it swaps the strip for
+        // the full table instead of resolving (and cancelling) the pending chord. A config that
+        // really binds '?' under this prefix keeps its own meaning.
+        if (mPendingSequencePrefix != null && e.getKeyCode() == KeyEvent.KEYCODE_SLASH
+            && e.isShiftPressed() && !e.isCtrlPressed() && !e.isAltPressed()) {
+            java.util.Map<String, TerminalKeyBindingResolver.Hint> pendingHints =
+                resolver.hintsForPrefix(mPendingSequencePrefix,
+                    TerminalActionDispatcher.getInstance().actionContext());
+            if (!pendingHints.containsKey("?") && !pendingHints.containsKey("shift+/")) {
+                if (e.getAction() == KeyEvent.ACTION_DOWN) {
+                    // Reading the table is taking the prefix up again, so the chord gets its
+                    // full timeout back.
+                    mKeyChordHandler.removeCallbacks(mKeyChordTimeout);
+                    mKeyChordHandler.postDelayed(mKeyChordTimeout, KEY_CHORD_TIMEOUT_MS);
+                    mActivity.toggleKeybindHintFullPopup();
+                }
+                return true;
+            }
+        }
+
         TerminalActionDispatcher dispatcher = TerminalActionDispatcher.getInstance();
         TerminalKeyBindingResolver.Step step = resolver.advance(e, dispatcher.actionContext());
         if (step.kind == TerminalKeyBindingResolver.Step.Kind.NONE) {

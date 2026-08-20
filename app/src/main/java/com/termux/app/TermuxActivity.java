@@ -8627,8 +8627,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * standard detail-card dress. Pressing {@code ?} under the prefix swaps the strip for the
      * full grouped table; with "Show key hints" off nothing drops on its own and the {@code ?}
      * cap glows instead, keeping {@code ?} as the one thing to remember. A latched {@code leader}
-     * prefix always shows its full table: it is a deliberate multi-step ask, and its keys have no
-     * caps to light. Any other modifier state removes everything, so it all tracks latch, lock
+     * prefix follows exactly the same heuristics — strip, preference, {@code ?} for the table —
+     * so the tmux-style prefix reads like the hold it aliases. Any other modifier state removes
+     * everything, so it all tracks latch, lock
      * and release for free via onKeyboardModifiersChanged and
      * {@link #setHardwareKeybindHintPrefix}.
      */
@@ -8745,9 +8746,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         boolean showHints = mPreferences == null || mPreferences.isShowKeyHintsEnabled();
-        // A leader prefix is invisible state with no lit caps to lean on; it always explains
-        // itself in full, whatever the strip preference says.
-        boolean full = mKeybindHintFullMode || basePrefix.indexOf('>') >= 0;
+        // A latched leader follows the same heuristics as the held Ctrl+Alt: the strip (or
+        // nothing, per the preference), with ? opening the full table. It used to force the full
+        // table, which made the tmux-style prefix land on a different surface than the one the
+        // in-app keyboard trained the user on.
+        boolean full = mKeybindHintFullMode;
 
         if (!full && !showHints) {
             // Nothing drops on its own: the ? cap glowing on the keyboard is the whole surface.
