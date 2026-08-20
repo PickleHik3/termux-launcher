@@ -1972,7 +1972,9 @@ public class TerminalPaneController {
      * as the screen keeling over.
      */
     private static final float PANE_TILT_DEG = 1.1f;
-    private static final float PANE_SHIFT_DP = 2f;
+    // The slide has to stay inside the pane gap: at the dock's 2dp a pressed slab crossed the
+    // default 1dp gap and rode over its neighbour's rim, which read as a detached border.
+    private static final float PANE_SHIFT_DP = 0.5f;
     private static final float PANE_PRESS_DIP = 0.006f;
 
     private final Map<FrameLayout, DockPlankController> mPanePlanks = new HashMap<>();

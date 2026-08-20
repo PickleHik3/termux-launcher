@@ -31,6 +31,7 @@ public final class GlassRimRenderer {
     private final float strokePx;
     private int lightShaderHeight = -1;
     private boolean shimmerShaderBuilt;
+    private boolean mUniformLight;
 
     public GlassRimRenderer(float density) {
         strokePx = Math.max(1f, 1.25f * density);
@@ -57,6 +58,15 @@ public final class GlassRimRenderer {
         mTint = tint;
         basePaint.setColor(tinted(BASE_COLOR));
         lightShaderHeight = -1;   // the light gradient bakes the colour, so rebuild it
+    }
+
+    /**
+     * One even stroke instead of the lit top edge. A rim that doubles as a focus indicator has to
+     * read the same all the way round: with the gradient, the bottom half was carried by the base
+     * stroke alone and all but vanished on an unfocused pane.
+     */
+    public void setUniformLight(boolean uniform) {
+        mUniformLight = uniform;
     }
 
     /**
@@ -89,22 +99,30 @@ public final class GlassRimRenderer {
         rect.set(left + inset, top + inset, right - inset, bottom - inset);
         float radius = Math.max(0f, radiusPx - inset);
 
-        basePaint.setAlpha(Math.round((BASE_COLOR >>> 24) * a));
+        // Paint.setAlpha replaces the colour's own alpha channel, so the tinted strengths have to
+        // be re-stated here — setColor(tinted(...)) alone was silently flattened back to the plain
+        // white strength on every draw.
+        int baseStrength = mUniformLight
+            ? (mTint != 0 ? TINTED_LIGHT_ALPHA : (LIGHT_TOP_COLOR >>> 24))
+            : (mTint != 0 ? TINTED_BASE_ALPHA : (BASE_COLOR >>> 24));
+        basePaint.setAlpha(Math.round(baseStrength * a));
         canvas.drawRoundRect(rect, radius, radius, basePaint);
 
-        int lightHeight = Math.max(1, Math.round(rect.height() * 0.55f));
-        if (lightShaderHeight != lightHeight) {
-            lightShaderHeight = lightHeight;
-            lightPaint.setShader(new LinearGradient(0f, 0f, 0f, lightHeight,
-                tinted(LIGHT_TOP_COLOR), tinted(0x00FFFFFF), Shader.TileMode.CLAMP));
+        if (!mUniformLight) {
+            int lightHeight = Math.max(1, Math.round(rect.height() * 0.55f));
+            if (lightShaderHeight != lightHeight) {
+                lightShaderHeight = lightHeight;
+                lightPaint.setShader(new LinearGradient(0f, 0f, 0f, lightHeight,
+                    tinted(LIGHT_TOP_COLOR), tinted(0x00FFFFFF), Shader.TileMode.CLAMP));
+            }
+            Shader light = lightPaint.getShader();
+            if (light != null) {
+                shaderMatrix.setTranslate(0f, rect.top);
+                light.setLocalMatrix(shaderMatrix);
+            }
+            lightPaint.setAlpha(Math.round(255 * a));
+            canvas.drawRoundRect(rect, radius, radius, lightPaint);
         }
-        Shader light = lightPaint.getShader();
-        if (light != null) {
-            shaderMatrix.setTranslate(0f, rect.top);
-            light.setLocalMatrix(shaderMatrix);
-        }
-        lightPaint.setAlpha(Math.round(255 * a));
-        canvas.drawRoundRect(rect, radius, radius, lightPaint);
 
         if (!(shimmerPhase >= 0f && shimmerPhase < 1f)) return;
         if (!shimmerShaderBuilt) {

@@ -31,6 +31,9 @@ public final class GlassRimDrawable extends Drawable {
     public GlassRimDrawable(float density, float radiusPx, int tint) {
         mRim = new GlassRimRenderer(density);
         mRim.setTint(tint);
+        // Pane rims are focus indicators, so they draw at one even strength all the way round;
+        // the lit-top gradient left their bottom half carried by the faint base stroke alone.
+        mRim.setUniformLight(true);
         mRadiusPx = radiusPx;
     }
 
