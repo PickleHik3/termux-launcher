@@ -328,7 +328,10 @@ public final class AppNoticeHostView extends FrameLayout {
         glyphBackground.setShape(GradientDrawable.OVAL);
         glyphBackground.setColor(ColorUtils.setAlphaComponent(accent, 46));
         mGlyph.setBackground(glyphBackground);
-        mGlyph.setText(item.resolvedGlyph());
+        // Spanned so a nerd-symbol glyph (the attention bell) renders from the bundled symbol
+        // face; plain glyphs pass through untouched.
+        mGlyph.setText(com.termux.shared.termux.font.NerdFontSpans.span(
+            getContext(), item.resolvedGlyph()));
         mGlyph.setTextColor(accent);
 
         GradientDrawable pulse = new GradientDrawable();

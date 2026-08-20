@@ -340,7 +340,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             return;
         AppNotice.shell(mActivity,
             mActivity.getString(R.string.notice_shell_wants_attention, title),
-            null, "◉", true, () -> setCurrentSession(session));
+            null, "\uf0f3" /* nf-fa-bell */, true, () -> setCurrentSession(session));
     }
 
     @Override
@@ -429,25 +429,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (mActivity.activateSessionInPanes(session)) {
             if (fromIndex >= 0 && toIndex >= 0 && fromIndex != toIndex)
                 mActivity.animateTerminalSessionArrival(toIndex >= fromIndex ? 1 : -1);
-            // notify about switched session if not already displaying the session
-            notifyOfSessionChange();
+            // No "[1] fish in ~" chip here any more: the action hint already narrates the switch,
+            // and two stacked notices for one keypress read as noise. The indicator view stays for
+            // notices that carry real news — an exited session, a refused split.
         }
         // We call the following even when the session is already being displayed since config may
         // be stale, like current session not selected or scrolled to.
         checkAndScrollToSession(session);
         updateBackgroundColor();
-    }
-
-    void notifyOfSessionChange() {
-        if (!mActivity.isVisible())
-            return;
-        // The indicator replaces the old Android toast, so disable-terminal-session-change-toast
-        // must not suppress it. A new pane or window inside the current session is not a session
-        // switch though, so those stay silent.
-        TerminalSession current = mActivity.getCurrentSession();
-        if (!mActivity.noteSessionSwitchIndicated(current))
-            return;
-        mActivity.showSessionSwitchIndicator(toToastTitle(current));
     }
 
     public void switchToSession(boolean forward) {
