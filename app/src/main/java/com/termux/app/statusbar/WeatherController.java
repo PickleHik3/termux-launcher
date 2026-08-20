@@ -3,6 +3,10 @@ package com.termux.app.statusbar;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import com.termux.shared.logger.Logger;
+
+import android.location.Address;
+import android.location.Geocoder;
 import android.location.Location;
 import android.location.LocationManager;
 import android.os.Handler;
@@ -36,6 +40,8 @@ import java.util.concurrent.Executors;
  */
 public final class WeatherController {
 
+    private static final String LOG_TAG = "WeatherController";
+
     public static final class Hourly {
         /** Local ISO time, e.g. {@code 2026-07-22T15:00}. */
         @NonNull public final String iso;
@@ -67,10 +73,17 @@ public final class WeatherController {
     public static final class Weather {
         public boolean valid;
         public double currentC;
+        /** Apparent ("feels like") temperature in Celsius, NaN when the provider omitted it. */
+        public double feelsLikeC = Double.NaN;
         public int currentCode;
         public boolean currentIsDay = true;
         @NonNull public List<Hourly> hourly = new ArrayList<>();
         @NonNull public List<Daily> daily = new ArrayList<>();
+        /** Today's local sunrise/sunset as {@code HH:mm}, empty when unknown. */
+        @NonNull public String sunrise = "";
+        @NonNull public String sunset = "";
+        /** Nearest place name for the fix, empty when reverse geocoding is unavailable. */
+        @NonNull public String locationName = "";
         public long fetchedAtMs;
         @Nullable public String error;
     }
@@ -149,9 +162,9 @@ public final class WeatherController {
         try {
             String url = String.format(Locale.ROOT,
                 "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f"
-                    + "&current=temperature_2m,weather_code,is_day"
+                    + "&current=temperature_2m,apparent_temperature,weather_code,is_day"
                     + "&hourly=temperature_2m,weather_code,is_day"
-                    + "&daily=weather_code,temperature_2m_max,temperature_2m_min"
+                    + "&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset"
                     + "&timezone=auto&forecast_days=7",
                 location.getLatitude(), location.getLongitude());
             String body = httpGet(url);
@@ -160,6 +173,7 @@ public final class WeatherController {
                 return w;
             }
             parse(new JSONObject(body), w);
+            w.locationName = placeName(location);
             w.valid = true;
             w.fetchedAtMs = nowMs();
         } catch (Exception e) {
@@ -172,6 +186,7 @@ public final class WeatherController {
         JSONObject current = root.optJSONObject("current");
         if (current != null) {
             w.currentC = current.optDouble("temperature_2m", Double.NaN);
+            w.feelsLikeC = current.optDouble("apparent_temperature", Double.NaN);
             w.currentCode = current.optInt("weather_code", 0);
             w.currentIsDay = current.optInt("is_day", 1) != 0;
         }
@@ -199,7 +214,102 @@ public final class WeatherController {
                     w.daily.add(new Daily(time.optString(i), max.optDouble(i), min.optDouble(i), code.optInt(i)));
                 }
             }
+            // Today's pair only: the card draws the daylight track for the day it is showing.
+            w.sunrise = clockOf(daily.optJSONArray("sunrise"));
+            w.sunset = clockOf(daily.optJSONArray("sunset"));
         }
+    }
+
+    /** {@code HH:mm} out of the first entry of an Open-Meteo local-ISO array. */
+    @NonNull
+    private static String clockOf(@Nullable JSONArray isoTimes) {
+        if (isoTimes == null || isoTimes.length() == 0) return "";
+        String iso = isoTimes.optString(0, "");
+        int t = iso.indexOf('T');
+        return t >= 0 && iso.length() >= t + 6 ? iso.substring(t + 1, t + 6) : "";
+    }
+
+    /**
+     * Nearest place name for the fix, for the card's header.
+     *
+     * <p>Best effort by design: Geocoder needs a backend the device may not have, and it is a
+     * blocking call, so it runs on the fetch thread and an empty answer simply leaves the header
+     * without a place name rather than failing the forecast.
+     */
+    @NonNull
+    private String placeName(@NonNull Location location) {
+        String local = platformPlaceName(location);
+        if (!local.isEmpty()) return local;
+        return remotePlaceName(location);
+    }
+
+    /** Android's own reverse geocoder, which needs a backend the device may simply not have. */
+    @NonNull
+    private String platformPlaceName(@NonNull Location location) {
+        if (!Geocoder.isPresent()) {
+            Logger.logVerbose(LOG_TAG, "Geocoder unavailable; falling back for the place name");
+            return "";
+        }
+        try {
+            List<Address> addresses = new Geocoder(mContext, Locale.getDefault())
+                .getFromLocation(location.getLatitude(), location.getLongitude(), 1);
+            if (addresses == null || addresses.isEmpty()) {
+                Logger.logVerbose(LOG_TAG, "Geocoder returned no address; falling back");
+                return "";
+            }
+            Address address = addresses.get(0);
+            String locality = firstNonEmpty(address.getLocality(), address.getSubAdminArea(),
+                address.getSubLocality(), address.getAdminArea());
+            if (locality.isEmpty()) return "";
+            return withRegion(locality, address.getAdminArea());
+        } catch (Exception e) {
+            Logger.logVerbose(LOG_TAG, "Geocoder failed (" + e.getClass().getSimpleName()
+                + "); falling back");
+            return "";
+        }
+    }
+
+    /**
+     * Keyless reverse geocode, used only when the platform geocoder has nothing — which is the
+     * common case on a de-Googled device, and was why the card kept reading "Current location".
+     *
+     * <p>The coordinates are rounded to two decimal places, roughly a kilometre, before they leave
+     * the device. That is more than enough to name a city and deliberately not enough to place the
+     * user in it, and it means this request carries less than the forecast request already does.
+     */
+    @NonNull
+    private String remotePlaceName(@NonNull Location location) {
+        try {
+            String url = String.format(Locale.ROOT,
+                "https://api.bigdatacloud.net/data/reverse-geocode-client"
+                    + "?latitude=%.2f&longitude=%.2f&localityLanguage=%s",
+                location.getLatitude(), location.getLongitude(),
+                Locale.getDefault().getLanguage());
+            String body = httpGet(url);
+            if (body == null) return "";
+            JSONObject root = new JSONObject(body);
+            String locality = firstNonEmpty(root.optString("city"), root.optString("locality"),
+                root.optString("principalSubdivision"));
+            if (locality.isEmpty()) return "";
+            return withRegion(locality, root.optString("principalSubdivision"));
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    @NonNull
+    private static String firstNonEmpty(@Nullable String... candidates) {
+        for (String candidate : candidates) {
+            if (candidate != null && !candidate.isEmpty()) return candidate;
+        }
+        return "";
+    }
+
+    /** "Kuwait City, Al Asimah", dropping the region when it repeats or adds nothing. */
+    @NonNull
+    private static String withRegion(@NonNull String locality, @Nullable String region) {
+        if (region == null || region.isEmpty() || region.equals(locality)) return locality;
+        return locality + ", " + region;
     }
 
     @Nullable
@@ -252,6 +362,10 @@ public final class WeatherController {
     private static void copyInto(@NonNull Weather dst, @NonNull Weather src) {
         dst.valid = src.valid;
         dst.currentC = src.currentC;
+        dst.feelsLikeC = src.feelsLikeC;
+        dst.sunrise = src.sunrise;
+        dst.sunset = src.sunset;
+        dst.locationName = src.locationName;
         dst.currentCode = src.currentCode;
         dst.currentIsDay = src.currentIsDay;
         dst.hourly = src.hourly;

@@ -1464,6 +1464,15 @@
     <!-- Required credit for Open-Meteo forecast data (CC BY 4.0). Not translated: it is the
          attribution wording Open-Meteo asks for. -->
     <string name="weather_attribution" translatable="false">Weather data by Open-Meteo.com</string>
+    <!-- Open-Meteo is CC BY 4.0: the credit has to stay beside the data it describes. -->
+    <string name="weather_card_attribution">OPEN-METEO · %1$d MIN AGO</string>
+    <string name="weather_card_location_unknown">Current location</string>
+    <string name="weather_card_condition_feels">%1$s · feels %2$s</string>
+    <string name="weather_card_range">H %1$s · L %2$s</string>
+    <string name="weather_card_now">NOW</string>
+    <string name="weather_card_today">TODAY</string>
+    <string name="weather_card_unavailable">Weather unavailable</string>
+    <string name="weather_card_unavailable_location">Weather needs a location fix</string>
 
     <!-- First-launch product onboarding -->
     <string name="onboarding_brand">TERMUX:LAUNCHER</string>

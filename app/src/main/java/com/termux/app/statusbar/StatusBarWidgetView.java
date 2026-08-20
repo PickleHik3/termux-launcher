@@ -18,6 +18,7 @@ import androidx.core.graphics.ColorUtils;
 import androidx.core.widget.ImageViewCompat;
 
 import com.airbnb.lottie.LottieAnimationView;
+import com.airbnb.lottie.LottieDrawable;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.shared.termux.font.NerdFontSpans;
@@ -36,6 +37,7 @@ public final class StatusBarWidgetView extends LinearLayout {
     @Nullable private LottieAnimationView mAnimation;
     private final TextView mValue;
     @Nullable private String mAnimationAsset;
+    private final Runnable mSettleAnimation = this::settleAnimation;
     private boolean mAccent;
     private boolean mMuted;
     @NonNull private ColorRole mColorRole = ColorRole.PRIMARY;
@@ -139,10 +141,42 @@ public final class StatusBarWidgetView extends LinearLayout {
         applyColors();
     }
 
+    /**
+     * Loops the icon animation for {@code durationMs}, then lets the current pass finish and holds
+     * the last frame again.
+     *
+     * <p>The steady state deliberately does not loop — measured on Pong at 1215 frames/10s and 47%
+     * of a core against 431 frames and 33% held still — so this is the bounded exception: a few
+     * seconds of movement when the user has just arrived, where the animation is the point, and
+     * then back to a still icon for the hours it sits there afterwards.
+     */
+    public void replayIconAnimation(long durationMs) {
+        if (mAnimation == null || mAnimationAsset == null) return;
+        if (getVisibility() != VISIBLE || mAnimation.getVisibility() != VISIBLE) return;
+        removeCallbacks(mSettleAnimation);
+        mAnimation.setRepeatCount(LottieDrawable.INFINITE);
+        mAnimation.playAnimation();
+        postDelayed(mSettleAnimation, durationMs);
+    }
+
+    /** Back to play-once: the running pass finishes and the icon holds its last frame. */
+    private void settleAnimation() {
+        if (mAnimation != null) mAnimation.setRepeatCount(0);
+    }
+
     private void hideAnimation() {
         if (mAnimation == null) return;
+        removeCallbacks(mSettleAnimation);
+        mAnimation.setRepeatCount(0);
         mAnimation.setVisibility(GONE);
         mAnimation.pauseAnimation();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        removeCallbacks(mSettleAnimation);
+        settleAnimation();
+        super.onDetachedFromWindow();
     }
 
     public void setValue(@NonNull CharSequence value) {
