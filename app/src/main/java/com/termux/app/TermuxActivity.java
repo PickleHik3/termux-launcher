@@ -14181,6 +14181,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     for (TerminalSession shell : mPaneController.shellsOf(window)) {
                         int shellPid = shell.getPid();
                         if (shellPid < 1 || !seenShells.add(shellPid)) continue;
+                        // Only shells that rang the bell earn a standing row: a long-lived remote
+                        // session or watcher is "running" forever, and a permanent corner row for it
+                        // is noise. The bell is the same signal the attention notice and the window
+                        // pill accent key off, and visiting the window clears it.
+                        if (!mAttentionShellPids.contains(shellPid)) continue;
                         com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
                             mWindowForegroundResolver.get(shellPid);
                         if (info == null || info.idle || info.foregroundPid < 1) continue;
