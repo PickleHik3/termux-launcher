@@ -1206,7 +1206,7 @@
     <string name="tool_terminal_select_url">Select URL</string>
     <string name="tool_terminal_select_at_cursor">Select at cursor</string>
     <string name="tool_terminal_select_all">Select all</string>
-    <string name="tool_terminal_hints">Hints</string>
+    <string name="tool_terminal_hints">Quick select</string>
     <string name="tool_terminal_search_scrollback">Search scrollback</string>
     <string name="tool_terminal_share_transcript">Share transcript</string>
     <string name="tool_clipboard_paste">Paste</string>
@@ -1283,10 +1283,10 @@
     <string name="tool_desc_terminal_select_at_cursor">Start a text selection at the shell cursor, on the word under it.</string>
     <string name="tool_desc_terminal_select_all">Select the whole buffer, scrollback included.</string>
     <string name="tool_desc_terminal_hints">Open or copy URLs, paths, hashes, and source line references by keyboard label.</string>
-    <string name="terminal_hints_title">Terminal hints</string>
-    <string name="terminal_hints_instructions">Press a label to open a URL or copy another item. Hold Shift while pressing a label to copy anything.</string>
+    <string name="terminal_hints_title">Quick select</string>
+    <string name="terminal_hints_instructions">Type a label to open or copy · uppercase copies</string>
     <string name="terminal_hints_none">No URLs, paths, hashes, or line references found.</string>
-    <string name="terminal_hint_copied">Hint copied to clipboard</string>
+    <string name="terminal_hint_copied">Copied to clipboard</string>
     <string name="tool_desc_terminal_search_scrollback">Find text in this pane’s scrollback and jump to a match.</string>
     <string name="terminal_scrollback_search_hint">Search text</string>
     <string name="terminal_find_yanked">Copied selection</string>

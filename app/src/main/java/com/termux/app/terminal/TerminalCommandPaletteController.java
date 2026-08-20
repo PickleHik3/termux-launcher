@@ -98,7 +98,7 @@ public final class TerminalCommandPaletteController
     /** Fallback strip when nothing has been run yet, per the handoff's default six. */
     private static final String[][] DEFAULT_KEYCAPS = {
         {LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD, "⌨", "kbd"},
-        {LauncherToolRegistry.TOOL_TERMINAL_HINTS, "✎", "hints"},
+        {LauncherToolRegistry.TOOL_TERMINAL_HINTS, "✎", "pick"},
         {LauncherToolRegistry.TOOL_PANE_SPLIT_VERTICAL, "⧉", "split"},
         {LauncherToolRegistry.TOOL_TERMINAL_SEARCH_SCROLLBACK, "⌕", "find"},
         {LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_INCREASE, "A", "font"},
