@@ -13,6 +13,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import com.termux.R;
+import com.termux.app.notice.AppNotice;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
@@ -307,6 +308,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         mActivity.noteShellAttention(session);
         if (!mActivity.isVisible())
             return;
+        raiseAttentionNotice(session);
         switch(mActivity.getProperties().getBellBehaviour()) {
             case TermuxPropertyConstants.IVALUE_BELL_BEHAVIOUR_VIBRATE:
                 BellHandler.getInstance(mActivity).doBell();
@@ -320,6 +322,25 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 // Ignore the bell character.
                 break;
         }
+    }
+
+    /**
+     * A bell from a shell the user is not looking at gets a notice they can act on: it is drawn in
+     * the attention accent, and tapping it goes to that pane or window.
+     *
+     * <p>Only for shells that are somewhere else. A bell from the pane already on screen needs no
+     * signpost — the user is looking straight at it — and a notice for it would fire on every
+     * completion beep of whatever they are running.
+     */
+    private void raiseAttentionNotice(@NonNull TerminalSession session) {
+        if (session == mActivity.getCurrentSession())
+            return;
+        String title = toToastTitle(session);
+        if (title == null || title.isEmpty())
+            return;
+        AppNotice.shell(mActivity,
+            mActivity.getString(R.string.notice_shell_wants_attention, title),
+            null, "◉", true, () -> setCurrentSession(session));
     }
 
     @Override

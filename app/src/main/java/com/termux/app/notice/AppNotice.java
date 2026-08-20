@@ -112,6 +112,17 @@ public final class AppNotice {
         raise(context, kind, title, sub, glyph, longDuration);
     }
 
+    /**
+     * A notice about a specific shell: tapping it takes the user to that pane or window, and an
+     * {@code attention} notice is drawn in its own accent because the shell is waiting on them.
+     */
+    public static void shell(@Nullable Context context, @Nullable CharSequence title,
+                             @Nullable CharSequence sub, @Nullable String glyph,
+                             boolean attention, @Nullable Runnable onActivate) {
+        raise(context, attention ? AppNoticeItem.Kind.WARNING : AppNoticeItem.Kind.INFO,
+            title, sub, glyph, false, onActivate, attention);
+    }
+
     public static void error(@Nullable Context context, @Nullable CharSequence message) {
         raise(context, AppNoticeItem.Kind.ERROR, message, null, null, true);
     }
@@ -125,10 +136,18 @@ public final class AppNotice {
     private static void raise(@Nullable Context context, @NonNull AppNoticeItem.Kind kind,
                               @Nullable CharSequence title, @Nullable CharSequence sub,
                               @Nullable String glyph, boolean longDuration) {
+        raise(context, kind, title, sub, glyph, longDuration, null, false);
+    }
+
+    private static void raise(@Nullable Context context, @NonNull AppNoticeItem.Kind kind,
+                              @Nullable CharSequence title, @Nullable CharSequence sub,
+                              @Nullable String glyph, boolean longDuration,
+                              @Nullable Runnable onActivate, boolean attention) {
         if (context == null || TextUtils.isEmpty(title)) return;
         Context appContext = context.getApplicationContext();
         AppNoticeItem item = new AppNoticeItem(kind, title, sub, glyph,
-            longDuration ? AppNoticeHostView.HOLD_LONG_MS : AppNoticeHostView.HOLD_SHORT_MS);
+            longDuration ? AppNoticeHostView.HOLD_LONG_MS : AppNoticeHostView.HOLD_SHORT_MS,
+            onActivate, attention);
         Activity fromContext = activityOf(context);
         if (Looper.myLooper() == Looper.getMainLooper()) {
             deliver(appContext, fromContext, item);

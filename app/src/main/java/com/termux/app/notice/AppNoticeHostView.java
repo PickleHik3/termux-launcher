@@ -13,7 +13,10 @@ import android.os.Build;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.VelocityTracker;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
@@ -93,7 +96,6 @@ public final class AppNoticeHostView extends FrameLayout {
     private final AppCompatTextView mTitle;
     private final AppCompatTextView mSub;
     private final AppCompatTextView mCount;
-    private final View mBar;
 
     private final Paint mFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mEdgePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -108,6 +110,7 @@ public final class AppNoticeHostView extends FrameLayout {
 
     private final int mAccentInfo;
     private final int mAccentError;
+    private final int mAccentAttention;
 
     @Nullable private OccupancyListener mOccupancyListener;
     private int mReportedHeightPx = -1;
@@ -126,6 +129,19 @@ public final class AppNoticeHostView extends FrameLayout {
      */
     private boolean mFoldParity;
 
+    private final Paint mBarPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** 1 at the start of a notice's hold, 0 when it has run out. */
+    private float mBarFraction;
+    @Nullable private ValueAnimator mBarAnimator;
+
+    private final int mTouchSlopPx;
+    private final int mSwipeDismissDistancePx;
+    @Nullable private VelocityTracker mVelocityTracker;
+    private float mTouchDownX;
+    private float mTouchDownY;
+    private boolean mSwiping;
+    private boolean mSwipeDismissed;
+
     public AppNoticeHostView(@NonNull Context context) {
         super(context);
         setClickable(true);
@@ -134,7 +150,6 @@ public final class AppNoticeHostView extends FrameLayout {
         setClipChildren(true);
         setClipToPadding(true);
         setVisibility(GONE);
-        setOnClickListener(v -> dismissActive());
 
         mExtendInterpolator = interpolator(0.16f, 1.05f, 0.3f, 1f, true);
         mRetractInterpolator = interpolator(0.4f, 0f, 1f, 1f, false);
@@ -155,7 +170,14 @@ public final class AppNoticeHostView extends FrameLayout {
             com.google.android.material.R.attr.colorPrimary, onSurface);
         mAccentError = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorError, mAccentInfo);
+        mAccentAttention = MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorTertiary,
+            MaterialColors.getColor(context,
+                com.google.android.material.R.attr.colorSecondary, mAccentError));
 
+        mTouchSlopPx = ViewConfiguration.get(context).getScaledTouchSlop();
+        mSwipeDismissDistancePx = Math.round(dp(48f));
+        mBarPaint.setStyle(Paint.Style.FILL);
         mFillPaint.setStyle(Paint.Style.FILL);
         mFillPaint.setColor(ColorUtils.setAlphaComponent(surface, SURFACE_ALPHA));
         mEdgePaint.setStyle(Paint.Style.STROKE);
@@ -230,12 +252,6 @@ public final class AppNoticeHostView extends FrameLayout {
         countParams.setMarginStart(Math.round(dp(7f)));
         mRow.addView(mCount, countParams);
 
-        mBar = new View(context);
-        addView(mBar, new LayoutParams(LayoutParams.MATCH_PARENT,
-            Math.max(1, Math.round(dp(1.5f))), Gravity.BOTTOM));
-        mBar.setPivotX(0f);
-        mBar.setVisibility(INVISIBLE);
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             setElevation(dp(3f));
             mRow.setCameraDistance(dp(CAMERA_DISTANCE_DP));
@@ -265,8 +281,8 @@ public final class AppNoticeHostView extends FrameLayout {
             mHeightAnimator = null;
         }
         mRow.animate().cancel();
-        mBar.animate().cancel();
         mPulse.animate().cancel();
+        stopBar();
         mActive = null;
         mHeightFraction = 0f;
         setVisibility(GONE);
@@ -294,9 +310,19 @@ public final class AppNoticeHostView extends FrameLayout {
         postDelayed(mHoldRunnable, item.durationMs);
     }
 
+    /**
+     * The accent a notice is drawn in. Attention outranks severity: a shell that has rung its bell
+     * in a window the user is not looking at is the one thing on this surface that is waiting for
+     * them, and it has to be tellable apart from the run of confirmations at a glance.
+     */
+    private int accentFor(@NonNull AppNoticeItem item) {
+        if (item.attention) return mAccentAttention;
+        return item.kind == AppNoticeItem.Kind.ERROR || item.kind == AppNoticeItem.Kind.WARNING
+            ? mAccentError : mAccentInfo;
+    }
+
     private void bind(@NonNull AppNoticeItem item) {
-        int accent = item.kind == AppNoticeItem.Kind.ERROR
-            || item.kind == AppNoticeItem.Kind.WARNING ? mAccentError : mAccentInfo;
+        int accent = accentFor(item);
 
         GradientDrawable glyphBackground = new GradientDrawable();
         glyphBackground.setShape(GradientDrawable.OVAL);
@@ -322,7 +348,11 @@ public final class AppNoticeHostView extends FrameLayout {
         mTitle.setSingleLine(hasSub);
         mTitle.setMaxLines(hasSub ? 1 : 3);
 
-        mBar.setBackgroundColor(ColorUtils.setAlphaComponent(accent, 178));
+        mBarPaint.setColor(ColorUtils.setAlphaComponent(accent, 178));
+        // A notice you can act on says so: the pointer cursor equivalent here is the tap target
+        // being announced, since the chip looks identical either way.
+        setContentDescription(item.onActivate == null ? item.title
+            : item.title + " — " + getContext().getString(R.string.notice_tap_to_open));
         updateCount();
     }
 
@@ -332,8 +362,7 @@ public final class AppNoticeHostView extends FrameLayout {
             mCount.setVisibility(GONE);
             return;
         }
-        int accent = mActive != null && (mActive.kind == AppNoticeItem.Kind.ERROR
-            || mActive.kind == AppNoticeItem.Kind.WARNING) ? mAccentError : mAccentInfo;
+        int accent = mActive == null ? mAccentInfo : accentFor(mActive);
         GradientDrawable pill = new GradientDrawable();
         pill.setCornerRadius(dp(5f));
         pill.setColor(ColorUtils.setAlphaComponent(accent, 51));
@@ -355,7 +384,7 @@ public final class AppNoticeHostView extends FrameLayout {
     private void retract() {
         mActive = null;
         cancelHold();
-        mBar.setVisibility(INVISIBLE);
+        stopBar();
         animateHeightTo(0f, RETRACT_MS, mRetractInterpolator);
     }
 
@@ -426,22 +455,185 @@ public final class AppNoticeHostView extends FrameLayout {
             .start();
     }
 
-    /** Tap anywhere on the chip: cut the hold short rather than wait it out. */
+    /** Cut the hold short rather than wait it out. */
     private void dismissActive() {
         if (mActive == null) return;
         cancelHold();
         foldOutActive();
     }
 
-    private void runBar(long durationMs) {
-        mBar.animate().cancel();
-        mBar.setVisibility(VISIBLE);
-        mBar.setScaleX(1f);
-        mBar.animate()
-            .scaleX(0f)
-            .setDuration(durationMs)
-            .setInterpolator(new LinearInterpolator())
+    /**
+     * A tap takes the user to whatever the notice is about — the pane or window it came from — and
+     * then gets out of the way. With nowhere to go, the tap is just an early dismiss.
+     */
+    private void activateOrDismiss() {
+        AppNoticeItem active = mActive;
+        if (active == null) return;
+        cancelHold();
+        Runnable action = active.onActivate;
+        foldOutActive();
+        if (action != null) action.run();
+    }
+
+    /**
+     * Swipe to dismiss, toward the trailing edge the chip is pinned to.
+     *
+     * <p>Interactive rather than only tap-and-wait because these are frequent and one may well be
+     * covering the top of a shell's output at the moment the user wants to read it. Only horizontal
+     * travel counts: a vertical drag here belongs to the status bar's own pull-down.
+     */
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                mTouchDownX = event.getRawX();
+                mTouchDownY = event.getRawY();
+                mSwiping = false;
+                mSwipeDismissed = false;
+                if (mVelocityTracker != null) mVelocityTracker.recycle();
+                mVelocityTracker = VelocityTracker.obtain();
+                mVelocityTracker.addMovement(event);
+                // The hold must not expire mid-drag and yank the chip out from under the finger.
+                cancelHold();
+                if (mBarAnimator != null) mBarAnimator.pause();
+                return true;
+            case MotionEvent.ACTION_MOVE: {
+                if (mVelocityTracker != null) mVelocityTracker.addMovement(event);
+                float dx = event.getRawX() - mTouchDownX;
+                float dy = event.getRawY() - mTouchDownY;
+                if (!mSwiping && Math.abs(dx) > mTouchSlopPx && Math.abs(dx) > Math.abs(dy)) {
+                    mSwiping = true;
+                    if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+                }
+                if (mSwiping) {
+                    // Resists the drag away from the edge it lives on, so the gesture that dismisses
+                    // is the one that pushes it off screen.
+                    float travel = dx > 0 ? dx : dx * 0.25f;
+                    setTranslationX(travel);
+                    setAlpha(Math.max(0.25f, 1f - Math.abs(travel) / (mSwipeDismissDistancePx * 2f)));
+                }
+                return true;
+            }
+            case MotionEvent.ACTION_UP: {
+                float dx = event.getRawX() - mTouchDownX;
+                if (mSwiping) {
+                    float velocity = 0f;
+                    if (mVelocityTracker != null) {
+                        mVelocityTracker.addMovement(event);
+                        mVelocityTracker.computeCurrentVelocity(1000);
+                        velocity = mVelocityTracker.getXVelocity();
+                    }
+                    if (dx > mSwipeDismissDistancePx || velocity > mSwipeDismissDistancePx * 8f) {
+                        swipeOut();
+                    } else {
+                        settleBack();
+                    }
+                } else if (Math.abs(dx) <= mTouchSlopPx) {
+                    activateOrDismiss();
+                } else {
+                    settleBack();
+                }
+                releaseVelocityTracker();
+                return true;
+            }
+            case MotionEvent.ACTION_CANCEL:
+                if (mSwiping) settleBack(); else resumeHold();
+                releaseVelocityTracker();
+                return true;
+            default:
+                return super.onTouchEvent(event);
+        }
+    }
+
+    private void releaseVelocityTracker() {
+        if (mVelocityTracker != null) {
+            mVelocityTracker.recycle();
+            mVelocityTracker = null;
+        }
+    }
+
+    /** Finish the throw off the trailing edge, then drop the notice and whatever is behind it. */
+    private void swipeOut() {
+        if (mSwipeDismissed) return;
+        mSwipeDismissed = true;
+        stopBar();
+        animate().cancel();
+        animate()
+            .translationX(getWidth() + mSwipeDismissDistancePx)
+            .alpha(0f)
+            .setDuration(FOLD_OUT_MS)
+            .setInterpolator(mFoldOutInterpolator)
+            .withEndAction(() -> {
+                setTranslationX(0f);
+                setAlpha(1f);
+                // A swipe dismisses the whole burst, not just the message on top: the user has said
+                // they are done with the corner, and popping the queue one swipe at a time would
+                // fight them.
+                mQueue.clear();
+                mActive = null;
+                retract();
+            })
             .start();
+    }
+
+    private void settleBack() {
+        mSwiping = false;
+        animate().cancel();
+        animate()
+            .translationX(0f)
+            .alpha(1f)
+            .setDuration(FOLD_OUT_MS)
+            .setInterpolator(mFoldInInterpolator)
+            .withEndAction(this::resumeHold)
+            .start();
+    }
+
+    /** Restart what is left of the hold after a touch that did not dismiss. */
+    private void resumeHold() {
+        if (mActive == null) return;
+        if (mBarAnimator != null && mBarAnimator.isPaused()) {
+            mBarAnimator.resume();
+            long remaining = Math.max(FOLD_OUT_MS,
+                Math.round(mActive.durationMs * Math.max(0f, mBarFraction)));
+            cancelHold();
+            mHoldRunnable = this::foldOutActive;
+            postDelayed(mHoldRunnable, remaining);
+        } else {
+            cancelHold();
+            mHoldRunnable = this::foldOutActive;
+            postDelayed(mHoldRunnable, mActive.durationMs);
+        }
+    }
+
+    /**
+     * The hold timer, drawn as a hairline across the bottom edge that empties left to right.
+     *
+     * <p>Drawn rather than laid out: as a {@code MATCH_PARENT} child it decided the width of a
+     * {@code WRAP_CONTENT} chip, because {@code View.getDefaultSize} hands back the full spec size
+     * under {@code AT_MOST}. The chip came out the whole width of the screen and read as a banner
+     * across the status bar instead of a popup in the corner.
+     */
+    private void runBar(long durationMs) {
+        if (mBarAnimator != null) mBarAnimator.cancel();
+        mBarFraction = 1f;
+        ValueAnimator animator = ValueAnimator.ofFloat(1f, 0f);
+        animator.setDuration(durationMs);
+        animator.setInterpolator(new LinearInterpolator());
+        animator.addUpdateListener(a -> {
+            mBarFraction = (float) a.getAnimatedValue();
+            invalidate();
+        });
+        mBarAnimator = animator;
+        animator.start();
+    }
+
+    private void stopBar() {
+        if (mBarAnimator != null) {
+            mBarAnimator.cancel();
+            mBarAnimator = null;
+        }
+        mBarFraction = 0f;
+        invalidate();
     }
 
     private void pulse() {
@@ -516,6 +708,14 @@ public final class AppNoticeHostView extends FrameLayout {
         mEdgePath.lineTo(width - radius - inset, height - inset);
         mEdgePath.quadTo(width - inset, height - inset, width - inset, height - radius - inset);
         canvas.drawPath(mEdgePath, mEdgePaint);
+
+        if (mBarFraction > 0f) {
+            float thickness = Math.max(1f, dp(1.5f));
+            canvas.save();
+            canvas.clipPath(mFillPath);
+            canvas.drawRect(0f, height - thickness, width * mBarFraction, height, mBarPaint);
+            canvas.restore();
+        }
         super.onDraw(canvas);
     }
 

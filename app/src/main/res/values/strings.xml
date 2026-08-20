@@ -482,6 +482,8 @@
     <string name="status_widget_needs_shizuku_guide">Read the guide</string>
     <string name="status_widget_needs_shizuku_connect">Connect</string>
     <string name="status_widget_needs_shizuku_enable_anyway">Enable anyway</string>
+    <string name="notice_tap_to_open">tap to open</string>
+    <string name="notice_shell_wants_attention">%1$s wants attention</string>
     <string name="action_open_settings">Settings</string>
     <string name="action_glass_lab">Edit surfaces</string>
     <string name="msg_generating_report">Generating Report</string>
