@@ -659,6 +659,14 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_LAZY_MODE = "lazy_mode";
         public static final boolean DEFAULT_VALUE_LAZY_MODE = false;
 
+        /**
+         * Whether holding a keybind prefix (Ctrl+Alt) automatically shows the key-hint strip.
+         * When off, nothing appears on its own: the {@code ?} cap lights up under the prefix and
+         * pressing it opens the full table on demand.
+         */
+        public static final String KEY_SHOW_KEY_HINTS = "show_key_hints";
+        public static final boolean DEFAULT_SHOW_KEY_HINTS = true;
+
         /** Clock renderer shown in the modular widget slot above the terminal window row. */
         public static final String KEY_TOP_PANE_CLOCK_STYLE = "top_pane_clock_style";
 

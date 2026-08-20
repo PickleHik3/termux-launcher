@@ -438,6 +438,24 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             return false;
         }
 
+        // Escape closes an open hint surface the way it closes everything else. Consumed only
+        // while one is up, so it never costs the shell an Escape it was waiting for.
+        if (e.getKeyCode() == KeyEvent.KEYCODE_ESCAPE && mActivity.isKeybindHintPopupVisible()) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN)
+                mActivity.onKeybindHintConsumed();
+            return true;
+        }
+
+        // '?' under the held prefix asks what the prefix can do instead of resolving a stroke:
+        // it toggles the full hint table on the top card. Both keyboards arrive here — hardware
+        // types it as Ctrl+Alt+Shift+/ and the in-app keyboard routes its '?' cap the same way.
+        if (e.getKeyCode() == KeyEvent.KEYCODE_SLASH && e.isShiftPressed()
+            && e.isCtrlPressed() && e.isAltPressed()) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN)
+                mActivity.toggleKeybindHintFullPopup();
+            return true;
+        }
+
         TerminalActionDispatcher dispatcher = TerminalActionDispatcher.getInstance();
         TerminalKeyBindingResolver.Step step = resolver.advance(e, dispatcher.actionContext());
         if (step.kind == TerminalKeyBindingResolver.Step.Kind.NONE) {

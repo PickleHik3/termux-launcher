@@ -68,6 +68,9 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
             case "top_pane_clock_am_pm":
                 mPreferences.setTopPaneClockAmPmEnabled(value);
                 break;
+            case "show_key_hints":
+                mPreferences.setShowKeyHintsEnabled(value);
+                break;
             case "status_widget_cpu":
                 mPreferences.setStatusWidgetCpuEnabled(value);
                 break;
@@ -98,6 +101,8 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isCompatibilityModeEnabled();
             case "top_pane_clock_am_pm":
                 return mPreferences.isTopPaneClockAmPmEnabled();
+            case "show_key_hints":
+                return mPreferences.isShowKeyHintsEnabled();
             case "status_widget_cpu":
                 return mPreferences.isStatusWidgetCpuEnabled();
             case "status_widget_ram":

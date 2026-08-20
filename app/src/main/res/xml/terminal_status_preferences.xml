@@ -29,6 +29,12 @@
             app:title="@string/settings_split_pane_controls_title"
             app:summary="@string/settings_split_pane_controls_summary"
             android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="show_key_hints"
+            app:title="@string/settings_show_key_hints_title"
+            app:summary="@string/settings_show_key_hints_summary"
+            app:dependency="split_pane_controls"
+            android:defaultValue="true" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_lazy_mode_header">

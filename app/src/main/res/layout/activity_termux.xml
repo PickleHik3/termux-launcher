@@ -512,6 +512,20 @@
                 android:elevation="10dp"
                 android:visibility="gone" />
 
+            <!-- Keybind hint row: takes the A-Z row's exact slot while a Ctrl+Alt prefix is
+                 latched, so the hints cost no terminal space at all. Chips are built in
+                 TermuxActivity.showKeybindHintDockRow(). -->
+            <HorizontalScrollView
+                android:id="@+id/keybind_hint_dock_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_alignTop="@+id/apps_bar_az_row"
+                android:layout_alignBottom="@+id/apps_bar_az_row"
+                android:elevation="11dp"
+                android:scrollbars="none"
+                android:clickable="true"
+                android:visibility="gone" />
+
             <androidx.viewpager.widget.ViewPager
                 android:id="@+id/terminal_toolbar_view_pager"
                 android:visibility="gone"
@@ -809,24 +823,6 @@
             android:layout_above="@id/accessory_stack_container"
             android:layout_alignWithParentIfMissing="true"
             android:elevation="16dp"
-            android:visibility="gone" />
-
-        <!-- Keybind hint popup: shown while a Ctrl+Alt prefix is latched on the in-app keyboard,
-             flush against the accessory stack so it reads as part of the keyboard. Rows and the
-             glass background are built in updateKeybindHintPopup(). -->
-
-        <LinearLayout
-            android:id="@+id/keybind_hint_popup"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_above="@id/accessory_stack_container"
-            android:layout_alignWithParentIfMissing="true"
-            android:orientation="vertical"
-            android:elevation="16dp"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
-            android:paddingTop="10dp"
-            android:paddingBottom="12dp"
             android:visibility="gone" />
 
         <com.google.android.material.card.MaterialCardView

@@ -54,6 +54,12 @@ public final class TerminalModifiers {
         return new TerminalModifiers(true, mAlt, mShift, mMeta);
     }
 
+    TerminalModifiers withShift() {
+        if (mShift)
+            return this;
+        return new TerminalModifiers(mCtrl, mAlt, true, mMeta);
+    }
+
     public int toKeyEventMetaState() {
         int metaState = 0;
         if (mCtrl)

@@ -41,6 +41,8 @@
     <string name="settings_sessions_panes_header">Sessions and panes</string>
     <string name="settings_split_pane_controls_title">Split-pane controls</string>
     <string name="settings_split_pane_controls_summary">Enable window splitting and tmux-style pane shortcuts.</string>
+    <string name="settings_show_key_hints_title">Show key hints</string>
+    <string name="settings_show_key_hints_summary">Show a hint strip while Ctrl+Alt is held. When off, the ? key lights up instead — press it for the full list.</string>
     <string name="settings_clock_status_header">Clock and status</string>
     <string name="settings_clock_style_title">Clock style</string>
     <string name="settings_clock_alignment_title">Clock alignment</string>

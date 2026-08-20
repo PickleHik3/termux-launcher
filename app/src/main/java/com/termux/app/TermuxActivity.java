@@ -244,7 +244,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final java.util.List<WSession> mWSessions = new java.util.ArrayList<>();
     @Nullable private WSession mCurrentWSession;
     /** Session the switch indicator last fired for; compared by identity, never dereferenced. */
-    @Nullable private WSession mLastIndicatedWSession;
     /** Resolves per-pane foreground process / open file for the window pill labels. */
     @Nullable private com.termux.app.statusbar.WindowForegroundResolver mWindowForegroundResolver;
     @Nullable private Runnable mSessionBrowserRefreshCallback;
@@ -1150,6 +1149,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public boolean dispatchTouchEvent(MotionEvent ev) {
         feedDockPlank(ev);
         feedTerminalPlank(ev);
+        maybeDismissKeybindHintOnTerminalTouch(ev);
         return super.dispatchTouchEvent(ev);
     }
 
@@ -5569,6 +5569,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mWindowLabelHandler.removeCallbacksAndMessages(null);
         mBackgroundProcessHandler.removeCallbacks(mBackgroundProcessResync);
         mStatusCardHost.dismiss();
+        performKeybindHintHide(false);
         if (mStatsController != null) mStatsController.stop();
         if (mAiIndicatorController != null) mAiIndicatorController.stop();
         // Sampling stops here, so the smoothed history stops meaning anything. Dropped now rather
@@ -8600,24 +8601,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private String mHardwareKeybindHintPrefix;
     private boolean mHardwareKeybindHintShift;
     /**
-     * Set when a binding under the shown prefix actually ran. The legend answers "what can I press
-     * now"; once something was pressed the answer is nothing, so it goes at once and stays gone
+     * Set when a binding under the shown prefix actually ran. The hints answer "what can I press
+     * now"; once something was pressed the answer is nothing, so they go at once and stay gone
      * until the prefix is let go and taken up again.
      */
     private boolean mKeybindHintSpent;
     /** Effective prefix at the last refresh, to notice a fresh one being taken up. */
     @Nullable private String mKeybindHintLastPrefix;
+    /** True while {@code ?} promoted the surface from the strip (or nothing) to the full table. */
+    private boolean mKeybindHintFullMode;
+    /**
+     * The hint surfaces' own card host, so an open stats or weather card and a chord narration
+     * never dismiss each other. Cards from this host are passive: they take no focus and swallow
+     * no outside touch, because the keyboard hold that raised them must keep working underneath.
+     */
+    private final com.termux.app.statusbar.StatusCardHost mKeybindHintCard =
+        new com.termux.app.statusbar.StatusCardHost();
+    /** Signature of the shown content, to skip rebuilds on repeated modifier callbacks. */
+    @Nullable private String mKeybindHintSignature;
 
     /**
      * While Ctrl+Alt (optionally +Shift) is held — latched on the in-app keyboard or held down on
      * a physical one — the bound caps light up in their legend group's colour on the live
-     * keyboard, and a glass slab flush against the accessory stack shows a grouped legend of what
-     * each lit key does. A latched {@code leader} prefix shows the same slab for its own table.
-     * Any other modifier state removes both, so they track latch, lock and release for free via
-     * onKeyboardModifiersChanged and {@link #setHardwareKeybindHintPrefix}.
-     *
-     * <p>A prefix change while latched (Shift joining or leaving) never remounts the slab: the
-     * legend re-runs its entry animation, the keyboard re-lights and the letters flip case.
+     * keyboard, and a compact strip of the essential binds drops beneath the status bar in the
+     * standard detail-card dress. Pressing {@code ?} under the prefix swaps the strip for the
+     * full grouped table; with "Show key hints" off nothing drops on its own and the {@code ?}
+     * cap glows instead, keeping {@code ?} as the one thing to remember. A latched {@code leader}
+     * prefix always shows its full table: it is a deliberate multi-step ask, and its keys have no
+     * caps to light. Any other modifier state removes everything, so it all tracks latch, lock
+     * and release for free via onKeyboardModifiersChanged and
+     * {@link #setHardwareKeybindHintPrefix}.
      */
     private void updateKeybindHintPopup(
             @Nullable com.termux.app.terminal.inappkeyboard.TerminalModifiers modifiers) {
@@ -8647,8 +8660,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * A hardware hold outranks the in-app keyboard's latch: the keyboard reports "no modifiers"
-     * on every key it releases, and that callback must not tear down a slab the physical keyboard
-     * is still holding up.
+     * on every key it releases, and that callback must not tear down a surface the physical
+     * keyboard is still holding up.
      */
     private void refreshKeybindHintPopup() {
         boolean hardware = mHardwareKeybindHintPrefix != null;
@@ -8657,6 +8670,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the first was checked, and the spend is recorded *after* the release pass for a leader
         // chord, so the flag survived into the next prefix and swallowed its legend.
         if (prefix == null || mKeybindHintLastPrefix == null) mKeybindHintSpent = false;
+        if (prefix == null) {
+            // A ?-opened table is sticky: the in-app latch is one-shot and pressing ? itself
+            // spends it, so tearing the table down on release would tear it down the moment it
+            // opened. It retires when a bind runs, on another ?, or on a tap anywhere else.
+            if (mKeybindHintFullMode && mKeybindHintCard.isShowing()) {
+                mKeybindHintLastPrefix = null;
+                return;
+            }
+            mKeybindHintFullMode = false;
+        }
         mKeybindHintLastPrefix = prefix;
         if (mKeybindHintSpent) {
             performKeybindHintHide(false);
@@ -8667,117 +8690,437 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Takes the legend down the moment a binding runs, with no linger: the slab is an answer to a
-     * question the keystroke just answered, and holding it over the action's own UI reads as a
+     * {@code ?} pressed under an active prefix: swaps between the resting surface (the strip, or
+     * nothing when hints are off) and the full table. A bind that already ran under this hold is
+     * forgiven — asking for the table is taking the prefix up again.
+     */
+    public void toggleKeybindHintFullPopup() {
+        boolean hardware = mHardwareKeybindHintPrefix != null;
+        String prefix = hardware ? mHardwareKeybindHintPrefix : mInAppKeybindHintPrefix;
+        if (prefix == null) return;
+        mKeybindHintFullMode = !mKeybindHintFullMode;
+        mKeybindHintSpent = false;
+        showKeybindHintPopup(prefix,
+            hardware ? mHardwareKeybindHintShift : mInAppKeybindHintShift);
+    }
+
+    /**
+     * Takes the hints down the moment a binding runs, with no linger: the surface is an answer to
+     * a question the keystroke just answered, and holding it over the action's own UI reads as a
      * stuck popup. The lingering hide is for the other ending — the prefix released without
      * pressing anything.
      */
     public void onKeybindHintConsumed() {
         mKeybindHintSpent = true;
+        mKeybindHintFullMode = false;
         performKeybindHintHide(false);
     }
 
-    /** Whether the hint legend is on screen, i.e. whether a pending prefix is already announced. */
+    /** Whether a hint surface is on screen, i.e. whether a pending prefix is already announced. */
     public boolean isKeybindHintPopupVisible() {
-        View popup = findViewById(R.id.keybind_hint_popup);
-        return popup != null && popup.getVisibility() == View.VISIBLE;
+        return mKeybindHintCard.isShowing() || isKeybindHintDockRowVisible();
+    }
+
+    private boolean isKeybindHintDockRowVisible() {
+        View row = findViewById(R.id.keybind_hint_dock_row);
+        return row != null && row.getVisibility() == View.VISIBLE;
     }
 
     private void showKeybindHintPopup(@Nullable String basePrefix, boolean shiftHeld) {
-        android.widget.LinearLayout popup = findViewById(R.id.keybind_hint_popup);
-        if (popup == null) return;
-        popup.removeCallbacks(mKeybindHintHide);
-        boolean show = basePrefix != null && isSplitPanesEnabled();
-        Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> hints = null;
-        boolean shift = show && shiftHeld;
-        String prefix = shift ? basePrefix + "shift+" : basePrefix;
-        // Bindings that are one plain Ctrl stroke — pane focus lives there now — are listed
-        // alongside the prefixed table. They are a different chord, so they are spelled out with
-        // their own "Ctrl+" caps and they never light a key: pressing that key under the prefix
-        // does something else.
-        Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> ctrlHints =
-            java.util.Collections.emptyMap();
-        if (show) {
-            com.termux.launcherctl.LauncherToolRegistry.ActionContext context =
-                com.termux.app.terminal.TerminalActionDispatcher.getInstance().actionContext();
-            hints = com.termux.app.terminal.TerminalKeyBindingResolver.getInstance()
-                .hintsForPrefix(prefix, context);
-            show = !hints.isEmpty();
-            if (show && !"ctrl+".equals(basePrefix)) {
-                ctrlHints = com.termux.app.terminal.TerminalKeyBindingResolver.getInstance()
-                    .hintsForPrefix("ctrl+", context);
-            }
-        }
-        if (!show) {
+        View decor = getWindow().getDecorView();
+        decor.removeCallbacks(mKeybindHintHide);
+        if (basePrefix == null || !isSplitPanesEnabled()) {
             hideKeybindHintPopup();
             return;
         }
-        boolean visible = popup.getVisibility() == View.VISIBLE;
-        // Modifier callbacks repeat for the same latch state; only content changes repopulate,
-        // so the lighting and entry animations are not restarted every callback.
-        String signature = prefix + '|' + hints + '|' + ctrlHints;
-        if (visible && signature.equals(popup.getTag())) return;
-        popup.setTag(signature);
-        Map<String, Integer> litTokens = populateKeybindHintPopup(popup, hints, ctrlHints, shift);
-        if (mInAppKeyboard != null)
-            mInAppKeyboard.setKeybindHintHighlights(litTokens);
-        float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity() / 100f : 0.5f;
-        popup.setBackground(buildDockGlassSurface(Math.max(0.85f, barAlpha), 0f, 1f, false));
-        if (!visible) {
-            popup.setVisibility(View.VISIBLE);
-            if (isReducedMotionEnabled()) {
-                popup.setAlpha(1f);
-                popup.setTranslationY(0f);
-            } else {
-                popup.setAlpha(0f);
-                popup.setTranslationY(dpToPx(14));
-                popup.animate().alpha(1f).translationY(0f).setDuration(220L)
-                    .setInterpolator(new android.view.animation.PathInterpolator(
-                        0.2f, 0.8f, 0.2f, 1f))
-                    .start();
-            }
-        } else {
-            // A repopulate can land while the hide fade is still running; keep the slab up.
-            popup.animate().cancel();
-            popup.setAlpha(1f);
-            popup.setTranslationY(0f);
+        boolean shift = shiftHeld;
+        String prefix = shift ? basePrefix + "shift+" : basePrefix;
+        com.termux.launcherctl.LauncherToolRegistry.ActionContext context =
+            com.termux.app.terminal.TerminalActionDispatcher.getInstance().actionContext();
+        Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> hints =
+            com.termux.app.terminal.TerminalKeyBindingResolver.getInstance()
+                .hintsForPrefix(prefix, context);
+        if (hints.isEmpty()) {
+            hideKeybindHintPopup();
+            return;
         }
+        boolean showHints = mPreferences == null || mPreferences.isShowKeyHintsEnabled();
+        // A leader prefix is invisible state with no lit caps to lean on; it always explains
+        // itself in full, whatever the strip preference says.
+        boolean full = mKeybindHintFullMode || basePrefix.indexOf('>') >= 0;
+
+        if (!full && !showHints) {
+            // Nothing drops on its own: the ? cap glowing on the keyboard is the whole surface.
+            mKeybindHintSignature = null;
+            if (mKeybindHintCard.isShowing()) mKeybindHintCard.dismissAnimated();
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.setKeybindHintHighlights(keybindHintQuestionGlow());
+            return;
+        }
+
+        Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> ctrlHints =
+            java.util.Collections.emptyMap();
+        if (full && !"ctrl+".equals(basePrefix)) {
+            // Bindings that are one plain Ctrl stroke — pane focus lives there now — are listed
+            // alongside the prefixed table. They are a different chord, so they are spelled out
+            // with their own "Ctrl+" caps and they never light a key.
+            ctrlHints = com.termux.app.terminal.TerminalKeyBindingResolver.getInstance()
+                .hintsForPrefix("ctrl+", context);
+        }
+        // Modifier callbacks repeat for the same latch state; only content changes rebuild.
+        String signature = (full ? "full|" : "strip|") + prefix + '|' + hints + '|' + ctrlHints;
+        if ((mKeybindHintCard.isShowing() || isKeybindHintDockRowVisible())
+            && signature.equals(mKeybindHintSignature)) return;
+        mKeybindHintSignature = signature;
+
+        View content;
+        if (full) {
+            android.widget.LinearLayout legend = new android.widget.LinearLayout(this);
+            legend.setOrientation(android.widget.LinearLayout.VERTICAL);
+            Map<String, Integer> litTokens =
+                populateKeybindHintPopup(legend, hints, ctrlHints, shift);
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.setKeybindHintHighlights(litTokens);
+            hideKeybindHintDockRow(true);
+            content = wrapKeybindHintScrolling(legend);
+        } else {
+            Map<String, Integer> litTokens = keybindHintLitTokens(hints);
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.setKeybindHintHighlights(litTokens);
+            View strip = buildKeybindHintStrip(hints, shift, litTokens);
+            if (strip == null) {
+                hideKeybindHintPopup();
+                return;
+            }
+            // The A-Z row's slot is the strip's first home: space the dock already pays for,
+            // directly above the keys being pressed. The top card is only the fallback for
+            // when that row is not on screen (apps bar hidden, hardware-keyboard-only).
+            if (canUseKeybindHintDockRow()) {
+                if (mKeybindHintCard.isShowing()) mKeybindHintCard.dismissAnimated();
+                showKeybindHintDockRow(strip);
+                return;
+            }
+            hideKeybindHintDockRow(true);
+            content = strip;
+        }
+        View anchor = keybindHintCardAnchor();
+        if (anchor == null) return;
+        mKeybindHintCard.setDropEdge(findViewById(R.id.terminal_window_bar_host));
+        // The sticky full table watches for a tap anywhere else and retires itself; the strip
+        // tracks the hold alone.
+        Runnable onOutsideTap = full ? () -> {
+            mKeybindHintFullMode = false;
+            performKeybindHintHide(true);
+        } : null;
+        mKeybindHintCard.showPassive(anchor, content, statusCardStyleProvider(),
+            com.termux.app.statusbar.StatusCardHost.STANDARD_WIDTH_DP, null, onOutsideTap);
+    }
+
+    /** The surface every hint card drops from, mirroring the status widgets' detail cards. */
+    @Nullable
+    private View keybindHintCardAnchor() {
+        View bar = findViewById(R.id.terminal_window_bar_host);
+        if (bar != null && bar.isAttachedToWindow() && bar.getVisibility() == View.VISIBLE)
+            return bar;
+        View statusBackground = findViewById(R.id.terminal_status_bar_background);
+        if (statusBackground != null && statusBackground.isAttachedToWindow())
+            return statusBackground;
+        return null;
+    }
+
+    /** Legend-group colours for every bound cap, without building any legend views. */
+    @NonNull
+    private Map<String, Integer> keybindHintLitTokens(
+            @NonNull Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> hints) {
+        int glassBase = resolveAccessoryGlassBaseColor();
+        int primary = getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary,
+            R.color.termux_primary);
+        java.util.EnumMap<com.termux.app.terminal.KeybindGroupPalette.Group, Integer> groupColors =
+            new java.util.EnumMap<>(com.termux.app.terminal.KeybindGroupPalette.Group.class);
+        Map<String, Integer> lit = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> hint
+                : hints.entrySet()) {
+            com.termux.app.terminal.KeybindGroupPalette.Group group =
+                com.termux.app.terminal.KeybindGroupPalette.groupFor(hint.getValue().toolName);
+            Integer color = groupColors.get(group);
+            if (color == null) {
+                color = com.termux.app.terminal.KeybindGroupPalette
+                    .colorFor(group, primary, glassBase);
+                groupColors.put(group, color);
+            }
+            lit.put(hint.getKey(), color);
+        }
+        return lit;
+    }
+
+    /** The one lit cap of hints-off mode: {@code ?} glowing in the primary colour. */
+    @NonNull
+    private Map<String, Integer> keybindHintQuestionGlow() {
+        return java.util.Collections.singletonMap("?",
+            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary,
+                R.color.termux_primary));
+    }
+
+    /** The essential binds the strip names, in strip order, with the label each chip wears. */
+    /**
+     * The strip's chips for the plain Ctrl+Alt table, in display order: {@code {tokens, label}}
+     * where tokens are space-separated stroke suffixes and a label may be a nerd-symbol glyph
+     * (rendered from the bundled symbol face). Chips whose tokens are not actually bound are
+     * dropped rather than shown as a lie.
+     */
+    private static final String[][] KEYBIND_HINT_STRIP_BASE = {
+        {"v h", "split"},
+        {"c", "new window"},
+        {"x", "close window"},
+        {"left right", "\uf2d0"},   // nf-fa-window_maximize: previous/next window
+        {"up down", "\uf489"},      // nf-oct-terminal: previous/next session
+    };
+
+    /** The Shift layer's chips, letters shown upper-case by the cap renderer. */
+    private static final String[][] KEYBIND_HINT_STRIP_SHIFT = {
+        {"c", "new session"},
+        {"x", "close session"},
+        {"left down up right", "\uf047"},   // nf-fa-arrows: resize pane
+        {"p", "palette"},
+    };
+
+    /**
+     * One compact row of curated binds for the held table — the base list under Ctrl+Alt, the
+     * session/resize list once Shift joins — closed by a {@code ?} chip that opens the full
+     * table. Chips are spread evenly across the row by weighted gaps, so the strip reads as a
+     * band rather than a huddle. Returns null when nothing curated is actually bound.
+     */
+    @Nullable
+    private View buildKeybindHintStrip(
+            @NonNull Map<String, com.termux.app.terminal.TerminalKeyBindingResolver.Hint> hints,
+            boolean shift,
+            @NonNull Map<String, Integer> litTokens) {
+        android.widget.LinearLayout strip = new android.widget.LinearLayout(this);
+        strip.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        strip.setGravity(Gravity.CENTER_VERTICAL);
+        int onSurface = getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
+            R.color.termux_on_surface);
+        int chips = 0;
+        for (String[] spec : shift ? KEYBIND_HINT_STRIP_SHIFT : KEYBIND_HINT_STRIP_BASE) {
+            StringBuilder caps = new StringBuilder();
+            Integer color = null;
+            for (String token : spec[0].split(" ")) {
+                if (!hints.containsKey(token)) continue;
+                if (caps.length() > 0) caps.append(' ');
+                caps.append(keybindHintCapText(token, shift));
+                if (color == null) color = litTokens.get(token);
+            }
+            if (caps.length() == 0) continue;
+            addKeybindHintStripGap(strip);
+            addKeybindHintChip(strip, caps.toString(), spec[1], color, onSurface, false);
+            chips++;
+        }
+        if (chips == 0) return null;
+        addKeybindHintStripGap(strip);
+        TextView more = addKeybindHintChip(strip, "?", "",
+            withAlphaComponent(onSurface, 140), onSurface, false);
+        more.setOnClickListener(view -> toggleKeybindHintFullPopup());
+        addKeybindHintStripGap(strip);
+        return strip;
+    }
+
+    /** A weighted gap: in the full-width dock slot the gaps share the leftover space evenly. */
+    private void addKeybindHintStripGap(@NonNull android.widget.LinearLayout strip) {
+        View gap = new View(this);
+        android.widget.LinearLayout.LayoutParams params =
+            new android.widget.LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.MATCH_PARENT, 1f);
+        params.width = Math.round(dpToPx(6));
+        strip.addView(gap, params);
     }
 
     /**
-     * Lingers before the legend goes: releasing the prefix is also how a stroke is typed, so
-     * fading the instant the modifier lifts blinks the slab away mid-read on every use.
+     * One strip chip: bold mono caps in the group colour, then a lower-case label (or none for
+     * the bare {@code ?}). Nerd-symbol labels render from the bundled symbol face.
+     */
+    private TextView addKeybindHintChip(@NonNull android.widget.LinearLayout strip,
+                                    @NonNull String caps, @NonNull String label,
+                                    @Nullable Integer capColor, int onSurface, boolean spaced) {
+        TextView chip = new TextView(this);
+        android.text.SpannableStringBuilder text = new android.text.SpannableStringBuilder();
+        text.append(caps);
+        text.setSpan(new android.text.style.ForegroundColorSpan(
+                capColor != null ? capColor : onSurface),
+            0, text.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        text.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+            0, text.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        text.setSpan(new android.text.style.TypefaceSpan("monospace"),
+            0, text.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        if (!label.isEmpty()) {
+            int labelStart = text.length();
+            text.append(' ').append(label);
+            text.setSpan(new android.text.style.ForegroundColorSpan(
+                    withAlphaComponent(onSurface, 199)),
+                labelStart, text.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        com.termux.shared.termux.font.NerdFontSpans.applyTo(this, text);
+        chip.setText(text);
+        chip.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 11f);
+        chip.setSingleLine(true);
+        android.widget.LinearLayout.LayoutParams params =
+            new android.widget.LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        if (spaced) params.leftMargin = Math.round(dpToPx(12));
+        strip.addView(chip, params);
+        return chip;
+    }
+
+    /** Scrolls a long legend instead of letting the card reach the keyboard. */
+    @NonNull
+    private View wrapKeybindHintScrolling(@NonNull View legend) {
+        ScrollView scroll = new ScrollView(this) {
+            @Override
+            protected void onMeasure(int widthSpec, int heightSpec) {
+                int cap = Math.round(
+                    getResources().getDisplayMetrics().heightPixels * 0.45f);
+                super.onMeasure(widthSpec,
+                    View.MeasureSpec.makeMeasureSpec(cap, View.MeasureSpec.AT_MOST));
+            }
+        };
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.addView(legend, new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return scroll;
+    }
+
+    /**
+     * Lingers before the hints go: releasing the prefix is also how a stroke is typed, so
+     * dismissing the instant the modifier lifts blinks the card away mid-read on every use.
      */
     private static final long KEYBIND_HINT_LINGER_MS = 450L;
 
     private final Runnable mKeybindHintHide = () -> performKeybindHintHide(true);
 
     private void hideKeybindHintPopup() {
-        View popup = findViewById(R.id.keybind_hint_popup);
-        if (popup == null || popup.getVisibility() != View.VISIBLE) {
+        if (!mKeybindHintCard.isShowing() && !isKeybindHintDockRowVisible()) {
+            mKeybindHintSignature = null;
             if (mInAppKeyboard != null)
                 mInAppKeyboard.setKeybindHintHighlights(null);
             return;
         }
-        popup.removeCallbacks(mKeybindHintHide);
-        popup.postDelayed(mKeybindHintHide, KEYBIND_HINT_LINGER_MS);
+        View decor = getWindow().getDecorView();
+        decor.removeCallbacks(mKeybindHintHide);
+        decor.postDelayed(mKeybindHintHide, KEYBIND_HINT_LINGER_MS);
     }
 
     private void performKeybindHintHide(boolean fade) {
         if (mInAppKeyboard != null)
             mInAppKeyboard.setKeybindHintHighlights(null);
-        View popup = findViewById(R.id.keybind_hint_popup);
-        if (popup == null || popup.getVisibility() != View.VISIBLE) return;
-        popup.removeCallbacks(mKeybindHintHide);
-        popup.setTag(null);
-        if (!fade) {
-            popup.animate().cancel();
-            popup.setAlpha(1f);
-            popup.setVisibility(View.GONE);
+        mKeybindHintSignature = null;
+        getWindow().getDecorView().removeCallbacks(mKeybindHintHide);
+        hideKeybindHintDockRow(fade);
+        if (!mKeybindHintCard.isShowing()) return;
+        if (fade) mKeybindHintCard.dismissAnimated();
+        else mKeybindHintCard.dismiss();
+    }
+
+    /** Whether the A-Z row's slot is on screen and able to host the strip. */
+    private boolean canUseKeybindHintDockRow() {
+        View az = findViewById(R.id.apps_bar_az_row);
+        View row = findViewById(R.id.keybind_hint_dock_row);
+        if (az == null || row == null) return false;
+        // While the strip holds the slot the letters are INVISIBLE by design; the slot is
+        // still ours. Without this, Shift joining mid-latch re-decided against the slot and
+        // opened the fallback card on top of the still-showing strip.
+        if (row.getVisibility() == View.VISIBLE) return true;
+        return az.isShown() && az.getHeight() > 0;
+    }
+
+    /**
+     * Swaps the strip into the A-Z row's slot: the letters sink away as the chips settle in, the
+     * exact reverse plays on the way out, and neither surface ever moves the dock's geometry
+     * because the hint row is pinned to the A-Z row's own bounds.
+     */
+    private void showKeybindHintDockRow(@NonNull View strip) {
+        android.widget.HorizontalScrollView row = findViewById(R.id.keybind_hint_dock_row);
+        View az = findViewById(R.id.apps_bar_az_row);
+        if (row == null || az == null) return;
+        row.setFillViewport(true);
+        row.setTranslationZ(dpToPx(4));
+        row.removeAllViews();
+        if (strip instanceof android.widget.LinearLayout)
+            ((android.widget.LinearLayout) strip).setGravity(Gravity.CENTER);
+        row.addView(strip, new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        boolean alreadyUp = row.getVisibility() == View.VISIBLE;
+        row.setVisibility(View.VISIBLE);
+        if (isReducedMotionEnabled() || alreadyUp) {
+            row.setAlpha(1f);
+            row.setTranslationY(0f);
+            az.setAlpha(0f);
+            az.setVisibility(View.INVISIBLE);
             return;
         }
-        popup.animate().alpha(0f).setDuration(160L)
-            .withEndAction(() -> popup.setVisibility(View.GONE)).start();
+        android.view.animation.Interpolator ease =
+            new android.view.animation.PathInterpolator(0.16f, 1f, 0.3f, 1f);
+        az.animate().cancel();
+        // INVISIBLE at the end of the fade, not just alpha 0: a transparent scrub row still
+        // owns its touches, and a tap meant for a chip must never jump the app pages.
+        az.animate().alpha(0f).setDuration(160L).setInterpolator(ease)
+            .withEndAction(() -> az.setVisibility(View.INVISIBLE)).start();
+        row.setAlpha(0f);
+        row.setTranslationY(-dpToPx(6));
+        row.animate().alpha(1f).translationY(0f).setDuration(200L)
+            .setInterpolator(ease).start();
+    }
+
+    /** Returns the A-Z row's letters to their slot; the strip lifts away the way it came. */
+    private void hideKeybindHintDockRow(boolean fade) {
+        android.widget.HorizontalScrollView row = findViewById(R.id.keybind_hint_dock_row);
+        if (row == null || row.getVisibility() != View.VISIBLE) return;
+        View az = findViewById(R.id.apps_bar_az_row);
+        row.animate().cancel();
+        if (az != null) az.animate().cancel();
+        if (!fade || isReducedMotionEnabled()) {
+            row.setVisibility(View.GONE);
+            row.removeAllViews();
+            row.setAlpha(1f);
+            row.setTranslationY(0f);
+            if (az != null) {
+                az.setVisibility(View.VISIBLE);
+                az.setAlpha(1f);
+            }
+            return;
+        }
+        android.view.animation.Interpolator ease =
+            new android.view.animation.PathInterpolator(0.16f, 1f, 0.3f, 1f);
+        if (az != null) {
+            az.setVisibility(View.VISIBLE);
+            az.animate().alpha(1f).setDuration(200L).setStartDelay(60L)
+                .setInterpolator(ease).start();
+        }
+        row.animate().alpha(0f).translationY(-dpToPx(6)).setDuration(160L)
+            .setInterpolator(ease)
+            .withEndAction(() -> {
+                row.setVisibility(View.GONE);
+                row.removeAllViews();
+                row.setAlpha(1f);
+                row.setTranslationY(0f);
+            })
+            .start();
+    }
+
+    /**
+     * A touch on the terminal while the strip occupies the A-Z row dismisses it — the user has
+     * moved on from the chord — and stays gone until the prefix is taken up afresh. The sticky
+     * full card handles the same gesture through its own outside-tap watcher.
+     */
+    private void maybeDismissKeybindHintOnTerminalTouch(@NonNull MotionEvent ev) {
+        if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) return;
+        if (!isKeybindHintDockRowVisible()) return;
+        View stack = findViewById(R.id.accessory_stack_container);
+        if (stack == null || !stack.isAttachedToWindow()) return;
+        int[] location = new int[2];
+        stack.getLocationOnScreen(location);
+        if (ev.getRawY() < location[1]) {
+            mKeybindHintSpent = true;
+            performKeybindHintHide(true);
+        }
     }
 
     /**
@@ -12348,20 +12691,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         WSession ws = wsessionOwning(mPaneController.windowOf(shell));
         int index = ws == null ? -1 : mWSessions.indexOf(ws);
         return index < 0 ? -1 : index + 1;
-    }
-
-    /**
-     * Records that the session-switch indicator is about to fire for {@code shell} and answers
-     * whether it should: false while the shell still belongs to the session indicated last time,
-     * so pane and window churn inside one session never reads as a session switch.
-     */
-    public boolean noteSessionSwitchIndicated(@Nullable TerminalSession shell) {
-        if (shell == null || mPaneController == null) return true;
-        WSession ws = wsessionOwning(mPaneController.windowOf(shell));
-        if (ws == null) return true;
-        if (ws == mLastIndicatedWSession) return false;
-        mLastIndicatedWSession = ws;
-        return true;
     }
 
     /** Ctrl+Alt+Shift+R entry point: rename the current session, not its window or focused pane. */
