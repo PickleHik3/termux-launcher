@@ -8846,6 +8846,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // when that row is not on screen (apps bar hidden, hardware-keyboard-only).
             if (canUseKeybindHintDockRow()) {
                 if (mKeybindHintCard.isShowing()) mKeybindHintCard.dismissAnimated();
+                // The leader's strip evicts any extra-key readout still holding the slot, and its
+                // pending hide must die with it or it would take the strip down mid-latch.
+                cancelExtraKeyReadout();
                 showKeybindHintDockRow(strip);
                 return;
             }
@@ -9058,6 +9061,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void performKeybindHintHide(boolean fade) {
+        cancelExtraKeyReadout();
         if (mInAppKeyboard != null)
             mInAppKeyboard.setKeybindHintHighlights(null);
         mKeybindHintSignature = null;
@@ -9190,6 +9194,56 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 row.setTranslationY(0f);
             })
             .start();
+    }
+
+    // --- Extra-key press readout: the pressed key named in the A-Z row's slot ---
+
+    /**
+     * Long enough to read a combo at a glance, short enough that the letters are back before the
+     * next deliberate scrub; a fresh press just restarts it.
+     */
+    private static final long EXTRA_KEY_READOUT_HOLD_MS = 600L;
+
+    /** True while the dock row's content is a readout rather than the leader's hint strip. */
+    private boolean mExtraKeyReadoutActive;
+
+    private final Runnable mExtraKeyReadoutHide = () -> {
+        if (!mExtraKeyReadoutActive) return;
+        mExtraKeyReadoutActive = false;
+        hideKeybindHintDockRow(true);
+    };
+
+    /**
+     * Names a pressed extra key in the A-Z row's slot — the same surface the leader's hint strip
+     * borrows — so the eye never has to leave the dock to confirm what a glyph key just sent.
+     * Repeated presses swap the label in place; the leader's strip outranks it and evicts it.
+     */
+    public void showExtraKeyPressReadout(@Nullable CharSequence label) {
+        if (label == null || label.length() == 0) return;
+        // While a latched prefix owns the slot (or its fallback card is up), the readout stays
+        // quiet: the strip is answering a question the user is still asking.
+        if (!mExtraKeyReadoutActive
+            && (isKeybindHintDockRowVisible() || mKeybindHintCard.isShowing())) return;
+        if (!canUseKeybindHintDockRow()) return;
+        android.widget.LinearLayout strip = new android.widget.LinearLayout(this);
+        strip.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        strip.setGravity(Gravity.CENTER);
+        int onSurface = getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
+            R.color.termux_on_surface);
+        int primary = getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary,
+            R.color.termux_primary);
+        addKeybindHintChip(strip, label.toString(), "", primary, onSurface, false);
+        mExtraKeyReadoutActive = true;
+        showKeybindHintDockRow(strip);
+        View decor = getWindow().getDecorView();
+        decor.removeCallbacks(mExtraKeyReadoutHide);
+        decor.postDelayed(mExtraKeyReadoutHide, EXTRA_KEY_READOUT_HOLD_MS);
+    }
+
+    /** Drops readout state without touching the row — for when the hint strip takes the slot. */
+    private void cancelExtraKeyReadout() {
+        mExtraKeyReadoutActive = false;
+        getWindow().getDecorView().removeCallbacks(mExtraKeyReadoutHide);
     }
 
     /**

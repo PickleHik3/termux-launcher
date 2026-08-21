@@ -99,6 +99,8 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
     @SuppressLint("RtlHardcoded")
     @Override
     public void onTerminalExtraKeyButtonClick(View view, String key, boolean ctrlDown, boolean altDown, boolean shiftDown, boolean fnDown) {
+        if (key != null)
+            mActivity.showExtraKeyPressReadout(pressReadoutLabel(key, ctrlDown, altDown, shiftDown, fnDown));
         if ("KEYBOARD".equals(key)) {
             if (mTermuxTerminalViewClient != null)
                 mTermuxTerminalViewClient.onToggleSoftKeyboardRequest();
@@ -124,6 +126,30 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
 
     /** Extra-keys entries prefixed with this run a registry tool instead of sending keys. */
     static final String LAUNCHER_TOOL_KEY_PREFIX = "tool:";
+
+    /**
+     * What the A-Z row readout names for a press: latched modifiers spelled out before the key,
+     * and a tool key by its registry title (the glyph on the cap is exactly what the readout is
+     * there to explain) — falling back to the bare tool name for tools with no UI title.
+     */
+    @NonNull
+    private String pressReadoutLabel(@NonNull String key, boolean ctrlDown, boolean altDown,
+                                     boolean shiftDown, boolean fnDown) {
+        if (key.startsWith(LAUNCHER_TOOL_KEY_PREFIX)) {
+            String spec = key.substring(LAUNCHER_TOOL_KEY_PREFIX.length());
+            int colon = spec.indexOf(':');
+            String toolName = colon > 0 ? spec.substring(0, colon) : spec;
+            com.termux.launcherctl.LauncherToolRegistry.ToolMetadata tool =
+                com.termux.launcherctl.LauncherToolRegistry.getInstance().getTool(toolName);
+            return tool != null && tool.titleRes != 0 ? mActivity.getString(tool.titleRes) : toolName;
+        }
+        StringBuilder label = new StringBuilder();
+        if (ctrlDown) label.append("CTRL ");
+        if (altDown) label.append("ALT ");
+        if (shiftDown) label.append("SHIFT ");
+        if (fnDown) label.append("FN ");
+        return label.append(key).toString();
+    }
 
     /**
      * Runs a registry tool named by an extra key. The spec is
