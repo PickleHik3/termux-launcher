@@ -88,6 +88,8 @@ public final class SystemStatsController {
     private static final String M_TOP = "@@TOP";
     private static final String M_PS = "@@PS";
     private static final int MAX_PROCESS_BUFFER = 32;
+    /** How long to wait between privileged-backend re-initialization attempts while it is down. */
+    private static final long BACKEND_RETRY_INTERVAL_MS = 30_000L;
 
     private final Context mContext;
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
@@ -104,6 +106,8 @@ public final class SystemStatsController {
      * the CPU delta afterwards. Written and read on the main thread only.
      */
     private int mSampleGeneration;
+    /** Last privileged-backend re-initialization attempt, for {@link #requestPrivilegedBackendRetry}. */
+    private long mLastBackendRetryAtMs;
 
     // Previous CPU tick totals per line ("cpu", "cpu0", ...) for delta-based utilisation.
     @Nullable private long[] mPrevTotal;
@@ -186,12 +190,33 @@ public final class SystemStatsController {
                 });
             });
         } else {
+            requestPrivilegedBackendRetry(manager, now);
             // Hardened builds deny the app's own /proc/stat read, so the fallback can fail
             // while ActivityManager memory keeps updating — mark that honestly instead of
             // presenting a frozen CPU reading and an old process list as fresh.
             mLatest.stale = !readDirectFallback();
             publish();
         }
+    }
+
+    /**
+     * Asks the manager to (re)initialize when no privileged backend is up. Sampling is a read-only
+     * consumer, so nothing else here would ever bring the backend back: on devices whose policy
+     * denies the direct /proc reads that leaves the card permanently blank until the user opens
+     * settings and connects by hand.
+     *
+     * <p>Rate limited because each attempt tears down and rebuilds the Shizuku backend, and a
+     * genuinely absent Shizuku would otherwise be re-probed on every single sample.
+     */
+    private void requestPrivilegedBackendRetry(@NonNull PrivilegedBackendManager manager, long nowMs) {
+        if (mLastBackendRetryAtMs != 0 && nowMs - mLastBackendRetryAtMs < BACKEND_RETRY_INTERVAL_MS) {
+            return;
+        }
+        mLastBackendRetryAtMs = nowMs;
+        manager.initializeIfNeeded(mContext).exceptionally(throwable -> {
+            Log.w(LOG_TAG, "Privileged backend retry failed: " + throwable);
+            return false;
+        });
     }
 
     /**

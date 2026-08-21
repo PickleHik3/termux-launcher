@@ -302,46 +302,68 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
             }
         }
         
- try{
-        logd("close remaining orphans in /proc");
-			final File proc = new File("/proc");
-   	final String[] files = proc.list();
-   	int i = 0;
-     for(String f : files) {
-         if (!new File(proc, f).isDirectory()) continue;
-         try {
-         // numbers are pids
-				int pid =  Integer.parseInt(f);
-				logd(self(pid) + " pid " + pid);
-				//skip termux 
-				if (!self(pid)) Os.kill(pid, OsConstants.SIGTERM);
-				i++;
-     	 } catch (NumberFormatException e) {}
-      }
-			  
-			} catch (Exception e) { loge(e); }
- }
-    
-boolean self(int pid){
-	  try {			
-		File f = new File(String.format("/proc/%d/cmdline",pid));
-		  FileInputStream		is = new FileInputStream(f);
-   BufferedReader  reader = new BufferedReader( new InputStreamReader(is));
-     String comm = reader.readLine();
-	//	  logd(comm + comm.trim().length() + "com.termux".length());
-		 return comm.trim().equals("com.termux");
-		}catch(Exception e) {
-			loge(e);
-		}
-		return false;
-	}
-	
-void logd(String l){
-	Logger.logDebug(LOG_TAG,l);
-	}
-	void loge(Exception e){
-		logd(e.toString() + e.getMessage());
-	}
+        reapOrphanedProcesses();
+    }
+
+    /**
+     * SIGTERM the processes that the killed sessions and tasks may have left behind, so a nix or
+     * proot tree does not keep running after everything that owned it is gone.
+     *
+     * Every android process of this app has to be skipped, our own included: {@link Os#kill} on our
+     * own pid tears down the whole app. The check used to compare the cmdline against a hardcoded
+     * "com.termux", so on every edition with a different applicationId — the nix and vaj ones —
+     * this killed the app process itself, and it did so on each and every session exit, which read
+     * as a crash. Processes of another uid raise an {@code ErrnoException} rather than dying, so each
+     * kill is guarded separately instead of aborting the whole sweep on the first foreign pid.
+     */
+    private void reapOrphanedProcesses() {
+        String[] procEntries = new File("/proc").list();
+        if (procEntries == null) {
+            Logger.logWarn(LOG_TAG, "Cannot list /proc to reap orphaned processes");
+            return;
+        }
+        int ownPid = android.os.Process.myPid();
+        int reaped = 0;
+        for (String procEntry : procEntries) {
+            int pid;
+            try {
+                pid = Integer.parseInt(procEntry);
+            } catch (NumberFormatException e) {
+                // Not a pid directory.
+                continue;
+            }
+            if (pid == ownPid || isProcessOfThisApp(pid))
+                continue;
+            try {
+                Os.kill(pid, OsConstants.SIGTERM);
+                reaped++;
+            } catch (Exception e) {
+                // Belongs to another uid (EPERM) or exited while we were looking at it (ESRCH).
+            }
+        }
+        Logger.logDebug(LOG_TAG, "Sent SIGTERM to " + reaped + " orphaned processes");
+    }
+
+    /**
+     * Whether {@code pid} is an android process of this app, which includes the plugin apps that
+     * run under our shared uid and any {@code :process} of our own.
+     */
+    private boolean isProcessOfThisApp(int pid) {
+        String packageName = getPackageName();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                new FileInputStream("/proc/" + pid + "/cmdline")))) {
+            String cmdline = reader.readLine();
+            if (cmdline == null)
+                return false;
+            // /proc/<pid>/cmdline is NUL separated and NUL trims away as whitespace.
+            cmdline = cmdline.trim();
+            return cmdline.equals(packageName)
+                || cmdline.startsWith(packageName + ":")
+                || cmdline.startsWith(packageName + ".");
+        } catch (Exception e) {
+            return false;
+        }
+    }
 	
     /**
      * Process action to acquire Power and Wi-Fi WakeLocks.
