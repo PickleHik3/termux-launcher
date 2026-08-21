@@ -48,8 +48,12 @@ import java.util.Locale;
 /** One compact app-owned row for the current tmux-style window list. */
 public final class TerminalWindowBar extends HorizontalScrollView {
 
-    /** Shared with the terminal surface so both pieces of the window switch settle together. */
-    public static final long WINDOW_SWITCH_ANIMATION_DURATION_MS = 320L;
+    /**
+     * Shared with the terminal surface so both pieces of the window switch settle together.
+     * Deliberately unhurried: with the spring-shaped settle curve the pan spends its middle
+     * moving fast and its ends easing, so the extra time reads as weight, not lag.
+     */
+    public static final long WINDOW_SWITCH_ANIMATION_DURATION_MS = 560L;
 
     public interface OnWindowSelectedListener {
         void onWindowSelected(int index);
@@ -517,9 +521,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     private Interpolator settleInterpolator() {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
-            ? new PathInterpolator(0.16f, 1f, 0.3f, 1f)
-            : new DecelerateInterpolator(1.8f);
+        return Motion.settle();
     }
 
     private void cancelSelectionAnimation() {

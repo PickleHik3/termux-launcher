@@ -41,7 +41,7 @@ import java.util.List;
 public final class PaneMotionOverlayView extends View {
 
     /** Hyprland/niri-ish close: fast off the mark, settling out, and a legible contraction. */
-    private static final long GHOST_DURATION_MS = 165L;
+    private static final long GHOST_DURATION_MS = 230L;
     private static final float GHOST_END_SCALE = 0.82f;
     /** More ghosts than this on screen at once is a burst nobody can read; drop the oldest. */
     private static final int MAX_GHOSTS = 4;

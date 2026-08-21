@@ -418,17 +418,28 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             return;
         // Which way the session list was walked, for the vertical arrival: sessions move on the
         // other axis from windows, so the animation itself says which switch just happened.
-        // Captured before the switch, and only when both ends are real tabs — a brand-new shell
-        // arriving is not travel between two sessions.
-        TerminalSession previous = mActivity.getCurrentTabPrimary();
-        if (previous == null) previous = mActivity.getCurrentSession();
-        int fromIndex = previous == null ? -1 : mActivity.getDrawerIndexOfSession(previous);
-        int toIndex = mActivity.getDrawerIndexOfSession(session);
+        // Session travel is a session-list boundary crossing, judged on session numbers, NOT on
+        // drawer indices: the drawer keys off the focused pane's shell, which is absent from the
+        // tab list whenever a secondary split pane holds focus — every switch made from such a
+        // pane used to silently skip its animation.
+        int fromNumber = mActivity.getCurrentSessionNumber();
+        int toNumber = mActivity.getSessionNumberFor(session);
+        boolean travelled = fromNumber > 0 && toNumber > 0 && fromNumber != toNumber;
+        // A brand-new shell is appended to the session list, so — niri's language — it arrives
+        // the same way "next session" does: the old session is carried off and the new one
+        // scrolls in from beyond the end of the list.
+        boolean created = fromNumber > 0 && toNumber <= 0;
+        // Captured before the pane tree is swapped so the arrival has an outgoing half to slide
+        // away.
+        if (travelled || created)
+            mActivity.captureTerminalDeparture();
         // Route through the split-pane model: shows the session's tab (primary + optional
         // secondary pane) and focuses the pane displaying this session.
         if (mActivity.activateSessionInPanes(session)) {
-            if (fromIndex >= 0 && toIndex >= 0 && fromIndex != toIndex)
-                mActivity.animateTerminalSessionArrival(toIndex >= fromIndex ? 1 : -1);
+            if (travelled)
+                mActivity.animateTerminalSessionArrival(toNumber >= fromNumber ? 1 : -1);
+            else if (created)
+                mActivity.animateTerminalSessionArrival(1);
             // No "[1] fish in ~" chip here any more: the action hint already narrates the switch,
             // and two stacked notices for one keypress read as noise. The indicator view stays for
             // notices that carry real news — an exited session, a refused split.

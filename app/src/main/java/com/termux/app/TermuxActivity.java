@@ -457,9 +457,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         new com.termux.app.statusbar.BackgroundProcessModel();
     @Nullable private com.termux.app.statusbar.BackgroundProcessStackView mBackgroundProcessStack;
     private final Handler mBackgroundProcessHandler = new Handler(Looper.getMainLooper());
-    /** Height the transient notice chip is occupying above the stack; 0 when it is not showing. */
-    private int mNoticeOccupancyPx;
-    /** Height the in-app notice chip is occupying above both of them; 0 when it is not showing. */
+    /** Height the in-app notice chip is occupying above the background stack; 0 when not showing. */
     private int mAppNoticeOccupancyPx;
     /** True between the onboarding finishing and the last of its permission dialogs closing. */
     private boolean mFirstRunPermissionChainActive;
@@ -531,6 +529,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mDockPlankWidth = 0f;
     private float mDockPlankHeight = 0f;
     private final int[] mDockPlankLocation = new int[2];
+    private final int[] mDockPlankKeySurfaceLocation = new int[2];
+    /**
+     * The key surfaces that ride on the dock plank. Touches on these never drive the plank
+     * physics — see {@link #isOnDockPlankKeySurface(float, float)}.
+     */
+    private static final int[] DOCK_PLANK_KEY_SURFACE_IDS = {
+        R.id.inapp_keyboard_container,
+        R.id.terminal_toolbar_view_pager,
+    };
 
     /** True while every terminal pane is a glass slab with its own physics. */
     private boolean mTerminalGlassActive = false;
@@ -1036,12 +1043,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
     }
 
-    /** One column, three tenants: notice chip on top, session chip under it, then the stack. */
+    /** The top-trailing column: notice chip on top, background stack right under it. The
+     *  session-switch indicator lives in the top-leading corner now and no longer shares it. */
     private void applyNoticeColumnOffsets() {
-        if (mSessionSwitchIndicator != null)
-            mSessionSwitchIndicator.setTranslationY(mAppNoticeOccupancyPx);
         if (mBackgroundProcessStack != null)
-            mBackgroundProcessStack.setNoticeOccupancyPx(mAppNoticeOccupancyPx + mNoticeOccupancyPx);
+            mBackgroundProcessStack.setNoticeOccupancyPx(mAppNoticeOccupancyPx);
     }
 
     @Override
@@ -1185,7 +1191,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 float x = ev.getRawX();
                 float y = ev.getRawY();
                 if (x >= mDockPlankLeft && x <= mDockPlankLeft + mDockPlankWidth
-                    && y >= mDockPlankTop && y <= mDockPlankTop + mDockPlankHeight) {
+                    && y >= mDockPlankTop && y <= mDockPlankTop + mDockPlankHeight
+                    && !isOnDockPlankKeySurface(x, y)) {
                     mDockPlankTouchInside = true;
                     controller.onPointerDown(
                         (x - mDockPlankLeft) / mDockPlankWidth,
@@ -1210,6 +1217,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             default:
                 break;
         }
+    }
+
+    /**
+     * Whether a touch lands on one of the key surfaces the plank carries rather than on the dock.
+     *
+     * <p>While the in-app keyboard is up the plank target is the whole accessory surface, and that
+     * surface holds the keyboard and the extra-keys row alongside the dock. Feeding those touches
+     * to the springs tilted and slid the entire plane on every keystroke, so the dock swayed while
+     * you typed. The physics belong to pushing the dock, not to pressing a key.</p>
+     */
+    private boolean isOnDockPlankKeySurface(float rawX, float rawY) {
+        for (int viewId : DOCK_PLANK_KEY_SURFACE_IDS) {
+            View view = findViewById(viewId);
+            if (view == null || view.getVisibility() != View.VISIBLE
+                || view.getWidth() <= 0 || view.getHeight() <= 0) {
+                continue;
+            }
+            view.getLocationOnScreen(mDockPlankKeySurfaceLocation);
+            float left = mDockPlankKeySurfaceLocation[0];
+            float top = mDockPlankKeySurfaceLocation[1];
+            if (rawX >= left && rawX <= left + view.getWidth()
+                && rawY >= top && rawY <= top + view.getHeight()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -1422,15 +1455,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the terminal: the pane borders land exactly where the terminal border was.
         int borderVerticalInsetPx = preferBorder || glass
             ? Math.round(dpToPx(TERMINAL_BORDER_VERTICAL_INSET_DP)) : 0;
+        int borderHorizontalInsetPx = capsuleMarginPx;
+        if (!capsule) {
+            // Default surface: the terminal's outer air is the user's own "Inner padding" knob —
+            // the same value that gaps the panes — applied evenly on all four sides. Before this,
+            // the vertical edges had a fixed 5dp of air while the sides sat flush against the
+            // screen, and no setting reached either. Rounded keeps its capsule heuristics.
+            int outerPx = Math.round(dpToPx(mPreferences.getTerminalPaneGap()));
+            borderHorizontalInsetPx = outerPx;
+            borderVerticalInsetPx = outerPx;
+        }
 
         ViewGroup.LayoutParams borderParams = borderView.getLayoutParams();
         if (borderParams instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) borderParams;
-            if (marginParams.leftMargin != capsuleMarginPx || marginParams.rightMargin != capsuleMarginPx
+            if (marginParams.leftMargin != borderHorizontalInsetPx || marginParams.rightMargin != borderHorizontalInsetPx
                 || marginParams.topMargin != borderVerticalInsetPx
                 || marginParams.bottomMargin != borderVerticalInsetPx) {
-                marginParams.leftMargin = capsuleMarginPx;
-                marginParams.rightMargin = capsuleMarginPx;
+                marginParams.leftMargin = borderHorizontalInsetPx;
+                marginParams.rightMargin = borderHorizontalInsetPx;
                 marginParams.topMargin = borderVerticalInsetPx;
                 marginParams.bottomMargin = borderVerticalInsetPx;
                 borderView.setLayoutParams(marginParams);
@@ -1449,7 +1492,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // corner cells were still being nibbled — worse the larger the radius. That clearance is
         // padding inside the clip instead (see cornerArcPaddingPx below).
         int paneInsetPx = enabled ? strokePx + Math.round(dpToPx(2)) : 0;
-        int paneHorizontalInsetPx = capsuleMarginPx + paneInsetPx;
+        int paneHorizontalInsetPx = borderHorizontalInsetPx + paneInsetPx;
         int paneVerticalInsetPx = borderVerticalInsetPx + paneInsetPx;
         ViewGroup.LayoutParams paneParams = paneHost.getLayoutParams();
         if (paneParams instanceof ViewGroup.MarginLayoutParams) {
@@ -1809,12 +1852,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Nullable private Runnable mActionHintHideRunnable;
 
-    /** Names a dispatched tool in the corner chip; a no-op for tools with no UI title. */
+    /**
+     * Names a dispatched tool in the corner chip; a no-op for tools with no UI title and for
+     * self-evident tools — an action whose result is already on screen (a split, a pan, a closed
+     * pane) narrates itself, and chipping it too was pure clutter. The chip is for what the screen
+     * cannot say: invisible results, refusals, off-screen events.
+     */
     public void showTerminalActionHint(@NonNull String toolName) {
         TextView chip = findViewById(R.id.terminal_action_hint);
         if (chip == null) return;
         LauncherToolRegistry.ToolMetadata tool = LauncherToolRegistry.getInstance().getTool(toolName);
-        if (tool == null || tool.titleRes == 0) return;
+        if (tool == null || tool.titleRes == 0 || tool.selfEvident) return;
         showTerminalActionHint(chip, getString(tool.titleRes));
     }
 
@@ -1831,10 +1879,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         background.setStroke(Math.max(1, Math.round(dpToPx(1))),
             withAlphaComponent(resolveAccessoryOutlineColor(), 120));
         chip.setBackground(background);
-        // The window draws under the status bar, so the chip clears it by its measured inset
-        // rather than by a guessed margin that would sit on the clock on one device and float on
-        // another.
-        chip.setTranslationY(mLastStatusBarInsetTop);
 
         chip.animate().cancel();
         chip.setVisibility(View.VISIBLE);
@@ -7625,6 +7669,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         // The gap is laid out by the split tree, so it needs a re-render rather
                         // than a restyle; the panes and their shells are reused across it.
                         if (mPaneController != null) mPaneController.refreshPaneLayout();
+                        // On the default surface the same knob is the terminal's outer air too.
+                        applyTerminalBorderAppearance();
                         requestDockTuningPreview(TUNING_PREVIEW_SURFACES);
                     }
                 }
@@ -7851,6 +7897,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.setTerminalPaneGap(
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP);
                 if (mPaneController != null) mPaneController.refreshPaneLayout();
+                applyTerminalBorderAppearance();
                 mPreferences.setTerminalContrastLevel(
                     com.termux.shared.termux.settings.preferences.TerminalContrastLevel
                         .DEFAULT.value);
@@ -7918,6 +7965,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mPreferences.getTerminalPaneGap() != initialTerminalGap) {
                     mPreferences.setTerminalPaneGap(initialTerminalGap);
                     if (mPaneController != null) mPaneController.refreshPaneLayout();
+                    applyTerminalBorderAppearance();
                 }
                 if (!initialTerminalContrast.equals(
                         mPreferences.getTerminalContrastLevel().value)) {
@@ -8509,9 +8557,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private android.view.animation.Interpolator surfaceTuningFadeInterpolator() {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
-            ? new android.view.animation.PathInterpolator(0.16f, 1f, 0.3f, 1f)
-            : new android.view.animation.DecelerateInterpolator(1.8f);
+        return com.termux.app.terminal.Motion.settle();
     }
 
     private void positionSurfaceTuningGestureTargets() {
@@ -9051,26 +9097,43 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         row.addView(strip, new ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         boolean alreadyUp = row.getVisibility() == View.VISIBLE;
+        // A hide may still be animating this row out (the consumed-bind fade); it must not win
+        // the race and GONE a row that has just been repopulated.
+        row.animate().cancel();
         row.setVisibility(View.VISIBLE);
         if (isReducedMotionEnabled() || alreadyUp) {
             row.setAlpha(1f);
             row.setTranslationY(0f);
             az.setAlpha(0f);
+            az.setTranslationY(0f);
             az.setVisibility(View.INVISIBLE);
             return;
         }
-        android.view.animation.Interpolator ease =
-            new android.view.animation.PathInterpolator(0.16f, 1f, 0.3f, 1f);
+        // A staggered vertical swap, not a same-slot crossfade: both rows are dense text in the
+        // same band, and fading them over each other collides their glyphs into an illegible
+        // in-between. The letters clear out first (up and away), the chips follow from below.
+        android.view.animation.Interpolator ease = com.termux.app.terminal.Motion.settle();
         az.animate().cancel();
         // INVISIBLE at the end of the fade, not just alpha 0: a transparent scrub row still
         // owns its touches, and a tap meant for a chip must never jump the app pages.
-        az.animate().alpha(0f).setDuration(160L).setInterpolator(ease)
-            .withEndAction(() -> az.setVisibility(View.INVISIBLE)).start();
+        az.animate().alpha(0f).translationY(-dpToPx(4)).setDuration(KEYBIND_HINT_SWAP_OUT_MS)
+            .setInterpolator(ease)
+            .withEndAction(() -> {
+                az.setVisibility(View.INVISIBLE);
+                az.setTranslationY(0f);
+            }).start();
         row.setAlpha(0f);
-        row.setTranslationY(-dpToPx(6));
-        row.animate().alpha(1f).translationY(0f).setDuration(200L)
-            .setInterpolator(ease).start();
+        row.setTranslationY(dpToPx(4));
+        row.animate().alpha(1f).translationY(0f).setDuration(KEYBIND_HINT_SWAP_IN_MS)
+            .setStartDelay(KEYBIND_HINT_SWAP_STAGGER_MS).setInterpolator(ease).start();
     }
+
+    /** The dock-row swap's clock: outgoing text clears before incoming text lands on it. */
+    private static final long KEYBIND_HINT_SWAP_OUT_MS = 50L;
+    private static final long KEYBIND_HINT_SWAP_IN_MS = 70L;
+    private static final long KEYBIND_HINT_SWAP_STAGGER_MS = 30L;
+    /** A consumed bind's hints leave fast but not as a one-frame vanish under the finger. */
+    private static final long KEYBIND_HINT_CONSUMED_EXIT_MS = 60L;
 
     /** Returns the A-Z row's letters to their slot; the strip lifts away the way it came. */
     private void hideKeybindHintDockRow(boolean fade) {
@@ -9079,7 +9142,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View az = findViewById(R.id.apps_bar_az_row);
         row.animate().cancel();
         if (az != null) az.animate().cancel();
-        if (!fade || isReducedMotionEnabled()) {
+        if (isReducedMotionEnabled()) {
             row.setVisibility(View.GONE);
             row.removeAllViews();
             row.setAlpha(1f);
@@ -9087,17 +9150,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (az != null) {
                 az.setVisibility(View.VISIBLE);
                 az.setAlpha(1f);
+                az.setTranslationY(0f);
             }
             return;
         }
-        android.view.animation.Interpolator ease =
-            new android.view.animation.PathInterpolator(0.16f, 1f, 0.3f, 1f);
+        android.view.animation.Interpolator ease = com.termux.app.terminal.Motion.settle();
+        if (!fade) {
+            // A bind just ran: the letters are wanted back now, but a one-frame vanish of the
+            // strip reads as a glitch, so it gets a short fade over the restored row.
+            if (az != null) {
+                az.setVisibility(View.VISIBLE);
+                az.setAlpha(1f);
+                az.setTranslationY(0f);
+            }
+            row.animate().alpha(0f).setDuration(KEYBIND_HINT_CONSUMED_EXIT_MS)
+                .setInterpolator(ease)
+                .withEndAction(() -> {
+                    row.setVisibility(View.GONE);
+                    row.removeAllViews();
+                    row.setAlpha(1f);
+                    row.setTranslationY(0f);
+                })
+                .start();
+            return;
+        }
+        // The enter swap in reverse: the chips sink back below, the letters return from above.
         if (az != null) {
             az.setVisibility(View.VISIBLE);
-            az.animate().alpha(1f).setDuration(200L).setStartDelay(60L)
-                .setInterpolator(ease).start();
+            az.setTranslationY(-dpToPx(4));
+            az.animate().alpha(1f).translationY(0f).setDuration(KEYBIND_HINT_SWAP_IN_MS)
+                .setStartDelay(KEYBIND_HINT_SWAP_STAGGER_MS).setInterpolator(ease).start();
         }
-        row.animate().alpha(0f).translationY(-dpToPx(6)).setDuration(160L)
+        row.animate().alpha(0f).translationY(dpToPx(4)).setDuration(KEYBIND_HINT_SWAP_OUT_MS)
             .setInterpolator(ease)
             .withEndAction(() -> {
                 row.setVisibility(View.GONE);
@@ -12271,14 +12355,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (host == null)
             return null;
         if (mSessionSwitchIndicator == null) {
+            // Top-leading corner, flush with the host's top edge — the same row the AppNotice chip
+            // hangs from in the top-trailing corner, so two simultaneous notices read as one band.
             mSessionSwitchIndicator = new com.termux.app.terminal.SessionSwitchIndicatorView(this);
-            // Both chips share the corner, so the notice owns the top slot and the background stack
-            // follows it down and back up — one column, never a reserved gap.
-            mSessionSwitchIndicator.setOccupancyListener(height -> {
-                mNoticeOccupancyPx = height;
-                applyNoticeColumnOffsets();
-            });
-            mSessionSwitchIndicator.setTranslationY(mAppNoticeOccupancyPx);
         }
         if (mSessionSwitchIndicator.getParent() == null) {
             host.addView(mSessionSwitchIndicator,
@@ -12297,7 +12376,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             host.addView(mBackgroundProcessStack,
                 com.termux.app.statusbar.BackgroundProcessStackView.buildHostLayoutParams(this));
             // A notice can already be up when the first background command appears.
-            mBackgroundProcessStack.setNoticeOccupancyPx(mAppNoticeOccupancyPx + mNoticeOccupancyPx);
+            mBackgroundProcessStack.setNoticeOccupancyPx(mAppNoticeOccupancyPx);
         }
         return mBackgroundProcessStack;
     }
@@ -12688,6 +12767,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return ws == null ? TerminalNamePolicy.normalizeSession(shell.mSessionName) : ws.name;
     }
 
+    /** 1-based number of the current tmux-style session, or -1 before any session exists. */
+    public int getCurrentSessionNumber() {
+        int index = mCurrentWSession == null ? -1 : mWSessions.indexOf(mCurrentWSession);
+        return index < 0 ? -1 : index + 1;
+    }
+
     /** 1-based number of the tmux-style session containing {@code shell}, or -1 when unowned. */
     public int getSessionNumberFor(@Nullable TerminalSession shell) {
         if (shell == null || mPaneController == null) return -1;
@@ -12889,6 +12974,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneController == null || index < 0 || index >= mWSessions.size()) return false;
         WSession ws = mWSessions.get(index);
         boolean wasCurrent = ws == mCurrentWSession;
+        if (wasCurrent) captureTerminalDeparture();
         for (com.termux.app.terminal.TerminalPaneController.Window window :
                 new java.util.ArrayList<>(ws.windows)) {
             for (TerminalSession shell : mPaneController.removeWindow(window)) {
@@ -12901,6 +12987,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!mWSessions.isEmpty()) {
                 mCurrentWSession = mWSessions.get(Math.min(index, mWSessions.size() - 1));
                 mPaneController.showWindow(mCurrentWSession.currentWindow());
+                animateTerminalSessionArrival(-1);
             } else if (getTermuxTerminalSessionClient() != null) {
                 getTermuxTerminalSessionClient().addNewSession(false, null);
             }
@@ -14820,6 +14907,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int previous = mCurrentWSession.current;
         if (previous == index) return;
         mStatusCardHost.dismiss();
+        captureTerminalDeparture();
         mCurrentWSession.current = index;
         mPaneController.showWindow(mCurrentWSession.currentWindow());
         rebuildDrawerSessions();
@@ -14831,7 +14919,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * push a compositor can afford — the panes here keep running while they move, and a long throw
      * of live terminals reads as lag rather than as motion.
      */
-    private static final int WORKSPACE_SLIDE_DP = 34;
+    private static final int WORKSPACE_SLIDE_DP = 64;
 
     /**
      * A window arrives sideways, a session arrives vertically. The two axes are the whole point:
@@ -14848,24 +14936,160 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void animateTerminalArrival(int direction, boolean horizontal) {
-        View terminal = findViewById(R.id.terminal_surface_host);
-        if (terminal == null || isReducedMotionEnabled()) return;
-        float offset = (direction < 0 ? -1f : 1f) * dpToPx(WORKSPACE_SLIDE_DP);
-        terminal.animate().cancel();
-        terminal.setAlpha(0.78f);
-        terminal.setTranslationX(horizontal ? offset : 0f);
-        terminal.setTranslationY(horizontal ? 0f : offset);
-        terminal.animate()
-            .alpha(1f)
+        ViewGroup surfaceHost = findViewById(R.id.terminal_surface_host);
+        View paneHost = findViewById(R.id.terminal_pane_host);
+        if (surfaceHost == null || paneHost == null || isReducedMotionEnabled()) {
+            dropTerminalDepartureSnapshot();
+            return;
+        }
+        float travel = horizontal ? surfaceHost.getWidth() : surfaceHost.getHeight();
+        if (travel <= 0f) {
+            dropTerminalDepartureSnapshot();
+            return;
+        }
+        // The switch is a wall pan, not a nudge: the outgoing card and the incoming surface each
+        // travel one full viewport on the same clock and curve, edges one viewport apart the whole
+        // way, so they read as one continuous sheet sliding past a stationary frame. No fades —
+        // fading is what made this read as a step.
+        float offset = (direction < 0 ? -1f : 1f) * travel;
+        android.view.animation.Interpolator settle = com.termux.app.terminal.Motion.settle();
+        // Neutralise any creation animation still running on the host itself.
+        surfaceHost.animate().cancel();
+        surfaceHost.setAlpha(1f);
+        surfaceHost.setScaleX(1f);
+        surfaceHost.setScaleY(1f);
+        surfaceHost.setTranslationX(0f);
+        surfaceHost.setTranslationY(0f);
+        // The host normally lets pane chrome overflow; while the wall pans, both sheets must be
+        // cut at the viewport edge or they would slide over the status row and the dock.
+        // setClipBounds rather than clipChildren: other features flip clipChildren on ancestors
+        // at will, and elevated pane chrome escapes it — clipBounds cuts everything this view
+        // draws, children included.
+        surfaceHost.setClipBounds(new android.graphics.Rect(
+            0, 0, surfaceHost.getWidth(), surfaceHost.getHeight()));
+        animateTerminalDeparture(surfaceHost, offset, horizontal, settle);
+        paneHost.animate().cancel();
+        paneHost.setTranslationX(horizontal ? offset : 0f);
+        paneHost.setTranslationY(horizontal ? 0f : offset);
+        paneHost.animate()
             .translationX(0f)
             .translationY(0f)
             .setDuration(com.termux.app.terminal.TerminalWindowBar
                 .WINDOW_SWITCH_ANIMATION_DURATION_MS)
-            .setInterpolator(Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
-                ? new android.view.animation.PathInterpolator(0.16f, 1f, 0.3f, 1f)
-                : new android.view.animation.DecelerateInterpolator(1.8f))
+            .setInterpolator(settle)
+            .withEndAction(() -> surfaceHost.setClipBounds(null))
             .start();
     }
+
+    /** Snapshot of the outgoing terminal surface, captured just before a window/session swap. */
+    @Nullable private android.graphics.Bitmap mTerminalDepartureSnapshot;
+
+    /**
+     * Captures the terminal surface immediately before a window/session switch tears its pane
+     * tree down. The pane glass is translucent, so the raw pixels would double-expose over the
+     * incoming session mid-pan; compositing them onto the theme's opaque surface turns the
+     * outgoing session into a solid glass card the pan can physically carry away.
+     */
+    public void captureTerminalDeparture() {
+        dropTerminalDepartureSnapshot();
+        if (isReducedMotionEnabled()) return;
+        View terminal = findViewById(R.id.terminal_surface_host);
+        if (terminal == null || terminal.getWidth() <= 0 || terminal.getHeight() <= 0) return;
+        try {
+            android.graphics.Bitmap snapshot = android.graphics.Bitmap.createBitmap(
+                terminal.getWidth(), terminal.getHeight(),
+                android.graphics.Bitmap.Config.ARGB_8888);
+            android.graphics.Canvas canvas = new android.graphics.Canvas(snapshot);
+            // The ground behind the panes: the pane-gap margins and rounded rim corners are
+            // transparent in the surface's own draw, and whatever is baked there rides along for
+            // the whole pan. A flat base colour painted a dark border around every rim (the live
+            // layout shows blurred wallpaper through those gaps), so the same shared blur frame
+            // the pane glass draws is composited first, and the flat colour is only the fallback
+            // for when glass is off (where the terminal ground really is that colour).
+            if (!paintWallpaperGlassGround(canvas, terminal))
+                canvas.drawColor(resolveTerminalSurfaceBaseColor());
+            terminal.draw(canvas);
+            mTerminalDepartureSnapshot = snapshot;
+        } catch (Throwable t) {
+            // OOM or a view that cannot software-draw: the switch just loses its outgoing half.
+            mTerminalDepartureSnapshot = null;
+        }
+    }
+
+    /**
+     * Paints the shared pre-blurred wallpaper frame across {@code canvas}, mapped exactly as
+     * {@link com.termux.app.terminal.PaneGlassBackdropView} maps it (frame rect in screen
+     * coordinates, clamped shader), so a departure snapshot's ground matches what the live layout
+     * showed around the panes. False when the glass frame is unavailable (glass off, no blur).
+     */
+    private boolean paintWallpaperGlassGround(@NonNull android.graphics.Canvas canvas,
+                                              @NonNull View terminal) {
+        android.graphics.Bitmap frame = obtainTerminalPaneGlassFrame();
+        if (frame == null || frame.isRecycled()) return false;
+        android.graphics.Rect frameRect = mCachedAccessoryWallpaperBlurFrameRect;
+        if (frameRect.isEmpty()) return false;
+        int[] location = new int[2];
+        terminal.getLocationOnScreen(location);
+        android.graphics.Matrix matrix = new android.graphics.Matrix();
+        matrix.setScale(frameRect.width() / (float) Math.max(1, frame.getWidth()),
+            frameRect.height() / (float) Math.max(1, frame.getHeight()));
+        matrix.postTranslate(frameRect.left - location[0], frameRect.top - location[1]);
+        android.graphics.BitmapShader shader = new android.graphics.BitmapShader(
+            frame, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP);
+        shader.setLocalMatrix(matrix);
+        android.graphics.Paint paint =
+            new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG);
+        paint.setShader(shader);
+        paint.setColorFilter(glassFrostFilter());
+        canvas.drawRect(0f, 0f, canvas.getWidth(), canvas.getHeight(), paint);
+        return true;
+    }
+
+    /** The opaque ground the departure card is composited onto. */
+    private int resolveTerminalSurfaceBaseColor() {
+        return getTermuxThemeColor(
+            com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
+    }
+
+    private void dropTerminalDepartureSnapshot() {
+        if (mTerminalDepartureSnapshot != null) {
+            mTerminalDepartureSnapshot.recycle();
+            mTerminalDepartureSnapshot = null;
+        }
+    }
+
+    /**
+     * Slides the captured outgoing card one full viewport toward the opposite edge, lifted above
+     * the incoming surface with a real shadow — the old session physically picks up and leaves.
+     */
+    private void animateTerminalDeparture(ViewGroup surfaceHost, float offset, boolean horizontal,
+                                          android.view.animation.Interpolator settle) {
+        android.graphics.Bitmap departure = mTerminalDepartureSnapshot;
+        mTerminalDepartureSnapshot = null;
+        if (departure == null) return;
+        android.widget.ImageView ghost = new android.widget.ImageView(this);
+        ghost.setImageBitmap(departure);
+        ghost.setBackgroundColor(resolveTerminalSurfaceBaseColor());
+        ghost.setElevation(dpToPx(12));
+        surfaceHost.addView(ghost, new android.widget.FrameLayout.LayoutParams(
+            departure.getWidth(), departure.getHeight()));
+        ghost.animate()
+            .translationX(horizontal ? -offset : 0f)
+            .translationY(horizontal ? 0f : -offset)
+            .setDuration(com.termux.app.terminal.TerminalWindowBar
+                .WINDOW_SWITCH_ANIMATION_DURATION_MS)
+            .setInterpolator(settle)
+            .withEndAction(() -> {
+                surfaceHost.removeView(ghost);
+                ghost.setImageDrawable(null);
+                departure.recycle();
+            })
+            .start();
+    }
+
+    // Creation used to settle in place (fade + a whisper of scale); it now rides the same wall
+    // pan as navigation — niri's language, where a new surface scrolls the strip to make room —
+    // so the dedicated creation animation is gone.
 
     /** Index of {@code session} within the drawer-visible list, or -1. */
     public int getDrawerIndexOfSession(TerminalSession session) {
@@ -15045,6 +15269,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.newWindow(shell);
             mCurrentWSession.windows.add(w);
             mCurrentWSession.current = mCurrentWSession.windows.size() - 1;
+            // niri's language: a new window on a full screen scrolls the strip sideways to make
+            // room, so creation rides the same wall pan as navigation — appended at the end, it
+            // enters from the trailing edge while the old window slides out the other side.
+            captureTerminalDeparture();
             mPaneController.showWindow(w);
             animateTerminalWindowArrival(1);
         });
@@ -15057,6 +15285,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneController == null || mCurrentWSession == null) return;
         com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.activeWindow();
         if (w == null) return;
+        // Creation's pan in reverse: the dying window is carried off and a neighbour slides in —
+        // from the left when the strip's tail was closed, from the right when a middle window's
+        // right-hand neighbour moves up to fill its slot.
+        int oldIndex = mCurrentWSession.current;
+        captureTerminalDeparture();
         for (TerminalSession s : mPaneController.removeWindow(w))
             if (mTermuxService != null) mTermuxService.killTermuxSession(s);
         mCurrentWSession.windows.remove(w);
@@ -15065,8 +15298,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mCurrentWSession = null;
             showNextSessionAfterClose();
         } else {
-            mCurrentWSession.current = Math.min(mCurrentWSession.current, mCurrentWSession.windows.size() - 1);
+            mCurrentWSession.current = Math.min(oldIndex, mCurrentWSession.windows.size() - 1);
             mPaneController.showWindow(mCurrentWSession.currentWindow());
+            animateTerminalWindowArrival(mCurrentWSession.current < oldIndex ? -1 : 1);
         }
         rebuildDrawerSessions();
     }
@@ -15078,7 +15312,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (n < 2) return;
         int target = ((mCurrentWSession.current + (forward ? 1 : -1)) % n + n) % n;
         showWindowFromBar(target);
-        showSessionSwitchIndicator(getString(R.string.msg_window_position, target + 1, n));
+        // The pan narrates the switch and the window bar's selected pill names the position, so
+        // with the bar on screen a chip would say what is already visible twice over. Only when
+        // the bar is hidden does the position have no other voice.
+        View windowBar = findViewById(R.id.terminal_window_bar_host);
+        if (windowBar == null || !windowBar.isShown()) {
+            String direction = getString(forward ? R.string.tool_window_next : R.string.tool_window_previous);
+            showSessionSwitchIndicator(getString(R.string.msg_window_switch_position, direction, target + 1, n));
+        }
     }
 
     /** Close the whole current session (Ctrl+Alt+Shift+X): all its windows + panes. */
@@ -15091,6 +15332,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         WSession ws = mCurrentWSession;
+        captureTerminalDeparture();
         for (com.termux.app.terminal.TerminalPaneController.Window w : new java.util.ArrayList<>(ws.windows))
             for (TerminalSession s : mPaneController.removeWindow(w))
                 if (mTermuxService != null) mTermuxService.killTermuxSession(s);
@@ -15105,6 +15347,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!mWSessions.isEmpty()) {
             mCurrentWSession = mWSessions.get(0);
             mPaneController.showWindow(mCurrentWSession.currentWindow());
+            // The closed session is carried off along the session axis, the survivor slides in —
+            // the same travel its creation played, reversed. Callers capture the departure.
+            animateTerminalSessionArrival(-1);
         } else if (getTermuxTerminalSessionClient() != null) {
             getTermuxTerminalSessionClient().addNewSession(false, null);
         }
@@ -15114,6 +15359,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onWindowEmptied(com.termux.app.terminal.TerminalPaneController.Window w) {
         WSession ws = wsessionOwning(w);
         if (ws == null) return;
+        int oldIndex = ws.current;
         ws.windows.remove(w);
         if (ws == mCurrentWSession) {
             if (ws.windows.isEmpty()) {
@@ -15121,8 +15367,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mCurrentWSession = null;
                 showNextSessionAfterClose();
             } else {
-                ws.current = Math.min(ws.current, ws.windows.size() - 1);
+                ws.current = Math.min(oldIndex, ws.windows.size() - 1);
                 mPaneController.showWindow(ws.currentWindow());
+                // No departure snapshot here — the window died with its last shell and its panes
+                // are already gone — but the neighbour still arrives with the travel language.
+                animateTerminalWindowArrival(ws.current < oldIndex ? -1 : 1);
             }
         } else if (ws.windows.isEmpty()) {
             mWSessions.remove(ws);

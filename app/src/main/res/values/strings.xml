@@ -455,6 +455,7 @@
     <string name="action_reset_terminal">Reset</string>
     <string name="msg_no_session_to_split">No session to split</string>
     <string name="msg_window_position">Window %1$d/%2$d</string>
+    <string name="msg_window_switch_position">%1$s · %2$d/%3$d</string>
     <plurals name="msg_pane_count">
         <item quantity="one">%d pane</item>
         <item quantity="other">%d panes</item>

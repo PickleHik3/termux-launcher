@@ -41,6 +41,12 @@ public final class GlassRimDrawable extends Drawable {
         return mRadiusPx;
     }
 
+    /** Retints the rim in place; the pane focus crossfade animates hue together with alpha. */
+    public void setTint(int tint) {
+        mRim.setTint(tint);
+        invalidateSelf();
+    }
+
     @Override
     public void draw(@NonNull Canvas canvas) {
         Rect bounds = getBounds();

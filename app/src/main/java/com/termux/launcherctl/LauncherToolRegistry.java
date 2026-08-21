@@ -232,6 +232,28 @@ public final class LauncherToolRegistry {
         @Nullable
         public final AvailabilityPredicate availability;
 
+        /**
+         * The action's result is already on screen the moment it runs — a pane appeared, the
+         * viewport panned, a float lifted — so the generic action-hint chip must stay quiet for
+         * it. Chips are for what the screen cannot say itself: invisible results (copy, reset),
+         * refusals, and events in windows the user is not looking at.
+         */
+        public final boolean selfEvident;
+
+        /**
+         * The tools whose result is narrated by their own motion. One table, so the judgment
+         * stays reviewable in one place instead of scattered through the registrations.
+         */
+        private static final java.util.Set<String> SELF_EVIDENT_TOOLS =
+            new java.util.HashSet<>(java.util.Arrays.asList(
+                TOOL_PANE_SPLIT_VERTICAL, TOOL_PANE_SPLIT_HORIZONTAL,
+                TOOL_PANE_KILL_FOCUSED, TOOL_PANE_EQUALIZE, TOOL_PANE_ROTATE,
+                TOOL_PANE_MOVE_TO_EDGE, TOOL_PANE_TOGGLE_FLOAT, TOOL_PANE_RESIZE,
+                TOOL_PANE_FOCUS_DIRECTION,
+                TOOL_WINDOW_NEW, TOOL_WINDOW_CLOSE, TOOL_WINDOW_NEXT, TOOL_WINDOW_PREVIOUS,
+                TOOL_SESSION_NEW, TOOL_SESSION_NEXT, TOOL_SESSION_PREVIOUS,
+                TOOL_SESSION_CLOSE_CURRENT));
+
         /** Agent-only tool: no UI metadata. */
         public ToolMetadata(
             @NonNull String name,
@@ -286,6 +308,7 @@ public final class LauncherToolRegistry {
             this.defaultBindings = defaultBindings == null || defaultBindings.isEmpty()
                 ? Collections.<Binding>emptyList()
                 : Collections.unmodifiableList(new ArrayList<>(defaultBindings));
+            this.selfEvident = SELF_EVIDENT_TOOLS.contains(name);
         }
 
         /** Whether this tool carries enough metadata to appear in the command palette. */
