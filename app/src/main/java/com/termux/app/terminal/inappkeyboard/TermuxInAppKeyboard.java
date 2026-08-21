@@ -795,17 +795,29 @@ public final class TermuxInAppKeyboard {
     private android.graphics.Typeface loadCustomLabelFont() {
         String fontPath = mPreferences.getInAppKeyboardFontPath();
         if (fontPath == null || fontPath.isEmpty())
-            return null;
+            return bundledSymbolsLabelFont();
         File fontFile = new File(fontPath);
         if (!fontFile.isFile())
-            return null;
+            return bundledSymbolsLabelFont();
         try {
             android.graphics.Typeface typeface = android.graphics.Typeface.createFromFile(fontFile);
-            return android.graphics.Typeface.DEFAULT.equals(typeface) ? null : typeface;
+            return android.graphics.Typeface.DEFAULT.equals(typeface)
+                ? bundledSymbolsLabelFont() : typeface;
         } catch (RuntimeException e) {
             mHost.debugLog("Failed to load in-app keyboard font " + fontPath + ": " + e);
-            return null;
+            return bundledSymbolsLabelFont();
         }
+    }
+
+    /**
+     * The default label face when no user font is picked: the bundled symbols-only Nerd Font, so
+     * icon code points on custom keys render instead of showing tofu. It has no Latin glyphs, so
+     * ordinary labels fall through to the very system font a null labelFont would have used.
+     */
+    @Nullable
+    private android.graphics.Typeface bundledSymbolsLabelFont() {
+        return com.termux.shared.termux.font.NerdFontSpans.typeface(
+            requireContainer().getContext());
     }
 
     private void refreshPalette() {

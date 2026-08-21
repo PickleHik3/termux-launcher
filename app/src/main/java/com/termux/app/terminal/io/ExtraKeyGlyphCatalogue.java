@@ -38,11 +38,17 @@ public final class ExtraKeyGlyphCatalogue {
     public static final String CATEGORY_POWERLINE = "powerline";
     public static final String CATEGORY_TECHNICAL = "technical";
     public static final String CATEGORY_TERMINAL_MARKS = "terminal_marks";
+    /**
+     * The bundled Nerd Font symbols. Unlike every other category this one is generated from the
+     * shipped face rather than reviewed by hand — the app draws these with that face, so "can the
+     * device render it" is answered by the font it ships with, not by the system UI font.
+     */
+    public static final String CATEGORY_NERD_FONT = "nerd_font";
 
     /** Declared category order; the file is grouped by it and the picker renders it in this order. */
     public static final List<String> CATEGORIES = Collections.unmodifiableList(Arrays.asList(
         CATEGORY_ARROWS, CATEGORY_BLOCKS, CATEGORY_SHAPES, CATEGORY_POWERLINE, CATEGORY_TECHNICAL,
-        CATEGORY_TERMINAL_MARKS));
+        CATEGORY_TERMINAL_MARKS, CATEGORY_NERD_FONT));
 
     /** One catalogue row: the character itself plus everything the search field can hit. */
     public static final class Glyph {
@@ -91,10 +97,28 @@ public final class ExtraKeyGlyphCatalogue {
         return parse(new InputStreamReader(input, StandardCharsets.UTF_8));
     }
 
+    /**
+     * The rows of both catalogues in one index, first file first. Ties in {@link #search} break by
+     * category order, so the reviewed rows keep coming out ahead of the generated Nerd Font ones.
+     */
+    @NonNull
+    public static ExtraKeyGlyphCatalogue concat(@NonNull ExtraKeyGlyphCatalogue first,
+                                                @NonNull ExtraKeyGlyphCatalogue second) {
+        if (second.isEmpty()) return first;
+        if (first.isEmpty()) return second;
+        List<Glyph> merged = new ArrayList<>(first.glyphs);
+        for (Glyph glyph : second.glyphs) {
+            if (first.byCodePoint(glyph.codePoint) == null) merged.add(glyph);
+        }
+        return new ExtraKeyGlyphCatalogue(merged);
+    }
+
     @NonNull
     public static ExtraKeyGlyphCatalogue parse(@NonNull Reader reader) throws IOException {
         List<Glyph> parsed = new ArrayList<>();
-        List<Integer> seen = new ArrayList<>();
+        // A set, not a list: the generated Nerd Font file is five figures of rows, and a linear
+        // duplicate scan per row turns parsing it into a visible pause when the picker opens.
+        java.util.Set<Integer> seen = new java.util.HashSet<>();
         BufferedReader lines = reader instanceof BufferedReader
             ? (BufferedReader) reader : new BufferedReader(reader);
         boolean schemaAccepted = false;

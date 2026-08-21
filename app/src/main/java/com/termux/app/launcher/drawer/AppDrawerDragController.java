@@ -11,11 +11,11 @@ import android.os.Build;
 import android.view.DragEvent;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.notice.AppNotice;
 import com.termux.app.SuggestionBarView;
 import com.termux.app.launcher.data.LauncherConfigRepository;
 import com.termux.app.launcher.data.LauncherConfigSnapshot;
@@ -229,8 +229,7 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
             host.onAcceptedDrop();
         } else if (result == LauncherConfigRepository.MutationResult.CAPACITY) {
             overlay.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
-            Toast.makeText(overlay.getContext(), com.termux.R.string.folder_capacity_reached,
-                Toast.LENGTH_SHORT).show();
+            AppNotice.show(overlay.getContext(), com.termux.R.string.folder_capacity_reached, false);
         }
         return accepted;
     }

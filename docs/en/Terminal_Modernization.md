@@ -412,9 +412,9 @@ any key slot can carry a launcher action written `tool:<registry id>` — option
 
 ```xml
 <key width="4.4" role="space_bar" key0="space"
-     key7="tool:app.command_palette:⌘"
-     key1="tool:window.previous:◧" key2="tool:window.next:◨"
-     key3="tool:session.previous:↰" key4="tool:session.next:↳"
+     key7="tool:app.command_palette:󱎱"
+     key1="tool:window.previous:󰜳" key2="tool:window.next:󰜶"
+     key3="tool:session.previous:󰜹" key4="tool:session.next:󰜰"
      key5="cursor_left" key6="cursor_right" key8="switch_backward"/>
 ```
 
@@ -741,6 +741,56 @@ so use an actual variable font when axis changes matter.
 Font files are untrusted input parsed by Android. Files larger than 64 MiB, unreadable files,
 malformed fonts, excessive mappings, and invalid settings are rejected with a bounded error and a
 safe fallback. Keep font files owner-writable only and obtain them from a source you trust.
+
+### Nerd Font icons on app chrome, not just in the terminal
+
+This is a difference from Termux worth stating plainly: **in Termux, a Nerd Font icon only renders
+where your terminal font renders it.** Everything outside the terminal grid — the notification, the
+extra-keys row, a session name in a drawer — draws with an Android system font, and no Android
+system font covers the Private Use Areas that Nerd Fonts populate. An icon in a session name is
+therefore tofu on every surface but the grid.
+
+Termux Launcher bundles the symbols-only face (`assets/fonts/SymbolsNerdFontMono.ttf`) and spans it
+onto the app's own chrome, so one icon looks the same everywhere it appears:
+
+- the status bar and its session/window indicators,
+- the window bar's tab labels,
+- the extra-keys row and its swipe-up badges,
+- the in-app keyboard's key caps,
+- the extra-keys editor and its glyph picker.
+
+The mechanism is `NerdFontSpans`. It walks a label **by code point**, not by `char` — the Material
+Design ranges are astral, so a `char` walk sees two unmapped surrogates instead of one icon — and
+wraps each run of PUA code points (`U+E000-U+F8FF` and `U+F0000-U+FFFFD`) in a typeface span
+pointing at the bundled face. Everything else keeps the label's own font, and a label with no icons
+is returned unchanged, allocating nothing. A styled label keeps its style: the span synthesizes bold
+or italic when the symbols face has no such cut, which is why an icon in a selected, bold tab still
+looks bold.
+
+The terminal grid is unaffected by all of this. It keeps its own font stack and its `symbol_map`
+routing (see [Route symbols deliberately](Terminal_Fonts.md#route-symbols-deliberately)). Where both
+apply — the window bar draws terminal-derived names — the bundled face is applied first and any
+`symbol_map` face second, so a face you configured wins and the bundled one only fills runs your
+configuration left uncovered.
+
+**Editing key labels.** Because the same face backs the key caps, any Nerd Font icon works as a key
+label. Paste one into **display** in the extra-keys editor, or into `extra-keys` in
+`~/.termux/termux.properties` — that file is read as UTF-8, so paste the character itself; `\uXXXX`
+escapes are not interpreted and could not reach the astral ranges anyway. The editor re-spans the
+field as you type, so an icon is drawn rather than boxed while you are still editing it.
+
+**Finding an icon.** The glyph picker (**Settings → Terminal & status → Edit extra keys**, then a
+key's glyph field) ships the whole bundled set: **10,512 icons**, searchable by name (`keyboard`),
+by family (`md`, `fa`, `oct`, `cod`, `dev`, `weather`), or by exact Nerd Font name
+(`nf-md-folder`). Browsing shows a shelf of the set with the rest behind search, because a grid of
+ten thousand live cells is not a grid anyone scrolls. That catalogue is generated from the shipped
+font's own name table by `scripts/generate-nerd-font-glyph-catalogue.py`, so it can never offer a
+glyph the app cannot draw; regenerate it whenever the bundled font is updated. Reviewed non-icon
+glyphs — arrows, blocks, box drawing, Powerline — are a separate, hand-curated list, and those
+**are** filtered per device against the UI font, since nothing bundled backs them.
+
+The space bar's swipe slots and the default extra-keys row both use these icons out of the box; see
+[Actions on in-app keyboard keys](#actions-on-in-app-keyboard-keys).
 
 ## Scrollback, links, and shell navigation
 

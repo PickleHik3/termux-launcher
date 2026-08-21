@@ -29,6 +29,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.shared.settings.preferences.SharedPreferenceUtils;
+import com.termux.shared.termux.font.NerdFontSpans;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.io.IOException;
@@ -41,11 +42,15 @@ import java.util.Locale;
  * The glyph half of the extra-keys editor: a searchable sheet of characters worth putting on a key
  * cap, feeding the display and swipe-up label fields.
  *
- * <p>Caps draw with the UI font, not the terminal font, so a Nerd-Font or Powerline code point only
- * exists here when the system font happens to carry it. Every candidate is therefore measured with
- * {@link Paint#hasGlyph(String)} against a paint set up like the cap label before it is offered —
- * the alternative was a picker full of tofu boxes that each looked like a working key until it was
- * saved.
+ * <p>Caps draw with the UI font, not the terminal font, so a Powerline or box-drawing code point
+ * only exists here when the system font happens to carry it. Every reviewed candidate is therefore
+ * measured with {@link Paint#hasGlyph(String)} against a paint set up like the cap label before it
+ * is offered — the alternative was a picker full of tofu boxes that each looked like a working key
+ * until it was saved.
+ *
+ * <p>Nerd Font rows are the exception: the row, the editor and this sheet all draw them with the
+ * bundled symbols face through {@link NerdFontSpans}, so their availability is a property of the
+ * APK rather than of the device, and the whole shipped set is offered.
  *
  * <p>Like {@link ExtraKeyActionPicker} the caller may pass an {@code onClosed} runnable, invoked
  * once when the sheet is gone, because the row editor hides itself while a picker is up (F-05).
@@ -62,6 +67,10 @@ public final class ExtraKeyGlyphPicker {
     /** Two rows of recents at the widest column count; beyond that the shelf stops being a shelf. */
     private static final int RECENT_LIMIT = 16;
     private static final int COLUMNS = 6;
+    /** Browse shelf for the generated Nerd Font set; the rest is reachable by name search. */
+    private static final int NERD_FONT_BROWSE_LIMIT = 120;
+    /** Search results are capped too: "a" matches thousands of Nerd Font names. */
+    private static final int SEARCH_LIMIT = 300;
 
     /** Parsed once per process: the file never changes at runtime and parsing it is not free. */
     @Nullable private static ExtraKeyGlyphCatalogue shippedCatalogue;
@@ -120,14 +129,22 @@ public final class ExtraKeyGlyphPicker {
     @NonNull
     public static synchronized ExtraKeyGlyphCatalogue shippedCatalogue(@NonNull Resources resources) {
         if (shippedCatalogue != null) return shippedCatalogue;
-        ExtraKeyGlyphCatalogue parsed = ExtraKeyGlyphCatalogue.empty();
-        try (InputStream input = resources.openRawResource(R.raw.extra_key_glyphs)) {
-            parsed = ExtraKeyGlyphCatalogue.parse(input);
+        ExtraKeyGlyphCatalogue parsed = parseCatalogue(resources, R.raw.extra_key_glyphs);
+        // The Nerd Font rows come second so a reviewed glyph always outranks a generated one at
+        // equal search rank.
+        shippedCatalogue = ExtraKeyGlyphCatalogue.concat(parsed,
+            parseCatalogue(resources, R.raw.nerd_font_glyphs));
+        return shippedCatalogue;
+    }
+
+    @NonNull
+    private static ExtraKeyGlyphCatalogue parseCatalogue(@NonNull Resources resources, int rawId) {
+        try (InputStream input = resources.openRawResource(rawId)) {
+            return ExtraKeyGlyphCatalogue.parse(input);
         } catch (IOException | Resources.NotFoundException e) {
             android.util.Log.w("ExtraKeyGlyphs", "Glyph catalogue unreadable", e);
+            return ExtraKeyGlyphCatalogue.empty();
         }
-        shippedCatalogue = parsed;
-        return parsed;
     }
 
     /** The catalogue reduced to what this device's UI font can actually draw at cap size. */
@@ -135,7 +152,16 @@ public final class ExtraKeyGlyphPicker {
     public static ExtraKeyGlyphCatalogue drawableCatalogue(@NonNull Context context) {
         ExtraKeyGlyphCatalogue source = shippedCatalogue(context.getResources());
         Paint paint = capPaint(context);
-        return source.filter(glyph -> paint.hasGlyph(glyph.text));
+        // Nerd Font rows are drawn with the bundled symbols face, not the UI font, so the system
+        // font's coverage says nothing about them — asking it would drop every one of them.
+        return source.filter(glyph -> NerdFontSpans.isNerdSymbol(glyph.codePoint)
+            || paint.hasGlyph(glyph.text));
+    }
+
+    /** Cap text with Nerd Font code points swapped onto the bundled symbols face. */
+    @NonNull
+    private CharSequence capLabel(@NonNull CharSequence text) {
+        return NerdFontSpans.span(context, text);
     }
 
     /**
@@ -201,6 +227,16 @@ public final class ExtraKeyGlyphPicker {
         clear.setOnClickListener(v -> search.setText(""));
         searchRow.addView(clear);
         root.addView(searchRow);
+
+        // Neither the catalogue nor this sheet is the only way in: any icon copied from a cheat
+        // sheet pastes into a label and renders, so say so once rather than leaving people to
+        // guess that the picker is the whole vocabulary.
+        TextView pasteHint = new TextView(context);
+        pasteHint.setText(context.getString(R.string.settings_extra_keys_glyph_paste_hint));
+        pasteHint.setTextColor(colorSubtle);
+        pasteHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+        pasteHint.setPadding(pad(4), pad(6), pad(4), 0);
+        root.addView(pasteHint);
 
         LinearLayout results = column();
         ScrollView scroller = new ScrollView(context);
@@ -288,7 +324,7 @@ public final class ExtraKeyGlyphPicker {
     private void showPreview(@Nullable ExtraKeyGlyphCatalogue.Glyph glyph) {
         if (previewCap == null || previewName == null) return;
         if (glyph != null) {
-            previewCap.setText(glyph.text);
+            previewCap.setText(capLabel(glyph.text));
             previewName.setText(glyph.name + " · U+" + glyph.hex());
             previewCap.setAlpha(1f);
             return;
@@ -297,7 +333,7 @@ public final class ExtraKeyGlyphPicker {
         // is exactly how the swatch looked before anything had been tapped.
         ExtraKeyGlyphCatalogue.Glyph opening = openingGlyph();
         if (opening != null) {
-            previewCap.setText(opening.text);
+            previewCap.setText(capLabel(opening.text));
             previewName.setText(opening.name + " · U+" + opening.hex());
             previewCap.setAlpha(1f);
             return;
@@ -335,7 +371,8 @@ public final class ExtraKeyGlyphPicker {
                 List<ExtraKeyGlyphCatalogue.Glyph> glyphs = catalogue.byCategory(category);
                 if (glyphs.isEmpty()) continue;
                 results.addView(header(categoryLabel(category)));
-                addGrid(results, glyphs, pick);
+                addGrid(results, capped(glyphs, browseLimit(category)), pick);
+                addOverflowNote(results, glyphs.size(), browseLimit(category));
             }
             showPreview(null);
             return;
@@ -350,7 +387,36 @@ public final class ExtraKeyGlyphPicker {
         // The best hit fills the swatch straight away, so a search that already found the glyph
         // needs no press to be read at cap size.
         showPreview(hits.get(0));
-        addGrid(results, hits, pick);
+        addGrid(results, capped(hits, SEARCH_LIMIT), pick);
+        addOverflowNote(results, hits.size(), SEARCH_LIMIT);
+    }
+
+    /**
+     * How many rows a category may put on screen while browsing. The Nerd Font set is five figures
+     * of glyphs and each swatch is a real view, so browsing it whole would build more views than
+     * the sheet can scroll through — it is a set to search, with a shelf shown for a first look.
+     */
+    private static int browseLimit(@NonNull String category) {
+        return ExtraKeyGlyphCatalogue.CATEGORY_NERD_FONT.equals(category)
+            ? NERD_FONT_BROWSE_LIMIT : Integer.MAX_VALUE;
+    }
+
+    @NonNull
+    private static List<ExtraKeyGlyphCatalogue.Glyph> capped(
+        @NonNull List<ExtraKeyGlyphCatalogue.Glyph> glyphs, int limit) {
+        return glyphs.size() <= limit ? glyphs : glyphs.subList(0, limit);
+    }
+
+    /** Says what was left out, so a capped list never reads as the whole set. */
+    private void addOverflowNote(@NonNull LinearLayout results, int total, int limit) {
+        if (total <= limit) return;
+        TextView note = new TextView(context);
+        note.setText(context.getString(R.string.settings_extra_keys_glyph_more_results,
+            total - limit));
+        note.setTextColor(colorSubtle);
+        note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+        note.setPadding(pad(4), pad(4), pad(4), pad(8));
+        results.addView(note);
     }
 
     private void addGrid(@NonNull LinearLayout results,
@@ -381,7 +447,7 @@ public final class ExtraKeyGlyphPicker {
     @NonNull
     private View swatch(@NonNull ExtraKeyGlyphCatalogue.Glyph glyph, @NonNull OnPicked pick) {
         TextView cap = new TextView(context);
-        cap.setText(glyph.text);
+        cap.setText(capLabel(glyph.text));
         cap.setContentDescription(glyph.name);
         cap.setTextColor(colorText);
         cap.setGravity(Gravity.CENTER);
@@ -431,6 +497,8 @@ public final class ExtraKeyGlyphPicker {
                 return context.getString(R.string.settings_extra_keys_glyph_category_technical);
             case ExtraKeyGlyphCatalogue.CATEGORY_TERMINAL_MARKS:
                 return context.getString(R.string.settings_extra_keys_glyph_category_terminal_marks);
+            case ExtraKeyGlyphCatalogue.CATEGORY_NERD_FONT:
+                return context.getString(R.string.settings_extra_keys_glyph_category_nerd_font);
             default:
                 return category;
         }

@@ -18,22 +18,28 @@ import android.view.ViewParent;
  * and its contents inherit it, so nothing on it can ease on a timeline of its own.</p>
  *
  * <p>This mirrors the {@code dock-ui.jsx} prototype's plank physics (press dip and glow/specular
- * coupling) recreated natively, with the tilt tightened to {@link #MAX_TILT_DEG} and the springs
+ * coupling) recreated natively, with the tilt tightened to {@code maxTiltDeg} and the springs
  * moved onto true critical damping.</p>
  */
-final class DockPlankController implements Choreographer.FrameCallback {
+public final class DockPlankController implements Choreographer.FrameCallback {
 
-    private static final float MAX_TILT_DEG = 3f;
+    private static final float DEFAULT_MAX_TILT_DEG = 3f;
     /** Pivot height for the floating capsule: slightly below centre, so it reads as pushed, not spun. */
     private static final float PIVOT_BELOW_CENTRE = 0.6f;
     /** The small slide that keeps the rotation from feeling mathematically isolated. */
-    private static final float SHIFT_DP = 3f;
+    private static final float DEFAULT_SHIFT_DP = 3f;
     /** Vertical share of that slide. The hinged bar gets none: its bottom edge stays pinned. */
     private static final float SHIFT_Y_FACTOR = 0.5f;
     /** Slack over the slide that the edge-to-edge slab overscans by, covering the tilt's own inset. */
     private static final float OVERSCAN_SLACK_DP = 2f;
     /** The capsule's press dip. */
-    private static final float PRESS_DIP = 0.013f;
+    private static final float DEFAULT_PRESS_DIP = 0.013f;
+
+    // Per-instance tuning: the dock keeps the defaults; the terminal's full-screen pane uses far
+    // gentler values, since 3° on a surface that tall reads as the whole screen keeling over.
+    private final float mMaxTiltDeg;
+    private final float mShiftDp;
+    private final float mPressDip;
 
     private final View mPlank;       // the transformed slab (whole dock stack)
     private final View mSpecular;    // moving specular highlight
@@ -62,7 +68,15 @@ final class DockPlankController implements Choreographer.FrameCallback {
     private final Spring mLightX = new Spring(0.5f, 210f, 28.98f);
     private final Spring mLightY = new Spring(0.5f, 210f, 28.98f);
 
-    DockPlankController(View plank, View specular, View glow) {
+    public DockPlankController(View plank, View specular, View glow) {
+        this(plank, specular, glow, DEFAULT_MAX_TILT_DEG, DEFAULT_SHIFT_DP, DEFAULT_PRESS_DIP);
+    }
+
+    public DockPlankController(View plank, View specular, View glow,
+                        float maxTiltDeg, float shiftDp, float pressDip) {
+        mMaxTiltDeg = maxTiltDeg;
+        mShiftDp = shiftDp;
+        mPressDip = pressDip;
         mPlank = plank;
         mSpecular = specular;
         mGlow = glow;
@@ -83,7 +97,7 @@ final class DockPlankController implements Choreographer.FrameCallback {
      * same spring values, never an easing of its own. Passing a different view (or null)
      * neutralizes the previous one.
      */
-    void setIconLayer(View iconLayer) {
+    public void setIconLayer(View iconLayer) {
         if (mIconLayer == iconLayer) {
             return;
         }
@@ -123,12 +137,12 @@ final class DockPlankController implements Choreographer.FrameCallback {
         layer.setScaleY(1f);
     }
 
-    void setReducedMotion(boolean reduced) {
+    public void setReducedMotion(boolean reduced) {
         mReducedMotion = reduced;
     }
 
     /** Enable/disable the slab transform (tilt). Both styles use motion; the mode differs. */
-    void setMotionEnabled(boolean enabled) {
+    public void setMotionEnabled(boolean enabled) {
         mMotionEnabled = enabled;
         if (!enabled) {
             mRx.target = 0f;
@@ -138,11 +152,11 @@ final class DockPlankController implements Choreographer.FrameCallback {
     }
 
     /** Capsule = false (free-floating centre tilt + press dip); normal = true (bottom-hinged tilt). */
-    void setHingeMode(boolean hinge) {
+    public void setHingeMode(boolean hinge) {
         mHingeMode = hinge;
     }
 
-    void setEnabled(boolean enabled) {
+    public void setEnabled(boolean enabled) {
         if (mEnabled == enabled) {
             if (enabled) {
                 showRestingGlow();
@@ -160,7 +174,7 @@ final class DockPlankController implements Choreographer.FrameCallback {
     }
 
     /** Begin a touch on the plank. {@code nx}/{@code ny} are normalized [0,1] within the plank. */
-    void onPointerDown(float nx, float ny) {
+    public void onPointerDown(float nx, float ny) {
         if (!mEnabled) {
             return;
         }
@@ -177,7 +191,7 @@ final class DockPlankController implements Choreographer.FrameCallback {
         kick();
     }
 
-    void onPointerMove(float nx, float ny) {
+    public void onPointerMove(float nx, float ny) {
         if (!mEnabled || !mPressed) {
             return;
         }
@@ -185,7 +199,7 @@ final class DockPlankController implements Choreographer.FrameCallback {
         kick();
     }
 
-    void onPointerUp() {
+    public void onPointerUp() {
         if (!mPressed) {
             return;
         }
@@ -198,7 +212,7 @@ final class DockPlankController implements Choreographer.FrameCallback {
     }
 
     /** Snap everything back to neutral and stop the frame loop. */
-    void reset() {
+    public void reset() {
         mPressed = false;
         mRx.reset(0f);
         mRy.reset(0f);
@@ -228,8 +242,8 @@ final class DockPlankController implements Choreographer.FrameCallback {
         mLightX.target = nx;
         mLightY.target = ny;
         if (mMotionEnabled) {
-            mRy.target = (nx - 0.5f) * 2f * MAX_TILT_DEG;
-            mRx.target = -(ny - 0.5f) * 2f * MAX_TILT_DEG;
+            mRy.target = (nx - 0.5f) * 2f * mMaxTiltDeg;
+            mRx.target = -(ny - 0.5f) * 2f * mMaxTiltDeg;
         } else {
             mRy.target = 0f;
             mRx.target = 0f;
@@ -295,10 +309,10 @@ final class DockPlankController implements Choreographer.FrameCallback {
             // hot lobe sweeps around the perimeter as the plank tips (physical glass-edge light).
             float glowTiltX = mMotionEnabled
                 ? mRx.value
-                : -(mLightY.value - 0.5f) * 2f * MAX_TILT_DEG;
+                : -(mLightY.value - 0.5f) * 2f * mMaxTiltDeg;
             float glowTiltY = mMotionEnabled
                 ? mRy.value
-                : (mLightX.value - 0.5f) * 2f * MAX_TILT_DEG;
+                : (mLightX.value - 0.5f) * 2f * mMaxTiltDeg;
             ((DockEdgeGlowView) mGlow).setGlowState(clamp01(mGlowLevel.value), glowTiltX, glowTiltY);
         } else if (mGlow != null) {
             mGlow.setAlpha(clamp01(mGlowLevel.value));
@@ -333,12 +347,12 @@ final class DockPlankController implements Choreographer.FrameCallback {
         slab.setPivotY(mHingeMode ? height : height * PIVOT_BELOW_CENTRE);
         slab.setRotationX(mRx.value);
         slab.setRotationY(mRy.value);
-        float tiltFraction = mRy.value / MAX_TILT_DEG;
-        float shiftPx = mDensity * SHIFT_DP;
+        float tiltFraction = mRy.value / mMaxTiltDeg;
+        float shiftPx = mDensity * mShiftDp;
         slab.setTranslationX(tiltFraction * shiftPx);
         // The hinged bar slides sideways only: any vertical travel would lift it off the screen edge.
         slab.setTranslationY(mHingeMode
-            ? 0f : (-mRx.value / MAX_TILT_DEG) * shiftPx * SHIFT_Y_FACTOR);
+            ? 0f : (-mRx.value / mMaxTiltDeg) * shiftPx * SHIFT_Y_FACTOR);
         if (mHingeMode) {
             float overscan = (Math.abs(tiltFraction) * shiftPx + mDensity * OVERSCAN_SLACK_DP)
                 * clamp01(mGlowLevel.value);
@@ -346,7 +360,7 @@ final class DockPlankController implements Choreographer.FrameCallback {
             slab.setScaleY(1f);
         } else {
             // The floating capsule has margins to slide into, so it needs no overscan — just the dip.
-            float scale = 1f - mPress.value * PRESS_DIP;
+            float scale = 1f - mPress.value * mPressDip;
             slab.setScaleX(scale);
             slab.setScaleY(scale);
         }

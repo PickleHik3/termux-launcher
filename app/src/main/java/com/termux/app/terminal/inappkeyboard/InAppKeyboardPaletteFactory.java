@@ -78,7 +78,11 @@ public final class InAppKeyboardPaletteFactory {
         if (!hasMinimumContrast(label, action) || !hasMinimumContrast(subLabel, action))
             action = key;
         int activatedLabel = ensureContrast(roles.primary, activated);
-        int pressedLabel = ensureContrast(roles.primary, activated);
+        // Non-selected labels on a pressed cap sit back so the resolved direction reads as the
+        // single dominant glyph. The keyboard's label paint owns the alpha channel outright
+        // (labelBrightness), so the set-back is pre-composited in RGB: the bright label sunk
+        // halfway toward the pressed chip it draws on. Touch FX reuse this color for hue only.
+        int pressedLabel = ColorUtils.blendARGB(activated, activatedLabel, 130f / 255f);
         int lockedLabel = ensureContrast(roles.secondary, activated);
 
         float density = context.getResources().getDisplayMetrics().density;
@@ -211,7 +215,8 @@ public final class InAppKeyboardPaletteFactory {
         int actionLabel = ensureContrast(base.actionLabelColor, actionOnBase);
         int actionSubLabel = ensureContrast(base.actionSubLabelColor, actionOnBase);
         int activatedLabel = ensureContrast(base.activatedLabelColor, activatedOnBase);
-        int pressedLabel = ensureContrast(base.pressedLabelColor, activatedOnBase);
+        // Re-sunk against the composited chip; see the non-glass path for why RGB, not alpha.
+        int pressedLabel = ColorUtils.blendARGB(activatedOnBase, activatedLabel, 130f / 255f);
         int lockedLabel = ensureContrast(base.lockedModifierColor, activatedOnBase);
 
         // Rim and cap shading follow the chip's effective brightness, not the phone's UI

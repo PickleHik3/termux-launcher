@@ -8,6 +8,16 @@
     android:clipChildren="false"
     android:clipToPadding="false">
 
+    <!-- This pane's glass: the shared pre-blurred wallpaper drawn through the pane's own rect,
+         with the terminal tint and film grain over it. Hidden unless the terminal glass is on
+         (TerminalPaneController.applyPaneGlass). -->
+    <com.termux.app.terminal.PaneGlassBackdropView
+        android:id="@+id/terminal_pane_glass"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+
     <com.termux.view.TerminalView
         android:id="@+id/terminal_view"
         android:layout_width="match_parent"

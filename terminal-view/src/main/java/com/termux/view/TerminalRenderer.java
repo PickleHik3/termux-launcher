@@ -271,6 +271,17 @@ public final class TerminalRenderer {
 
     final SymbolExpansion mSymbolExpansion;
 
+    /**
+     * Suppresses this view's cursor without touching the shared emulator state.
+     *
+     * <p>Every pane paints its own cursor, because {@code shouldCursorBeVisible} has no focus term
+     * — sensible for one terminal, wrong for a split, where several lit cursors leave nothing to
+     * say which pane the keyboard is talking to. kitty holds inactive windows at
+     * {@code cursor_opacity = 0} for the same reason. Per-renderer rather than per-emulator,
+     * because the emulator is shared with every other view showing the same session.
+     */
+    private boolean mCursorSuppressed;
+
     private final Paint mTextPaint = new Paint();
     /** Fills for the find overlay, kept off the text paint's per-run state. */
     private final Paint mOverlayPaint = new Paint();
@@ -589,7 +600,7 @@ public final class TerminalRenderer {
         final int columns = mEmulator.mColumns;
         final int cursorCol = mEmulator.getCursorCol();
         final int cursorRow = mEmulator.getCursorRow();
-        final boolean cursorVisible = mEmulator.shouldCursorBeVisible();
+        final boolean cursorVisible = mEmulator.shouldCursorBeVisible() && !mCursorSuppressed;
         final TerminalBuffer screen = mEmulator.getScreen();
         final int[] palette = mEmulator.mColors.mCurrentColors;
         final int cursorShape = mEmulator.getCursorStyle();
@@ -1641,15 +1652,28 @@ public final class TerminalRenderer {
         // Its own paint: the text paint carries per-run typeface, skew and effects, and this pass
         // runs between frames of that state rather than inside it.
         mOverlayPaint.setColor(color);
-        canvas.drawRect(horizontalOffset + startColumn * mFontWidth, top,
-            horizontalOffset + (endColumn + 1) * mFontWidth, top + mFontLineSpacing, mOverlayPaint);
+        canvas.drawRect(Math.round(horizontalOffset + startColumn * mFontWidth), Math.round(top),
+            Math.round(horizontalOffset + (endColumn + 1) * mFontWidth),
+            Math.round(top + mFontLineSpacing), mOverlayPaint);
     }
 
+    /**
+     * One run's cell background, snapped to the pixel grid.
+     *
+     * <p>Cell edges land on fractional pixels at most font sizes, and an anti-aliased rect edge
+     * covers its boundary pixel only partly. Two runs meeting there each paint their own half of
+     * that pixel, which composites to less than full coverage — over an opaque terminal background
+     * that is invisible, but over the glass panes (or any transparent surface) it reads as a thin
+     * vertical line between powerline segments, and as a horizontal one between rows. Rounding both
+     * edges with the same monotone function makes adjacent runs share one integer boundary, so the
+     * fills tile exactly: no gap, no double coverage. This is the same pixel-snapping kitty and
+     * alacritty apply to cell backgrounds.
+     */
     private void drawCellRect(Canvas canvas, int startColumn, int endColumn, float top, float bottom,
                               float horizontalOffset, int color) {
         mTextPaint.setColor(color);
-        canvas.drawRect(horizontalOffset + startColumn * mFontWidth, top,
-            horizontalOffset + endColumn * mFontWidth, bottom, mTextPaint);
+        canvas.drawRect(Math.round(horizontalOffset + startColumn * mFontWidth), Math.round(top),
+            Math.round(horizontalOffset + endColumn * mFontWidth), Math.round(bottom), mTextPaint);
     }
 
     /** Draw kitty-protocol cursors after the normal screen, so they do not perturb text run batching. */
@@ -1724,8 +1748,8 @@ public final class TerminalRenderer {
                 float left = horizontalOffset + startColumn * mFontWidth;
                 if (overlayBackground != palette[TextStyle.COLOR_INDEX_BACKGROUND]) {
                     mTextPaint.setColor(overlayBackground);
-                    canvas.drawRect(left, y - mFontLineSpacing, left + width * mFontWidth, y,
-                        mTextPaint);
+                    canvas.drawRect(Math.round(left), Math.round(y - mFontLineSpacing),
+                        Math.round(left + width * mFontWidth), Math.round(y), mTextPaint);
                 }
                 drawCursorShape(canvas, left, y, width * mFontWidth, shape, cursorColor);
                 if ((effect & TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE) == 0) {
@@ -2024,6 +2048,13 @@ public final class TerminalRenderer {
         mTextPaint.setColor(color);
         canvas.drawRect(left, center - mStrikethroughThickness / 2f,
             right, center + mStrikethroughThickness / 2f, mTextPaint);
+    }
+
+    /** @return true when the flag changed, so the caller can skip a needless invalidate */
+    public boolean setCursorSuppressed(boolean suppressed) {
+        if (mCursorSuppressed == suppressed) return false;
+        mCursorSuppressed = suppressed;
+        return true;
     }
 
     public float getFontWidth() {

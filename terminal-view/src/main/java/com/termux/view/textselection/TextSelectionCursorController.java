@@ -94,6 +94,15 @@ public class TextSelectionCursorController implements CursorController {
         int[] columnAndRow = terminalView.getColumnAndRow(event, true);
         mSelX1 = mSelX2 = columnAndRow[0];
         mSelY1 = mSelY2 = columnAndRow[1];
+        expandSelectionToWord();
+    }
+
+    /**
+     * Grows a caret-sized selection at [mSelX1]/[mSelY1] over the word it sits on, leaving a
+     * selection that starts on whitespace alone. Shared by the long-press path and by
+     * {@link #selectAtCursor()}, so a key-triggered selection lands on the same word a tap would.
+     */
+    private void expandSelectionToWord() {
         TerminalBuffer screen = terminalView.mEmulator.getScreen();
         TerminalRow line = screen.allocateFullLineIfNecessary(screen.externalToInternalRow(mSelY1));
         char[] text = line.mText;
@@ -111,6 +120,30 @@ public class TextSelectionCursorController implements CursorController {
                 mSelX2++;
             }
         }
+    }
+
+    /**
+     * Starts a selection at the shell's cursor cell, expanded to the word under it, without a
+     * MotionEvent. This is the entry point for keys and tools: the touch path anchors on where a
+     * finger landed, but a key press has no coordinates, and the cursor is the one cell the user
+     * is demonstrably looking at.
+     */
+    public void selectAtCursor() {
+        if (terminalView.mEmulator == null)
+            return;
+        mSelX1 = mSelX2 = Math.max(0,
+            Math.min(terminalView.mEmulator.getCursorCol(), terminalView.mEmulator.mColumns - 1));
+        mSelY1 = mSelY2 = Math.max(0,
+            Math.min(terminalView.mEmulator.getCursorRow(), terminalView.mEmulator.mRows - 1));
+        expandSelectionToWord();
+        mStartHandle.positionAtCursor(mSelX1, mSelY1, true);
+        mEndHandle.positionAtCursor(mSelX2 + 1, mSelY2, true);
+        if (!mIsSelectingText)
+            setActionModeCallBacks();
+        // Same reasoning as selectAll(): nothing here came from a long-press, so there are no
+        // trailing touch events to guard against.
+        mShowStartTime = 0L;
+        mIsSelectingText = true;
     }
 
     /** Select all active rows, including scrollback, without synthesizing a long-press event. */

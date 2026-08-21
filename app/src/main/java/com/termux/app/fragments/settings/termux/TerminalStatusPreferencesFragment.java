@@ -9,7 +9,6 @@ import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.Keep;
 import androidx.annotation.Nullable;
@@ -17,6 +16,7 @@ import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
 import androidx.preference.Preference;
 
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
@@ -53,6 +53,8 @@ public final class TerminalStatusPreferencesFragment extends MaterialPreferenceF
                 R.string.settings_clock_alignment_left,
                 R.string.settings_clock_alignment_center,
                 R.string.settings_clock_alignment_right});
+        StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_cpu"));
+        StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_ram"));
         Preference customize = findPreference("customize_status_surface");
         if (customize != null) customize.setOnPreferenceClickListener(preference -> {
             openSurfaceEditor(context, "status");
@@ -124,16 +126,14 @@ public final class TerminalStatusPreferencesFragment extends MaterialPreferenceF
                     String pkg = packageInput.getText().toString().trim();
                     String keywords = keywordsInput.getText().toString().trim();
                     if (pkg.isEmpty() && keywords.isEmpty()) {
-                        Toast.makeText(context, R.string.essential_rules_needs_field,
-                            Toast.LENGTH_SHORT).show();
+                        AppNotice.show(context, R.string.essential_rules_needs_field, false);
                         return;
                     }
                     EssentialNotificationRule rule = new EssentialNotificationRule(
                         EssentialNotificationRules.deriveId(pkg, keywords), pkg, keywords,
                         clearCheckbox.isChecked());
                     if (EssentialNotificationRules.add(preferences, rule) == null) {
-                        Toast.makeText(context, R.string.essential_rules_full,
-                            Toast.LENGTH_SHORT).show();
+                        AppNotice.show(context, R.string.essential_rules_full, false);
                         return;
                     }
                     LauncherCtlNotificationListener.requestPinnedRefresh();

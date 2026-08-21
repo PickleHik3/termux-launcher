@@ -9,7 +9,6 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
@@ -22,6 +21,7 @@ import androidx.preference.PreferenceScreen;
 import androidx.preference.SwitchPreferenceCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.ai.TaiModelCatalog;
 import com.termux.ai.TaiModelProfile;
@@ -156,7 +156,7 @@ public class TaiParameterPreferencesFragment extends MaterialPreferenceFragment 
         reset.setPersistent(false);
         reset.setOnPreferenceClickListener(preference -> {
             new TaiSettings(context).resetModelParametersToGlobal(modelId);
-            Toast.makeText(context, R.string.termux_ai_model_tune_reset_done, Toast.LENGTH_SHORT).show();
+            AppNotice.show(context, R.string.termux_ai_model_tune_reset_done, false);
             refreshSummaries();
             return true;
         });
@@ -436,18 +436,18 @@ public class TaiParameterPreferencesFragment extends MaterialPreferenceFragment 
         if (value.isEmpty() || "auto".equalsIgnoreCase(value)) {
             if (modelRows) settings.resetModelParameterToGlobal(modelId, spec.field);
             else settings.setGlobalParameter(rowBackend, spec.field, null);
-            Toast.makeText(context, R.string.termux_ai_model_tune_saved, Toast.LENGTH_SHORT).show();
+            AppNotice.show(context, R.string.termux_ai_model_tune_saved, false);
             refreshSummaries();
             return;
         }
         Object parsed = spec.parse(value);
         if (parsed == null) {
-            Toast.makeText(context, R.string.termux_ai_model_tune_invalid, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, R.string.termux_ai_model_tune_invalid, true);
             return;
         }
         if (modelRows) settings.setModelParameter(modelId, spec.field, parsed);
         else settings.setGlobalParameter(rowBackend, spec.field, parsed);
-        Toast.makeText(context, R.string.termux_ai_model_tune_saved, Toast.LENGTH_SHORT).show();
+        AppNotice.show(context, R.string.termux_ai_model_tune_saved, false);
         refreshSummaries();
     }
 

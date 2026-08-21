@@ -16,6 +16,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -37,11 +38,21 @@ public final class FirstLaunchOnboarding {
     private FirstLaunchOnboarding() {}
 
     public static void showIfNeeded(@NonNull Activity activity, boolean force) {
+        showIfNeeded(activity, force, null);
+    }
+
+    /**
+     * @param onFinished run once the onboarding has been dismissed — whether the user paged to the
+     *     end or skipped out. Not run at all when there was no onboarding to show, so a caller can
+     *     use it for first-run-only follow-up work such as asking for permissions.
+     */
+    public static void showIfNeeded(@NonNull Activity activity, boolean force,
+                                    @Nullable Runnable onFinished) {
         SharedPreferences preferences = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         if (!force && preferences.getInt(KEY_COMPLETED_VERSION, 0) >= CURRENT_VERSION) return;
         ViewGroup host = activity.findViewById(android.R.id.content);
         if (host == null || host.findViewWithTag(Controller.ROOT_TAG) != null) return;
-        new Controller(activity, host, preferences).show();
+        new Controller(activity, host, preferences, onFinished).show();
     }
 
     private static final class Controller {
@@ -62,11 +73,14 @@ public final class FirstLaunchOnboarding {
         private final ViewPager pager;
         private final LinearLayout dots;
         private final MaterialButton primaryButton;
+        @Nullable private Runnable onFinished;
 
-        Controller(Activity activity, ViewGroup host, SharedPreferences preferences) {
+        Controller(Activity activity, ViewGroup host, SharedPreferences preferences,
+                   @Nullable Runnable onFinished) {
             this.activity = activity;
             this.host = host;
             this.preferences = preferences;
+            this.onFinished = onFinished;
             Window window = activity.getWindow();
             oldStatusBarColor = window.getStatusBarColor();
             oldNavigationBarColor = window.getNavigationBarColor();
@@ -213,6 +227,12 @@ public final class FirstLaunchOnboarding {
                     window.setStatusBarColor(oldStatusBarColor);
                     window.setNavigationBarColor(oldNavigationBarColor);
                     window.getDecorView().setSystemUiVisibility(oldSystemUiVisibility);
+                    // After the overlay is gone, never over it: the permission dialogs that follow
+                    // are system-owned and would otherwise be judged against a backdrop the user
+                    // has no context for yet.
+                    Runnable finished = onFinished;
+                    onFinished = null;
+                    if (finished != null) finished.run();
                 }).start();
         }
 

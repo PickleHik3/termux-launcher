@@ -9,7 +9,6 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.widget.Toast;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
@@ -19,6 +18,7 @@ import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiManager;
@@ -491,15 +491,14 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
     private void startCatalogDownload(Context context, TaiModelCatalog.CatalogEntry entry) {
         try {
             JSONObject result = TaiManager.getInstance(context).downloadCatalogModel(entry.modelId);
-            Toast.makeText(context, result.optBoolean("ok", false)
-                ? R.string.termux_ai_model_download_started : R.string.termux_ai_model_action_failed,
-                Toast.LENGTH_SHORT).show();
+            AppNotice.show(context, result.optBoolean("ok", false)
+                ? R.string.termux_ai_model_download_started : R.string.termux_ai_model_action_failed, false);
             // Flip just this row to its downloading state in place (no full rebuild → no flash).
             updateRowsInPlace(context);
             handler.removeCallbacks(refreshRunnable);
             handler.postDelayed(refreshRunnable, POLL_INTERVAL_MS);
         } catch (JSONException e) {
-            Toast.makeText(context, R.string.termux_ai_model_action_failed, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, R.string.termux_ai_model_action_failed, true);
         }
     }
 
@@ -507,12 +506,11 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
         try {
             JSONObject result = TaiManager.getInstance(context).cancelDownload(
                 new JSONObject().put("modelId", modelId).toString());
-            Toast.makeText(context, result.optBoolean("ok", false)
-                ? R.string.termux_ai_model_download_cancelled : R.string.termux_ai_model_action_failed,
-                Toast.LENGTH_SHORT).show();
+            AppNotice.show(context, result.optBoolean("ok", false)
+                ? R.string.termux_ai_model_download_cancelled : R.string.termux_ai_model_action_failed, false);
             updateRowsInPlace(context);
         } catch (JSONException e) {
-            Toast.makeText(context, R.string.termux_ai_model_action_failed, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, R.string.termux_ai_model_action_failed, true);
         }
     }
 
@@ -521,14 +519,13 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
         TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(context);
         if (model != null && TaiModelSpec.BACKEND_MNN_LLM.equals(model.backend) && !capabilities.mnnSupported) {
             String reason = capabilities.mnnUnsupportedReason;
-            Toast.makeText(context, reason == null ? getString(R.string.termux_ai_mnn_runtime_pending) : reason,
-                Toast.LENGTH_LONG).show();
+            AppNotice.show(context, reason == null ? getString(R.string.termux_ai_mnn_runtime_pending) : reason, true);
             return;
         }
         SharedPreferences preferences = getPreferenceManager().getSharedPreferences();
         if (preferences == null) return;
         preferences.edit().putString(TaiSettings.KEY_ROLE_DEFAULT_ASSISTANT, modelId).apply();
-        Toast.makeText(context, R.string.termux_ai_model_active_saved, Toast.LENGTH_SHORT).show();
+        AppNotice.show(context, R.string.termux_ai_model_active_saved, false);
         updateRowsInPlace(context);
     }
 
@@ -554,14 +551,14 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
         ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
         if (clipboard == null) return;
         clipboard.setPrimaryClip(ClipData.newPlainText("TAI provider", text));
-        Toast.makeText(context, text, Toast.LENGTH_SHORT).show();
+        AppNotice.show(context, text, false);
     }
 
     private void openUrl(Context context, String url) {
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
         } catch (Exception e) {
-            Toast.makeText(context, url, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, url, true);
         }
     }
 

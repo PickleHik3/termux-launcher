@@ -169,6 +169,8 @@ dependencies {
     implementation "io.noties.markwon:linkify:$markwonVersion"
     implementation "io.noties.markwon:recycler:$markwonVersion"
     implementation 'com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava'
+    // Renders the bundled Meteocons weather animations (app/src/main/assets/weather).
+    implementation "com.airbnb.android:lottie:6.7.1"
     implementation "com.google.ai.edge.litertlm:litertlm-android:0.14.0"
     implementation "com.google.ai.edge.litert:litert:1.4.2"
     implementation project(":terminal-view")
