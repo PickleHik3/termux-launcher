@@ -439,7 +439,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             if (travelled)
                 mActivity.animateTerminalSessionArrival(toNumber >= fromNumber ? 1 : -1);
             else if (created)
-                mActivity.animateTerminalSessionArrival(1);
+                mActivity.animateTerminalSessionLifecycleArrival(1);
             // No "[1] fish in ~" chip here any more: the action hint already narrates the switch,
             // and two stacked notices for one keypress read as noise. The indicator view stays for
             // notices that carry real news — an exited session, a refused split.

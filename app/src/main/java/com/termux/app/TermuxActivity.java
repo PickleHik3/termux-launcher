@@ -13041,7 +13041,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!mWSessions.isEmpty()) {
                 mCurrentWSession = mWSessions.get(Math.min(index, mWSessions.size() - 1));
                 mPaneController.showWindow(mCurrentWSession.currentWindow());
-                animateTerminalSessionArrival(-1);
+                animateTerminalSessionLifecycleArrival(-1);
             } else if (getTermuxTerminalSessionClient() != null) {
                 getTermuxTerminalSessionClient().addNewSession(false, null);
             }
@@ -14981,15 +14981,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the axis is what tells the user which of the two just happened, without reading a label.
      */
     private void animateTerminalWindowArrival(int direction) {
-        animateTerminalArrival(direction, true);
+        animateTerminalArrival(direction, true,
+            com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS);
     }
 
     /** Session switch: the same arrival on the vertical axis. */
     public void animateTerminalSessionArrival(int direction) {
-        animateTerminalArrival(direction, false);
+        animateTerminalArrival(direction, false,
+            com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS);
     }
 
-    private void animateTerminalArrival(int direction, boolean horizontal) {
+    /**
+     * Creation and close pans are quicker than navigation pans: a switch is travel the user
+     * watches, but new/close is a command whose result the user is waiting to type into, and the
+     * frame-timing pass measured the wait as the whole perceived latency. Same grammar, less time.
+     */
+    private static final long TERMINAL_LIFECYCLE_ANIMATION_MS = 380L;
+
+    private void animateTerminalWindowLifecycleArrival(int direction) {
+        animateTerminalArrival(direction, true, TERMINAL_LIFECYCLE_ANIMATION_MS);
+    }
+
+    public void animateTerminalSessionLifecycleArrival(int direction) {
+        animateTerminalArrival(direction, false, TERMINAL_LIFECYCLE_ANIMATION_MS);
+    }
+
+    private void animateTerminalArrival(int direction, boolean horizontal, long durationMs) {
         ViewGroup surfaceHost = findViewById(R.id.terminal_surface_host);
         View paneHost = findViewById(R.id.terminal_pane_host);
         if (surfaceHost == null || paneHost == null || isReducedMotionEnabled()) {
@@ -15021,15 +15038,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // draws, children included.
         surfaceHost.setClipBounds(new android.graphics.Rect(
             0, 0, surfaceHost.getWidth(), surfaceHost.getHeight()));
-        animateTerminalDeparture(surfaceHost, offset, horizontal, settle);
+        animateTerminalDeparture(surfaceHost, offset, horizontal, settle, durationMs);
         paneHost.animate().cancel();
         paneHost.setTranslationX(horizontal ? offset : 0f);
         paneHost.setTranslationY(horizontal ? 0f : offset);
         paneHost.animate()
             .translationX(0f)
             .translationY(0f)
-            .setDuration(com.termux.app.terminal.TerminalWindowBar
-                .WINDOW_SWITCH_ANIMATION_DURATION_MS)
+            .setDuration(durationMs)
             .setInterpolator(settle)
             .withEndAction(() -> surfaceHost.setClipBounds(null))
             .start();
@@ -15050,10 +15066,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View terminal = findViewById(R.id.terminal_surface_host);
         if (terminal == null || terminal.getWidth() <= 0 || terminal.getHeight() <= 0) return;
         try {
+            // Half resolution: the software draw of the whole hierarchy (glass shaders included)
+            // is the expensive part of a switch's silent gap, and it scales with pixels. The card
+            // is only ever seen in motion, stretched back up by the ghost — the softness never
+            // reads at pan speed. Quarter of the pixels, quarter of the work.
             android.graphics.Bitmap snapshot = android.graphics.Bitmap.createBitmap(
-                terminal.getWidth(), terminal.getHeight(),
+                Math.max(1, terminal.getWidth() / 2), Math.max(1, terminal.getHeight() / 2),
                 android.graphics.Bitmap.Config.ARGB_8888);
             android.graphics.Canvas canvas = new android.graphics.Canvas(snapshot);
+            canvas.scale(0.5f, 0.5f);
             // The ground behind the panes: the pane-gap margins and rounded rim corners are
             // transparent in the surface's own draw, and whatever is baked there rides along for
             // the whole pan. A flat base colour painted a dark border around every rim (the live
@@ -15095,7 +15116,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG);
         paint.setShader(shader);
         paint.setColorFilter(glassFrostFilter());
-        canvas.drawRect(0f, 0f, canvas.getWidth(), canvas.getHeight(), paint);
+        // View coordinates, not bitmap coordinates: the caller's canvas may be scaled down for a
+        // reduced-resolution snapshot, and the shader matrix above is built in view space.
+        canvas.drawRect(0f, 0f, terminal.getWidth(), terminal.getHeight(), paint);
         return true;
     }
 
@@ -15117,21 +15140,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the incoming surface with a real shadow — the old session physically picks up and leaves.
      */
     private void animateTerminalDeparture(ViewGroup surfaceHost, float offset, boolean horizontal,
-                                          android.view.animation.Interpolator settle) {
+                                          android.view.animation.Interpolator settle,
+                                          long durationMs) {
         android.graphics.Bitmap departure = mTerminalDepartureSnapshot;
         mTerminalDepartureSnapshot = null;
         if (departure == null) return;
         android.widget.ImageView ghost = new android.widget.ImageView(this);
         ghost.setImageBitmap(departure);
+        // The snapshot is captured at half resolution (see captureTerminalDeparture); the ghost
+        // stretches it back over the full surface. It only ever exists moving, so the softness
+        // never reads.
+        ghost.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
         ghost.setBackgroundColor(resolveTerminalSurfaceBaseColor());
         ghost.setElevation(dpToPx(12));
         surfaceHost.addView(ghost, new android.widget.FrameLayout.LayoutParams(
-            departure.getWidth(), departure.getHeight()));
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         ghost.animate()
             .translationX(horizontal ? -offset : 0f)
             .translationY(horizontal ? 0f : -offset)
-            .setDuration(com.termux.app.terminal.TerminalWindowBar
-                .WINDOW_SWITCH_ANIMATION_DURATION_MS)
+            .setDuration(durationMs)
             .setInterpolator(settle)
             .withEndAction(() -> {
                 surfaceHost.removeView(ghost);
@@ -15328,7 +15355,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // enters from the trailing edge while the old window slides out the other side.
             captureTerminalDeparture();
             mPaneController.showWindow(w);
-            animateTerminalWindowArrival(1);
+            animateTerminalWindowLifecycleArrival(1);
         });
         rebuildDrawerSessions();
     }
@@ -15354,7 +15381,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } else {
             mCurrentWSession.current = Math.min(oldIndex, mCurrentWSession.windows.size() - 1);
             mPaneController.showWindow(mCurrentWSession.currentWindow());
-            animateTerminalWindowArrival(mCurrentWSession.current < oldIndex ? -1 : 1);
+            animateTerminalWindowLifecycleArrival(mCurrentWSession.current < oldIndex ? -1 : 1);
         }
         rebuildDrawerSessions();
     }
@@ -15403,7 +15430,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneController.showWindow(mCurrentWSession.currentWindow());
             // The closed session is carried off along the session axis, the survivor slides in —
             // the same travel its creation played, reversed. Callers capture the departure.
-            animateTerminalSessionArrival(-1);
+            animateTerminalSessionLifecycleArrival(-1);
         } else if (getTermuxTerminalSessionClient() != null) {
             getTermuxTerminalSessionClient().addNewSession(false, null);
         }
@@ -15425,7 +15452,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPaneController.showWindow(ws.currentWindow());
                 // No departure snapshot here — the window died with its last shell and its panes
                 // are already gone — but the neighbour still arrives with the travel language.
-                animateTerminalWindowArrival(ws.current < oldIndex ? -1 : 1);
+                animateTerminalWindowLifecycleArrival(ws.current < oldIndex ? -1 : 1);
             }
         } else if (ws.windows.isEmpty()) {
             mWSessions.remove(ws);
