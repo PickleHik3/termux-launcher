@@ -168,7 +168,10 @@ public final class StatusCardHost {
                 outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
             }
         });
-        container.setElevation(dp(context, 10));
+        // No elevation: the popup surface is exactly the card's bounding box, so a cast shadow
+        // cannot fall outside it — it renders only inside the four corner notches beyond the
+        // rounded arc and is clipped square at the window edge, which reads as tinted sharp
+        // corners behind the card (issue #13). The 1dp outline stroke carries the edge instead.
         int pad = Math.round(style.contentInsetPx(alignStart));
         container.setPadding(pad, pad, pad, pad);
         container.addView(content,
