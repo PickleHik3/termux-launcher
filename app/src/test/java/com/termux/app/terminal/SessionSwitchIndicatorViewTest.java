@@ -21,13 +21,14 @@ import static org.junit.Assert.assertTrue;
 public class SessionSwitchIndicatorViewTest {
 
     @Test
-    public void hostParams_pinTheChipToTheTopTrailingCorner() {
+    public void hostParams_sitInsideTheNoticeColumn() {
+        // The chip lives in the top-trailing notice column now, which owns the corner offsets;
+        // the chip itself only keeps a start margin and wraps its content.
         FrameLayout.LayoutParams params = SessionSwitchIndicatorView.buildHostLayoutParams(
             ApplicationProvider.getApplicationContext());
 
-        assertEquals(Gravity.TOP | Gravity.END, params.gravity);
-        assertTrue(params.topMargin > 0);
-        assertTrue(params.getMarginEnd() > 0);
+        assertEquals(Gravity.TOP | Gravity.START, params.gravity);
+        assertTrue(params.getMarginStart() > 0);
         assertEquals(FrameLayout.LayoutParams.WRAP_CONTENT, params.width);
         assertEquals(FrameLayout.LayoutParams.WRAP_CONTENT, params.height);
     }
@@ -35,13 +36,15 @@ public class SessionSwitchIndicatorViewTest {
     @Test
     public void reShowingKeepsTheSettledAlphaAndClearsTheSlide() {
         // The re-entrant branch used to set alpha(1f) and reset the wrong axis, so an updated chip
-        // snapped to full opacity while keeping a stale offset. Guards that bug class.
+        // snapped to full opacity while keeping a stale offset. Guards that bug class. Re-showing
+        // the same text takes the in-place branch; a different text crossfades asynchronously, so
+        // only the same-text path is assertable without driving animator time.
         SessionSwitchIndicatorView chip = chip();
 
-        chip.show("first");
-        chip.show("second");
+        chip.show("notice");
+        chip.show("notice");
 
-        assertEquals("second", chip.getText().toString());
+        assertEquals("notice", chip.getText().toString());
         assertEquals(SessionSwitchIndicatorView.ENTER_ALPHA, chip.getAlpha(), .001f);
         assertEquals(0f, chip.getTranslationX(), .001f);
         assertEquals(0f, chip.getTranslationY(), .001f);
