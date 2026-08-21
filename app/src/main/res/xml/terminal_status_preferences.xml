@@ -29,6 +29,12 @@
             app:title="@string/settings_split_pane_controls_title"
             app:summary="@string/settings_split_pane_controls_summary"
             android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="show_key_hints"
+            app:title="@string/settings_show_key_hints_title"
+            app:summary="@string/settings_show_key_hints_summary"
+            app:dependency="split_pane_controls"
+            android:defaultValue="true" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_lazy_mode_header">
@@ -62,12 +68,12 @@
             app:key="status_widget_cpu"
             app:title="@string/settings_cpu_usage_title"
             app:summary="@string/termux_status_widget_cpu_summary"
-            app:defaultValue="true" />
+            app:defaultValue="false" />
         <SwitchPreferenceCompat
             app:key="status_widget_ram"
             app:title="@string/settings_memory_usage_title"
             app:summary="@string/settings_memory_usage_summary"
-            app:defaultValue="true" />
+            app:defaultValue="false" />
         <SwitchPreferenceCompat
             app:key="status_widget_weather"
             app:title="@string/settings_weather_title"

@@ -41,6 +41,13 @@ public final class SessionSwitchIndicatorView extends AppCompatTextView {
     private static final long HOLD_MS = 1400L;
     private static final long ANIM_OUT_MS = 200L;
     /**
+     * In-place text swap: dip down and back up rather than a hard replacement. The pill still
+     * re-measures at the low point, so the width change rides inside the dip instead of snapping
+     * at full opacity.
+     */
+    private static final long TEXT_SWAP_HALF_MS = 70L;
+    private static final float TEXT_SWAP_DIP_ALPHA = 0.3f;
+    /**
      * Alpha the chip settles at. Under 1 on purpose: it floats over live terminal output, and a
      * fully opaque chip reads as a dialog rather than as a note.
      */
@@ -72,7 +79,7 @@ public final class SessionSwitchIndicatorView extends AppCompatTextView {
         setEllipsize(TextUtils.TruncateAt.END);
         setMaxWidth(dp(220));
         setIncludeFontPadding(false);
-        setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
         // Material 3 label-medium: 12sp, medium weight, 0.5sp tracking. The old 9.5sp was below the
         // type scale's floor, which is why the notice read as fine print rather than as a component.
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
@@ -135,28 +142,39 @@ public final class SessionSwitchIndicatorView extends AppCompatTextView {
     /** Show (or update, if already showing) the chip with {@code text} and (re)start the hold timer. */
     public void show(@Nullable CharSequence text) {
         if (TextUtils.isEmpty(text)) return;
-        setText(text);
         if (mHideRunnable != null) {
             removeCallbacks(mHideRunnable);
             mHideRunnable = null;
         }
         if (mVisibleState) {
             // Already showing (or fading out): swap text in place and restart the hold rather than
-            // replay the entrance. Both transforms are reset here too — a chip updated mid-fade
-            // would otherwise settle at full opacity with a stale slide offset still applied.
+            // replay the entrance. The slide offset is reset here too — a chip updated mid-fade
+            // would otherwise settle with a stale slide offset still applied.
             animate().cancel();
-            setAlpha(ENTER_ALPHA);
             setTranslationX(0f);
+            if (TextUtils.equals(getText(), text)) {
+                setText(text);
+                setAlpha(ENTER_ALPHA);
+            } else {
+                // Different notice: crossfade the swap instead of hard-replacing the label.
+                animate().alpha(TEXT_SWAP_DIP_ALPHA).setDuration(TEXT_SWAP_HALF_MS)
+                    .withEndAction(() -> {
+                        setText(text);
+                        animate().alpha(ENTER_ALPHA).setDuration(TEXT_SWAP_HALF_MS).start();
+                    })
+                    .start();
+            }
             scheduleHide();
             return;
         }
+        setText(text);
         mVisibleState = true;
         animate().cancel();
         setVisibility(VISIBLE);
         notifyOccupancy();
         setAlpha(0f);
         // One axis of truth: the chip is pinned to the trailing edge, so it enters along it.
-        setTranslationX(dp(SLIDE_DP));
+        setTranslationX(-dp(SLIDE_DP));
         animate()
             .alpha(ENTER_ALPHA)
             .translationX(0f)
@@ -190,7 +208,7 @@ public final class SessionSwitchIndicatorView extends AppCompatTextView {
         animate().cancel();
         animate()
             .alpha(0f)
-            .translationX(dp(SLIDE_DP) * 0.5f)
+            .translationX(-dp(SLIDE_DP) * 0.5f)
             .setDuration(ANIM_OUT_MS)
             .setInterpolator(Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
                 ? new PathInterpolator(0.3f, 0f, 1f, 1f) : new DecelerateInterpolator())
@@ -224,15 +242,18 @@ public final class SessionSwitchIndicatorView extends AppCompatTextView {
     /**
      * Where the chip sits in its host. Position and entry animation have to agree — the slide comes
      * in along the edge the chip is pinned to — so they belong in the same place.
+     *
+     * <p>No top margin: this chip and the {@code AppNotice} chip in the top-trailing corner are the
+     * two transient voices of the terminal, and they must share one row — both hang flush from the
+     * top of the surface, leading and trailing corner respectively.
      */
     @NonNull
     public static FrameLayout.LayoutParams buildHostLayoutParams(@NonNull Context context) {
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
-        params.gravity = Gravity.TOP | Gravity.END;
+        params.gravity = Gravity.TOP | Gravity.START;
         float density = context.getResources().getDisplayMetrics().density;
-        params.topMargin = Math.round(8 * density);
-        params.setMarginEnd(Math.round(10 * density));
+        params.setMarginStart(Math.round(10 * density));
         return params;
     }
 

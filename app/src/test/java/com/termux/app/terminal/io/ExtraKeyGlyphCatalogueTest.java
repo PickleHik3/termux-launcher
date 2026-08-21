@@ -70,8 +70,12 @@ public class ExtraKeyGlyphCatalogueTest {
         }
 
         assertTrue("expected a real catalogue, found " + rows + " rows", rows >= 250);
+        // The Nerd Font group lives in its own generated file, so the reviewed file carries every
+        // other declared category, in order.
+        List<String> reviewedCategories = new ArrayList<>(ExtraKeyGlyphCatalogue.CATEGORIES);
+        reviewedCategories.remove(ExtraKeyGlyphCatalogue.CATEGORY_NERD_FONT);
         assertEquals("groups must follow the declared category order",
-            ExtraKeyGlyphCatalogue.CATEGORIES, categoriesSeen);
+            reviewedCategories, categoriesSeen);
 
         // The parser must accept its own shipped file wholesale, and every declared category has to
         // survive it: an empty group is a category the picker would render as a bare header.
@@ -80,9 +84,42 @@ public class ExtraKeyGlyphCatalogueTest {
             catalogue = ExtraKeyGlyphCatalogue.parse(reader);
         }
         assertEquals(rows, catalogue.size());
-        for (String category : ExtraKeyGlyphCatalogue.CATEGORIES) {
+        for (String category : reviewedCategories) {
             assertFalse("empty category: " + category, catalogue.byCategory(category).isEmpty());
         }
+    }
+
+    /**
+     * The Nerd Font file is generated from the bundled symbols face rather than reviewed, so what
+     * is asserted here is that generation stayed inside the parser's contract — a row the parser
+     * skips is a glyph the picker silently loses.
+     */
+    @Test public void generatedNerdFontCatalogueParsesWholeAndStaysInItsOwnCategory() throws Exception {
+        Path path = Path.of("app/src/main/res/raw/nerd_font_glyphs.csv");
+        if (!Files.exists(path)) path = Path.of("src/main/res/raw/nerd_font_glyphs.csv");
+        assertTrue("generated Nerd Font catalogue is missing", Files.exists(path));
+        List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+        assertEquals(ExtraKeyGlyphCatalogue.SCHEMA_LINE, lines.get(0));
+
+        int rows = 0;
+        for (String raw : lines) {
+            String line = raw.trim();
+            if (line.isEmpty() || line.startsWith("#")) continue;
+            rows++;
+            String[] fields = line.split(",", -1);
+            assertEquals("three commas per row: " + line, 4, fields.length);
+            assertEquals("generated rows are all Nerd Font: " + line,
+                ExtraKeyGlyphCatalogue.CATEGORY_NERD_FONT, fields[3]);
+        }
+        assertTrue("expected the whole shipped face, found " + rows + " rows", rows >= 10_000);
+
+        ExtraKeyGlyphCatalogue catalogue;
+        try (var reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            catalogue = ExtraKeyGlyphCatalogue.parse(reader);
+        }
+        assertEquals("every generated row must survive the parser", rows, catalogue.size());
+        // nf-md-keyboard_outline, the glyph the KEYBOARD cap now draws.
+        assertNotNull(catalogue.byCodePoint(0xF097B));
     }
 
     @Test public void parserSkipsMalformedRowsWithoutDroppingValidNeighbours() throws Exception {

@@ -12,6 +12,15 @@
 > All hail Fable for exorcising this daemon-basically yeeted it in seconds, on God.
 
 
+> [!IMPORTANT]
+> **This is an independent fork.** Termux Launcher is not affiliated with, endorsed by, or
+> supported by the official [Termux](https://github.com/termux/termux-app) project or its
+> maintainers. It is a separately maintained modification that reuses the Termux name only to
+> describe what it is built on. Do not report issues with this fork to Termux — file them
+> [here](https://github.com/PickleHik3/termux-launcher/issues). The `com.termux` edition shares a
+> package name with official Termux and **replaces it** on the device; the other editions install
+> side by side. Termux is a trademark of its respective owners.
+
 Termux Launcher is a terminal-first Android home launcher inspired by [TEL](https://github.com/t-e-l/tel), built on [termux-app](https://github.com/termux/termux-app) and [termux-monet](https://github.com/Termux-Monet/termux-monet).
 
 **[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | [Download builds](https://github.com/PickleHik3/termux-launcher/releases) | [Getting Started](docs/en/Launcher_Getting_Started.md) | [Modern terminal](docs/en/Terminal_Modernization.md) | [Local AI API](docs/en/LauncherCtl_API.md) | [Termux AI](docs/en/Termux_AI.md) | [Changelog](CHANGELOG.md)
@@ -120,6 +129,11 @@ Fonts are not part of the script — the in-app font picker (**Settings › Term
 ## License and Attributions
 
 Termux Launcher is a modified Termux/Termux:Monet distribution, developed from 2026 onward and
-released under GPLv3-only. See [LICENSE](LICENSE), [license exceptions](LICENSE-EXCEPTIONS.md), and
+released under GPLv3-only. It is an independent fork with no affiliation to the official Termux
+project. See [LICENSE](LICENSE), [license exceptions](LICENSE-EXCEPTIONS.md), and
 [open-source notices](THIRD_PARTY_NOTICES.md). The Android app exposes the same notices under
 **Settings > Open-source licenses**.
+
+Bundled assets carry their own licenses: the weather animations are
+[Meteocons](https://github.com/basmilius/meteocons) (MIT, Copyright 2020-present Bas Milius), and
+the icon font is [Symbols Nerd Font Mono](https://github.com/ryanoasis/nerd-fonts) (SIL OFL 1.1).

@@ -10,7 +10,6 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
-import android.widget.Toast;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
@@ -21,6 +20,7 @@ import androidx.preference.PreferenceManager;
 import androidx.preference.SwitchPreferenceCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
@@ -143,7 +143,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
                     .setMessage(R.string.termux_app_launcher_reset_usage_ranking_confirm_message)
                     .setPositiveButton(android.R.string.ok, (dialog, which) -> {
                         LauncherUsageStatsStore.getInstance(ctx).clear();
-                        Toast.makeText(ctx, R.string.termux_app_launcher_reset_usage_ranking_done, Toast.LENGTH_SHORT).show();
+                        AppNotice.show(ctx, R.string.termux_app_launcher_reset_usage_ranking_done, false);
                     })
                     .setNegativeButton(android.R.string.cancel, null)
                     .show();
@@ -330,7 +330,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         if (startSettingsIntent(context, LauncherNotificationAccess.listSettingsIntent())) {
             return;
         }
-        Toast.makeText(context, R.string.termux_app_launcher_notification_access_unavailable, Toast.LENGTH_SHORT).show();
+        AppNotice.show(context, R.string.termux_app_launcher_notification_access_unavailable, false);
     }
 
     private void openNotificationSettings(@NonNull Context context) {
@@ -350,7 +350,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
     }
 
     private void showSettingsUnavailable(@NonNull Context context) {
-        Toast.makeText(context, R.string.termux_app_launcher_permission_settings_unavailable, Toast.LENGTH_SHORT).show();
+        AppNotice.show(context, R.string.termux_app_launcher_permission_settings_unavailable, false);
     }
 
     private void showAccessibilityLockPrompt(Context context) {
@@ -359,7 +359,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
             .setMessage(R.string.termux_app_launcher_accessibility_lock_prompt_message)
             .setPositiveButton(R.string.termux_app_launcher_accessibility_lock_prompt_enable, (dialog, which) -> {
                 if (!startSettingsIntent(context, new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))) {
-                    Toast.makeText(context, R.string.termux_app_launcher_permission_settings_unavailable, Toast.LENGTH_SHORT).show();
+                    AppNotice.show(context, R.string.termux_app_launcher_permission_settings_unavailable, false);
                 }
             })
             .setNegativeButton(android.R.string.cancel, null)
@@ -387,7 +387,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
             }
         }
 
-        Toast.makeText(context, R.string.termux_app_launcher_set_home_unavailable, Toast.LENGTH_SHORT).show();
+        AppNotice.show(context, R.string.termux_app_launcher_set_home_unavailable, false);
     }
 
     private boolean startSettingsIntent(Context context, Intent intent) {

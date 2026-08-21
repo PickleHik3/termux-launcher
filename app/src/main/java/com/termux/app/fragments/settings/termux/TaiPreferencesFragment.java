@@ -23,7 +23,6 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
@@ -37,6 +36,7 @@ import androidx.preference.PreferenceManager;
 import androidx.preference.SwitchPreferenceCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
@@ -399,7 +399,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         try {
             endpoint = LauncherCtlApiServer.getInstance().endpointSettings(context);
         } catch (JSONException e) {
-            Toast.makeText(context, R.string.termux_ai_endpoint_update_failed, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, R.string.termux_ai_endpoint_update_failed, true);
             return;
         }
         String baseUrl = endpoint.optString("baseUrl", "");
@@ -443,9 +443,9 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 url[0] = ep.optString("openAiBaseUrl", b.isEmpty() ? "" : b + "/v1");
                 urlView.setText(url[0]);
                 refreshEndpointPreferences(context);
-                Toast.makeText(context, R.string.termux_ai_api_port_randomized, Toast.LENGTH_SHORT).show();
+                AppNotice.show(context, R.string.termux_ai_api_port_randomized, false);
             } catch (JSONException e) {
-                Toast.makeText(context, R.string.termux_ai_endpoint_update_failed, Toast.LENGTH_LONG).show();
+                AppNotice.show(context, R.string.termux_ai_endpoint_update_failed, true);
             }
         });
         Button recreateToken = endpointButton(context, R.string.termux_ai_endpoint_recreate_token, () -> {
@@ -456,9 +456,9 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 token[0] = fresh.isEmpty() ? new TaiSettings(context).getOrCreateApiToken() : fresh;
                 tokenView.setText(revealed[0] ? token[0] : TaiSettings.redactToken(token[0]));
                 refreshEndpointPreferences(context);
-                Toast.makeText(context, R.string.termux_ai_api_token_rotated, Toast.LENGTH_SHORT).show();
+                AppNotice.show(context, R.string.termux_ai_api_token_rotated, false);
             } catch (JSONException e) {
-                Toast.makeText(context, R.string.termux_ai_endpoint_update_failed, Toast.LENGTH_LONG).show();
+                AppNotice.show(context, R.string.termux_ai_endpoint_update_failed, true);
             }
         });
         layout.addView(endpointRow(context, getString(R.string.termux_ai_endpoint_manage_label), null,
@@ -531,7 +531,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
         if (clipboard == null) return;
         clipboard.setPrimaryClip(ClipData.newPlainText("Termux Launcher", text));
-        Toast.makeText(context, toastResId, Toast.LENGTH_SHORT).show();
+        AppNotice.show(context, toastResId, false);
     }
 
     private EditText buildDialogEditText(Context context, String value, int inputType, boolean multiline) {
@@ -619,7 +619,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 LauncherCtlApiServer.getInstance().applyEndpointSettings(context);
                 refreshEndpointPreferences(context);
             } catch (JSONException e) {
-                Toast.makeText(context, R.string.termux_ai_endpoint_update_failed, Toast.LENGTH_LONG).show();
+                AppNotice.show(context, R.string.termux_ai_endpoint_update_failed, true);
             }
             return true;
         });
@@ -642,7 +642,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 LauncherCtlApiServer.getInstance().applyEndpointSettings(context);
                 refreshEndpointPreferences(context);
             } catch (JSONException e) {
-                Toast.makeText(context, R.string.termux_ai_endpoint_update_failed, Toast.LENGTH_LONG).show();
+                AppNotice.show(context, R.string.termux_ai_endpoint_update_failed, true);
             }
             return true;
         });
@@ -659,7 +659,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                     LauncherCtlApiServer.getInstance().applyEndpointSettings(context);
                     refreshEndpointPreferences(context);
                 } catch (JSONException e) {
-                    Toast.makeText(context, R.string.termux_ai_endpoint_update_failed, Toast.LENGTH_LONG).show();
+                    AppNotice.show(context, R.string.termux_ai_endpoint_update_failed, true);
                 }
             })
             .setNegativeButton(android.R.string.cancel, null)
@@ -685,7 +685,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             .setPositiveButton(R.string.termux_ai_dialog_save, (dialog, which) -> {
                 String url = input.getText().toString().trim();
                 if (!url.startsWith("https://")) {
-                    Toast.makeText(context, R.string.termux_ai_mnn_custom_download_invalid_url, Toast.LENGTH_LONG).show();
+                    AppNotice.show(context, R.string.termux_ai_mnn_custom_download_invalid_url, true);
                     return;
                 }
                 startMnnCustomDownload(context, url);
@@ -714,14 +714,14 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 Context currentContext = getContext();
                 if (currentContext == null) return;
                 if (finalResult != null && finalResult.optBoolean("ok", false)) {
-                    Toast.makeText(currentContext, R.string.termux_ai_model_download_started, Toast.LENGTH_SHORT).show();
+                    AppNotice.show(currentContext, R.string.termux_ai_model_download_started, false);
                     handler.removeCallbacks(refreshRuntimeRunnable);
                     handler.postDelayed(refreshRuntimeRunnable, 1000L);
                 } else {
                     String message = finalResult == null
                         ? currentContext.getString(R.string.termux_ai_model_action_failed)
                         : finalResult.optString("message", currentContext.getString(R.string.termux_ai_model_action_failed));
-                    Toast.makeText(currentContext, message, Toast.LENGTH_LONG).show();
+                    AppNotice.show(currentContext, message, true);
                 }
                 refreshTaiPage(currentContext);
             });
@@ -909,7 +909,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 Context currentContext = getContext();
                 if (currentContext == null) return;
                 if (finalResult == null) {
-                    Toast.makeText(currentContext, R.string.termux_ai_runtime_action_failed, Toast.LENGTH_LONG).show();
+                    AppNotice.show(currentContext, R.string.termux_ai_runtime_action_failed, true);
                 } else {
                     toastRuntimeResult(currentContext, finalResult, successResId);
                 }
@@ -924,13 +924,12 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
 
     private void toastRuntimeResult(Context context, JSONObject result, int successResId) {
         if (result.optBoolean("loadCancellationRequested", false)) {
-            Toast.makeText(context,
-                result.optString("message", context.getString(R.string.termux_ai_runtime_cancel_requested)),
-                Toast.LENGTH_LONG).show();
+            AppNotice.show(context,
+                result.optString("message", context.getString(R.string.termux_ai_runtime_cancel_requested)), true);
         } else if (result.optBoolean("ok", false)) {
-            Toast.makeText(context, successResId, Toast.LENGTH_SHORT).show();
+            AppNotice.show(context, successResId, false);
         } else {
-            Toast.makeText(context, result.optString("message", context.getString(R.string.termux_ai_runtime_action_failed)), Toast.LENGTH_LONG).show();
+            AppNotice.show(context, result.optString("message", context.getString(R.string.termux_ai_runtime_action_failed)), true);
         }
     }
 
@@ -986,7 +985,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                     .putString(TaiSettings.KEY_HUGGINGFACE_TOKEN, input.getText().toString().trim())
                     .apply();
                 updateHuggingFaceTokenSummary(preference);
-                Toast.makeText(context, R.string.termux_ai_huggingface_token_saved, Toast.LENGTH_SHORT).show();
+                AppNotice.show(context, R.string.termux_ai_huggingface_token_saved, false);
             })
             .setNeutralButton(R.string.termux_ai_huggingface_token_get_action,
                 (dialog, which) -> openUrl(context, "https://huggingface.co/settings/tokens"))
@@ -1295,7 +1294,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 else if (which == 2) openParameterScreen(model);
                 else if (which == 3) {
                     if (loaded) {
-                        Toast.makeText(context, R.string.termux_ai_model_delete_loaded_warning, Toast.LENGTH_LONG).show();
+                        AppNotice.show(context, R.string.termux_ai_model_delete_loaded_warning, true);
                     } else {
                         confirmDeleteModel(context, model);
                     }
@@ -1319,14 +1318,13 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(context);
         if (model != null && TaiModelSpec.BACKEND_MNN_LLM.equals(model.backend) && !capabilities.mnnSupported) {
             String reason = capabilities.mnnUnsupportedReason;
-            Toast.makeText(context, reason == null ? getString(R.string.termux_ai_mnn_runtime_pending) : reason,
-                Toast.LENGTH_LONG).show();
+            AppNotice.show(context, reason == null ? getString(R.string.termux_ai_mnn_runtime_pending) : reason, true);
             return;
         }
         SharedPreferences preferences = getPreferenceManager().getSharedPreferences();
         if (preferences == null) return;
         preferences.edit().putString(TaiSettings.KEY_ROLE_DEFAULT_ASSISTANT, modelId).apply();
-        Toast.makeText(context, R.string.termux_ai_model_active_saved, Toast.LENGTH_SHORT).show();
+        AppNotice.show(context, R.string.termux_ai_model_active_saved, false);
         refreshTaiPage(context);
     }
 
@@ -1355,7 +1353,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 if (!isAdded() || getContext() == null) return;
                 Context ctx = getContext();
                 if (body == null) {
-                    Toast.makeText(ctx, R.string.termux_ai_runtime_action_failed, Toast.LENGTH_LONG).show();
+                    AppNotice.show(ctx, R.string.termux_ai_runtime_action_failed, true);
                     return;
                 }
                 new MaterialAlertDialogBuilder(ctx)
@@ -1386,15 +1384,15 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         try {
             JSONObject result = TaiManager.getInstance(context).downloadCatalogModel(entry.modelId);
             if (result.optBoolean("ok", false)) {
-                Toast.makeText(context, R.string.termux_ai_model_download_started, Toast.LENGTH_SHORT).show();
+                AppNotice.show(context, R.string.termux_ai_model_download_started, false);
                 handler.removeCallbacks(refreshRuntimeRunnable);
                 handler.postDelayed(refreshRuntimeRunnable, 1000L);
             } else {
-                Toast.makeText(context, result.optString("message", context.getString(R.string.termux_ai_model_action_failed)), Toast.LENGTH_LONG).show();
+                AppNotice.show(context, result.optString("message", context.getString(R.string.termux_ai_model_action_failed)), true);
             }
             refreshTaiPage(context);
         } catch (JSONException e) {
-            Toast.makeText(context, R.string.termux_ai_model_action_failed, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, R.string.termux_ai_model_action_failed, true);
         }
     }
 
@@ -1402,12 +1400,12 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         try {
             JSONObject result = TaiManager.getInstance(context).cancelDownload(
                 new JSONObject().put("modelId", modelId).toString());
-            Toast.makeText(context, result.optBoolean("ok", false)
+            AppNotice.show(context, result.optBoolean("ok", false)
                 ? R.string.termux_ai_model_download_cancelled
-                : R.string.termux_ai_model_action_failed, Toast.LENGTH_SHORT).show();
+                : R.string.termux_ai_model_action_failed, false);
             refreshTaiPage(context);
         } catch (JSONException e) {
-            Toast.makeText(context, R.string.termux_ai_model_action_failed, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, R.string.termux_ai_model_action_failed, true);
         }
     }
 
@@ -1421,7 +1419,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         TaiModelImporter.ValidationResult validation =
             TaiModelImporter.validateImportFileNameForBackend(draft.backend, metadata.displayName);
         if (!validation.supported) {
-            Toast.makeText(context, validation.message, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, validation.message, true);
             return;
         }
         draft.documentUri = uri;
@@ -1637,7 +1635,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             draft.modelId = modelIdInput.getText().toString().trim();
             captureModalities.run();
             if (draft.capabilities.isEmpty()) {
-                Toast.makeText(context, R.string.termux_ai_import_no_capability, Toast.LENGTH_LONG).show();
+                AppNotice.show(context, R.string.termux_ai_import_no_capability, true);
                 return;
             }
             if (startImportDraft(context, draft)) dialog.dismiss();
@@ -1650,7 +1648,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             draft.modelId = modelIdInput.getText().toString().trim();
             captureModalities.run();
             if (draft.capabilities.isEmpty()) {
-                Toast.makeText(context, R.string.termux_ai_import_no_capability, Toast.LENGTH_LONG).show();
+                AppNotice.show(context, R.string.termux_ai_import_no_capability, true);
                 return;
             }
             pendingImportDraft = draft;
@@ -1778,14 +1776,14 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         boolean hasUrl = draft.hfUrl != null && !draft.hfUrl.trim().isEmpty();
         boolean hasFile = draft.documentUri != null && draft.documentMetadata != null;
         if (hasUrl == hasFile) {
-            Toast.makeText(context, R.string.termux_ai_model_import_choose_one_source, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, R.string.termux_ai_model_import_choose_one_source, true);
             return false;
         }
         if (hasUrl) {
             TaiModelImporter.ValidationResult validation =
                 TaiModelImporter.validateHuggingFaceImportUrl(draft.hfUrl);
             if (!validation.supported) {
-                Toast.makeText(context, validation.message, Toast.LENGTH_LONG).show();
+                AppNotice.show(context, validation.message, true);
                 return false;
             }
             startHuggingFaceImport(context, draft);
@@ -1795,7 +1793,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         TaiModelImporter.ValidationResult validation = TaiModelImporter.validateImportFileNameForBackend(
             IMPORT_BACKEND_LITERT, draft.documentMetadata.displayName);
         if (!validation.supported) {
-            Toast.makeText(context, validation.message, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, validation.message, true);
             return false;
         }
         importModelDocument(context, draft.documentUri, draft.modelId, IMPORT_BACKEND_LITERT,
@@ -1808,7 +1806,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         String modelId = TaiModelImporter.sanitizeModelId(draft.modelId == null || draft.modelId.trim().isEmpty()
             ? deriveModelIdFromUrl(draft.hfUrl) : draft.modelId);
         if (modelId.isEmpty()) {
-            Toast.makeText(context, R.string.termux_ai_model_import_invalid_model_id, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, R.string.termux_ai_model_import_invalid_model_id, true);
             return;
         }
         runtimeActionExecutor.execute(() -> {
@@ -1835,7 +1833,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 Context currentContext = getContext();
                 if (currentContext == null) return;
                 if (finalResult != null && finalResult.optBoolean("ok", false)) {
-                    Toast.makeText(currentContext, R.string.termux_ai_model_download_started, Toast.LENGTH_SHORT).show();
+                    AppNotice.show(currentContext, R.string.termux_ai_model_download_started, false);
                     handler.removeCallbacks(refreshRuntimeRunnable);
                     handler.postDelayed(refreshRuntimeRunnable, 1000L);
                 } else if (finalResult != null && "gated_model_requires_auth".equals(finalResult.optString("error"))) {
@@ -1854,7 +1852,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                     String message = finalResult == null
                         ? currentContext.getString(R.string.termux_ai_model_action_failed)
                         : finalResult.optString("message", currentContext.getString(R.string.termux_ai_model_action_failed));
-                    Toast.makeText(currentContext, message, Toast.LENGTH_LONG).show();
+                    AppNotice.show(currentContext, message, true);
                 }
                 pendingImportDraft = null;
                 refreshTaiPage(currentContext);
@@ -1888,12 +1886,12 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                     currentImportPreference.setSummary(R.string.termux_ai_model_import_summary);
                 }
                 if (finalResult != null && finalResult.optBoolean("ok", false)) {
-                    Toast.makeText(currentContext, R.string.termux_ai_model_imported, Toast.LENGTH_SHORT).show();
+                    AppNotice.show(currentContext, R.string.termux_ai_model_imported, false);
                 } else {
                     String message = finalResult == null
                         ? currentContext.getString(R.string.termux_ai_model_action_failed)
                         : finalResult.optString("message", currentContext.getString(R.string.termux_ai_model_action_failed));
-                    Toast.makeText(currentContext, message, Toast.LENGTH_LONG).show();
+                    AppNotice.show(currentContext, message, true);
                 }
                 refreshTaiPage(currentContext);
             });
@@ -1908,7 +1906,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             toastRuntimeResult(context, result, R.string.termux_ai_model_loaded);
             refreshTaiPage(context);
         } catch (JSONException e) {
-            Toast.makeText(context, R.string.termux_ai_runtime_action_failed, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, R.string.termux_ai_runtime_action_failed, true);
         }
     }
 
@@ -1918,12 +1916,11 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             request.put("modelId", modelId);
             request.put("confirm", true);
             JSONObject result = TaiManager.getInstance(context).deleteModel(request.toString());
-            Toast.makeText(context,
-                result.optBoolean("deleted", false) ? R.string.termux_ai_model_deleted : R.string.termux_ai_model_delete_missing,
-                Toast.LENGTH_SHORT).show();
+            AppNotice.show(context,
+                result.optBoolean("deleted", false) ? R.string.termux_ai_model_deleted : R.string.termux_ai_model_delete_missing, false);
             refreshTaiPage(context);
         } catch (JSONException e) {
-            Toast.makeText(context, R.string.termux_ai_model_action_failed, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, R.string.termux_ai_model_action_failed, true);
         }
     }
 
@@ -2000,7 +1997,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
         } catch (Exception e) {
-            Toast.makeText(context, url, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, url, true);
         }
     }
 }

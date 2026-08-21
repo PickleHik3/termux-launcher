@@ -5,7 +5,6 @@ import android.content.Intent;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
-import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -19,6 +18,7 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
 
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
@@ -139,7 +139,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         File file = new File(com.termux.shared.termux.TermuxConstants.TERMUX_DATA_HOME_DIR_PATH,
             "keyboard/layout.xml");
         if (!file.isFile()) {
-            Toast.makeText(context, R.string.settings_custom_layout_missing, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, R.string.settings_custom_layout_missing, true);
             return;
         }
         new Thread(() -> {
@@ -161,7 +161,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             final int message = valid ? R.string.settings_custom_layout_valid
                 : R.string.settings_custom_layout_invalid;
             if (isAdded() && getActivity() != null) getActivity().runOnUiThread(() ->
-                Toast.makeText(context, message, Toast.LENGTH_LONG).show());
+                AppNotice.show(context, message, true));
         }, "keyboard-layout-validation").start();
     }
 
@@ -337,8 +337,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         } catch (Exception e) {
             //noinspection ResultOfMethodCallIgnored
             stagedFile.delete();
-            Toast.makeText(context, R.string.termux_in_app_keyboard_font_error,
-                Toast.LENGTH_SHORT).show();
+            AppNotice.show(context, R.string.termux_in_app_keyboard_font_error, false);
         }
         Preference fontPreference = findPreference(KEY_FONT);
         if (fontPreference != null)

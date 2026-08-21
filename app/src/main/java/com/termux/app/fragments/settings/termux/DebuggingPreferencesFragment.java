@@ -2,7 +2,6 @@ package com.termux.app.fragments.settings.termux;
 
 import android.content.Context;
 import android.os.Bundle;
-import android.widget.Toast;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -11,6 +10,7 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
@@ -86,9 +86,8 @@ public class DebuggingPreferencesFragment extends MaterialPreferenceFragment {
         if (manager.getBackendType() == PrivilegedBackend.Type.SHIZUKU && !manager.isPrivilegedAvailable()) {
             boolean requested = manager.requestPrivilegedPermission(ShizukuBackend.PERMISSION_REQUEST_CODE);
             Logger.logInfo(LOG_TAG, "[SmokeTest] Requested Shizuku permission: " + requested);
-            Toast.makeText(context,
-                requested ? "Requested Shizuku permission. Re-run smoke test after granting." : "Shizuku permission not available/requested.",
-                Toast.LENGTH_LONG).show();
+            AppNotice.show(context,
+                requested ? "Requested Shizuku permission. Re-run smoke test after granting." : "Shizuku permission not available/requested.", true);
             if (requested) return;
         }
 
@@ -96,14 +95,14 @@ public class DebuggingPreferencesFragment extends MaterialPreferenceFragment {
             Logger.logInfo(LOG_TAG, "[SmokeTest] Command=id output=" + output);
             if (isAdded() && getActivity() != null) {
                 getActivity().runOnUiThread(() ->
-                    Toast.makeText(context, "Smoke test complete. Check logcat for details.", Toast.LENGTH_SHORT).show()
+                    AppNotice.show(context, "Smoke test complete. Check logcat for details.", false)
                 );
             }
         }).exceptionally(throwable -> {
             Logger.logErrorExtended(LOG_TAG, "[SmokeTest] Command failed: " + throwable.getMessage());
             if (isAdded() && getActivity() != null) {
                 getActivity().runOnUiThread(() ->
-                    Toast.makeText(context, "Smoke test failed. Check logcat.", Toast.LENGTH_SHORT).show()
+                    AppNotice.show(context, "Smoke test failed. Check logcat.", false)
                 );
             }
             return null;

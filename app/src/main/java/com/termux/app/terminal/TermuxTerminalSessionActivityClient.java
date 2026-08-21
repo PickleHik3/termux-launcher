@@ -13,6 +13,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import com.termux.R;
+import com.termux.app.notice.AppNotice;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
@@ -307,6 +308,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         mActivity.noteShellAttention(session);
         if (!mActivity.isVisible())
             return;
+        raiseAttentionNotice(session);
         switch(mActivity.getProperties().getBellBehaviour()) {
             case TermuxPropertyConstants.IVALUE_BELL_BEHAVIOUR_VIBRATE:
                 BellHandler.getInstance(mActivity).doBell();
@@ -320,6 +322,25 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 // Ignore the bell character.
                 break;
         }
+    }
+
+    /**
+     * A bell from a shell the user is not looking at gets a notice they can act on: it is drawn in
+     * the attention accent, and tapping it goes to that pane or window.
+     *
+     * <p>Only for shells that are somewhere else. A bell from the pane already on screen needs no
+     * signpost — the user is looking straight at it — and a notice for it would fire on every
+     * completion beep of whatever they are running.
+     */
+    private void raiseAttentionNotice(@NonNull TerminalSession session) {
+        if (session == mActivity.getCurrentSession())
+            return;
+        String title = toToastTitle(session);
+        if (title == null || title.isEmpty())
+            return;
+        AppNotice.shell(mActivity,
+            mActivity.getString(R.string.notice_shell_wants_attention, title),
+            null, "\uf0f3" /* nf-fa-bell */, true, () -> setCurrentSession(session));
     }
 
     @Override
@@ -395,28 +416,38 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     public void setCurrentSession(TerminalSession session) {
         if (session == null)
             return;
+        // Which way the session list was walked, for the vertical arrival: sessions move on the
+        // other axis from windows, so the animation itself says which switch just happened.
+        // Session travel is a session-list boundary crossing, judged on session numbers, NOT on
+        // drawer indices: the drawer keys off the focused pane's shell, which is absent from the
+        // tab list whenever a secondary split pane holds focus — every switch made from such a
+        // pane used to silently skip its animation.
+        int fromNumber = mActivity.getCurrentSessionNumber();
+        int toNumber = mActivity.getSessionNumberFor(session);
+        boolean travelled = fromNumber > 0 && toNumber > 0 && fromNumber != toNumber;
+        // A brand-new shell is appended to the session list, so — niri's language — it arrives
+        // the same way "next session" does: the old session is carried off and the new one
+        // scrolls in from beyond the end of the list.
+        boolean created = fromNumber > 0 && toNumber <= 0;
+        // Captured before the pane tree is swapped so the arrival has an outgoing half to slide
+        // away.
+        if (travelled || created)
+            mActivity.captureTerminalDeparture();
         // Route through the split-pane model: shows the session's tab (primary + optional
         // secondary pane) and focuses the pane displaying this session.
         if (mActivity.activateSessionInPanes(session)) {
-            // notify about switched session if not already displaying the session
-            notifyOfSessionChange();
+            if (travelled)
+                mActivity.animateTerminalSessionArrival(toNumber >= fromNumber ? 1 : -1);
+            else if (created)
+                mActivity.animateTerminalSessionLifecycleArrival(1);
+            // No "[1] fish in ~" chip here any more: the action hint already narrates the switch,
+            // and two stacked notices for one keypress read as noise. The indicator view stays for
+            // notices that carry real news — an exited session, a refused split.
         }
         // We call the following even when the session is already being displayed since config may
         // be stale, like current session not selected or scrolled to.
         checkAndScrollToSession(session);
         updateBackgroundColor();
-    }
-
-    void notifyOfSessionChange() {
-        if (!mActivity.isVisible())
-            return;
-        // The indicator replaces the old Android toast, so disable-terminal-session-change-toast
-        // must not suppress it. A new pane or window inside the current session is not a session
-        // switch though, so those stay silent.
-        TerminalSession current = mActivity.getCurrentSession();
-        if (!mActivity.noteSessionSwitchIndicated(current))
-            return;
-        mActivity.showSessionSwitchIndicator(toToastTitle(current));
     }
 
     public void switchToSession(boolean forward) {

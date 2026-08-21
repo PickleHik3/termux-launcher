@@ -29,6 +29,20 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   [tinted-theming/schemes](https://github.com/tinted-theming/schemes); palette authors remain
   credited in the downloaded scheme metadata.
 
+## Bundled assets
+
+- **[Symbols Nerd Font Mono](https://github.com/ryanoasis/nerd-fonts)** — SIL Open Font License 1.1
+  — Copyright 2014 Ryan L McIntyre and Nerd Fonts contributors. Shipped as
+  `app/src/main/assets/fonts/SymbolsNerdFontMono.ttf`, drawn on app chrome and extracted for the
+  terminal font config. The icon sets Nerd Fonts aggregates — Material Design Icons, Font Awesome,
+  Octicons, Weather Icons, Devicons, Codicons, Powerline and others — remain under their own
+  licenses; see the Nerd Fonts license audit. The glyph names in
+  `app/src/main/res/raw/nerd_font_glyphs.csv` are generated from that font's own name table.
+- **[Meteocons](https://github.com/basmilius/meteocons)** — MIT — Copyright 2020-present Bas
+  Milius. The weather animations in `app/src/main/assets/weather/` are the fill style of
+  `@meteocons/lottie`, unmodified apart from compact re-serialization; the license text ships beside
+  them as `app/src/main/assets/weather/LICENSE.txt`.
+
 ## Runtime libraries
 
 The Android application also uses these independently maintained libraries:
@@ -38,6 +52,7 @@ The Android application also uses these independently maintained libraries:
 - Apache Commons IO — Apache-2.0
 - Google Guava — Apache-2.0
 - Google LiteRT and LiteRT-LM — Apache-2.0
+- Lottie for Android — Apache-2.0 — renders the bundled Meteocons weather animations
 - HiddenApiBypass — Apache-2.0
 - Markwon — Apache-2.0
 - Process Phoenix — Apache-2.0

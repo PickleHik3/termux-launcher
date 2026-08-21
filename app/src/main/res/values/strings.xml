@@ -41,6 +41,8 @@
     <string name="settings_sessions_panes_header">Sessions and panes</string>
     <string name="settings_split_pane_controls_title">Split-pane controls</string>
     <string name="settings_split_pane_controls_summary">Enable window splitting and tmux-style pane shortcuts.</string>
+    <string name="settings_show_key_hints_title">Show key hints</string>
+    <string name="settings_show_key_hints_summary">Show a hint strip while Ctrl+Alt is held. When off, the ? key lights up instead — press it for the full list.</string>
     <string name="settings_clock_status_header">Clock and status</string>
     <string name="settings_clock_style_title">Clock style</string>
     <string name="settings_clock_alignment_title">Clock alignment</string>
@@ -149,6 +151,9 @@
     <string name="settings_extra_keys_glyph_category_powerline">Powerline</string>
     <string name="settings_extra_keys_glyph_category_technical">Technical</string>
     <string name="settings_extra_keys_glyph_category_terminal_marks">Terminal marks</string>
+    <string name="settings_extra_keys_glyph_category_nerd_font">Nerd Font icons</string>
+    <string name="settings_extra_keys_glyph_more_results">%1$d more — search by name, e.g. \"keyboard\" or \"nf-md-folder\"</string>
+    <string name="settings_extra_keys_glyph_paste_hint">Nerd Font icons are bundled: search them above, or paste any icon straight into a key label.</string>
     <string name="settings_edit_extra_keys_title">Edit extra keys</string>
     <string name="settings_edit_extra_keys_summary">Keys, swipe-up actions and pages of the extra keys row.</string>
     <string name="settings_terminal_key_row_header">Extra keys</string>
@@ -408,7 +413,7 @@
 
     <string name="settings_lazy_mode_header">Battery</string>
     <string name="settings_lazy_mode_title">Lazy mode</string>
-    <string name="settings_lazy_mode_summary">Stop the idle animation: the clock swaps its digits instead of folding them, a working window\'s rim stays lit instead of breathing, and the CPU/memory readings sample three times less often. Nothing repaints while you are only looking at the screen.</string>
+    <string name="settings_lazy_mode_summary">Stop the idle animation: the clock swaps its digits instead of folding them, a working window\'s rim stays lit instead of breathing, the CPU/memory readings sample three times less often, and the weather icon rests on its last frame. Nothing repaints while you are only looking at the screen.\n\nWorth turning on — this is planned to become the default, so please report anything that looks stuck or stale with it.</string>
     <string name="terminal_key_binding_failed">%1$s: %2$s</string>
     <!-- Brief confirmation of the binding that just ran: stroke, then the action's name. -->
     <string name="terminal_key_binding_ran">%1$s · %2$s</string>
@@ -450,6 +455,7 @@
     <string name="action_reset_terminal">Reset</string>
     <string name="msg_no_session_to_split">No session to split</string>
     <string name="msg_window_position">Window %1$d/%2$d</string>
+    <string name="msg_window_switch_position">%1$s · %2$d/%3$d</string>
     <plurals name="msg_pane_count">
         <item quantity="one">%d pane</item>
         <item quantity="other">%d panes</item>
@@ -470,6 +476,17 @@
     <string name="msg_wallpaper_read_permission">The glass status bar, dock and keyboard blur a crop of your wallpaper, and this device won\'t hand it over without storage access. Allow it to turn the blur on. Setting a wallpaper from within the launcher works without this permission.</string>
     <string name="action_wallpaper_read_permission_allow">Allow</string>
     <string name="action_wallpaper_read_permission_dismiss">Not now</string>
+    <string name="title_weather_location_permission">Weather needs a rough location</string>
+    <string name="msg_weather_location_permission">The status bar can show the temperature where you are. It asks for coarse location only — city-level, never a precise fix — and the lookup runs only while the weather widget is switched on. Decline and everything else works exactly the same.</string>
+    <string name="action_weather_location_permission_allow">Allow</string>
+    <string name="action_weather_location_permission_dismiss">Not now</string>
+    <string name="status_widget_needs_shizuku_title">Shizuku isn\'t connected</string>
+    <string name="status_widget_needs_shizuku_message">%1$s reads far better with the privileged backend: per-core CPU, detailed memory and the top-process list all come from it. Without it the CPU figure is a best-effort /proc estimate that some ROMs refuse outright, and the widget can end up blank. Set Shizuku up, or turn the widget on anyway and take the unprivileged reading.</string>
+    <string name="status_widget_needs_shizuku_guide">Read the guide</string>
+    <string name="status_widget_needs_shizuku_connect">Connect</string>
+    <string name="status_widget_needs_shizuku_enable_anyway">Enable anyway</string>
+    <string name="notice_tap_to_open">tap to open</string>
+    <string name="notice_shell_wants_attention">%1$s wants attention</string>
     <string name="action_open_settings">Settings</string>
     <string name="action_glass_lab">Edit surfaces</string>
     <string name="msg_generating_report">Generating Report</string>
@@ -1031,6 +1048,8 @@
                 <string name="termux_dock_tuning_section_dock">Dock</string>
                 <string name="termux_dock_tuning_section_terminal">Terminal</string>
                 <string name="termux_dock_tuning_section_sessions">Sessions</string>
+                <string name="termux_dock_tuning_section_wallpaper">Wallpaper</string>
+                <string name="termux_dock_tuning_terminal_inner_padding">Inner padding</string>
                 <string name="termux_dock_tuning_done">Done</string>
                 <string name="termux_dock_tuning_cancel">Close</string>
                 <string name="termux_dock_tuning_value_dp">%1$d dp</string>
@@ -1186,7 +1205,9 @@
     <string name="tool_terminal_font_size_increase">Increase font size</string>
     <string name="tool_terminal_font_size_decrease">Decrease font size</string>
     <string name="tool_terminal_select_url">Select URL</string>
-    <string name="tool_terminal_hints">Hints</string>
+    <string name="tool_terminal_select_at_cursor">Select at cursor</string>
+    <string name="tool_terminal_select_all">Select all</string>
+    <string name="tool_terminal_hints">Quick select</string>
     <string name="tool_terminal_search_scrollback">Search scrollback</string>
     <string name="tool_terminal_share_transcript">Share transcript</string>
     <string name="tool_clipboard_paste">Paste</string>
@@ -1260,11 +1281,13 @@
     <string name="tool_desc_terminal_font_size_increase">Make the terminal text larger.</string>
     <string name="tool_desc_terminal_font_size_decrease">Make the terminal text smaller.</string>
     <string name="tool_desc_terminal_select_url">Pick a link from the terminal scrollback.</string>
+    <string name="tool_desc_terminal_select_at_cursor">Start a text selection at the shell cursor, on the word under it.</string>
+    <string name="tool_desc_terminal_select_all">Select the whole buffer, scrollback included.</string>
     <string name="tool_desc_terminal_hints">Open or copy URLs, paths, hashes, and source line references by keyboard label.</string>
-    <string name="terminal_hints_title">Terminal hints</string>
-    <string name="terminal_hints_instructions">Press a label to open a URL or copy another item. Hold Shift while pressing a label to copy anything.</string>
+    <string name="terminal_hints_title">Quick select</string>
+    <string name="terminal_hints_instructions">Type a label to open or copy · uppercase copies</string>
     <string name="terminal_hints_none">No URLs, paths, hashes, or line references found.</string>
-    <string name="terminal_hint_copied">Hint copied to clipboard</string>
+    <string name="terminal_hint_copied">Copied to clipboard</string>
     <string name="tool_desc_terminal_search_scrollback">Find text in this pane’s scrollback and jump to a match.</string>
     <string name="terminal_scrollback_search_hint">Search text</string>
     <string name="terminal_find_yanked">Copied selection</string>
@@ -1446,6 +1469,20 @@
     <!-- Required credit for Open-Meteo forecast data (CC BY 4.0). Not translated: it is the
          attribution wording Open-Meteo asks for. -->
     <string name="weather_attribution" translatable="false">Weather data by Open-Meteo.com</string>
+    <!-- Open-Meteo is CC BY 4.0: the credit has to stay beside the data it describes. -->
+    <string name="weather_card_attribution">OPEN-METEO · %1$d MIN AGO</string>
+    <string name="weather_card_location_unknown">Current location</string>
+    <string name="weather_card_condition_feels">%1$s · feels %2$s</string>
+    <string name="weather_card_range">H %1$s · L %2$s</string>
+    <string name="weather_card_now">NOW</string>
+    <string name="weather_card_stat_wind">WIND</string>
+    <string name="weather_card_stat_wind_value">%1$d km/h</string>
+    <string name="weather_card_stat_humidity">HUMIDITY</string>
+    <string name="weather_card_stat_rain">RAIN</string>
+    <string name="weather_card_stat_uv">UV MAX</string>
+    <string name="weather_card_today">TODAY</string>
+    <string name="weather_card_unavailable">Weather unavailable</string>
+    <string name="weather_card_unavailable_location">Weather needs a location fix</string>
 
     <!-- First-launch product onboarding -->
     <string name="onboarding_brand">TERMUX:LAUNCHER</string>

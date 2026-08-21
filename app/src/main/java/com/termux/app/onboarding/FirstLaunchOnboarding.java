@@ -42,20 +42,15 @@ public final class FirstLaunchOnboarding {
     }
 
     /**
-     * @param onFinished run once the onboarding is out of the way — immediately when it is not
-     *                   needed, otherwise after it animates away — so a follow-up prompt never
-     *                   opens behind the full-screen pages.
+     * @param onFinished run once the onboarding has been dismissed — whether the user paged to the
+     *     end or skipped out. Not run at all when there was no onboarding to show, so a caller can
+     *     use it for first-run-only follow-up work such as asking for permissions.
      */
     public static void showIfNeeded(@NonNull Activity activity, boolean force,
                                     @Nullable Runnable onFinished) {
         SharedPreferences preferences = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        if (!force && preferences.getInt(KEY_COMPLETED_VERSION, 0) >= CURRENT_VERSION) {
-            if (onFinished != null) onFinished.run();
-            return;
-        }
+        if (!force && preferences.getInt(KEY_COMPLETED_VERSION, 0) >= CURRENT_VERSION) return;
         ViewGroup host = activity.findViewById(android.R.id.content);
-        // An onboarding already on screen owns the callback of whoever started it; a second
-        // request must not run this one's follow-up early.
         if (host == null || host.findViewWithTag(Controller.ROOT_TAG) != null) return;
         new Controller(activity, host, preferences, onFinished).show();
     }
@@ -70,7 +65,6 @@ public final class FirstLaunchOnboarding {
         private final Activity activity;
         private final ViewGroup host;
         private final SharedPreferences preferences;
-        @Nullable private final Runnable onFinished;
         private final int oldStatusBarColor;
         private final int oldNavigationBarColor;
         private final int oldSystemUiVisibility;
@@ -79,6 +73,7 @@ public final class FirstLaunchOnboarding {
         private final ViewPager pager;
         private final LinearLayout dots;
         private final MaterialButton primaryButton;
+        @Nullable private Runnable onFinished;
 
         Controller(Activity activity, ViewGroup host, SharedPreferences preferences,
                    @Nullable Runnable onFinished) {
@@ -232,7 +227,12 @@ public final class FirstLaunchOnboarding {
                     window.setStatusBarColor(oldStatusBarColor);
                     window.setNavigationBarColor(oldNavigationBarColor);
                     window.getDecorView().setSystemUiVisibility(oldSystemUiVisibility);
-                    if (onFinished != null) onFinished.run();
+                    // After the overlay is gone, never over it: the permission dialogs that follow
+                    // are system-owned and would otherwise be judged against a backdrop the user
+                    // has no context for yet.
+                    Runnable finished = onFinished;
+                    onFinished = null;
+                    if (finished != null) finished.run();
                 }).start();
         }
 

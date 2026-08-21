@@ -756,11 +756,9 @@ public final class TerminalView extends View {
             ClipboardManager clipboard = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
             ClipData clip = ClipData.newPlainText("screen text", getText());
             clipboard.setPrimaryClip(clip);
-            Toast toast = Toast.makeText(
-                getContext(),
-                getResources().getText(R.string.copied_to_clipboard_text),
-                Toast.LENGTH_SHORT);
-            toast.show();
+            CharSequence copied = getResources().getText(R.string.copied_to_clipboard_text);
+            if (mClient != null) mClient.onShowNotice(copied);
+            else Toast.makeText(getContext(), copied, Toast.LENGTH_SHORT).show();
 
             return true;
         } else if (action == R.id.a11y_speak_cursor_position && mEmulator != null) {
@@ -2095,6 +2093,15 @@ public final class TerminalView extends View {
         return Math.max(0f, (getWidth() - contentWidth) / 2f);
     }
 
+    /**
+     * Hide or show this pane's own text cursor. Used by the split-pane layer so only the focused
+     * pane carries one, and so both ends of a cursor smear can be dark while the smear itself is
+     * the cursor in flight.
+     */
+    public void setCursorSuppressed(boolean suppressed) {
+        if (mRenderer != null && mRenderer.setCursorSuppressed(suppressed)) invalidate();
+    }
+
     public int getTopRow() {
         return mTopRow;
     }
@@ -2523,6 +2530,17 @@ public final class TerminalView extends View {
         // Selection works in row coordinates, so it may not be started while a row is half scrolled.
         clearScrollOffset();
         showTextSelectionCursors(event);
+        mClient.copyModeChanged(isSelectingText());
+        invalidate();
+    }
+
+    /** Start selecting text at the shell cursor, expanded to the word under it. */
+    public void startTextSelectionAtCursor() {
+        if (mEmulator == null || !requestFocus())
+            return;
+        // Selection works in row coordinates, so it may not be started while a row is half scrolled.
+        clearScrollOffset();
+        getTextSelectionCursorController().selectAtCursor();
         mClient.copyModeChanged(isSelectingText());
         invalidate();
     }

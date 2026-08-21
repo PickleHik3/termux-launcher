@@ -361,6 +361,54 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 : Math.min(TERMUX_APP.MAX_STATUS_BAR_CORNER_RADIUS, value), false);
     }
 
+    /** Wallpaper blur radius (dp) of the terminal's bordered glass pane; 0 disables. */
+    public int getTerminalGlassBlurRadius() {
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS,
+            TERMUX_APP.DEFAULT_TERMINAL_GLASS_BLUR_RADIUS), 0, 30);
+    }
+
+    public void setTerminalGlassBlurRadius(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS,
+            DataUtils.clamp(value, 0, 30), false);
+    }
+
+    /** Film-grain strength (percent) of the terminal's bordered glass pane; 0 disables. */
+    public int getTerminalGlassGrain() {
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_GLASS_GRAIN,
+            TERMUX_APP.DEFAULT_TERMINAL_GLASS_GRAIN), 0, 100);
+    }
+
+    public void setTerminalGlassGrain(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_GLASS_GRAIN,
+            DataUtils.clamp(value, 0, 100), false);
+    }
+
+    /** Opacity of the wallpaper behind every surface (percent); 100 leaves it undimmed. */
+    public int getWallpaperBackdropOpacity() {
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_WALLPAPER_BACKDROP_OPACITY,
+            TERMUX_APP.DEFAULT_WALLPAPER_BACKDROP_OPACITY), 0, 100);
+    }
+
+    public void setWallpaperBackdropOpacity(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_BACKDROP_OPACITY,
+            DataUtils.clamp(value, 0, 100), false);
+    }
+
+    /** Gap between tiled terminal panes, in dp. */
+    public int getTerminalPaneGap() {
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_PANE_GAP, TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP),
+            0, TERMUX_APP.MAX_TERMINAL_PANE_GAP);
+    }
+
+    public void setTerminalPaneGap(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_PANE_GAP,
+            DataUtils.clamp(value, 0, TERMUX_APP.MAX_TERMINAL_PANE_GAP), false);
+    }
+
     public static int clampSurfaceHorizontalInset(int value) {
         return DataUtils.clamp(value, 0, TERMUX_APP.MAX_SURFACE_HORIZONTAL_INSET);
     }
@@ -404,6 +452,16 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TermuxPreferenceConstants.TERMUX_APP.KEY_LAZY_MODE,
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_LAZY_MODE);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_SHOW_KEY_HINTS}. */
+    public boolean isShowKeyHintsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_SHOW_KEY_HINTS, TERMUX_APP.DEFAULT_SHOW_KEY_HINTS);
+    }
+
+    public void setShowKeyHintsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_SHOW_KEY_HINTS, value, false);
     }
 
     public boolean isStatusWidgetCpuEnabled() {

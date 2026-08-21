@@ -309,7 +309,11 @@ public final class InAppKeyboardColorScheme {
             preserveAlpha(mSwatches[0x2], base.actionKeyBackground),
             preserveAlpha(mSwatches[0x2], base.spaceBarBackground),
             preserveAlpha(mSwatches[0xD], base.activatedKeyBackground),
-            mSwatches[0x5], mSwatches[0x4], mSwatches[0x7], mSwatches[0xC],
+            mSwatches[0x5], mSwatches[0x4], mSwatches[0x7],
+            // Pressed (non-selected) labels sit back, pre-composited in RGB against the
+            // activated chip; see InAppKeyboardPaletteFactory for why alpha cannot carry this.
+            androidx.core.graphics.ColorUtils.blendARGB(
+                mSwatches[0xD] | 0xFF000000, mSwatches[0x7] | 0xFF000000, 130f / 255f),
             mSwatches[0xE], preserveAlpha(mSwatches[0x3], base.borderColor),
             base.borderEnabled, base.borderWidth, base.borderRadius, base.opacity,
             base.secondaryDimming, base.greyedDimming, mSwatches[0x6], mSwatches[0x4],

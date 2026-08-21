@@ -300,11 +300,36 @@
                         android:clipToPadding="false" />
 
                     <!-- Optional thin outline framing the terminal area; background/shape/margins
-                         are set programmatically in applyTerminalBorderAppearance(). -->
-                    <View
+                         are set programmatically in applyTerminalBorderAppearance(). Draws the
+                         shared glass rim instead of the plain stroke while the glass pane is on. -->
+                    <com.termux.app.TerminalGlassFrameView
                         android:id="@+id/terminal_border_overlay"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
+                        android:visibility="gone" />
+
+                    <!-- Names the action a key just ran. Tool keys draw a glyph, so what a swipe
+                         or a cap actually does is otherwise only discoverable by trying it. Not
+                         clickable: it is a read-out, never a target. Lives in the terminal surface
+                         so it shares one flush top row with the session-switch chip in the
+                         leading corner — it used to hang from the activity root with a status-bar
+                         inset, a different coordinate system, and the two chips never lined up. -->
+                    <TextView
+                        android:id="@+id/terminal_action_hint"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="top|end"
+                        android:layout_marginEnd="10dp"
+                        android:paddingLeft="14dp"
+                        android:paddingTop="7dp"
+                        android:paddingRight="14dp"
+                        android:paddingBottom="7dp"
+                        android:textSize="12sp"
+                        android:singleLine="true"
+                        android:clickable="false"
+                        android:focusable="false"
+                        android:elevation="6dp"
+                        android:alpha="0"
                         android:visibility="gone" />
                 </FrameLayout>
             </LinearLayout>
@@ -509,6 +534,20 @@
                 android:gravity="center_vertical"
                 android:textColor="?attr/termuxColorOnSurfaceVariant"
                 android:elevation="10dp"
+                android:visibility="gone" />
+
+            <!-- Keybind hint row: takes the A-Z row's exact slot while a Ctrl+Alt prefix is
+                 latched, so the hints cost no terminal space at all. Chips are built in
+                 TermuxActivity.showKeybindHintDockRow(). -->
+            <HorizontalScrollView
+                android:id="@+id/keybind_hint_dock_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_alignTop="@+id/apps_bar_az_row"
+                android:layout_alignBottom="@+id/apps_bar_az_row"
+                android:elevation="11dp"
+                android:scrollbars="none"
+                android:clickable="true"
                 android:visibility="gone" />
 
             <androidx.viewpager.widget.ViewPager
@@ -808,24 +847,6 @@
             android:layout_above="@id/accessory_stack_container"
             android:layout_alignWithParentIfMissing="true"
             android:elevation="16dp"
-            android:visibility="gone" />
-
-        <!-- Keybind hint popup: shown while a Ctrl+Alt prefix is latched on the in-app keyboard,
-             flush against the accessory stack so it reads as part of the keyboard. Rows and the
-             glass background are built in updateKeybindHintPopup(). -->
-
-        <LinearLayout
-            android:id="@+id/keybind_hint_popup"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_above="@id/accessory_stack_container"
-            android:layout_alignWithParentIfMissing="true"
-            android:orientation="vertical"
-            android:elevation="16dp"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
-            android:paddingTop="10dp"
-            android:paddingBottom="12dp"
             android:visibility="gone" />
 
         <com.google.android.material.card.MaterialCardView
@@ -1525,6 +1546,155 @@
                             android:layout_height="wrap_content" />
                     </LinearLayout>
 
+                    <!-- Glass pane controls, only offered while the border is on: the border is
+                         the pane's edge, so glass without it has nothing to live inside. -->
+                    <LinearLayout
+                        android:id="@+id/dock_tuning_terminal_glass_group"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="36dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="64dp"
+                                android:layout_height="wrap_content"
+                                android:text="@string/termux_dock_tuning_blur"
+                                android:textColor="?attr/termuxColorOnSurface"
+                                android:textSize="12sp" />
+
+                            <SeekBar
+                                android:id="@+id/dock_tuning_terminal_blur_slider"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:max="30"
+                                android:splitTrack="false" />
+
+                            <TextView
+                                android:id="@+id/dock_tuning_terminal_blur_value"
+                                android:layout_width="60dp"
+                                android:layout_height="wrap_content"
+                                android:gravity="center"
+                                android:textColor="?attr/termuxColorOnSurfaceVariant"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="36dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="64dp"
+                                android:layout_height="wrap_content"
+                                android:text="@string/termux_dock_tuning_grain"
+                                android:textColor="?attr/termuxColorOnSurface"
+                                android:textSize="12sp" />
+
+                            <SeekBar
+                                android:id="@+id/dock_tuning_terminal_grain_slider"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:max="100"
+                                android:splitTrack="false" />
+
+                            <TextView
+                                android:id="@+id/dock_tuning_terminal_grain_value"
+                                android:layout_width="60dp"
+                                android:layout_height="wrap_content"
+                                android:gravity="center"
+                                android:textColor="?attr/termuxColorOnSurfaceVariant"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="36dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="64dp"
+                            android:layout_height="wrap_content"
+                            android:text="@string/termux_dock_tuning_terminal_inner_padding"
+                            android:textColor="?attr/termuxColorOnSurface"
+                            android:textSize="12sp" />
+
+                        <SeekBar
+                            android:id="@+id/dock_tuning_terminal_gap_slider"
+                            android:layout_width="0dp"
+                            android:layout_height="36dp"
+                            android:layout_weight="1"
+                            android:max="24"
+                            android:splitTrack="false" />
+
+                        <TextView
+                            android:id="@+id/dock_tuning_terminal_gap_value"
+                            android:layout_width="60dp"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:textColor="?attr/termuxColorOnSurfaceVariant"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:letterSpacing="0.12"
+                        android:text="@string/termux_dock_tuning_section_wallpaper"
+                        android:textAllCaps="true"
+                        android:textColor="?attr/termuxColorPrimary"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="3dp"
+                        android:layout_marginBottom="4dp"
+                        android:alpha="0.35"
+                        android:background="?attr/termuxColorPrimary" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="36dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="64dp"
+                            android:layout_height="wrap_content"
+                            android:text="@string/termux_dock_tuning_opacity"
+                            android:textColor="?attr/termuxColorOnSurface"
+                            android:textSize="12sp" />
+
+                        <SeekBar
+                            android:id="@+id/dock_tuning_wallpaper_opacity_slider"
+                            android:layout_width="0dp"
+                            android:layout_height="36dp"
+                            android:layout_weight="1"
+                            android:max="100"
+                            android:splitTrack="false" />
+
+                        <TextView
+                            android:id="@+id/dock_tuning_wallpaper_opacity_value"
+                            android:layout_width="60dp"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:textColor="?attr/termuxColorOnSurfaceVariant"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -1817,6 +1987,7 @@
             android:focusable="false"
             android:elevation="20dp"
             android:visibility="gone" />
+
     </FrameLayout>
 
     <FrameLayout

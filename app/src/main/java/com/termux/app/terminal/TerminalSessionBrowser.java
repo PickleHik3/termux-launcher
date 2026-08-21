@@ -12,11 +12,11 @@ import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
 
@@ -150,12 +150,12 @@ public final class TerminalSessionBrowser {
         try {
             entries = activity.listWorkspaces();
         } catch (TerminalWorkspace.WorkspaceException e) {
-            Toast.makeText(activity, activity.getString(R.string.workspace_picker_failed,
-                e.getMessage()), Toast.LENGTH_SHORT).show();
+            AppNotice.show(activity, activity.getString(R.string.workspace_picker_failed,
+                e.getMessage()), false);
             return;
         }
         if (entries.isEmpty()) {
-            Toast.makeText(activity, R.string.workspace_picker_empty, Toast.LENGTH_SHORT).show();
+            AppNotice.show(activity, R.string.workspace_picker_empty, false);
             return;
         }
         LinearLayout list = new LinearLayout(activity);
@@ -217,11 +217,11 @@ public final class TerminalSessionBrowser {
             sheet.dismiss();
             try {
                 activity.deleteWorkspace(name);
-                Toast.makeText(activity, activity.getString(
-                    R.string.workspace_deleted, name), Toast.LENGTH_SHORT).show();
+                AppNotice.show(activity, activity.getString(
+                    R.string.workspace_deleted, name), false);
             } catch (TerminalWorkspace.WorkspaceException e) {
-                Toast.makeText(activity, activity.getString(
-                    R.string.workspace_picker_failed, e.getMessage()), Toast.LENGTH_SHORT).show();
+                AppNotice.show(activity, activity.getString(
+                    R.string.workspace_picker_failed, e.getMessage()), false);
             }
             showWorkspacePicker(activity);
         });
@@ -262,11 +262,10 @@ public final class TerminalSessionBrowser {
                                       boolean replace, boolean runCommands) {
         try {
             activity.loadWorkspace(name, replace, runCommands);
-            Toast.makeText(activity, activity.getString(R.string.workspace_picker_loaded, name),
-                Toast.LENGTH_SHORT).show();
+            AppNotice.show(activity, activity.getString(R.string.workspace_picker_loaded, name), false);
         } catch (TerminalWorkspace.WorkspaceException e) {
-            Toast.makeText(activity, activity.getString(R.string.workspace_picker_failed,
-                e.getMessage()), Toast.LENGTH_SHORT).show();
+            AppNotice.show(activity, activity.getString(R.string.workspace_picker_failed,
+                e.getMessage()), false);
         }
     }
 
@@ -333,9 +332,8 @@ public final class TerminalSessionBrowser {
         try {
             TerminalWorkspace workspace = activity.saveWorkspace(name == null ? "" : name,
                 overwrite, captureCommands);
-            Toast.makeText(activity,
-                activity.getString(R.string.session_browser_workspace_saved, workspace.name),
-                Toast.LENGTH_SHORT).show();
+            AppNotice.show(activity,
+                activity.getString(R.string.session_browser_workspace_saved, workspace.name), false);
         } catch (TerminalWorkspace.WorkspaceException e) {
             if (!overwrite && "conflict".equals(e.code)) {
                 final String requested = name == null ? "" : name.trim();
@@ -352,13 +350,13 @@ public final class TerminalSessionBrowser {
                 sheet.show(activity.getString(
                     R.string.session_browser_workspace_overwrite_title, requested), body);
             } else {
-                Toast.makeText(activity, e.getMessage(), Toast.LENGTH_LONG).show();
+                AppNotice.show(activity, e.getMessage(), true);
             }
         }
     }
 
     private static void showActionFailed(@NonNull Context context) {
-        Toast.makeText(context, R.string.session_browser_action_failed, Toast.LENGTH_SHORT).show();
+        AppNotice.show(context, R.string.session_browser_action_failed, false);
     }
 
     @NonNull

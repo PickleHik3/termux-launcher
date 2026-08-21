@@ -60,8 +60,9 @@ public class LauncherToolRegistryTest {
         }
         // Bumped from 60 by pane.rename and pane.rename_prompt, which split the shell rename out of
         // session.rename when the rename vocabulary was straightened out, then by extrakeys.edit,
-        // the row editor's in-terminal entry.
-        assertEquals(63, registry.getUiTools().size());
+        // the row editor's in-terminal entry, then by terminal.select_at_cursor and
+        // terminal.select_all, which gave selection an entry point outside a long-press.
+        assertEquals(65, registry.getUiTools().size());
     }
 
     @Test

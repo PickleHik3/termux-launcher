@@ -18,6 +18,7 @@ import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.termux.shell.am.TermuxAmSocketServer;
 import com.termux.shared.termux.shell.TermuxShellManager;
 import com.termux.shared.termux.theme.TermuxThemeUtils;
+import com.termux.app.notice.AppNotice;
 import com.termux.launcherctl.LauncherCtlApiServer;
 
 public class TermuxApplication extends Application {
@@ -39,6 +40,10 @@ public class TermuxApplication extends Application {
             return;
         }
         Logger.logDebug("Starting Application");
+        // Every transient message in the app — including the ones raised from termux-shared, which
+        // cannot see the app module — lands in the in-app notice chip rather than a stock toast.
+        AppNotice.install(this);
+        Logger.setNoticePresenter(AppNotice::show);
         // Set TermuxBootstrap.TERMUX_APP_PACKAGE_MANAGER and TermuxBootstrap.TERMUX_APP_PACKAGE_VARIANT
         TermuxBootstrap.setTermuxPackageManagerAndVariant(BuildConfig.TERMUX_PACKAGE_VARIANT);
         // Terminal name and version reported to applications via XTVERSION ("CSI > 0 q")

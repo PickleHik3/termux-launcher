@@ -14,7 +14,6 @@ import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.Space;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
@@ -28,6 +27,7 @@ import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.color.MaterialColors;
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory;
@@ -332,8 +332,8 @@ public class KeyboardColorSchemeFragment extends Fragment {
         mSelectedSwatch = 0;
         persistAndRender();
         createSwatches();
-        Toast.makeText(requireContext(),
-            R.string.termux_keyboard_color_scheme_follow_theme_done, Toast.LENGTH_SHORT).show();
+        AppNotice.show(requireContext(),
+            R.string.termux_keyboard_color_scheme_follow_theme_done, false);
     }
 
     /** Reset seam used by the confirmation dialog: unpins every slot and drops the import. */
@@ -561,9 +561,8 @@ public class KeyboardColorSchemeFragment extends Fragment {
         mScheme.unpinSwatch(index);
         persistAndRender();
         updateSwatches();
-        Toast.makeText(requireContext(),
-            getString(R.string.termux_keyboard_color_scheme_slot_unpinned, slotName(index)),
-            Toast.LENGTH_SHORT).show();
+        AppNotice.show(requireContext(),
+            getString(R.string.termux_keyboard_color_scheme_slot_unpinned, slotName(index)), false);
     }
 
     @Nullable

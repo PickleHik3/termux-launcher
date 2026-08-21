@@ -16,6 +16,8 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import com.termux.app.notice.AppNotice;
+import com.termux.app.notice.AppNoticeItem;
 import com.termux.R;
 import com.termux.app.SuggestionBarCallback;
 import com.termux.app.TermuxActivity;
@@ -436,6 +438,44 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             return false;
         }
 
+        // Escape closes an open hint surface the way it closes everything else. Consumed only
+        // while one is up, so it never costs the shell an Escape it was waiting for.
+        if (e.getKeyCode() == KeyEvent.KEYCODE_ESCAPE && mActivity.isKeybindHintPopupVisible()) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN)
+                mActivity.onKeybindHintConsumed();
+            return true;
+        }
+
+        // '?' under the held prefix asks what the prefix can do instead of resolving a stroke:
+        // it toggles the full hint table on the top card. Both keyboards arrive here — hardware
+        // types it as Ctrl+Alt+Shift+/ and the in-app keyboard routes its '?' cap the same way.
+        if (e.getKeyCode() == KeyEvent.KEYCODE_SLASH && e.isShiftPressed()
+            && e.isCtrlPressed() && e.isAltPressed()) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN)
+                mActivity.toggleKeybindHintFullPopup();
+            return true;
+        }
+
+        // '?' under a latched leader asks the same question, tmux-style: it swaps the strip for
+        // the full table instead of resolving (and cancelling) the pending chord. A config that
+        // really binds '?' under this prefix keeps its own meaning.
+        if (mPendingSequencePrefix != null && e.getKeyCode() == KeyEvent.KEYCODE_SLASH
+            && e.isShiftPressed() && !e.isCtrlPressed() && !e.isAltPressed()) {
+            java.util.Map<String, TerminalKeyBindingResolver.Hint> pendingHints =
+                resolver.hintsForPrefix(mPendingSequencePrefix,
+                    TerminalActionDispatcher.getInstance().actionContext());
+            if (!pendingHints.containsKey("?") && !pendingHints.containsKey("shift+/")) {
+                if (e.getAction() == KeyEvent.ACTION_DOWN) {
+                    // Reading the table is taking the prefix up again, so the chord gets its
+                    // full timeout back.
+                    mKeyChordHandler.removeCallbacks(mKeyChordTimeout);
+                    mKeyChordHandler.postDelayed(mKeyChordTimeout, KEY_CHORD_TIMEOUT_MS);
+                    mActivity.toggleKeybindHintFullPopup();
+                }
+                return true;
+            }
+        }
+
         TerminalActionDispatcher dispatcher = TerminalActionDispatcher.getInstance();
         TerminalKeyBindingResolver.Step step = resolver.advance(e, dispatcher.actionContext());
         if (step.kind == TerminalKeyBindingResolver.Step.Kind.NONE) {
@@ -738,6 +778,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     @Override
     public boolean onShowContextMenu(TerminalView view) {
         return mActivity.showTerminalActionSheet(mLastLongPressOnScreen);
+    }
+
+    @Override
+    public void onShowNotice(CharSequence text) {
+        AppNotice.show(mActivity, AppNoticeItem.Kind.SUCCESS, "⧉", text, null, false);
     }
 
     @Override

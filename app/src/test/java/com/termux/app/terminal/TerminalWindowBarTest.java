@@ -122,7 +122,7 @@ public class TerminalWindowBarTest {
         assertEquals(1f, tabs.getChildAt(1).getAlpha(), .01f);
         assertTrue(tabs.getChildAt(1).isSelected());
         assertFalse(tabs.getChildAt(0).isSelected());
-        assertEquals(320L, TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS);
+        assertEquals(560L, TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS);
     }
 
     /**

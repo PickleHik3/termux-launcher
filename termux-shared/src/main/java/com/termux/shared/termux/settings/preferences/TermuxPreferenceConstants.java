@@ -315,6 +315,34 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_STATUS_BAR_CORNER_RADIUS = 40;
 
         /**
+         * Terminal glass pane, available while the terminal border is on: wallpaper blur radius
+         * (dp, 0 disables) and film grain (percent) localised to the bordered terminal area.
+         * Both default off so the border alone stays the plain outline it always was.
+         */
+        public static final String KEY_TERMINAL_GLASS_BLUR_RADIUS = "terminal_glass_blur_radius";
+        public static final int DEFAULT_TERMINAL_GLASS_BLUR_RADIUS = 0;
+        public static final String KEY_TERMINAL_GLASS_GRAIN = "terminal_glass_grain";
+        public static final int DEFAULT_TERMINAL_GLASS_GRAIN = 0;
+
+        /**
+         * Opacity of the wallpaper behind every surface (percent): 100 shows the wallpaper as-is,
+         * lower values dim it toward black before any surface tint is painted over it. Needed once
+         * the terminal tint could be localised to its own glass pane — until then the terminal
+         * opacity doubled as the whole-window dim.
+         */
+        public static final String KEY_WALLPAPER_BACKDROP_OPACITY = "wallpaper_backdrop_opacity";
+        public static final int DEFAULT_WALLPAPER_BACKDROP_OPACITY = 100;
+
+        /**
+         * Gap between tiled terminal panes in dp — the surface editor's Inner padding. The old
+         * fixed 1dp hairline is the default; with the glass panes on, the gap is what makes each
+         * pane read as its own floating terminal rather than a cell of one sheet.
+         */
+        public static final String KEY_TERMINAL_PANE_GAP = "terminal_pane_gap";
+        public static final int DEFAULT_TERMINAL_PANE_GAP = 1;
+        public static final int MAX_TERMINAL_PANE_GAP = 24;
+
+        /**
          * Symmetric left/right inset in dp between a surface and the physical screen edges. The
          * default matches the floating capsule's redline outer margin; the edge-to-edge default
          * shape only honours whatever is configured beyond that baseline.
@@ -328,12 +356,20 @@ public final class TermuxPreferenceConstants {
             "in_app_keyboard_horizontal_inset";
         public static final String KEY_STATUS_BAR_HORIZONTAL_INSET = "status_bar_horizontal_inset";
 
-        /** Optional trailing system widgets on the status row. */
+        /**
+         * Optional trailing system widgets on the status row.
+         *
+         * <p>CPU and RAM default off. Both read best on a device with the privileged backend
+         * connected — without it the CPU figure is a best-effort /proc estimate that several ROMs
+         * refuse outright — so they are opt-in, and turning either on walks the user past a Shizuku
+         * check first. Existing installs keep whatever they already chose; only a fresh install
+         * starts with them off.
+         */
         public static final String KEY_STATUS_WIDGET_CPU = "status_widget_cpu";
-        public static final boolean DEFAULT_STATUS_WIDGET_CPU = true;
+        public static final boolean DEFAULT_STATUS_WIDGET_CPU = false;
 
         public static final String KEY_STATUS_WIDGET_RAM = "status_widget_ram";
-        public static final boolean DEFAULT_STATUS_WIDGET_RAM = true;
+        public static final boolean DEFAULT_STATUS_WIDGET_RAM = false;
 
         public static final String KEY_STATUS_WIDGET_WEATHER = "status_widget_weather";
         public static final boolean DEFAULT_STATUS_WIDGET_WEATHER = true;
@@ -622,6 +658,14 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_LAZY_MODE = "lazy_mode";
         public static final boolean DEFAULT_VALUE_LAZY_MODE = false;
+
+        /**
+         * Whether holding a keybind prefix (Ctrl+Alt) automatically shows the key-hint strip.
+         * When off, nothing appears on its own: the {@code ?} cap lights up under the prefix and
+         * pressing it opens the full table on demand.
+         */
+        public static final String KEY_SHOW_KEY_HINTS = "show_key_hints";
+        public static final boolean DEFAULT_SHOW_KEY_HINTS = true;
 
         /** Clock renderer shown in the modular widget slot above the terminal window row. */
         public static final String KEY_TOP_PANE_CLOCK_STYLE = "top_pane_clock_style";

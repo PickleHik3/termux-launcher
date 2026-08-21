@@ -6,6 +6,7 @@ import android.os.Looper;
 import android.util.Log;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import com.termux.shared.R;
 import com.termux.shared.data.DataUtils;
 import java.io.IOException;
@@ -359,9 +360,29 @@ public class Logger {
             return label + ": " + def;
     }
 
+    /**
+     * How a transient message is put on screen. The app installs its own in-app notice chip here;
+     * without one, or in a process that never sets one, the stock toast stands in.
+     */
+    public interface NoticePresenter {
+        void showNotice(@NonNull Context context, @NonNull String text, boolean longDuration);
+    }
+
+    @Nullable private static volatile NoticePresenter sNoticePresenter;
+
+    /** Route every {@link #showToast} through {@code presenter}; {@code null} restores toasts. */
+    public static void setNoticePresenter(@Nullable NoticePresenter presenter) {
+        sNoticePresenter = presenter;
+    }
+
     public static void showToast(final Context context, final String toastText, boolean longDuration) {
         if (context == null || DataUtils.isNullOrEmpty(toastText))
             return;
+        NoticePresenter presenter = sNoticePresenter;
+        if (presenter != null) {
+            presenter.showNotice(context, toastText, longDuration);
+            return;
+        }
         new Handler(Looper.getMainLooper()).post(() -> Toast.makeText(context, toastText, longDuration ? Toast.LENGTH_LONG : Toast.LENGTH_SHORT).show());
     }
 

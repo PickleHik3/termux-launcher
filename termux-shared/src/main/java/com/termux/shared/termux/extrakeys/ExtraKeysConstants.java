@@ -104,8 +104,9 @@ public class ExtraKeysConstants {
                 put("DEL", "⌦");
                 // U+2630 ☰ TRIGRAM FOR HEAVEN not well known but easy to understand
                 put("DRAWER", "☰");
-                // U+2328 ⌨ KEYBOARD not well known but easy to understand
-                put("KEYBOARD", "⌨");
+                // U+F097B nf-md-keyboard_outline, drawn with the bundled symbols face: the
+                // stock U+2328 ⌨ renders as a hairline outline at cap size on most system fonts.
+                put("KEYBOARD", "\uDB82\uDD7B");
                 // U+2398
                 put("PASTE", "⎘");
                 // U+21F3
