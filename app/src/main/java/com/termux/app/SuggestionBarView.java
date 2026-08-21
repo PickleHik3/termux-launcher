@@ -6122,15 +6122,7 @@ public final class SuggestionBarView extends GridLayout
 
         if (sbn.isClearable()) {
             Button dismiss = notificationActionButton("Dismiss");
-            dismiss.setOnClickListener(v -> {
-                LauncherCtlNotificationListener.dismissNotification(sbn.getKey());
-                card.setVisibility(View.GONE);
-                postDelayed(() -> {
-                    if (LauncherNotificationBadgeStore.getNotificationsForPackage(sbn.getPackageName()).isEmpty()) {
-                        dismissNotificationPopup();
-                    }
-                }, 180L);
-            });
+            dismiss.setOnClickListener(v -> dismissNotificationCard(card, sbn));
             actionRow.addView(dismiss, notificationActionLayoutParams(actionIndex++ > 0));
         }
         if (actionIndex > 0) {
@@ -6139,9 +6131,120 @@ public final class SuggestionBarView extends GridLayout
             hostLp.topMargin = dp(3);
             card.addView(actionHost, hostLp);
         }
-        shell.addView(card, new LinearLayout.LayoutParams(
+        // Replying from the system notification shade leaves WhatsApp's own notification (and this
+        // card, which mirrors it) sitting there afterwards — clearable cards get a swipe-to-dismiss
+        // wrapper so there is a way to clear that stale card without hunting for the small Dismiss
+        // button on a touch target this narrow.
+        SwipeDismissFrame wrapper = new SwipeDismissFrame(getContext());
+        wrapper.setSwipeEnabled(sbn.isClearable());
+        wrapper.setOnDismiss(() -> dismissNotificationCard(card, sbn));
+        wrapper.addView(card, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        shell.addView(wrapper, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return replyTarget;
+    }
+
+    /** Cancels the underlying system notification and drops its card once the popup is idle. */
+    private void dismissNotificationCard(@NonNull View card, @NonNull StatusBarNotification sbn) {
+        LauncherCtlNotificationListener.dismissNotification(sbn.getKey());
+        card.setVisibility(View.GONE);
+        postDelayed(() -> {
+            if (LauncherNotificationBadgeStore.getNotificationsForPackage(sbn.getPackageName()).isEmpty()) {
+                dismissNotificationPopup();
+            }
+        }, 180L);
+    }
+
+    /**
+     * Wraps a notification card so a horizontal drag past a third of its width dismisses it, while
+     * a vertical or short drag falls through to the card's own clickable content (the message body,
+     * reply composer, action buttons) untouched.
+     *
+     * <p>Interception has to happen here, one level up: the message body is clickable whenever the
+     * notification has a content intent, and a plain {@code OnTouchListener} on the card itself would
+     * never see a drag that starts on it — the child already claimed the touch stream.
+     */
+    private static final class SwipeDismissFrame extends FrameLayout {
+        private static final float DISMISS_FRACTION = 0.34f;
+
+        private boolean mSwipeEnabled = true;
+        private boolean mDragging;
+        private float mDownRawX;
+        private float mDownRawY;
+        @Nullable private Runnable mOnDismiss;
+
+        SwipeDismissFrame(@NonNull android.content.Context context) {
+            super(context);
+        }
+
+        void setSwipeEnabled(boolean enabled) {
+            mSwipeEnabled = enabled;
+        }
+
+        void setOnDismiss(@Nullable Runnable onDismiss) {
+            mOnDismiss = onDismiss;
+        }
+
+        @Override
+        public boolean onInterceptTouchEvent(MotionEvent ev) {
+            if (!mSwipeEnabled) return false;
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    mDownRawX = ev.getRawX();
+                    mDownRawY = ev.getRawY();
+                    mDragging = false;
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    if (!mDragging) {
+                        float dx = ev.getRawX() - mDownRawX;
+                        float dy = ev.getRawY() - mDownRawY;
+                        int slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+                        if (Math.abs(dx) > slop && Math.abs(dx) > Math.abs(dy) * 1.15f) {
+                            mDragging = true;
+                        }
+                    }
+                    if (mDragging) return true;
+                    break;
+                default:
+                    break;
+            }
+            return false;
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent ev) {
+            if (!mSwipeEnabled) return false;
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_MOVE: {
+                    float dx = ev.getRawX() - mDownRawX;
+                    setTranslationX(dx);
+                    int width = getWidth();
+                    if (width > 0) setAlpha(Math.max(0.2f, 1f - Math.abs(dx) / width));
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL: {
+                    float dx = getTranslationX();
+                    int width = getWidth();
+                    if (mDragging && width > 0 && Math.abs(dx) > width * DISMISS_FRACTION) {
+                        animate().translationX(dx > 0 ? width : -width).alpha(0f)
+                            .setDuration(160L)
+                            .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                            .withEndAction(() -> { if (mOnDismiss != null) mOnDismiss.run(); })
+                            .start();
+                    } else {
+                        animate().translationX(0f).alpha(1f).setDuration(180L)
+                            .setInterpolator(new DecelerateInterpolator())
+                            .start();
+                    }
+                    mDragging = false;
+                    return true;
+                }
+                default:
+                    return true;
+            }
+        }
     }
 
     private static final class NotificationReplyTarget {
