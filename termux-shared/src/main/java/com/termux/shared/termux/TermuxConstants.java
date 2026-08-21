@@ -2059,13 +2059,19 @@ public final class TermuxConstants {
 
         /**
          * Termux:Styling app core activity name.
+         *
+         * <p>A literal, not derived from {@link #TERMUX_STYLING_PACKAGE_NAME}: rebranding an
+         * edition changes the applicationId but not the Java packages, so the class keeps its
+         * {@code com.termux.styling} name whatever the plugin's package is renamed to. Deriving it
+         * made every non-com.termux edition look for an activity that does not exist and drop the
+         * Style row (issue #13).
          */
         // Default: "com.termux.styling.TermuxStyleActivity"
-        public static final String TERMUX_STYLING_ACTIVITY_NAME = TERMUX_STYLING_PACKAGE_NAME + ".TermuxStyleActivity";
+        public static final String TERMUX_STYLING_ACTIVITY_NAME = "com.termux.styling.TermuxStyleActivity";
 
 
         /** Termux:Styling app main activity name. */
-        public static final String TERMUX_STYLING_MAIN_ACTIVITY_NAME = TERMUX_STYLING_PACKAGE_NAME + ".activities.TermuxStylingMainActivity"; // Default: "com.termux.styling.activities.TermuxStylingMainActivity"
+        public static final String TERMUX_STYLING_MAIN_ACTIVITY_NAME = "com.termux.styling.activities.TermuxStylingMainActivity"; // Default: "com.termux.styling.activities.TermuxStylingMainActivity"
 
         /** Termux:Styling app launcher activity name. This is an `activity-alias` for {@link #TERMUX_STYLING_MAIN_ACTIVITY_NAME} used for launchers with {@link Intent#CATEGORY_LAUNCHER}. */
         public static final String TERMUX_STYLING_LAUNCHER_ACTIVITY_NAME = TERMUX_STYLING_PACKAGE_NAME + ".activities.TermuxStylingLauncherActivity"; // Default: "com.termux.styling.activities.TermuxStylingLauncherActivity"
