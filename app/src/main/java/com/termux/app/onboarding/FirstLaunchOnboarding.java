@@ -41,6 +41,12 @@ public final class FirstLaunchOnboarding {
         showIfNeeded(activity, force, null);
     }
 
+    /** Whether the onboarding overlay is on screen right now — for suppressing dialogs over it. */
+    public static boolean isShowing(@NonNull Activity activity) {
+        ViewGroup host = activity.findViewById(android.R.id.content);
+        return host != null && host.findViewWithTag(Controller.ROOT_TAG) != null;
+    }
+
     /**
      * @param onFinished run once the onboarding has been dismissed — whether the user paged to the
      *     end or skipped out. Not run at all when there was no onboarding to show, so a caller can
