@@ -268,6 +268,35 @@ public class Keyboard2View extends View
   public void setKeybindHintOverrides(Map<String, KeyColorOverride> overrides)
   {
     requireMainThread();
+    boolean clearing = overrides == null || overrides.isEmpty();
+    if (clearing && _hintColorOverrides.size() > 0 && _hintFadeAnimator == null
+        && isAttachedToWindow() && ValueAnimator.areAnimatorsEnabled())
+    {
+      // Clearing snaps the whole keyboard back at once, which reads as a broad flash after
+      // every shortcut. Fade the lighting toward the underlying colors instead, then clear.
+      ValueAnimator fade = ValueAnimator.ofFloat(1f, 0f);
+      fade.setDuration(HINT_FADE_MS);
+      fade.addUpdateListener(a -> {
+        _hintFade = (Float) a.getAnimatedValue();
+        invalidate();
+      });
+      fade.addListener(new AnimatorListenerAdapter() {
+        @Override
+        public void onAnimationEnd(Animator animation)
+        {
+          _hintFadeAnimator = null;
+          _hintFade = 1f;
+          _hintColorOverrides.clear();
+          updateHintBreathAnimator();
+          invalidate();
+        }
+      });
+      _hintFadeAnimator = fade;
+      fade.start();
+      return;
+    }
+    if (_hintFadeAnimator != null)
+      _hintFadeAnimator.cancel(); // end listener clears the faded-out overrides first
     _hintColorOverrides.clear();
     if (overrides != null) {
       for (Map.Entry<String, KeyColorOverride> e : overrides.entrySet()) {
@@ -278,6 +307,45 @@ public class Keyboard2View extends View
     }
     updateHintBreathAnimator();
     invalidate();
+  }
+
+  /** Fade-out of the hint lighting after the prefix releases. */
+  private static final long HINT_FADE_MS = 260L;
+  private ValueAnimator _hintFadeAnimator;
+  /** 1 = hint colors at full strength, 0 = fully returned to the underlying colors. */
+  private float _hintFade = 1f;
+
+  /** The hint override blended toward what the key would paint without it. */
+  private KeyColorOverride fadeHintOverride(KeyColorOverride hint, KeyColorOverride base,
+      Theme.Computed.Key tc)
+  {
+    return new KeyColorOverride(
+        fadeHintColor(hint.keyBackground, base == null ? null : base.keyBackground,
+            tc.bg_paint.getColor()),
+        fadeHintColor(hint.primaryLabel, base == null ? null : base.primaryLabel, tc.labelColor),
+        fadeHintColor(hint.secondaryLabel, base == null ? null : base.secondaryLabel,
+            tc.subLabelColor),
+        fadeHintColor(hint.secondaryBottomLabel,
+            base == null ? null : base.secondaryBottomLabel, tc.subLabelColor),
+        fadeHintColor(hint.borderColor, base == null ? null : base.borderColor,
+            tc.border_left_paint.getColor()));
+  }
+
+  private Integer fadeHintColor(Integer hintColor, Integer baseColor, int themeDefault)
+  {
+    if (hintColor == null)
+      return baseColor;
+    int target = baseColor != null ? baseColor : themeDefault;
+    return lerpColor(target, hintColor, _hintFade);
+  }
+
+  private static int lerpColor(int from, int to, float t)
+  {
+    return Color.argb(
+        Color.alpha(from) + Math.round((Color.alpha(to) - Color.alpha(from)) * t),
+        Color.red(from) + Math.round((Color.red(to) - Color.red(from)) * t),
+        Color.green(from) + Math.round((Color.green(to) - Color.green(from)) * t),
+        Color.blue(from) + Math.round((Color.blue(to) - Color.blue(from)) * t));
   }
 
   /** Period of one full breath of the hint lighting. Deliberately slow and shallow. */
@@ -1047,8 +1115,9 @@ public class Keyboard2View extends View
         KeyboardData.Key k = row.keys.get(keyIndex);
         int keyIdValue = keyId(rowIndex, keyIndex);
         KeyColorOverride hintOverride = _hintColorOverrides.get(keyIdValue);
+        KeyColorOverride schemeOverride = _keyColorOverrides.get(keyIdValue);
         KeyColorOverride colorOverride =
-            hintOverride != null ? hintOverride : _keyColorOverrides.get(keyIdValue);
+            hintOverride != null ? hintOverride : schemeOverride;
         x += k.shift * _keyWidth;
         float keyW = _keyWidth * k.width - _tc.horizontal_margin;
         boolean isKeyDown = _pointers.isKeyDown(k);
@@ -1073,6 +1142,11 @@ public class Keyboard2View extends View
             default:
             case Normal: tc_key = _tc.key; break;
           }
+        if (hintOverride != null && _hintFadeAnimator != null)
+        {
+          hintOverride = fadeHintOverride(hintOverride, schemeOverride, tc_key);
+          colorOverride = hintOverride;
+        }
         Integer frameBackground =
             isKeyDown || colorOverride == null ? null : colorOverride.keyBackground;
         Integer frameBorder =
