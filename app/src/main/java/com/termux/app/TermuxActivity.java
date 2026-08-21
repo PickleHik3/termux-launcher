@@ -4323,6 +4323,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!mIsVisible || mPreferences == null || isFinishing() || isDestroyed()) {
             return;
         }
+        // On a fresh install the wallpaper read fails while the first-launch tour is still up, so
+        // this reactive prompt used to open over the tour. The first-run permission chain asks the
+        // same question after the tour is dismissed; if the user skips it there, the next failed
+        // read after onboarding re-triggers this path.
+        if (com.termux.app.onboarding.FirstLaunchOnboarding.isShowing(this)) {
+            return;
+        }
         boolean permissionGranted = androidx.core.content.ContextCompat.checkSelfPermission(this,
             android.Manifest.permission.READ_EXTERNAL_STORAGE)
             == android.content.pm.PackageManager.PERMISSION_GRANTED;
