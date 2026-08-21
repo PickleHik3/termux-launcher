@@ -14212,6 +14212,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View host = findViewById(R.id.terminal_window_bar_host);
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (host == null || bar == null) return;
+        // Re-applied here, not only at setup, so a lazy-mode toggle takes effect on the
+        // settings-return refresh instead of waiting for the activity to be recreated.
+        if (mPreferences != null) bar.setLazyMode(mPreferences.isLazyModeEnabled());
         boolean visible = isSplitPanesEnabled();
         host.setVisibility(visible ? View.VISIBLE : View.GONE);
         if (!visible) {
