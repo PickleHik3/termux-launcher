@@ -110,6 +110,17 @@
                         android:layout_width="match_parent"
                         android:layout_height="match_parent" />
 
+                    <!-- FULL-pane ownership rule: StatusBarSwipeLayout measures the body from the
+                         laid-out bottom of the top slot to the laid-out top of the status row.
+                         These margins deliberately do not approximate either chrome band. The
+                         hard clips remain a redundant containment boundary for provider content. -->
+                    <com.termux.app.launcher.widget.WidgetPaneView
+                        android:id="@id/widget_pane"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:clipChildren="true"
+                        android:clipToPadding="true" />
+
                     <!-- Stable modular slot: clocks render only here. A later widget editor can
                          resize/reorder this host without coupling widget code to the pane. The slot
                          owns the clock / media / pinned-notification contention; the pane height
@@ -170,8 +181,8 @@
                         android:gravity="center_vertical"
                         android:elevation="6dp"
                         android:outlineProvider="none"
-                        android:clipChildren="false"
-                        android:clipToPadding="false">
+                        android:clipChildren="true"
+                        android:clipToPadding="true">
 
                         <com.termux.app.statusbar.SessionsIndicatorView
                             android:id="@+id/terminal_sessions_indicator"
@@ -240,19 +251,24 @@
                                 android:visibility="gone"
                                 android:contentDescription="@string/termux_status_widget_weather_content_description" />
 
-                            <!-- No dot separator before this: dots punctuate readings, and this is
-                                 an action. match_parent + center keeps the glyph optically centred
-                                 as the row breathes between its collapsed and expanded heights,
-                                 without participating in applyInteractiveStatusRowGeometry(). -->
-                            <androidx.appcompat.widget.AppCompatImageButton
-                                android:id="@+id/terminal_status_settings"
-                                android:layout_width="18dp"
+                            <!-- The AI glyph is not a preference: it appears only while a model is
+                                 actually resident, so it owns its own visibility and its own dot. -->
+                            <com.termux.app.statusbar.MaterialDotSeparatorView
+                                android:id="@+id/terminal_status_dot_ai"
+                                android:layout_width="3dp"
+                                android:layout_height="3dp"
+                                android:layout_gravity="center_vertical"
+                                android:layout_marginHorizontal="1dp"
+                                android:visibility="gone" />
+
+                            <com.termux.app.statusbar.StatusBarWidgetView
+                                android:id="@+id/terminal_status_widget_ai"
+                                android:layout_width="wrap_content"
                                 android:layout_height="match_parent"
-                                android:layout_marginStart="4dp"
-                                android:background="@null"
-                                android:scaleType="center"
-                                android:src="@drawable/ic_status_bar_settings"
-                                android:contentDescription="@string/termux_status_settings_content_description" />
+                                android:layout_marginStart="3dp"
+                                android:visibility="gone"
+                                android:contentDescription="@string/termux_status_widget_ai_content_description" />
+
                         </LinearLayout>
                     </LinearLayout>
 
@@ -284,11 +300,36 @@
                         android:clipToPadding="false" />
 
                     <!-- Optional thin outline framing the terminal area; background/shape/margins
-                         are set programmatically in applyTerminalBorderAppearance(). -->
-                    <View
+                         are set programmatically in applyTerminalBorderAppearance(). Draws the
+                         shared glass rim instead of the plain stroke while the glass pane is on. -->
+                    <com.termux.app.TerminalGlassFrameView
                         android:id="@+id/terminal_border_overlay"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
+                        android:visibility="gone" />
+
+                    <!-- Names the action a key just ran. Tool keys draw a glyph, so what a swipe
+                         or a cap actually does is otherwise only discoverable by trying it. Not
+                         clickable: it is a read-out, never a target. Lives in the terminal surface
+                         so it shares one flush top row with the session-switch chip in the
+                         leading corner — it used to hang from the activity root with a status-bar
+                         inset, a different coordinate system, and the two chips never lined up. -->
+                    <TextView
+                        android:id="@+id/terminal_action_hint"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="top|end"
+                        android:layout_marginEnd="10dp"
+                        android:paddingLeft="14dp"
+                        android:paddingTop="7dp"
+                        android:paddingRight="14dp"
+                        android:paddingBottom="7dp"
+                        android:textSize="12sp"
+                        android:singleLine="true"
+                        android:clickable="false"
+                        android:focusable="false"
+                        android:elevation="6dp"
+                        android:alpha="0"
                         android:visibility="gone" />
                 </FrameLayout>
             </LinearLayout>
@@ -465,7 +506,18 @@
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_above="@+id/apps_bar_indicator_band"
-                android:visibility="gone" />
+                android:visibility="gone">
+
+                <!-- Transform host owned solely by the dock plank physics: the icon row tilts and
+                     shifts with the glass under it. The bar itself keeps its own page-switch
+                     transforms, and the pager keeps the drawer's lift translation. -->
+                <FrameLayout
+                    android:id="@+id/apps_bar_plank_layer"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipChildren="false"
+                    android:clipToPadding="false" />
+            </FrameLayout>
 
             <View
                 android:id="@+id/apps_bar_indicator_band"
@@ -482,6 +534,20 @@
                 android:gravity="center_vertical"
                 android:textColor="?attr/termuxColorOnSurfaceVariant"
                 android:elevation="10dp"
+                android:visibility="gone" />
+
+            <!-- Keybind hint row: takes the A-Z row's exact slot while a Ctrl+Alt prefix is
+                 latched, so the hints cost no terminal space at all. Chips are built in
+                 TermuxActivity.showKeybindHintDockRow(). -->
+            <HorizontalScrollView
+                android:id="@+id/keybind_hint_dock_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_alignTop="@+id/apps_bar_az_row"
+                android:layout_alignBottom="@+id/apps_bar_az_row"
+                android:elevation="11dp"
+                android:scrollbars="none"
+                android:clickable="true"
                 android:visibility="gone" />
 
             <androidx.viewpager.widget.ViewPager
@@ -772,21 +838,15 @@
             </FrameLayout>
         </FrameLayout>
 
-        <!-- Keybind hint popup: shown while a Ctrl+Alt prefix is latched on the in-app keyboard,
-             flush against the accessory stack so it reads as part of the keyboard. Rows and the
-             glass background are built in updateKeybindHintPopup(). -->
-        <LinearLayout
-            android:id="@+id/keybind_hint_popup"
+        <!-- Scrollback find strip: one text line above the dock, so the transcript it searches
+             stays on screen with its matches lit. Filled by TerminalFindCoordinator. -->
+        <FrameLayout
+            android:id="@+id/terminal_find_bar_host"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_above="@id/accessory_stack_container"
             android:layout_alignWithParentIfMissing="true"
-            android:orientation="vertical"
             android:elevation="16dp"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
-            android:paddingTop="10dp"
-            android:paddingBottom="12dp"
             android:visibility="gone" />
 
         <com.google.android.material.card.MaterialCardView
@@ -1140,6 +1200,12 @@
                         </LinearLayout>
 
                         <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
+                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_keyboard_bg_opacity" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <SeekBar android:id="@+id/surface_tuning_keyboard_bg_opacity_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="100" android:splitTrack="false" />
+                            <TextView android:id="@+id/surface_tuning_keyboard_bg_opacity_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
                             <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_edges" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
                             <SeekBar android:id="@+id/surface_tuning_keyboard_inset_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="48" android:splitTrack="false" />
                             <TextView android:id="@+id/surface_tuning_keyboard_inset_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
@@ -1480,6 +1546,155 @@
                             android:layout_height="wrap_content" />
                     </LinearLayout>
 
+                    <!-- Glass pane controls, only offered while the border is on: the border is
+                         the pane's edge, so glass without it has nothing to live inside. -->
+                    <LinearLayout
+                        android:id="@+id/dock_tuning_terminal_glass_group"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="36dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="64dp"
+                                android:layout_height="wrap_content"
+                                android:text="@string/termux_dock_tuning_blur"
+                                android:textColor="?attr/termuxColorOnSurface"
+                                android:textSize="12sp" />
+
+                            <SeekBar
+                                android:id="@+id/dock_tuning_terminal_blur_slider"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:max="30"
+                                android:splitTrack="false" />
+
+                            <TextView
+                                android:id="@+id/dock_tuning_terminal_blur_value"
+                                android:layout_width="60dp"
+                                android:layout_height="wrap_content"
+                                android:gravity="center"
+                                android:textColor="?attr/termuxColorOnSurfaceVariant"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="36dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="64dp"
+                                android:layout_height="wrap_content"
+                                android:text="@string/termux_dock_tuning_grain"
+                                android:textColor="?attr/termuxColorOnSurface"
+                                android:textSize="12sp" />
+
+                            <SeekBar
+                                android:id="@+id/dock_tuning_terminal_grain_slider"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:max="100"
+                                android:splitTrack="false" />
+
+                            <TextView
+                                android:id="@+id/dock_tuning_terminal_grain_value"
+                                android:layout_width="60dp"
+                                android:layout_height="wrap_content"
+                                android:gravity="center"
+                                android:textColor="?attr/termuxColorOnSurfaceVariant"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="36dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="64dp"
+                            android:layout_height="wrap_content"
+                            android:text="@string/termux_dock_tuning_terminal_inner_padding"
+                            android:textColor="?attr/termuxColorOnSurface"
+                            android:textSize="12sp" />
+
+                        <SeekBar
+                            android:id="@+id/dock_tuning_terminal_gap_slider"
+                            android:layout_width="0dp"
+                            android:layout_height="36dp"
+                            android:layout_weight="1"
+                            android:max="24"
+                            android:splitTrack="false" />
+
+                        <TextView
+                            android:id="@+id/dock_tuning_terminal_gap_value"
+                            android:layout_width="60dp"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:textColor="?attr/termuxColorOnSurfaceVariant"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:letterSpacing="0.12"
+                        android:text="@string/termux_dock_tuning_section_wallpaper"
+                        android:textAllCaps="true"
+                        android:textColor="?attr/termuxColorPrimary"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="3dp"
+                        android:layout_marginBottom="4dp"
+                        android:alpha="0.35"
+                        android:background="?attr/termuxColorPrimary" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="36dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="64dp"
+                            android:layout_height="wrap_content"
+                            android:text="@string/termux_dock_tuning_opacity"
+                            android:textColor="?attr/termuxColorOnSurface"
+                            android:textSize="12sp" />
+
+                        <SeekBar
+                            android:id="@+id/dock_tuning_wallpaper_opacity_slider"
+                            android:layout_width="0dp"
+                            android:layout_height="36dp"
+                            android:layout_weight="1"
+                            android:max="100"
+                            android:splitTrack="false" />
+
+                        <TextView
+                            android:id="@+id/dock_tuning_wallpaper_opacity_value"
+                            android:layout_width="60dp"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:textColor="?attr/termuxColorOnSurfaceVariant"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -1613,8 +1828,8 @@
 
         <!-- Landscape-only vertical dock rail. A sibling of the padded content root so it can
              occupy the display-cutout column the terminal is inset from. updateDockRailView()
-             sizes and populates it. -->
-        <ScrollView
+             sizes and populates it, and moves the gravity to the preferred edge. -->
+        <com.termux.app.launcher.drawer.DockRailScrollView
             android:id="@+id/dock_rail_scroll"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
@@ -1629,7 +1844,45 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:gravity="center_horizontal" />
-        </ScrollView>
+        </com.termux.app.launcher.drawer.DockRailScrollView>
+
+        <!-- App drawer overlay plane. A full-bleed sibling of the padded content root, so it paints
+             over the whole accessory stack while still losing to the command palette in z. It is
+             deliberately NOT part of the accessory stack: the drawer animates with transforms only,
+             never through the flush-padding solver or a terminal resize. INVISIBLE rather than gone
+             so the host stays measured and the blur can gate its own work on isShown().
+             AppDrawerController drives it and clips the glass to the animated rounded rect. -->
+        <FrameLayout
+            android:id="@+id/app_drawer_host"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:visibility="invisible">
+
+            <FrameLayout
+                android:id="@+id/app_drawer_glass"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <!-- Wallpaper-mode frost: shows the shared pre-blurred wallpaper frame, clipped by
+                     the plane's animated outline, replacing the live blur that can only see the
+                     window's own (mostly transparent) content there. -->
+                <ImageView
+                    android:id="@+id/app_drawer_wallpaper_backdrop"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitXY"
+                    android:importantForAccessibility="no"
+                    android:visibility="gone" />
+
+                <com.github.mmin18.widget.RealtimeBlurView
+                    android:id="@+id/app_drawer_blur"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    app:realtimeBlurRadius="10dp"
+                    app:realtimeOverlayColor="@android:color/transparent" />
+            </FrameLayout>
+        </FrameLayout>
 
         <!-- Command palette overlay. Last child of the content root so the palette can sprout
              from the in-app keyboard's space bar and land over the terminal without a Dialog
@@ -1669,6 +1922,72 @@
                     app:realtimeOverlayColor="@android:color/transparent" />
             </FrameLayout>
         </FrameLayout>
+
+        <!-- Terminal sheet plane. The one in-app surface every terminal prompt that used to be an
+             AlertDialog or a PopupMenu now lands on. A dialog window takes focus, which pulls the
+             InputConnection off TerminalView and summons the system IME — the swap the in-app
+             keyboard exists to avoid, and what made the session browser's search box collapse the
+             keyboard the moment it opened. Nothing in here is ever an EditText for the same reason;
+             TerminalSheetController types the fields from the key channel.
+
+             Above the palette in z because a sheet is modal and the palette collapses before it
+             opens one, and below the rename chip because a rename can be started from a sheet.
+             INVISIBLE rather than gone so the host stays measured and the blur gates its own work
+             on isShown(). -->
+        <FrameLayout
+            android:id="@+id/terminal_sheet_host"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:visibility="invisible">
+
+            <FrameLayout
+                android:id="@+id/terminal_sheet_glass"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <!-- Wallpaper-mode frost: shows the shared pre-blurred wallpaper frame, replacing
+                     the live blur that can only see the window's own (mostly transparent) content
+                     there. -->
+                <ImageView
+                    android:id="@+id/terminal_sheet_wallpaper_backdrop"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitXY"
+                    android:importantForAccessibility="no"
+                    android:visibility="gone" />
+
+                <com.github.mmin18.widget.RealtimeBlurView
+                    android:id="@+id/terminal_sheet_blur"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    app:realtimeBlurRadius="18dp"
+                    app:realtimeOverlayColor="@android:color/transparent" />
+            </FrameLayout>
+
+            <!-- Cards, oldest first: a sheet opened from a sheet (the workspace picker's confirm)
+                 stacks here rather than replacing the one under it. -->
+            <FrameLayout
+                android:id="@+id/terminal_sheet_stack"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipChildren="false" />
+        </FrameLayout>
+
+        <!-- Inline rename chips. Last child of the content root so a chip lands over the window bar
+             or a pane without a Dialog window — a dialog would take focus and summon the system IME,
+             which is exactly the swap renaming used to cost. Touch handling lives on the
+             coordinator's listener: a tap outside the chip commits, except over the in-app keyboard,
+             where it must fall through to the key being typed. Clickable would swallow those. -->
+        <FrameLayout
+            android:id="@+id/terminal_rename_chip_host"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="false"
+            android:focusable="false"
+            android:elevation="20dp"
+            android:visibility="gone" />
+
     </FrameLayout>
 
     <FrameLayout

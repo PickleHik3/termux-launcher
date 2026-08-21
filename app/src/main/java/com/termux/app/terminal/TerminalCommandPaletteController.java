@@ -14,12 +14,12 @@ import android.view.View;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
-import android.widget.Toast;
+import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.Spring;
 import com.termux.app.TermuxActivity;
@@ -98,7 +98,7 @@ public final class TerminalCommandPaletteController
     /** Fallback strip when nothing has been run yet, per the handoff's default six. */
     private static final String[][] DEFAULT_KEYCAPS = {
         {LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD, "⌨", "kbd"},
-        {LauncherToolRegistry.TOOL_TERMINAL_HINTS, "✎", "hints"},
+        {LauncherToolRegistry.TOOL_TERMINAL_HINTS, "✎", "pick"},
         {LauncherToolRegistry.TOOL_PANE_SPLIT_VERTICAL, "⧉", "split"},
         {LauncherToolRegistry.TOOL_TERMINAL_SEARCH_SCROLLBACK, "⌕", "find"},
         {LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_INCREASE, "A", "font"},
@@ -190,7 +190,7 @@ public final class TerminalCommandPaletteController
         mActivity = activity;
         mStats = new CommandPaletteActionStats(activity);
         mAppProvider = LauncherAppDataProvider.getInstance(activity);
-        mAppUsageStats = new LauncherUsageStatsStore(activity);
+        mAppUsageStats = LauncherUsageStatsStore.getInstance(activity);
         mDensity = activity.getResources().getDisplayMetrics().density;
     }
 
@@ -209,11 +209,19 @@ public final class TerminalCommandPaletteController
 
     public void show() {
         if (!bindViews()) return;
+        mActivity.closeFullStatusBarImmediate();
+        // Two full-screen glass surfaces must never stack: the palette is transient and summonable
+        // over anything, so the drawer is the one that yields. Immediate rather than animated —
+        // a plane springing shut behind a palette sprouting open reads as a glitch, not a handoff.
+        mActivity.getAppDrawerController().closeImmediate();
+        // Same rule for the sheet plane, which owns the same interceptor slot: the palette is the
+        // one surface summonable over anything, so the modal sheets are the ones that yield.
+        if (mActivity.isTerminalSheetOpen()) mActivity.getTerminalSheetController().dismissAll();
         mEntries.clear();
         mEntries.addAll(TerminalCommandPalette.buildEntries(mActivity));
         mEntries.addAll(TerminalCommandPalette.buildSessionEntries(mActivity));
         if (mEntries.isEmpty()) {
-            Toast.makeText(mActivity, R.string.palette_empty, Toast.LENGTH_SHORT).show();
+            AppNotice.show(mActivity, R.string.palette_empty, false);
             return;
         }
         mHandler.removeCallbacks(mClearConfirmation);
@@ -1024,8 +1032,7 @@ public final class TerminalCommandPaletteController
             return;
         }
         if (!CommandPaletteCaptureModel.isBindable(mCaptureStroke)) {
-            Toast.makeText(mActivity, R.string.palette_capture_needs_modifier,
-                Toast.LENGTH_SHORT).show();
+            AppNotice.show(mActivity, R.string.palette_capture_needs_modifier, false);
             return;
         }
         String stableId = pending.arguments == null ? "" : pending.arguments.optString("query", "");
@@ -1033,13 +1040,15 @@ public final class TerminalCommandPaletteController
             popMode();
             return;
         }
+        // The row's own title becomes the binding's --label, so the keybind legend names the app
+        // instead of repeating "Launch app" for every chord captured this way.
         String error = TerminalBindingConfigWriter.bindAppLaunch(mCaptureStroke,
             CommandPaletteAppShortcuts.bindingArgumentFor(stableId,
-                defaultStableIdForPackage(stableId)));
+                defaultStableIdForPackage(stableId)),
+            pending.title);
         if (error != null) {
             Logger.logWarn(LOG_TAG, "Could not write binding: " + error);
-            Toast.makeText(mActivity, mActivity.getString(R.string.palette_capture_failed, error),
-                Toast.LENGTH_SHORT).show();
+            AppNotice.show(mActivity, mActivity.getString(R.string.palette_capture_failed, error), false);
             return;
         }
         mAppShortcuts = TerminalCommandPalette.buildAppShortcuts(mAppProvider);
@@ -1084,9 +1093,8 @@ public final class TerminalCommandPaletteController
 
     private void activate(@NonNull CommandPaletteFilter.Entry entry) {
         if (!entry.enabled) {
-            Toast.makeText(mActivity, entry.disabledReason != null
-                ? entry.disabledReason : mActivity.getString(R.string.palette_empty),
-                Toast.LENGTH_SHORT).show();
+            AppNotice.show(mActivity, entry.disabledReason != null
+                ? entry.disabledReason : mActivity.getString(R.string.palette_empty), false);
             return;
         }
         if (entry.isSubmenu()) {
@@ -1121,15 +1129,37 @@ public final class TerminalCommandPaletteController
         run(entry);
     }
 
+    /**
+     * The palette is gone by the time this is asked, so the confirmation is a sheet card rather than
+     * a dialog window: the palette exists to keep a destructive action off the system IME's path,
+     * and confirming it in a focus-taking window would hand back exactly what was avoided.
+     */
     private void confirmThenRun(@NonNull CommandPaletteFilter.Entry entry) {
         collapse();
-        new MaterialAlertDialogBuilder(mActivity)
-            .setTitle(mActivity.getString(R.string.palette_confirm_title, entry.title))
-            .setMessage(entry.subtitle)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.palette_confirm_run, (dialog, which) -> run(entry))
-            .show();
+        TerminalSheetController sheet = mActivity.getTerminalSheetController();
+        LinearLayout body = TerminalSheetViews.body(mActivity);
+        if (!entry.subtitle.isEmpty())
+            TerminalSheetViews.addMessage(body, entry.subtitle);
+        LinearLayout actions = TerminalSheetViews.addActionRow(body);
+        TerminalSheetViews.addAction(actions, mActivity.getString(android.R.string.cancel),
+            sheet::dismiss);
+        TerminalSheetViews.addAction(actions, mActivity.getString(R.string.palette_confirm_run),
+            () -> {
+                sheet.dismiss();
+                run(entry);
+            });
+        sheet.show(mActivity.getString(R.string.palette_confirm_title, entry.title), body);
     }
+
+    /**
+     * Actions whose result is plainly visible on screen, so the palette does not also announce
+     * them: a new window or pane is its own confirmation, and the chip on top of it was noise.
+     */
+    private static final java.util.Set<String> SILENT_TOOLS = new java.util.HashSet<>(
+        java.util.Arrays.asList(
+            com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_NEW,
+            com.termux.launcherctl.LauncherToolRegistry.TOOL_PANE_SPLIT_VERTICAL,
+            com.termux.launcherctl.LauncherToolRegistry.TOOL_PANE_SPLIT_HORIZONTAL));
 
     private void run(@NonNull CommandPaletteFilter.Entry entry) {
         mStats.recordRun(CommandPaletteActionStats.keyFor(entry));
@@ -1141,10 +1171,10 @@ public final class TerminalCommandPaletteController
             String message = result.optString("message",
                 mActivity.getString(R.string.palette_action_failed, entry.title));
             Logger.logWarn(LOG_TAG, "Palette action " + entry.toolName + " failed: " + message);
-            Toast.makeText(mActivity, message, Toast.LENGTH_SHORT).show();
+            AppNotice.show(mActivity, message, false);
             return;
         }
-        showConfirmation(entry.title);
+        if (!SILENT_TOOLS.contains(entry.toolName)) showConfirmation(entry.title);
     }
 
     /** No match: ⏎ hands the query to the shell verbatim. */
@@ -1154,8 +1184,7 @@ public final class TerminalCommandPaletteController
         if (command.isEmpty()) return;
         com.termux.terminal.TerminalSession session = mActivity.getCurrentSession();
         if (session == null) {
-            Toast.makeText(mActivity, R.string.palette_unavailable_no_session,
-                Toast.LENGTH_SHORT).show();
+            AppNotice.show(mActivity, R.string.palette_unavailable_no_session, false);
             return;
         }
         session.write(command + "\r");

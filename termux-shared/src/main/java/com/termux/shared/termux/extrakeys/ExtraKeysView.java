@@ -11,7 +11,6 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RadialGradient;
 import android.graphics.Shader;
-import android.graphics.drawable.Drawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
@@ -22,6 +21,7 @@ import android.util.AttributeSet;
 import android.util.TypedValue;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -36,7 +36,6 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
-import android.view.ViewPropertyAnimator;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.AccelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
@@ -44,13 +43,13 @@ import android.view.animation.OvershootInterpolator;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.GridLayout;
-import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import com.google.android.material.button.MaterialButton;
 import com.termux.shared.R;
+import com.termux.shared.termux.font.NerdFontSpans;
 import com.termux.shared.termux.terminal.io.TerminalExtraKeys;
 import com.termux.shared.theme.ThemeUtils;
 
@@ -322,6 +321,10 @@ public final class ExtraKeysView extends GridLayout {
     private static final float KEY_GLOW_WHITE_MIX_HOLD = 0.45f;
     @Nullable private Animator mKeyGlowAnimator;
     @Nullable private MaterialButton mKeyGlowButton;
+    /** Page dots: index and count of the toolbar's key pages, 0/0 while there is only one page. */
+    private int mPageIndex;
+    private int mPageCount;
+    @Nullable private Paint mPageDotPaint;
     /** Swipe-up popup travel is active (finger is dragging the popup toward the secondary slot). */
     private boolean mBubbleArmed;
     /** The press has crossed into the persistent long-press/held state. */
@@ -539,6 +542,30 @@ public final class ExtraKeysView extends GridLayout {
     }
 
     /**
+     * Sets a key-cap label with Nerd Font code points routed to the bundled symbols face, so an
+     * icon key never shows tofu. A plain label keeps the stock all-caps transformation; a label
+     * that needed spans gets uppercased manually instead, because the all-caps transformation
+     * re-creates the text as a plain string and would silently drop the typeface spans. Icon code
+     * points have no case, so the visible result is identical either way.
+     */
+    private void setKeyCapText(@NonNull TextView view, @Nullable CharSequence display) {
+        CharSequence label = display == null ? "" : display;
+        CharSequence spanned = NerdFontSpans.span(getContext(), label);
+        if (spanned == label) {
+            view.setAllCaps(mButtonTextAllCaps);
+            view.setText(label);
+            return;
+        }
+        view.setAllCaps(false);
+        if (mButtonTextAllCaps) {
+            // Case mapping can change the length (ß → SS), which would misplace the spans; span
+            // the uppercased text from scratch.
+            spanned = NerdFontSpans.span(getContext(), label.toString().toUpperCase(Locale.ROOT));
+        }
+        view.setText(spanned);
+    }
+
+    /**
      * Get {@link #mLongPressTimeout}.
      */
     public int getLongPressTimeout() {
@@ -632,9 +659,8 @@ public final class ExtraKeysView extends GridLayout {
                     }
                 });
 
-                button.setText(buttonInfo.getDisplay());
+                setKeyCapText(button, buttonInfo.getDisplay());
                 button.setTextColor(mButtonTextColor);
-                button.setAllCaps(mButtonTextAllCaps);
                 // Keep multi-letter labels (SHFT, CTRL) on one line. The active/sticky background is
                 // an InsetDrawable whose padding shrinks the content box; without this the last
                 // letter wrapped to a second row when the key took on its pressed/active background.
@@ -932,15 +958,6 @@ public final class ExtraKeysView extends GridLayout {
         }
     }
 
-    private void setButtonVisualState(@NonNull MaterialButton button, @NonNull ExtraKeyButton buttonInfo,
-                                      @NonNull KeyVisualState state) {
-        if (state == KeyVisualState.RESTING) {
-            restoreButtonVisualState(button, buttonInfo);
-            return;
-        }
-        applyButtonVisualState(button, state, true);
-    }
-
     void updateSpecialButtonVisualState(@NonNull MaterialButton button, @NonNull SpecialButtonState state) {
         KeyVisualState visualState = state.isLocked
             ? KeyVisualState.STICKY_LOCKED
@@ -1126,6 +1143,39 @@ public final class ExtraKeysView extends GridLayout {
             mGlowPaint.setShader(null);
         }
         super.dispatchDraw(canvas);
+        drawPageIndicator(canvas);
+    }
+
+    /**
+     * Which key page this view is and how many there are. Drawn inside the row rather than added as
+     * its own band: the accessory stack is explicitly sized, and a new band would have to be folded
+     * into the combined height everywhere or it would clip invisibly.
+     */
+    public void setPageIndicator(int page, int pageCount) {
+        if (page == mPageIndex && pageCount == mPageCount) return;
+        mPageIndex = page;
+        mPageCount = pageCount;
+        invalidate();
+    }
+
+    private void drawPageIndicator(@NonNull Canvas canvas) {
+        if (mPageCount < 2) return;
+        float radius = dpToPx(1.6f);
+        float gap = dpToPx(5f);
+        float totalWidth = mPageCount * radius * 2 + (mPageCount - 1) * (gap - radius * 2);
+        float cx = (getWidth() - totalWidth) / 2f + radius;
+        float cy = getHeight() - dpToPx(2.6f);
+        if (mPageDotPaint == null) {
+            mPageDotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            mPageDotPaint.setStyle(Paint.Style.FILL);
+        }
+        int color = mButtonTextColor;
+        for (int i = 0; i < mPageCount; i++) {
+            mPageDotPaint.setColor(color);
+            mPageDotPaint.setAlpha(i == mPageIndex ? 150 : 55);
+            canvas.drawCircle(cx, cy, radius, mPageDotPaint);
+            cx += gap;
+        }
     }
 
     /** Glow the pressed key's glyphs up (a tap reads as a single tight pulse once it releases). */
@@ -1276,11 +1326,10 @@ public final class ExtraKeysView extends GridLayout {
         tv.setIncludeFontPadding(false);
         tv.setSingleLine(true);
         tv.setMaxLines(1);
-        tv.setAllCaps(mButtonTextAllCaps);
         tv.setTextSize(TypedValue.COMPLEX_UNIT_PX, button.getTextSize() * 1.25f);
         tv.setTypeface(button.getTypeface());
         tv.setTextColor(activeTextColor());
-        tv.setText(mTravelSecondaryText);
+        setKeyCapText(tv, mTravelSecondaryText);
         mTravelBubbleBg = buildFloatingSecondaryKeyBackground();
         tv.setBackground(mTravelBubbleBg);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -1331,7 +1380,7 @@ public final class ExtraKeysView extends GridLayout {
         // never the source glyph (regardless of how far up/down the finger has travelled).
         if (!mTravelShowingSecondary) {
             mTravelShowingSecondary = true;
-            mTravelBubble.setText(mTravelSecondaryText);
+            setKeyCapText(mTravelBubble, mTravelSecondaryText);
         }
         mTravelBubble.setShadowLayer(dpToPx(KEY_GLOW_RADIUS_HOLD_DP), 0f, 0f,
             withAlpha(keyGlowColor(KEY_GLOW_WHITE_MIX_HOLD), 255));

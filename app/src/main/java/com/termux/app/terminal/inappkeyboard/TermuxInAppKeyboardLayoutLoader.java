@@ -2,8 +2,8 @@ package com.termux.app.terminal.inappkeyboard;
 
 import android.content.Context;
 import android.content.res.Resources;
-import android.widget.Toast;
 
+import com.termux.app.notice.AppNotice;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
 
@@ -78,7 +78,7 @@ public final class TermuxInAppKeyboardLayoutLoader {
         mErrorReporter = errorReporter == null
             ? (diagnostic, userMessage) -> {
                 Logger.logError(LOG_TAG, diagnostic);
-                Toast.makeText(appContext, userMessage, Toast.LENGTH_LONG).show();
+                AppNotice.show(appContext, userMessage, true);
             }
             : errorReporter;
     }

@@ -79,13 +79,21 @@ public class TerminalKeyBindingResolverTest {
     }
 
     @Test
-    public void arrowsBelongToTheMultiplexerWhenSplitsAreOn() {
+    public void arrowsNestOutwardsFromPanesToSessions() {
         int[] arrows = {KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN};
         for (int arrow : arrows) {
-            assertEquals("pane.focus_direction", tool(arrow, CTRL_ALT, SPLITS_ON));
+            // Innermost move, shortest stroke: no Alt, no prefix.
+            assertEquals("pane.focus_direction", tool(arrow, KeyEvent.META_CTRL_ON, SPLITS_ON));
             assertEquals("pane.resize", tool(arrow, CTRL_ALT_SHIFT, SPLITS_ON));
         }
+        // Prefixed horizontal arrows walk the windows of the session, vertical ones the sessions.
+        assertEquals("window.previous", tool(KeyEvent.KEYCODE_DPAD_LEFT, CTRL_ALT, SPLITS_ON));
+        assertEquals("window.next", tool(KeyEvent.KEYCODE_DPAD_RIGHT, CTRL_ALT, SPLITS_ON));
+        assertEquals("session.previous", tool(KeyEvent.KEYCODE_DPAD_UP, CTRL_ALT, SPLITS_ON));
+        assertEquals("session.next", tool(KeyEvent.KEYCODE_DPAD_DOWN, CTRL_ALT, SPLITS_ON));
+        // Pane focus needs panes: with splits off the plain Ctrl arrows stay the shell's.
+        assertNull(tool(KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.META_CTRL_ON, SPLITS_OFF));
     }
 
     // ---------------------------------------------------------------- splits off
@@ -107,9 +115,11 @@ public class TerminalKeyBindingResolverTest {
         // Ctrl+Alt+C: new window with panes on, new session with them off.
         assertEquals("window.new", tool(KeyEvent.KEYCODE_C, CTRL_ALT, SPLITS_ON));
         assertEquals("session.new", tool(KeyEvent.KEYCODE_C, CTRL_ALT, SPLITS_OFF));
-        // Ctrl+Alt+R renamed the window session with panes on, the shell with them off.
+        // Ctrl+Alt+R names the window with panes on and the pane with them off, while the shifted
+        // stroke names the session — three targets, never two names for one thing.
         assertEquals("window.rename_prompt", tool(KeyEvent.KEYCODE_R, CTRL_ALT, SPLITS_ON));
-        assertEquals("session.rename_prompt", tool(KeyEvent.KEYCODE_R, CTRL_ALT, SPLITS_OFF));
+        assertEquals("pane.rename_prompt", tool(KeyEvent.KEYCODE_R, CTRL_ALT, SPLITS_OFF));
+        assertEquals("session.rename_prompt", tool(KeyEvent.KEYCODE_R, CTRL_ALT_SHIFT, SPLITS_ON));
     }
 
     @Test
@@ -145,14 +155,23 @@ public class TerminalKeyBindingResolverTest {
     }
 
     @Test
-    public void digitsSwitchSessionsByIndex() {
+    public void digitsPickWindowsAndShiftedDigitsPickSessions() {
         for (int digit = 1; digit <= 9; digit++) {
             int keyCode = KeyEvent.KEYCODE_0 + digit;
-            TerminalKeyBindingResolver.Match match = resolver.resolve(key(keyCode, CTRL_ALT), SPLITS_ON);
-            assertNotNull("digit " + digit, match);
-            assertEquals("session.activate_by_index", match.toolName);
+            // A plain digit picks a window inside the session...
+            TerminalKeyBindingResolver.Match window = resolver.resolve(key(keyCode, CTRL_ALT), SPLITS_ON);
+            assertNotNull("digit " + digit, window);
+            assertEquals("window.select", window.toolName);
             assertEquals("digit " + digit + " is a one-based label for a zero-based index",
-                digit - 1, match.arguments.optInt("index", -1));
+                digit - 1, window.arguments.optInt("index", -1));
+            // ...the shifted one picks the session itself.
+            TerminalKeyBindingResolver.Match session =
+                resolver.resolve(key(keyCode, CTRL_ALT_SHIFT), SPLITS_ON);
+            assertNotNull("shifted digit " + digit, session);
+            assertEquals("session.activate_by_index", session.toolName);
+            assertEquals(digit - 1, session.arguments.optInt("index", -1));
+            // With no windows to pick, the plain digit falls back to the session.
+            assertEquals("session.activate_by_index", tool(keyCode, CTRL_ALT, SPLITS_OFF));
         }
     }
 
@@ -179,6 +198,94 @@ public class TerminalKeyBindingResolverTest {
         assertEquals("app.command_palette", second.match.toolName);
         assertEquals("ctrl+alt+space>p", second.match.stroke);
         org.junit.Assert.assertFalse(resolver.hasPendingSequence());
+    }
+
+    @Test
+    public void leaderDeclaration_mirrorsEveryCtrlAltStroke() {
+        TerminalBindingConfig.Result config = TerminalBindingConfig.parse(
+            "leader ctrl+space\n", LauncherToolRegistry.getInstance(), true);
+        assertTrue(config.errors.toString(), config.errors.isEmpty());
+        assertEquals("ctrl+space", config.leader);
+        TerminalKeyBindingResolver.installConfigForTesting(config);
+        resolver = TerminalKeyBindingResolver.getInstance();
+        assertEquals("ctrl+space", resolver.getLeaderStroke());
+
+        // Prefix, then the same key the Ctrl+Alt stroke uses.
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.PENDING,
+            resolver.advance(key(KeyEvent.KEYCODE_SPACE, KeyEvent.META_CTRL_ON), SPLITS_ON).kind);
+        TerminalKeyBindingResolver.Step sheet =
+            resolver.advance(key(KeyEvent.KEYCODE_M, 0), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, sheet.kind);
+        assertEquals("terminal.action_sheet", sheet.match.toolName);
+
+        // Shift is part of the second stroke, exactly as it is part of the Ctrl+Alt one.
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.PENDING,
+            resolver.advance(key(KeyEvent.KEYCODE_SPACE, KeyEvent.META_CTRL_ON), SPLITS_ON).kind);
+        TerminalKeyBindingResolver.Step palette =
+            resolver.advance(key(KeyEvent.KEYCODE_P, KeyEvent.META_SHIFT_ON), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, palette.kind);
+        assertEquals("app.command_palette", palette.match.toolName);
+        assertEquals("ctrl+space>shift+p", palette.match.stroke);
+
+        // The chord the prefix mirrors keeps working untouched.
+        assertEquals("terminal.action_sheet", tool(KeyEvent.KEYCODE_M, CTRL_ALT, SPLITS_ON));
+        // And the legend the hint slab draws lists the prefixed table.
+        assertTrue(resolver.hintsForPrefix("ctrl+space>", SPLITS_ON).containsKey("m"));
+    }
+
+    @Test
+    public void modifierPressAfterALeader_doesNotCancelTheSequence() {
+        TerminalBindingConfig.Result config = TerminalBindingConfig.parse(
+            "leader ctrl+space\n", LauncherToolRegistry.getInstance(), true);
+        TerminalKeyBindingResolver.installConfigForTesting(config);
+        resolver = TerminalKeyBindingResolver.getInstance();
+
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.PENDING,
+            resolver.advance(key(KeyEvent.KEYCODE_SPACE, KeyEvent.META_CTRL_ON), SPLITS_ON).kind);
+        // Reaching for Shift is how the *next* stroke is spelled, not an unknown continuation.
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.NONE,
+            resolver.advance(key(KeyEvent.KEYCODE_SHIFT_LEFT, KeyEvent.META_SHIFT_ON), SPLITS_ON).kind);
+        assertTrue(resolver.hasPendingSequence());
+
+        TerminalKeyBindingResolver.Step step =
+            resolver.advance(key(KeyEvent.KEYCODE_P, KeyEvent.META_SHIFT_ON), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, step.kind);
+        assertEquals("app.command_palette", step.match.toolName);
+        assertEquals("ctrl+space>shift+p", step.match.stroke);
+    }
+
+    @Test
+    public void leaderAliases_neverOverwriteASequenceTheFileSpellsOut() {
+        TerminalBindingConfig.Result config = TerminalBindingConfig.parse(
+            "leader ctrl+space\n"
+                + "map ctrl+space>m terminal.font_size_increase\n",
+            LauncherToolRegistry.getInstance(), true);
+        assertTrue(config.errors.toString(), config.errors.isEmpty());
+        TerminalKeyBindingResolver.installConfigForTesting(config);
+        resolver = TerminalKeyBindingResolver.getInstance();
+
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.PENDING,
+            resolver.advance(key(KeyEvent.KEYCODE_SPACE, KeyEvent.META_CTRL_ON), SPLITS_ON).kind);
+        TerminalKeyBindingResolver.Step step =
+            resolver.advance(key(KeyEvent.KEYCODE_M, 0), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, step.kind);
+        assertEquals("terminal.font_size_increase", step.match.toolName);
+    }
+
+    @Test
+    public void secondLeaderLine_isRejectedSoTheFirstKeepsItsTable() {
+        TerminalBindingConfig.Result config = TerminalBindingConfig.parse(
+            "leader ctrl+space\nleader ctrl+b\nleader nonsense+\n",
+            LauncherToolRegistry.getInstance(), true);
+        assertEquals("ctrl+space", config.leader);
+        assertEquals(2, config.errors.size());
+    }
+
+    @Test
+    public void noLeaderDeclared_leavesTheTableAsItWas() {
+        assertNull(resolver.getLeaderStroke());
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.NONE,
+            resolver.advance(key(KeyEvent.KEYCODE_SPACE, KeyEvent.META_CTRL_ON), SPLITS_ON).kind);
     }
 
     @Test

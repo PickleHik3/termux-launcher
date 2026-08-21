@@ -118,15 +118,30 @@ public class InAppKeyboardDynamicColorSchemeTest {
         assertEquals(0xFF300000 | 23, scheme.getSwatch(23));
     }
 
-    @Test
-    public void base24ImportPinsEveryFilledSlot() {
-        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(WALLPAPER_A, "");
-        StringBuilder yaml = new StringBuilder("system: base24\npalette:\n");
-        for (int i = 0; i < 24; i++)
-            yaml.append(String.format("  base%02X: \"%06x\"%n", i, 0x202020 + i));
+    /**
+     * Persisted version-2 document as the removed Tinted importer wrote it: the first
+     * {@code colorCount} slots pinned plus the imported-palette flag. Devices still hold these,
+     * so they must keep loading exactly.
+     */
+    private static String importedJson(int colorCount, int baseColor, String themeId)
+        throws JSONException {
+        JSONObject root = new JSONObject();
+        root.put("schemaVersion", InAppKeyboardColorScheme.SCHEMA_VERSION);
+        root.put("base16Palette", true);
+        root.put("importedThemeId", themeId);
+        JSONArray swatches = new JSONArray();
+        for (int i = 0; i < InAppKeyboardColorScheme.BASE24_COLOR_COUNT; i++)
+            swatches.put(i < colorCount ? (Object) Integer.valueOf(0xFF000000 | (baseColor + i))
+                : JSONObject.NULL);
+        root.put("swatches", swatches);
+        return root.toString();
+    }
 
-        assertTrue(scheme.importBasePalette(yaml.toString(),
-            InAppKeyboardColorScheme.BASE24_COLOR_COUNT));
+    @Test
+    public void persistedBase24ImportKeepsEverySlotPinned() throws JSONException {
+        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(WALLPAPER_A,
+            importedJson(InAppKeyboardColorScheme.BASE24_COLOR_COUNT, 0x202020, "base24-test"));
+
         assertTrue(scheme.hasImportedPalette());
         assertFalse(scheme.isFullyDynamic());
         for (int i = 0; i < scheme.swatchCount(); i++)
@@ -137,13 +152,10 @@ public class InAppKeyboardDynamicColorSchemeTest {
     }
 
     @Test
-    public void base16ImportLeavesExtendedSlotsDynamic() {
-        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(WALLPAPER_A, "");
-        StringBuilder yaml = new StringBuilder("scheme: Test\n");
-        for (int i = 0; i < 16; i++)
-            yaml.append(String.format("base%02X: \"%06x\"%n", i, 0x101010 + i));
+    public void persistedBase16ImportLeavesExtendedSlotsDynamic() throws JSONException {
+        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(WALLPAPER_A,
+            importedJson(InAppKeyboardColorScheme.BASE16_COLOR_COUNT, 0x101010, ""));
 
-        assertTrue(scheme.importBase16(yaml.toString()));
         for (int i = 0; i < InAppKeyboardColorScheme.BASE16_COLOR_COUNT; i++)
             assertTrue("slot " + i, scheme.isSwatchPinned(i));
         for (int i = InAppKeyboardColorScheme.BASE16_COLOR_COUNT; i < scheme.swatchCount(); i++)
@@ -154,13 +166,9 @@ public class InAppKeyboardDynamicColorSchemeTest {
     }
 
     @Test
-    public void unpinAllSwatchesDropsAnImportedPalette() {
-        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(WALLPAPER_A, "");
-        StringBuilder yaml = new StringBuilder();
-        for (int i = 0; i < 16; i++)
-            yaml.append(String.format("base%02X: \"%06x\"%n", i, 0x101010 + i));
-        assertTrue(scheme.importBase16(yaml.toString()));
-        scheme.setImportedThemeId("base16-test");
+    public void unpinAllSwatchesDropsAnImportedPalette() throws JSONException {
+        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(WALLPAPER_A,
+            importedJson(InAppKeyboardColorScheme.BASE16_COLOR_COUNT, 0x101010, "base16-test"));
 
         scheme.unpinAllSwatches();
 
@@ -168,6 +176,21 @@ public class InAppKeyboardDynamicColorSchemeTest {
         assertFalse(scheme.hasImportedPalette());
         assertEquals("", scheme.getImportedThemeId());
         assertEquals(WALLPAPER_A[0], scheme.getSwatch(0));
+    }
+
+    @Test
+    public void keyboardBackgroundOnADynamicSlotFollowsTheWallpaper() {
+        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(WALLPAPER_A, "");
+        scheme.setKeyboardBackgroundSwatch(6);
+
+        // Like a per-key assignment, the background points at a slot and pins nothing.
+        assertTrue(scheme.isFullyDynamic());
+        assertEquals(Integer.valueOf(WALLPAPER_A[6]), scheme.resolvedKeyboardBackground());
+
+        InAppKeyboardColorScheme restored = InAppKeyboardColorScheme.fromJson(
+            WALLPAPER_B, scheme.toJson());
+        assertEquals(6, restored.getKeyboardBackgroundSwatch());
+        assertEquals(Integer.valueOf(WALLPAPER_B[6]), restored.resolvedKeyboardBackground());
     }
 
     @Test

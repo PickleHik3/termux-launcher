@@ -29,6 +29,20 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   [tinted-theming/schemes](https://github.com/tinted-theming/schemes); palette authors remain
   credited in the downloaded scheme metadata.
 
+## Bundled assets
+
+- **[Symbols Nerd Font Mono](https://github.com/ryanoasis/nerd-fonts)** — SIL Open Font License 1.1
+  — Copyright 2014 Ryan L McIntyre and Nerd Fonts contributors. Shipped as
+  `app/src/main/assets/fonts/SymbolsNerdFontMono.ttf`, drawn on app chrome and extracted for the
+  terminal font config. The icon sets Nerd Fonts aggregates — Material Design Icons, Font Awesome,
+  Octicons, Weather Icons, Devicons, Codicons, Powerline and others — remain under their own
+  licenses; see the Nerd Fonts license audit. The glyph names in
+  `app/src/main/res/raw/nerd_font_glyphs.csv` are generated from that font's own name table.
+- **[Meteocons](https://github.com/basmilius/meteocons)** — MIT — Copyright 2020-present Bas
+  Milius. The weather animations in `app/src/main/assets/weather/` are the fill style of
+  `@meteocons/lottie`, unmodified apart from compact re-serialization; the license text ships beside
+  them as `app/src/main/assets/weather/LICENSE.txt`.
+
 ## Runtime libraries
 
 The Android application also uses these independently maintained libraries:
@@ -38,6 +52,7 @@ The Android application also uses these independently maintained libraries:
 - Apache Commons IO — Apache-2.0
 - Google Guava — Apache-2.0
 - Google LiteRT and LiteRT-LM — Apache-2.0
+- Lottie for Android — Apache-2.0 — renders the bundled Meteocons weather animations
 - HiddenApiBypass — Apache-2.0
 - Markwon — Apache-2.0
 - Process Phoenix — Apache-2.0
@@ -47,6 +62,40 @@ The Android application also uses these independently maintained libraries:
 
 Dependencies used only by tests and build tooling are not part of the distributed APK. Their
 licenses remain available in their respective distributions.
+
+## Build recipes for external terminal tools
+
+The `recipes/` directory builds third-party command-line tools that exercise the launcher's
+graphics protocols. **No binary of any of these is distributed inside the Termux Launcher APK.**
+This repository contains only build scripts and patches; the tools are compiled from upstream
+sources on the machine that runs a recipe.
+
+Prebuilt `aarch64` binaries of three of them — `kitten`, the patched Fastfetch, and Sigye — are
+published separately at
+[PickleHik3/termux-launcher-binaries](https://github.com/PickleHik3/termux-launcher-binaries),
+which `setup-launcher` can install. That repository carries the upstream licence texts, the
+patches, the build recipes, and the corresponding-source pointers for the GPL-3.0-only `kitten`.
+The notices below apply to those builds.
+
+- **[Fastfetch](https://github.com/fastfetch-cli/fastfetch)** — MIT — Copyright 2021–2023 Linus
+  Dierheimer, 2022– Carter Li. Built from pinned commit `9c7cfb8` (v2.67.0) with the repository's
+  animated Kitty graphics patch.
+- **[Sigye](https://github.com/am2rican5/sigye)** — MIT — built from pinned commit `0f0b8ca`
+  (v0.6.0) with the repository's Termux clipboard patch.
+- **[kitty](https://github.com/kovidgoyal/kitty) `kitten`** — GPL-3.0-only — Copyright Kovid Goyal.
+  Built from tag `v0.48.2`. The binary statically links kitty's Go dependencies (MIT and
+  BSD-licensed), whose notices travel with it. Distributing a built `kitten` obliges the
+  distributor to offer the corresponding source under GPLv3.
+- **[Chafa](https://github.com/hpjansson/chafa)** — LGPL-3.0-or-later — Copyright Hans Petter
+  Jansson. Fastfetch loads `libchafa.so` with `dlopen` at run time and does not link it statically,
+  which is also what keeps LGPLv3's relinking requirement out of scope. Chafa itself bundles
+  lodepng (Zlib) and libnsgif (MIT).
+- **[ImageMagick 7](https://imagemagick.org/)** — SPDX `ImageMagick` (the ImageMagick License, an
+  Apache-2.0 derivative, not Apache-2.0 itself) — Copyright ImageMagick Studio LLC. Also loaded
+  with `dlopen` at run time.
+
+Chafa and ImageMagick reach a device through the Termux package repositories, not through this
+project.
 
 ## Data sources
 

@@ -42,6 +42,9 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
+    <uses-permission
+        android:name="android.permission.BIND_APPWIDGET"
+        tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
@@ -71,6 +74,13 @@
         <intent>
             <action android:name="com.gau.go.launcherex.theme" />
         </intent>
+        <!--
+            The Style row in the terminal long-press menu is shown only when the companion is
+            actually installed, which means asking. The shared user id already exempts the plugins
+            from Android 11 package visibility, but naming the package keeps that answer true even
+            for a build that does not share one.
+        -->
+        <package android:name="${TERMUX_PACKAGE_NAME}.styling" />
     </queries>
 
     <application
@@ -264,6 +274,10 @@
             android:name=".shared.activities.ReportActivity$ReportActivityBroadcastReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".app.launcher.data.LauncherCategoryPasteNotification$ActionReceiver"
+            android:exported="false" />
+
 
         <service
             android:name=".app.TermuxService"
@@ -282,6 +296,11 @@
 
         <service
             android:name=".ai.TaiModelDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse" />
+
+        <service
+            android:name=".app.launcher.data.LauncherCategorySortService"
             android:exported="false"
             android:foregroundServiceType="specialUse" />
 

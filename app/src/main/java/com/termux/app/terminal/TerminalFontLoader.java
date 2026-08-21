@@ -40,6 +40,8 @@ public final class TerminalFontLoader {
         @NonNull public final TerminalRenderer.FontMetricsAdjustments fontMetricsAdjustments;
         /** {@code box_drawing}, {@code box_drawing_scale} and {@code powerline_symbols}. */
         @NonNull public final TerminalRenderer.BoxDrawingPolicy boxDrawingPolicy;
+        /** {@code narrow_symbols}: per-code-point ceilings on symbol expansion. */
+        @NonNull public final TerminalRenderer.SymbolExpansion symbolExpansion;
         @NonNull public final List<String> errors;
 
         private Faces(@NonNull Typeface regular, @Nullable Typeface bold,
@@ -51,6 +53,7 @@ public final class TerminalFontLoader {
                       @NonNull TerminalRenderer.FontVariations fontVariations,
                       @NonNull TerminalRenderer.FontMetricsAdjustments fontMetricsAdjustments,
                       @NonNull TerminalRenderer.BoxDrawingPolicy boxDrawingPolicy,
+                      @NonNull TerminalRenderer.SymbolExpansion symbolExpansion,
                       @NonNull List<String> errors) {
             this.regular = regular;
             this.bold = bold;
@@ -63,6 +66,7 @@ public final class TerminalFontLoader {
             this.fontVariations = fontVariations;
             this.fontMetricsAdjustments = fontMetricsAdjustments;
             this.boxDrawingPolicy = boxDrawingPolicy;
+            this.symbolExpansion = symbolExpansion;
             this.errors = Collections.unmodifiableList(new ArrayList<>(errors));
         }
     }
@@ -130,7 +134,7 @@ public final class TerminalFontLoader {
                 metric(config, TerminalFontConfig.Metric.STRIKETHROUGH_THICKNESS));
         return new Faces(regular, bold, italic, boldItalic, symbolMaps, fallbackFonts,
             ligaturePolicy, fontFeatures, fontVariations, fontMetricsAdjustments,
-            boxDrawingPolicy(config), errors);
+            boxDrawingPolicy(config), symbolExpansion(config), errors);
     }
 
     /** Translates the box-drawing directives into the renderer's own policy type. */
@@ -145,6 +149,29 @@ public final class TerminalFontLoader {
             new float[] {(float) scale.thin, (float) scale.light, (float) scale.heavy,
                 (float) scale.veryHeavy},
             config.powerlineSymbols == TerminalFontConfig.PowerlineMode.SYNTHESIZE);
+    }
+
+    /** Flattens the {@code narrow_symbols} rules into the renderer's parallel-array form. */
+    @NonNull
+    private static TerminalRenderer.SymbolExpansion symbolExpansion(
+        @NonNull TerminalFontConfig.Result config) {
+        int count = 0;
+        for (TerminalFontConfig.NarrowSymbolsSpec spec : config.narrowSymbols)
+            count += spec.ranges.size();
+        if (count == 0) return TerminalRenderer.SymbolExpansion.DEFAULT;
+        int[] first = new int[count];
+        int[] last = new int[count];
+        int[] cells = new int[count];
+        int at = 0;
+        for (TerminalFontConfig.NarrowSymbolsSpec spec : config.narrowSymbols) {
+            for (TerminalFontConfig.CodePointRange range : spec.ranges) {
+                first[at] = range.first;
+                last[at] = range.last;
+                cells[at] = spec.cells;
+                at++;
+            }
+        }
+        return new TerminalRenderer.SymbolExpansion(first, last, cells);
     }
 
     /** Resolves the fallback chain in order, dropping only the entries Android cannot load. */

@@ -51,9 +51,15 @@ public class InAppKeyboardPaletteFactoryTest {
             assertTrue(variant + " activated label contrast",
                 ColorUtils.calculateContrast(palette.activatedLabelColor,
                     palette.activatedKeyBackground) >= 4.5d);
-            assertTrue(variant + " pressed label contrast",
-                ColorUtils.calculateContrast(palette.pressedLabelColor,
-                    palette.activatedKeyBackground) >= 4.5d);
+            // Pressed (non-selected) labels deliberately sit back — an RGB blend halfway
+            // toward the activated chip — so the resolved direction dominates. They must be
+            // strictly dimmer than the activated label but still legible.
+            double activatedContrast = ColorUtils.calculateContrast(
+                palette.activatedLabelColor, palette.activatedKeyBackground);
+            double pressedContrast = ColorUtils.calculateContrast(
+                palette.pressedLabelColor, palette.activatedKeyBackground);
+            assertTrue(variant + " pressed label sits back", pressedContrast < activatedContrast);
+            assertTrue(variant + " pressed label still legible", pressedContrast >= 1.5d);
             assertTrue(variant + " locked label contrast",
                 ColorUtils.calculateContrast(palette.lockedModifierColor,
                     palette.activatedKeyBackground) >= 4.5d);

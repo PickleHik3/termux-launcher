@@ -59,12 +59,20 @@ A setting **Require API token** (default **on**) lives under **Settings → Serv
 
 Rotate the token with `POST /v1/auth/rotate`, which rewrites `~/.launcherctl/token` and `~/.launcherctl/endpoint`.
 
-## CORS and Health
+## CORS, Host checks, and Health
 
-All responses include `Access-Control-Allow-Origin: *` so browser-based clients can call the API (the token is still required for protected routes).
+Browser clients are accepted only when the page itself came from loopback. A request carrying an
+`Origin` header is served — and granted CORS by echoing that origin back — only if the origin host is
+`localhost`, `127.0.0.0/8`, or `::1`; any other origin gets `403 forbidden_origin`, token or no token.
+Requests with no `Origin` at all (curl, the OpenAI SDKs, the shell helpers) are unaffected: the bearer
+token governs those.
+
+The `Host` header must name an address the server actually bound — a literal IP, or `localhost`. A
+request naming any other hostname gets `403 forbidden_host`. This is what stops DNS rebinding, where a
+remote page points its own hostname at `127.0.0.1` so the browser treats the API as same-origin.
 
 - `GET /` — returns `Ollama is running` with HTTP 200. No auth. Used by clients to detect a live Ollama-compatible server.
-- `OPTIONS` — CORS preflight. No auth. Returns the standard `Access-Control-Allow-*` headers.
+- `OPTIONS` — CORS preflight. No auth, but subject to the origin and host checks above.
 
 ## Endpoint Reference
 
@@ -293,6 +301,7 @@ Inspect `/v1/models` first to confirm both `_backend == "mnn-llm"` and the endpo
 ### Bind Mode
 - Default: `localhost` — server bound to `127.0.0.1`. Only processes on the device can reach the API.
 - Opt-in: `lan` — server bound to `0.0.0.0`. Any device on the local network can reach the API. **LAN mode always requires the token** even when the localhost token-optional toggle is off.
+- LAN exposure is time-boxed: 12 hours after it is enabled the server rebinds to `127.0.0.1` and rotates the API token. Requests arriving after the window closes get `403 lan_session_expired`. The endpoint settings JSON carries `lanSessionStartedAt`, `lanSessionExpiresAt`, and `lanSessionExpired`.
 
 ### Mitigations Implemented
 - Bearer token auth (or `X-Api-Key`), startup-generated random token.
@@ -306,18 +315,22 @@ Inspect `/v1/models` first to confirm both `_backend == "mnn-llm"` and the endpo
 - Per-route token-bucket rate limiting (`429` with `Retry-After`).
 - Token rotation endpoint.
 - Sensitive files written owner-only.
-- CORS `Access-Control-Allow-Origin: *` on all responses so browser clients work; protected routes still require the token.
+- CORS grants only to loopback origins (echoed back, never a wildcard); cross-origin browser requests are refused outright.
+- `Host` header validated against the bound address, which closes the DNS-rebinding path into the loopback listener.
+- LAN exposure expires after 12 hours and rotates the token on the way out.
+- Media referenced by chat requests is bounded: local paths must resolve under the Termux home or shared storage (never `~/.launcherctl`), and remote URLs must resolve to public addresses, re-checked at every redirect hop.
 
 ### LAN Opt-In Considerations
 - LAN mode (`bindMode: lan`) is opt-in and surfaces a `lanWarning` field in the endpoint settings JSON plus the `tai` CLI help text.
 - Treat the bearer token as a network secret whenever LAN mode is active. Do not paste it into shell history, screenshots, or shared notes.
 - Rotate the token (`POST /v1/auth/rotate`) after temporarily enabling LAN mode if the token may have been observed.
 - A firewall on the LAN, a per-call `Authorization: Bearer <token>` header, and short-lived sessions are recommended for any non-trivial LAN use.
+- LAN mode is unencrypted: requests are plain HTTP, so the bearer token is visible to anyone on the network. Treat every LAN session as one where the token has already been observed — that is why the window expires and rotates on its own.
 
 ### Remaining Security Considerations
 - Localhost token auth still depends on local process trust.
 - If same app UID ecosystem is compromised, token can be read.
-- LAN mode trusts every device on the local network; it does not implement per-device authentication.
+- LAN mode trusts every device on the local network; it does not implement per-device authentication, and it carries the token in cleartext.
 - Consider Unix domain sockets for tighter local access boundaries in future.
 
 ## Troubleshooting

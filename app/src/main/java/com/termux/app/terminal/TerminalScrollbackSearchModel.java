@@ -58,6 +58,22 @@ final class TerminalScrollbackSearchModel {
         return result;
     }
 
+    /**
+     * Where an arrow leaves the highlighted result.
+     *
+     * <p>Clamped rather than wrapped: an arrow held down at the end of the list should stop there, not
+     * jump back to the far end, because the user is walking the list to read it. A page key arrives
+     * here as a larger delta and lands on the edge when it overshoots.
+     *
+     * @param size number of results; zero leaves the highlight at zero.
+     */
+    public static int moveHighlight(int current, int delta, int size) {
+        if (size <= 0) return 0;
+        int moved = current + delta;
+        if (moved < 0) return 0;
+        return Math.min(moved, size - 1);
+    }
+
     private static String snippet(String line, int start, int length) {
         int left = Math.max(0, start - 36);
         int right = Math.min(line.length(), start + length + 56);

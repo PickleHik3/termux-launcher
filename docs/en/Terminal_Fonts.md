@@ -96,6 +96,32 @@ font_features icons liga=0
 A named map lets `font_features` and `font_variations` target one map rather than every symbol font.
 Unnamed maps continue using the shared `symbols` target.
 
+Symbol glyphs are scaled uniformly until they meet the cell box, never squeezed on one axis. Nerd
+Font glyphs are drawn on a full em square while a text cell is narrower than its em — Maple Mono's
+is 0.6 em — so a symbol confined to one cell ends up markedly shorter than the capitals beside it.
+
+Following kitty, a private-use symbol whose own glyph is wider than one cell, and which is followed
+by blanks that paint the same, is drawn across those blanks instead. It asks for
+`ceil(advance / cell width)` cells, takes as many of them as there are blanks, and never exceeds
+five. A glyph that already fits its cell asks for one and is left where it is.
+
+A blank is a space or an en-space (U+2002). "Paints the same" means the same background and the same
+underline style, underline and strikethrough — all a space can show. Foreground colour, bold and
+italic are ignored, so a coloured icon followed by an uncoloured separator still expands. A symbol
+against real text, or against a blank with a different background or decoration, stays in its cell.
+
+To keep specific code points narrow, use `narrow_symbols` — kitty's directive, same syntax:
+
+```text
+narrow_symbols U+E0A0-U+E0A3,U+E0C0-U+E0C7
+narrow_symbols U+F0000-U+FFFFD 3
+```
+
+The trailing number is the cell ceiling and defaults to 1, the maximum is 5, and for a code point
+matched by several lines the last one wins. Note that the Powerline separators in `U+E0B0-U+E0B7`
+and `U+E0BA-U+E0BD` are drawn as geometry rather than shaped as text, so they never expand and need
+no rule; `powerline_symbols font` hands them back to the face and brings them under this rule.
+
 ## Box drawing, blocks, braille, and Powerline
 
 By default the terminal draws box-drawing lines, blocks, shades, braille, sextants, and Powerline

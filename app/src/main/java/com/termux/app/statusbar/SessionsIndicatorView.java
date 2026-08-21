@@ -22,7 +22,8 @@ import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
-import com.termux.app.terminal.WindowSessionName;
+import com.termux.app.terminal.TerminalNamePolicy;
+import com.termux.shared.termux.font.NerdFontSpans;
 
 /**
  * Session label sitting to the left of the window pills. Named sessions show their name; unnamed
@@ -84,9 +85,10 @@ public final class SessionsIndicatorView extends LinearLayout {
             return;
         }
         int position = Math.max(0, Math.min(currentIndex, count - 1)) + 1;
-        String sessionName = WindowSessionName.normalize(label);
+        String sessionName = TerminalNamePolicy.normalizeSession(label);
         mShowingSessionNumber = TextUtils.isEmpty(sessionName);
-        mLabel.setText(mShowingSessionNumber ? Integer.toString(position) : sessionName);
+        mLabel.setText(mShowingSessionNumber ? Integer.toString(position)
+            : NerdFontSpans.span(getContext(), sessionName));
         setContentDescription(mShowingSessionNumber
             ? getResources().getString(
                 R.string.termux_sessions_indicator_content_description, position, count)

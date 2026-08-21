@@ -8,8 +8,8 @@ index bc33e67f7..3863dc451 100644
      #define FF_CACHE_FILE_SIXEL "sixel"
 -    #define FF_CACHE_FILE_KITTY_COMPRESSED "kittyc"
 -    #define FF_CACHE_FILE_KITTY_UNCOMPRESSED "kittyu"
-+    #define FF_CACHE_FILE_KITTY_COMPRESSED "kittyc2"
-+    #define FF_CACHE_FILE_KITTY_UNCOMPRESSED "kittyu2"
++    #define FF_CACHE_FILE_KITTY_COMPRESSED "kittyc3"
++    #define FF_CACHE_FILE_KITTY_UNCOMPRESSED "kittyu3"
      #define FF_CACHE_FILE_CHAFA "chafa"
 
      #include <string.h>
@@ -94,7 +94,7 @@ index bc33e67f7..3863dc451 100644
 +    if (animationFrame) {
 +        ffStrbufAppendF(result, "\033_Ga=f,I=1,q=2,f=32,s=%u,v=%u,z=%u,X=1", requestData->logoPixelWidth, requestData->logoPixelHeight, frameDelay);
 +    } else {
-+        ffStrbufAppendF(result, "\033_Ga=T,I=1,q=2,f=32,s=%u,v=%u,c=%u,r=%u", requestData->logoPixelWidth, requestData->logoPixelHeight, requestData->logoCharacterWidth, requestData->logoCharacterHeight);
++        ffStrbufAppendF(result, "\033_Ga=T,I=1,q=2,f=32,s=%u,v=%u,c=%u", requestData->logoPixelWidth, requestData->logoPixelHeight, requestData->logoCharacterWidth);
 +        if (instance.config.logo.position == FF_LOGO_POSITION_LEFT) {
 +            ffStrbufAppendS(result, ",C=1");
 +        }

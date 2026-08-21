@@ -3,12 +3,7 @@
 <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
 <!ENTITY TERMUX_APP_NAME "Termux:Launcher">
 <!ENTITY TERMUX_API_APP_NAME "Termux:API">
-<!ENTITY TERMUX_GUI_APP_NAME "Termux:GUI">
-<!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
-<!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
 <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
-<!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
-<!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
 ]>
 <!-- Spanish translation by CrazyBytesVE --><resources>
     <string name="application_name">&TERMUX_APP_NAME;</string>
@@ -52,25 +47,17 @@
     <string name="action_share_transcript">Compartir transcripción</string>
     <string name="title_share_transcript">Transcripción de la terminal</string>
     <string name="title_share_transcript_with">Enviar transcripción a:</string>
-    <string name="action_share_selected_text">Compartir selección</string>
     <string name="title_share_selected_text">Texto del Terminal</string>
     <string name="title_share_selected_text_with">Enviar texto seleccionado a:</string>
-    <string name="action_autofill_password">Autocompletar contraseñas</string>
     <string name="action_reset_terminal">Reiniciar</string>
     <string name="msg_terminal_reset">Reiniciar terminal</string>
     <string name="action_kill_process">Cerrar proceso (%d)</string>
     <string name="title_confirm_kill_process">¿Cerrar realmente esta sesión?</string>
     <string name="action_style_terminal">Estilo</string>
-    <string name="action_font_and_color">Fuentes y Colores</string>
     <string name="action_set_background_image">Seleccionar Fondo de pantalla</string>
-    <string name="action_toggle_keep_screen_on">Mantener pantalla encendida</string>
-    <string name="action_open_help">Ayuda</string>
     <string name="action_open_settings">Ajustes</string>
-    <string name="action_report_issue">Reportar problema</string>
     <string name="msg_generating_report">Generando Reporte</string>
     <string name="msg_add_termux_debug_info">¿Agregar información de depuración de &TERMUX_APP_NAME; al informe?</string>
-    <string name="error_styling_not_installed">El plugin &TERMUX_STYLING_APP_NAME; no está instalado.</string>
-    <string name="action_styling_install">Instalar</string>
     <!-- Termux Notifications -->
     <string name="notification_action_exit">Salir</string>
     <string name="notification_action_wake_lock">Adquirir wakelock</string>
@@ -96,8 +83,6 @@
     <!-- Termux Settings -->
     <string name="title_activity_termux_settings">Ajustes de &TERMUX_APP_NAME;</string>
     <!-- Termux App Preferences -->
-    <string name="termux_preferences_title">&TERMUX_APP_NAME;</string>
-    <string name="termux_preferences_summary">Preferencias para la app &TERMUX_APP_NAME;</string>
     <!-- Debugging Preferences -->
     <string name="termux_debugging_preferences_title">Depuración</string>
     <string name="termux_debugging_preferences_summary">Preferencias para depuración</string>
@@ -119,8 +104,6 @@
     <string name="termux_crash_report_notifications_enabled_off">Deshabilitar notificaciones de informe de fallas.</string>
     <string name="termux_crash_report_notifications_enabled_on">Habilitar notificaciones de informe de fallas. (Defecto)</string>
     <!-- Terminal IO Preferences -->
-    <string name="termux_terminal_io_preferences_title">Terminal I/O</string>
-    <string name="termux_terminal_io_preferences_summary">Preferencias para terminal I/O</string>
     <!-- Keyboard Category -->
     <string name="termux_keyboard_header">Teclado</string>
     <!-- Soft Keyboard -->
@@ -134,8 +117,6 @@
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">El teclado virtual se habilitará solo si
                     no hay ningún teclado físico conectado.</string>
     <!-- Terminal View Preferences -->
-    <string name="termux_terminal_view_preferences_title">Vista de terminal</string>
-    <string name="termux_terminal_view_preferences_summary">Preferencias para la vista de terminal</string>
     <!-- View Category -->
     <string name="termux_terminal_view_view_header">Vista</string>
     <!-- Terminal View Margin Adjustment -->
@@ -150,43 +131,13 @@
     <string name="termux_terminal_view_activity_remove_on">&TERMUX_APP_NAME; se cerrará y no permanecerá en apps recientes cuando no haya sesiones de terminal activas. (Defecto)</string>
     <!-- Termux Style Preferences -->
     <string name="termux_style_preferences_title">Apariencia del &TERMUX_APP_NAME;</string>
-    <string name="termux_style_preferences_summary">Preferencias de apariencia y personalización del &TERMUX_APP_NAME;</string>
     <!-- Background Category -->
-    <string name="termux_background_header">Fondo de pantalla</string>
     <!-- Background Image -->
-    <string name="termux_background_image_enabled_title">Mostrar imagen de fondo de pantalla</string>
-    <string name="termux_background_image_enabled_off">El fondo de pantalla estará deshabilitado. Para habilitarlo, asegúrese de que los archivos verticales y horizontales estén presentes. Si desea configurar un nuevo fondo de pantalla, configúrelo a través del menú contextual presionando prolongadamente en la Terminal. (Defecto)</string>
-    <string name="termux_background_image_enabled_on">El fondo de pantalla estará habilitado.</string>
     <!-- Termux:API App Preferences -->
-    <string name="termux_api_preferences_title">&TERMUX_API_APP_NAME;</string>
-    <string name="termux_api_preferences_summary">Preferencias para la app &TERMUX_API_APP_NAME;</string>
     <!-- Termux:Float App Preferences -->
-    <string name="termux_float_preferences_title">&TERMUX_FLOAT_APP_NAME;</string>
-    <string name="termux_float_preferences_summary">Preferencias para la app &TERMUX_FLOAT_APP_NAME;</string>
     <!-- Termux:Tasker App Preferences -->
-    <string name="termux_tasker_preferences_title">&TERMUX_TASKER_APP_NAME;</string>
-    <string name="termux_tasker_preferences_summary">Preferencias para la app &TERMUX_TASKER_APP_NAME;</string>
     <!-- Termux:Widget App Preferences -->
-    <string name="termux_widget_preferences_title">&TERMUX_WIDGET_APP_NAME;</string>
-    <string name="termux_widget_preferences_summary">Preferencias para la app &TERMUX_WIDGET_APP_NAME;</string>
     <!-- About Preference -->
-    <string name="about_preference_title">Acerca de</string>
     <!-- Donate Preference -->
     <string name="donate_preference_title">Donar</string>
-    <string name="error_background_image_loading_failed">No se puede cargar la imagen de fondo. Configuración del color de fondo.</string>
-    <string name="title_restore_background_image">Imagen de fondo detectada. ¿Quieres restaurarla\?</string>
-    <string name="error_background_image_loading_from_gallery_failed">No se ha podido cargar la imagen. Prueba con otra imagen.</string>
-    <string name="termux_gui_preferences_summary">Preferencias para &TERMUX_GUI_APP_NAME; aplicación</string>
-    <string name="termux_gui_preferences_title">&TERMUX_GUI_APP_NAME;</string>
-    <string name="termux_sessions_blur_enabled_off">El fondo desenfocado del menú de ventanas está deshabilitado. Añade un fondo transparente y desenfocado al Menú de sesiones. (Puede afectar el rendimiento) (Defecto)</string>
-    <string name="termux_monet_background_enabled_title">Fondo estilo Material (no estable)</string>
-    <string name="termux_monet_background_enabled_on">El fondo estilo Material será habilitado.</string>
-    <string name="termux_monet_background_enabled_off">El fondo de la terminal estilo Material está deshabilitado. Convierte el estilo del fondo de la terminal en Material. (Defecto)</string>
-    <string name="termux_extrakeys_blur_enabled_title">Fondo desenfocado de las teclas adicionales</string>
-    <string name="termux_extrakeys_blur_enabled_off">El fondo desenfocado de las teclas adicionales está deshabilitado. Añade un fondo transparente y desenfocado a las teclas extra. (Puede afectar el rendimiento) (Defecto)</string>
-    <string name="termux_extrakeys_blur_enabled_on">El fondo desenfocado de las teclas adicionales será habilitado.</string>
-    <string name="termux_sessions_header">Menú de Sesiones</string>
-    <string name="termux_sessions_blur_enabled_title">Fondo desenfocado del Menú de sesiones</string>
-    <string name="termux_sessions_blur_enabled_on">El fondo desenfocado del menú de sesiones será habilitado.</string>
-    <string name="action_autofill_username">Autocompletar el nombre de usuario</string>
 </resources>

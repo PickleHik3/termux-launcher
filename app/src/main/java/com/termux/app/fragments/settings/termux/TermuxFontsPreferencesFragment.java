@@ -8,7 +8,6 @@ import android.os.Bundle;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
@@ -19,6 +18,7 @@ import androidx.preference.PreferenceManager;
 import androidx.preference.SwitchPreferenceCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.fonts.FontCatalog;
 import com.termux.app.fonts.FontDownloader;
@@ -96,10 +96,9 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
         Context context = getContext();
         if (context == null || !isAdded()) return;
         if (progress.state == FontDownloader.State.FAILED && !progress.error.isEmpty()) {
-            Toast.makeText(context, getString(R.string.termux_fonts_install_failed, progress.error),
-                Toast.LENGTH_LONG).show();
+            AppNotice.show(context, getString(R.string.termux_fonts_install_failed, progress.error), true);
         } else if (progress.state == FontDownloader.State.INSTALLED) {
-            Toast.makeText(context, R.string.termux_fonts_installed_toast, Toast.LENGTH_SHORT).show();
+            AppNotice.show(context, R.string.termux_fonts_installed_toast, false);
         }
         refresh(context);
     }
@@ -284,7 +283,7 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
             row.setPrimaryAction(getString(R.string.termux_fonts_action_cancel), true, true,
                 view -> {
                     FontInstallCoordinator.getInstance(context).cancel();
-                    Toast.makeText(context, R.string.termux_fonts_cancelling, Toast.LENGTH_SHORT).show();
+                    AppNotice.show(context, R.string.termux_fonts_cancelling, false);
                 });
         } else if (active) {
             row.setPrimaryAction(getString(R.string.termux_fonts_action_active), false, false, null);
@@ -365,10 +364,9 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
     private void start(@NonNull Context context, @NonNull FontCatalog.Family family,
                        @NonNull FontInstaller.Options options) {
         boolean started = FontInstallCoordinator.getInstance(context).start(family, options);
-        Toast.makeText(context, started
+        AppNotice.show(context, started
                 ? getString(R.string.termux_fonts_install_started, family.displayName)
-                : getString(R.string.termux_fonts_busy),
-            Toast.LENGTH_SHORT).show();
+                : getString(R.string.termux_fonts_busy), false);
         refresh(context);
     }
 
@@ -376,7 +374,7 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
                          @NonNull FontInstaller.Options options) {
         boolean applied = FontInstallCoordinator.getInstance(context).reapply(family, options);
         if (!applied) {
-            Toast.makeText(context, R.string.termux_fonts_reapply_failed, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, R.string.termux_fonts_reapply_failed, true);
         }
         refresh(context);
     }
@@ -387,9 +385,8 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
             .setMessage(R.string.termux_fonts_use_font_ttf_confirm)
             .setPositiveButton(R.string.termux_fonts_use_font_ttf_action, (dialog, which) -> {
                 boolean removed = FontInstallCoordinator.getInstance(context).uninstallManagedConfig();
-                Toast.makeText(context, removed
-                        ? R.string.termux_fonts_uninstalled : R.string.termux_fonts_uninstall_missing,
-                    Toast.LENGTH_SHORT).show();
+                AppNotice.show(context, removed
+                        ? R.string.termux_fonts_uninstalled : R.string.termux_fonts_uninstall_missing, false);
                 refresh(context);
             })
             .setNegativeButton(android.R.string.cancel, null)
@@ -533,7 +530,7 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
         } catch (Exception e) {
-            Toast.makeText(context, url, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, url, true);
         }
     }
 

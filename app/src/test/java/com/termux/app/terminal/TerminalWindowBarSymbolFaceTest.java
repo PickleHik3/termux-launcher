@@ -75,14 +75,21 @@ public class TerminalWindowBarSymbolFaceTest {
     }
 
     @Test
-    public void withoutConfiguredSymbolMapsTheRowStaysOnPlainLabels() {
+    public void withoutConfiguredSymbolMapsIconsFallBackToTheBundledFace() {
         TerminalLabelFaces.publish(Typeface.MONOSPACE, new TerminalRenderer.SymbolMap[0]);
         TerminalWindowBar bar = new TerminalWindowBar(
             ApplicationProvider.getApplicationContext(), null);
 
         bar.setWindows(windows(), 0);
 
-        assertFalse(tabAt(bar, 0).getText() instanceof Spanned);
+        // No symbol_map is configured, but the bundled symbols face still fills the PUA run — an
+        // icon in a window name used to be tofu on every device without a patched terminal font.
+        assertTrue(tabAt(bar, 0).getText() instanceof Spanned);
+        Spanned spanned = (Spanned) tabAt(bar, 0).getText();
+        assertEquals(0, spanned.getSpans(0, spanned.length(),
+            TerminalLabelSymbolSpans.SymbolTypefaceSpan.class).length);
+        // A label with nothing to map is left alone, spans and all.
+        assertFalse(tabAt(bar, 1).getText() instanceof Spanned);
         assertSame(Typeface.MONOSPACE, tabAt(bar, 1).getTypeface());
     }
 

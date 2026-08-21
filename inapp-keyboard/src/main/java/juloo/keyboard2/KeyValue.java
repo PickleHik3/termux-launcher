@@ -1,7 +1,6 @@
 package juloo.keyboard2;
 
 import android.view.KeyEvent;
-import java.util.HashMap;
 
 public final class KeyValue implements Comparable<KeyValue>
 {

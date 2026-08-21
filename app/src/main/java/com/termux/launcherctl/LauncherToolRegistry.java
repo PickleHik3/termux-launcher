@@ -232,6 +232,28 @@ public final class LauncherToolRegistry {
         @Nullable
         public final AvailabilityPredicate availability;
 
+        /**
+         * The action's result is already on screen the moment it runs — a pane appeared, the
+         * viewport panned, a float lifted — so the generic action-hint chip must stay quiet for
+         * it. Chips are for what the screen cannot say itself: invisible results (copy, reset),
+         * refusals, and events in windows the user is not looking at.
+         */
+        public final boolean selfEvident;
+
+        /**
+         * The tools whose result is narrated by their own motion. One table, so the judgment
+         * stays reviewable in one place instead of scattered through the registrations.
+         */
+        private static final java.util.Set<String> SELF_EVIDENT_TOOLS =
+            new java.util.HashSet<>(java.util.Arrays.asList(
+                TOOL_PANE_SPLIT_VERTICAL, TOOL_PANE_SPLIT_HORIZONTAL,
+                TOOL_PANE_KILL_FOCUSED, TOOL_PANE_EQUALIZE, TOOL_PANE_ROTATE,
+                TOOL_PANE_MOVE_TO_EDGE, TOOL_PANE_TOGGLE_FLOAT, TOOL_PANE_RESIZE,
+                TOOL_PANE_FOCUS_DIRECTION,
+                TOOL_WINDOW_NEW, TOOL_WINDOW_CLOSE, TOOL_WINDOW_NEXT, TOOL_WINDOW_PREVIOUS,
+                TOOL_SESSION_NEW, TOOL_SESSION_NEXT, TOOL_SESSION_PREVIOUS,
+                TOOL_SESSION_CLOSE_CURRENT));
+
         /** Agent-only tool: no UI metadata. */
         public ToolMetadata(
             @NonNull String name,
@@ -286,6 +308,7 @@ public final class LauncherToolRegistry {
             this.defaultBindings = defaultBindings == null || defaultBindings.isEmpty()
                 ? Collections.<Binding>emptyList()
                 : Collections.unmodifiableList(new ArrayList<>(defaultBindings));
+            this.selfEvident = SELF_EVIDENT_TOOLS.contains(name);
         }
 
         /** Whether this tool carries enough metadata to appear in the command palette. */
@@ -340,6 +363,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_WORKSPACE_PICKER = "workspace.picker";
     public static final String TOOL_WORKSPACE_SAVE_PROMPT = "workspace.save_prompt";
     public static final String TOOL_TERMINAL_TOGGLE_SCRATCHPAD = "terminal.toggle_scratchpad";
+    public static final String TOOL_EXTRA_KEYS_EDIT = "extrakeys.edit";
     public static final String TOOL_PANE_SPLIT_VERTICAL = "pane.split_vertical";
     public static final String TOOL_PANE_SPLIT_HORIZONTAL = "pane.split_horizontal";
     public static final String TOOL_PANE_FOCUS_DIRECTION = "pane.focus_direction";
@@ -367,6 +391,8 @@ public final class LauncherToolRegistry {
     public static final String TOOL_TERMINAL_FONT_SIZE_INCREASE = "terminal.font_size_increase";
     public static final String TOOL_TERMINAL_FONT_SIZE_DECREASE = "terminal.font_size_decrease";
     public static final String TOOL_TERMINAL_SELECT_URL = "terminal.select_url";
+    public static final String TOOL_TERMINAL_SELECT_AT_CURSOR = "terminal.select_at_cursor";
+    public static final String TOOL_TERMINAL_SELECT_ALL = "terminal.select_all";
     public static final String TOOL_TERMINAL_HINTS = "terminal.hints";
     public static final String TOOL_TERMINAL_SEARCH_SCROLLBACK = "terminal.search_scrollback";
     public static final String TOOL_TERMINAL_SHARE_TRANSCRIPT = "terminal.share_transcript";
@@ -375,6 +401,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_WINDOW_RENAME = "window.rename";
     public static final String TOOL_SESSION_RENAME = "session.rename";
     public static final String TOOL_SESSION_RENAME_AT_INDEX = "session.rename_at_index";
+    public static final String TOOL_PANE_RENAME = "pane.rename";
     public static final String TOOL_TERMINAL_RESET = "terminal.reset";
     public static final String TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT = "terminal.jump_previous_prompt";
     public static final String TOOL_TERMINAL_JUMP_NEXT_PROMPT = "terminal.jump_next_prompt";
@@ -394,6 +421,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_SESSION_ACTIVATE_BY_INDEX = "session.activate_by_index";
     public static final String TOOL_WINDOW_RENAME_PROMPT = "window.rename_prompt";
     public static final String TOOL_SESSION_RENAME_PROMPT = "session.rename_prompt";
+    public static final String TOOL_PANE_RENAME_PROMPT = "pane.rename_prompt";
     public static final String TOOL_TERMINAL_SHARE_SELECTED = "terminal.share_selected";
     public static final String TOOL_CLIPBOARD_COPY_SELECTED = "clipboard.copy_selected";
     public static final String TOOL_FONTS_PICK = "fonts.pick";
@@ -455,6 +483,15 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_SESSION, R.string.tool_workspace_picker, R.string.tool_desc_workspace_picker,
             null, REQUIRES_SPLITS);
+        // The row editor's in-terminal entry: bindable, palette-visible, and usable as a
+        // "tool:extrakeys.edit" key in the row itself. There is no long-press entry on the row
+        // because every key already owns long press for auto-repeat and modifier toggles.
+        addUi(map, TOOL_EXTRA_KEYS_EDIT,
+            "Open the extra-keys row editor.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_TERMINAL, R.string.tool_extra_keys_edit, R.string.tool_desc_extra_keys_edit,
+            null);
         addUi(map, TOOL_WORKSPACE_SAVE_PROMPT,
             "Prompt for a name and save the live session, window, and pane topology.",
             schemaEmpty(),
@@ -477,11 +514,16 @@ public final class LauncherToolRegistry {
                 .withEnum("direction", new String[]{"left", "right", "up", "down"}, true, "left")
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            // Ctrl+Arrow, with no Alt and no prefix: moving between the panes of one window is
+            // the innermost move of the three, so it gets the shortest stroke, and the prefixed
+            // arrows are freed for the two outer ones (windows, then sessions). The cost is that
+            // Ctrl+Left/Right no longer reaches the shell's word-wise cursor movement while split
+            // panes are on.
             CATEGORY_PANE, R.string.tool_pane_focus_direction, 0, Arrays.asList(
-                Binding.of("ctrl+alt+left", BindingCondition.SPLITS_ON),
-                Binding.of("ctrl+alt+right", BindingCondition.SPLITS_ON),
-                Binding.of("ctrl+alt+up", BindingCondition.SPLITS_ON),
-                Binding.of("ctrl+alt+down", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
+                Binding.of("ctrl+left", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+right", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+up", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+down", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
         addUi(map, TOOL_PANE_RESIZE,
             "Grow the focused pane toward a direction.",
             schemaObject()
@@ -566,15 +608,17 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_WINDOW, R.string.tool_window_next, R.string.tool_desc_window_next,
-            Collections.singletonList(
-                Binding.of("ctrl+alt+]", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
+            Arrays.asList(
+                Binding.of("ctrl+alt+]", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+right", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
         addUi(map, TOOL_WINDOW_PREVIOUS,
             "Switch to the previous window in the current session.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_WINDOW, R.string.tool_window_previous, R.string.tool_desc_window_previous,
-            Collections.singletonList(
-                Binding.of("ctrl+alt+[", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
+            Arrays.asList(
+                Binding.of("ctrl+alt+[", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+left", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
         addUi(map, TOOL_SESSION_NEW,
             "Create a new terminal session, optionally named or fail-safe.",
             schemaObject()
@@ -603,25 +647,21 @@ public final class LauncherToolRegistry {
             ToolRisk.MEDIUM, true, ToolExecutor.TERMINAL,
             CATEGORY_SESSION, R.string.tool_session_clone_current,
             R.string.tool_desc_session_clone_current, null, REQUIRES_SESSION);
-        // Ctrl+Alt+Down/Up is deliberately absent here. Today it means "next/previous
-        // session" only while split panes are off; with splits on the multiplexer
-        // claims it for pane focus first. Until defaultBindings can express that
-        // condition, recording it would advertise a binding that often does
-        // something else.
+        // Ctrl+Alt+Down/Up means "next/previous session" in both modes now: pane focus moved to
+        // the unprefixed Ctrl+Arrow, so the prefixed vertical arrows are free to mean the same
+        // thing whether or not split panes are on.
         addUi(map, TOOL_SESSION_NEXT,
             "Switch to the next terminal session.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
-            CATEGORY_SESSION, R.string.tool_session_next, R.string.tool_desc_session_next, Arrays.asList(
-                Binding.of("ctrl+alt+n"),
-                Binding.of("ctrl+alt+down", BindingCondition.SPLITS_OFF)));
+            CATEGORY_SESSION, R.string.tool_session_next, R.string.tool_desc_session_next,
+            Binding.all("ctrl+alt+n", "ctrl+alt+down"));
         addUi(map, TOOL_SESSION_PREVIOUS,
             "Switch to the previous terminal session.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
-            CATEGORY_SESSION, R.string.tool_session_previous, R.string.tool_desc_session_previous, Arrays.asList(
-                Binding.of("ctrl+alt+p"),
-                Binding.of("ctrl+alt+up", BindingCondition.SPLITS_OFF)));
+            CATEGORY_SESSION, R.string.tool_session_previous, R.string.tool_desc_session_previous,
+            Binding.all("ctrl+alt+p", "ctrl+alt+up"));
         addUi(map, TOOL_SESSION_CLOSE_CURRENT,
             "Close the current session, including all of its windows and panes.",
             schemaEmpty(),
@@ -658,6 +698,22 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_TERMINAL, R.string.tool_terminal_select_url, R.string.tool_desc_terminal_select_url,
+            null, REQUIRES_SESSION);
+        // Text selection had no entry point outside a long-press, which left copy_selected and
+        // share_selected unreachable from a key, a tool, or the palette.
+        addUi(map, TOOL_TERMINAL_SELECT_AT_CURSOR,
+            "Start selecting terminal text at the shell cursor, expanded to the word under it.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_TERMINAL, R.string.tool_terminal_select_at_cursor,
+            R.string.tool_desc_terminal_select_at_cursor,
+            null, REQUIRES_SESSION);
+        addUi(map, TOOL_TERMINAL_SELECT_ALL,
+            "Select the whole terminal buffer, including scrollback.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_TERMINAL, R.string.tool_terminal_select_all,
+            R.string.tool_desc_terminal_select_all,
             null, REQUIRES_SESSION);
         addUi(map, TOOL_TERMINAL_HINTS,
             "Show keyboard labels for URLs, paths, hashes, and source line references in scrollback.",
@@ -696,33 +752,56 @@ public final class LauncherToolRegistry {
                 .withInteger("index", "Zero-based window index", 0, 64, 0, true)
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
-            CATEGORY_WINDOW, R.string.tool_window_select, 0, null, REQUIRES_SPLITS);
+            // The digit supplies the index, the same way it does for the session tool below.
+            CATEGORY_WINDOW, R.string.tool_window_select, 0, Arrays.asList(
+                Binding.of("ctrl+alt+1", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+2", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+3", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+4", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+5", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+6", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+7", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+8", BindingCondition.SPLITS_ON),
+                Binding.of("ctrl+alt+9", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
+        // The three rename tools name the three things the UI names, and nothing else:
+        // session.rename a drawer row, window.rename a window-bar tab, pane.rename one shell. The
+        // ids used to be rotated one step — window.rename renamed the session and session.rename
+        // renamed the shell — which made every stroke and every palette row read as a lie and left
+        // the window itself unnameable.
         addUi(map, TOOL_WINDOW_RENAME,
-            "Rename the current tmux-style session that holds the windows. Names are"
-                + " capped at 8 characters; an empty name clears the label.",
+            "Rename the current window, the tab it occupies in the window bar. Names are capped"
+                + " at 14 characters; an empty name restores the automatic process/directory label.",
+            schemaObject()
+                .withString("name",
+                    "New name, capped at 14 characters. Empty restores the automatic label.", true)
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, R.string.tool_window_rename, 0, null, REQUIRES_SPLITS);
+        addUi(map, TOOL_SESSION_RENAME,
+            "Rename the current session, the drawer row that holds the windows. Names are capped"
+                + " at 8 characters; an empty name clears the label.",
             schemaObject()
                 .withString("name",
                     "New name, capped at 8 characters. Empty clears the label.", true)
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
-            CATEGORY_WINDOW, R.string.tool_window_rename, 0, null, REQUIRES_SPLITS);
-        addUi(map, TOOL_SESSION_RENAME,
-            "Rename the focused shell session. An empty name restores the unnamed default.",
+            CATEGORY_SESSION, R.string.tool_session_rename, 0, null, REQUIRES_SPLITS);
+        addUi(map, TOOL_PANE_RENAME,
+            "Rename the focused pane's shell. An empty name restores the unnamed default.",
             schemaObject()
                 .withString("name",
-                    "New name for the shell session. Empty restores the default.", true)
+                    "New name for the shell. Empty restores the default.", true)
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
-            CATEGORY_SESSION, R.string.tool_session_rename, 0, null, REQUIRES_SESSION);
-        // A separate tool rather than an optional index on session.rename, because it renames a
-        // different object: the tmux-style session that owns the windows — what the palette's and
-        // the panel's session rows display — whereas session.rename renames the focused shell,
-        // which has its own naming rules and no cap.
+            CATEGORY_PANE, R.string.tool_pane_rename, 0, null, REQUIRES_SESSION);
+        // A separate tool rather than an optional index on session.rename, because it names a
+        // session the user is not currently in — the panel's and the palette's session rows can
+        // point at any of them.
         //
         // index is declared before name so a positional invocation
         // (`map … session.rename_at_index 1 work`) fills them in the order a reader expects.
         addUi(map, TOOL_SESSION_RENAME_AT_INDEX,
-            "Rename a tmux-style session by its zero-based index. Names are capped at 8"
+            "Rename a session by its zero-based index. Names are capped at 8"
                 + " characters; an empty name clears the label.",
             schemaObject()
                 .withInteger("index", "Zero-based session index", 0, 64, 0, true)
@@ -730,7 +809,7 @@ public final class LauncherToolRegistry {
                     "New name, capped at 8 characters. Empty clears the label.", true)
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
-            CATEGORY_SESSION, R.string.tool_session_rename_at_index, 0, null, REQUIRES_SESSION);
+            CATEGORY_SESSION, R.string.tool_session_rename_at_index, 0, null, REQUIRES_SPLITS);
         // Reset clears the emulator state and scrollback; the shell survives.
         // The space bar's north swipe opens this, but that lives in the keyboard layout file
         // as a tool: key rather than in a binding here — see bottom_row.xml.
@@ -778,30 +857,52 @@ public final class LauncherToolRegistry {
                 .withInteger("index", "Zero-based session index", 0, 64, 0, true)
                 .build(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
-            CATEGORY_SESSION, R.string.tool_session_activate_by_index, 0,
-            Binding.all("ctrl+alt+1", "ctrl+alt+2", "ctrl+alt+3", "ctrl+alt+4", "ctrl+alt+5",
-                "ctrl+alt+6", "ctrl+alt+7", "ctrl+alt+8", "ctrl+alt+9"));
-        // Prompt variants exist because Ctrl+Alt+R has always opened a dialog. The
-        // argument-taking window.rename / session.rename remain the remote path.
+            // Shifted digits with split panes on, where the plain digits pick a window inside the
+            // session; plain digits with them off, where there are no windows to pick.
+            CATEGORY_SESSION, R.string.tool_session_activate_by_index, 0, Arrays.asList(
+                Binding.of("ctrl+alt+shift+1"), Binding.of("ctrl+alt+shift+2"),
+                Binding.of("ctrl+alt+shift+3"), Binding.of("ctrl+alt+shift+4"),
+                Binding.of("ctrl+alt+shift+5"), Binding.of("ctrl+alt+shift+6"),
+                Binding.of("ctrl+alt+shift+7"), Binding.of("ctrl+alt+shift+8"),
+                Binding.of("ctrl+alt+shift+9"),
+                Binding.of("ctrl+alt+1", BindingCondition.SPLITS_OFF),
+                Binding.of("ctrl+alt+2", BindingCondition.SPLITS_OFF),
+                Binding.of("ctrl+alt+3", BindingCondition.SPLITS_OFF),
+                Binding.of("ctrl+alt+4", BindingCondition.SPLITS_OFF),
+                Binding.of("ctrl+alt+5", BindingCondition.SPLITS_OFF),
+                Binding.of("ctrl+alt+6", BindingCondition.SPLITS_OFF),
+                Binding.of("ctrl+alt+7", BindingCondition.SPLITS_OFF),
+                Binding.of("ctrl+alt+8", BindingCondition.SPLITS_OFF),
+                Binding.of("ctrl+alt+9", BindingCondition.SPLITS_OFF)));
+        // Prompt variants open the anchored rename editor; the argument-taking window.rename /
+        // session.rename / pane.rename remain the remote and scripted path.
         //
-        // Case is the split: Ctrl+Alt+r renames the window, Ctrl+Alt+R (shifted) renames the shell
-        // session, whatever the layout — so both renames are always reachable and the shifted one
-        // is not a synonym of the other. Ctrl+Alt+r keeps naming the session with splits off, where
-        // there is no window to rename and the stroke would otherwise be dead.
+        // Case is the split, and each case names a different thing rather than the same thing twice:
+        // Ctrl+Alt+r renames the window (the tab), Ctrl+Alt+R (shifted) renames the session (the
+        // drawer row). With splits off there is no window and no session, so Ctrl+Alt+r names the
+        // pane instead of being dead. The pane keeps no shifted stroke: renaming individual shells
+        // belongs to the palette and the drawer, and a third stroke here would be one nobody
+        // remembers.
         addUi(map, TOOL_WINDOW_RENAME_PROMPT,
-            "Ask for a new name for the current window session.",
+            "Open the rename editor for the current window.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_WINDOW, R.string.tool_window_rename_prompt, R.string.tool_desc_window_rename_prompt,
             Collections.singletonList(Binding.of("ctrl+alt+r", BindingCondition.SPLITS_ON)),
             REQUIRES_SPLITS);
         addUi(map, TOOL_SESSION_RENAME_PROMPT,
-            "Ask for a new name for the focused shell session.",
+            "Open the rename editor for the current session.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_SESSION, R.string.tool_session_rename_prompt, R.string.tool_desc_session_rename_prompt,
-            Arrays.asList(Binding.of("ctrl+alt+shift+r"),
-                Binding.of("ctrl+alt+r", BindingCondition.SPLITS_OFF)),
+            Collections.singletonList(Binding.of("ctrl+alt+shift+r", BindingCondition.SPLITS_ON)),
+            REQUIRES_SPLITS);
+        addUi(map, TOOL_PANE_RENAME_PROMPT,
+            "Open the rename editor for the focused pane's shell.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_PANE, R.string.tool_pane_rename_prompt, R.string.tool_desc_pane_rename_prompt,
+            Collections.singletonList(Binding.of("ctrl+alt+r", BindingCondition.SPLITS_OFF)),
             REQUIRES_SESSION);
 
         // Selection-dependent actions. Availability tracks the live selection, so

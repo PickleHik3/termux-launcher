@@ -31,7 +31,16 @@ public final class MaterialTerminalColorScheme {
 
     private MaterialTerminalColorScheme() {}
 
-    /** Build a palette for an explicit level; public so ratio and signature tests are deterministic. */
+    /**
+     * Build a palette for an explicit level; public so ratio and signature tests are deterministic.
+     *
+     * <p>Colour keys only. The result goes straight to
+     * {@code TerminalColors.COLOR_SCHEME.updateWith()}, which throws {@code IllegalArgumentException}
+     * on any key that is not {@code foreground} / {@code background} / {@code cursor} / {@code colorN}
+     * — mid-iteration over an unordered map, so a stray key leaves the palette half applied. The
+     * contrast level travels beside this palette, not inside it; see
+     * {@link #createMaterialRoleProperties}.
+     */
     @NonNull
     public static Properties create(@NonNull Context context, @NonNull TerminalContrastLevel level) {
         Properties props = new Properties();
@@ -61,7 +70,6 @@ public final class MaterialTerminalColorScheme {
         foreground = contrastTone(foreground, background, level.foregroundRatio);
         primary = contrastTone(primary, background, level.cursorRatio);
 
-        props.setProperty("contrast_level", level.value);
         props.setProperty("background", hex(background));
         props.setProperty("foreground", hex(foreground));
         props.setProperty("cursor", hex(primary));
@@ -98,10 +106,14 @@ public final class MaterialTerminalColorScheme {
      *
      * <p>The palette is passed in rather than rebuilt so the exported files describe exactly the colours
      * the terminal was given, and so the caller pays for one HCT search instead of two.
+     *
+     * <p>This is where {@code contrast_level} lives. It is a description of the palette, not a colour
+     * in it, so it is carried alongside the terminal properties rather than inside them.
      */
     @NonNull
     public static Properties createMaterialRoleProperties(@NonNull Context context,
-                                                          @NonNull Properties terminalProps) {
+                                                          @NonNull Properties terminalProps,
+                                                          @NonNull TerminalContrastLevel level) {
         Properties props = new Properties();
 
         putMaterialColor(props, "primary", context, com.google.android.material.R.attr.colorPrimary,
@@ -158,8 +170,7 @@ public final class MaterialTerminalColorScheme {
         putMaterialColor(props, "outline_variant", context, com.google.android.material.R.attr.colorOutlineVariant,
             R.color.termux_outline_variant);
 
-        props.setProperty("contrast_level", terminalProps.getProperty("contrast_level",
-            TerminalContrastLevel.DEFAULT.value));
+        props.setProperty("contrast_level", level.value);
         for (String key : terminalProps.stringPropertyNames()) {
             props.setProperty("terminal_" + key, terminalProps.getProperty(key));
         }

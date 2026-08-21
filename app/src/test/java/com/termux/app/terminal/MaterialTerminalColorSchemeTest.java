@@ -7,6 +7,7 @@ import android.os.Build;
 import androidx.test.core.app.ApplicationProvider;
 
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
+import com.termux.terminal.TerminalColorScheme;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -30,7 +31,6 @@ public class MaterialTerminalColorSchemeTest {
             Properties palette = MaterialTerminalColorScheme.create(
                 ApplicationProvider.getApplicationContext(), level);
             int background = color(palette, "background");
-            assertEquals(level.value, palette.getProperty("contrast_level"));
             assertTrue(MaterialTerminalColorScheme.contrastRatio(
                 color(palette, "foreground"), background) + .01 >= level.foregroundRatio);
             assertTrue(MaterialTerminalColorScheme.contrastRatio(
@@ -65,7 +65,8 @@ public class MaterialTerminalColorSchemeTest {
         Properties roles = MaterialTerminalColorScheme.createMaterialRoleProperties(
             ApplicationProvider.getApplicationContext(),
             MaterialTerminalColorScheme.create(
-                ApplicationProvider.getApplicationContext(), TerminalContrastLevel.DEFAULT));
+                ApplicationProvider.getApplicationContext(), TerminalContrastLevel.DEFAULT),
+            TerminalContrastLevel.DEFAULT);
         for (String container : new String[] {"primary", "secondary", "tertiary", "error",
                 "primary_container", "secondary_container", "tertiary_container",
                 "error_container"}) {
@@ -99,6 +100,41 @@ public class MaterialTerminalColorSchemeTest {
         // Stable for the same inputs, or every resume would look like a change.
         assertEquals(dflt, MaterialTerminalColorScheme.signature(
             ApplicationProvider.getApplicationContext(), TerminalContrastLevel.DEFAULT));
+    }
+
+    /**
+     * The generated palette goes straight into {@code TerminalColorScheme.updateWith()}, which throws
+     * on the first key it does not recognise — mid-iteration over an unordered map, so the palette is
+     * left half applied and the session reset behind it never runs. {@code contrast_level} used to be
+     * in here and threw on every single apply.
+     */
+    @Test
+    public void theGeneratedPaletteIsColourKeysOnly() {
+        for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+            Properties palette = MaterialTerminalColorScheme.create(
+                ApplicationProvider.getApplicationContext(), level);
+            for (String key : palette.stringPropertyNames()) {
+                boolean named = "foreground".equals(key) || "background".equals(key)
+                    || "cursor".equals(key);
+                assertTrue("non-colour key '" + key + "' at " + level.value,
+                    named || key.matches("color\\d+"));
+            }
+            // The real consumer, not a re-statement of the rule above.
+            new TerminalColorScheme().updateWith(palette);
+        }
+    }
+
+    /** The level still has to reach the exported role files; it just travels beside the palette now. */
+    @Test
+    public void theExportedRolesCarryTheContrastLevel() {
+        for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+            Properties roles = MaterialTerminalColorScheme.createMaterialRoleProperties(
+                ApplicationProvider.getApplicationContext(),
+                MaterialTerminalColorScheme.create(
+                    ApplicationProvider.getApplicationContext(), level),
+                level);
+            assertEquals(level.value, roles.getProperty("contrast_level"));
+        }
     }
 
     private static int color(Properties properties, String key) {

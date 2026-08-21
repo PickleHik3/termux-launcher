@@ -3,30 +3,20 @@
 <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
 <!ENTITY TERMUX_APP_NAME "Termux:Launcher">
 <!ENTITY TERMUX_API_APP_NAME "Termux:API">
-<!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
-<!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
 <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
-<!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
-<!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
 ]>
 <resources>
     <string name="extra_keys_command_hint">Wprowadź komendę…</string>
     <string name="msg_select_url_copied_to_clipboard">Adres URL skopiowany do schowka</string>
-    <string name="title_restore_background_image">Wykryto obraz tła. Czy chcesz je przywrócić\?</string>
     <string name="msg_disabling_terminal_toolbar">Pasek narzędzi został ukryty</string>
-    <string name="action_toggle_keep_screen_on">Nie wyłączaj ekranu</string>
     <string name="error_termux_service_start_failed_general">Nie udało się uruchomić usługi TermuxService. Sprawdź komunikat wyjątku w logcat.</string>
     <string name="action_reset_terminal">Resetuj</string>
-    <string name="action_open_help">Pomoc</string>
     <string name="action_create_named_session_confirm">Utwórz</string>
-    <string name="action_autofill_password">Autouzupełnij hasło</string>
     <string name="termux_soft_keyboard_enabled_title">Klawiatura ekranowa włączona</string>
     <string name="termux_debugging_preferences_title">Debugowanie</string>
     <string name="title_confirm_kill_process">Czy na pewno zakończyć sesję\?</string>
-    <string name="termux_terminal_io_preferences_title">Wejścia/Wyjścia terminala</string>
     <string name="notification_action_wake_lock">Uzyskaj wakelock</string>
     <string name="termux_debugging_preferences_summary">Preferencje dotyczące debugowania</string>
-    <string name="termux_preferences_summary">Preferencje dla aplikacji &TERMUX_APP_NAME;</string>
     <string name="bootstrap_error_title">Nie można zainstalować bootstrap</string>
     <string name="bootstrap_error_abort">Przerwij</string>
     <string name="bootstrap_installer_body">Instalowanie pakietów bootstrap…</string>
@@ -44,12 +34,10 @@
     <string name="notification_action_wake_unlock">Zwolnij wakelock</string>
     <string name="title_activity_termux_settings">Ustawienia &TERMUX_APP_NAME;</string>
     <string name="action_select_url">Wybierz adres URL</string>
-    <string name="action_share_selected_text">Udostępnij zaznaczony tekst</string>
     <string name="title_share_transcript">Zawartość terminala</string>
     <string name="termux_log_level_title">Poziom logowania</string>
     <string name="action_set_background_image">Ustaw obraz tła</string>
     <string name="title_share_selected_text_with">Wyślij zaznaczony tekst do:</string>
-    <string name="termux_terminal_io_preferences_summary">Preferencje dla wejść/wyjść terminala</string>
     <string name="msg_add_termux_debug_info">Dodać do raportu informacje debugowania\?</string>
     <string name="permission_run_command_label">Uruchom polecenia w środowisku &TERMUX_APP_NAME;</string>
     <string name="action_share_transcript">Udostępnij zawartość</string>
@@ -65,15 +53,11 @@
     <string name="title_create_named_session">Nowa nazwana sesja</string>
     <string name="title_select_url_none_found">Nie znaleziono adresu URL w terminalu.</string>
     <string name="action_file_received_edit">Edytuj</string>
-    <string name="error_background_image_loading_from_gallery_failed">Nie udało się wczytać obrazu. Wypróbuj inny obraz.</string>
-    <string name="action_font_and_color">Kolor i czcionka</string>
     <string name="title_file_received">Zapisz plik w ~/downloads/</string>
     <string name="permission_run_command_description">wykonywanie dowolnych poleceń w środowisku &TERMUX_APP_NAME; i uzyskiwanie dostępu do plików</string>
     <string name="title_share_selected_text">Tekst terminala</string>
-    <string name="error_background_image_loading_failed">Nie można wczytać obrazu tła. Ustawianie koloru tła.</string>
     <string name="notification_action_exit">Wyjdź</string>
     <string name="error_display_over_other_apps_permission_not_granted_to_start_terminal">&TERMUX_APP_NAME; wymaga uprawnienia \"Wyświetlanie nad innymi aplikacjami\" do uruchamiania sesji terminala w tle na Androidzie &gt;= 10. Przyznaj je w Ustawienia -&gt; Aplikacje -&gt; &TERMUX_APP_NAME; -&gt; Zaawansowane</string>
-    <string name="action_report_issue">Zgłoś błąd</string>
     <string name="bootstrap_error_installed_on_portable_sd">&TERMUX_APP_NAME; nie można zainstalować na przenośnej/zewnętrznej/wymiennej karcie SD w urządzeniu.
 \nPliki binarne Bootstrap skompilowane dla &TERMUX_APP_NAME; mają zakodowaną ścieżkę $PREFIX i nie mogą być zainstalowane pod żadną inną ścieżką niż:
 \n%1$s.</string>
@@ -82,17 +66,8 @@
 \n%1$s.</string>
     <string name="title_rename_session">Ustaw nazwę sesji</string>
     <string name="shared_user_label">Użytkownik &TERMUX_APP_NAME;</string>
-    <string name="error_styling_not_installed">Wtyczka &TERMUX_STYLING_APP_NAME; nie jest zainstalowana.</string>
-    <string name="action_styling_install">Zainstaluj</string>
     <string name="action_kill_process">Zakończ sesję (%d)</string>
-    <string name="about_preference_title">O aplikacji</string>
     <string name="termux_style_preferences_title">Wygląd &TERMUX_APP_NAME;</string>
-    <string name="termux_background_header">Tło</string>
-    <string name="termux_api_preferences_summary">Preferencje dla aplikacji &TERMUX_API_APP_NAME;</string>
-    <string name="termux_tasker_preferences_summary">Preferencje dla aplikacji &TERMUX_TASKER_APP_NAME;</string>
-    <string name="termux_float_preferences_summary">Preferencje dla aplikacji &TERMUX_FLOAT_APP_NAME;</string>
-    <string name="termux_terminal_view_preferences_title">Widok terminala</string>
     <string name="termux_terminal_view_view_header">Widok</string>
     <string name="donate_preference_title">Przekaż darowiznę</string>
-    <string name="termux_widget_preferences_summary">Preferencje dla aplikacji &TERMUX_WIDGET_APP_NAME;</string>
 </resources>

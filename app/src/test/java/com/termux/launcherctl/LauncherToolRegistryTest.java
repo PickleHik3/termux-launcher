@@ -49,7 +49,8 @@ public class LauncherToolRegistryTest {
             "window.next", "window.previous", "session.new", "session.next", "session.previous",
             "session.close_current", "session.browser", "session.panel", "session.clone_current",
             "pane.equalize", "pane.rotate", "pane.next_layout", "pane.toggle_float",
-            "terminal.toggle_scratchpad", "workspace.picker", "workspace.save_prompt"};
+            "terminal.toggle_scratchpad", "workspace.picker", "workspace.save_prompt",
+            "extrakeys.edit"};
         for (String name : terminalTools) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
             assertNotNull(name, tool);
@@ -57,8 +58,11 @@ public class LauncherToolRegistryTest {
             assertNotNull(name, tool.category);
             assertTrue(name, tool.hasUiMetadata());
         }
-        // Bumped from 58 by fonts.pick and fonts.install.
-        assertEquals(60, registry.getUiTools().size());
+        // Bumped from 60 by pane.rename and pane.rename_prompt, which split the shell rename out of
+        // session.rename when the rename vocabulary was straightened out, then by extrakeys.edit,
+        // the row editor's in-terminal entry, then by terminal.select_at_cursor and
+        // terminal.select_all, which gave selection an entry point outside a long-press.
+        assertEquals(65, registry.getUiTools().size());
     }
 
     @Test
@@ -89,20 +93,23 @@ public class LauncherToolRegistryTest {
         assertEquals(LauncherToolRegistry.BindingCondition.SPLITS_OFF,
             registry.getTool("clipboard.paste").defaultBindings.get(0).condition);
         assertEquals("ctrl+alt+v", registry.getTool("clipboard.paste").defaultBindings.get(0).stroke);
-        // Ctrl+Alt+r renames the window with splits on and the session with them off, while the
-        // shifted Ctrl+Alt+R always renames the session.
+        // Ctrl+Alt+r renames the window with splits on and the pane with them off; the shifted
+        // Ctrl+Alt+R renames the session. Each case names a different thing, so no two of the three
+        // rename prompts are ever synonyms.
         assertEquals(LauncherToolRegistry.BindingCondition.SPLITS_ON,
             registry.getTool("window.rename_prompt").defaultBindings.get(0).condition);
         assertEquals("ctrl+alt+r",
             registry.getTool("window.rename_prompt").defaultBindings.get(0).stroke);
         LauncherToolRegistry.ToolMetadata sessionRename = registry.getTool("session.rename_prompt");
-        assertEquals(2, sessionRename.defaultBindings.size());
+        assertEquals(1, sessionRename.defaultBindings.size());
         assertEquals("ctrl+alt+shift+r", sessionRename.defaultBindings.get(0).stroke);
-        assertEquals(LauncherToolRegistry.BindingCondition.ALWAYS,
+        assertEquals(LauncherToolRegistry.BindingCondition.SPLITS_ON,
             sessionRename.defaultBindings.get(0).condition);
-        assertEquals("ctrl+alt+r", sessionRename.defaultBindings.get(1).stroke);
+        LauncherToolRegistry.ToolMetadata paneRename = registry.getTool("pane.rename_prompt");
+        assertEquals(1, paneRename.defaultBindings.size());
+        assertEquals("ctrl+alt+r", paneRename.defaultBindings.get(0).stroke);
         assertEquals(LauncherToolRegistry.BindingCondition.SPLITS_OFF,
-            sessionRename.defaultBindings.get(1).condition);
+            paneRename.defaultBindings.get(0).condition);
     }
 
     @Test
@@ -113,6 +120,7 @@ public class LauncherToolRegistryTest {
             registry.getTool("app.command_palette").defaultBindings.get(1).stroke);
         assertNotNull(registry.getTool("window.rename_prompt"));
         assertNotNull(registry.getTool("session.rename_prompt"));
+        assertNotNull(registry.getTool("pane.rename_prompt"));
         // The argument-taking variants remain, for callers that know the name.
         assertNotNull(registry.getTool("window.rename").schema.optJSONArray("required"));
         assertNull(registry.getTool("window.rename_prompt").schema.optJSONArray("required"));
@@ -503,16 +511,25 @@ public class LauncherToolRegistryTest {
         assertEquals(4, registry.getTool("pane.resize").defaultBindings.size());
         // terminal.state has no keybind today.
         assertTrue(registry.getTool("terminal.state").defaultBindings.isEmpty());
-        // Session switching records its legacy letter plus the compatibility-mode arrow, the
-        // latter conditioned so it cannot lie. The space bar swipe is not here: swipes live in
-        // the keyboard layout file as tool: keys, not as strokes in this table.
+        // Session switching records its legacy letter plus the prefixed down arrow, which means
+        // the same thing in both modes now that pane focus sits on the unprefixed Ctrl+Arrow. The
+        // space bar swipe is not here: swipes live in the keyboard layout file as tool: keys, not
+        // as strokes in this table.
         assertEquals(2, registry.getTool("session.next").defaultBindings.size());
         assertEquals("ctrl+alt+n", registry.getTool("session.next").defaultBindings.get(0).stroke);
         assertEquals(LauncherToolRegistry.BindingCondition.ALWAYS,
             registry.getTool("session.next").defaultBindings.get(0).condition);
         assertEquals("ctrl+alt+down", registry.getTool("session.next").defaultBindings.get(1).stroke);
-        assertEquals(LauncherToolRegistry.BindingCondition.SPLITS_OFF,
+        assertEquals(LauncherToolRegistry.BindingCondition.ALWAYS,
             registry.getTool("session.next").defaultBindings.get(1).condition);
+        // The three navigation levels, each on its own chord: Ctrl+Arrow inside the window,
+        // prefixed arrows across windows and sessions, digits for direct picks.
+        for (LauncherToolRegistry.Binding binding
+                : registry.getTool("pane.focus_direction").defaultBindings)
+            assertTrue(binding.stroke, binding.stroke.startsWith("ctrl+")
+                && !binding.stroke.startsWith("ctrl+alt+"));
+        assertEquals(9, registry.getTool("window.select").defaultBindings.size());
+        assertEquals(18, registry.getTool("session.activate_by_index").defaultBindings.size());
         // No default binding anywhere names a keyboard gesture any more.
         for (LauncherToolRegistry.ToolMetadata tool : registry.getTools())
             for (LauncherToolRegistry.Binding binding : tool.defaultBindings)

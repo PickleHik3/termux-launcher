@@ -3,11 +3,7 @@
 <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
 <!ENTITY TERMUX_APP_NAME "Termux:Launcher">
 <!ENTITY TERMUX_API_APP_NAME "Termux:API">
-<!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
-<!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
 <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
-<!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
-<!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
 ]>
 <resources>
     <string name="shared_user_label">&TERMUX_APP_NAME; kullanıcı</string>
@@ -22,10 +18,7 @@
     <string name="title_share_selected_text_with">Seçilen metni şuraya gönder:</string>
     <string name="action_kill_process">İşlemi sonlandır (%d)</string>
     <string name="action_style_terminal">Tarzı düzenle</string>
-    <string name="action_font_and_color">Yazı tipi ve Renk</string>
-    <string name="action_toggle_keep_screen_on">Ekranı açık tut</string>
     <string name="msg_generating_report">Rapor oluşturuluyor</string>
-    <string name="error_styling_not_installed">&TERMUX_STYLING_APP_NAME; Eklenti uygulaması yüklü değil.</string>
     <string name="notification_action_exit">Çıkış</string>
     <string name="notification_action_wake_lock">Uyandırma kilidini açın</string>
     <string name="notification_action_wake_unlock">Uyandırma kilidini serbest bırak</string>
@@ -33,23 +26,16 @@
     <string name="error_run_command_service_invalid_execution_command_runner">RunCommandService için geçersiz yürütme komutu çalıştırıcısı: `%1$s`</string>
     <string name="title_file_received">Dosyayı ~/downloads/ dizinine kaydedin</string>
     <string name="action_file_received_edit">Düzenle</string>
-    <string name="error_background_image_loading_failed">Arka plan resmi yüklenemedi. Arka plan rengi ayarlanıyor.</string>
-    <string name="error_background_image_loading_from_gallery_failed">Resim yüklenemedi. Başka bir resim deneyin.</string>
     <string name="termux_debugging_preferences_title">Hata ayıklama</string>
     <string name="termux_log_level_title">Günlük seviyesi</string>
     <string name="termux_plugin_error_notifications_enabled_title">Eklenti Hata Bildirimleri</string>
     <string name="termux_crash_report_notifications_enabled_title">Çökme Raporu Bildirimleri</string>
     <string name="termux_crash_report_notifications_enabled_off">Çökme raporları için bildirimleri devre dışı bırakın.</string>
     <string name="termux_crash_report_notifications_enabled_on">Çökme raporları için bildirimleri göster. (Varsayılan)</string>
-    <string name="termux_terminal_io_preferences_title">Terminal Giriş/Çıkış</string>
     <string name="termux_keyboard_header">Klavye</string>
     <string name="termux_soft_keyboard_enabled_off">Klavye devre dışı bırakılacaktır.</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">Sanal klavye, yalnızca herhangi bir donanım klavyesi bağlı değilse etkinleştirilecektir.</string>
     <string name="termux_terminal_view_view_header">Görünüm</string>
-    <string name="termux_style_preferences_summary">&amp;TERMUX_APP_NAME için tercihler; görünüm ve özelleştirme</string>
-    <string name="termux_background_header">Arkaplan</string>
-    <string name="termux_background_image_enabled_on">Arkaplan resmi etkinleştirilecektir.</string>
-    <string name="termux_api_preferences_summary">&amp;TERMUX_API_APP_NAME için tercihler; uygulama</string>
     <string name="permission_run_command_description">&amp;TERMUX_APP_NAME içinde isteğe bağlı komutlar yürütün; ortam ve erişim dosyaları</string>
     <string name="bootstrap_error_title">Önyükleme paketleri yüklenemiyor</string>
     <string name="permission_run_command_label">&amp;TERMUX_APP_NAME içinde komutları çalıştırın; çevre</string>
@@ -68,7 +54,6 @@
 \n&amp;TERMUX_APP_NAME için derlenen önyükleme ikili dosyaları; sabit kodlu $PREFIX yoluna sahiptir ve aşağıdakilerden başka herhangi bir yol altına kurulamaz:
 \n%1$s.</string>
     <string name="title_rename_session">Oturum ismini ayarla</string>
-    <string name="action_autofill_password">Şifreyi otomatik doldur</string>
     <string name="msg_enabling_terminal_toolbar">Terminal Araç Çubuğunu Etkinleştiriliyor</string>
     <string name="title_select_url_none_found">Terminalde URL bulunamadı.</string>
     <string name="msg_disabling_terminal_toolbar">Terminal Araç Çubuğunu Devre dışı bırakılıyor</string>
@@ -76,14 +61,10 @@
     <string name="msg_select_url_copied_to_clipboard">URL panoya kopyalandı</string>
     <string name="title_select_url_dialog">Kopyalamak için URL\'ye tıklayın veya açmak için uzun basın</string>
     <string name="title_share_transcript">Terminal transkripti</string>
-    <string name="action_share_selected_text">Seçili metni paylaş</string>
     <string name="action_reset_terminal">Sıfırla</string>
-    <string name="action_open_help">Yardım</string>
     <string name="msg_terminal_reset">Terminali sıfırla</string>
     <string name="title_confirm_kill_process">Bu oturumu gerçekten sonlandırmak istiyor musunuz\?</string>
     <string name="action_open_settings">Ayarlar</string>
-    <string name="action_report_issue">Sorunu bildir</string>
-    <string name="action_styling_install">Yükle</string>
     <string name="action_set_background_image">Arka plan resmini ayarla</string>
     <string name="termux_terminal_view_key_logging_enabled_on">Logcat günlükleri, terminal görünüm anahtarları için girişlere sahip olacaktır. Bunlar çok ayrıntılıdır ve normal şartlar altında devre dışı bırakılmalıdır, aksi takdirde performans sorunlarına neden olabilir.</string>
     <string name="msg_add_termux_debug_info">Raporlanacak hata ayıklama bilgisini; &TERMUX_APP_NAME; \'e eklensin mi\?</string>
@@ -94,14 +75,12 @@
     <string name="error_run_command_service_mandatory_extra_missing">RunCommandService için zorunlu ekstra eksik: \"%1$s\"</string>
     <string name="error_termux_service_execution_command_shell_name_unset">Kabuk adı ayarlanmadı ancak `%1$s` kabuk oluşturma modu geçildi</string>
     <string name="error_run_command_service_invalid_intent_action">RunCommandService için geçersiz eylem: `%1$s`</string>
-    <string name="title_restore_background_image">Arka plan resmi algılandı. Geri yüklemek istiyor musunuz\?</string>
     <string name="error_run_command_service_api_help">RUN_COMMAND kullanımı hakkında daha fazla bilgi için %1$s adresini ziyaret edin.</string>
     <string name="title_activity_termux_settings">&TERMUX_APP_NAME; Ayarlar</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_off">Terminal kenar boşluğu ayarı devre dışı bırakılacak.</string>
     <string name="error_termux_service_start_failed_general">TermuxService başlatılamadı. Hata mesajı için logcat\'i kontrol edin.</string>
     <string name="error_termux_service_start_failed_bg">Android arka plan kısıtlamaları nedeniyle uygulama arka plandayken TermuxService başlatılamadı.</string>
     <string name="termux_debugging_preferences_summary">Hata ayıklama için tercihler</string>
-    <string name="termux_preferences_summary">&amp;TERMUX_APP_NAME için tercihler; uygulama</string>
     <string name="termux_terminal_view_key_logging_enabled_title">Terminal Görünüm Anahtarı Günlükleme</string>
     <string name="termux_logging_header">Günlükleme</string>
     <string name="termux_soft_keyboard_enabled_title">Klavye Etkin</string>
@@ -109,22 +88,13 @@
     <string name="termux_plugin_error_notifications_enabled_off">Eklenti hataları için flaşları ve bildirimleri devre dışı bırakın.</string>
     <string name="termux_plugin_error_notifications_enabled_on">Eklenti hataları için flaşları ve bildirimleri göster. (Varsayılan)</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Eğer Yalnızca Donanım Yoksa Sanal Klavye Etkin</string>
-    <string name="termux_terminal_io_preferences_summary">Terminal Giriş/Çıkış için tercihler</string>
     <string name="termux_soft_keyboard_enabled_on">Klavye etkinleştirilecektir. (Varsayılan)</string>
-    <string name="termux_terminal_view_preferences_title">Terminal Görünümü</string>
     <string name="termux_terminal_view_activity_remove_title">Son uygulamalarda kalmasını engelle</string>
     <string name="termux_terminal_view_activity_remove_off">Tüm terminal oturumları kapatıldığında, &TERMUX_APP_NAME; kapanacak ve son uygulamalarda görünür kalacaktır.</string>
     <string name="termux_terminal_view_activity_remove_on">&TERMUX_APP_NAME; etkin terminal oturumu yoksa kapanacak ve kendisini son uygulamalardan kaldıracaktır. (Varsayılan)</string>
     <string name="termux_style_preferences_title">&TERMUX_APP_NAME; Görünüm</string>
-    <string name="termux_background_image_enabled_title">Arkaplan resmini görüntüle</string>
-    <string name="termux_float_preferences_summary">&amp;TERMUX_FLOAT_APP_NAME için tercihler; uygulama</string>
-    <string name="termux_background_image_enabled_off">Arka plan resmi devre dışı bırakılacak. Etkinleştirmek için uygun dikey ve yatay dosyaların bulunduğundan emin olun. Yeni bir arka plan ayarlamak istiyorsanız, Terminal\'e uzun tıklayarak bağlam menüsünden ayarlayın. (Varsayılan)</string>
     <string name="donate_preference_title">Bağış Yap</string>
-    <string name="termux_tasker_preferences_summary">&amp;TERMUX_TASKER_APP_NAME için tercihler; uygulama</string>
-    <string name="termux_widget_preferences_summary">&amp;TERMUX_WIDGET_APP_NAME için tercihler;uygulama</string>
-    <string name="about_preference_title">Hakkında</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Donanım klavyesi bağlı olsa bile sanal klavye etkinleştirilecektir. (Varsayılan)</string>
-    <string name="termux_terminal_view_preferences_summary">Terminal Görünümü için tercihler</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_title">Terminal Kenar Boşluğu Ayarı</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_on">Terminal kenar boşluğu ayarı etkinleştirilecektir. Sanal klavyenin ekstra tuşların/terminal görünümünün bir bölümünü kapladığı sorunu düzeltmeye çalışmak için etkinleştirilmelidir. Cihazlarınızda ekran titremesine neden oluyorsa, devre dışı bırakın. (Varsayılan)</string>
 </resources>

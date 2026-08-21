@@ -11,11 +11,17 @@ replaced without warning.
 |---|---|---|
 | `~/.termux/termux-launcher-bindings.conf` | yes, if absent | Key bindings, chords, modal keymaps, launching Android apps from a chord |
 | `~/.termux/fonts.conf` | yes, if absent | Terminal faces, symbol maps, fallback chain, ligatures, OpenType features, variable axes, box drawing, cell metrics |
+| `~/.termux/termux.properties` | yes, if absent | `TERM`, volume and back keys, extra keys, cursor, scrollback, margins, colours, app behaviour |
 | `~/.termux/keyboard/layout.xml` | no — copy it yourself | In-app keyboard layout, including the space bar's swipe slots |
 
-The two seeded files arrive with every directive commented out, so a fresh
+The three seeded files arrive with every directive commented out, so a fresh
 install behaves exactly as it did before they existed. Uncomment what you want.
 They are written only when missing, so your edits survive app updates.
+
+`termux.properties` has one extra rule: only one properties file is ever read.
+`~/.termux/termux.properties` wins and `~/.config/termux/termux.properties` is
+read only when it is absent — so if you already keep yours at that second path,
+the app leaves it alone and seeds nothing.
 
 ## Fonts: three tiers
 
@@ -47,7 +53,9 @@ the bundled keyboard layout, so creating it should be your decision.
 
     termux-reload-settings
 
-No app restart is needed for any of the three files.
+No app restart is needed for any of these files. One caveat: a running terminal
+session keeps the environment it started with, so `terminal-term` reaches only
+sessions opened after the reload.
 
 ## Full web guides
 
@@ -60,6 +68,7 @@ No app restart is needed for any of the three files.
 
     cp ~/.termux/launcher/examples/fonts.conf ~/.termux/fonts.conf
     cp ~/.termux/launcher/examples/termux-launcher-bindings.conf ~/.termux/
+    cp ~/.termux/launcher/examples/termux.properties ~/.termux/
 
 ## Launching Android apps from the keyboard
 

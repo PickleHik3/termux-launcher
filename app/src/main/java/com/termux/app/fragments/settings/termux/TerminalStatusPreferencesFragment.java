@@ -9,7 +9,6 @@ import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.Keep;
 import androidx.annotation.Nullable;
@@ -17,9 +16,11 @@ import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
 import androidx.preference.Preference;
 
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
+import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
 import com.termux.app.statusbar.EssentialNotificationRule;
@@ -39,6 +40,21 @@ public final class TerminalStatusPreferencesFragment extends MaterialPreferenceF
         manager.setPreferenceDataStore(new TerminalStatusDataStore(context));
         setPreferencesFromResource(R.xml.terminal_status_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
+        SegmentedPillPreference alignment = findPreference("top_pane_clock_alignment");
+        if (alignment != null) alignment.setSegments(
+            new String[]{
+                com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                    .TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_LEFT,
+                com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                    .TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_CENTER,
+                com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                    .TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_RIGHT},
+            new int[]{
+                R.string.settings_clock_alignment_left,
+                R.string.settings_clock_alignment_center,
+                R.string.settings_clock_alignment_right});
+        StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_cpu"));
+        StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_ram"));
         Preference customize = findPreference("customize_status_surface");
         if (customize != null) customize.setOnPreferenceClickListener(preference -> {
             openSurfaceEditor(context, "status");
@@ -110,16 +126,14 @@ public final class TerminalStatusPreferencesFragment extends MaterialPreferenceF
                     String pkg = packageInput.getText().toString().trim();
                     String keywords = keywordsInput.getText().toString().trim();
                     if (pkg.isEmpty() && keywords.isEmpty()) {
-                        Toast.makeText(context, R.string.essential_rules_needs_field,
-                            Toast.LENGTH_SHORT).show();
+                        AppNotice.show(context, R.string.essential_rules_needs_field, false);
                         return;
                     }
                     EssentialNotificationRule rule = new EssentialNotificationRule(
                         EssentialNotificationRules.deriveId(pkg, keywords), pkg, keywords,
                         clearCheckbox.isChecked());
                     if (EssentialNotificationRules.add(preferences, rule) == null) {
-                        Toast.makeText(context, R.string.essential_rules_full,
-                            Toast.LENGTH_SHORT).show();
+                        AppNotice.show(context, R.string.essential_rules_full, false);
                         return;
                     }
                     LauncherCtlNotificationListener.requestPinnedRefresh();

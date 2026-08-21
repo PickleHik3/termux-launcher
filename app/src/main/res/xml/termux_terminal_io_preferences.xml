@@ -47,13 +47,13 @@
             app:key="status_widget_cpu"
             app:title="@string/termux_status_widget_cpu_title"
             app:summary="@string/termux_status_widget_cpu_summary"
-            app:defaultValue="true" />
+            app:defaultValue="false" />
 
         <SwitchPreferenceCompat
             app:key="status_widget_ram"
             app:title="@string/termux_status_widget_ram_title"
             app:summary="@string/termux_status_widget_ram_summary"
-            app:defaultValue="true" />
+            app:defaultValue="false" />
 
         <SwitchPreferenceCompat
             app:key="status_widget_weather"

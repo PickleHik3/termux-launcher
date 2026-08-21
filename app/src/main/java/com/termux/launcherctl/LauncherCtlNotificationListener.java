@@ -26,6 +26,7 @@ import com.termux.app.statusbar.TopPaneFeed;
 import com.termux.app.statusbar.TopPaneMediaState;
 import com.termux.app.statusbar.TopPaneSlotMode;
 import com.termux.shared.logger.Logger;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -124,7 +125,7 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         persistPosted(sbn);
         refreshNowPlaying();
         rebuildPinnedNotifications();
-        syncTopPaneMedia();
+        publishTopPaneMedia();
     }
 
     @Override
@@ -134,7 +135,7 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         persistPosted(sbn);
         refreshNowPlaying();
         rebuildPinnedNotifications();
-        syncTopPaneMedia();
+        publishTopPaneMedia();
     }
 
     @Override
@@ -147,7 +148,7 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         persistRemoved(sbn);
         refreshNowPlaying();
         rebuildPinnedNotifications();
-        syncTopPaneMedia();
+        publishTopPaneMedia();
     }
 
     @Override
@@ -264,8 +265,27 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         }
     }
 
+    /**
+     * Whether the user asked for notification contents to be written to disk.
+     *
+     * <p>Notification access alone does not authorise this: it is granted for dots, the status bar
+     * and the top pane, which read notifications in memory and forget them. History persists them
+     * under the Termux home, where anything running as the app UID -- any package installed in the
+     * shell, any script a user pastes -- can read message bodies and one-time codes long after the
+     * notification itself is gone.
+     */
+    private boolean isHistoryEnabled() {
+        try {
+            TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(this);
+            return preferences != null && preferences.isAppLauncherNotificationHistoryEnabled();
+        } catch (Exception e) {
+            Logger.logErrorExtended(LOG_TAG, "Failed to read notification history preference: " + e.getMessage());
+            return false;
+        }
+    }
+
     private void persistPosted(StatusBarNotification sbn) {
-        if (sbn == null || sbn.getNotification() == null) {
+        if (sbn == null || sbn.getNotification() == null || !isHistoryEnabled()) {
             return;
         }
         try {
@@ -276,7 +296,7 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
     }
 
     private void persistRemoved(StatusBarNotification sbn) {
-        if (sbn == null || sbn.getNotification() == null) {
+        if (sbn == null || sbn.getNotification() == null || !isHistoryEnabled()) {
             return;
         }
         try {
@@ -310,24 +330,28 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         return value == null ? null : value.toString();
     }
 
+    /**
+     * Reads the session this listener already holds rather than enumerating sessions again.
+     *
+     * <p>Every {@link MediaSessionManager#getActiveSessions} call mints a fresh
+     * {@link MediaController} per active session, and each one registers a binder death recipient
+     * that only unwinds when the object is finalized. This ran on every notification posted and
+     * removed — twice, with {@link #syncTopPaneMedia()} — so a chatty notification (a download, a
+     * player's progress) walked the process's death-recipient count up by dozens a minute forever.
+     * The active-sessions listener and {@link #mMediaCallback} already tell us when the session or
+     * its metadata changes, so nothing here has to ask the system again.
+     */
     private void refreshNowPlaying() {
         JSONObject current = null;
         JSONObject currentArt = null;
-        try {
-            MediaSessionManager mediaSessionManager = (MediaSessionManager) getSystemService(MEDIA_SESSION_SERVICE);
-            if (mediaSessionManager != null) {
-                List<MediaController> sessions =
-                    mediaSessionManager.getActiveSessions(new ComponentName(this, LauncherCtlNotificationListener.class));
-                MediaController selected = selectController(sessions);
-                if (selected != null) {
-                    current = toNowPlayingJson(selected);
-                    currentArt = toNowPlayingArtJson(selected);
-                }
+        MediaController controller = mTopPaneController;
+        if (controller != null) {
+            try {
+                current = toNowPlayingJson(controller);
+                currentArt = toNowPlayingArtJson(controller);
+            } catch (Exception e) {
+                Logger.logErrorExtended(LOG_TAG, "Failed to read media session: " + e.getMessage());
             }
-        } catch (SecurityException e) {
-            Logger.logWarn(LOG_TAG, "Media sessions unavailable without notification listener access");
-        } catch (Exception e) {
-            Logger.logErrorExtended(LOG_TAG, "Failed to refresh media sessions: " + e.getMessage());
         }
         nowPlaying = current;
         nowPlayingArt = currentArt;
@@ -580,6 +604,9 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
     }
 
     private void publishTopPaneMedia() {
+        // Single funnel: the API's now-playing JSON is cut from the same controller this publishes,
+        // so a metadata change with no notification behind it cannot leave the JSON stale.
+        refreshNowPlaying();
         MediaController controller = mTopPaneController;
         if (controller == null) {
             TopPaneFeed.setMedia(null);

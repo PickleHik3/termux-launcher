@@ -8,6 +8,7 @@ import org.robolectric.RobolectricTestRunner;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
@@ -100,6 +101,38 @@ public class TerminalBindingConfigTest {
         assertEquals(3, result.errors.size());
         assertEquals(1, result.mappings.size());
         assertEquals("ctrl+alt+z", result.mappings.get(0).sequence);
+    }
+
+    @Test
+    public void labelNamesTheBindingAndTheFirstOneWins() {
+        TerminalBindingConfig.Result result = TerminalBindingConfig.parse(
+            "map --label WhatsApp ctrl+alt+w app.launch com.whatsapp\n"
+                + "map --label=\"Work mail\" ctrl+alt+m app.launch com.mail\n"
+                + "map ctrl+alt+j send-text \"cd ~/src\\n\"\n"
+                + "map --label Repo ctrl+alt+j send-text \"git status\\n\"\n"
+                + "map --label Ignored ctrl+alt+j send-text \"git log\\n\"\n",
+            registry, true);
+
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+        assertEquals(3, result.mappings.size());
+        assertEquals("WhatsApp", result.mappings.get(0).label);
+        assertEquals("Work mail", result.mappings.get(1).label);
+        // One binding of three actions, named by the first line that named it.
+        assertEquals(3, result.mappings.get(2).actions.size());
+        assertEquals("Repo", result.mappings.get(2).label);
+    }
+
+    @Test
+    public void anUnlabelledMappingHasNoLabelAndAnUnusableOneIsRefused() {
+        TerminalBindingConfig.Result result = TerminalBindingConfig.parse(
+            "map ctrl+alt+w app.launch com.whatsapp\n"
+                + "map --label \"\" ctrl+alt+m app.launch com.mail\n"
+                + "map --label 012345678901234567890123456789012 ctrl+alt+t app.launch com.chat\n",
+            registry, true);
+
+        assertEquals(2, result.errors.size());
+        assertEquals(1, result.mappings.size());
+        assertNull(result.mappings.get(0).label);
     }
 
     @Test

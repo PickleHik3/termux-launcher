@@ -177,7 +177,7 @@ public class TerminalBindingConfigWriterTest {
         String stableId = "com.mail/.Main#userSerial=10";
         TerminalBindingConfigWriter.Edit edit = TerminalBindingConfigWriter.putMapping(
             Collections.<String>emptyList(), "ctrl+alt+m",
-            LauncherToolRegistry.TOOL_APP_LAUNCH, Collections.singletonList(stableId));
+            LauncherToolRegistry.TOOL_APP_LAUNCH, Collections.singletonList(stableId), null);
         assertTrue(edit.error, edit.ok());
 
         StringBuilder file = new StringBuilder();
@@ -192,6 +192,59 @@ public class TerminalBindingConfigWriterTest {
         assertEquals(1, mapping.actions.size());
         assertEquals(LauncherToolRegistry.TOOL_APP_LAUNCH, mapping.actions.get(0).value);
         assertEquals(stableId, mapping.actions.get(0).arguments.optString("query"));
+    }
+
+    @Test
+    public void aWrittenLabelParsesBackAsTheBindingsDisplayName() {
+        TerminalBindingConfigWriter.Edit edit = TerminalBindingConfigWriter.putMapping(
+            Collections.<String>emptyList(), "ctrl+alt+w",
+            LauncherToolRegistry.TOOL_APP_LAUNCH, Collections.singletonList(FIREFOX),
+            "Firefox Nightly");
+        assertTrue(edit.error, edit.ok());
+        assertEquals("map --label \"Firefox Nightly\" ctrl+alt+w app.launch " + FIREFOX,
+            edit.lines.get(edit.index));
+
+        StringBuilder file = new StringBuilder();
+        for (String line : edit.lines) file.append(line).append('\n');
+        TerminalBindingConfig.Result parsed = TerminalBindingConfig.parse(file.toString(),
+            LauncherToolRegistry.getInstance(), true);
+
+        assertTrue(parsed.errors.toString(), parsed.errors.isEmpty());
+        assertEquals("Firefox Nightly", parsed.mappings.get(0).label);
+        assertEquals("ctrl+alt+w", parsed.mappings.get(0).sequence);
+    }
+
+    @Test
+    public void aLabelTooLongForTheParserIsTrimmedRatherThanWrittenOut() {
+        String tooLong = "An app name far past the legend column width";
+        TerminalBindingConfigWriter.Edit edit = TerminalBindingConfigWriter.putMapping(
+            Collections.<String>emptyList(), "ctrl+alt+w",
+            LauncherToolRegistry.TOOL_APP_LAUNCH, Collections.singletonList(FIREFOX), tooLong);
+
+        StringBuilder file = new StringBuilder();
+        for (String line : edit.lines) file.append(line).append('\n');
+        TerminalBindingConfig.Result parsed = TerminalBindingConfig.parse(file.toString(),
+            LauncherToolRegistry.getInstance(), true);
+
+        assertTrue(parsed.errors.toString(), parsed.errors.isEmpty());
+        assertEquals(tooLong.substring(0, TerminalBindingConfig.MAX_LABEL_CHARS).trim(),
+            parsed.mappings.get(0).label);
+    }
+
+    @Test
+    public void aLabelledLineIsStillReplacedInPlace() {
+        List<String> original = Arrays.asList(
+            "# comment",
+            "map --label WhatsApp ctrl+alt+w app.launch com.whatsapp");
+
+        TerminalBindingConfigWriter.Edit edit = TerminalBindingConfigWriter.putMapping(
+            original, "ctrl+alt+w", LauncherToolRegistry.TOOL_APP_LAUNCH,
+            Collections.singletonList(FIREFOX), "Firefox");
+
+        assertTrue(edit.error, edit.ok());
+        assertTrue(edit.replaced);
+        assertEquals(Arrays.asList("# comment",
+            "map --label Firefox ctrl+alt+w app.launch " + FIREFOX), edit.lines);
     }
 
     @Test
@@ -231,6 +284,6 @@ public class TerminalBindingConfigWriterTest {
 
     private static TerminalBindingConfigWriter.Edit bind(List<String> lines, String sequence) {
         return TerminalBindingConfigWriter.putMapping(lines, sequence,
-            LauncherToolRegistry.TOOL_APP_LAUNCH, Collections.singletonList(FIREFOX));
+            LauncherToolRegistry.TOOL_APP_LAUNCH, Collections.singletonList(FIREFOX), null);
     }
 }

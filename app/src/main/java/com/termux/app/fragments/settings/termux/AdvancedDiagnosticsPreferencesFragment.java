@@ -8,7 +8,6 @@ import android.os.Bundle;
 import android.widget.Toast;
 
 import androidx.annotation.Keep;
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.preference.ListPreference;
 import androidx.preference.Preference;
@@ -17,10 +16,10 @@ import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
-import com.termux.app.models.UserAction;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.shared.activities.ReportActivity;
 import com.termux.shared.android.AndroidUtils;
@@ -81,7 +80,7 @@ public final class AdvancedDiagnosticsPreferencesFragment extends MaterialPrefer
         click("copy_diagnostics", preference -> {
             ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
             if (clipboard != null) clipboard.setPrimaryClip(ClipData.newPlainText("Termux Launcher diagnostics", buildDiagnostics(context)));
-            Toast.makeText(context, R.string.settings_diagnostics_copied, Toast.LENGTH_SHORT).show();
+            AppNotice.show(context, R.string.settings_diagnostics_copied, false);
             return true;
         });
         click("export_logs", preference -> { exportLogs(context); return true; });
@@ -131,7 +130,7 @@ public final class AdvancedDiagnosticsPreferencesFragment extends MaterialPrefer
     }
 
     private void uiToast(Context context, int message) {
-        if (isAdded() && getActivity() != null) getActivity().runOnUiThread(() -> Toast.makeText(context, message, Toast.LENGTH_SHORT).show());
+        if (isAdded() && getActivity() != null) getActivity().runOnUiThread(() -> AppNotice.show(context, message, false));
     }
 
     private static final class AdvancedDataStore extends PreferenceDataStore {

@@ -179,6 +179,17 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     }
 
     @Test
+    public void matchAllSurfacesOutranksAnEditedKeyboardBackground() {
+        // An edited scheme or a moved opacity slider owns the keyboard surface on its own...
+        assertTrue(TermuxActivity.hasInAppKeyboardBackgroundOverride(false, 0xFF203040, 100));
+        assertTrue(TermuxActivity.hasInAppKeyboardBackgroundOverride(false, null, 60));
+        assertFalse(TermuxActivity.hasInAppKeyboardBackgroundOverride(false, null, 100));
+        // ...but not while surfaces are normalized, which is what left the keyboard lighter than
+        // every other surface until the keyboard section was reset by hand.
+        assertFalse(TermuxActivity.hasInAppKeyboardBackgroundOverride(true, 0xFF203040, 60));
+    }
+
+    @Test
     public void blurredUnifiedKeyboardRevealWaitsOnlyForDestinationBackdrop() {
         assertTrue(TermuxActivity.shouldDeferInAppKeyboardReveal(
             true, true, true, false));
@@ -277,6 +288,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     public void rootCappedKeyboardStaysExactInsideShorterAccessoryStackWithoutTopGap() {
         TermuxAppSharedPreferences preferences = prepareActivity(true);
         preferences.setShowTerminalToolbar(true);
+        preferences.setAppLauncherExtraKeysRowEnabled(true);
         preferences.setAppLauncherAppsRowEnabled(true);
         preferences.setAppLauncherAzRowEnabled(false);
         preferences.setTerminalFlushDockEnabled(false);
@@ -314,6 +326,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     public void keyboardAndDockCombinedHeightDefinesTerminalBounds() {
         TermuxAppSharedPreferences preferences = prepareActivity(true);
         preferences.setShowTerminalToolbar(true);
+        preferences.setAppLauncherExtraKeysRowEnabled(true);
         preferences.setAppLauncherAppsRowEnabled(true);
         preferences.setAppLauncherAzRowEnabled(false);
         preferences.setTerminalFlushDockEnabled(true);
@@ -496,6 +509,8 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         preferences.setInAppKeyboardEnabled(keyboardEnabled);
         preferences.setShowTerminalToolbar(false);
         preferences.setAppLauncherAppsRowEnabled(false);
+        preferences.setAppLauncherAzRowEnabled(false);
+        preferences.setAppLauncherExtraKeysRowEnabled(false);
         preferences.setTerminalFlushDockEnabled(false);
 
         // Production creates this dynamically through TerminalPaneController during onCreate.

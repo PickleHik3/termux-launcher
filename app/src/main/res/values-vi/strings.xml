@@ -3,12 +3,7 @@
 <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
 <!ENTITY TERMUX_APP_NAME "Termux:Launcher">
 <!ENTITY TERMUX_API_APP_NAME "Termux:API">
-<!ENTITY TERMUX_GUI_APP_NAME "Termux:GUI">
-<!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
-<!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
 <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
-<!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
-<!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
 ]>
 <resources>
     <string name="title_rename_session">Đặt tên phiên</string>
@@ -44,22 +39,16 @@
     <string name="action_share_transcript">Chia sẻ bản ghi</string>
     <string name="title_share_transcript">Bảng điểm cuối cùng</string>
     <string name="title_share_transcript_with">Gửi bản ghi tới:</string>
-    <string name="action_share_selected_text">Chia sẻ văn bản đã chọn</string>
     <string name="title_share_selected_text_with">Gửi văn bản đã chọn tới:</string>
-    <string name="action_autofill_password">Tự động điền mật khẩu</string>
     <string name="action_reset_terminal">Đặt lại</string>
     <string name="msg_terminal_reset">Đặt lại thiết bị đầu cuối</string>
     <string name="action_kill_process">Dừng phiên (%d)</string>
     <string name="title_confirm_kill_process">Bạn muốn dừng phiên này?</string>
     <string name="action_style_terminal">Kiểu</string>
-    <string name="action_font_and_color">Màu và phông chữ</string>
     <string name="action_set_background_image">Đặt hình nền</string>
-    <string name="action_open_help">Trợ giúp</string>
     <string name="action_open_settings">Cài đặt</string>
-    <string name="action_report_issue">Báo cáo lỗi</string>
     <string name="msg_generating_report">Tạo báo cáo</string>
     <string name="msg_add_termux_debug_info">Thêm &TERMUX_APP_NAME; thông tin gỡ lỗi để báo cáo?</string>
-    <string name="action_styling_install">Cài đặt</string>
     <string name="notification_action_exit">Thoát</string>
     <string name="notification_action_wake_lock">Nhận khóa chế độ thức</string>
     <string name="notification_action_wake_unlock">Giải phóng khóa chế độ thức</string>
@@ -71,12 +60,9 @@
     <string name="error_run_command_service_api_help">Truy cập %1$s để biết thêm thông tin về cách sử dụng RUN_COMMAND Intent.</string>
     <string name="action_file_received_edit">Chỉnh sửa</string>
     <string name="action_file_received_open_directory">Mở thư mục</string>
-    <string name="error_background_image_loading_failed">Không thể tải hình nền. Đặt màu nền.</string>
-    <string name="error_background_image_loading_from_gallery_failed">Không thể tải hình ảnh. Hãy thử một hình ảnh khác.</string>
     <string name="error_termux_service_start_failed_general">Không khởi động được TermuxService. Kiểm tra logcat để biết thông báo ngoại lệ.</string>
     <string name="error_termux_service_start_failed_bg">Không thể khởi động TermuxService khi ứng dụng ở chế độ nền do các hạn chế về nền của Android.</string>
     <string name="title_activity_termux_settings">&TERMUX_APP_NAME; Cài đặt</string>
-    <string name="termux_preferences_summary">Tùy chọn cho &TERMUX_APP_NAME; ứng dụng</string>
     <string name="termux_debugging_preferences_title">Đang sửa lỗi</string>
     <string name="termux_debugging_preferences_summary">Tùy chọn gỡ lỗi</string>
     <string name="termux_logging_header">Ghi nhật ký</string>
@@ -86,28 +72,13 @@
     <string name="termux_plugin_error_notifications_enabled_title">Thông báo lỗi plugin</string>
     <string name="termux_plugin_error_notifications_enabled_off">Tắt đèn flash và thông báo lỗi plugin.</string>
     <string name="termux_crash_report_notifications_enabled_off">Tắt thông báo cho các báo cáo sự cố.</string>
-    <string name="termux_terminal_io_preferences_summary">Tùy chọn cho thiết bị đầu cuối I/O</string>
     <string name="termux_keyboard_header">Bàn phím</string>
-    <string name="termux_terminal_view_preferences_title">Chế độ xem thiết bị đầu cuối</string>
-    <string name="termux_terminal_view_preferences_summary">Tùy chọn cho chế độ xem thiết bị đầu cuối</string>
-    <string name="termux_terminal_io_preferences_title">Đầu cuối I/O</string>
     <string name="termux_soft_keyboard_enabled_off">Bàn phím mềm sẽ bị tắt.</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Bàn phím mềm chỉ khi không có phần cứng</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Bàn phím mềm sẽ được bật ngay cả khi bàn phím cứng được kết nối. (Mặc định)</string>
     <string name="termux_style_preferences_title">&TERMUX_APP_NAME; Vẻ bề ngoài</string>
-    <string name="termux_style_preferences_summary">Tùy chọn cho &TERMUX_APP_NAME; sự xuất hiện và tùy biến</string>
-    <string name="termux_background_header">Nền</string>
-    <string name="termux_background_image_enabled_title">Hiển thị hình nền</string>
-    <string name="termux_background_image_enabled_off">Hình nền sẽ bị vô hiệu hóa. Để kích hoạt nó, hãy đảm bảo rằng có các tệp dọc và ngang thích hợp. Nếu bạn muốn đặt nền mới, hãy đặt nền đó từ menu ngữ cảnh bằng cách nhấp chuột dài vào Terminal. (Mặc định)</string>
-    <string name="termux_background_image_enabled_on">Hình nền sẽ được kích hoạt.</string>
-    <string name="termux_float_preferences_summary">Tùy chọn cho &TERMUX_FLOAT_APP_NAME; ứng dụng</string>
-    <string name="termux_tasker_preferences_summary">Tùy chọn cho &TERMUX_TASKER_APP_NAME; ứng dụng</string>
-    <string name="termux_widget_preferences_summary">Tùy chọn cho &TERMUX_WIDGET_APP_NAME; ứng dụng</string>
-    <string name="about_preference_title">Thông tin về chúng tôi</string>
     <string name="donate_preference_title">Donate</string>
     <string name="title_share_selected_text">Văn bản đầu cuối</string>
-    <string name="action_toggle_keep_screen_on">Giữ màn hình bật</string>
-    <string name="error_styling_not_installed">&TERMUX_STYLING_APP_NAME; Ứng dụng plugin chưa được cài đặt.</string>
     <string name="error_display_over_other_apps_permission_not_granted_to_start_terminal">&TERMUX_APP_NAME; yêu cầu quyền \"Hiển thị trên các ứng dụng khác\" để bắt đầu các phiên cuối từ nền trên Android &gt;= 10. Cấp quyền này từ Cài đặt -&gt; Ứng dụng -&gt; &TERMUX_APP_NAME; -&gt; Trình độ cao</string>
     <string name="error_run_command_service_invalid_intent_action">Hành động có mục đích không hợp lệ đối với RunCommandService: `%1$s`</string>
     <string name="error_run_command_service_invalid_execution_command_runner">Trình chạy lệnh thực thi không hợp lệ đối với RunCommandService: `%1$s`</string>
@@ -118,7 +89,6 @@
     <string name="termux_soft_keyboard_enabled_on">Bàn phím mềm sẽ được bật. (Mặc định)</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">Bàn phím mềm sẽ chỉ được bật nếu không có bàn phím cứng nào được kết nối.</string>
     <string name="title_file_received">Lưu tệp trong ~/downloads/</string>
-    <string name="title_restore_background_image">Đã phát hiện thấy hình nền. Bạn có muốn khôi phục nó không?</string>
     <string name="termux_terminal_view_view_header">Xem</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_title">Điều chỉnh ký quỹ đầu cuối</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_off">Điều chỉnh ký quỹ đầu cuối sẽ bị vô hiệu hóa.</string>
@@ -126,19 +96,5 @@
     <string name="termux_terminal_view_activity_remove_title">Ngăn không cho lưu lại các ứng dụng gần đây</string>
     <string name="termux_terminal_view_activity_remove_off">Sau khi đóng tất cả các phiên cuối, &TERMUX_APP_NAME; sẽ đóng và vẫn hiển thị trong các ứng dụng gần đây.</string>
     <string name="termux_terminal_view_activity_remove_on">&TERMUX_APP_NAME; sẽ đóng và xóa chính nó khỏi các ứng dụng gần đây nếu không có phiên cuối nào đang hoạt động. (Mặc định)</string>
-    <string name="termux_api_preferences_summary">Tùy chọn cho &TERMUX_API_APP_NAME; ứng dụng</string>
     <string name="termux_crash_report_notifications_enabled_title">Thông báo về báo cáo sự cố</string>
-    <string name="termux_monet_background_enabled_on">Nền Material sẽ được bật.</string>
-    <string name="termux_sessions_blur_enabled_title">Phiên bản nền mờ</string>
-    <string name="termux_sessions_header">Menu</string>
-    <string name="termux_monet_background_enabled_title">Bối cảnh của Material (Không ổn định)</string>
-    <string name="termux_monet_background_enabled_off">Nền Terminal Material sẽ bị vô hiệu hóa. Biến nền terminal thành Material (Mặc định)</string>
-    <string name="termux_extrakeys_blur_enabled_title">Phím bổ sung để làm mờ nền</string>
-    <string name="termux_sessions_blur_enabled_off">Nền mờ của Phiên sẽ bị vô hiệu hóa. Thêm Nền mờ và trong suốt vào Menu Phiên. (Có thể ảnh hưởng đến hiệu suất) (Mặc định)</string>
-    <string name="termux_extrakeys_blur_enabled_off">Nền mờ của Extra Keys sẽ bị vô hiệu hóa. Thêm Nền mờ và trong suốt vào Extra Keys. (Có thể ảnh hưởng đến hiệu suất) (Mặc định)</string>
-    <string name="termux_gui_preferences_title">&TERMUX_GUI_APP_NAME;</string>
-    <string name="action_autofill_username">Tự động điền tên người dùng</string>
-    <string name="termux_extrakeys_blur_enabled_on">Tính năng ExtraKeys Blurred Background sẽ được bật.</string>
-    <string name="termux_sessions_blur_enabled_on">Tính năng Nền mờ của phiên sẽ được bật.</string>
-    <string name="termux_gui_preferences_summary">Tùy chọn cho ứng dụng &TERMUX_GUI_APP_NAME;</string>
 </resources>

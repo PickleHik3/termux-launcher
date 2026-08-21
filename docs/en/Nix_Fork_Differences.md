@@ -56,11 +56,21 @@ wrong paths.
 
 - **`launcher` flake template** (`templates/launcher/`, used by the
   [getting-started walkthrough](Nix_Package_Management.md)): fish as
-  login shell, oh-my-posh Material themes, eza/zoxide/yazi, LazyVim,
-  fastfetch/timg/chafa, the launcher's stock `config.fish`, and the
+  login shell, oh-my-posh Material themes, eza/zoxide/yazi, a
+  `setup-nvim` distro chooser (AstroNvim default, with a colourscheme
+  generated from the wallpaper palette),
+  fastfetch/timg/chafa with a shipped animated GIF logo, the launcher's
+  stock `config.fish`, and the
   `sshd-start`/`sshd-autostart` toolset. Kept compatible with both old
   and new oh-my-posh, ships `ncurses`, and puts the proot `/bin`
   (launcherctl, tai) on fish's PATH.
+- **`toolkits.nix` + `setup-toolkits`**: the template's packages are
+  grouped (shell, eye candy, editor, build toolchain, node, go, python,
+  patched-fastfetch), and a checklist script flips the booleans and
+  switches. Global installs of the other package managers are redirected
+  into `$HOME` (`NPM_CONFIG_PREFIX`, `GOBIN`, uv's default bin dir), which
+  they have to be: the nix profile they would otherwise write to is a
+  read-only store path that each switch replaces.
 - `android-integration` defaults match the launcher's package name, so
   `termux-am`, `termux-setup-storage` and friends talk to the right
   socket out of the box.

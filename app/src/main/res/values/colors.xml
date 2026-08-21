@@ -23,6 +23,13 @@
     <color name="termux_on_error_container">#410002</color>
     <color name="termux_scrollbar">#66FFFFFF</color>
 
+    <!--
+      Overridden at runtime by LauncherSchemeTheme when the chrome follows the terminal colour
+      scheme. Deliberately declared in values/ only: a ResourcesLoader entry carries no config
+      qualifiers, so a values-night twin of this colour would outrank the override at night.
+    -->
+    <color name="launcher_scheme_scrollbar">#66FFFFFF</color>
+
     <color name="main_accent">@color/termux_on_surface</color>
     <color name="highlight_accent">@color/termux_surface_panel_highest</color>
     <color name="opposite_accent">@color/termux_error</color>

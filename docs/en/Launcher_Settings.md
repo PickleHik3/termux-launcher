@@ -18,6 +18,10 @@ Use this section for visible surfaces and colors:
   and adjust weight where supported.
 - **Color mode:** follow the system, force light, or force dark mode.
 - **Use wallpaper colors:** build the launcher palette from the Android wallpaper.
+- **Interface colors:** choose whether the dock, status bar, app drawer, in-app keyboard and command
+  palette follow the wallpaper palette or the terminal color scheme in
+  `~/.termux/colors.properties`. Needs Android 11 or newer, and a scheme on disk — apply one from
+  Termux:Styling first. See [Theming from a color scheme](#theming-from-a-color-scheme).
 - **Terminal contrast:** choose Softer, Default, or Harder for the generated wallpaper palette.
 - **Wallpaper:** show or hide the system wallpaper behind launcher surfaces.
 - **Icon appearance:** monochrome icons, system or custom icon pack, and pinned-app icon behavior.
@@ -26,9 +30,44 @@ The font picker writes its managed selection to `~/.termux/fonts.d/10-launcher.c
 / Termux:Styling** removes that one managed config; it does not delete your own `fonts.conf` or
 downloaded families.
 
-When wallpaper colors are enabled, the launcher exports the generated roles to
-`~/.termux/material-colors.sh` and `.properties`, including container/on-container pairs, tertiary,
-error-container, and outline roles for prompts and scripts.
+The launcher exports its resolved roles to `~/.termux/material-colors.sh` and `.properties` —
+including container/on-container pairs, tertiary, error-container, and outline roles for prompts and
+scripts — whether the palette came from the wallpaper or from a color scheme.
+
+### Theming from a color scheme
+
+Set **Interface colors** to *From terminal color scheme* and the whole interface is derived from
+`~/.termux/colors.properties`, the file Termux:Styling writes. The scheme is the anchor, not a seed:
+`background` becomes the surface, `foreground` becomes the text color, `color4` (or a distinctly
+colored `cursor`) becomes the accent, `color1` the error color, `color8` the divider color. Only the
+tones the scheme has no opinion about — container elevations and their text colors — are derived, as
+a lightness ladder off the background with contrast repaired afterwards.
+
+Changing a scheme in Termux:Styling recreates the activity and repaints everything. The setting is
+unavailable below Android 11, where the palette cannot be loaded into a running activity; the
+terminal itself still follows the scheme there.
+
+Any derived color can be overridden in `~/.termux/launcher-theme.properties`, one token per line:
+
+```properties
+# accent from the scheme's yellow instead of its blue
+primary                = color3
+surface_container_high = lighten(surface, 0.08)
+outline_variant        = mix(on_surface, surface, 0.78)
+scrollbar              = alpha(on_surface_variant, 0.3)
+inverse_primary        = #d79921
+```
+
+A value is a hex color, a scheme key (`background`, `foreground`, `cursor`, `color0`-`color15`),
+another token name, or `lighten` / `darken` / `mix` / `alpha` over any of those. Amounts accept
+`0.25` or `25%`. Unparsable lines are ignored and logged; the rest of the file still applies.
+
+The tokens are `surface`, `surface_dim`, `surface_bright`, `surface_container_lowest`,
+`surface_container_low`, `surface_container`, `surface_container_high`, `surface_container_highest`,
+`on_surface`, `on_surface_variant`, `outline`, `outline_variant`, `scrollbar`, `primary`,
+`on_primary`, `primary_container`, `on_primary_container`, and the `secondary`, `tertiary` and
+`error` families spelled the same way, plus `inverse_surface`, `inverse_on_surface` and
+`inverse_primary`.
 
 ## Terminal & status
 
@@ -43,6 +82,17 @@ Use this section for terminal geometry and the top row:
 - **Clock style** and **Use 12-hour time**.
 - **CPU usage**, **Memory usage**, and **Weather** status cards.
 - **Media and pinned notifications** and their essential notification rules.
+- **Battery → Lazy mode:** stop the launcher animating while you are only looking at it. The clock
+  swaps its digits instead of folding them, a working window's rim holds lit instead of breathing,
+  the status readings sample less often, and the weather icon rests on its last frame. Nothing on
+  screen repaints until something actually changes.
+
+**Please try Lazy mode.** Without it the launcher redraws every frame the panel offers, purely to
+animate the clock's seconds — that is a real battery cost for something nobody is watching most of
+the time. The intent is to make it the default once it has been through enough hands; what that
+needs is people running it on other devices and reporting anything that looks stuck, stale, or
+wrong — a clock that stops updating, a status reading that freezes, a rim that never lights.
+[Open an issue](https://github.com/PickleHik3/termux-launcher/issues) if you find one.
 
 The expanded status panel's clock opens Android's clock app and its cog opens Settings. Window pills
 also show CPU-based working state and bell-based attention state; those indicators need no toggle.

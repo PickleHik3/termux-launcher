@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Collections;
 
 import org.robolectric.RuntimeEnvironment;
+import org.robolectric.util.ReflectionHelpers;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -35,6 +36,32 @@ import static org.junit.Assert.assertTrue;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class TerminalPaneControllerTest {
+
+    @Test
+    public void hostResizeLeaseIsNestedGlobalAndInheritedByWindowSwitch() {
+        TerminalPaneController controller = newController();
+        TerminalSession firstSession = terminal();
+        TerminalSession secondSession = terminal();
+        TerminalPaneController.Window first = controller.newWindow(firstSession);
+        TerminalPaneController.Window second = controller.newWindow(secondSession);
+        controller.showWindow(first);
+        TerminalView firstView = controller.getViewForSession(firstSession);
+
+        controller.beginHostSurfaceResize();
+        controller.beginHostSurfaceResize();
+        assertTrue(ReflectionHelpers.getField(firstView, "mTerminalSizeUpdatesPaused"));
+        controller.showWindow(second);
+        TerminalView secondView = controller.getViewForSession(secondSession);
+        assertTrue("newly attached pane must inherit the lease",
+            ReflectionHelpers.getField(secondView, "mTerminalSizeUpdatesPaused"));
+
+        controller.finishHostSurfaceResizeKeepingBottom();
+        assertTrue("nested owner must prevent premature divider-style resume",
+            ReflectionHelpers.getField(secondView, "mTerminalSizeUpdatesPaused"));
+        controller.finishHostSurfaceResizeKeepingBottom();
+        assertFalse(ReflectionHelpers.getField(firstView, "mTerminalSizeUpdatesPaused"));
+        assertFalse(ReflectionHelpers.getField(secondView, "mTerminalSizeUpdatesPaused"));
+    }
 
     @Test
     public void clampFirstWeight_keepsBothPanesAtLeastEighteenPercent() {

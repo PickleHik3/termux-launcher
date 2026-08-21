@@ -12,6 +12,15 @@
 > All hail Fable for exorcising this daemon-basically yeeted it in seconds, on God.
 
 
+> [!IMPORTANT]
+> **This is an independent fork.** Termux Launcher is not affiliated with, endorsed by, or
+> supported by the official [Termux](https://github.com/termux/termux-app) project or its
+> maintainers. It is a separately maintained modification that reuses the Termux name only to
+> describe what it is built on. Do not report issues with this fork to Termux — file them
+> [here](https://github.com/PickleHik3/termux-launcher/issues). The `com.termux` edition shares a
+> package name with official Termux and **replaces it** on the device; the other editions install
+> side by side. Termux is a trademark of its respective owners.
+
 Termux Launcher is a terminal-first Android home launcher inspired by [TEL](https://github.com/t-e-l/tel), built on [termux-app](https://github.com/termux/termux-app) and [termux-monet](https://github.com/Termux-Monet/termux-monet).
 
 **[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | [Download builds](https://github.com/PickleHik3/termux-launcher/releases) | [Getting Started](docs/en/Launcher_Getting_Started.md) | [Modern terminal](docs/en/Terminal_Modernization.md) | [Local AI API](docs/en/LauncherCtl_API.md) | [Termux AI](docs/en/Termux_AI.md) | [Changelog](CHANGELOG.md)
@@ -38,6 +47,7 @@ All credits go to the amazing developers and contributors of Termux, TEL, and Te
 - Sixel image drawing in terminal
 - Native sessions, windows, recursive split and floating panes, layouts, workspace restore, and session browser
 - Kitty keyboard/graphics protocols, safe hyperlinks, prompt navigation, and advanced font shaping
+- TUI-tuned touch, unlike stock Termux: drags scroll mouse-aware apps, taps click, and a brief press-and-hold turns the finger into a held mouse button — drag vim selections or resize tmux/TUI panes by touch
 - Searchable terminal command palette with customizable chords and modal keymaps
 - App dock with terminal app search
 - Android Material theme integration for launcher surfaces and Termux shell theming
@@ -64,7 +74,7 @@ Every release ships the same launcher built from the same source; the editions d
 
 Pick the **Termux edition** for the classic Termux experience — the launcher as your Termux, fully compatible with the upstream Termux package ecosystem. Pick the **Nix edition** if you want the entire `nixpkgs` collection, declarative configs, and rollbacks next to an existing Termux install — it is built on a [Nix-on-Droid](https://github.com/nix-community/nix-on-droid)-style environment; new to Nix? start with the [beginner's guide](docs/en/Nix_Getting_Started.md), then the [package management reference](docs/en/Nix_Package_Management.md). The **VAJ edition is a legacy demo**: it predates the Nix edition as the side-by-side option and is kept only for preview installs.
 
-> ⚠️ The VAJ demo edition runs off my manually maintained custom APT repo (`https://repo.pathayam.xyz`), which carries only a small fraction of the Termux package set and is updated **less frequently** — many packages you rely on will simply not be installable there. If you want a side-by-side install, prefer the Nix edition.
+> ⚠️ **The VAJ demo edition is being deprecated.** It has been security-fixes-only since `v0.2.34-vaj`. It runs off my manually maintained custom APT repo (`https://repo.pathayam.xyz`), which carries only a small fraction of the Termux package set; keeping its crucial packages updated is no longer sustainable, and packages that stop receiving security updates are a liability rather than a feature. Move to the Nix edition instead — the **[VAJ to Nix migration guide](docs/en/VAJ_To_Nix_Migration.md)** covers backing up the home directory, installing the Nix build side by side, restoring your files, and replacing APT packages from `nixpkgs`. If the Nix edition does not cover a specific need, [open an issue](https://github.com/PickleHik3/termux-launcher/issues).
 
 Companion add-ons must be the matching builds from this project's forks (they share the launcher's signing key and package family); official F-Droid add-ons will not pair with any edition. Nix-edition companions ship as `nix-v*` tagged releases (TLNix:API, TLNix:Styling).
 
@@ -84,7 +94,7 @@ See [Getting Started](docs/en/Launcher_Getting_Started.md) for the setup flow.
 
 ### Quick start script
 
-[`setup-launcher`](docs/en/examples/setup-launcher) turns a fresh install into the full showcase shell in one run — fish + Oh My Posh with wallpaper Material colors, zoxide/eza/yazi/neovim, and the launcher terminal configs in `~/.termux`. It is interactive, and every config it replaces gets a timestamped `.bak` first:
+[`setup-launcher`](docs/en/examples/setup-launcher) turns a fresh install into the showcase shell. It offers everything (fish, Oh My Posh with wallpaper Material colors, zoxide, eza, Neovim + AstroNvim, and the showcase binaries — sigye, the animated-logo fastfetch, kitten), just the shell essentials, or one item at a time. Every config it replaces gets a timestamped `.bak` first, and nothing under `~/.termux` comes from the script: the app seeds those files itself and ships the extra keys row and keyboard layout as built-in defaults:
 
 ```sh
 curl -fsSLO https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-launcher
@@ -119,6 +129,11 @@ Fonts are not part of the script — the in-app font picker (**Settings › Term
 ## License and Attributions
 
 Termux Launcher is a modified Termux/Termux:Monet distribution, developed from 2026 onward and
-released under GPLv3-only. See [LICENSE](LICENSE), [license exceptions](LICENSE-EXCEPTIONS.md), and
+released under GPLv3-only. It is an independent fork with no affiliation to the official Termux
+project. See [LICENSE](LICENSE), [license exceptions](LICENSE-EXCEPTIONS.md), and
 [open-source notices](THIRD_PARTY_NOTICES.md). The Android app exposes the same notices under
 **Settings > Open-source licenses**.
+
+Bundled assets carry their own licenses: the weather animations are
+[Meteocons](https://github.com/basmilius/meteocons) (MIT, Copyright 2020-present Bas Milius), and
+the icon font is [Symbols Nerd Font Mono](https://github.com/ryanoasis/nerd-fonts) (SIL OFL 1.1).

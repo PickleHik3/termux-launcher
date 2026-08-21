@@ -6,7 +6,8 @@ Phase 1–2; this file covers Phase 4 (protocol/render upgrades) and the first P
 project (the keyboard protocol).
 
 Status: delivered through graphics Tier 2 core — stored images, placements, crop, z-index, and the
-full delete forms (slice 14), and animation with terminal-driven playback (slice 16); Unicode placeholders and file/shm media remain excluded. User setup and compatibility guidance are in
+full delete forms (slice 14), animation with terminal-driven playback (slice 16), and Unicode
+placeholders (slice 17); file/shm media remain excluded. User setup and compatibility guidance are in
 [`../../docs/en/Terminal_Modernization.md`](../../docs/en/Terminal_Modernization.md); the cross-project
 status map is [`../terminal-modernization-status.md`](../terminal-modernization-status.md).
 
@@ -496,6 +497,31 @@ Both are preserved by the same paths: `setChar`, `copyInterval`, reflow inside
   itself was tried on-device and crashes in its own runtime before reaching the terminal
   (seccomp register dump), so it cannot be the verification client on Android; the byte-stream
   replay stands in for it. `test-terminal-protocols.sh` gained a self-contained animation section.
+
+- **Slice 17 — Unicode placeholders and configurable TERM (done).** `U=1` now creates an invisible
+  virtual placement prototype instead of stamping bitmap ownership into screen cells. U+10EEEE
+  therefore remains ordinary text that tmux, Neovim, and other Unicode-aware hosts can move and
+  redraw; `TerminalRenderer` recognizes the grapheme and draws the referenced stored image through
+  that cell. The renderer aspect-fits and centers the image in the declared `c` by `r` box, clips
+  every draw to its cell, reads the current animation frame, and draws the cursor last.
+
+  `KittyUnicodePlaceholder` is pure Java and owns the fixed 297-code-point alphabet from kitty's
+  `rowcolumn-diacritics.txt`. It decodes row, column, the optional most-significant image-id byte,
+  the low 24 bits from foreground colour, and placement id from underline colour. The three
+  specified left-cell inheritance forms require immediate adjacency and exact encoded-colour
+  matches, so a scroll boundary or overlapping style cannot silently borrow unrelated state.
+  Identified virtual placements replace their `(image, placement)` predecessor; `d=i/n` removes
+  their prototypes while lowercase deletion keeps stored pixels, and retransmission removes them
+  with the image.
+
+  The same slice adds `terminal-term` to `termux.properties`. `xterm-256color` remains the default;
+  `terminal-term = xterm-kitty` changes new Termux environments after settings reload. Resolution
+  and validation are pure Java, and per-launch environment entries are merged after the default so
+  an explicit caller value is not clobbered.
+
+  JVM coverage lives in `KittyUnicodePlaceholderTest`, the virtual-placement protocol cases in
+  `KittyGraphicsProtocolTest`, and `TerminalTermTest`. Android Canvas rendering and real tmux plus
+  Neovim plugin behavior remain device checks because local JVM tests cannot execute a real Canvas.
 
 ## User config path
 

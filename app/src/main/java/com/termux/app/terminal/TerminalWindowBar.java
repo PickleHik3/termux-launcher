@@ -48,8 +48,12 @@ import java.util.Locale;
 /** One compact app-owned row for the current tmux-style window list. */
 public final class TerminalWindowBar extends HorizontalScrollView {
 
-    /** Shared with the terminal surface so both pieces of the window switch settle together. */
-    public static final long WINDOW_SWITCH_ANIMATION_DURATION_MS = 320L;
+    /**
+     * Shared with the terminal surface so both pieces of the window switch settle together.
+     * Deliberately unhurried: with the spring-shaped settle curve the pan spends its middle
+     * moving fast and its ends easing, so the extra time reads as weight, not lag.
+     */
+    public static final long WINDOW_SWITCH_ANIMATION_DURATION_MS = 560L;
 
     public interface OnWindowSelectedListener {
         void onWindowSelected(int index);
@@ -344,8 +348,21 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      * invalidate, so they compose; sharing one animator would stall the activity indication for the
      * length of every window switch.
      */
+    /**
+     * Lazy mode keeps the rim lit but stops it breathing: the animator invalidated the whole strip
+     * every vsync for as long as any shell was busy, which with a long-running agent meant forever.
+     */
+    public void setLazyMode(boolean lazy) {
+        if (mLazyMode == lazy) return;
+        mLazyMode = lazy;
+        mTabs.setLazyRim(lazy);
+        updateBusyAnimator();
+    }
+
+    private boolean mLazyMode;
+
     private void updateBusyAnimator() {
-        boolean wanted = mTabs.hasBusyWindow() && mAttached && mWindowVisible;
+        boolean wanted = mTabs.hasBusyWindow() && mAttached && mWindowVisible && !mLazyMode;
         if (!wanted) {
             if (mBusyAnimator != null) {
                 mBusyAnimator.cancel();
@@ -406,8 +423,11 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         tab.setIncludeFontPadding(false);
         tab.setTextAlignment(TEXT_ALIGNMENT_CENTER);
         tab.setEllipsize(TextUtils.TruncateAt.END);
-        // Spanned only where a symbol_map claims a code point; a plain ASCII label is set as it is.
-        tab.setText(TerminalLabelSymbolSpans.apply(label, mSymbolMaps));
+        // Bundled symbols face first, symbol_map faces second: both spans land on a shared PUA
+        // run, and the later-applied user-configured face wins at draw time — the bundled Nerd
+        // Font glyphs only ever fill runs no symbol_map claims.
+        tab.setText(TerminalLabelSymbolSpans.apply(
+            com.termux.shared.termux.font.NerdFontSpans.span(context, label), mSymbolMaps));
         tab.setTextColor(selected ? mSelectedTextColor : mUnselectedTextColor);
         tab.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
         tab.setTypeface(mTerminalTypeface, selected ? Typeface.BOLD : Typeface.NORMAL);
@@ -501,9 +521,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     private Interpolator settleInterpolator() {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
-            ? new PathInterpolator(0.16f, 1f, 0.3f, 1f)
-            : new DecelerateInterpolator(1.8f);
+        return Motion.settle();
     }
 
     private void cancelSelectionAnimation() {
@@ -732,7 +750,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         private void drawBusyRims(@NonNull Canvas canvas) {
             if (!hasBusyWindow()) return;
             float density = getResources().getDisplayMetrics().density;
-            float phase = ShellActivityPulse.phase(busyElapsedMs());
+            // Lazy mode holds the breath at its peak rather than animating through it: a lit rim
+            // still says "working", and it costs one frame instead of sixty a second.
+            float phase = mLazyRim ? 0f : ShellActivityPulse.phase(busyElapsedMs());
             drawRimPass(canvas, density, mBusy, mBusyColor,
                 ShellActivityPulse.rimWeight(phase), 0f);
             // The attention rim breathes on its own curve — brighter floor, sharper peak — and carries
@@ -782,6 +802,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             return mGlowFilter;
         }
 
+        /** Holds the rim at its lit peak instead of breathing it. Set by the host's lazy mode. */
+        void setLazyRim(boolean lazy) {
+            if (mLazyRim == lazy) return;
+            mLazyRim = lazy;
+            invalidate();
+        }
+
+        private boolean mLazyRim;
+
         private long busyElapsedMs() {
             long now = android.os.SystemClock.uptimeMillis();
             if (mBusyStartMs == 0L) mBusyStartMs = now;
@@ -827,6 +856,16 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         return true;
     }
 
+    /**
+     * The selected tab's view, so a surface can anchor itself to the window it belongs to. Null
+     * before the row is populated or while nothing is selected.
+     */
+    @Nullable
+    public View selectedTabView() {
+        if (mSelectedIndex < 0 || mSelectedIndex >= mTabs.getChildCount()) return null;
+        return mTabs.getChildAt(mSelectedIndex);
+    }
+
     /** Process is represented only by a Nerd Font glyph; visible text is the compact directory. */
     @NonNull
     public static WindowItem itemFor(@Nullable TerminalSession session, int index) {
@@ -839,6 +878,18 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         String spokenProcess = process == null ? "terminal" : process;
         return new WindowItem(processGlyph(process) + " " + directory,
             spokenProcess + " in " + directory);
+    }
+
+    /**
+     * Build an item for a window the user has named. The name replaces the derived text but keeps
+     * the live process glyph, so a named tab still shows at a glance what is running in it — the
+     * name says which window it is, the glyph says what it is doing.
+     */
+    @NonNull
+    public static WindowItem itemForNamed(@NonNull String name, @Nullable String processName) {
+        String spokenProcess = processName == null ? "terminal" : processName;
+        return new WindowItem(processGlyph(processName) + " " + name,
+            name + ", " + spokenProcess);
     }
 
     /**
@@ -948,8 +999,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         }
     }
 
+    /** Public so a named tab can keep the process glyph the derived label would have picked. */
     @Nullable
-    private static String processName(@Nullable String title) {
+    public static String processName(@Nullable String title) {
         String cleaned = clean(title);
         if (cleaned == null) return null;
         int inDirectory = cleaned.indexOf(" in <");

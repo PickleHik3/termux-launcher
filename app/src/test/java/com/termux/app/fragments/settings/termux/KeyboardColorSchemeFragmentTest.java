@@ -11,14 +11,15 @@ import android.os.Build;
 
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
-
-import java.util.Locale;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -53,12 +54,22 @@ public class KeyboardColorSchemeFragmentTest {
         return InAppKeyboardColorScheme.fromJson(palette(), "");
     }
 
-    /** A complete Base16 document, the smallest thing the importer accepts. */
-    private static String base16Yaml() {
-        StringBuilder yaml = new StringBuilder();
-        for (int i = 0; i < InAppKeyboardColorScheme.BASE16_COLOR_COUNT; i++)
-            yaml.append(String.format(Locale.ROOT, "base%02X: \"#%06X\"%n", i, 0x0A0B00 + i));
-        return yaml.toString();
+    /**
+     * Persisted version-2 document as the removed Tinted importer wrote it: 16 pinned slots and
+     * the imported-palette flag. Devices still hold these, so the editor must keep describing
+     * them.
+     */
+    private static InAppKeyboardColorScheme importedScheme() throws JSONException {
+        JSONObject root = new JSONObject();
+        root.put("schemaVersion", InAppKeyboardColorScheme.SCHEMA_VERSION);
+        root.put("base16Palette", true);
+        root.put("importedThemeId", "");
+        JSONArray swatches = new JSONArray();
+        for (int i = 0; i < InAppKeyboardColorScheme.BASE24_COLOR_COUNT; i++)
+            swatches.put(i < InAppKeyboardColorScheme.BASE16_COLOR_COUNT
+                ? (Object) Integer.valueOf(0xFF0A0B00 + i) : JSONObject.NULL);
+        root.put("swatches", swatches);
+        return InAppKeyboardColorScheme.fromJson(palette(), root.toString());
     }
 
     @Test
@@ -73,33 +84,6 @@ public class KeyboardColorSchemeFragmentTest {
     public void rejectsInvalidHexColors() {
         assertNull(KeyboardColorSchemeFragment.parseHexColor("#12345"));
         assertNull(KeyboardColorSchemeFragment.parseHexColor("#hello!"));
-    }
-
-    @Test
-    public void normalizesTintedGalleryNamesToBase16Ids() {
-        assertEquals("catppuccin-mocha",
-            KeyboardColorSchemeFragment.normalizeBase16Name("Catppuccin Mocha"));
-        assertEquals("atelier-cave-light",
-            KeyboardColorSchemeFragment.normalizeBase16Name("base16-atelier_cave light"));
-        assertNull(KeyboardColorSchemeFragment.normalizeBase16Name("---"));
-    }
-
-    @Test
-    public void parsesAllTintedGallerySchemeSystems() {
-        KeyboardColorSchemeFragment.TintedSchemeId base16 =
-            KeyboardColorSchemeFragment.parseTintedSchemeId("base16-apathy");
-        assertEquals("base16", base16.system);
-        assertEquals("apathy", base16.slug);
-
-        KeyboardColorSchemeFragment.TintedSchemeId base24 =
-            KeyboardColorSchemeFragment.parseTintedSchemeId("base24-ayu-mirage");
-        assertEquals("base24", base24.system);
-        assertEquals("ayu-mirage", base24.slug);
-
-        KeyboardColorSchemeFragment.TintedSchemeId tinted8 =
-            KeyboardColorSchemeFragment.parseTintedSchemeId("tinted8_catppuccin mocha");
-        assertEquals("tinted8", tinted8.system);
-        assertEquals("catppuccin-mocha", tinted8.slug);
     }
 
     @Test
@@ -165,10 +149,9 @@ public class KeyboardColorSchemeFragmentTest {
     }
 
     @Test
-    public void statusLineNamesAnImportedPalette() {
-        InAppKeyboardColorScheme scheme = scheme();
-        assertTrue(scheme.importBasePalette(base16Yaml(),
-            InAppKeyboardColorScheme.BASE16_COLOR_COUNT));
+    public void statusLineNamesAnImportedPalette() throws JSONException {
+        InAppKeyboardColorScheme scheme = importedScheme();
+        assertTrue(scheme.hasImportedPalette());
         assertEquals("An imported palette is in use, so no color follows your wallpaper.",
             KeyboardColorSchemeFragment.statusText(context, scheme));
         scheme.setImportedThemeId("base16-apathy");
@@ -178,10 +161,8 @@ public class KeyboardColorSchemeFragmentTest {
     }
 
     @Test
-    public void resetActionUnpinsEverySlotAndDropsTheImport() {
-        InAppKeyboardColorScheme scheme = scheme();
-        assertTrue(scheme.importBasePalette(base16Yaml(),
-            InAppKeyboardColorScheme.BASE16_COLOR_COUNT));
+    public void resetActionUnpinsEverySlotAndDropsTheImport() throws JSONException {
+        InAppKeyboardColorScheme scheme = importedScheme();
         scheme.setImportedThemeId("base16-apathy");
         scheme.setSwatch(20, 0xFF778899);
         scheme.paint("q", InAppKeyboardColorScheme.Role.KEY_BACKGROUND, 3);

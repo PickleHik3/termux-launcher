@@ -71,7 +71,9 @@ produced by the current keyboard layout.
 |---|---|---|
 | `Ctrl+Alt+v` | Split vertically (side by side) | Paste |
 | `Ctrl+Alt+h` | Split horizontally (stacked) | Sent to the shell if unclaimed |
-| `Ctrl+Alt+Arrow` | Focus the pane in that direction | Left/right opens or closes the session drawer; up/down changes session |
+| `Ctrl+Arrow` | Focus the pane in that direction | Sent to the shell if unclaimed |
+| `Ctrl+Alt+Left` / `Ctrl+Alt+Right` | Previous/next window | Opens or closes the session drawer |
+| `Ctrl+Alt+Up` / `Ctrl+Alt+Down` | Previous/next session | Previous/next session |
 | `Ctrl+Alt+Shift+Arrow` | Resize the focused pane | Sent to the shell if unclaimed |
 | `Ctrl+Alt+c` | New window | New session |
 | `Ctrl+Alt+x` | Close current window, after confirmation | Sent to the shell if unclaimed |
@@ -83,7 +85,8 @@ produced by the current keyboard layout.
 | `Ctrl+Alt+Shift+C` | New session | New session |
 | `Ctrl+Alt+Shift+X` | Close current session, after confirmation | Sent to the shell if unclaimed |
 | `Ctrl+Alt+n` / `Ctrl+Alt+p` | Next/previous session | Next/previous session |
-| `Ctrl+Alt+1` … `Ctrl+Alt+9` | Activate that drawer session | Activate that drawer session |
+| `Ctrl+Alt+1` … `Ctrl+Alt+9` | Activate that window in the session | Activate that drawer session |
+| `Ctrl+Alt+Shift+1` … `Ctrl+Alt+Shift+9` | Activate that drawer session | Activate that drawer session |
 | `Ctrl+Alt+k` | Toggle soft keyboard | Toggle soft keyboard |
 | `Ctrl+Alt++` / `Ctrl+Alt+-` | Increase/decrease font size | Increase/decrease font size |
 | `Ctrl+Alt+m` | Open terminal action sheet | Open terminal action sheet |
@@ -91,6 +94,15 @@ produced by the current keyboard layout.
 | `Ctrl+Alt+s` | Search scrollback | Search scrollback |
 
 “Vertical split” means a vertical dividing line and therefore creates side-by-side panes.
+
+## Touch and mouse
+
+Touch handling differs from stock Termux: it is tuned for TUIs, not just shell prompts. Drags
+scroll — translated to scroll-wheel events inside mouse-aware apps — and taps click when the app
+tracks the mouse. **Press and hold briefly, then drag** to hold the mouse button down (a small
+haptic marks the handoff): from there, select text in vim, drag tmux splits, or resize TUI panes
+like a desktop mouse. A quick long-press without moving still opens ordinary text selection with
+the copy toolbar, and pinch changes only the focused pane's font size.
 
 ## Panes, windows, and layouts
 
@@ -244,13 +256,18 @@ The launcher installs its own configuration examples, so nothing has to be writt
 |---|---|---|
 | `~/.termux/termux-launcher-bindings.conf` | On install, only when absent | Bindings, chords, modal keymaps, launching apps from a chord |
 | `~/.termux/fonts.conf` | On install, only when absent | Faces, symbol maps, shaping, features, axes, cell metrics |
+| `~/.termux/termux.properties` | On install, only when absent | `TERM`, volume and back keys, extra keys, cursor, scrollback, margins, colours, app behaviour |
 | `~/.termux/keyboard/layout.xml` | Never — copy it yourself | In-app keyboard layout and space-bar swipe slots |
 | `~/.termux/launcher/examples/` | Refreshed at every app start | Pristine copies of all of the above, plus a `README.md` |
 
-The two seeded files arrive with every directive commented out, so a fresh install behaves exactly as
-it did before they existed — uncomment what you want. They are written only when missing, so app
+The three seeded files arrive with every directive commented out, so a fresh install behaves exactly
+as it did before they existed — uncomment what you want. They are written only when missing, so app
 updates never overwrite your edits. To start over, copy the file back from
 `~/.termux/launcher/examples/`.
+
+Only one properties file is ever read: `~/.termux/termux.properties` wins, and
+`~/.config/termux/termux.properties` applies only when the first is absent. A file already at that
+second path is therefore left in charge — the app seeds nothing rather than shadowing it.
 
 The keyboard layout is not seeded, because the moment `~/.termux/keyboard/layout.xml` exists it
 replaces the bundled layout. Opt in explicitly:
@@ -302,6 +319,33 @@ map ctrl+alt+j send-text "git status\n"
 
 `--when` accepts `always`, `splits-on`, or `splits-off`.
 
+### tmux-style prefix
+
+`leader <stroke>` declares a prefix key. Every root `ctrl+alt+…` binding then also answers to the
+prefix followed by the same key, which is what makes the bindings reachable on a keyboard where
+holding three keys at once is awkward:
+
+```text
+leader ctrl+space
+```
+
+With that line, `Ctrl+Space` then `m` opens the action sheet, `Ctrl+Space` then `Shift+P` opens the
+command palette, and the Ctrl+Alt strokes keep working unchanged. The prefix behaves like any other
+chord: the pending stroke shows in the chord overlay, the keybind hint legend lists what the next
+key can be, and an unknown key or the chord timeout cancels it. A sequence the file spells out
+itself is never overwritten by the generated alias, and only the first `leader` line is used.
+
+`--label "Display name"` names a binding for the keybind hint legend, up to 32 characters. Without
+one the legend prints the action's own title, which reads well for the specific actions and says
+nothing useful for the generic ones: every app chord runs `app.launch`, so an unlabelled row reads
+"Launch app" whichever app it starts. In a multi-line binding the first `--label` names the whole
+thing.
+
+```text
+map --label WhatsApp ctrl+alt+w app.launch com.whatsapp
+map --label "Repo status" ctrl+alt+j send-text "cd ~/src\n"
+```
+
 ### Action arguments
 
 Words after the action id are its arguments. Positional words fill the action's required arguments in
@@ -333,9 +377,12 @@ otherwise the launcher's fuzzy app ranking picks the best match, the same rankin
 uses.
 
 ```text
-map ctrl+alt+w app.launch com.whatsapp
-map ctrl+alt+shift+m app.launch Maps
+map --label WhatsApp ctrl+alt+w app.launch com.whatsapp
+map --label Maps ctrl+alt+shift+m app.launch Maps
 ```
+
+`--label` is what the keybind hint legend prints for the chord; without it every app row in the
+legend reads "Launch app".
 
 Installed apps also appear in the command palette under **Apps**: the most-used ones with no query,
 and the full ranked match list while filtering. Selecting a row runs `app.launch`.
@@ -345,8 +392,9 @@ and because the shortcut column is searchable, typing `ctrl+alt+w` finds the row
 
 You do not have to edit the file to bind one. **Long-press an app row** (or press `Ctrl+Alt+Enter` on
 the focused one) and the palette waits for a key combination: `⏎` saves, `⌫` clears, `Esc` cancels.
-The binding is written to `~/.termux/termux-launcher-bindings.conf` under a managed header, with your
-comments, blank lines and ordering preserved, and takes effect immediately.
+The binding is written to `~/.termux/termux-launcher-bindings.conf` under a managed header, labelled
+with the app name the row showed, with your comments, blank lines and ordering preserved, and takes
+effect immediately.
 
 Three details are worth knowing:
 
@@ -364,9 +412,9 @@ any key slot can carry a launcher action written `tool:<registry id>` — option
 
 ```xml
 <key width="4.4" role="space_bar" key0="space"
-     key7="tool:app.command_palette:⌘"
-     key1="tool:window.previous:◧" key2="tool:window.next:◨"
-     key3="tool:session.previous:↰" key4="tool:session.next:↳"
+     key7="tool:app.command_palette:󱎱"
+     key1="tool:window.previous:󰜳" key2="tool:window.next:󰜶"
+     key3="tool:session.previous:󰜹" key4="tool:session.next:󰜰"
      key5="cursor_left" key6="cursor_right" key8="switch_backward"/>
 ```
 
@@ -693,6 +741,56 @@ so use an actual variable font when axis changes matter.
 Font files are untrusted input parsed by Android. Files larger than 64 MiB, unreadable files,
 malformed fonts, excessive mappings, and invalid settings are rejected with a bounded error and a
 safe fallback. Keep font files owner-writable only and obtain them from a source you trust.
+
+### Nerd Font icons on app chrome, not just in the terminal
+
+This is a difference from Termux worth stating plainly: **in Termux, a Nerd Font icon only renders
+where your terminal font renders it.** Everything outside the terminal grid — the notification, the
+extra-keys row, a session name in a drawer — draws with an Android system font, and no Android
+system font covers the Private Use Areas that Nerd Fonts populate. An icon in a session name is
+therefore tofu on every surface but the grid.
+
+Termux Launcher bundles the symbols-only face (`assets/fonts/SymbolsNerdFontMono.ttf`) and spans it
+onto the app's own chrome, so one icon looks the same everywhere it appears:
+
+- the status bar and its session/window indicators,
+- the window bar's tab labels,
+- the extra-keys row and its swipe-up badges,
+- the in-app keyboard's key caps,
+- the extra-keys editor and its glyph picker.
+
+The mechanism is `NerdFontSpans`. It walks a label **by code point**, not by `char` — the Material
+Design ranges are astral, so a `char` walk sees two unmapped surrogates instead of one icon — and
+wraps each run of PUA code points (`U+E000-U+F8FF` and `U+F0000-U+FFFFD`) in a typeface span
+pointing at the bundled face. Everything else keeps the label's own font, and a label with no icons
+is returned unchanged, allocating nothing. A styled label keeps its style: the span synthesizes bold
+or italic when the symbols face has no such cut, which is why an icon in a selected, bold tab still
+looks bold.
+
+The terminal grid is unaffected by all of this. It keeps its own font stack and its `symbol_map`
+routing (see [Route symbols deliberately](Terminal_Fonts.md#route-symbols-deliberately)). Where both
+apply — the window bar draws terminal-derived names — the bundled face is applied first and any
+`symbol_map` face second, so a face you configured wins and the bundled one only fills runs your
+configuration left uncovered.
+
+**Editing key labels.** Because the same face backs the key caps, any Nerd Font icon works as a key
+label. Paste one into **display** in the extra-keys editor, or into `extra-keys` in
+`~/.termux/termux.properties` — that file is read as UTF-8, so paste the character itself; `\uXXXX`
+escapes are not interpreted and could not reach the astral ranges anyway. The editor re-spans the
+field as you type, so an icon is drawn rather than boxed while you are still editing it.
+
+**Finding an icon.** The glyph picker (**Settings → Terminal & status → Edit extra keys**, then a
+key's glyph field) ships the whole bundled set: **10,512 icons**, searchable by name (`keyboard`),
+by family (`md`, `fa`, `oct`, `cod`, `dev`, `weather`), or by exact Nerd Font name
+(`nf-md-folder`). Browsing shows a shelf of the set with the rest behind search, because a grid of
+ten thousand live cells is not a grid anyone scrolls. That catalogue is generated from the shipped
+font's own name table by `scripts/generate-nerd-font-glyph-catalogue.py`, so it can never offer a
+glyph the app cannot draw; regenerate it whenever the bundled font is updated. Reviewed non-icon
+glyphs — arrows, blocks, box drawing, Powerline — are a separate, hand-curated list, and those
+**are** filtered per device against the UI font, since nothing bundled backs them.
+
+The space bar's swipe slots and the default extra-keys row both use these icons out of the box; see
+[Actions on in-app keyboard keys](#actions-on-in-app-keyboard-keys).
 
 ## Scrollback, links, and shell navigation
 

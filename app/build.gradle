@@ -31,7 +31,7 @@ android {
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         versionCode 1020 // Always keep the same versionCode as Termux Upstream to allow users to swap between termux installations.
-        versionName "0.2.34"
+        versionName "0.2.35"
 
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)
@@ -40,14 +40,7 @@ android {
 
         manifestPlaceholders = [
             TERMUX_PACKAGE_NAME    : "com.termux",
-            TERMUX_APP_NAME        : "Termux:Monet",
-            TERMUX_API_APP_NAME    : "Termux:API",
-            TERMUX_GUI_APP_NAME    : "Termux:GUI",
-            TERMUX_BOOT_APP_NAME   : "Termux:Boot",
-            TERMUX_FLOAT_APP_NAME  : "Termux:Float",
-            TERMUX_STYLING_APP_NAME: "Termux:Styling",
-            TERMUX_TASKER_APP_NAME : "Termux:Tasker",
-            TERMUX_WIDGET_APP_NAME : "Termux:Widget",
+            TERMUX_APP_NAME        : "Termux:Launcher",
             TERMUX_APP_ALLOW_BACKUP: "false",
             TERMUX_APP_FULL_BACKUP_CONTENT: "false",
             TERMUX_APP_USES_CLEARTEXT_TRAFFIC: "false"
@@ -152,6 +145,7 @@ dependencies {
     implementation "androidx.core:core:1.13.1"
     implementation "androidx.drawerlayout:drawerlayout:1.2.0"
     implementation "androidx.preference:preference:1.2.1"
+    implementation "androidx.recyclerview:recyclerview:1.1.0"
     implementation "androidx.viewpager:viewpager:1.1.0-alpha01"
     implementation "com.google.android.material:material:1.12.0"
     implementation "com.vanniktech:android-image-cropper:4.7.0"
@@ -161,11 +155,10 @@ dependencies {
     implementation "io.noties.markwon:linkify:$markwonVersion"
     implementation "io.noties.markwon:recycler:$markwonVersion"
     implementation 'com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava'
+    // Renders the bundled Meteocons weather animations (app/src/main/assets/weather).
+    implementation "com.airbnb.android:lottie:6.7.1"
     implementation "com.google.ai.edge.litertlm:litertlm-android:0.14.0"
     implementation "com.google.ai.edge.litert:litert:1.4.2"
-    implementation("io.github.eix128:sentencepiece4j:1.0.2") {
-        exclude group: "it.unimi.dsi", module: "fastutil"
-    }
     implementation project(":terminal-view")
     implementation project(":termux-shared")
     implementation project(":inapp-keyboard")

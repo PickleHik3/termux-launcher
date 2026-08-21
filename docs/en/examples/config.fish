@@ -1,3 +1,13 @@
+# Termux Launcher — launcher-owned fish config. setup-launcher replaces this
+# file on every run (after a timestamped .bak), so keep only what the launcher
+# integration itself needs here: PATH, the wallpaper Material palette and its
+# per-prompt refresh, the clear/cursor helpers, and the Oh My Posh prompt.
+#
+# YOUR OWN SETTINGS GO IN ~/.config/fish/conf.d/personal.fish (installed once
+# from the conf.d-personal.fish example and never overwritten). Editor, aliases,
+# and the ls/cd helpers all live there. Note fish loads conf.d/*.fish BEFORE
+# this file.
+
 set -g fish_greeting ""
 
 # Non-login shells (sshd, scripts) arrive without the profile on PATH — everything
@@ -10,7 +20,6 @@ set -gx TMPDIR "$HOME/.tmp"
 mkdir -p "$TMPDIR"
 
 set -q COLORTERM; or set -gx COLORTERM truecolor
-set -q EDITOR; or set -gx EDITOR nvim
 
 fish_add_path "$HOME/.local/bin" "$HOME/.termux/bin"
 
@@ -95,66 +104,15 @@ function clear
     __move_cursor_to_bottom
 end
 
-# yazi helper: exit yazi into the directory it was viewing.
-function y
-    set -l tmp (mktemp -t "yazi-cwd.XXXXXX")
-
-    command yazi $argv --cwd-file="$tmp"
-
-    if read -l cwd <"$tmp"; and test "$cwd" != "$PWD"; and test -d "$cwd"
-        builtin cd -- "$cwd"
-    end
-
-    rm -f -- "$tmp"
-end
-
-## ---------------------------------------------------------------------------
-## Quick guide: make this config yours
-## ---------------------------------------------------------------------------
-#
-# Abbreviations expand as you type (like typing `cc` + space becoming `clear`).
-# They live in your history as the expanded command, which keeps history
-# useful. Uncomment any of these or add your own:
-#
-#   abbr -a cc clear
-#   abbr -a ee exit
-#   abbr -a cdd 'cd ..'
-#   abbr -a nn nvim
-#   abbr -a mm mkdir
-#   abbr -a py python
-#   abbr -a gitc 'git clone'
-#   abbr -a fishy 'nvim ~/.config/fish/config.fish'    # edit this file
-#   abbr -a termuxy 'nvim ~/.termux/termux.properties' # edit terminal settings
-#   abbr -a rfish 'exec fish'                          # reload this config
-#   abbr -a rr termux-reload-settings                  # reload ~/.termux configs
-#
-# Package-manager shortcuts, guarded so they only exist where pacman does:
-#
-#   if type -q pacman
-#       abbr -a ii 'pacman -S --needed --noconfirm'
-#       abbr -a ss 'pacman -Ss'
-#       abbr -a uu 'pacman -Syu --needed --noconfirm'
-#   end
-#
-# Functions are for anything with logic (see `y` above). Key bindings attach
-# to any function; this one runs it on Alt+G in an interactive shell:
-#
-#   function __git_status
-#       git status
-#       commandline -f repaint
-#   end
-#   bind \eg __git_status
-#
-# Environment variables for tools you install (API keys and the like) belong
-# in a separate un-shared file; source it here if it exists:
-#
-#   test -r ~/.config/fish/secrets.fish; and source ~/.config/fish/secrets.fish
-
 if status is-interactive
-    # Nix edition: start the declarative sshd only when armed via `sshd-autostart on`.
-    if test -e ~/.config/sshd/autostart; and type -q sshd-start
-        sshd-start --quiet
+    # Mention the Neovim chooser once, only while no config exists. Not a prompt:
+    # a question on every new shell would be worse than no question at all.
+    set -l __tl_config_home (test -n "$XDG_CONFIG_HOME"; and echo "$XDG_CONFIG_HOME"; or echo "$HOME/.config")
+    if type -q setup-nvim; and not test -e "$__tl_config_home/nvim"; and not test -e "$__tl_config_home/.setup-nvim-hinted"
+        echo "Neovim has no config yet — run 'setup-nvim' to pick one (AstroNvim, NvChad, LazyVim, kickstart, or stock)."
+        touch "$__tl_config_home/.setup-nvim-hinted"
     end
+    set -e __tl_config_home
 
     function fish_greeting
         command clear
@@ -163,52 +121,11 @@ if status is-interactive
 
     # Oh My Posh prompt. Keep this after the Material colors are sourced.
     # The compact Aliens-derived theme follows the launcher's Material palette.
-    # termux-launcher remains available as the fuller alternate theme.
     if type -q oh-my-posh
         set -l omp_theme "$HOME/.config/ohmyposh/aliens-material.omp.json"
-        test -f "$omp_theme"; or set omp_theme "$HOME/.config/ohmyposh/termux-launcher.omp.json"
 
         if test -f "$omp_theme"
             oh-my-posh --config "$omp_theme" init fish | source
-        end
-    end
-
-    # eza replaces ls-style commands when installed.
-    if type -q eza
-        function ls
-            command eza --group-directories-first --icons=auto $argv
-        end
-
-        function l
-            command eza --group-directories-first --icons=auto $argv
-        end
-
-        function la
-            command eza --all --group-directories-first --icons=auto $argv
-        end
-
-        function ll
-            command eza --long --all --header --git --group-directories-first --icons=auto $argv
-        end
-
-        function lt
-            command eza --tree --level=2 --group-directories-first --icons=auto $argv
-        end
-    end
-
-    # zoxide powers cd; the wrapper also lists the destination after moving.
-    if type -q zoxide
-        zoxide init --cmd cd fish | source
-
-        functions --erase cd
-        function cd --wraps=__zoxide_z
-            __zoxide_z $argv
-            and ls
-        end
-    else
-        function cd --wraps=cd
-            builtin cd $argv
-            and ls
         end
     end
 end

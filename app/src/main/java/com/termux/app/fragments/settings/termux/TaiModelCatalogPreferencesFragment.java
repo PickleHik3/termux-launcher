@@ -9,10 +9,6 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.text.InputType;
-import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.Toast;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
@@ -22,6 +18,7 @@ import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiManager;
@@ -494,15 +491,14 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
     private void startCatalogDownload(Context context, TaiModelCatalog.CatalogEntry entry) {
         try {
             JSONObject result = TaiManager.getInstance(context).downloadCatalogModel(entry.modelId);
-            Toast.makeText(context, result.optBoolean("ok", false)
-                ? R.string.termux_ai_model_download_started : R.string.termux_ai_model_action_failed,
-                Toast.LENGTH_SHORT).show();
+            AppNotice.show(context, result.optBoolean("ok", false)
+                ? R.string.termux_ai_model_download_started : R.string.termux_ai_model_action_failed, false);
             // Flip just this row to its downloading state in place (no full rebuild → no flash).
             updateRowsInPlace(context);
             handler.removeCallbacks(refreshRunnable);
             handler.postDelayed(refreshRunnable, POLL_INTERVAL_MS);
         } catch (JSONException e) {
-            Toast.makeText(context, R.string.termux_ai_model_action_failed, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, R.string.termux_ai_model_action_failed, true);
         }
     }
 
@@ -510,12 +506,11 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
         try {
             JSONObject result = TaiManager.getInstance(context).cancelDownload(
                 new JSONObject().put("modelId", modelId).toString());
-            Toast.makeText(context, result.optBoolean("ok", false)
-                ? R.string.termux_ai_model_download_cancelled : R.string.termux_ai_model_action_failed,
-                Toast.LENGTH_SHORT).show();
+            AppNotice.show(context, result.optBoolean("ok", false)
+                ? R.string.termux_ai_model_download_cancelled : R.string.termux_ai_model_action_failed, false);
             updateRowsInPlace(context);
         } catch (JSONException e) {
-            Toast.makeText(context, R.string.termux_ai_model_action_failed, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, R.string.termux_ai_model_action_failed, true);
         }
     }
 
@@ -524,39 +519,14 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
         TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(context);
         if (model != null && TaiModelSpec.BACKEND_MNN_LLM.equals(model.backend) && !capabilities.mnnSupported) {
             String reason = capabilities.mnnUnsupportedReason;
-            Toast.makeText(context, reason == null ? getString(R.string.termux_ai_mnn_runtime_pending) : reason,
-                Toast.LENGTH_LONG).show();
+            AppNotice.show(context, reason == null ? getString(R.string.termux_ai_mnn_runtime_pending) : reason, true);
             return;
         }
         SharedPreferences preferences = getPreferenceManager().getSharedPreferences();
         if (preferences == null) return;
         preferences.edit().putString(TaiSettings.KEY_ROLE_DEFAULT_ASSISTANT, modelId).apply();
-        Toast.makeText(context, R.string.termux_ai_model_active_saved, Toast.LENGTH_SHORT).show();
+        AppNotice.show(context, R.string.termux_ai_model_active_saved, false);
         updateRowsInPlace(context);
-    }
-
-    private void confirmDeleteModel(Context context, TaiModelSpec model) {
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(getString(R.string.termux_ai_model_delete_title, model.displayName))
-            .setMessage(R.string.termux_ai_model_delete_message)
-            .setPositiveButton(R.string.termux_ai_model_delete_action, (dialog, which) -> deleteModel(context, model.id))
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
-    }
-
-    private void deleteModel(Context context, String modelId) {
-        try {
-            JSONObject request = new JSONObject();
-            request.put("modelId", modelId);
-            request.put("confirm", true);
-            JSONObject result = TaiManager.getInstance(context).deleteModel(request.toString());
-            Toast.makeText(context,
-                result.optBoolean("deleted", false) ? R.string.termux_ai_model_deleted : R.string.termux_ai_model_delete_missing,
-                Toast.LENGTH_SHORT).show();
-            refreshCatalogRows(context);
-        } catch (JSONException e) {
-            Toast.makeText(context, R.string.termux_ai_model_action_failed, Toast.LENGTH_LONG).show();
-        }
     }
 
     private void openParameterScreen(@NonNull TaiModelSpec model) {
@@ -566,97 +536,6 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
             .replace(R.id.settings, fragment)
             .addToBackStack(null)
             .commit();
-    }
-
-    private void showTuneModelDialog(Context context, TaiModelSpec model) {
-        TaiSettings.ParameterSchema schema = TaiSettings.getParameterSchema(model.backend);
-        ArrayList<TaiSettings.ParameterSpec> specs = new ArrayList<>(schema.fields().values());
-        CharSequence[] labels = new CharSequence[specs.size() + 1];
-        SharedPreferences preferences = getPreferenceManager().getSharedPreferences();
-        for (int i = 0; i < specs.size(); i++) {
-            TaiSettings.ParameterSpec spec = specs.get(i);
-            String value = preferences == null ? "auto" : preferences.getString(modelParameterKey(model.id, spec.field), "auto");
-            labels[i] = parameterLabel(spec.field) + "  ·  " + overrideValueLabel(spec.field, value);
-        }
-        labels[specs.size()] = getString(R.string.termux_ai_model_tune_reset_action);
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(getString(R.string.termux_ai_model_tune_title, model.displayName))
-            .setItems(labels, (dialog, which) -> {
-                if (which == specs.size()) {
-                    new TaiSettings(context).resetModelParametersToGlobal(model.id);
-                    Toast.makeText(context, R.string.termux_ai_model_tune_reset_done, Toast.LENGTH_SHORT).show();
-                } else {
-                    showTuneParameterDialog(context, model, specs.get(which));
-                }
-            })
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
-    }
-
-    private void showTuneParameterDialog(Context context, TaiModelSpec model, TaiSettings.ParameterSpec spec) {
-        if (spec.options.length > 0 || spec.fallbackValue instanceof Boolean) {
-            ArrayList<String> values = new ArrayList<>();
-            values.add("auto");
-            if (spec.fallbackValue instanceof Boolean) {
-                values.add("true");
-                values.add("false");
-            } else {
-                values.addAll(Arrays.asList(spec.options));
-            }
-            String[] labels = values.toArray(new String[0]);
-            String current = currentModelParameterValue(model.id, spec.field);
-            int checked = 0;
-            for (int i = 0; i < labels.length; i++) if (labels[i].equalsIgnoreCase(current)) checked = i;
-            new MaterialAlertDialogBuilder(context)
-                .setTitle(parameterLabel(spec.field))
-                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
-                    saveModelParameter(context, model.id, spec, labels[which]);
-                    dialog.dismiss();
-                })
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
-            return;
-        }
-        EditText input = new EditText(context);
-        input.setInputType(InputType.TYPE_CLASS_NUMBER | (spec.fallbackValue instanceof Double
-            ? InputType.TYPE_NUMBER_FLAG_DECIMAL : 0));
-        input.setSingleLine(true);
-        input.setText(currentModelParameterValue(model.id, spec.field));
-        int padding = Math.round(24 * context.getResources().getDisplayMetrics().density);
-        LinearLayout layout = new LinearLayout(context);
-        layout.setPadding(padding, 0, padding, 0);
-        layout.addView(input);
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(parameterLabel(spec.field))
-            .setView(layout)
-            .setNeutralButton(R.string.termux_ai_model_tune_reset_one_action, (dialog, which) ->
-                saveModelParameter(context, model.id, spec, "auto"))
-            .setPositiveButton(R.string.termux_ai_dialog_save, (dialog, which) ->
-                saveModelParameter(context, model.id, spec, input.getText().toString()))
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
-    }
-
-    private String currentModelParameterValue(String modelId, String field) {
-        SharedPreferences preferences = getPreferenceManager().getSharedPreferences();
-        return preferences == null ? "auto" : preferences.getString(modelParameterKey(modelId, field), "auto");
-    }
-
-    private void saveModelParameter(Context context, String modelId, TaiSettings.ParameterSpec spec, String rawValue) {
-        String value = rawValue == null ? "auto" : rawValue.trim();
-        TaiSettings settings = new TaiSettings(context);
-        if (value.isEmpty() || "auto".equalsIgnoreCase(value)) {
-            settings.resetModelParameterToGlobal(modelId, spec.field);
-            Toast.makeText(context, R.string.termux_ai_model_tune_saved, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        Object parsed = spec.parse(value);
-        if (parsed == null) {
-            Toast.makeText(context, R.string.termux_ai_model_tune_invalid, Toast.LENGTH_LONG).show();
-            return;
-        }
-        settings.setModelParameter(modelId, spec.field, parsed);
-        Toast.makeText(context, R.string.termux_ai_model_tune_saved, Toast.LENGTH_SHORT).show();
     }
 
     private boolean hasActiveDownloads(Context context) {
@@ -672,14 +551,14 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
         ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
         if (clipboard == null) return;
         clipboard.setPrimaryClip(ClipData.newPlainText("TAI provider", text));
-        Toast.makeText(context, text, Toast.LENGTH_SHORT).show();
+        AppNotice.show(context, text, false);
     }
 
     private void openUrl(Context context, String url) {
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
         } catch (Exception e) {
-            Toast.makeText(context, url, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, url, true);
         }
     }
 
@@ -695,33 +574,6 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
             builder.append(tag);
         }
         return builder.toString();
-    }
-
-    private String modelParameterKey(String modelId, String field) {
-        return "tai_model_parameter." + modelId + "." + field;
-    }
-
-    private String parameterLabel(String field) {
-        if (TaiSettings.FIELD_MAX_TOKENS.equals(field)) return getString(R.string.termux_ai_max_tokens_title);
-        if (TaiSettings.FIELD_TOP_K.equals(field)) return getString(R.string.termux_ai_top_k_title);
-        if (TaiSettings.FIELD_TOP_P.equals(field)) return getString(R.string.termux_ai_top_p_title);
-        if (TaiSettings.FIELD_TEMPERATURE.equals(field)) return getString(R.string.termux_ai_temperature_title);
-        if (TaiSettings.FIELD_ACCELERATOR.equals(field)) return getString(R.string.termux_ai_accelerator_title);
-        if (TaiSettings.FIELD_ENABLE_THINKING.equals(field)) return getString(R.string.termux_ai_thinking_title);
-        if (TaiSettings.FIELD_ENABLE_SPECULATIVE_DECODING.equals(field)) return getString(R.string.termux_ai_speculative_decoding_title);
-        if (TaiSettings.FIELD_CONTEXT_WINDOW.equals(field)) return getString(R.string.termux_ai_context_window_title);
-        return field;
-    }
-
-    private String overrideValueLabel(String key, String value) {
-        if (value == null || value.isEmpty()) return "auto";
-        if (TaiSettings.FIELD_ACCELERATOR.equals(key)) return "auto".equals(value) ? "profile" : value;
-        if (TaiSettings.FIELD_ENABLE_THINKING.equals(key) || TaiSettings.FIELD_ENABLE_SPECULATIVE_DECODING.equals(key)) {
-            if ("true".equals(value)) return "on";
-            if ("false".equals(value)) return "off";
-            return "auto";
-        }
-        return value;
     }
 
     private static String formatBytes(long bytes) {

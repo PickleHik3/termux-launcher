@@ -2,10 +2,8 @@ package com.termux.app.fragments.settings.termux;
 
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
-import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
-import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -16,13 +14,10 @@ import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.Space;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.fragment.app.Fragment;
@@ -32,25 +27,17 @@ import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.color.MaterialColors;
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory;
-import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import juloo.keyboard2.Config;
 import juloo.keyboard2.Keyboard2View;
@@ -67,7 +54,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
     private TermuxAppSharedPreferences mPreferences;
     private InAppKeyboardColorScheme mScheme;
     private Keyboard2View mKeyboard;
-    private LinearLayout mSwatchRow;
+    private LinearLayout mSwatchGrid;
     private TextView mStatus;
     private final List<View> mSwatchViews = new ArrayList<>();
     private final List<View> mSwatchBadges = new ArrayList<>();
@@ -76,8 +63,10 @@ public class KeyboardColorSchemeFragment extends Fragment {
     private int mSelectedSwatch;
     private InAppKeyboardColorScheme.Role mSelectedRole =
         InAppKeyboardColorScheme.Role.KEY_BACKGROUND;
+    /** The Background chip paints through swatch taps alone, so it sits outside the roles. */
+    private boolean mPaintingBackground;
     private boolean mEditingSwatches;
-    private static final int MAX_BASE16_BYTES = 262144;
+    private static final int SWATCH_GRID_COLUMNS = 8;
     /**
      * Material role behind every slot, mirroring
      * {@link InAppKeyboardPaletteFactory#defaultEditorSwatches}. These stay untranslated on
@@ -93,19 +82,6 @@ public class KeyboardColorSchemeFragment extends Fragment {
         "error + onSurface 20%", "tertiary + onSurface 20%", "primary + onSurface 20%",
         "secondary + onSurface 20%", "tertiary + primary 50%", "primary + secondary 50%"
     };
-    private static final String TINTED_SCHEME_URL =
-        "https://raw.githubusercontent.com/tinted-theming/schemes/spec-0.11/%s/%s.yaml";
-    private static final String TINTED_GALLERY_URL =
-        "https://tinted-theming.github.io/tinted-gallery/";
-    private final ExecutorService mImportExecutor = Executors.newSingleThreadExecutor(runnable -> {
-        Thread thread = new Thread(runnable, "base16-theme-import");
-        thread.setDaemon(true);
-        return thread;
-    });
-
-    private final ActivityResultLauncher<String[]> mBase16Picker = registerForActivityResult(
-        new ActivityResultContracts.OpenDocument(), this::importBase16Uri);
-
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
@@ -145,6 +121,15 @@ public class KeyboardColorSchemeFragment extends Fragment {
         Space spacer = new Space(context);
         root.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1f));
 
+        // All 24 swatches sit right above the preview so a chosen color lands next to the keys
+        // it paints; the card below keeps the actions and role filters.
+        mSwatchGrid = new LinearLayout(context);
+        mSwatchGrid.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        gridParams.bottomMargin = dp(8);
+        root.addView(mSwatchGrid, gridParams);
+
         Config.Builder config = new Config.Builder(getResources(), new Config.IKeyEventHandler() {
             @Override public void key_down(KeyValue value, boolean isSwipe) {}
             @Override public void key_up(KeyValue value, Pointers.Modifiers modifiers) {}
@@ -153,11 +138,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         });
         config.hapticEnabled = false;
         config.keySoundEnabled = false;
-        String theme = mPreferences.getInAppKeyboardTheme();
-        Theme.Palette palette = InAppKeyboardPaletteFactory.createGlass(context, theme);
-        if (mScheme.shouldApplyImportedPalette(theme))
-            palette = mScheme.applyToPalette(palette);
-        mKeyboard = new Keyboard2View(context, config.build(), palette);
+        mKeyboard = new Keyboard2View(context, config.build(), buildPreviewPalette(context));
         KeyboardData previewLayout = KeyboardData.load(getResources(),
             juloo.keyboard2.R.xml.termux_launcher_qwerty);
         if (previewLayout != null) {
@@ -173,6 +154,9 @@ public class KeyboardColorSchemeFragment extends Fragment {
         mKeyboard.setKeyCornerRadiusOverride(radiusDp < 0f ? -1f : dpFloat(radiusDp));
         mKeyboard.setKeyColorOverrides(mScheme.resolvedOverrides());
         mKeyboard.setOnKeyPaintListener(keyId -> {
+            // The Background chip assigns through swatch taps alone; a key tap paints nothing.
+            if (mPaintingBackground)
+                return;
             mScheme.paint(keyId, mSelectedRole, mSelectedSwatch);
             persistAndRender();
         });
@@ -181,7 +165,33 @@ public class KeyboardColorSchemeFragment extends Fragment {
 
         root.addView(buildPaletteCard(context), new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        createSwatches();
         return root;
+    }
+
+    /** Glass preview palette: the imported palette when active, then the background override. */
+    @NonNull
+    private Theme.Palette buildPreviewPalette(@NonNull android.content.Context context) {
+        String theme = mPreferences.getInAppKeyboardTheme();
+        Theme.Palette palette = InAppKeyboardPaletteFactory.createGlass(context, theme);
+        if (mScheme.shouldApplyImportedPalette(theme))
+            palette = mScheme.applyToPalette(palette);
+        // Production paints this color into the activity's glass backdrop behind a transparent
+        // keyboard; the preview has no backdrop, so its palette carries the color itself.
+        Integer background = mScheme.resolvedKeyboardBackground();
+        return background == null ? palette : withKeyboardBackground(palette, background);
+    }
+
+    /** Copy of a palette with only the keyboard background replaced. */
+    @NonNull
+    private static Theme.Palette withKeyboardBackground(@NonNull Theme.Palette base, int color) {
+        return new Theme.Palette(color, base.keyBackground, base.actionKeyBackground,
+            base.spaceBarBackground, base.activatedKeyBackground, base.labelColor,
+            base.subLabelColor, base.activatedLabelColor, base.pressedLabelColor,
+            base.lockedModifierColor, base.borderColor, base.borderEnabled, base.borderWidth,
+            base.borderRadius, base.opacity, base.secondaryDimming, base.greyedDimming,
+            base.actionLabelColor, base.actionSubLabelColor, base.indicatorColors,
+            base.keyGradientTopOverlay, base.keyGradientBottomOverlay);
     }
 
     /** Bottom sheet-style card holding the swatches, edit/reset actions, and role filters. */
@@ -226,48 +236,19 @@ public class KeyboardColorSchemeFragment extends Fragment {
         heading.addView(edit);
         content.addView(heading);
 
-        // Import and the scheme-level reset scroll rather than clip: both labels are long enough
-        // to overflow one row on a narrow phone.
-        HorizontalScrollView actionScroller = new HorizontalScrollView(context);
-        actionScroller.setHorizontalScrollBarEnabled(false);
-        actionScroller.setClipToPadding(false);
         LinearLayout actions = new LinearLayout(context);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setGravity(Gravity.CENTER_VERTICAL);
-        MaterialButton importButton = new MaterialButton(context, null,
-            com.google.android.material.R.attr.materialButtonOutlinedStyle);
-        importButton.setText(R.string.termux_keyboard_color_scheme_import_tinted);
-        importButton.setOnClickListener(view -> showBase16NameDialog());
-        actions.addView(importButton, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         MaterialButton followTheme = new MaterialButton(context, null,
             com.google.android.material.R.attr.materialButtonOutlinedStyle);
         followTheme.setText(R.string.termux_keyboard_color_scheme_follow_theme);
         followTheme.setOnClickListener(view -> showFollowThemeDialog());
-        LinearLayout.LayoutParams followParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        followParams.setMarginStart(dp(8));
-        actions.addView(followTheme, followParams);
-        actionScroller.addView(actions, new ViewGroup.LayoutParams(
+        actions.addView(followTheme, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout.LayoutParams actionParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         actionParams.topMargin = dp(4);
-        content.addView(actionScroller, actionParams);
-
-        HorizontalScrollView swatchScroller = new HorizontalScrollView(context);
-        swatchScroller.setHorizontalScrollBarEnabled(false);
-        swatchScroller.setClipToPadding(false);
-        mSwatchRow = new LinearLayout(context);
-        mSwatchRow.setOrientation(LinearLayout.HORIZONTAL);
-        mSwatchRow.setGravity(Gravity.CENTER_VERTICAL);
-        swatchScroller.addView(mSwatchRow, new ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, dp(100)));
-        LinearLayout.LayoutParams swatchParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(100));
-        swatchParams.topMargin = dp(8);
-        content.addView(swatchScroller, swatchParams);
-        createSwatches();
+        content.addView(actions, actionParams);
 
         HorizontalScrollView roleScroller = new HorizontalScrollView(context);
         roleScroller.setHorizontalScrollBarEnabled(false);
@@ -287,10 +268,16 @@ public class KeyboardColorSchemeFragment extends Fragment {
             InAppKeyboardColorScheme.Role.SECONDARY, false);
         addRole(context, roles, R.string.termux_keyboard_color_scheme_secondary_bottom,
             InAppKeyboardColorScheme.Role.SECONDARY_BOTTOM, false);
+        // Not a per-key role: while checked, a swatch tap immediately becomes the whole
+        // keyboard's background, and re-tapping the assigned swatch clears it again.
+        Chip backgroundChip = addRole(context, roles,
+            R.string.termux_keyboard_color_scheme_background, null, false);
         roles.setOnCheckedStateChangeListener((group, checkedIds) -> {
             if (checkedIds.isEmpty())
                 return;
-            InAppKeyboardColorScheme.Role role = mRoleByChipId.get(checkedIds.get(0));
+            int checkedId = checkedIds.get(0);
+            mPaintingBackground = checkedId == backgroundChip.getId();
+            InAppKeyboardColorScheme.Role role = mRoleByChipId.get(checkedId);
             if (role != null)
                 mSelectedRole = role;
         });
@@ -345,8 +332,8 @@ public class KeyboardColorSchemeFragment extends Fragment {
         mSelectedSwatch = 0;
         persistAndRender();
         createSwatches();
-        Toast.makeText(requireContext(),
-            R.string.termux_keyboard_color_scheme_follow_theme_done, Toast.LENGTH_SHORT).show();
+        AppNotice.show(requireContext(),
+            R.string.termux_keyboard_color_scheme_follow_theme_done, false);
     }
 
     /** Reset seam used by the confirmation dialog: unpins every slot and drops the import. */
@@ -365,7 +352,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         return index >= 0 && index < SLOT_ROLE_IDS.length ? SLOT_ROLE_IDS[index] : "";
     }
 
-    /** Short, translated role name shown under a swatch. */
+    /** Short, translated role name used when a slot has no Material role identifier. */
     @NonNull
     static String slotRoleLabel(@NonNull android.content.Context context, int index) {
         String[] labels = context.getResources().getStringArray(
@@ -415,85 +402,90 @@ public class KeyboardColorSchemeFragment extends Fragment {
             pinnedSwatchCount(scheme), scheme.swatchCount());
     }
 
-    private void addRole(@NonNull android.content.Context context, @NonNull ChipGroup group,
-                         int label, InAppKeyboardColorScheme.Role role, boolean checked) {
+    @NonNull
+    private Chip addRole(@NonNull android.content.Context context, @NonNull ChipGroup group,
+                         int label, @Nullable InAppKeyboardColorScheme.Role role,
+                         boolean checked) {
         Chip chip = new Chip(context);
         chip.setId(View.generateViewId());
         chip.setText(label);
         chip.setCheckable(true);
         chip.setChecked(checked);
-        mRoleByChipId.put(chip.getId(), role);
+        if (role != null)
+            mRoleByChipId.put(chip.getId(), role);
         ChipGroup.LayoutParams params = new ChipGroup.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.setMarginEnd(dp(8));
         group.addView(chip, params);
+        return chip;
     }
 
-    /** Every slot is always shown; unlabelled chips are unusable at 24 of them. */
+    /**
+     * Every slot is always visible: 8x3 fixed circles instead of a scrolling row, so choosing a
+     * color never means hunting off-screen. The circles carry no text; the role and pinned state
+     * live in each slot's content description and in the hex dialog.
+     */
     private void createSwatches() {
         android.content.Context context = requireContext();
         mSwatchViews.clear();
         mSwatchBadges.clear();
         mSwatchItems.clear();
-        mSwatchRow.removeAllViews();
+        mSwatchGrid.removeAllViews();
         if (mSelectedSwatch < 0 || mSelectedSwatch >= mScheme.swatchCount())
             mSelectedSwatch = 0;
-        int roleColor = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorOnSurfaceVariant, Color.GRAY);
+        LinearLayout row = null;
         for (int i = 0; i < mScheme.swatchCount(); i++) {
             final int index = i;
-            LinearLayout item = new LinearLayout(context);
-            item.setOrientation(LinearLayout.VERTICAL);
-            item.setGravity(Gravity.CENTER_HORIZONTAL);
-            item.setOnClickListener(view -> {
-                mSelectedSwatch = index;
-                if (mEditingSwatches) showHexEditor(index);
-                updateSwatches();
-            });
+            if (i % SWATCH_GRID_COLUMNS == 0) {
+                row = new LinearLayout(context);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                if (i > 0) rowParams.topMargin = dp(6);
+                mSwatchGrid.addView(row, rowParams);
+            }
 
-            // The pinned badge overlays the swatch, so the two share a well.
+            // The pinned badge overlays the swatch, so the two share a well; the well floats in
+            // an equal-weight cell, which is what spaces the columns evenly on any width.
+            FrameLayout cell = new FrameLayout(context);
+            cell.setOnClickListener(view -> onSwatchTapped(index));
             FrameLayout well = new FrameLayout(context);
             View swatch = new View(context);
-            well.addView(swatch, new FrameLayout.LayoutParams(dp(48), dp(48)));
+            well.addView(swatch, new FrameLayout.LayoutParams(dp(36), dp(36)));
             View badge = new View(context);
             badge.setBackground(pinnedBadge(context));
-            FrameLayout.LayoutParams badgeParams = new FrameLayout.LayoutParams(dp(13), dp(13));
+            FrameLayout.LayoutParams badgeParams = new FrameLayout.LayoutParams(dp(11), dp(11));
             badgeParams.gravity = Gravity.TOP | Gravity.END;
             well.addView(badge, badgeParams);
-            item.addView(well, new LinearLayout.LayoutParams(dp(48), dp(48)));
+            FrameLayout.LayoutParams wellParams = new FrameLayout.LayoutParams(dp(36), dp(36));
+            wellParams.gravity = Gravity.CENTER;
+            cell.addView(well, wellParams);
 
-            TextView slotLabel = new TextView(context);
-            slotLabel.setText(slotName(i));
-            slotLabel.setGravity(Gravity.CENTER);
-            slotLabel.setTextAppearance(
-                com.google.android.material.R.style.TextAppearance_Material3_LabelSmall);
-            item.addView(slotLabel, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-            TextView roleLabel = new TextView(context);
-            roleLabel.setText(slotRoleLabel(context, i));
-            roleLabel.setGravity(Gravity.CENTER);
-            roleLabel.setTextAppearance(
-                com.google.android.material.R.style.TextAppearance_Material3_LabelSmall);
-            roleLabel.setTextSize(9f);
-            roleLabel.setMaxLines(2);
-            roleLabel.setEllipsize(TextUtils.TruncateAt.END);
-            roleLabel.setTextColor(roleColor);
-            item.addView(roleLabel, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                dp(68), ViewGroup.LayoutParams.WRAP_CONTENT);
-            params.setMarginEnd(dp(10));
-            mSwatchRow.addView(item, params);
+            row.addView(cell, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             mSwatchViews.add(swatch);
             mSwatchBadges.add(badge);
-            mSwatchItems.add(item);
+            mSwatchItems.add(cell);
         }
         updateSwatches();
     }
 
-    /** Dot marking a pinned slot, ringed in the card color so it reads over any swatch. */
+    private void onSwatchTapped(int index) {
+        mSelectedSwatch = index;
+        if (mEditingSwatches) {
+            showHexEditor(index);
+        } else if (mPaintingBackground) {
+            // Re-tapping the assigned swatch is the way back to the theme's own surface.
+            if (mScheme.getKeyboardBackgroundSwatch() == index)
+                mScheme.clearKeyboardBackgroundSwatch();
+            else
+                mScheme.setKeyboardBackgroundSwatch(index);
+            persistAndRender();
+        }
+        updateSwatches();
+    }
+
+    /** Dot marking a pinned slot, ringed in the page surface so it reads over any swatch. */
     @NonNull
     private GradientDrawable pinnedBadge(@NonNull android.content.Context context) {
         GradientDrawable badge = new GradientDrawable();
@@ -501,9 +493,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         badge.setColor(MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorOnSurface, Color.WHITE));
         badge.setStroke(dp(2), MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorSurfaceContainerHigh,
-            MaterialColors.getColor(context,
-                com.google.android.material.R.attr.colorSurface, Color.DKGRAY)));
+            com.google.android.material.R.attr.colorSurface, Color.DKGRAY));
         return badge;
     }
 
@@ -571,9 +561,8 @@ public class KeyboardColorSchemeFragment extends Fragment {
         mScheme.unpinSwatch(index);
         persistAndRender();
         updateSwatches();
-        Toast.makeText(requireContext(),
-            getString(R.string.termux_keyboard_color_scheme_slot_unpinned, slotName(index)),
-            Toast.LENGTH_SHORT).show();
+        AppNotice.show(requireContext(),
+            getString(R.string.termux_keyboard_color_scheme_slot_unpinned, slotName(index)), false);
     }
 
     @Nullable
@@ -593,258 +582,8 @@ public class KeyboardColorSchemeFragment extends Fragment {
 
     private void persistAndRender() {
         mPreferences.setInAppKeyboardColorScheme(mScheme.toJson());
-        String theme = mPreferences.getInAppKeyboardTheme();
-        Theme.Palette palette = InAppKeyboardPaletteFactory.createGlass(requireContext(), theme);
-        if (mScheme.shouldApplyImportedPalette(theme))
-            palette = mScheme.applyToPalette(palette);
-        mKeyboard.setPalette(palette);
+        mKeyboard.setPalette(buildPreviewPalette(requireContext()));
         mKeyboard.setKeyColorOverrides(mScheme.resolvedOverrides());
-    }
-
-    private void importBase16Uri(@Nullable Uri uri) {
-        if (uri == null) return;
-        try (InputStream stream = requireContext().getContentResolver().openInputStream(uri)) {
-            if (stream == null) throw new IOException("Unable to open document");
-            BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
-            StringBuilder text = new StringBuilder();
-            char[] buffer = new char[4096];
-            int count;
-            while ((count = reader.read(buffer)) >= 0) {
-                if (text.length() + count > MAX_BASE16_BYTES)
-                    throw new IOException("Theme file is too large");
-                text.append(buffer, 0, count);
-            }
-            if (!importTintedScheme(text.toString(), null)) {
-                Toast.makeText(requireContext(),
-                    R.string.termux_keyboard_color_scheme_tinted_error, Toast.LENGTH_LONG).show();
-                return;
-            }
-            mScheme.setImportedThemeId(getString(
-                R.string.termux_keyboard_color_scheme_imported_file_name));
-            mPreferences.setInAppKeyboardTheme("custom");
-            mSelectedSwatch = 0;
-            persistAndRender();
-            createSwatches();
-            Toast.makeText(requireContext(),
-                R.string.termux_keyboard_color_scheme_tinted_imported, Toast.LENGTH_SHORT).show();
-        } catch (IOException | SecurityException e) {
-            Toast.makeText(requireContext(),
-                R.string.termux_keyboard_color_scheme_tinted_read_error, Toast.LENGTH_LONG).show();
-        }
-    }
-
-    private void showBase16NameDialog() {
-        EditText input = new EditText(requireContext());
-        input.setSingleLine(true);
-        input.setInputType(InputType.TYPE_CLASS_TEXT);
-        input.setHint(R.string.termux_keyboard_color_scheme_tinted_name_hint);
-        LinearLayout dialogContent = new LinearLayout(requireContext());
-        dialogContent.setOrientation(LinearLayout.VERTICAL);
-        dialogContent.addView(input, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        TextView galleryLink = new TextView(requireContext());
-        galleryLink.setText(R.string.termux_keyboard_color_scheme_tinted_gallery_link);
-        galleryLink.setTextColor(MaterialColors.getColor(requireContext(),
-            com.google.android.material.R.attr.colorPrimary, Color.CYAN));
-        galleryLink.setPadding(0, dp(12), 0, dp(4));
-        galleryLink.setOnClickListener(view -> ShareUtils.openUrl(requireContext(),
-            TINTED_GALLERY_URL));
-        dialogContent.addView(galleryLink, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        int horizontal = dp(24);
-        AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.termux_keyboard_color_scheme_tinted_name_title)
-            .setMessage(R.string.termux_keyboard_color_scheme_tinted_name_message)
-            .setView(dialogContent, horizontal, 0, horizontal, 0)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setNeutralButton(R.string.termux_keyboard_color_scheme_tinted_choose_file,
-                (ignored, which) -> launchBase16FilePicker())
-            .setPositiveButton(R.string.termux_keyboard_color_scheme_tinted_import, null)
-            .create();
-        dialog.setOnShowListener(ignored -> {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
-                TintedSchemeId scheme = parseTintedSchemeId(input.getText().toString());
-                if (scheme == null) {
-                    input.setError(getString(
-                        R.string.termux_keyboard_color_scheme_tinted_name_error));
-                    return;
-                }
-                dialog.dismiss();
-                downloadTintedScheme(scheme);
-            });
-            input.requestFocus();
-        });
-        dialog.show();
-    }
-
-    private void launchBase16FilePicker() {
-        mBase16Picker.launch(new String[] {
-            "application/x-yaml", "text/yaml", "text/plain", "application/json", "*/*"
-        });
-    }
-
-    @Nullable
-    static String normalizeBase16Name(@Nullable String name) {
-        TintedSchemeId scheme = parseTintedSchemeId(name);
-        return scheme == null ? null : scheme.slug;
-    }
-
-    @Nullable
-    static TintedSchemeId parseTintedSchemeId(@Nullable String name) {
-        if (name == null) return null;
-        String normalized = name.trim().toLowerCase(Locale.ROOT);
-        normalized = normalized.replaceAll("[\\s_]+", "-")
-            .replaceAll("[^a-z0-9-]", "-")
-            .replaceAll("-+", "-")
-            .replaceAll("^-|-$", "");
-        if (normalized.isEmpty() || normalized.length() > 104) return null;
-        String system = "base16";
-        for (String candidate : new String[] {"base16", "base24", "tinted8"}) {
-            String prefix = candidate + "-";
-            if (normalized.startsWith(prefix)) {
-                system = candidate;
-                normalized = normalized.substring(prefix.length());
-                break;
-            }
-        }
-        return normalized.isEmpty() || normalized.length() > 96
-            ? null : new TintedSchemeId(system, normalized);
-    }
-
-    private void downloadTintedScheme(@NonNull TintedSchemeId scheme) {
-        Toast.makeText(requireContext(),
-            R.string.termux_keyboard_color_scheme_tinted_downloading, Toast.LENGTH_SHORT).show();
-        mImportExecutor.execute(() -> {
-            Base16Download result = fetchTintedScheme(scheme);
-            if (!isAdded()) return;
-            requireActivity().runOnUiThread(() -> applyDownloadedTintedScheme(result));
-        });
-    }
-
-    @NonNull
-    private static Base16Download fetchTintedScheme(@NonNull TintedSchemeId scheme) {
-        HttpURLConnection connection = null;
-        try {
-            URL url = new URL(String.format(Locale.ROOT, TINTED_SCHEME_URL,
-                scheme.system, scheme.slug));
-            connection = (HttpURLConnection) url.openConnection();
-            connection.setConnectTimeout(8000);
-            connection.setReadTimeout(8000);
-            connection.setInstanceFollowRedirects(false);
-            connection.setRequestProperty("Accept", "text/yaml,text/plain");
-            int status = connection.getResponseCode();
-            if (status == HttpURLConnection.HTTP_NOT_FOUND)
-                return Base16Download.notFound();
-            if (status != HttpURLConnection.HTTP_OK)
-                return Base16Download.networkError();
-            try (InputStream stream = connection.getInputStream()) {
-                String text = readLimitedText(stream);
-                return text == null ? Base16Download.networkError()
-                    : Base16Download.success(text, scheme.system, scheme.id());
-            }
-        } catch (IOException | SecurityException ignored) {
-            return Base16Download.networkError();
-        } finally {
-            if (connection != null) connection.disconnect();
-        }
-    }
-
-    @Nullable
-    private static String readLimitedText(@NonNull InputStream stream) throws IOException {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
-        StringBuilder text = new StringBuilder();
-        char[] buffer = new char[4096];
-        int count;
-        while ((count = reader.read(buffer)) >= 0) {
-            if (text.length() + count > MAX_BASE16_BYTES) return null;
-            text.append(buffer, 0, count);
-        }
-        return text.toString();
-    }
-
-    private void applyDownloadedTintedScheme(@NonNull Base16Download result) {
-        if (!isAdded() || mKeyboard == null) return;
-        if (result.notFound) {
-            Toast.makeText(requireContext(),
-                R.string.termux_keyboard_color_scheme_tinted_not_found, Toast.LENGTH_LONG).show();
-            return;
-        }
-        if (result.text == null) {
-            Toast.makeText(requireContext(),
-                R.string.termux_keyboard_color_scheme_tinted_network_error,
-                Toast.LENGTH_LONG).show();
-            return;
-        }
-        if (!importTintedScheme(result.text, result.system)) {
-            Toast.makeText(requireContext(),
-                R.string.termux_keyboard_color_scheme_tinted_error, Toast.LENGTH_LONG).show();
-            return;
-        }
-        mScheme.setImportedThemeId(result.themeId);
-        mPreferences.setInAppKeyboardTheme("custom");
-        mSelectedSwatch = 0;
-        persistAndRender();
-        createSwatches();
-        Toast.makeText(requireContext(),
-            R.string.termux_keyboard_color_scheme_tinted_imported, Toast.LENGTH_SHORT).show();
-    }
-
-    private boolean importTintedScheme(@NonNull String text, @Nullable String system) {
-        if ("base16".equals(system))
-            return mScheme.importBasePalette(text, InAppKeyboardColorScheme.BASE16_COLOR_COUNT);
-        if ("base24".equals(system))
-            return mScheme.importBasePalette(text, InAppKeyboardColorScheme.BASE24_COLOR_COUNT);
-        if ("tinted8".equals(system)) return mScheme.importTinted8(text);
-        return mScheme.importBasePalette(text, InAppKeyboardColorScheme.BASE24_COLOR_COUNT)
-            || mScheme.importBasePalette(text, InAppKeyboardColorScheme.BASE16_COLOR_COUNT)
-            || mScheme.importTinted8(text);
-    }
-
-    @Override
-    public void onDestroy() {
-        mImportExecutor.shutdownNow();
-        super.onDestroy();
-    }
-
-    private static final class Base16Download {
-        @Nullable final String text;
-        @Nullable final String system;
-        @Nullable final String themeId;
-        final boolean notFound;
-
-        private Base16Download(@Nullable String text, @Nullable String system,
-                               @Nullable String themeId, boolean notFound) {
-            this.text = text;
-            this.system = system;
-            this.themeId = themeId;
-            this.notFound = notFound;
-        }
-
-        static Base16Download success(@NonNull String text, @NonNull String system,
-                                      @NonNull String themeId) {
-            return new Base16Download(text, system, themeId, false);
-        }
-
-        static Base16Download notFound() {
-            return new Base16Download(null, null, null, true);
-        }
-
-        static Base16Download networkError() {
-            return new Base16Download(null, null, null, false);
-        }
-    }
-
-    static final class TintedSchemeId {
-        @NonNull final String system;
-        @NonNull final String slug;
-
-        TintedSchemeId(@NonNull String system, @NonNull String slug) {
-            this.system = system;
-            this.slug = slug;
-        }
-
-        @NonNull
-        String id() { return system + "-" + slug; }
     }
 
     private int dp(float value) { return Math.round(dpFloat(value)); }

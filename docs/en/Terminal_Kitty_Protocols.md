@@ -12,6 +12,22 @@ TERM_PROGRAM=termux-launcher
 TERM_PROGRAM_VERSION=<installed version>
 ```
 
+`TERM` remains `xterm-256color` by default. To use a different terminal identity for programs that
+string-match it, set this in `~/.termux/termux.properties` — the app seeds that file with the
+property documented and commented out, so it is already there to uncomment:
+
+```properties
+terminal-term = xterm-kitty
+```
+
+The property supplies the default for new sessions. An explicit environment value supplied when a
+session is launched still wins, so a caller's `TERM` is not overwritten.
+
+Properties are read from the app's cached copy, so editing the file is not enough on its own. Run
+`termux-reload-settings` and then open a new session; a running session keeps the `TERM` it started
+with. Verified on device: a session opened straight after the file edit still reported
+`xterm-256color`, while one opened after `termux-reload-settings` reported `xterm-kitty`.
+
 XTVERSION reports `termux-launcher(version)`. XTSMGRAPHICS reports the Sixel color-register count and
 geometry for the current screen. Capability detectors such as chafa and notcurses can therefore pick
 a supported renderer instead of relying on a conservative terminal-name fallback.
@@ -43,6 +59,8 @@ The terminal supports:
 - zlib-compressed raw pixels and chunked transfers;
 - stored images by image ID or number;
 - placements with source cropping, cell scaling, sub-cell offsets, and z-index;
+- Unicode placeholder virtual placements (`U=1`), including row/column diacritics, 32-bit image
+  IDs, placement IDs in underline colour, and left-cell inheritance;
 - acknowledgements, quiet modes, and delete forms; and
 - text-safe negative-z placement: text remains visible while the image occupies surrounding blanks.
 
@@ -54,6 +72,10 @@ chafa -f kitty image.png
 ```
 
 Yazi can also use Kitty image previews when configured to select that backend.
+
+Unicode placeholders keep U+10EEEE cells as ordinary terminal text while drawing slices of the
+stored image through them. This lets tmux and full-screen editors move or redraw the cells without
+understanding image state, which is the path used by Neovim image integrations inside tmux.
 
 ## Kitty graphics animation
 
@@ -73,7 +95,6 @@ choose their preferred protocol from capability replies or explicit command-line
 
 ## Current boundaries
 
-- Kitty Unicode placeholders are not implemented.
 - Shared-memory and file-based Kitty transmissions are not implemented.
 - Unsupported or excessive requests return bounded protocol errors rather than consuming unbounded
   memory.

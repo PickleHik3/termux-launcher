@@ -3,20 +3,10 @@
 <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
 <!ENTITY TERMUX_APP_NAME "Termux:Launcher">
 <!ENTITY TERMUX_API_APP_NAME "Termux:API">
-<!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
-<!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
 <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
-<!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
-<!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
 ]>
 <resources>
-    <string name="termux_background_header">背景</string>
-    <string name="termux_background_image_enabled_title">セッション背景に画像を表示する</string>
-    <string name="termux_api_preferences_summary">&TERMUX_API_APP_NAME; アプリの環境設定</string>
-    <string name="termux_float_preferences_summary">&TERMUX_FLOAT_APP_NAME; アプリの環境設定</string>
-    <string name="about_preference_title">アプリについて</string>
     <string name="donate_preference_title">寄付する</string>
-    <string name="termux_widget_preferences_summary">&TERMUX_WIDGET_APP_NAME; アプリの環境設定</string>
     <string name="shared_user_label">&TERMUX_APP_NAME; ユーザ</string>
     <string name="permission_run_command_label">コマンドを &TERMUX_APP_NAME; 環境で実行する</string>
     <string name="bootstrap_installer_body">bootstrapパッケージをインストール中…</string>
@@ -48,24 +38,17 @@
     <string name="action_share_transcript">選択した文字列を共有</string>
     <string name="title_share_transcript">ターミナル文字列</string>
     <string name="title_share_transcript_with">選択した文字列を送る:</string>
-    <string name="action_share_selected_text">選択したテキストを共有</string>
     <string name="title_share_selected_text">ターミナルテキスト</string>
     <string name="title_share_selected_text_with">選択したテキストを共有する:</string>
-    <string name="action_autofill_password">パスワードを自動入力</string>
     <string name="action_reset_terminal">リセット</string>
     <string name="msg_terminal_reset">ターミナルをリセット</string>
     <string name="action_kill_process">プロセスをキル(%d)</string>
     <string name="title_confirm_kill_process">セッションを閉じますか?</string>
-    <string name="action_font_and_color">フォントと色の設定</string>
     <string name="action_set_background_image">セッション背景に画像を設定</string>
     <string name="action_style_terminal">Termux:Stylingを開く</string>
-    <string name="action_toggle_keep_screen_on">画面をONのままにする</string>
-    <string name="action_open_help">ヘルプ</string>
     <string name="action_open_settings">設定</string>
-    <string name="action_report_issue">問題を報告する</string>
     <string name="msg_generating_report">デバッグレポートを生成する</string>
     <string name="msg_add_termux_debug_info">&TERMUX_APP_NAME; のデバッグ情報をレポートに含めますか?</string>
-    <string name="action_styling_install">インストール</string>
     <string name="notification_action_exit">終了</string>
     <string name="notification_action_wake_lock">スリープモードへ移行させない(wakelock)</string>
     <string name="notification_action_wake_unlock">wakelockを解除する</string>
@@ -78,20 +61,14 @@
     <string name="title_file_received">~/downloads/ にファイルを保存する</string>
     <string name="action_file_received_edit">編集</string>
     <string name="action_file_received_open_directory">ディレクトリを開く</string>
-    <string name="title_restore_background_image">セッション背景の画像を見つけました。画像を復元しますか?</string>
-    <string name="error_background_image_loading_failed">セッション背景の画像を読み込むことが出来ませんでした。背景色を設定してください。</string>
-    <string name="error_background_image_loading_from_gallery_failed">画像を読み込めません。他の画像を選択してください。</string>
     <string name="error_termux_service_start_failed_general">TermuxServiceを開始出来ませんでした。logcatのエラーメッセージを確認してください。</string>
     <string name="title_activity_termux_settings">&TERMUX_APP_NAME; の設定</string>
-    <string name="termux_preferences_summary">&TERMUX_APP_NAME; アプリの環境設定</string>
     <string name="termux_debugging_preferences_title">デバッグ</string>
     <string name="termux_log_level_title">ログレベルを変更</string>
     <string name="termux_plugin_error_notifications_enabled_on">プラグインのエラーに関する通知を有効化しています。(デフォルト)</string>
-    <string name="termux_terminal_io_preferences_summary">ターミナルの入出力設定</string>
     <string name="termux_keyboard_header">キーボード</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_title">ターミナルのマージンの自動調節</string>
     <string name="error_termux_service_start_failed_bg">バックグラウンドアプリ最適化機能の制限設定によって、TermuxServiceをバックグラウンドで開始できませんでした。</string>
-    <string name="termux_terminal_io_preferences_title">Terminal I/O</string>
     <string name="termux_debugging_preferences_summary">デバッグ機能の設定</string>
     <string name="termux_logging_header">ログ</string>
     <string name="termux_soft_keyboard_enabled_title">ソフトウェアキーボードを有効化</string>
@@ -101,9 +78,6 @@
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">ハードウェアキーボードが接続されている場合でもソフトウェアキーボードを有効化します。(デフォルト)</string>
     <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">ハードウェアキーボードが接続されていない場合のみソフトウェアキーボードを有効化します。</string>
     <string name="action_create_named_session_confirm">作成</string>
-    <string name="termux_terminal_view_preferences_title">ターミナル表示設定</string>
-    <string name="termux_terminal_view_preferences_summary">ターミナルの表示設定</string>
-    <string name="error_styling_not_installed">&TERMUX_STYLING_APP_NAME; プラグインがインストールされていません。</string>
     <string name="termux_terminal_view_view_header">外観</string>
     <string name="error_run_command_service_invalid_intent_action">RunCommandServiceに対する無効なアクション: `%1$s`</string>
     <string name="error_run_command_service_invalid_execution_command_runner">RunCommandServiceに対する無効なコマンド: `%1$s`</string>
@@ -114,7 +88,4 @@
     <string name="termux_crash_report_notifications_enabled_on">クラッシュリポートに関する通知の表示を有効化しています。(デフォルト)</string>
     <string name="termux_terminal_view_terminal_margin_adjustment_off">ターミナルのマージンの自動調節を無効化しています。</string>
     <string name="termux_style_preferences_title">&TERMUX_APP_NAME; の外観</string>
-    <string name="termux_style_preferences_summary">&TERMUX_APP_NAME; の外観をカスタマイズする設定</string>
-    <string name="termux_background_image_enabled_on">セッション背景に画像を表示しません。</string>
-    <string name="termux_tasker_preferences_summary">&TERMUX_TASKER_APP_NAME; アプリの環境設定</string>
 </resources>

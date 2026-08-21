@@ -29,6 +29,21 @@
             app:title="@string/settings_split_pane_controls_title"
             app:summary="@string/settings_split_pane_controls_summary"
             android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="show_key_hints"
+            app:title="@string/settings_show_key_hints_title"
+            app:summary="@string/settings_show_key_hints_summary"
+            app:dependency="split_pane_controls"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_lazy_mode_header">
+        <SwitchPreferenceCompat
+            app:key="lazy_mode"
+            app:icon="@drawable/ic_symbol_battery_saver"
+            app:title="@string/settings_lazy_mode_title"
+            app:summary="@string/settings_lazy_mode_summary"
+            app:defaultValue="false" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_clock_status_header">
@@ -39,6 +54,11 @@
             app:entryValues="@array/termux_top_pane_clock_style_values"
             app:defaultValue="flip"
             app:useSimpleSummaryProvider="true" />
+        <com.termux.app.fragments.settings.SegmentedPillPreference
+            app:key="top_pane_clock_alignment"
+            app:title="@string/settings_clock_alignment_title"
+            app:summary="@string/settings_clock_alignment_summary"
+            app:defaultValue="left" />
         <SwitchPreferenceCompat
             app:key="top_pane_clock_am_pm"
             app:title="@string/settings_use_12_hour_title"
@@ -48,17 +68,23 @@
             app:key="status_widget_cpu"
             app:title="@string/settings_cpu_usage_title"
             app:summary="@string/termux_status_widget_cpu_summary"
-            app:defaultValue="true" />
+            app:defaultValue="false" />
         <SwitchPreferenceCompat
             app:key="status_widget_ram"
             app:title="@string/settings_memory_usage_title"
             app:summary="@string/settings_memory_usage_summary"
-            app:defaultValue="true" />
+            app:defaultValue="false" />
         <SwitchPreferenceCompat
             app:key="status_widget_weather"
             app:title="@string/settings_weather_title"
             app:summary="@string/settings_weather_summary"
             app:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="status_widget_weather_fahrenheit"
+            app:title="@string/settings_weather_fahrenheit_title"
+            app:summary="@string/settings_weather_fahrenheit_summary"
+            app:defaultValue="false"
+            app:dependency="status_widget_weather" />
         <Preference
             app:key="top_pane_notification_access"
             app:persistent="false"

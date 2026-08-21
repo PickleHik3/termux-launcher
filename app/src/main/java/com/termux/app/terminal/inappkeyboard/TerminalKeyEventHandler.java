@@ -135,6 +135,13 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
                 // point instead would write an escape-prefixed control byte to the shell while the
                 // cap claimed to run an action. Routing it as a key event puts soft and hardware
                 // keyboards on the one resolver, so termux-launcher-bindings.conf governs both.
+                // '?' has no stroke token of its own — it is Shift+/ on every board — but under
+                // the prefix it is the ask-for-help key, so it rides out as exactly that stroke
+                // and the hardware and soft paths meet at one interception point.
+                if (modifiers.isCtrl() && modifiers.isAlt() && value.getChar() == '?') {
+                    dispatchKeyEvent(KeyEvent.KEYCODE_SLASH, modifiers.withShift());
+                    break;
+                }
                 Integer keyCode = modifiers.isCtrl() && modifiers.isAlt()
                     ? com.termux.app.terminal.TerminalKeyBindingResolver.keyCodeForToken(
                         com.termux.app.terminal.TerminalKeyBindingResolver.tokenForChar(

@@ -1,0 +1,333 @@
+# schema=1
+# code_point,name,keywords,category
+# Rows are grouped by category in the order arrows, blocks, shapes, powerline, technical, terminal_marks and ascend by code point inside a group.
+# Every row is reviewed by hand: a glyph only earns a row when it is worth a key cap, and Paint.hasGlyph drops the rest per device at runtime.
+2190,leftwards arrow,left west back arrow,arrows
+2191,upwards arrow,up north arrow,arrows
+2192,rightwards arrow,right east forward arrow,arrows
+2193,downwards arrow,down south arrow,arrows
+2194,left right arrow,horizontal both arrow,arrows
+2195,up down arrow,vertical both arrow,arrows
+2196,north west arrow,up left diagonal arrow,arrows
+2197,north east arrow,up right diagonal arrow,arrows
+2198,south east arrow,down right diagonal arrow,arrows
+2199,south west arrow,down left diagonal arrow,arrows
+219A,leftwards arrow with stroke,left not blocked arrow,arrows
+219B,rightwards arrow with stroke,right not blocked arrow,arrows
+219E,leftwards two headed arrow,left fast page arrow,arrows
+219F,upwards two headed arrow,up fast page arrow,arrows
+21A0,rightwards two headed arrow,right fast page arrow,arrows
+21A1,downwards two headed arrow,down fast page arrow,arrows
+21A2,leftwards arrow with tail,left tail arrow,arrows
+21A3,rightwards arrow with tail,right tail arrow,arrows
+21A4,leftwards arrow from bar,left home start arrow,arrows
+21A5,upwards arrow from bar,up bar arrow,arrows
+21A6,rightwards arrow from bar,right end bar arrow,arrows
+21A7,downwards arrow from bar,down bar arrow,arrows
+21A8,up down arrow with base,vertical base arrow,arrows
+21AA,rightwards arrow with hook,redo forward hook arrow,arrows
+21B0,upwards arrow with tip leftwards,up left corner arrow,arrows
+21B1,upwards arrow with tip rightwards,up right corner arrow,arrows
+21B2,downwards arrow with tip leftwards,down left corner arrow,arrows
+21B3,downwards arrow with tip rightwards,down right corner arrow,arrows
+21B4,rightwards arrow with corner downwards,wrap newline arrow,arrows
+21B6,anticlockwise top semicircle arrow,undo back arrow,arrows
+21B7,clockwise top semicircle arrow,redo arrow,arrows
+21BA,anticlockwise open circle arrow,reload refresh rotate arrow,arrows
+21BB,clockwise open circle arrow,reload refresh rotate arrow,arrows
+21C4,rightwards arrow over leftwards arrow,swap exchange sync arrow,arrows
+21C5,upwards arrow leftwards of downwards arrow,swap vertical sync arrow,arrows
+21C6,leftwards arrow over rightwards arrow,swap exchange sync arrow,arrows
+21C7,leftwards paired arrows,left double arrow,arrows
+21C8,upwards paired arrows,up double arrow,arrows
+21C9,rightwards paired arrows,right double arrow,arrows
+21CA,downwards paired arrows,down double arrow,arrows
+21CB,leftwards harpoon over rightwards harpoon,harpoon swap arrow,arrows
+21CC,rightwards harpoon over leftwards harpoon,harpoon swap arrow,arrows
+21D0,leftwards double arrow,left implies arrow,arrows
+21D1,upwards double arrow,up arrow,arrows
+21D2,rightwards double arrow,right implies arrow,arrows
+21D3,downwards double arrow,down arrow,arrows
+21D4,left right double arrow,equivalent both arrow,arrows
+21D5,up down double arrow,vertical both arrow,arrows
+21DA,leftwards triple arrow,left triple arrow,arrows
+21DB,rightwards triple arrow,right triple arrow,arrows
+21E0,leftwards dashed arrow,left dashed arrow,arrows
+21E1,upwards dashed arrow,up dashed arrow,arrows
+21E2,rightwards dashed arrow,right dashed arrow,arrows
+21E3,downwards dashed arrow,down dashed arrow,arrows
+21E6,leftwards white arrow,left hollow arrow,arrows
+21E8,rightwards white arrow,right hollow arrow,arrows
+21E9,downwards white arrow,down hollow arrow,arrows
+21F5,downwards arrow leftwards of upwards arrow,swap vertical arrow,arrows
+2934,arrow pointing rightwards then curving upwards,reply up curve arrow,arrows
+2935,arrow pointing rightwards then curving downwards,reply down curve arrow,arrows
+2500,box drawings light horizontal,line horizontal rule box,blocks
+2501,box drawings heavy horizontal,line horizontal bold box,blocks
+2502,box drawings light vertical,line vertical divider box,blocks
+2503,box drawings heavy vertical,line vertical bold box,blocks
+2504,box drawings light triple dash horizontal,dashed horizontal box,blocks
+2505,box drawings heavy triple dash horizontal,dashed horizontal bold box,blocks
+2506,box drawings light triple dash vertical,dashed vertical box,blocks
+2507,box drawings heavy triple dash vertical,dashed vertical bold box,blocks
+2508,box drawings light quadruple dash horizontal,dotted horizontal box,blocks
+250A,box drawings light quadruple dash vertical,dotted vertical box,blocks
+250C,box drawings light down and right,corner top left box,blocks
+250F,box drawings heavy down and right,corner top left bold box,blocks
+2510,box drawings light down and left,corner top right box,blocks
+2513,box drawings heavy down and left,corner top right bold box,blocks
+2514,box drawings light up and right,corner bottom left box,blocks
+2517,box drawings heavy up and right,corner bottom left bold box,blocks
+2518,box drawings light up and left,corner bottom right box,blocks
+251B,box drawings heavy up and left,corner bottom right bold box,blocks
+251C,box drawings light vertical and right,tee left branch box,blocks
+2523,box drawings heavy vertical and right,tee left branch bold box,blocks
+2524,box drawings light vertical and left,tee right box,blocks
+252B,box drawings heavy vertical and left,tee right bold box,blocks
+252C,box drawings light down and horizontal,tee down box,blocks
+2533,box drawings heavy down and horizontal,tee down bold box,blocks
+2534,box drawings light up and horizontal,tee up box,blocks
+253B,box drawings heavy up and horizontal,tee up bold box,blocks
+253C,box drawings light vertical and horizontal,cross plus box,blocks
+254B,box drawings heavy vertical and horizontal,cross plus bold box,blocks
+254C,box drawings light double dash horizontal,dashed horizontal box,blocks
+254E,box drawings light double dash vertical,dashed vertical box,blocks
+2550,box drawings double horizontal,line horizontal double box,blocks
+2551,box drawings double vertical,line vertical double box,blocks
+2554,box drawings double down and right,corner top left double box,blocks
+2557,box drawings double down and left,corner top right double box,blocks
+255A,box drawings double up and right,corner bottom left double box,blocks
+255D,box drawings double up and left,corner bottom right double box,blocks
+2560,box drawings double vertical and right,tee left double box,blocks
+2563,box drawings double vertical and left,tee right double box,blocks
+2566,box drawings double down and horizontal,tee down double box,blocks
+2569,box drawings double up and horizontal,tee up double box,blocks
+256C,box drawings double vertical and horizontal,cross double box,blocks
+256D,box drawings light arc down and right,corner rounded top left box,blocks
+256E,box drawings light arc down and left,corner rounded top right box,blocks
+256F,box drawings light arc up and left,corner rounded bottom right box,blocks
+2570,box drawings light arc up and right,corner rounded bottom left box,blocks
+2571,box drawings light diagonal upper right to lower left,slash diagonal box,blocks
+2572,box drawings light diagonal upper left to lower right,backslash diagonal box,blocks
+2573,box drawings light diagonal cross,cross diagonal box,blocks
+2574,box drawings light left,stub left box,blocks
+2575,box drawings light up,stub up box,blocks
+2576,box drawings light right,stub right box,blocks
+2577,box drawings light down,stub down box,blocks
+2580,upper half block,block half top,blocks
+2581,lower one eighth block,block bar meter eighth,blocks
+2582,lower one quarter block,block bar meter quarter,blocks
+2583,lower three eighths block,block bar meter,blocks
+2584,lower half block,block half bottom,blocks
+2585,lower five eighths block,block bar meter,blocks
+2586,lower three quarters block,block bar meter,blocks
+2587,lower seven eighths block,block bar meter,blocks
+2588,full block,block solid full bar,blocks
+2589,left seven eighths block,block bar meter,blocks
+258A,left three quarters block,block bar meter,blocks
+258B,left five eighths block,block bar meter,blocks
+258C,left half block,block half left,blocks
+258D,left three eighths block,block bar meter,blocks
+258E,left one quarter block,block bar meter,blocks
+258F,left one eighth block,block bar meter gutter,blocks
+2590,right half block,block half right,blocks
+2591,light shade,shade dither pattern light,blocks
+2592,medium shade,shade dither pattern medium,blocks
+2593,dark shade,shade dither pattern dark,blocks
+2594,upper one eighth block,block thin top rule,blocks
+2595,right one eighth block,block thin right gutter,blocks
+2596,quadrant lower left,quadrant block,blocks
+2597,quadrant lower right,quadrant block,blocks
+2598,quadrant upper left,quadrant block,blocks
+2599,quadrant upper left and lower left and lower right,quadrant block,blocks
+259A,quadrant upper left and lower right,quadrant block checker,blocks
+259B,quadrant upper left and upper right and lower left,quadrant block,blocks
+259C,quadrant upper left and upper right and lower right,quadrant block,blocks
+259D,quadrant upper right,quadrant block,blocks
+259E,quadrant upper right and lower left,quadrant block checker,blocks
+259F,quadrant upper right and lower left and lower right,quadrant block,blocks
+25A0,black square,square filled solid,shapes
+25A1,white square,square hollow outline,shapes
+25A3,white square containing black small square,square nested,shapes
+25AA,black small square,square small filled,shapes
+25AB,white small square,square small hollow,shapes
+25AC,black rectangle,rectangle bar filled,shapes
+25AD,white rectangle,rectangle bar hollow,shapes
+25B2,black up pointing triangle,triangle up filled,shapes
+25B3,white up pointing triangle,triangle up hollow,shapes
+25B4,black up pointing small triangle,triangle up small,shapes
+25B5,white up pointing small triangle,triangle up small hollow,shapes
+25B7,white right pointing triangle,triangle right hollow,shapes
+25B9,white right pointing small triangle,triangle right small hollow,shapes
+25BC,black down pointing triangle,triangle down filled collapse,shapes
+25BD,white down pointing triangle,triangle down hollow,shapes
+25BE,black down pointing small triangle,triangle down small collapse,shapes
+25BF,white down pointing small triangle,triangle down small hollow,shapes
+25C1,white left pointing triangle,triangle left hollow,shapes
+25C3,white left pointing small triangle,triangle left small hollow,shapes
+25C6,black diamond,diamond filled,shapes
+25C7,white diamond,diamond hollow,shapes
+25C8,white diamond containing black small diamond,diamond nested,shapes
+25CA,lozenge,diamond lozenge,shapes
+25CC,dotted circle,circle dotted placeholder,shapes
+25CD,circle with vertical fill,circle striped,shapes
+25CE,bullseye,circle target ring,shapes
+25D0,circle with left half black,circle half progress,shapes
+25D1,circle with right half black,circle half progress,shapes
+25D2,circle with lower half black,circle half progress,shapes
+25D3,circle with upper half black,circle half progress,shapes
+25D4,circle with upper right quadrant black,circle quarter progress,shapes
+25D5,circle with all but upper left quadrant black,circle three quarter progress,shapes
+25D6,left half black circle,circle half left,shapes
+25D7,right half black circle,circle half right,shapes
+25E2,black lower right triangle,triangle corner filled,shapes
+25E3,black lower left triangle,triangle corner filled,shapes
+25E4,black upper left triangle,triangle corner filled,shapes
+25E5,black upper right triangle,triangle corner filled,shapes
+25EF,large circle,circle large hollow,shapes
+25FB,white medium square,square medium hollow,shapes
+25FC,black medium square,square medium filled,shapes
+2B1A,dotted square,square dotted placeholder,shapes
+2B22,black hexagon,hexagon filled,shapes
+2B23,horizontal black hexagon,hexagon filled,shapes
+E0A0,powerline branch,git branch vcs powerline nerd,powerline
+E0A1,powerline line number,line number powerline nerd,powerline
+E0A2,powerline padlock,readonly lock powerline nerd,powerline
+E0A3,powerline column number,column number powerline nerd,powerline
+E0B0,powerline right filled separator,separator right solid powerline nerd,powerline
+E0B1,powerline right thin separator,separator right thin powerline nerd,powerline
+E0B2,powerline left filled separator,separator left solid powerline nerd,powerline
+E0B3,powerline left thin separator,separator left thin powerline nerd,powerline
+E0B4,powerline right filled semicircle,separator right round powerline nerd,powerline
+E0B5,powerline right thin semicircle,separator right round thin powerline nerd,powerline
+E0B6,powerline left filled semicircle,separator left round powerline nerd,powerline
+E0B7,powerline left thin semicircle,separator left round thin powerline nerd,powerline
+E0B8,powerline lower left filled triangle,separator slant powerline nerd,powerline
+E0B9,powerline lower left thin triangle,separator slant thin powerline nerd,powerline
+E0BA,powerline lower right filled triangle,separator slant powerline nerd,powerline
+E0BB,powerline lower right thin triangle,separator slant thin powerline nerd,powerline
+E0BC,powerline upper left filled triangle,separator slant powerline nerd,powerline
+E0BD,powerline upper left thin triangle,separator slant thin powerline nerd,powerline
+E0BE,powerline upper right filled triangle,separator slant powerline nerd,powerline
+E0BF,powerline upper right thin triangle,separator slant thin powerline nerd,powerline
+E0C0,powerline filled flame,separator flame powerline nerd,powerline
+E0C1,powerline thin flame,separator flame thin powerline nerd,powerline
+E0C2,powerline filled pixelated squares,separator pixel powerline nerd,powerline
+E0C4,powerline filled ice waveform,separator wave powerline nerd,powerline
+E0C5,powerline thin ice waveform,separator wave thin powerline nerd,powerline
+E0C6,powerline filled honeycomb,separator honeycomb powerline nerd,powerline
+E0C8,powerline filled trapezoid,separator trapezoid powerline nerd,powerline
+E0CA,powerline filled lego block,separator lego powerline nerd,powerline
+E0CC,powerline lego block facing,separator lego powerline nerd,powerline
+E0CE,powerline filled trapezoid alternate,separator trapezoid powerline nerd,powerline
+E0D0,powerline filled top left square,separator square powerline nerd,powerline
+E0D2,powerline filled left aligned wedge,separator wedge powerline nerd,powerline
+E0D4,powerline filled right aligned wedge,separator wedge powerline nerd,powerline
+00AC,not sign,negation not logic,technical
+00B1,plus minus sign,plus minus tolerance,technical
+00D7,multiplication sign,times multiply cross,technical
+00F7,division sign,divide,technical
+2020,dagger,footnote dagger mark,technical
+2021,double dagger,footnote dagger mark,technical
+2026,horizontal ellipsis,ellipsis dots more truncated,technical
+21A9,leftwards arrow with hook,enter return undo hook,technical
+21B5,downwards arrow with corner leftwards,return enter newline,technical
+21E4,leftwards arrow to bar,backtab shift tab dedent,technical
+21E5,rightwards arrow to bar,tab indent,technical
+21E7,upwards white arrow,shift modifier,technical
+21EA,upwards white arrow from bar,caps lock modifier,technical
+2200,for all,logic universal quantifier,technical
+2202,partial differential,math derivative partial,technical
+2203,there exists,logic existential quantifier,technical
+2205,empty set,empty null set,technical
+2207,nabla,math gradient nabla del,technical
+2208,element of,math member in set,technical
+220F,n ary product,math product,technical
+2211,n ary summation,math sum sigma,technical
+221A,square root,math root radical,technical
+221E,infinity,math infinite unbounded,technical
+2227,logical and,logic and wedge,technical
+2228,logical or,logic or vee,technical
+2229,intersection,set intersection,technical
+222A,union,set union,technical
+2248,almost equal to,approximately equal math,technical
+2260,not equal to,math not equal,technical
+2261,identical to,menu equivalent triple bar,technical
+2264,less than or equal to,math less equal,technical
+2265,greater than or equal to,math greater equal,technical
+2282,subset of,set subset,technical
+2286,subset of or equal to,set subset,technical
+2295,circled plus,math xor plus,technical
+2297,circled times,math tensor times,technical
+22A5,up tack,math perpendicular bottom,technical
+22EE,vertical ellipsis,menu more overflow dots,technical
+22EF,midline horizontal ellipsis,dots more,technical
+2302,house,home directory house,technical
+2303,up arrowhead,control ctrl modifier,technical
+2304,down arrowhead,modifier arrowhead,technical
+2305,projective,modifier bar,technical
+2318,place of interest sign,command cmd meta modifier,technical
+2325,option key,option alt modifier,technical
+2326,erase to the right,delete forward del,technical
+2327,x in a rectangle box,clear key,technical
+2328,keyboard,keyboard input keys,technical
+232B,erase to the left,backspace delete,technical
+2380,insertion symbol,insert key,technical
+2386,enter symbol,enter return,technical
+2387,alternative key symbol,alt option modifier,technical
+2388,helm symbol,helm wheel kubernetes,technical
+238B,broken circle with northwest arrow,escape esc key,technical
+2395,apl functional symbol quad,quad box key,technical
+23CE,return symbol,return enter newline,technical
+23CF,eject symbol,eject unmount,technical
+2400,symbol for null,control picture null nul,technical
+2408,symbol for backspace,control picture backspace,technical
+2409,symbol for horizontal tabulation,control picture tab,technical
+240A,symbol for line feed,control picture newline lf,technical
+240D,symbol for carriage return,control picture return cr,technical
+241B,symbol for escape,control picture escape esc,technical
+2421,symbol for delete,control picture delete del,technical
+2423,open box,space blank whitespace,technical
+2699,gear,settings gear configuration,technical
+00AB,left pointing double angle quotation mark,chevron left guillemet prompt,terminal_marks
+00B6,pilcrow sign,paragraph pilcrow newline,terminal_marks
+00B7,middle dot,dot separator bullet,terminal_marks
+00BB,right pointing double angle quotation mark,chevron right guillemet prompt,terminal_marks
+03BB,greek small letter lamda,lambda prompt functional,terminal_marks
+2022,bullet,bullet list dot,terminal_marks
+2023,triangular bullet,bullet triangle list,terminal_marks
+2039,single left pointing angle quotation mark,chevron left small prompt,terminal_marks
+203A,single right pointing angle quotation mark,chevron right small prompt,terminal_marks
+2043,hyphen bullet,bullet dash list,terminal_marks
+23FB,power symbol,power on off,terminal_marks
+23FC,power on off symbol,power toggle,terminal_marks
+23FD,power on symbol,power on,terminal_marks
+25B6,black right pointing triangle,play run prompt triangle,terminal_marks
+25B8,black right pointing small triangle,prompt run triangle small,terminal_marks
+25C0,black left pointing triangle,back previous triangle,terminal_marks
+25C2,black left pointing small triangle,back previous triangle small,terminal_marks
+25C9,fisheye,circle selected status,terminal_marks
+25CB,white circle,circle hollow idle status,terminal_marks
+25CF,black circle,circle filled status dot,terminal_marks
+25E6,white bullet,bullet hollow list,terminal_marks
+2605,black star,star favourite filled,terminal_marks
+2606,white star,star favourite hollow,terminal_marks
+2610,ballot box,checkbox todo unchecked,terminal_marks
+2611,ballot box with check,checkbox done checked,terminal_marks
+2612,ballot box with x,checkbox cancelled failed,terminal_marks
+2630,trigram for heaven,menu hamburger lines,terminal_marks
+26A0,warning sign,warning caution alert,terminal_marks
+2713,check mark,check tick ok pass success,terminal_marks
+2714,heavy check mark,check tick ok pass success bold,terminal_marks
+2715,multiplication x,cross fail close,terminal_marks
+2716,heavy multiplication x,cross fail close bold,terminal_marks
+2717,ballot x,cross fail error,terminal_marks
+2718,heavy ballot x,cross fail error bold,terminal_marks
+2731,heavy asterisk,asterisk glob wildcard,terminal_marks
+2739,twelve pointed black star,star asterisk mark,terminal_marks
+276E,heavy left pointing angle quotation mark ornament,chevron left prompt,terminal_marks
+276F,heavy right pointing angle quotation mark ornament,chevron right prompt shell,terminal_marks
+2794,heavy wide headed rightwards arrow,prompt arrow right,terminal_marks
+279C,heavy round tipped rightwards arrow,prompt arrow right shell,terminal_marks
+27A4,black rightwards arrowhead,prompt arrowhead right,terminal_marks
+2B58,heavy circle,circle ring power outline,terminal_marks

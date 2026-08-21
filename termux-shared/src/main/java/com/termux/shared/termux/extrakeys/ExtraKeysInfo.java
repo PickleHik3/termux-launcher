@@ -1,7 +1,6 @@
 package com.termux.shared.termux.extrakeys;
 
 import android.view.View;
-import android.widget.Button;
 import androidx.annotation.NonNull;
 import com.google.android.material.button.MaterialButton;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants.EXTRA_KEY_DISPLAY_MAPS;

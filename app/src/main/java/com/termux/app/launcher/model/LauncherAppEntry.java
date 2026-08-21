@@ -1,5 +1,6 @@
 package com.termux.app.launcher.model;
 
+import android.content.pm.ApplicationInfo;
 import android.graphics.drawable.Drawable;
 
 import androidx.annotation.NonNull;
@@ -13,6 +14,10 @@ public final class LauncherAppEntry {
     @Nullable public final Drawable icon;
     /** True when artwork came from an icon pack and should not receive launcher saturation tuning. */
     public final boolean iconPackArtwork;
+    /** {@link ApplicationInfo#category}, or {@link ApplicationInfo#CATEGORY_UNDEFINED}. */
+    public final int applicationCategory;
+    /** Package first-install time, or zero when the profile/provider could not supply it. */
+    public final long firstInstallTimeEpochMs;
     @NonNull public final String labelLower;
     @NonNull public final String labelNormalized;
     @NonNull public final String packageLower;
@@ -30,10 +35,23 @@ public final class LauncherAppEntry {
         @Nullable Drawable icon,
         boolean iconPackArtwork
     ) {
+        this(appRef, label, icon, iconPackArtwork, ApplicationInfo.CATEGORY_UNDEFINED, 0L);
+    }
+
+    public LauncherAppEntry(
+        @NonNull AppRef appRef,
+        @NonNull String label,
+        @Nullable Drawable icon,
+        boolean iconPackArtwork,
+        int applicationCategory,
+        long firstInstallTimeEpochMs
+    ) {
         this.appRef = appRef;
         this.label = label;
         this.icon = icon;
         this.iconPackArtwork = iconPackArtwork;
+        this.applicationCategory = applicationCategory;
+        this.firstInstallTimeEpochMs = Math.max(0L, firstInstallTimeEpochMs);
         this.labelLower = label.toLowerCase(Locale.US);
         this.labelNormalized = normalizeLookupValue(label);
         this.packageLower = appRef.packageName.toLowerCase(Locale.US);

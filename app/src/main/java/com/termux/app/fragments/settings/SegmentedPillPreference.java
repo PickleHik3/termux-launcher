@@ -17,7 +17,11 @@ import androidx.preference.PreferenceViewHolder;
 
 import com.termux.R;
 
-/** Inline two-segment preference for the global Default / Rounded surface-shape choice. */
+/**
+ * Inline segmented preference: a sliding indicator over two or three labelled segments. Defaults
+ * to the global Default / Rounded surface-shape pair; {@link #setSegments} swaps in another value
+ * set (the third segment stays hidden until a three-value set is configured).
+ */
 @Keep
 public final class SegmentedPillPreference extends Preference {
 
@@ -26,6 +30,9 @@ public final class SegmentedPillPreference extends Preference {
     private static final String VALUE_LEGACY_VALARIE_CAPSULE = "valarie_capsule";
     private static final long SLIDE_DURATION_MS = 190L;
 
+    private String[] mValues = {VALUE_DEFAULT, VALUE_ROUNDED};
+    /** 0 keeps the label text the layout declares; anything else overrides it. */
+    private int[] mLabelResIds = {0, 0};
     private String mValue = VALUE_DEFAULT;
     private ValueAnimator mIndicatorAnimator;
 
@@ -40,9 +47,22 @@ public final class SegmentedPillPreference extends Preference {
         this(context, null);
     }
 
+    /**
+     * Replaces the segment set. Re-reads the persisted value against the new set, since the value
+     * restored on attach was normalized against the default Default / Rounded pair.
+     */
+    public void setSegments(@NonNull String[] values, @NonNull int[] labelResIds) {
+        if (values.length < 2 || values.length > 3 || values.length != labelResIds.length)
+            throw new IllegalArgumentException("SegmentedPillPreference needs 2 or 3 segments");
+        mValues = values;
+        mLabelResIds = labelResIds;
+        mValue = normalize(getPersistedString(mValues[0]));
+        notifyChanged();
+    }
+
     @Override
     protected void onSetInitialValue(Object defaultValue) {
-        String fallback = defaultValue instanceof String ? (String) defaultValue : VALUE_DEFAULT;
+        String fallback = defaultValue instanceof String ? (String) defaultValue : mValues[0];
         mValue = normalize(getPersistedString(fallback));
     }
 
@@ -51,21 +71,35 @@ public final class SegmentedPillPreference extends Preference {
         super.onBindViewHolder(holder);
         FrameLayout track = (FrameLayout) holder.findViewById(R.id.segmented_pill_track);
         View indicator = holder.findViewById(R.id.segmented_pill_indicator);
-        TextView defaultLabel = (TextView) holder.findViewById(R.id.segmented_pill_default);
-        TextView capsuleLabel = (TextView) holder.findViewById(R.id.segmented_pill_capsule);
-        if (track == null || indicator == null || defaultLabel == null || capsuleLabel == null)
-            return;
+        TextView[] labels = findLabels(holder);
+        if (track == null || indicator == null || labels == null) return;
 
-        View.OnClickListener chooseDefault = view -> setValue(VALUE_DEFAULT, track, indicator, true);
-        View.OnClickListener chooseCapsule = view -> setValue(VALUE_ROUNDED, track, indicator, true);
-        defaultLabel.setOnClickListener(chooseDefault);
-        capsuleLabel.setOnClickListener(chooseCapsule);
+        for (int i = 0; i < labels.length; i++) {
+            TextView label = labels[i];
+            if (i >= mValues.length) {
+                label.setVisibility(View.GONE);
+                label.setOnClickListener(null);
+                continue;
+            }
+            label.setVisibility(View.VISIBLE);
+            if (mLabelResIds[i] != 0) label.setText(mLabelResIds[i]);
+            final String value = mValues[i];
+            label.setOnClickListener(view -> setValue(value, track, indicator, true));
+        }
         track.setContentDescription(getTitle());
         track.post(() -> {
             updateIndicatorWidth(track, indicator);
-            indicator.setTranslationX(isCapsule() ? segmentWidth(track) : 0f);
-            updateLabelColors(defaultLabel, capsuleLabel);
+            indicator.setTranslationX(selectedIndex() * segmentWidth(track));
+            updateLabelColors(labels);
         });
+    }
+
+    private TextView[] findLabels(@NonNull PreferenceViewHolder holder) {
+        TextView first = (TextView) holder.findViewById(R.id.segmented_pill_default);
+        TextView second = (TextView) holder.findViewById(R.id.segmented_pill_capsule);
+        TextView third = (TextView) holder.findViewById(R.id.segmented_pill_third);
+        if (first == null || second == null || third == null) return null;
+        return new TextView[]{first, second, third};
     }
 
     private void setValue(@NonNull String value, @NonNull FrameLayout track,
@@ -76,7 +110,7 @@ public final class SegmentedPillPreference extends Preference {
         mValue = normalized;
         persistString(normalized);
         updateIndicatorWidth(track, indicator);
-        float target = isCapsule() ? segmentWidth(track) : 0f;
+        float target = selectedIndex() * segmentWidth(track);
         if (mIndicatorAnimator != null) mIndicatorAnimator.cancel();
         if (animate && track.isLaidOut()) {
             mIndicatorAnimator = ValueAnimator.ofFloat(indicator.getTranslationX(), target);
@@ -88,9 +122,10 @@ public final class SegmentedPillPreference extends Preference {
         } else {
             indicator.setTranslationX(target);
         }
-        TextView defaultLabel = track.findViewById(R.id.segmented_pill_default);
-        TextView capsuleLabel = track.findViewById(R.id.segmented_pill_capsule);
-        updateLabelColors(defaultLabel, capsuleLabel);
+        updateLabelColors(new TextView[]{
+            track.findViewById(R.id.segmented_pill_default),
+            track.findViewById(R.id.segmented_pill_capsule),
+            track.findViewById(R.id.segmented_pill_third)});
     }
 
     private void updateIndicatorWidth(@NonNull FrameLayout track, @NonNull View indicator) {
@@ -101,17 +136,21 @@ public final class SegmentedPillPreference extends Preference {
     }
 
     private float segmentWidth(@NonNull FrameLayout track) {
-        return Math.max(0f, (track.getWidth() - track.getPaddingLeft() - track.getPaddingRight()) / 2f);
+        return Math.max(0f, (track.getWidth() - track.getPaddingLeft() - track.getPaddingRight())
+            / (float) mValues.length);
     }
 
-    private void updateLabelColors(TextView defaultLabel, TextView capsuleLabel) {
-        if (defaultLabel == null || capsuleLabel == null) return;
+    private void updateLabelColors(TextView[] labels) {
+        if (labels == null) return;
         int selected = resolveColor(com.termux.shared.R.attr.termuxColorOnAccentContainer,
             R.color.termux_on_primary);
         int idle = resolveColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
             R.color.termux_on_surface_variant);
-        defaultLabel.setTextColor(isCapsule() ? idle : selected);
-        capsuleLabel.setTextColor(isCapsule() ? selected : idle);
+        int selectedIndex = selectedIndex();
+        for (int i = 0; i < labels.length && i < mValues.length; i++) {
+            if (labels[i] == null) continue;
+            labels[i].setTextColor(i == selectedIndex ? selected : idle);
+        }
     }
 
     private int resolveColor(int attr, int fallback) {
@@ -120,13 +159,23 @@ public final class SegmentedPillPreference extends Preference {
         return ContextCompat.getColor(getContext(), fallback);
     }
 
-    private boolean isCapsule() {
-        return VALUE_ROUNDED.equals(mValue);
+    private int selectedIndex() {
+        for (int i = 0; i < mValues.length; i++) {
+            if (mValues[i].equals(mValue)) return i;
+        }
+        return 0;
     }
 
     @NonNull
-    private static String normalize(String value) {
-        return VALUE_ROUNDED.equals(value) || VALUE_LEGACY_VALARIE_CAPSULE.equals(value)
-            ? VALUE_ROUNDED : VALUE_DEFAULT;
+    private String normalize(String value) {
+        for (String known : mValues) {
+            if (known.equals(value)) return value;
+        }
+        if (VALUE_LEGACY_VALARIE_CAPSULE.equals(value)) {
+            for (String known : mValues) {
+                if (VALUE_ROUNDED.equals(known)) return VALUE_ROUNDED;
+            }
+        }
+        return mValues[0];
     }
 }

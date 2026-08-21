@@ -1,19 +1,16 @@
 package com.termux.app.fragments.settings.termux;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
-import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.preference.ListPreference;
 import androidx.preference.MultiSelectListPreference;
@@ -21,6 +18,7 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
 
+import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
@@ -80,6 +78,16 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         setPreferencesFromResource(R.xml.termux_keyboard_preferences, rootKey);
         refreshThemeEntries();
 
+        Preference editRow = findPreference("edit_extra_keys_row");
+        if (editRow != null) editRow.setOnPreferenceClickListener(preference -> {
+            // Edited over the live terminal, so the row on screen is the row being changed.
+            Intent intent = new Intent(context, com.termux.app.TermuxActivity.class);
+            intent.putExtra(com.termux.app.TermuxActivity.EXTRA_EDIT_EXTRA_KEYS, true);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(intent);
+            return true;
+        });
+
         Preference customizeSurface = findPreference("customize_keyboard_surface");
         if (customizeSurface != null) customizeSurface.setOnPreferenceClickListener(preference -> {
             Intent intent = new Intent(context, com.termux.app.TermuxActivity.class);
@@ -131,7 +139,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         File file = new File(com.termux.shared.termux.TermuxConstants.TERMUX_DATA_HOME_DIR_PATH,
             "keyboard/layout.xml");
         if (!file.isFile()) {
-            Toast.makeText(context, R.string.settings_custom_layout_missing, Toast.LENGTH_LONG).show();
+            AppNotice.show(context, R.string.settings_custom_layout_missing, true);
             return;
         }
         new Thread(() -> {
@@ -153,7 +161,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             final int message = valid ? R.string.settings_custom_layout_valid
                 : R.string.settings_custom_layout_invalid;
             if (isAdded() && getActivity() != null) getActivity().runOnUiThread(() ->
-                Toast.makeText(context, message, Toast.LENGTH_LONG).show());
+                AppNotice.show(context, message, true));
         }, "keyboard-layout-validation").start();
     }
 
@@ -329,8 +337,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         } catch (Exception e) {
             //noinspection ResultOfMethodCallIgnored
             stagedFile.delete();
-            Toast.makeText(context, R.string.termux_in_app_keyboard_font_error,
-                Toast.LENGTH_SHORT).show();
+            AppNotice.show(context, R.string.termux_in_app_keyboard_font_error, false);
         }
         Preference fontPreference = findPreference(KEY_FONT);
         if (fontPreference != null)
@@ -373,10 +380,12 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
 class KeyboardPreferencesDataStore extends PreferenceDataStore {
 
     private final TermuxAppSharedPreferences mPreferences;
+    private final Context mContext;
 
     private static KeyboardPreferencesDataStore mInstance;
 
     private KeyboardPreferencesDataStore(Context context) {
+        mContext = context.getApplicationContext();
         mPreferences = TermuxAppSharedPreferences.build(context, true);
     }
 
@@ -404,6 +413,20 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             case "in_app_keyboard_key_sound_enabled":
                 mPreferences.setInAppKeyboardKeySoundEnabled(value);
                 break;
+            case "app_launcher_extra_keys_row_enabled":
+                mPreferences.setAppLauncherExtraKeysRowEnabled(value);
+                com.termux.app.TermuxActivity.requestTermuxActivityStylingOnNextResume(
+                    mContext, false);
+                break;
+            case "extra_keys_text_all_caps":
+                // A property, not a preference: the row reads it from termux.properties, so this
+                // writes there and the styling reload picks it up like any hand edit would.
+                com.termux.app.settings.TermuxPropertiesFile.write(
+                    com.termux.shared.termux.settings.properties.TermuxPropertyConstants
+                        .KEY_EXTRA_KEYS_TEXT_ALL_CAPS, Boolean.toString(value));
+                com.termux.app.TermuxActivity.requestTermuxActivityStylingOnNextResume(
+                    mContext, false);
+                break;
             default:
                 break;
         }
@@ -422,6 +445,16 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isInAppKeyboardHapticsEnabled();
             case "in_app_keyboard_key_sound_enabled":
                 return mPreferences.isInAppKeyboardKeySoundEnabled();
+            case "app_launcher_extra_keys_row_enabled":
+                return mPreferences.isAppLauncherExtraKeysRowEnabled();
+            case "extra_keys_text_all_caps": {
+                String stored = com.termux.app.settings.TermuxPropertiesFile.load(mContext)
+                    .getProperty(com.termux.shared.termux.settings.properties
+                        .TermuxPropertyConstants.KEY_EXTRA_KEYS_TEXT_ALL_CAPS);
+                // Absent means this property's documented default-true behaviour.
+                return stored == null
+                    || !"false".equals(stored.trim().toLowerCase(java.util.Locale.ROOT));
+            }
             default:
                 return defValue;
         }
