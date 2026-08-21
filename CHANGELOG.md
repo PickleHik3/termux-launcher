@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.35-a
+
+Fix release.
+
+### Fixed
+
+- **The Style row was missing on rebranded editions (#13).** `TERMUX_STYLING_ACTIVITY_NAME` was
+  derived from the styling plugin's package name, but rebranding changes the applicationId and not
+  the Java packages, so the Nix edition looked for `com.termux.launcher.nix.styling.TermuxStyleActivity`
+  while TLNix:Styling's only activity is `com.termux.styling.TermuxStyleActivity` — and the
+  launch-intent fallback returned null because the plugin ships no launcher activity at all. The
+  class names are literals now, pinned by a test.
+- **Tinted square corners behind the status cards (#13).** The card container carried 10dp of
+  elevation inside a popup window sized exactly to the card, so the cast shadow could only render
+  inside the four corner notches beyond the rounded arc, clipped square at the window edge. The
+  elevation is gone; the 1dp outline stroke carries the edge.
+- **The Lazy Mode toggle did not persist.** The switch wrote `lazy_mode` into the terminal-status
+  data store's default branch, which drops the value — the setting shipped with no setter and no
+  store case. The window bar also only read the flag at setup; the settings-return refresh
+  re-applies it now, like the clock already did. Round-trip pinned by a test.
+
 ## 0.2.35
 
 The largest release since the launcher surfaces landed: a full app drawer with three view
