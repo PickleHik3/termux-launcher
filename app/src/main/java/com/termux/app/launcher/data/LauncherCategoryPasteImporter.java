@@ -6,7 +6,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.launcher.model.LauncherAppEntry;
-import com.termux.shared.termux.TermuxConstants;
 
 import java.io.File;
 import java.io.StringReader;
@@ -29,7 +28,6 @@ import java.util.Set;
  */
 public final class LauncherCategoryPasteImporter {
 
-    private static final String CATEGORY_FILE_NAME = "app-categories.conf";
 
     private LauncherCategoryPasteImporter() {
     }
@@ -93,7 +91,7 @@ public final class LauncherCategoryPasteImporter {
         for (String packageName : slugByPackage.keySet())
             reassigned.add(packageName.toLowerCase(Locale.US));
 
-        File file = new File(TermuxConstants.TERMUX_HOME_DIR_PATH + "/" + CATEGORY_FILE_NAME);
+        File file = LauncherCategoryFile.defaultFile();
         LauncherCategoryFile existing;
         try {
             existing = LauncherCategoryFile.parse(file);

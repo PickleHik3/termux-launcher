@@ -5,7 +5,6 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.launcher.drawer.AppDrawerCategory;
 import com.termux.app.launcher.drawer.AppDrawerCategoryClassifier;
-import com.termux.shared.termux.TermuxConstants;
 
 import java.io.File;
 import java.io.IOException;
@@ -26,8 +25,6 @@ import java.io.IOException;
 public final class LauncherCategoryAssignmentSource
     implements AppDrawerCategoryClassifier.OverrideLookup {
 
-    private static final String CATEGORY_FILE_NAME = "app-categories.conf";
-
     @NonNull private final LauncherCategoryOverrideStore overrides;
     @NonNull private final File categoryFile;
 
@@ -37,7 +34,7 @@ public final class LauncherCategoryAssignmentSource
     private long cachedLength;
 
     public LauncherCategoryAssignmentSource(@NonNull LauncherCategoryOverrideStore overrides) {
-        this(overrides, new File(TermuxConstants.TERMUX_HOME_DIR_PATH, CATEGORY_FILE_NAME));
+        this(overrides, LauncherCategoryFile.defaultFile());
     }
 
     public LauncherCategoryAssignmentSource(@NonNull LauncherCategoryOverrideStore overrides,
