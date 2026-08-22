@@ -249,12 +249,18 @@ public final class SuggestionBarView extends GridLayout
     @Nullable private ColorFilter appIconColorFilter;
     private static final int ICON_RENDER_PIPELINE_VERSION = 2;
     private static final int ICON_SHADOW_COLOR = 0x47000000;
-    /** Smallest icon budget we will hand out, even on a memory-starved device: two dozen 192px pairs. */
-    private static final int ICON_CACHE_MIN_BYTES = 6 * 1024 * 1024;
-    /** Ceiling regardless of how generous the heap is — the drawer scrolls a whole catalogue past this cache. */
-    private static final int ICON_CACHE_MAX_BYTES = 16 * 1024 * 1024;
-    /** Fraction of the per-app heap the rendered-icon cache may hold (1/12th). */
-    private static final int ICON_CACHE_HEAP_DIVISOR = 12;
+    /** Smallest icon budget we will hand out, even on a memory-starved device. */
+    private static final int ICON_CACHE_MIN_BYTES = 8 * 1024 * 1024;
+    /**
+     * Ceiling regardless of how generous the heap is. Sized against a real catalogue rather than a
+     * round number: at xxhdpi a 48dp entry costs ~166KB (display plus retained clean artwork), so
+     * the old 16MB ceiling held ~96 entries — fewer apps than one drawer screenful cycle, which
+     * turned every fling into a continuous re-render (4 bitmaps and a mask blur per cell, on the
+     * UI thread). 32MB holds ~190 entries, enough that a scroll revisits before eviction.
+     */
+    private static final int ICON_CACHE_MAX_BYTES = 32 * 1024 * 1024;
+    /** Fraction of the per-app heap the rendered-icon cache may hold (1/8th). */
+    private static final int ICON_CACHE_HEAP_DIVISOR = 8;
     /**
      * Cache of harmonized icon drawables so resting and swipe-preview icons are identical (no size
      * jump) and we don't rebuild bitmaps per frame.
@@ -505,7 +511,7 @@ public final class SuggestionBarView extends GridLayout
         return 0;
     }
 
-    /** One twelfth of the per-app heap, clamped into [6MB, 16MB]. */
+    /** One eighth of the per-app heap, clamped into [8MB, 32MB]. */
     static int resolveIconCacheBudgetBytes(int memoryClassMb) {
         long heapBytes = (long) Math.max(0, memoryClassMb) * 1024L * 1024L;
         long budget = heapBytes / ICON_CACHE_HEAP_DIVISOR;
@@ -698,6 +704,7 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private void invalidateRenderedIconCaches() {
+        launcherTextColorCache = null;
         normalizedIconCache.evictAll();
         drawableVisibleBoundsCache.clear();
         focusOutlineVisualCache.clear();
@@ -774,9 +781,20 @@ public final class SuggestionBarView extends GridLayout
             ContextCompat.getColor(getContext(), R.color.termux_on_surface));
     }
 
+    /**
+     * Cached theme resolve: the drawer asks for this on every cell bind, and each resolve walks
+     * the theme's attribute table. Invalidated with the rendered-icon caches, which the styling
+     * reload paths already evict whenever the theme can have changed.
+     */
+    @Nullable private Integer launcherTextColorCache;
+
     /** The launcher's on-surface text colour, for surfaces rendered outside this view. */
     public int getLauncherTextColor() {
-        return resolveLauncherTextColor();
+        Integer cached = launcherTextColorCache;
+        if (cached != null) return cached;
+        int resolved = resolveLauncherTextColor();
+        launcherTextColorCache = resolved;
+        return resolved;
     }
 
     private static int resolveLauncherTextColor(@NonNull View view) {
@@ -5671,6 +5689,13 @@ public final class SuggestionBarView extends GridLayout
      * otherwise leave a menu floating over nothing.
      */
     public void dismissContextPopups() {
+        // The drawer calls this from onScrolled, i.e. on every frame of every scroll. With no
+        // surface showing there is nothing to dismiss, and the individual dismissers below do
+        // unconditional state-clearing work even then.
+        if (appContextPopupWindow == null && folderPopupWindow == null
+            && shortcutsPopupWindow == null && categoryPickerPopupWindow == null) {
+            return;
+        }
         dismissAppContextPopup();
         dismissFolderPopup();
         dismissShortcutsPopup();

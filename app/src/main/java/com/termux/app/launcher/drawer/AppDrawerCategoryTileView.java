@@ -163,6 +163,7 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         @NonNull AppDrawerAppCellView.ClickGate clickGate,
         @Nullable AppDrawerCategoryChoiceListener categoryChoiceListener) {
         unbind();
+        boolean metricsChanged = this.metrics != metrics;
         this.dock = dock;
         this.bucket = bucket;
         this.metrics = metrics;
@@ -235,7 +236,10 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
                 icon.setContentDescription(null);
             }
         }
-        requestLayout();
+        // Geometry is a function of the metrics alone; the heading TextView requests its own
+        // layout when its text changes. Unconditional here, this forced a full measure+layout of
+        // all seven children for every tile bound during a categories scroll.
+        if (metricsChanged) requestLayout();
     }
 
     /** Releases every drawable and app-specific listener while retaining the cheap holder tree. */

@@ -183,6 +183,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private boolean mEngaged;
     private boolean mOpen;
     private boolean mDragging;
+    /** The plane's live backdrop blur, held so the settle logic can rest and wake it per frame. */
+    @Nullable private com.github.mmin18.widget.RealtimeBlurView mLiveBlur;
     @NonNull private AppDrawerCommitPolicy.Direction mDirection =
         AppDrawerCommitPolicy.Direction.OPENING;
     private float mDownRawY;
@@ -533,6 +535,17 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             return;
         }
         if (moving || revealMoving || fxMoving) kick();
+        // The live blur ghosts the terminal through the glass at the price of a full software
+        // re-draw of the decor hierarchy on every frame the window produces — including every
+        // frame of a grid scroll. Once the plane has settled fully open, what it blurs is static
+        // to the eye, so the blur rests on its last captured frame; any motion of the plane
+        // itself (a close, a drag, a re-open) drops the progress out of the settled band and the
+        // next frame here wakes it. Scrub and rope frames deliberately do not wake it — they move
+        // content above the glass, never what is behind it.
+        if (mLiveBlur != null) {
+            mLiveBlur.setUpdatesPaused(mOpen && !mDragging
+                && mProgress.target >= 1f && mProgress.value >= 0.999f);
+        }
     }
 
     /**
@@ -958,6 +971,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         View blur = mActivity.findViewById(R.id.app_drawer_blur);
         boolean frosted = frost != null && mActivity.applyAppDrawerWallpaperFrost(frost);
         if (blur == null) return;
+        mLiveBlur = blur instanceof com.github.mmin18.widget.RealtimeBlurView
+            ? (com.github.mmin18.widget.RealtimeBlurView) blur : null;
+        // A fresh open always starts live; doFrame rests it again once the plane settles.
+        if (mLiveBlur != null) mLiveBlur.setUpdatesPaused(false);
         TermuxAppSharedPreferences preferences = mActivity.getPreferences();
         boolean wallpaperMode = preferences != null && preferences.isUseSystemWallpaperEnabled();
         // Frosted wallpaper mode keeps the live blur ON TOP of the frost: the blur can see the

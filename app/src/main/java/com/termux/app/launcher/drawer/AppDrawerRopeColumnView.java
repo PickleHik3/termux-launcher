@@ -278,36 +278,66 @@ public final class AppDrawerRopeColumnView extends View {
         // rendering fault rather than as emphasis.
         float focusGlyphPx = Math.min(metrics.slotHeightPx, baseGlyphPx * FOCUS_GLYPH_SCALE);
         int count = Math.min(mLetters.length, metrics.letterCount);
+        // Paint state set once per pass, not per glyph: every setTextSize/setTypeface invalidates
+        // the paint's cached font state and defeats glyph-atlas reuse across the 26 letters, and
+        // this draw runs on every frame of the drawer's fx loop. Only the single focused glyph
+        // (if any) reconfigures the paints, after all the resting glyphs have been drawn.
+        mFillPaint.setTextSize(baseGlyphPx);
+        mFillPaint.setColor(baseColor);
+        applyLetterWeight(false);
+        mFillPaint.getFontMetrics(mFontMetrics);
+        float restingHalfSpan = (mFontMetrics.ascent + mFontMetrics.descent) * 0.5f;
+        mOutlinePaint.setTextSize(baseGlyphPx);
+        mOutlinePaint.setTypeface(mFillPaint.getTypeface());
+        mOutlinePaint.setColor(withAlpha(OUTLINE_DARK, OUTLINE_ALPHA));
+        int focusedIndex = mScrubbing ? mActiveIndex : -1;
         for (int i = 0; i < count; i++) {
-            boolean focused = mScrubbing && i == mActiveIndex;
-            float x = centerX + mModel.offsetPx(i);
-            float y = metrics.centerYForIndex(i);
-            mFillPaint.setTextSize(focused ? focusGlyphPx : baseGlyphPx);
-            mFillPaint.setColor(focused ? mFocusColor : baseColor);
-            applyLetterWeight(focused);
+            if (i == focusedIndex) continue;
+            drawGlyph(canvas, metrics, i, centerX, restingHalfSpan);
+        }
+        if (focusedIndex >= 0 && focusedIndex < count) {
+            mFillPaint.setTextSize(focusGlyphPx);
+            mFillPaint.setColor(mFocusColor);
+            applyLetterWeight(true);
             mFillPaint.getFontMetrics(mFontMetrics);
-            // Centred on the slot rather than sat on a baseline: the slot centre is what indexForY
-            // maps a finger to, so the glyph the finger is over has to be the glyph drawn there.
-            float baseline = y - ((mFontMetrics.ascent + mFontMetrics.descent) * 0.5f);
-            mOutlinePaint.setTextSize(mFillPaint.getTextSize());
+            mOutlinePaint.setTextSize(focusGlyphPx);
             mOutlinePaint.setTypeface(mFillPaint.getTypeface());
-            mOutlinePaint.setColor(withAlpha(OUTLINE_DARK,
-                focused ? OUTLINE_ALPHA_FOCUSED : OUTLINE_ALPHA));
-            String glyph = mGlyphs[i];
-            float tilt = mModel.tiltDeg(i);
-            int saved = canvas.save();
-            // About the glyph's own centre, so a tilted letter stays in its slot instead of
-            // swinging away from the finger that is holding it.
-            canvas.rotate(tilt, x, y);
-            canvas.drawText(glyph, x, baseline, mOutlinePaint);
-            canvas.drawText(glyph, x, baseline, mFillPaint);
-            canvas.restoreToCount(saved);
+            mOutlinePaint.setColor(withAlpha(OUTLINE_DARK, OUTLINE_ALPHA_FOCUSED));
+            drawGlyph(canvas, metrics, focusedIndex, centerX,
+                (mFontMetrics.ascent + mFontMetrics.descent) * 0.5f);
         }
     }
 
+    /** One glyph through the currently configured paints. */
+    private void drawGlyph(@NonNull Canvas canvas, @NonNull AppDrawerRopeMetrics metrics, int i,
+                           float centerX, float halfSpan) {
+        float x = centerX + mModel.offsetPx(i);
+        float y = metrics.centerYForIndex(i);
+        // Centred on the slot rather than sat on a baseline: the slot centre is what indexForY
+        // maps a finger to, so the glyph the finger is over has to be the glyph drawn there.
+        float baseline = y - halfSpan;
+        String glyph = mGlyphs[i];
+        float tilt = mModel.tiltDeg(i);
+        int saved = canvas.save();
+        // About the glyph's own centre, so a tilted letter stays in its slot instead of
+        // swinging away from the finger that is holding it.
+        canvas.rotate(tilt, x, y);
+        canvas.drawText(glyph, x, baseline, mOutlinePaint);
+        canvas.drawText(glyph, x, baseline, mFillPaint);
+        canvas.restoreToCount(saved);
+    }
+
+    /** Cached per weight: {@code Typeface.create} per glyph per frame was the draw's hot spot. */
+    @Nullable private Typeface mRestingTypeface;
+    @Nullable private Typeface mFocusTypeface;
+
     private void applyLetterWeight(boolean focused) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            mFillPaint.setTypeface(Typeface.create(Typeface.DEFAULT, focused ? 900 : 500, false));
+            if (mRestingTypeface == null) {
+                mRestingTypeface = Typeface.create(Typeface.DEFAULT, 500, false);
+                mFocusTypeface = Typeface.create(Typeface.DEFAULT, 900, false);
+            }
+            mFillPaint.setTypeface(focused ? mFocusTypeface : mRestingTypeface);
             return;
         }
         mFillPaint.setTypeface(focused ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);

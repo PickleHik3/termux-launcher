@@ -66,20 +66,20 @@ public class SuggestionBarIconCacheTest {
      * 96-entry cap allowed ~28MB. The budget is bytes.
      */
     @Test
-    public void theBudget_isOneTwelfthOfTheHeapClampedTo6And16Megabytes() {
-        assertEquals(6 * 1024 * 1024, SuggestionBarView.resolveIconCacheBudgetBytes(0));
-        assertEquals(6 * 1024 * 1024, SuggestionBarView.resolveIconCacheBudgetBytes(48));
-        // 72MB / 12 = 6MB, exactly the floor.
-        assertEquals(6 * 1024 * 1024, SuggestionBarView.resolveIconCacheBudgetBytes(72));
-        assertEquals(8 * 1024 * 1024, SuggestionBarView.resolveIconCacheBudgetBytes(96));
-        assertEquals(16 * 1024 * 1024, SuggestionBarView.resolveIconCacheBudgetBytes(192));
-        assertEquals(16 * 1024 * 1024, SuggestionBarView.resolveIconCacheBudgetBytes(512));
+    public void theBudget_isOneEighthOfTheHeapClampedTo8And32Megabytes() {
+        assertEquals(8 * 1024 * 1024, SuggestionBarView.resolveIconCacheBudgetBytes(0));
+        assertEquals(8 * 1024 * 1024, SuggestionBarView.resolveIconCacheBudgetBytes(48));
+        // 64MB / 8 = 8MB, exactly the floor.
+        assertEquals(8 * 1024 * 1024, SuggestionBarView.resolveIconCacheBudgetBytes(64));
+        assertEquals(12 * 1024 * 1024, SuggestionBarView.resolveIconCacheBudgetBytes(96));
+        assertEquals(24 * 1024 * 1024, SuggestionBarView.resolveIconCacheBudgetBytes(192));
+        assertEquals(32 * 1024 * 1024, SuggestionBarView.resolveIconCacheBudgetBytes(512));
     }
 
     @Test
     public void theLiveCacheBudget_staysInsideTheClamp() {
-        assertTrue(renderedIconCache.maxSize() >= 6 * 1024 * 1024);
-        assertTrue(renderedIconCache.maxSize() <= 16 * 1024 * 1024);
+        assertTrue(renderedIconCache.maxSize() >= 8 * 1024 * 1024);
+        assertTrue(renderedIconCache.maxSize() <= 32 * 1024 * 1024);
         assertEquals(renderedIconCache.maxSize(),
             suggestionBarView.getRenderedIconCacheBudgetBytes());
     }
