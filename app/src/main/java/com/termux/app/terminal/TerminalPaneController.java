@@ -3312,7 +3312,10 @@ public class TerminalPaneController {
         private void drawEdgeGlow(Canvas canvas, @NonNull RectF pane, int color,
                                   @Nullable RectF clip) {
             float depth = dp(GLOW_DEPTH_DP);
-            float radius = dp(FLOAT_CORNER_RADIUS_DP);
+            // The glow must trace the ring the pane already draws. With glass on that ring is the
+            // rim at the glass radius (up to 14dp); drawing the glow at the stock 6dp put a second
+            // arc inside every corner — a visible double border for the whole grab and drag.
+            float radius = paneGlassActive() ? paneGlassRadiusPx() : dp(FLOAT_CORNER_RADIUS_DP);
             int saved = canvas.save();
             // Clip to the pane so the blur falls off inward only: light spilling across the seam
             // would read as the neighbour lighting up too.
