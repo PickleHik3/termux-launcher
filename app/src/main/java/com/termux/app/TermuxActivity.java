@@ -15077,6 +15077,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Snapshot of the outgoing terminal surface, captured just before a window/session swap. */
     @Nullable private android.graphics.Bitmap mTerminalDepartureSnapshot;
 
+    /** Whether that snapshot was left see-through (wallpaper passthrough, glass off), so the
+     *  ghost that carries it must not put an opaque plate back behind it. */
+    private boolean mTerminalDepartureTranslucent;
+
     /**
      * Captures the terminal surface immediately before a window/session switch tears its pane
      * tree down. The pane glass is translucent, so the raw pixels would double-expose over the
@@ -15104,10 +15108,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // layout shows blurred wallpaper through those gaps), so the same shared blur frame
             // the pane glass draws is composited first, and the flat colour is only the fallback
             // for when glass is off (where the terminal ground really is that colour).
-            if (!paintWallpaperGlassGround(canvas, terminal))
+            boolean paintedGround = paintWallpaperGlassGround(canvas, terminal);
+            // The flat base colour is only right where the live ground really is opaque. In
+            // wallpaper passthrough mode with glass off the ground is the wallpaper seen through
+            // the unified dim — painting the opaque base there turned the outgoing card into a
+            // near-black slab sliding over the wallpaper. Leaving the snapshot translucent is
+            // exact instead: the wallpaper behind the pan is static and shared by both sheets,
+            // and the card's trailing edge meets the incoming surface's leading edge, so the
+            // see-through card never double-exposes over anything the live layout didn't.
+            boolean translucentGround = !paintedGround && shouldUseWallpaperPassthroughMode();
+            if (!paintedGround && !translucentGround)
                 canvas.drawColor(resolveTerminalSurfaceBaseColor());
             terminal.draw(canvas);
             mTerminalDepartureSnapshot = snapshot;
+            mTerminalDepartureTranslucent = translucentGround;
         } catch (Throwable t) {
             // OOM or a view that cannot software-draw: the switch just loses its outgoing half.
             mTerminalDepartureSnapshot = null;
@@ -15166,7 +15180,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                           android.view.animation.Interpolator settle,
                                           long durationMs) {
         android.graphics.Bitmap departure = mTerminalDepartureSnapshot;
+        boolean translucent = mTerminalDepartureTranslucent;
         mTerminalDepartureSnapshot = null;
+        mTerminalDepartureTranslucent = false;
         if (departure == null) return;
         android.widget.ImageView ghost = new android.widget.ImageView(this);
         ghost.setImageBitmap(departure);
@@ -15174,8 +15190,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // stretches it back over the full surface. It only ever exists moving, so the softness
         // never reads.
         ghost.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
-        ghost.setBackgroundColor(resolveTerminalSurfaceBaseColor());
-        ghost.setElevation(dpToPx(12));
+        // A translucent snapshot stays translucent: an opaque plate here is the black flash the
+        // capture just avoided. The plate (and the shadow its outline enables) belongs only to
+        // the opaque-ground cards.
+        if (!translucent) {
+            ghost.setBackgroundColor(resolveTerminalSurfaceBaseColor());
+            ghost.setElevation(dpToPx(12));
+        }
         surfaceHost.addView(ghost, new android.widget.FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         ghost.animate()
