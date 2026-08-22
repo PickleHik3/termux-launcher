@@ -1861,7 +1861,7 @@ public final class AppDrawerContentView extends FrameLayout
         float velocityPxPerSec =
             AppDrawerCloseArmingPolicy.closeVelocityForNestedFling(mFlingVelocityY);
         RecyclerView recycler = mGestureRecycler == null ? mGrid : mGestureRecycler;
-        mPolicy.end(mOverpullTranslationPx, armOverpullPx(), velocityPxPerSec,
+        mPolicy.end(mOverpullTranslationPx, 0f, velocityPxPerSec,
             !recycler.canScrollVertically(-1), SystemClock.uptimeMillis());
         mFlingVelocityY = 0f;
         releaseOverpull();
@@ -1902,10 +1902,6 @@ public final class AppDrawerContentView extends FrameLayout
 
     private float overpullMaxPx() {
         return OVERPULL_MAX_DP * mDensity;
-    }
-
-    private float armOverpullPx() {
-        return AppDrawerCloseArmingPolicy.ARM_OVERPULL_DP * mDensity;
     }
 
     /** The grid's current overpull travel, in pixels. */

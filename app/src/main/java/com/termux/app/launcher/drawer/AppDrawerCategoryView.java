@@ -57,6 +57,10 @@ public final class AppDrawerCategoryView extends ViewGroup
         new AppDrawerCategoryGesturePolicy();
     /** The one house spring specified by B-5; there is no per-view frame callback. */
     private final Spring expansionSpring = new Spring(0f, 420f, 41f);
+    /** Progress within ~5px of the end counts as arrived; see the snap in {@link #advance}. */
+    private static final float SETTLE_SNAP_PROGRESS = 0.002f;
+    /** Residual spring velocity (progress/s) slow enough to snap without a visible step. */
+    private static final float SETTLE_SNAP_VELOCITY = 0.15f;
     private final ClickGate clickGate = new ClickGate();
     private final int touchSlop;
 
@@ -92,12 +96,13 @@ public final class AppDrawerCategoryView extends ViewGroup
         tileAdapter.setExpansionListener(this);
         tileAdapter.setClickGate(clickGate);
         overviewLayout = new GridLayoutManager(context, 1);
-        overviewLayout.setItemPrefetchEnabled(false);
         overview = new RecyclerView(context);
         overview.setLayoutManager(overviewLayout);
         overview.setAdapter(tileAdapter);
         overview.setHasFixedSize(true);
-        overview.setItemViewCacheSize(0);
+        // Prefetch on and the default view cache: a tile bind renders seven icons, resolves theme
+        // colours and requests layout — with a zero cache every tile nudged one pixel off-screen
+        // paid all of that again on the way back, on the scroll frame itself.
         overview.setItemAnimator(null);
         overview.setOverScrollMode(OVER_SCROLL_NEVER);
         overview.setClipToPadding(true);
@@ -110,12 +115,11 @@ public final class AppDrawerCategoryView extends ViewGroup
         detailAdapter = new AppDrawerCategoryDetailAdapter(dock);
         detailAdapter.setClickGate(clickGate);
         detailLayout = new GridLayoutManager(context, AppDrawerGridMetrics.MIN_COLUMNS);
-        detailLayout.setItemPrefetchEnabled(false);
         detailList = new RecyclerView(context);
         detailList.setLayoutManager(detailLayout);
         detailList.setAdapter(detailAdapter);
         detailList.setHasFixedSize(true);
-        detailList.setItemViewCacheSize(0);
+        // Same rationale as the overview above: let prefetch and the view cache absorb rebinds.
         detailList.setItemAnimator(null);
         detailList.setOverScrollMode(OVER_SCROLL_NEVER);
         detailList.setClipToPadding(true);
@@ -385,6 +389,14 @@ public final class AppDrawerCategoryView extends ViewGroup
             || state == AppDrawerCategoryExpansionModel.State.EXPANDED
             || state == AppDrawerCategoryExpansionModel.State.COLLAPSE_DRAGGING) return false;
         boolean moving = expansionSpring.tick(reducedMotion, Spring.clampDelta(dt));
+        // Spring.SETTLE_EPSILON is sub-pixel (4e-4 of a full-screen travel), and this state machine
+        // keeps eating every touch until the spring reports settled — so the invisible asymptotic
+        // tail held the drawer input-dead for ~half a second after the collapse looked finished.
+        // Anything within a few pixels of the end is the end.
+        if (moving && Math.abs(expansionSpring.target - expansionSpring.value) < SETTLE_SNAP_PROGRESS
+            && Math.abs(expansionSpring.vel) < SETTLE_SNAP_VELOCITY) {
+            moving = false;
+        }
         applyExpansionProgress(expansionSpring.value);
         if (!moving) {
             expansionSpring.value = expansionSpring.target;
@@ -606,9 +618,20 @@ public final class AppDrawerCategoryView extends ViewGroup
         expansion.finishCollapseDrag(commit);
         expansionSpring.value = expansion.progress();
         expansionSpring.target = commit ? 0f : 1f;
+        // The release velocity rides into the spring — p is (down - rawY)/travel away from where
+        // the finger started, so dp/dt is -v/travel for a downward-positive velocity. Without
+        // this, a hard flick decelerated to the spring's own from-rest ramp at the moment of
+        // release, which read as the drawer hesitating. Clamped: an extreme fling velocity would
+        // otherwise overshoot a critically damped spring visibly past its end.
+        float travel = metrics == null ? 1f : Math.max(1f, metrics.collapseTravelPx);
+        expansionSpring.vel = Math.max(-COLLAPSE_MAX_INJECTED_VELOCITY,
+            Math.min(COLLAPSE_MAX_INJECTED_VELOCITY, -velocityPxPerSec / travel));
         requestFrames();
         return true;
     }
+
+    /** Cap on the flick velocity carried into the expansion spring, in progress/s. */
+    private static final float COLLAPSE_MAX_INJECTED_VELOCITY = 6f;
 
     public void suppressClicks() { clickGate.suppress(); }
     public boolean suppressCellClick() { return clickGate.suppressCellClick(); }

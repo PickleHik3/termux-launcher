@@ -108,10 +108,6 @@ public class AppDrawerContentColumnTest {
 
     @Test
     public void aDownOnTheColumnProducesNoCloseReportForTheWholeStream() {
-        // Paid for in advance, so the only thing standing between this stream and a close is the
-        // region it went down in.
-        armWithAPaidPull();
-
         pressOnColumn(0);
         // A scrub is a long downward drag, so every delta of it is offered to the close channel the
         // grid would have used — the whole way to the bottom of the alphabet. The overpull channel is
@@ -133,18 +129,16 @@ public class AppDrawerContentColumnTest {
     }
 
     @Test
-    public void aColumnStreamDisarmsSoTheNextGridPullScrollsRatherThanCloses() {
-        armWithAPaidPull();
-
+    public void aGridPullAtTheTopAfterAColumnStreamStillCloses() {
         pressOnColumn(0);
         moveOnColumn(4);
         releaseColumn(4);
 
-        // Risk 3 in reverse: the arming the earlier pull earned is spent by the column's down rather
-        // than left lying around for a stream that never went through the recycler at all.
+        // The column stream is its own gesture; a fresh downward pull on a grid sitting at its top
+        // closes in that one gesture, exactly as it would with no column stream before it.
         pressOnGrid();
-        assertEquals(0, preScroll(-40));
-        assertEquals(0, callbacks.begins);
+        assertEquals(-40, preScroll(-40));
+        assertEquals(1, callbacks.begins);
     }
 
     // ------------------------------------------------------------------ the grid side
@@ -382,16 +376,6 @@ public class AppDrawerContentColumnTest {
         return column.getTop() + (metrics == null ? 0f : metrics.centerYForIndex(index));
     }
 
-    private void armWithAPaidPull() {
-        pressOnGrid();
-        preScroll(-Math.round(pull));
-        unconsumed(-Math.round(pull));
-        content.onStopNestedScroll(grid, ViewCompat.TYPE_TOUCH);
-        for (int i = 0; i < 240 && content.getOverpullTranslationPx() != 0f; i++) {
-            content.doFrame((i + 1) * 16_666_667L);
-        }
-        callbacks.reset();
-    }
 
     private int preScroll(int dy) {
         int[] consumed = new int[2];
