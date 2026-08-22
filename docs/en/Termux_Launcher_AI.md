@@ -239,9 +239,10 @@ For catalog models, use the official model ID so OpenAI-compatible tools can req
 
 MNN models should be installed from the catalog/download flow so TAI can fetch `config.json` and required sidecar files. GGUF, safetensors, PyTorch, ONNX, and other raw weight files are rejected by import/load paths because this APK does not include a GGUF/llama.cpp backend.
 
-## tmux Status Indicator
+## Status Bar Indicator
 
-If you use the Termux Launcher tmux package, the status bar can show whether an AI model is loaded.
+Any status bar that can run a shell command on a timer can show whether an AI model is loaded — the
+launcher's own bar included. These are the glyphs it reports with.
 
 Loaded:
 
