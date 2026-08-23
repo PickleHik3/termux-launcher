@@ -106,7 +106,9 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT = "terminal.jump_previous_prompt";
     public static final String TOOL_TERMINAL_JUMP_NEXT_PROMPT = "terminal.jump_next_prompt";
     public static final String TOOL_APPEARANCE_TOGGLE_CURSOR_TRAIL = "appearance.toggle_cursor_trail";
-    public static final String TOOL_APPEARANCE_GLASS_LAB = "appearance.glass_lab";
+    public static final String TOOL_APPEARANCE_SURFACE_EDITOR = "appearance.surface_editor";
+    /** Legacy alias from when the surface editor was called the glass lab; scripts may still call it. */
+    public static final String TOOL_APPEARANCE_GLASS_LAB_LEGACY = "appearance.glass_lab";
     public static final String TOOL_APP_OPEN_SETTINGS = "app.open_settings";
     public static final String TOOL_APP_OPEN_LOOK_AND_FEEL = "app.open_look_and_feel";
     public static final String TOOL_APP_OPEN_APPS_BAR = "app.open_apps_bar";
@@ -219,7 +221,8 @@ public final class TerminalActionDispatcher {
             case TOOL_TERMINAL_JUMP_NEXT_PROMPT:
             case TOOL_APPEARANCE_TOGGLE_WALLPAPER:
             case TOOL_APPEARANCE_TOGGLE_CURSOR_TRAIL:
-            case TOOL_APPEARANCE_GLASS_LAB:
+            case TOOL_APPEARANCE_SURFACE_EDITOR:
+            case TOOL_APPEARANCE_GLASS_LAB_LEGACY:
             case TOOL_APP_OPEN_SETTINGS:
             case TOOL_APP_OPEN_LOOK_AND_FEEL:
             case TOOL_APP_OPEN_APPS_BAR:
@@ -583,8 +586,9 @@ public final class TerminalActionDispatcher {
                     return ok().put("wallpaperEnabled", host.toggleWallpaperMode());
                 case TOOL_APPEARANCE_TOGGLE_CURSOR_TRAIL:
                     return ok().put("cursorTrailEnabled", host.toggleCursorTrail());
-                case TOOL_APPEARANCE_GLASS_LAB:
-                    host.openGlassLab();
+                case TOOL_APPEARANCE_SURFACE_EDITOR:
+                case TOOL_APPEARANCE_GLASS_LAB_LEGACY:
+                    host.openSurfaceEditor();
                     return ok();
                 case TOOL_APP_OPEN_SETTINGS:
                     host.openSettings();

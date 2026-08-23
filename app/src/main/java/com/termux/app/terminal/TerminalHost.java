@@ -396,7 +396,7 @@ public interface TerminalHost {
 
     boolean isCursorTrailEnabled();
 
-    void openGlassLab();
+    void openSurfaceEditor();
 
     /** Repaints the window ground for whichever session is now current. */
     void updateWindowBackgroundForCurrentSession();

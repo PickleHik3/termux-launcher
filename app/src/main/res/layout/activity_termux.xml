@@ -1064,7 +1064,7 @@
                                 app:autoSizeTextType="uniform" />
 
                             <com.google.android.material.button.MaterialButton
-                                android:id="@+id/surface_tuning_section_other"
+                                android:id="@+id/surface_tuning_section_terminal"
                                 style="?attr/materialButtonOutlinedStyle"
                                 android:layout_width="0dp"
                                 android:layout_height="34dp"
@@ -1073,7 +1073,7 @@
                                 android:insetBottom="0dp"
                                 android:minHeight="34dp"
                                 android:paddingHorizontal="2dp"
-                                android:text="@string/termux_surface_tuning_other"
+                                android:text="@string/termux_surface_tuning_terminal"
                                 android:textSize="10sp"
                                 android:ellipsize="end"
                                 android:maxLines="1"
@@ -1784,7 +1784,7 @@
                     </LinearLayout>
 
                     <LinearLayout
-                        android:id="@+id/surface_tuning_other_panel"
+                        android:id="@+id/surface_tuning_terminal_panel"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"

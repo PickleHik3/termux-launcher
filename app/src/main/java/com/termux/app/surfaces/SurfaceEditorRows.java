@@ -122,7 +122,7 @@ public final class SurfaceEditorRows {
         switch (slot) {
             case KEYBOARD: return R.string.termux_surface_tuning_keyboard;
             case STATUS: return R.string.termux_surface_tuning_status;
-            case CANVAS: return R.string.termux_surface_tuning_other;
+            case CANVAS: return R.string.termux_surface_tuning_terminal;
             default: return R.string.termux_surface_tuning_dock;
         }
     }

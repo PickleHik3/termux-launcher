@@ -743,8 +743,8 @@ class FakeTerminalHost implements TerminalHost {
         return cursorTrailEnabled;
     }
 
-    @Override public void openGlassLab() {
-        record("openGlassLab");
+    @Override public void openSurfaceEditor() {
+        record("openSurfaceEditor");
     }
 
     @Override public void updateWindowBackgroundForCurrentSession() {

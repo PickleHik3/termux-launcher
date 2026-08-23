@@ -609,7 +609,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final int CONTEXT_MENU_RESET_TERMINAL_ID = 7;
 
-    private static final int CONTEXT_MENU_GLASS_LAB_ID = 9;
+    private static final int CONTEXT_MENU_SURFACE_EDITOR_ID = 9;
 
     private static final int CONTEXT_MENU_COMMAND_PALETTE_ID = 10;
 
@@ -7300,7 +7300,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if ("status".equals(section) || "sessions".equals(section))
             return R.id.surface_tuning_section_status;
         if ("other".equals(section) || "terminal".equals(section))
-            return R.id.surface_tuning_section_other;
+            return R.id.surface_tuning_section_terminal;
         return R.id.surface_tuning_section_dock;
     }
 
@@ -7309,7 +7309,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (sectionId == R.id.surface_tuning_section_keyboard) return "keyboard";
         if (sectionId == R.id.surface_tuning_section_status)
             return isSurfaceTuningSessionsSlot() ? "sessions" : "status";
-        if (sectionId == R.id.surface_tuning_section_other) return "other";
+        // Written as "terminal" now; "other" is still read above for sections stored by older
+        // builds, which named this tab after what it wasn't.
+        if (sectionId == R.id.surface_tuning_section_terminal) return "terminal";
         return "dock";
     }
 
@@ -7347,7 +7349,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View keyboard = findViewById(R.id.surface_tuning_keyboard_panel);
         View status = findViewById(R.id.surface_tuning_status_panel);
         View sessions = findViewById(R.id.surface_tuning_sessions_panel);
-        View other = findViewById(R.id.surface_tuning_other_panel);
+        View other = findViewById(R.id.surface_tuning_terminal_panel);
         if (base != null) base.setVisibility(
             checkedId == R.id.surface_tuning_section_base ? View.VISIBLE : View.GONE);
         boolean showDock = checkedId == R.id.surface_tuning_section_dock;
@@ -7362,7 +7364,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (sessions != null) sessions.setVisibility(
             fourthSlot && sessionsSlot ? View.VISIBLE : View.GONE);
         if (other != null) other.setVisibility(
-            checkedId == R.id.surface_tuning_section_other ? View.VISIBLE : View.GONE);
+            checkedId == R.id.surface_tuning_section_terminal ? View.VISIBLE : View.GONE);
         syncSurfaceReattachAllVisibility();
         ScrollView scroll = findViewById(R.id.dock_tuning_scroll);
         if (scroll != null) {
@@ -7768,7 +7770,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         SURFACE_SLOT_TABS.put(TermuxAppSharedPreferences.SurfaceSlot.STATUS,
             R.id.surface_tuning_section_status);
         SURFACE_SLOT_TABS.put(TermuxAppSharedPreferences.SurfaceSlot.CANVAS,
-            R.id.surface_tuning_section_other);
+            R.id.surface_tuning_section_terminal);
     }
 
     /**
@@ -7988,7 +7990,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (tab == null)
                 continue;
             int base = entry.getKey() == TermuxAppSharedPreferences.SurfaceSlot.CANVAS
-                ? R.string.termux_surface_tuning_other
+                ? R.string.termux_surface_tuning_terminal
                 : SurfaceEditorRows.slotLabel(entry.getKey());
             if (entry.getKey() == TermuxAppSharedPreferences.SurfaceSlot.STATUS
                 && isSurfaceTuningSessionsSlot())
@@ -10253,7 +10255,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case CONTEXT_MENU_KILL_PROCESS_ID:
                 showKillSessionDialog(session);
                 return true;
-            case CONTEXT_MENU_GLASS_LAB_ID:
+            case CONTEXT_MENU_SURFACE_EDITOR_ID:
                 enterDockTuningMode();
                 return true;
             case CONTEXT_MENU_COMMAND_PALETTE_ID:
@@ -10358,7 +10360,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? R.string.action_disable_background_image
                 : R.string.action_enable_background_image)
         ));
-        items.add(new TerminalActionItem(CONTEXT_MENU_GLASS_LAB_ID, getString(R.string.action_glass_lab)));
+        items.add(new TerminalActionItem(CONTEXT_MENU_SURFACE_EDITOR_ID, getString(R.string.action_surface_editor)));
         // Only when the companion is installed: a row that opens the Appearance settings under the
         // name of a plugin the device does not have is a broken promise, not a shortcut.
         if (isTerminalStylingAvailable()) {
@@ -12316,7 +12318,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mPreferences != null && mPreferences.isTerminalCursorTrailEnabled();
     }
 
-    void openGlassLab() {
+    void openSurfaceEditor() {
         enterDockTuningMode();
     }
 
@@ -14948,8 +14950,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return TermuxActivity.this.isCursorTrailEnabled();
         }
 
-        @Override public void openGlassLab() {
-            TermuxActivity.this.openGlassLab();
+        @Override public void openSurfaceEditor() {
+            TermuxActivity.this.openSurfaceEditor();
         }
 
         @Override public void updateWindowBackgroundForCurrentSession() {
