@@ -180,6 +180,7 @@ public final class StatusBarWidgetView extends LinearLayout {
     }
 
     public void setValue(@NonNull CharSequence value) {
+        if (android.text.TextUtils.equals(mValue.getText(), value)) return;
         mValue.setText(value);
     }
 

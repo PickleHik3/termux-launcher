@@ -12508,6 +12508,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             cpu.setVisibility(cpuOn ? View.VISIBLE : View.GONE);
             cpu.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
             cpu.setIconGlyph("\uf4bc");   // nf-oct-cpu
+            // Seeded from the smoother every pass: onStatsUpdated skips hidden widgets, so a value
+            // published while this one was off or covered is otherwise only repainted when the
+            // reading next changes \u2014 and before the first sample this is what puts "--" on screen
+            // instead of an empty slot.
+            if (cpuOn) cpu.setValue(mBarCpuSmoother.text());
             if (cpu.getTag() == null) {
                 cpu.setTag("wired");
                 cpu.setOnClickListener(v -> toggleStatsCard(v));
@@ -12517,6 +12522,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ram.setVisibility(ramOn ? View.VISIBLE : View.GONE);
             ram.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
             ram.setIconGlyph("\uefc5");   // nf-fa-memory
+            if (ramOn) ram.setValue(mBarMemorySmoother.text());
             if (ram.getTag() == null) {
                 ram.setTag("wired");
                 ram.setOnClickListener(v -> toggleStatsCard(v));
