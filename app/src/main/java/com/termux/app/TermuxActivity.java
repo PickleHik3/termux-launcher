@@ -7653,18 +7653,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TextView chip = findViewById(row.chipId);
             if (chip == null)
                 continue;
-            String slotName = getString(SurfaceEditorRows.slotLabel(row.slot));
-            chip.setText(inheriting ? R.string.termux_surface_tuning_link_inherited
-                : R.string.termux_surface_tuning_link_detached);
-            chip.setTextColor(getSurfaceLinkChipColor(inheriting));
-            chip.setAlpha(inheriting ? 0.7f : 1f);
-            // Only a detached chip does anything; an inherited one is a state, not a target.
+            // An untouched row carries no glyph at all; the ↺ appears only once the row has its
+            // own value, as the way back to Base. INVISIBLE, not GONE, so the slot keeps its
+            // width and every track in the column stays the same length.
+            chip.setVisibility(inheriting ? View.INVISIBLE : View.VISIBLE);
             chip.setClickable(!inheriting);
             chip.setFocusable(!inheriting);
-            chip.setContentDescription(getString(inheriting
-                    ? R.string.termux_surface_tuning_link_inherited_description
-                    : R.string.termux_surface_tuning_link_detached_description,
-                slotName));
+            if (inheriting)
+                continue;
+            String slotName = getString(SurfaceEditorRows.slotLabel(row.slot));
+            chip.setText(R.string.termux_surface_tuning_link_detached);
+            chip.setTextColor(getSurfaceLinkChipColor(false));
+            chip.setAlpha(1f);
+            chip.setContentDescription(getString(
+                R.string.termux_surface_tuning_link_detached_description, slotName));
         }
         syncSurfaceBaseSliders();
         syncSurfaceTabBadges();
@@ -7802,9 +7804,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && isSurfaceTuningSessionsSlot())
                 base = R.string.termux_dock_tuning_section_sessions;
             int overrides = mPreferences.surfaceOverrideCount(entry.getKey());
+            // A dot, not a count: the tab only needs to say "something here left Base", and a
+            // bare number next to a tab name read as part of the name ("Dock 1").
             tab.setText(overrides == 0
                 ? getString(base)
-                : getString(base) + " " + overrides);
+                : getString(base) + " •");
         }
     }
 

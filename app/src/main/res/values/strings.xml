@@ -1034,13 +1034,13 @@
                 <string name="termux_surface_tuning_dock">Dock</string>
                 <string name="termux_surface_tuning_keyboard">Keyboard</string>
                 <string name="termux_surface_tuning_status">Status</string>
-                <string name="termux_surface_tuning_other">Canvas</string>
-                <string name="termux_surface_tuning_reset">Reset tab</string>
+                <string name="termux_surface_tuning_other">Terminal</string>
+                <string name="termux_surface_tuning_reset">Reset</string>
                 <string name="termux_surface_tuning_keyboard_height">Height</string>
                 <string name="termux_surface_tuning_keyboard_spacing">Spacing</string>
                 <string name="termux_surface_tuning_keyboard_key_opacity">Keys opacity</string>
                 <string name="termux_surface_tuning_keyboard_bg_opacity">Bg opacity</string>
-                <string name="termux_surface_tuning_edges">Side gap</string>
+                <string name="termux_surface_tuning_edges">Margin</string>
                 <string name="termux_surface_tuning_dock_height_handle">Drag to resize the dock</string>
                 <string name="termux_surface_tuning_keyboard_height_handle">Drag to resize the keyboard</string>
                 <string name="termux_dock_tuning_blur">Blur</string>
