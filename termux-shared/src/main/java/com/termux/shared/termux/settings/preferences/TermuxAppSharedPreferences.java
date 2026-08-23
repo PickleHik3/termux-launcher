@@ -2022,18 +2022,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_DYNAMIC_COLORS_ENABLED, value, false);
     }
 
-    /** Where the launcher chrome takes its colours from: {@code wallpaper} or {@code scheme}. */
-    @NonNull
-    public String getUiColorSource() {
-        return SharedPreferenceUtils.getString(mSharedPreferences, TERMUX_APP.KEY_UI_COLOR_SOURCE,
-            TERMUX_APP.DEFAULT_VALUE_UI_COLOR_SOURCE, true);
-    }
-
-    public void setUiColorSource(@Nullable String value) {
-        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_UI_COLOR_SOURCE,
-            value == null ? TERMUX_APP.DEFAULT_VALUE_UI_COLOR_SOURCE : value, false);
-    }
-
     @NonNull
     public TerminalContrastLevel getTerminalContrastLevel() {
         return TerminalContrastLevel.from(SharedPreferenceUtils.getString(mSharedPreferences,

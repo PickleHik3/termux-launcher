@@ -40,18 +40,6 @@
             app:selectable="false"
             app:iconSpaceReserved="false" />
         <ListPreference
-            app:key="ui_color_source"
-            app:title="@string/settings_ui_color_source_title"
-            app:entries="@array/termux_ui_color_source_entries"
-            app:entryValues="@array/termux_ui_color_source_values"
-            android:defaultValue="wallpaper" />
-        <Preference
-            app:key="ui_color_source_hint"
-            app:summary="@string/settings_ui_color_source_hint"
-            app:persistent="false"
-            app:selectable="false"
-            app:iconSpaceReserved="false" />
-        <ListPreference
             app:key="terminal_contrast_level"
             app:title="@string/settings_terminal_contrast_title"
             app:entries="@array/terminal_contrast_entries"

@@ -63,7 +63,8 @@
     <string name="settings_color_mode_title">Color mode</string>
     <string name="settings_wallpaper_colors_title">Use wallpaper colors</string>
     <string name="settings_wallpaper_colors_summary">Builds the launcher palette from the current wallpaper.</string>
-    <string name="settings_wallpaper_colors_hint">While on, this overrides ~/.termux/colors.properties. Applying a Termux:Styling scheme turns it off.</string>
+    <string name="settings_wallpaper_colors_hint">While on, this overrides ~/.termux/colors.properties. Turn it off — or apply a Termux:Styling scheme, which turns it off for you — and the terminal and the launcher chrome both follow that scheme. Overrides in ~/.termux/launcher-theme.properties are read on top of it: one token per line, e.g. primary = color3.</string>
+    <string name="settings_wallpaper_colors_hint_chrome_unsupported">While on, this overrides ~/.termux/colors.properties. Applying a Termux:Styling scheme turns it off. The launcher chrome needs Android 11 or newer to follow a scheme; here it stays on system colors while the terminal follows the scheme.</string>
     <string name="settings_terminal_contrast_title">Terminal contrast</string>
     <string name="settings_terminal_contrast_summary">%1$s</string>
     <string name="settings_terminal_contrast_disabled">Available when wallpaper colors are on</string>
@@ -76,20 +77,6 @@
         <item>softer</item>
         <item>default</item>
         <item>harder</item>
-    </string-array>
-    <string name="settings_ui_color_source_title">Interface colors</string>
-    <string name="settings_ui_color_source_summary_wallpaper">Dock, status bar, drawer and keyboard follow the wallpaper palette.</string>
-    <string name="settings_ui_color_source_summary_scheme">Dock, status bar, drawer and keyboard are derived from the terminal color scheme.</string>
-    <string name="settings_ui_color_source_no_scheme">No color scheme installed yet — apply one from Termux:Styling first.</string>
-    <string name="settings_ui_color_source_unsupported">Needs Android 11 or newer; the terminal still follows the scheme.</string>
-    <string name="settings_ui_color_source_hint">Overrides in ~/.termux/launcher-theme.properties are read on top of the scheme: one token per line, e.g. primary = color3.</string>
-    <string-array name="termux_ui_color_source_entries">
-        <item>From wallpaper</item>
-        <item>From terminal color scheme</item>
-    </string-array>
-    <string-array name="termux_ui_color_source_values">
-        <item>wallpaper</item>
-        <item>scheme</item>
     </string-array>
     <string name="settings_wallpaper_title">Wallpaper</string>
     <string name="settings_icon_appearance_header">Icon appearance</string>

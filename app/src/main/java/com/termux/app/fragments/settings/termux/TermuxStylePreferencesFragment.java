@@ -61,7 +61,7 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         }
         configureDockPreferencePresentation();
         configureTerminalContrastPreference();
-        configureUiColorSourcePreference();
+        configureDynamicColorsHint();
         updateDockBlurAvailability();
     }
 
@@ -77,49 +77,22 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         }
         updateDockBlurAvailability();
         configureTerminalContrastPreference();
-        configureUiColorSourcePreference();
+        configureDynamicColorsHint();
     }
 
     /**
-     * Availability and summary for the interface-colour source.
+     * What the wallpaper-colours switch is really choosing, said under it.
      *
-     * <p>Both ways it can be unavailable are stated in the summary rather than hidden: on API 30
-     * and below the palette cannot be loaded into the activity's resources at all, and with no
-     * {@code colors.properties} on disk there is nothing to derive a palette from.
+     * <p>It picks the palette for the terminal and for the launcher chrome together, so the note
+     * names both — and the one case where the chrome cannot follow, the palette being loaded into
+     * the activity's resources on API 30 and below, is stated rather than hidden.
      */
-    private void configureUiColorSourcePreference() {
-        androidx.preference.ListPreference source = findPreference("ui_color_source");
-        Preference hint = findPreference("ui_color_source_hint");
-        if (source == null) return;
-
-        boolean supported = LauncherSchemeTheme.isSupported();
-        boolean hasScheme = TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE.isFile();
-        source.setEnabled(supported && hasScheme);
-        if (hint != null) hint.setVisible(supported && hasScheme);
-
-        if (!supported) {
-            source.setSummary(R.string.settings_ui_color_source_unsupported);
-            return;
-        }
-        if (!hasScheme) {
-            source.setSummary(R.string.settings_ui_color_source_no_scheme);
-            return;
-        }
-        source.setSummary(LauncherSchemeTheme.COLOR_SOURCE_SCHEME.equals(source.getValue())
-            ? R.string.settings_ui_color_source_summary_scheme
-            : R.string.settings_ui_color_source_summary_wallpaper);
-        source.setOnPreferenceChangeListener((preference, value) -> {
-            source.setValue(String.valueOf(value));
-            if (LauncherSchemeTheme.COLOR_SOURCE_SCHEME.equals(String.valueOf(value))) {
-                // The data store has already turned wallpaper colours off — the terminal and the
-                // chrome share one palette — so the switch has to stop claiming otherwise.
-                SwitchPreferenceCompat dynamic = findPreference("terminal_dynamic_colors_enabled");
-                if (dynamic != null) dynamic.setChecked(false);
-                configureTerminalContrastPreference();
-            }
-            configureUiColorSourcePreference();
-            return true;
-        });
+    private void configureDynamicColorsHint() {
+        Preference hint = findPreference("terminal_dynamic_colors_hint");
+        if (hint == null) return;
+        hint.setSummary(LauncherSchemeTheme.isSupported()
+            ? R.string.settings_wallpaper_colors_hint
+            : R.string.settings_wallpaper_colors_hint_chrome_unsupported);
     }
 
     private void configureTerminalContrastPreference() {
@@ -139,14 +112,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
             boolean on = Boolean.TRUE.equals(value);
             contrast.setEnabled(on);
             updateTerminalContrastSummary(contrast, on);
-            androidx.preference.ListPreference source = findPreference("ui_color_source");
-            if (on && source != null
-                && LauncherSchemeTheme.COLOR_SOURCE_SCHEME.equals(source.getValue())) {
-                // Same coupling from the other side: the data store has already moved the chrome
-                // back to the wallpaper.
-                source.setValue(LauncherSchemeTheme.COLOR_SOURCE_WALLPAPER);
-                configureUiColorSourcePreference();
-            }
             return true;
         });
     }
@@ -313,16 +278,13 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 // Legacy compatibility: material overlay is always enabled now.
                 break;
             case "terminal_dynamic_colors_enabled":
+                // This switch is the whole palette decision: on, the terminal and the chrome both
+                // take the wallpaper; off, both take the scheme. Either way the chrome palette
+                // changes, and it is loaded into the activity's Resources at theme time, so
+                // nothing short of a recreate can swap it.
                 mPreferences.setTerminalDynamicColorsEnabled(value);
-                if (value && LauncherSchemeTheme.COLOR_SOURCE_SCHEME.equals(mPreferences.getUiColorSource())) {
-                    // The scheme the chrome was following is no longer what the terminal shows, so
-                    // the chrome goes back to the wallpaper with it.
-                    mPreferences.setUiColorSource(LauncherSchemeTheme.COLOR_SOURCE_WALLPAPER);
-                    LauncherSchemeTheme.invalidate();
-                    scheduleTermuxActivityStylingSync(true);
-                    break;
-                }
-                scheduleTermuxActivityStylingSync(false);
+                LauncherSchemeTheme.invalidate();
+                scheduleTermuxActivityStylingSync(true);
                 break;
             case "app_launcher_bw_icons":
                 mPreferences.setAppLauncherBwIconsEnabled(value);
@@ -561,18 +523,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setTerminalContrastLevel(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
-            case "ui_color_source":
-                mPreferences.setUiColorSource(value);
-                if (LauncherSchemeTheme.COLOR_SOURCE_SCHEME.equals(value)) {
-                    // Chrome on the scheme and terminal on the wallpaper is not a state anyone asked
-                    // for: the two would sit side by side in different palettes.
-                    mPreferences.setTerminalDynamicColorsEnabled(false);
-                }
-                // The palette is loaded into the activity's Resources at theme time, so nothing
-                // short of a recreate can swap it.
-                LauncherSchemeTheme.invalidate();
-                scheduleTermuxActivityStylingSync(true);
-                break;
             case "theme_mode":
                 writeTermuxPropertyToProperties(TermuxPropertyConstants.KEY_NIGHT_MODE, value);
                 TermuxThemeUtils.setAppNightMode(value);
@@ -669,8 +619,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         switch (key) {
             case "terminal_contrast_level":
                 return mPreferences.getTerminalContrastLevel().value;
-            case "ui_color_source":
-                return mPreferences.getUiColorSource();
             case "theme_mode":
                 return TermuxSharedProperties.getNightMode(mContext);
             case "app_launcher_button_count":
