@@ -1003,6 +1003,14 @@
                 <string name="termux_dock_tune_live_title">Surface editor</string>
                 <string name="termux_dock_tune_live_summary">Customize dock, keyboard, status panel, and terminal live on the home screen.</string>
                 <string name="termux_dock_tuning_title">Surface editor</string>
+                <string name="termux_surface_tuning_presets_section">Presets</string>
+                <string name="termux_surface_preset_stock">Stock</string>
+                <string name="termux_surface_preset_glass">Glass</string>
+                <string name="termux_surface_preset_frost">Frost</string>
+                <string name="termux_surface_preset_solid">Solid</string>
+                <string name="termux_surface_preset_minimal">Minimal</string>
+                <string name="termux_surface_preset_applied">%1$s applied</string>
+                <string name="termux_surface_preset_undo">Undo</string>
                 <string name="termux_surface_tuning_base_section">All surfaces</string>
                 <string name="termux_surface_tuning_material">Material</string>
                 <string name="termux_surface_tuning_material_solid">Solid</string>

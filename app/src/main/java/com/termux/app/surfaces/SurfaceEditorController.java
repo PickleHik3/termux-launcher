@@ -146,6 +146,7 @@ public final class SurfaceEditorController {
         if (prefs() == null)
             return;
         ensureGeneratedRows();
+        ensurePresetsStrip();
         View controls = mHost.findView(R.id.dock_tuning_controls);
         View advanced = mHost.findView(R.id.surface_editor_advanced);
         View keyboardColors = mHost.findView(R.id.surface_tuning_keyboard_colors);
@@ -1330,6 +1331,7 @@ public final class SurfaceEditorController {
         }
         syncSurfaceBaseSliders();
         syncSurfaceReattachAllVisibility();
+        syncPresetSelection();
     }
 
     private int getSurfaceLinkChipColor(boolean inheriting) {
@@ -1397,6 +1399,263 @@ public final class SurfaceEditorController {
         if (value != null) value.setText(getString(dp
             ? R.string.termux_dock_tuning_value_dp
             : R.string.termux_dock_tuning_value_percent, current));
+    }
+
+    // ------------------------------------------------------------------------------- the presets
+    //
+    // Complete looks, one tap each - the editor's front door. A preset overwrites everything it
+    // defines, detached overrides included (that is what "complete" means), against one Undo that
+    // puts back the exact raw values and link shape it found. The strip is built once from
+    // SurfacePresets and each card is a stylized mini-preview drawn from the preset's own numbers;
+    // the card whose values exactly match the live preferences wears a ring.
+
+    /** Preview frame and name per preset id, for the selection ring. */
+    private final java.util.Map<String, android.util.Pair<View, TextView>> mPresetItems =
+        new java.util.LinkedHashMap<>();
+
+    private void ensurePresetsStrip() {
+        ViewGroup container = mHost.findView(R.id.surface_editor_presets_container);
+        if (container == null)
+            return;
+        if (container.getChildCount() > 0) {
+            container.setVisibility(View.VISIBLE);
+            return;
+        }
+        Context context = mHost.context();
+        android.widget.LinearLayout column = new android.widget.LinearLayout(context);
+        column.setOrientation(android.widget.LinearLayout.VERTICAL);
+
+        TextView header = new TextView(context);
+        header.setText(R.string.termux_surface_tuning_presets_section);
+        header.setAllCaps(true);
+        header.setLetterSpacing(0.12f);
+        header.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 11);
+        header.setTypeface(header.getTypeface(), android.graphics.Typeface.BOLD);
+        header.setTextColor(mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary,
+            R.color.termux_primary));
+        column.addView(header);
+
+        android.widget.HorizontalScrollView strip =
+            new android.widget.HorizontalScrollView(context);
+        strip.setHorizontalScrollBarEnabled(false);
+        android.widget.LinearLayout row = new android.widget.LinearLayout(context);
+        row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        row.setPadding(0, Math.round(dpToPx(6)), 0, Math.round(dpToPx(2)));
+        for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
+            android.widget.LinearLayout item = new android.widget.LinearLayout(context);
+            item.setOrientation(android.widget.LinearLayout.VERTICAL);
+            item.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+            android.widget.LinearLayout.LayoutParams itemParams =
+                new android.widget.LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            itemParams.rightMargin = Math.round(dpToPx(10));
+            item.setLayoutParams(itemParams);
+
+            View preview = new View(context);
+            android.widget.LinearLayout.LayoutParams previewParams =
+                new android.widget.LinearLayout.LayoutParams(
+                    Math.round(dpToPx(56)), Math.round(dpToPx(38)));
+            preview.setLayoutParams(previewParams);
+            preview.setBackground(buildPresetPreview(preset));
+            item.addView(preview);
+
+            TextView name = new TextView(context);
+            name.setText(preset.nameRes);
+            name.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 10);
+            name.setMaxLines(1);
+            name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            android.widget.LinearLayout.LayoutParams nameParams =
+                new android.widget.LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            nameParams.topMargin = Math.round(dpToPx(3));
+            name.setLayoutParams(nameParams);
+            item.addView(name);
+
+            item.setContentDescription(getString(preset.nameRes));
+            item.setOnClickListener(view -> applyPreset(preset));
+            row.addView(item);
+            mPresetItems.put(preset.id, android.util.Pair.create(preview, name));
+        }
+        strip.addView(row);
+        column.addView(strip);
+        container.addView(column);
+        container.setVisibility(View.VISIBLE);
+        syncPresetSelection();
+    }
+
+    /**
+     * A stylized reading of the preset's own numbers: status strip, canvas, dock strip, at the
+     * preset's opacity and radius, edge-to-edge when Docked and inset when Floating. A sketch,
+     * not a screenshot - enough to tell the looks apart at a glance.
+     */
+    @NonNull
+    private android.graphics.drawable.Drawable buildPresetPreview(
+            @NonNull SurfacePresets.Preset preset) {
+        Object radiusValue = preset.values.get(
+            TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS);
+        Object opacityValue = preset.values.get(
+            TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_BASE_OPACITY);
+        int radiusDp = radiusValue instanceof Integer ? (Integer) radiusValue : 24;
+        int opacity = opacityValue instanceof Integer ? (Integer) opacityValue : 34;
+        boolean floating = SegmentedPillPreference.VALUE_ROUNDED.equals(preset.values.get(
+            TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE));
+
+        int canvasColor = mHost.themeColor(
+            com.termux.shared.R.attr.termuxColorOnSurfaceVariant, R.color.termux_on_surface_variant);
+        int stripColor = mHost.themeColor(
+            com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary);
+        int stripAlpha = Math.min(255, 80 + Math.round(opacity * 1.6f));
+
+        android.graphics.drawable.GradientDrawable canvas =
+            new android.graphics.drawable.GradientDrawable();
+        canvas.setColor(withAlpha(canvasColor, 36));
+        canvas.setCornerRadius(dpToPx(9));
+
+        float stripRadius = dpToPx(Math.min(40, Math.max(0, radiusDp)) * 0.09f);
+        android.graphics.drawable.GradientDrawable status =
+            new android.graphics.drawable.GradientDrawable();
+        status.setColor(withAlpha(stripColor, stripAlpha));
+        status.setCornerRadius(stripRadius);
+        android.graphics.drawable.GradientDrawable dock =
+            new android.graphics.drawable.GradientDrawable();
+        dock.setColor(withAlpha(stripColor, stripAlpha));
+        dock.setCornerRadius(stripRadius);
+
+        android.graphics.drawable.LayerDrawable layers =
+            new android.graphics.drawable.LayerDrawable(
+                new android.graphics.drawable.Drawable[] {canvas, status, dock});
+        int side = Math.round(dpToPx(floating ? 5 : 2));
+        int stripHeight = Math.round(dpToPx(6));
+        int edge = Math.round(dpToPx(floating ? 3 : 0)) + Math.round(dpToPx(2));
+        int height = Math.round(dpToPx(38));
+        layers.setLayerInset(1, side, edge, side, height - edge - stripHeight);
+        layers.setLayerInset(2, side, height - edge - stripHeight, side, edge);
+        return layers;
+    }
+
+    private static int withAlpha(int color, int alpha) {
+        return (Math.max(0, Math.min(255, alpha)) << 24) | (color & 0x00FFFFFF);
+    }
+
+    /** The ring follows whichever preset the live preferences exactly are - usually none. */
+    private void syncPresetSelection() {
+        if (prefs() == null || mPresetItems.isEmpty())
+            return;
+        for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
+            android.util.Pair<View, TextView> item = mPresetItems.get(preset.id);
+            if (item == null)
+                continue;
+            boolean selected = SurfacePresets.matches(prefs(), preset);
+            if (selected == Boolean.TRUE.equals(item.first.getTag()))
+                continue;
+            item.first.setTag(selected);
+            item.first.setForeground(selected ? buildPresetRing() : null);
+            item.second.setTextColor(selected
+                ? mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary,
+                    R.color.termux_primary)
+                : mHost.themeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+                    R.color.termux_on_surface_variant));
+        }
+    }
+
+    @NonNull
+    private android.graphics.drawable.Drawable buildPresetRing() {
+        android.graphics.drawable.GradientDrawable ring =
+            new android.graphics.drawable.GradientDrawable();
+        ring.setColor(0);
+        ring.setCornerRadius(dpToPx(9));
+        ring.setStroke(Math.round(dpToPx(2)),
+            mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary));
+        return ring;
+    }
+
+    private void applyPreset(@NonNull SurfacePresets.Preset preset) {
+        if (prefs() == null)
+            return;
+        final Runnable undo = capturePresetUndo();
+        SurfacePresets.apply(prefs(), preset);
+        syncEditorAfterPresetWrite();
+        View card = mHost.findView(R.id.dock_tuning_controls);
+        if (card == null)
+            return;
+        com.google.android.material.snackbar.Snackbar
+            .make(card, getString(R.string.termux_surface_preset_applied,
+                getString(preset.nameRes)),
+                com.google.android.material.snackbar.Snackbar.LENGTH_LONG)
+            .setAction(R.string.termux_surface_preset_undo, view -> {
+                undo.run();
+                syncEditorAfterPresetWrite();
+            })
+            .show();
+    }
+
+    /**
+     * Everything a preset can write, captured for the one Undo. Raw values and the link signature
+     * rather than resolved numbers, so the restore is exact: a surface that was detached at the
+     * same number as Base comes back detached, not quietly folded in.
+     */
+    @NonNull
+    private Runnable capturePresetUndo() {
+        final String links = surfaceEditorLinkSignature();
+        final TermuxAppSharedPreferences.SurfaceProperty[] properties =
+            TermuxAppSharedPreferences.SurfaceProperty.values();
+        final int[] base = new int[properties.length];
+        for (TermuxAppSharedPreferences.SurfaceProperty property : properties)
+            base[property.ordinal()] = prefs().getSurfaceBaseValue(property);
+        final java.util.List<SurfaceEditorRows.Row> rows = SurfaceEditorRows.rows();
+        final int[] raws = new int[rows.size()];
+        for (int i = 0; i < rows.size(); i++)
+            raws[i] = prefs().getSurfaceOverrideValue(rows.get(i).slot, rows.get(i).property);
+        final String material = prefs().getSurfaceMaterial();
+        final int intensity = prefs().getSurfaceMaterialIntensity();
+        final String dockStyle = prefs().getAppLauncherDockStyle();
+        final boolean border = prefs().isTerminalBorderEnabled();
+        final int terminalRadius = prefs().getTerminalCornerRadius();
+        final int paneGap = prefs().getTerminalPaneGap();
+        return () -> {
+            if (prefs() == null)
+                return;
+            for (TermuxAppSharedPreferences.SurfaceProperty property : properties)
+                prefs().setSurfaceBaseValue(property, base[property.ordinal()]);
+            for (int i = 0; i < rows.size(); i++)
+                prefs().setSurfaceRawValue(rows.get(i).slot, rows.get(i).property, raws[i]);
+            restoreSurfaceEditorLinks(links);
+            prefs().setSurfaceMaterial(material);
+            prefs().setSurfaceMaterialIntensity(intensity);
+            prefs().setAppLauncherDockStyle(dockStyle);
+            prefs().setTerminalBorderEnabled(border);
+            prefs().setTerminalCornerRadius(terminalRadius);
+            prefs().setTerminalPaneGap(paneGap);
+        };
+    }
+
+    /**
+     * Restates the hand-wired controls after a bulk write (preset apply or its Undo); the
+     * generated rows, the macro and the ring all restate through the shared sync anyway.
+     */
+    private void syncEditorAfterPresetWrite() {
+        if (prefs() == null)
+            return;
+        MaterialButtonToggleGroup styleGroup = mHost.findView(R.id.dock_tuning_style_group);
+        if (styleGroup != null) {
+            // The listener writes only when the pref actually changes, and the bulk write has
+            // already landed it, so re-checking here cannot loop.
+            styleGroup.check(SegmentedPillPreference.VALUE_ROUNDED.equals(
+                prefs().getAppLauncherDockStyle())
+                ? R.id.dock_tuning_style_capsule : R.id.dock_tuning_style_default);
+        }
+        com.google.android.material.materialswitch.MaterialSwitch terminalBorder =
+            mHost.findView(R.id.dock_tuning_terminal_border_switch);
+        if (terminalBorder != null
+            && terminalBorder.isChecked() != prefs().isTerminalBorderEnabled())
+            terminalBorder.setChecked(prefs().isTerminalBorderEnabled());
+        setSeekBarProgress(R.id.dock_tuning_terminal_gap_slider, prefs().getTerminalPaneGap());
+        syncTerminalRadiusRow();
+        syncSurfaceTuningStyleDependentControls();
+        syncSurfaceInheritanceUi();
+        mHost.refreshPaneLayout();
+        applyDockTuningStructuralPreview();
+        updateSurfaceEditorDirtyBadge();
     }
 
     // ------------------------------------------------------------------------ the material macro

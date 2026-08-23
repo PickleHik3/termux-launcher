@@ -1570,7 +1570,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             SharedPreferenceUtils.setInt(mSharedPreferences, key, value, false);
     }
 
-    private static String surfaceOverrideKey(SurfaceSlot slot, SurfaceProperty property) {
+    /**
+     * The preference key holding a surface's own value for a property, or null where the surface
+     * has no such property. Public because the preset format names cells by these keys — a preset
+     * carrying one is a detached override — and the presets need the same mapping to read them.
+     */
+    @Nullable
+    public static String surfaceOverrideKey(SurfaceSlot slot, SurfaceProperty property) {
         if (!hasSurfaceProperty(slot, property))
             return null;
         switch (slot) {
