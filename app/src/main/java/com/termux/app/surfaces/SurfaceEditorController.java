@@ -1355,6 +1355,7 @@ public final class SurfaceEditorController {
         bindOrSyncBaseSlider(R.id.surface_tuning_base_gap_slider,
             R.id.surface_tuning_base_gap_value,
             TermuxAppSharedPreferences.SurfaceProperty.SIDE_GAP, true, 48);
+        syncBaseGapAvailability();
 
         TextView followers = mHost.findView(R.id.surface_tuning_base_followers);
         if (followers == null)
@@ -1582,6 +1583,10 @@ public final class SurfaceEditorController {
             .make(card, getString(R.string.termux_surface_preset_applied,
                 getString(preset.nameRes)),
                 com.google.android.material.snackbar.Snackbar.LENGTH_LONG)
+            // A preset just overwrote the whole look, detached overrides included; the default
+            // 2.75s is gone before the surfaces even finish re-rendering. Ten seconds is long
+            // enough to see the result and change one's mind.
+            .setDuration(10000)
             .setAction(R.string.termux_surface_preset_undo, view -> {
                 undo.run();
                 syncEditorAfterPresetWrite();
@@ -1931,8 +1936,28 @@ public final class SurfaceEditorController {
         }
     }
 
+    /**
+     * The Base margin slider obeys the same rule as the per-surface ones: Docked surfaces are
+     * flush by definition, so the shared knob is inert there too — dash, not a frozen number.
+     */
+    private void syncBaseGapAvailability() {
+        SeekBar slider = mHost.findView(R.id.surface_tuning_base_gap_slider);
+        TextView value = mHost.findView(R.id.surface_tuning_base_gap_value);
+        boolean available = mHost.isRoundedDockStyle();
+        if (slider != null) {
+            slider.setEnabled(available);
+            slider.setAlpha(available ? 1f : SURFACE_TUNING_DISABLED_ALPHA);
+        }
+        if (value != null) {
+            if (!available)
+                value.setText(getString(R.string.termux_surface_tuning_value_not_applicable));
+            value.setAlpha(available ? 1f : SURFACE_TUNING_DISABLED_ALPHA);
+        }
+    }
+
     /** Re-reads the dock style for every control whose availability depends on it. */
     private void syncSurfaceTuningStyleDependentControls() {
+        syncBaseGapAvailability();
         syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_DOCK);
         syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_KEYBOARD);
         syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_STATUS);
