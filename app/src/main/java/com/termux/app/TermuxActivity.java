@@ -157,6 +157,7 @@ import com.termux.view.TerminalView;
 import com.termux.view.TerminalViewClient;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AlertDialog;
@@ -1343,7 +1344,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int terminalSurfaceColor = showSurface ? resolveTerminalSurfaceColor() : Color.TRANSPARENT;
             int wallpaperDim = resolveWallpaperBackdropDimColor();
             boolean glassPane = isTerminalPaneGlassActive();
-            if (glassPane) {
+            // A rounded Docked terminal is a bounded slab, and a slab's tint cannot be the
+            // full-screen dim: painted on the root it fills the very corners the radius is there to
+            // cut, and the radius reads as doing nothing. So the root keeps only the wallpaper dim
+            // and the tint moves onto the slab itself.
+            boolean slab = !glassPane && dockedTerminalCornerRadiusPx() > 0f
+                && Color.alpha(terminalSurfaceColor) > 0;
+            if (glassPane || slab) {
                 // The terminal tint lives on each pane's own glass slab now; the root carries only
                 // the wallpaper dim, so the gaps between panes — and the margin around them — show
                 // the wallpaper at whatever opacity the Wallpaper control asks for.
@@ -1358,8 +1365,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     terminalSurfaceColor, wallpaperDim));
             }
             terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
-            terminalBodySurface.setBackgroundColor(Color.TRANSPARENT);
-            terminalBodySurface.setVisibility(View.GONE);
+            applyTerminalBodySurface(terminalBodySurface,
+                slab ? terminalSurfaceColor : Color.TRANSPARENT, slab);
             terminalStatusSurface.setBackgroundColor(Color.TRANSPARENT);
             terminalStatusSurface.setVisibility(View.GONE);
             if (terminalView != null) {
@@ -1378,8 +1385,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean showSurface = true;
         int terminalSurfaceColor = resolveTerminalSurfaceColor();
         terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
-        terminalBodySurface.setBackgroundColor(terminalSurfaceColor);
-        terminalBodySurface.setVisibility(showSurface && Color.alpha(terminalSurfaceColor) > 0 ? View.VISIBLE : View.GONE);
+        applyTerminalBodySurface(terminalBodySurface, terminalSurfaceColor,
+            showSurface && Color.alpha(terminalSurfaceColor) > 0);
         terminalStatusSurface.setBackgroundColor(terminalSurfaceColor);
         terminalStatusSurface.setVisibility(shouldShowTerminalStatusBarSurface(showSurface, terminalSurfaceColor) ? View.VISIBLE : View.GONE);
         if (terminalView != null) {
@@ -1413,6 +1420,37 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private int visiblePaneCount() {
         return mPaneController == null ? 1 : mPaneController.tiledPaneCount();
+    }
+
+    /**
+     * The air the Docked terminal leaves on every side — the surface editor's Margin knob, which is
+     * the same number that gaps tiled panes. Floating tucks the frame under the dock's capsule inset
+     * instead, so this is not its measure.
+     */
+    private int dockedTerminalMarginPx() {
+        return mPreferences == null ? 0 : Math.round(dpToPx(mPreferences.getTerminalPaneGap()));
+    }
+
+    /**
+     * The Docked terminal's own corner radius in px, or 0 when it has none to draw with — Floating
+     * (where the capsule owns the frame's shape) or the knob's default flush square. Non-zero is
+     * what turns the terminal from a full-bleed field into a bounded slab, so every surface that
+     * has to agree on that shape reads it from here.
+     */
+    private float dockedTerminalCornerRadiusPx() {
+        if (mPreferences == null || isRoundedDockStyle())
+            return 0f;
+        return dpToPx(mPreferences.getTerminalCornerRadius());
+    }
+
+    @NonNull
+    private static ViewOutlineProvider roundedOutlineProvider(float radiusPx) {
+        return new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, android.graphics.Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radiusPx);
+            }
+        };
     }
 
     private void applyTerminalBorderAppearance() {
@@ -1454,7 +1492,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // the same value that gaps the panes — applied evenly on all four sides. Before this,
             // the vertical edges had a fixed 5dp of air while the sides sat flush against the
             // screen, and no setting reached either. Rounded keeps its capsule heuristics.
-            int outerPx = Math.round(dpToPx(mPreferences.getTerminalPaneGap()));
+            int outerPx = dockedTerminalMarginPx();
             borderHorizontalInsetPx = outerPx;
             borderVerticalInsetPx = outerPx;
         }
@@ -1509,10 +1547,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (borderView instanceof TerminalGlassFrameView) {
                 ((TerminalGlassFrameView) borderView).setRim(false, 0f);
             }
-            applyPaneHostCornerPadding(paneHost, 0);
+            // The Docked radius is a property of the terminal, not of the frame line: it has to
+            // hold with the border off (its default) and with a window split, or the knob only
+            // acts in the one configuration that happens to draw a stroke. Glass is the exception
+            // — there each pane rounds its own slab, and a second clip around the set of them
+            // would box the floating slabs back inside a sheet.
+            float hostRadiusPx = glass ? 0f : dockedTerminalCornerRadiusPx();
+            applyPaneHostCornerPadding(paneHost, Math.round(hostRadiusPx * 0.30f));
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                paneHost.setOutlineProvider(ViewOutlineProvider.BOUNDS);
-                paneHost.setClipToOutline(glass);
+                paneHost.setOutlineProvider(hostRadiusPx > 0f
+                    ? roundedOutlineProvider(hostRadiusPx) : ViewOutlineProvider.BOUNDS);
+                paneHost.setClipToOutline(glass || hostRadiusPx > 0f);
             }
             setupTerminalPlankFx(glass);
             updateTerminalGlassFrost();
@@ -1545,19 +1590,43 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyPaneHostCornerPadding(paneHost, Math.round(innerRadiusPx * 0.30f));
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            if (innerRadiusPx > 0f) {
-                paneHost.setOutlineProvider(new ViewOutlineProvider() {
-                    @Override
-                    public void getOutline(View view, android.graphics.Outline outline) {
-                        outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), innerRadiusPx);
-                    }
-                });
-                paneHost.setClipToOutline(true);
-            } else {
-                paneHost.setOutlineProvider(ViewOutlineProvider.BOUNDS);
-                paneHost.setClipToOutline(true);
+            paneHost.setOutlineProvider(innerRadiusPx > 0f
+                ? roundedOutlineProvider(innerRadiusPx) : ViewOutlineProvider.BOUNDS);
+            paneHost.setClipToOutline(true);
+        }
+    }
+
+    /**
+     * Paints the terminal's own field. Square and full-bleed by default, which is what makes the
+     * terminal, the strip under the dock and the gesture-pill area read as one surface; with a
+     * Docked corner radius set it becomes a bounded rounded slab inset by the Margin knob, sharing
+     * both numbers with the frame line and the pane clip so the three never disagree on an edge.
+     */
+    private void applyTerminalBodySurface(@NonNull View bodySurface, int color, boolean visible) {
+        float radiusPx = dockedTerminalCornerRadiusPx();
+        int marginPx = radiusPx > 0f ? dockedTerminalMarginPx() : 0;
+        ViewGroup.LayoutParams params = bodySurface.getLayoutParams();
+        if (params instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) params;
+            if (marginParams.leftMargin != marginPx || marginParams.topMargin != marginPx
+                || marginParams.rightMargin != marginPx || marginParams.bottomMargin != marginPx) {
+                marginParams.leftMargin = marginPx;
+                marginParams.topMargin = marginPx;
+                marginParams.rightMargin = marginPx;
+                marginParams.bottomMargin = marginPx;
+                bodySurface.setLayoutParams(marginParams);
             }
         }
+        if (radiusPx > 0f) {
+            GradientDrawable slab = new GradientDrawable();
+            slab.setColor(color);
+            slab.setCornerRadius(radiusPx);
+            bodySurface.setBackground(slab);
+        } else {
+            bodySurface.setBackground(null);
+            bodySurface.setBackgroundColor(color);
+        }
+        bodySurface.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     /**
@@ -1631,9 +1700,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public float paneGlassCornerRadiusPx() {
-                return isRoundedDockStyle()
-                    ? Math.min(dpToPx(14), resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE))
-                    : dpToPx(4);
+                if (isRoundedDockStyle())
+                    return Math.min(dpToPx(14), resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE));
+                // Docked: the glass slabs are the terminal's edge, so they round by the terminal's
+                // own knob. Its default 0 keeps the 4dp softening the slabs always had — a glass
+                // pane with literally square corners reads as a torn rectangle, not a slab.
+                float radiusPx = dockedTerminalCornerRadiusPx();
+                return radiusPx > 0f ? radiusPx : dpToPx(4);
             }
 
             @Override public int paneGapDp() {
@@ -1702,11 +1775,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPaneController.dispatchPaneGlassTouch(ev, isReducedMotionEnabled());
     }
 
-    /** Black dim over the wallpaper, behind every surface: 100% shows the wallpaper untouched. */
+    /** Black dim over the wallpaper, behind every surface: 0% shows the wallpaper untouched. */
     private int resolveWallpaperBackdropDimColor() {
-        int opacity = mPreferences != null ? mPreferences.getWallpaperBackdropOpacity() : 100;
-        int alpha = Math.round((100 - Math.max(0, Math.min(100, opacity))) / 100f * 255f);
-        return alpha << 24;   // black at the complementary alpha
+        int dim = mPreferences != null ? mPreferences.getWallpaperBackdropDim()
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_WALLPAPER_BACKDROP_DIM;
+        int alpha = Math.round(Math.max(0, Math.min(100, dim)) / 100f * 255f);
+        return alpha << 24;   // black at the slider's own alpha
     }
 
     /**
@@ -6580,7 +6654,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final int initialTerminalGlassGrain = mPreferences.getTerminalGlassGrain();
         final int initialTerminalCornerRadius = mPreferences.getTerminalCornerRadius();
         final int initialTerminalGap = mPreferences.getTerminalPaneGap();
-        final int initialWallpaperOpacity = mPreferences.getWallpaperBackdropOpacity();
+        final int initialWallpaperDim = mPreferences.getWallpaperBackdropDim();
         final String initialTerminalContrast = mPreferences.getTerminalContrastLevel().value;
         final int initialSessions = mPreferences.getSessionsOpacity();
         final float initialBarHeight = mPreferences.getAppLauncherBarHeightScale();
@@ -6634,9 +6708,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (terminalGap != null) terminalGap.setProgress(initialTerminalGap);
         if (terminalGapValue != null) terminalGapValue.setText(
             getString(R.string.termux_dock_tuning_value_dp, initialTerminalGap));
-        if (wallpaperOpacity != null) wallpaperOpacity.setProgress(initialWallpaperOpacity);
+        if (wallpaperOpacity != null) wallpaperOpacity.setProgress(initialWallpaperDim);
         if (wallpaperOpacityValue != null) wallpaperOpacityValue.setText(
-            getString(R.string.termux_dock_tuning_value_percent, initialWallpaperOpacity));
+            getString(R.string.termux_dock_tuning_value_percent, initialWallpaperDim));
         syncTerminalContrastGroup(terminalContrast, terminalContrastHint);
         sessions.setProgress(initialSessions);
         size.setProgress(initialSizeIndex);
@@ -6800,13 +6874,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (terminalGapValue != null) terminalGapValue.setText(
                         getString(R.string.termux_dock_tuning_value_dp, progress));
                     if (fromUser) {
-                        peekReadout(getString(R.string.termux_dock_tuning_value_dp, progress));
+                        setSurfaceTuningPeekReadout(getString(terminalGapPeekLabelRes()),
+                            getString(R.string.termux_dock_tuning_value_dp, progress));
                         mPreferences.setTerminalPaneGap(progress);
                         // The gap is laid out by the split tree, so it needs a re-render rather
                         // than a restyle; the panes and their shells are reused across it.
                         if (mPaneController != null) mPaneController.refreshPaneLayout();
                         // On the default surface the same knob is the terminal's outer air too.
-                        applyTerminalBorderAppearance();
                         requestDockTuningPreview(TUNING_PREVIEW_SURFACES);
                     }
                 }
@@ -6820,7 +6894,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         getString(R.string.termux_dock_tuning_value_percent, progress));
                     if (fromUser) {
                         peekReadout(getString(R.string.termux_dock_tuning_value_percent, progress));
-                        mPreferences.setWallpaperBackdropOpacity(progress);
+                        mPreferences.setWallpaperBackdropDim(progress);
                         requestDockTuningPreview(TUNING_PREVIEW_SURFACES);
                     }
                 }
@@ -6993,6 +7067,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bindSurfaceReattachAll();
         bindTerminalRadiusRow();
         syncTerminalRadiusRow();
+        syncTerminalGapLabel();
         reset.setOnClickListener(view -> {
             int section = sectionGroup.getCheckedButtonId();
             if (section == R.id.surface_tuning_section_dock) {
@@ -7060,12 +7135,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.setTerminalCornerRadius(
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_CORNER_RADIUS);
                 syncTerminalRadiusRow();
-                mPreferences.setWallpaperBackdropOpacity(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_WALLPAPER_BACKDROP_OPACITY);
+                mPreferences.setWallpaperBackdropDim(
+                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_WALLPAPER_BACKDROP_DIM);
                 mPreferences.setTerminalPaneGap(
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP);
                 if (mPaneController != null) mPaneController.refreshPaneLayout();
-                applyTerminalBorderAppearance();
+                applyTerminalSurfaceAppearance();
                 mPreferences.setTerminalContrastLevel(
                     com.termux.shared.termux.settings.preferences.TerminalContrastLevel
                         .DEFAULT.value);
@@ -7109,7 +7184,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (terminalGap != null)
                 terminalGap.setProgress(mPreferences.getTerminalPaneGap());
             if (wallpaperOpacity != null)
-                wallpaperOpacity.setProgress(mPreferences.getWallpaperBackdropOpacity());
+                wallpaperOpacity.setProgress(mPreferences.getWallpaperBackdropDim());
             syncTerminalContrastGroup(terminalContrast, terminalContrastHint);
             sessions.setProgress(mPreferences.getSessionsOpacity());
             syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_DOCK);
@@ -7138,13 +7213,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.setTerminalGlassGrain(initialTerminalGlassGrain);
                 if (mPreferences.getTerminalCornerRadius() != initialTerminalCornerRadius) {
                     mPreferences.setTerminalCornerRadius(initialTerminalCornerRadius);
-                    applyTerminalBorderAppearance();
+                    applyTerminalSurfaceAppearance();
                 }
-                mPreferences.setWallpaperBackdropOpacity(initialWallpaperOpacity);
+                mPreferences.setWallpaperBackdropDim(initialWallpaperDim);
                 if (mPreferences.getTerminalPaneGap() != initialTerminalGap) {
                     mPreferences.setTerminalPaneGap(initialTerminalGap);
                     if (mPaneController != null) mPaneController.refreshPaneLayout();
-                    applyTerminalBorderAppearance();
+                    applyTerminalSurfaceAppearance();
                 }
                 if (!initialTerminalContrast.equals(
                         mPreferences.getTerminalContrastLevel().value)) {
@@ -7394,6 +7469,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setSeekBarProgress(R.id.surface_tuning_keyboard_bg_opacity_slider,
             mPreferences.getInAppKeyboardBackgroundOpacity());
         syncTerminalRadiusRow();
+        syncTerminalGapLabel();
     }
 
     /**
@@ -7412,10 +7488,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     value.setText(getString(R.string.termux_dock_tuning_value_dp, progress));
                 if (fromUser && mPreferences != null) {
                     mPreferences.setTerminalCornerRadius(progress);
-                    applyTerminalBorderAppearance();
+                    // The radius reshapes the terminal's field, its frame line and its pane clip
+                    // together, so it needs the surface re-apply, not just the border pass.
+                    requestDockTuningPreview(TUNING_PREVIEW_SURFACES);
                 }
             }
         });
+    }
+
+    /**
+     * The gap knob answers to two names because it does two jobs. Docked spends it on the
+     * terminal's outer air as well as on the space between tiled panes, so there it is a margin;
+     * Floating insets the frame from the dock's capsule instead and the knob only gaps the panes.
+     */
+    @StringRes
+    private int terminalGapLabelRes() {
+        return isRoundedDockStyle() ? R.string.termux_dock_tuning_terminal_inner_padding
+            : R.string.termux_dock_tuning_terminal_margin;
+    }
+
+    @StringRes
+    private int terminalGapPeekLabelRes() {
+        return isRoundedDockStyle() ? R.string.termux_surface_tuning_peek_terminal_gap
+            : R.string.termux_surface_tuning_peek_terminal_margin;
+    }
+
+    private void syncTerminalGapLabel() {
+        TextView label = findViewById(R.id.dock_tuning_terminal_gap_label);
+        if (label != null)
+            label.setText(terminalGapLabelRes());
     }
 
     private void syncTerminalRadiusRow() {
@@ -7575,7 +7676,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .append(mPreferences.getTerminalCornerRadius()).append('|')
             .append(mPreferences.getTerminalPaneGap()).append('|')
             .append(mPreferences.getTerminalContrastLevel().value).append('|')
-            .append(mPreferences.getWallpaperBackdropOpacity()).append('|')
+            .append(mPreferences.getWallpaperBackdropDim()).append('|')
             .append(mPreferences.getSessionsOpacity()).append('|')
             .append(surfaceEditorLinkSignature())
             .append('|')
@@ -8026,6 +8127,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_DOCK);
         syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_KEYBOARD);
         syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_STATUS);
+        // Both of these are Docked-only readings of a shared knob, so switching the shape has to
+        // move them with it rather than waiting for the editor to be reopened.
+        syncTerminalRadiusRow();
+        syncTerminalGapLabel();
     }
 
     private void bindSurfaceTuningInsetSeekBar(int target) {

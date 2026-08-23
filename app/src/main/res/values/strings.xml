@@ -1064,6 +1064,10 @@
                 <string name="termux_dock_tuning_section_sessions">Sessions</string>
                 <string name="termux_dock_tuning_section_wallpaper">Wallpaper</string>
                 <string name="termux_dock_tuning_terminal_inner_padding">Inner padding</string>
+                <!-- Docked spends the same knob on the terminal's outer air as well as the gap
+                     between panes, so there it is a margin. Floating insets the frame from the
+                     capsule instead, and the knob only gaps the panes. -->
+                <string name="termux_dock_tuning_terminal_margin">Margin</string>
                 <string name="termux_dock_tuning_done">Done</string>
                 <string name="termux_dock_tuning_cancel">Close</string>
                 <string name="termux_surface_tuning_value_not_applicable">—</string>
@@ -1074,6 +1078,7 @@
                 <string name="termux_surface_tuning_peek_terminal_blur">Terminal blur</string>
                 <string name="termux_surface_tuning_peek_terminal_grain">Terminal grain</string>
                 <string name="termux_surface_tuning_peek_terminal_gap">Inner padding</string>
+                <string name="termux_surface_tuning_peek_terminal_margin">Terminal margin</string>
                 <string name="termux_surface_tuning_peek_wallpaper_opacity">Wallpaper opacity</string>
                 <string name="termux_surface_tuning_peek_dock_size">Dock size</string>
                 <string name="termux_surface_tuning_peek_dock_icons">Apps per page</string>

@@ -59,7 +59,10 @@ public class DockAppearancePreferencesTest {
 
     @Test
     public void cornerRadiusSupportsStyleDefaultAndSliderBounds() {
-        assertEquals(-1, preferences.getAppLauncherDockCornerRadius());
+        // The shipped Docked look names a radius on the shared layer; the dock's own -1 stays the
+        // "follow the selected style" sentinel the slider's lower bound clamps to.
+        assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS,
+            preferences.getAppLauncherDockCornerRadius());
 
         preferences.setAppLauncherDockCornerRadius(-4);
         assertEquals(-1, preferences.getAppLauncherDockCornerRadius());

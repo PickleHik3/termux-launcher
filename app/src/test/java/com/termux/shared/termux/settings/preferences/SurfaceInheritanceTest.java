@@ -218,32 +218,94 @@ public class SurfaceInheritanceTest {
 
     @Test
     public void migration_keepsAKeyboardGapTheUserActuallyChose() {
-        // The keyboard shipped 13dp against everyone else's 10dp. A value the user stored has to
-        // survive the upgrade, so migration sees the difference and starts that pair detached.
-        putRaw(TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET,
-            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET);
+        // A value the user stored has to survive the upgrade, so migration sees that it differs
+        // from Base and starts that pair detached.
+        putRaw(TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET, 17);
 
         preferences.migrateSurfaceInheritance();
 
         assertFalse(preferences.isSurfaceInheriting(
             SurfaceSlot.KEYBOARD, SurfaceProperty.SIDE_GAP));
-        assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET,
-            preferences.getInAppKeyboardHorizontalInset());
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET,
-            preferences.getDockHorizontalInset());
+        assertEquals(17, preferences.getInAppKeyboardHorizontalInset());
+        assertEquals("the dock keeps the gap it shipped with before the Docked theme",
+            PRE_SHIPPED_SIDE_GAP, preferences.getDockHorizontalInset());
     }
 
     @Test
     public void migration_leavesAnUntouchedSurfaceLinked() {
         // Nothing stored means no opinion to preserve. Without this an untouched keyboard would
-        // start detached purely because its shipped default differed, and a brand-new install
-        // would open with override badges already lit.
+        // start detached purely because its shipped default differed.
+        markInstallAsExisting();
+
         preferences.migrateSurfaceInheritance();
 
         for (SurfaceSlot slot : SurfaceSlot.values())
             assertEquals(slot.toString(), 0, preferences.surfaceOverrideCount(slot));
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET,
-            preferences.getInAppKeyboardHorizontalInset());
+        assertEquals(PRE_SHIPPED_SIDE_GAP, preferences.getInAppKeyboardHorizontalInset());
+    }
+
+    // ------------------------------------------------- the shipped look reaches new installs only
+
+    /** The side gap every surface had before the Docked theme was captured from a tuned device. */
+    private static final int PRE_SHIPPED_SIDE_GAP = 10;
+
+    /** Anything in the store other than the log level means the app has been used before. */
+    private void markInstallAsExisting() {
+        store.edit().putString("current_session", "a-session-from-a-previous-run").commit();
+    }
+
+    @Test
+    public void freshInstall_wearsTheShippedDockedLook() {
+        preferences.migrateSurfaceInheritance();
+
+        assertEquals("the shared layer", TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY,
+            preferences.getStatusBarOpacity());
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP,
+            preferences.getDockHorizontalInset());
+        assertEquals("the dock alone sits denser, which is a detached row by definition",
+            TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY, preferences.getAppBarOpacity());
+        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY));
+        assertEquals(1, preferences.surfaceOverrideCount(SurfaceSlot.DOCK));
+        for (SurfaceSlot slot : SurfaceSlot.values()) {
+            if (slot == SurfaceSlot.DOCK) continue;
+            assertEquals(slot.toString(), 0, preferences.surfaceOverrideCount(slot));
+        }
+        assertTrue(preferences.isTerminalBorderEnabled());
+        assertEquals(TERMUX_APP.DEFAULT_TERMINAL_CORNER_RADIUS,
+            preferences.getTerminalCornerRadius());
+        assertEquals(TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP, preferences.getTerminalPaneGap());
+    }
+
+    @Test
+    public void anAlreadyFoldedInstallStillKeepsThePreShippedLook() {
+        // Anyone who ran a build between the inheritance fold and the Docked theme has the fold's
+        // marker set already. Hanging the pin off that marker would have skipped exactly those
+        // installs and restyled them, so it carries its own.
+        markInstallAsExisting();
+        store.edit().putBoolean(TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, true).commit();
+
+        preferences.migrateSurfaceInheritance();
+
+        assertFalse(preferences.isTerminalBorderEnabled());
+        assertEquals(1, preferences.getTerminalPaneGap());
+        assertEquals(0, preferences.getTerminalCornerRadius());
+    }
+
+    @Test
+    public void existingInstall_keepsThePreShippedLook() {
+        markInstallAsExisting();
+
+        preferences.migrateSurfaceInheritance();
+
+        assertEquals(PRE_SHIPPED_SIDE_GAP, preferences.getDockHorizontalInset());
+        assertEquals(46, preferences.getAppBarOpacity());
+        assertEquals(10, preferences.getExtraKeysBlurRadius());
+        assertEquals(39, preferences.getDockGlassGrain());
+        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY));
+        assertFalse("the border was off before the Docked theme turned it on",
+            preferences.isTerminalBorderEnabled());
+        assertEquals(0, preferences.getTerminalCornerRadius());
+        assertEquals(1, preferences.getTerminalPaneGap());
     }
 
     @Test
