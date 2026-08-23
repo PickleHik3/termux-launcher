@@ -1090,22 +1090,108 @@
                             <View android:layout_width="30dp" android:layout_height="1dp" />
                         </LinearLayout>
 
-                        <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
-                            <TextView android:layout_width="88dp" android:ellipsize="end" android:maxLines="1" android:layout_height="wrap_content" android:labelFor="@id/surface_tuning_base_blur_slider" android:text="@string/termux_dock_tuning_blur" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
-                            <SeekBar android:id="@+id/surface_tuning_base_blur_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="30" android:splitTrack="false" />
-                            <TextView android:id="@+id/surface_tuning_base_blur_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                        <!-- The glass triple (blur, opacity, grain) said as one decision: a
+                             material family plus one intensity. The raw numbers stay editable
+                             per surface inside the fold; here they are a look, not three dials.
+                             selectionRequired is off because "Custom" - a hand-tuned triple no
+                             point on any curve reproduces - renders as no family selected. -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="2dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="88dp"
+                                android:ellipsize="end"
+                                android:maxLines="1"
+                                android:layout_height="wrap_content"
+                                android:text="@string/termux_surface_tuning_material"
+                                android:textColor="?attr/termuxColorOnSurface"
+                                android:textSize="12sp" />
+
+                            <com.google.android.material.button.MaterialButtonToggleGroup
+                                android:id="@+id/surface_tuning_material_group"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                app:selectionRequired="false"
+                                app:singleSelection="true">
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/surface_tuning_material_solid"
+                                    style="?attr/materialButtonOutlinedStyle"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:insetTop="0dp"
+                                    android:insetBottom="0dp"
+                                    android:minHeight="34dp"
+                                    android:paddingTop="4dp"
+                                    android:paddingBottom="4dp"
+                                    android:text="@string/termux_surface_tuning_material_solid"
+                                    android:textSize="11sp"
+                                    android:ellipsize="end"
+                                    android:maxLines="1"
+                                    android:minWidth="0dp"
+                                    android:paddingHorizontal="4dp"
+                                    app:autoSizeMaxTextSize="11sp"
+                                    app:autoSizeMinTextSize="8sp"
+                                    app:autoSizeStepGranularity="0.5sp"
+                                    app:autoSizeTextType="uniform" />
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/surface_tuning_material_glass"
+                                    style="?attr/materialButtonOutlinedStyle"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:insetTop="0dp"
+                                    android:insetBottom="0dp"
+                                    android:minHeight="34dp"
+                                    android:paddingTop="4dp"
+                                    android:paddingBottom="4dp"
+                                    android:text="@string/termux_surface_tuning_material_glass"
+                                    android:textSize="11sp"
+                                    android:ellipsize="end"
+                                    android:maxLines="1"
+                                    android:minWidth="0dp"
+                                    android:paddingHorizontal="4dp"
+                                    app:autoSizeMaxTextSize="11sp"
+                                    app:autoSizeMinTextSize="8sp"
+                                    app:autoSizeStepGranularity="0.5sp"
+                                    app:autoSizeTextType="uniform" />
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/surface_tuning_material_frost"
+                                    style="?attr/materialButtonOutlinedStyle"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:insetTop="0dp"
+                                    android:insetBottom="0dp"
+                                    android:minHeight="34dp"
+                                    android:paddingTop="4dp"
+                                    android:paddingBottom="4dp"
+                                    android:text="@string/termux_surface_tuning_material_frost"
+                                    android:textSize="11sp"
+                                    android:ellipsize="end"
+                                    android:maxLines="1"
+                                    android:minWidth="0dp"
+                                    android:paddingHorizontal="4dp"
+                                    app:autoSizeMaxTextSize="11sp"
+                                    app:autoSizeMinTextSize="8sp"
+                                    app:autoSizeStepGranularity="0.5sp"
+                                    app:autoSizeTextType="uniform" />
+                            </com.google.android.material.button.MaterialButtonToggleGroup>
+
                             <View android:layout_width="30dp" android:layout_height="1dp" />
                         </LinearLayout>
                         <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
-                            <TextView android:layout_width="88dp" android:ellipsize="end" android:maxLines="1" android:layout_height="wrap_content" android:labelFor="@id/surface_tuning_base_opacity_slider" android:text="@string/termux_dock_tuning_opacity" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
-                            <SeekBar android:id="@+id/surface_tuning_base_opacity_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="100" android:splitTrack="false" />
-                            <TextView android:id="@+id/surface_tuning_base_opacity_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
-                            <View android:layout_width="30dp" android:layout_height="1dp" />
-                        </LinearLayout>
-                        <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
-                            <TextView android:layout_width="88dp" android:ellipsize="end" android:maxLines="1" android:layout_height="wrap_content" android:labelFor="@id/surface_tuning_base_grain_slider" android:text="@string/termux_dock_tuning_grain" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
-                            <SeekBar android:id="@+id/surface_tuning_base_grain_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="100" android:splitTrack="false" />
-                            <TextView android:id="@+id/surface_tuning_base_grain_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                            <TextView android:layout_width="88dp" android:ellipsize="end" android:maxLines="1" android:layout_height="wrap_content" android:labelFor="@id/surface_tuning_material_intensity_slider" android:text="@string/termux_surface_tuning_material_intensity" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <SeekBar android:id="@+id/surface_tuning_material_intensity_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="100" android:splitTrack="false" />
+                            <TextView android:id="@+id/surface_tuning_material_intensity_value" android:layout_width="48dp" android:layout_height="wrap_content" android:ellipsize="end" android:maxLines="1" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
                             <View android:layout_width="30dp" android:layout_height="1dp" />
                         </LinearLayout>
                         <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">

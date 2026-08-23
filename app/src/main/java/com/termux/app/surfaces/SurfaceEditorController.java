@@ -263,6 +263,12 @@ public final class SurfaceEditorController {
         final String initialLinks = surfaceEditorLinkSignature();
         final String initialKeyboardColorScheme = prefs().getInAppKeyboardColorScheme();
         final String initialKeyboardTheme = prefs().getInAppKeyboardTheme();
+        final String initialMaterial = prefs().getSurfaceMaterial();
+        final int initialMaterialIntensity = prefs().getSurfaceMaterialIntensity();
+        final int[] initialBase = new int[TermuxAppSharedPreferences.SurfaceProperty.values().length];
+        for (TermuxAppSharedPreferences.SurfaceProperty property
+                : TermuxAppSharedPreferences.SurfaceProperty.values())
+            initialBase[property.ordinal()] = prefs().getSurfaceBaseValue(property);
 
         blur.setProgress(initialBlur);
         opacity.setProgress(initialOpacity);
@@ -606,6 +612,7 @@ public final class SurfaceEditorController {
             TUNING_PREVIEW_SURFACES | TUNING_PREVIEW_GEOMETRY,
             value -> writeSurfaceCornerRadius(SURFACE_TUNING_TARGET_STATUS, value));
         bindSurfaceTuningGestures();
+        bindMaterialMacro();
         bindSurfaceInheritanceChips();
         bindSurfaceReattachAll();
         bindTerminalRadiusRow();
@@ -629,6 +636,12 @@ public final class SurfaceEditorController {
                 TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS);
             prefs().setSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.SIDE_GAP,
                 TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP);
+            // The shipped triple above is glass at 50, so the macro keys agree with it by taking
+            // their own defaults.
+            prefs().setSurfaceMaterial(
+                TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_MATERIAL);
+            prefs().setSurfaceMaterialIntensity(
+                TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_MATERIAL_INTENSITY);
             // The rest is outside the cascade: geometry, shape and the keyboard's own metrics.
             prefs().setAppLauncherBarHeightScale(
                 TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT);
@@ -751,6 +764,15 @@ public final class SurfaceEditorController {
                 prefs().setStatusBarHorizontalInset(initialStatusInset);
                 prefs().setInAppKeyboardColorScheme(initialKeyboardColorScheme);
                 prefs().setInAppKeyboardTheme(initialKeyboardTheme);
+                // The legacy setters above restore Base through whichever links were attached, but
+                // a property every surface had detached leaves Base itself unrestored - and the
+                // macro writes Base directly - so the shared layer is put back explicitly, last,
+                // when the links are already back in their entry shape.
+                for (TermuxAppSharedPreferences.SurfaceProperty property
+                        : TermuxAppSharedPreferences.SurfaceProperty.values())
+                    prefs().setSurfaceBaseValue(property, initialBase[property.ordinal()]);
+                prefs().setSurfaceMaterial(initialMaterial);
+                prefs().setSurfaceMaterialIntensity(initialMaterialIntensity);
                 if (keyboard() != null) {
                     keyboard().previewSurfaceEditorHeightScale(initialKeyboardHeight);
                     keyboard().previewSurfaceEditorKeyOpacity(initialKeyboardKeyOpacity);
@@ -1148,6 +1170,9 @@ public final class SurfaceEditorController {
             .append('|')
             .append(prefs().getSurfaceBaseValue(
                 TermuxAppSharedPreferences.SurfaceProperty.SIDE_GAP))
+            .append('|')
+            .append(prefs().getSurfaceMaterial()).append('|')
+            .append(prefs().getSurfaceMaterialIntensity())
             .toString();
     }
 
@@ -1317,19 +1342,11 @@ public final class SurfaceEditorController {
                 R.color.termux_primary);
     }
 
-    /** The Base tab's own five sliders, plus the "who is still following" line under them. */
+    /** The primary section's own controls, plus the "who is still following" line under them. */
     private void syncSurfaceBaseSliders() {
         if (prefs() == null)
             return;
-        bindOrSyncBaseSlider(R.id.surface_tuning_base_blur_slider,
-            R.id.surface_tuning_base_blur_value,
-            TermuxAppSharedPreferences.SurfaceProperty.BLUR, true, 30);
-        bindOrSyncBaseSlider(R.id.surface_tuning_base_opacity_slider,
-            R.id.surface_tuning_base_opacity_value,
-            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, false, 100);
-        bindOrSyncBaseSlider(R.id.surface_tuning_base_grain_slider,
-            R.id.surface_tuning_base_grain_value,
-            TermuxAppSharedPreferences.SurfaceProperty.GRAIN, false, 100);
+        syncMaterialMacro();
         bindOrSyncBaseSlider(R.id.surface_tuning_base_radius_slider,
             R.id.surface_tuning_base_radius_value,
             TermuxAppSharedPreferences.SurfaceProperty.CORNER_RADIUS, true, 40);
@@ -1380,6 +1397,117 @@ public final class SurfaceEditorController {
         if (value != null) value.setText(getString(dp
             ? R.string.termux_dock_tuning_value_dp
             : R.string.termux_dock_tuning_value_percent, current));
+    }
+
+    // ------------------------------------------------------------------------ the material macro
+    //
+    // Blur, opacity and grain as one decision: a family (Solid / Glass / Frost) and an intensity.
+    // The macro writes the mapped triple through the Base setters, so followers move and detached
+    // surfaces keep their overrides exactly as any Base edit would; the two macro keys only
+    // remember which point the triple came from. A triple no point reproduces renders as Custom -
+    // nothing selected, the intensity echoing "Custom" - and is never snapped on entry: touching
+    // the macro is the one gesture that re-applies a curve.
+
+    /** Suppresses the toggle listener while sync is restating the group programmatically. */
+    private boolean mSyncingMaterialMacro;
+
+    private void bindMaterialMacro() {
+        MaterialButtonToggleGroup group = mHost.findView(R.id.surface_tuning_material_group);
+        SeekBar intensity = mHost.findView(R.id.surface_tuning_material_intensity_slider);
+        if (group == null || intensity == null)
+            return;
+        group.clearOnButtonCheckedListeners();
+        group.addOnButtonCheckedListener((buttons, checkedId, isChecked) -> {
+            if (!isChecked || mSyncingMaterialMacro || prefs() == null)
+                return;
+            applyMaterialMacro(materialForButton(checkedId), prefs().getSurfaceMaterialIntensity());
+        });
+        intensity.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                if (!fromUser || prefs() == null)
+                    return;
+                applyMaterialMacro(prefs().getSurfaceMaterial(), progress);
+            }
+        });
+    }
+
+    @NonNull
+    private String materialForButton(int buttonId) {
+        if (buttonId == R.id.surface_tuning_material_solid)
+            return TermuxPreferenceConstants.TERMUX_APP.SURFACE_MATERIAL_SOLID;
+        if (buttonId == R.id.surface_tuning_material_frost)
+            return TermuxPreferenceConstants.TERMUX_APP.SURFACE_MATERIAL_FROST;
+        return TermuxPreferenceConstants.TERMUX_APP.SURFACE_MATERIAL_GLASS;
+    }
+
+    private int materialButtonId(@NonNull String material) {
+        if (TermuxPreferenceConstants.TERMUX_APP.SURFACE_MATERIAL_SOLID.equals(material))
+            return R.id.surface_tuning_material_solid;
+        if (TermuxPreferenceConstants.TERMUX_APP.SURFACE_MATERIAL_FROST.equals(material))
+            return R.id.surface_tuning_material_frost;
+        return R.id.surface_tuning_material_glass;
+    }
+
+    private void applyMaterialMacro(@NonNull String material, int intensity) {
+        if (prefs() == null)
+            return;
+        prefs().setSurfaceMaterial(material);
+        prefs().setSurfaceMaterialIntensity(intensity);
+        int[] triple = SurfaceMaterials.triple(material, intensity);
+        prefs().setSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.BLUR,
+            triple[SurfaceMaterials.BLUR]);
+        prefs().setSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.OPACITY,
+            triple[SurfaceMaterials.OPACITY]);
+        prefs().setSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.GRAIN,
+            triple[SurfaceMaterials.GRAIN]);
+        // Everything still following Base moves with it, so the whole editor restates. Blur is in
+        // the triple, so the pre-blurred wallpaper cache has to go too.
+        syncSurfaceInheritanceUi();
+        requestDockTuningPreview(TUNING_PREVIEW_ALL);
+    }
+
+    /**
+     * Restates the macro from the prefs. The stored point is shown only while it still explains
+     * the Base triple; a triple something else wrote - an upgrade's hand-tuned numbers, a raw
+     * value restored by Discard - deselects the family and says Custom instead of lying.
+     */
+    private void syncMaterialMacro() {
+        MaterialButtonToggleGroup group = mHost.findView(R.id.surface_tuning_material_group);
+        SeekBar intensity = mHost.findView(R.id.surface_tuning_material_intensity_slider);
+        TextView intensityValue = mHost.findView(R.id.surface_tuning_material_intensity_value);
+        if (group == null || intensity == null || prefs() == null)
+            return;
+        String material = prefs().getSurfaceMaterial();
+        int storedIntensity = prefs().getSurfaceMaterialIntensity();
+        int[] expected = SurfaceMaterials.triple(material, storedIntensity);
+        boolean matches =
+            expected[SurfaceMaterials.BLUR] == prefs().getSurfaceBaseValue(
+                TermuxAppSharedPreferences.SurfaceProperty.BLUR)
+            && expected[SurfaceMaterials.OPACITY] == prefs().getSurfaceBaseValue(
+                TermuxAppSharedPreferences.SurfaceProperty.OPACITY)
+            && expected[SurfaceMaterials.GRAIN] == prefs().getSurfaceBaseValue(
+                TermuxAppSharedPreferences.SurfaceProperty.GRAIN);
+        mSyncingMaterialMacro = true;
+        try {
+            if (matches) {
+                int buttonId = materialButtonId(material);
+                if (group.getCheckedButtonId() != buttonId)
+                    group.check(buttonId);
+            } else if (group.getCheckedButtonId() != View.NO_ID) {
+                group.clearChecked();
+            }
+        } finally {
+            mSyncingMaterialMacro = false;
+        }
+        if (intensity.getProgress() != storedIntensity)
+            intensity.setProgress(storedIntensity);
+        intensity.setAlpha(matches ? 1f : SURFACE_TUNING_DISABLED_ALPHA);
+        if (intensityValue != null) {
+            intensityValue.setText(matches
+                ? getString(R.string.termux_dock_tuning_value_percent, storedIntensity)
+                : getString(R.string.termux_surface_tuning_material_custom));
+            intensityValue.setAlpha(matches ? 1f : SURFACE_TUNING_DISABLED_ALPHA);
+        }
     }
 
     /** Every group header carries its own whole-surface ↺; a tap puts that surface back on Base. */

@@ -839,6 +839,22 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_SURFACE_BASE_CORNER_RADIUS = 24;
         public static final int DEFAULT_SURFACE_BASE_SIDE_GAP = 12;
 
+        /**
+         * The Base glass triple said as one decision: a material family plus how much of it.
+         * The editor's macro writes blur/opacity/grain through the Base setters like anything
+         * else; these two keys only remember which point on which family's curve the triple came
+         * from, so the control can show that point again — or "Custom" once the triple no longer
+         * matches any point, which is how hand-tuned installs are left untouched.
+         */
+        public static final String KEY_SURFACE_MATERIAL = "surface_material";
+        public static final String KEY_SURFACE_MATERIAL_INTENSITY = "surface_material_intensity";
+        public static final String SURFACE_MATERIAL_SOLID = "solid";
+        public static final String SURFACE_MATERIAL_GLASS = "glass";
+        public static final String SURFACE_MATERIAL_FROST = "frost";
+        /** Glass at 50 reproduces the shipped Base triple exactly (8 / 34 / 18). */
+        public static final String DEFAULT_SURFACE_MATERIAL = SURFACE_MATERIAL_GLASS;
+        public static final int DEFAULT_SURFACE_MATERIAL_INTENSITY = 50;
+
         /** Prefix for the per-(surface, property) detach flags: {@code surface_inherit_dock_blur}. */
         public static final String KEY_SURFACE_INHERIT_PREFIX = "surface_inherit_";
         /** A surface follows Base until the user moves that one control. */

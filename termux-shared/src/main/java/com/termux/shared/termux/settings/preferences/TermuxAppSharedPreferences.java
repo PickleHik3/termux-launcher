@@ -1711,6 +1711,32 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setInt(mSharedPreferences, surfaceBaseKey(property), value, false);
     }
 
+    /** Which material family the Base triple was last set from. Display state, not a render input. */
+    @NonNull
+    public String getSurfaceMaterial() {
+        return SharedPreferenceUtils.getString(mSharedPreferences, TERMUX_APP.KEY_SURFACE_MATERIAL,
+            TERMUX_APP.DEFAULT_SURFACE_MATERIAL, true);
+    }
+
+    public void setSurfaceMaterial(@Nullable String material) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_SURFACE_MATERIAL,
+            material == null ? TERMUX_APP.DEFAULT_SURFACE_MATERIAL : material, false);
+    }
+
+    /** Where on the family's curve the Base triple was last set. 0..100. */
+    public int getSurfaceMaterialIntensity() {
+        int intensity = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY,
+            TERMUX_APP.DEFAULT_SURFACE_MATERIAL_INTENSITY);
+        return Math.max(0, Math.min(100, intensity));
+    }
+
+    public void setSurfaceMaterialIntensity(int intensity) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY,
+            Math.max(0, Math.min(100, intensity)), false);
+    }
+
     /**
      * The number a surface should actually use: its own override when detached, Base otherwise.
      * Callers still apply their own clamp, so a Base value outside one surface's range (the

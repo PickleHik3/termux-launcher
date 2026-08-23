@@ -1004,6 +1004,12 @@
                 <string name="termux_dock_tune_live_summary">Customize dock, keyboard, status panel, and terminal live on the home screen.</string>
                 <string name="termux_dock_tuning_title">Surface editor</string>
                 <string name="termux_surface_tuning_base_section">All surfaces</string>
+                <string name="termux_surface_tuning_material">Material</string>
+                <string name="termux_surface_tuning_material_solid">Solid</string>
+                <string name="termux_surface_tuning_material_glass">Glass</string>
+                <string name="termux_surface_tuning_material_frost">Frost</string>
+                <string name="termux_surface_tuning_material_intensity">Intensity</string>
+                <string name="termux_surface_tuning_material_custom">Custom</string>
                 <!-- The link chip on a shared row: an arrow while the surface follows Base, an
                      undo glyph once it has its own value. -->
                 <string name="termux_surface_tuning_link_inherited">↗</string>
