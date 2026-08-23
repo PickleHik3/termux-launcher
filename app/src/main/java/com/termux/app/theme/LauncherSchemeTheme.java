@@ -100,6 +100,10 @@ public final class LauncherSchemeTheme {
         return sCachedChromeActive;
     }
 
+    private static synchronized void setChromeActive(boolean active) {
+        sCachedChromeActive = active;
+    }
+
     /**
      * Applies the scheme palette to {@code activity}, or does nothing and returns false.
      *
@@ -109,8 +113,13 @@ public final class LauncherSchemeTheme {
     @SuppressLint("RestrictedApi")
     public static boolean apply(@NonNull Activity activity,
                                 @Nullable TermuxAppSharedPreferences preferences) {
-        if (!isSupported() || !isEnabled(preferences)) return false;
-        LinkedHashMap<String, Integer> tokens = tokens();
+        boolean enabled = isSupported() && isEnabled(preferences);
+        LinkedHashMap<String, Integer> tokens = enabled ? tokens() : null;
+        // apply() runs on every activity create, so it is the natural refresh point for the
+        // chrome-active cache: a scheme written after the first computation (termux-styling
+        // installing a theme, then termux-reload-settings recreating) must flip it without
+        // waiting for a settings-screen invalidate().
+        setChromeActive(tokens != null);
         if (tokens == null) return false;
 
         ColorResourcesOverride override = ColorResourcesOverride.getInstance();
