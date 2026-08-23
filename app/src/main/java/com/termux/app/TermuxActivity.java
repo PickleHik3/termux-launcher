@@ -6584,9 +6584,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         TextView terminalGapValue = findViewById(R.id.dock_tuning_terminal_gap_value);
         SeekBar wallpaperOpacity = findViewById(R.id.dock_tuning_wallpaper_opacity_slider);
         TextView wallpaperOpacityValue = findViewById(R.id.dock_tuning_wallpaper_opacity_value);
-        MaterialButtonToggleGroup terminalContrast =
-            findViewById(R.id.dock_tuning_terminal_contrast_group);
-        TextView terminalContrastHint = findViewById(R.id.dock_tuning_terminal_contrast_hint);
         SeekBar sessions = findViewById(R.id.dock_tuning_sessions_slider);
         SeekBar size = findViewById(R.id.dock_tuning_size_slider);
         SeekBar icons = findViewById(R.id.dock_tuning_icons_slider);
@@ -6660,7 +6657,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final int initialTerminalCornerRadius = mPreferences.getTerminalCornerRadius();
         final int initialTerminalGap = mPreferences.getTerminalPaneGap();
         final int initialWallpaperDim = mPreferences.getWallpaperBackdropDim();
-        final String initialTerminalContrast = mPreferences.getTerminalContrastLevel().value;
         final int initialSessions = mPreferences.getSessionsOpacity();
         final float initialBarHeight = mPreferences.getAppLauncherBarHeightScale();
         final int initialSizeIndex = DockLayoutPolicy.nearestSizePresetIndex(initialBarHeight);
@@ -6683,10 +6679,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final int initialDockInset = mPreferences.getDockHorizontalInset();
         final int initialKeyboardInset = mPreferences.getInAppKeyboardHorizontalInset();
         final int initialStatusInset = mPreferences.getStatusBarHorizontalInset();
-        // Captured too, so "Revert all" really means all. These four are written straight to
-        // preferences by the clock picker, the normalize switch and the keyboard colour sub-screen
-        // rather than through the sliders, and leaving them out left a half-reverted state behind.
-        final String initialClockStyle = mPreferences.getTopPaneClockStyle();
+        // Captured too, so "Revert all" really means all. These are written straight to
+        // preferences by the keyboard colour sub-screen rather than through the sliders, and
+        // leaving them out left a half-reverted state behind.
         final String initialLinks = surfaceEditorLinkSignature();
         final String initialKeyboardColorScheme = mPreferences.getInAppKeyboardColorScheme();
         final String initialKeyboardTheme = mPreferences.getInAppKeyboardTheme();
@@ -6716,7 +6711,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (wallpaperOpacity != null) wallpaperOpacity.setProgress(initialWallpaperDim);
         if (wallpaperOpacityValue != null) wallpaperOpacityValue.setText(
             getString(R.string.termux_dock_tuning_value_percent, initialWallpaperDim));
-        syncTerminalContrastGroup(terminalContrast, terminalContrastHint);
         sessions.setProgress(initialSessions);
         size.setProgress(initialSizeIndex);
         icons.setProgress(Math.max(1, Math.min(20, initialButtonCount)));
@@ -6905,17 +6899,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             });
         }
-        if (terminalContrast != null) {
-            terminalContrast.clearOnButtonCheckedListeners();
-            terminalContrast.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
-                if (!isChecked) return;
-                String level = terminalContrastLevelForButton(checkedId);
-                if (level.equals(mPreferences.getTerminalContrastLevel().value)) return;
-                mPreferences.setTerminalContrastLevel(level);
-                applyTerminalContrastChange();
-                updateSurfaceEditorDirtyBadge();
-            });
-        }
         sessions.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 sessionsValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
@@ -7066,7 +7049,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bindStatusSeekBar(statusRadius, statusRadiusValue, true,
             TUNING_PREVIEW_SURFACES | TUNING_PREVIEW_GEOMETRY,
             value -> writeSurfaceCornerRadius(SURFACE_TUNING_TARGET_STATUS, value));
-        bindSurfaceTuningClockPicker();
         bindSurfaceTuningGestures();
         bindSurfaceInheritanceChips();
         bindSurfaceReattachAll();
@@ -7146,10 +7128,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP);
                 if (mPaneController != null) mPaneController.refreshPaneLayout();
                 applyTerminalSurfaceAppearance();
-                mPreferences.setTerminalContrastLevel(
-                    com.termux.shared.termux.settings.preferences.TerminalContrastLevel
-                        .DEFAULT.value);
-                applyTerminalContrastChange();
             }
             blur.setProgress(mPreferences.getExtraKeysBlurRadius());
             opacity.setProgress(mPreferences.getAppBarOpacity());
@@ -7190,7 +7168,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 terminalGap.setProgress(mPreferences.getTerminalPaneGap());
             if (wallpaperOpacity != null)
                 wallpaperOpacity.setProgress(mPreferences.getWallpaperBackdropDim());
-            syncTerminalContrastGroup(terminalContrast, terminalContrastHint);
             sessions.setProgress(mPreferences.getSessionsOpacity());
             syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_DOCK);
             syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_KEYBOARD);
@@ -7226,11 +7203,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mPaneController != null) mPaneController.refreshPaneLayout();
                     applyTerminalSurfaceAppearance();
                 }
-                if (!initialTerminalContrast.equals(
-                        mPreferences.getTerminalContrastLevel().value)) {
-                    mPreferences.setTerminalContrastLevel(initialTerminalContrast);
-                    applyTerminalContrastChange();
-                }
                 mPreferences.setSessionsOpacity(initialSessions);
                 mPreferences.setAppLauncherBarHeightScale(initialBarHeight);
                 mPreferences.setAppLauncherButtonCount(initialButtonCount);
@@ -7247,13 +7219,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.setDockHorizontalInset(initialDockInset);
                 mPreferences.setInAppKeyboardHorizontalInset(initialKeyboardInset);
                 mPreferences.setStatusBarHorizontalInset(initialStatusInset);
-                mPreferences.setTopPaneClockStyle(initialClockStyle);
-                com.termux.app.terminal.TerminalClockWidget clock =
-                    findViewById(R.id.terminal_clock_widget);
-                if (clock != null) {
-                    clock.setStyle(initialClockStyle);
-                    clock.setAlignment(mPreferences.getTopPaneClockAlignment());
-                }
                 mPreferences.setInAppKeyboardColorScheme(initialKeyboardColorScheme);
                 mPreferences.setInAppKeyboardTheme(initialKeyboardTheme);
                 if (mInAppKeyboard != null) {
@@ -7592,59 +7557,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPreferences.setStatusBarCornerRadius(value);
     }
 
-    /** Clock style picker in the editor's Status section. */
-    private void bindSurfaceTuningClockPicker() {
-        com.google.android.material.button.MaterialButtonToggleGroup group =
-            findViewById(R.id.surface_tuning_status_clock_group);
-        if (group == null || mPreferences == null)
-            return;
-        group.clearOnButtonCheckedListeners();
-        group.check(surfaceTuningClockButtonId(mPreferences.getTopPaneClockStyle()));
-        group.addOnButtonCheckedListener((buttons, checkedId, isChecked) -> {
-            if (!isChecked || mPreferences == null)
-                return;
-            String style = surfaceTuningClockStyle(checkedId);
-            if (style.equals(mPreferences.getTopPaneClockStyle()))
-                return;
-            mPreferences.setTopPaneClockStyle(style);
-            com.termux.app.terminal.TerminalClockWidget clock =
-                findViewById(R.id.terminal_clock_widget);
-            if (clock != null) {
-                clock.setStyle(style);
-                clock.setAlignment(mPreferences.getTopPaneClockAlignment());
-            }
-            updateSurfaceEditorDirtyBadge();
-        });
-    }
-
-    private int surfaceTuningClockButtonId(String style) {
-        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD.equals(style))
-            return R.id.surface_tuning_status_clock_lcd;
-        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL.equals(style))
-            return R.id.surface_tuning_status_clock_minimal;
-        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED.equals(style))
-            return R.id.surface_tuning_status_clock_led;
-        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(style))
-            return R.id.surface_tuning_status_clock_tape;
-        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB.equals(style))
-            return R.id.surface_tuning_status_clock_slab;
-        return R.id.surface_tuning_status_clock_flip;
-    }
-
-    private String surfaceTuningClockStyle(int buttonId) {
-        if (buttonId == R.id.surface_tuning_status_clock_lcd)
-            return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD;
-        if (buttonId == R.id.surface_tuning_status_clock_minimal)
-            return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL;
-        if (buttonId == R.id.surface_tuning_status_clock_led)
-            return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED;
-        if (buttonId == R.id.surface_tuning_status_clock_tape)
-            return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE;
-        if (buttonId == R.id.surface_tuning_status_clock_slab)
-            return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB;
-        return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP;
-    }
-
     /** A finger travel of 1dp moves a surface edge half a dp, so the 0..48dp span needs ~96dp. */
     /**
      * Every preference the editor can move, in one string. Compared against the value captured on
@@ -7677,14 +7589,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .append(mPreferences.getStatusBarGrain()).append('|')
             .append(mPreferences.getStatusBarCornerRadius()).append('|')
             .append(mPreferences.getStatusBarHorizontalInset()).append('|')
-            .append(mPreferences.getTopPaneClockStyle()).append('|')
             .append(mPreferences.getTerminalBackgroundOpacity()).append('|')
             .append(mPreferences.isTerminalBorderEnabled()).append('|')
             .append(mPreferences.getTerminalGlassBlurRadius()).append('|')
             .append(mPreferences.getTerminalGlassGrain()).append('|')
             .append(mPreferences.getTerminalCornerRadius()).append('|')
             .append(mPreferences.getTerminalPaneGap()).append('|')
-            .append(mPreferences.getTerminalContrastLevel().value).append('|')
             .append(mPreferences.getWallpaperBackdropDim()).append('|')
             .append(mPreferences.getSessionsOpacity()).append('|')
             .append(surfaceEditorLinkSignature())
@@ -8764,55 +8674,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Broader live re-apply for controls that change dock geometry, terminal, or sessions surfaces. */
     private void applyDockTuningStructuralPreview() {
         requestDockTuningPreview(TUNING_PREVIEW_ALL);
-    }
-
-    @NonNull
-    private static String terminalContrastLevelForButton(int checkedId) {
-        com.termux.shared.termux.settings.preferences.TerminalContrastLevel level;
-        if (checkedId == R.id.dock_tuning_terminal_contrast_softer) {
-            level = com.termux.shared.termux.settings.preferences.TerminalContrastLevel.SOFTER;
-        } else if (checkedId == R.id.dock_tuning_terminal_contrast_harder) {
-            level = com.termux.shared.termux.settings.preferences.TerminalContrastLevel.HARDER;
-        } else {
-            level = com.termux.shared.termux.settings.preferences.TerminalContrastLevel.DEFAULT;
-        }
-        return level.value;
-    }
-
-    private static int terminalContrastButtonForLevel(
-            @NonNull com.termux.shared.termux.settings.preferences.TerminalContrastLevel level) {
-        switch (level) {
-            case SOFTER: return R.id.dock_tuning_terminal_contrast_softer;
-            case HARDER: return R.id.dock_tuning_terminal_contrast_harder;
-            default: return R.id.dock_tuning_terminal_contrast_default;
-        }
-    }
-
-    /**
-     * Selects the stored level without firing the listener, and disables the row when the palette it
-     * grades is not in use: contrast targets the generated wallpaper palette, so with wallpaper colours
-     * off there is nothing for it to act on. The hint says so rather than leaving a dead control.
-     */
-    private void syncTerminalContrastGroup(@Nullable MaterialButtonToggleGroup group,
-                                           @Nullable TextView hint) {
-        if (mPreferences == null || group == null) return;
-        boolean available = mPreferences.isTerminalDynamicColorsEnabled();
-        // No listener juggling: the reset button calls this too, and clearing here would leave the row
-        // dead afterwards. The listener is a no-op when the level it reads back is already stored.
-        group.check(terminalContrastButtonForLevel(mPreferences.getTerminalContrastLevel()));
-        for (int i = 0; i < group.getChildCount(); i++) group.getChildAt(i).setEnabled(available);
-        if (hint != null) hint.setVisibility(available ? View.GONE : View.VISIBLE);
-    }
-
-    /**
-     * Regenerate the terminal palette and restyle the surfaces that read it. Both halves are needed:
-     * the sessions take their colours from the generated palette, while the wallpaper-mode overlay
-     * takes only its background tone, and a contrast change moves both.
-     */
-    private void applyTerminalContrastChange() {
-        if (mTermuxTerminalSessionActivityClient != null)
-            mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();
-        applyTerminalSurfaceAppearance();
     }
 
     @NonNull

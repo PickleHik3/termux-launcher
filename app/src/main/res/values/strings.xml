@@ -629,8 +629,6 @@
                 <string name="termux_top_pane_clock_style_tape">Tape</string>
                 <string name="termux_top_pane_clock_style_slab">Slab</string>
                 <!-- Toggle-group labels: six faces have to share one row. -->
-                <string name="termux_top_pane_clock_style_minimal_short">Min</string>
-                <string name="termux_top_pane_clock_style_led_short">LED</string>
 
             <!-- Keyboard Category -->
             <string name="termux_keyboard_header">Keyboard</string>
@@ -1036,13 +1034,8 @@
                 <string name="termux_dock_tuning_size">Size</string>
                 <string name="termux_dock_tuning_icons">Apps per page</string>
                 <string name="termux_dock_tuning_terminal">Opacity</string>
-                <string name="termux_dock_tuning_terminal_contrast">Contrast</string>
-                <string name="termux_dock_tuning_terminal_contrast_softer">Softer</string>
-                <string name="termux_dock_tuning_terminal_contrast_default">Default</string>
-                <string name="termux_dock_tuning_terminal_contrast_harder">Harder</string>
                 <string name="termux_dock_tuning_terminal_border">Border</string>
                 <string name="termux_dock_tuning_sessions">Opacity</string>
-                <string name="termux_surface_tuning_clock">Clock</string>
                 <string name="termux_dock_tuning_section_dock">Dock</string>
                 <string name="termux_dock_tuning_section_terminal">Terminal</string>
                 <string name="termux_dock_tuning_section_sessions">Sessions</string>

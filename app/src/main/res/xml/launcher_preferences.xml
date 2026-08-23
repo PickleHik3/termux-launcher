@@ -37,11 +37,6 @@
             app:summary="@string/settings_app_index_haptics_summary"
             app:dependency="app_launcher_apps_row_enabled"
             android:defaultValue="true" />
-        <SwitchPreferenceCompat
-            app:key="app_launcher_extra_keys_row_enabled"
-            app:title="@string/settings_show_extra_keys_row_title"
-            app:summary="@string/settings_show_extra_keys_row_summary"
-            android:defaultValue="true" />
         <com.termux.app.fragments.settings.SegmentedPillPreference
             app:key="app_launcher_dock_rail_side"
             app:title="@string/settings_dock_rail_side_title"
