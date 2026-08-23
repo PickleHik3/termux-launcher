@@ -1879,7 +1879,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private int resolveAccessoryGlassBaseColor() {
-        if (isNightThemeActive()) {
+        // In dark wallpaper mode the glass base deliberately reads the framework's Material You
+        // neutral so the dock matches the system exactly; when the chrome belongs to the terminal
+        // scheme that bypass would keep every glass surface on the wallpaper palette.
+        if (isNightThemeActive() && !LauncherSchemeTheme.isSchemeChromeActive(this)) {
             return resolveMaterialDarkBackgroundColor();
         }
         return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh, R.color.termux_surface_panel_high);
@@ -2333,7 +2336,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return com.termux.app.terminal.MaterialTerminalColorScheme.backgroundColor(
                 this, mPreferences.getTerminalContrastLevel());
         }
-        if (isNightThemeActive()) {
+        if (isNightThemeActive() || LauncherSchemeTheme.isSchemeChromeActive(this)) {
             return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
         }
         return Color.parseColor("#1C1B1F");
@@ -12505,6 +12508,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             cpu.setVisibility(cpuOn ? View.VISIBLE : View.GONE);
             cpu.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
             cpu.setIconGlyph("\uf4bc");   // nf-oct-cpu
+            // Seeded from the smoother every pass: onStatsUpdated skips hidden widgets, so a value
+            // published while this one was off or covered is otherwise only repainted when the
+            // reading next changes \u2014 and before the first sample this is what puts "--" on screen
+            // instead of an empty slot.
+            if (cpuOn) cpu.setValue(mBarCpuSmoother.text());
             if (cpu.getTag() == null) {
                 cpu.setTag("wired");
                 cpu.setOnClickListener(v -> toggleStatsCard(v));
@@ -12514,6 +12522,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ram.setVisibility(ramOn ? View.VISIBLE : View.GONE);
             ram.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
             ram.setIconGlyph("\uefc5");   // nf-fa-memory
+            if (ramOn) ram.setValue(mBarMemorySmoother.text());
             if (ram.getTag() == null) {
                 ram.setTag("wired");
                 ram.setOnClickListener(v -> toggleStatsCard(v));
