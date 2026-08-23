@@ -79,6 +79,9 @@
         <item>harder</item>
     </string-array>
     <string name="settings_wallpaper_title">Wallpaper</string>
+    <string name="settings_sessions_sidebar_header">Sessions sidebar</string>
+    <string name="settings_sessions_opacity_title">Sessions opacity</string>
+    <string name="settings_sessions_opacity_summary">Background opacity of the legacy sessions drawer, shown only while split panes are off.</string>
     <string name="settings_icon_appearance_header">Icon appearance</string>
     <string name="settings_icon_appearance_title">Use monochrome icons</string>
     <string name="settings_icon_pack_title">Icon pack</string>
@@ -1035,10 +1038,8 @@
                 <string name="termux_dock_tuning_icons">Apps per page</string>
                 <string name="termux_dock_tuning_terminal">Opacity</string>
                 <string name="termux_dock_tuning_terminal_border">Border</string>
-                <string name="termux_dock_tuning_sessions">Opacity</string>
                 <string name="termux_dock_tuning_section_dock">Dock</string>
                 <string name="termux_dock_tuning_section_terminal">Terminal</string>
-                <string name="termux_dock_tuning_section_sessions">Sessions</string>
                 <string name="termux_dock_tuning_section_wallpaper">Wallpaper</string>
                 <string name="termux_dock_tuning_terminal_inner_padding">Inner padding</string>
                 <!-- Docked spends the same knob on the terminal's outer air as well as the gap
@@ -1060,7 +1061,6 @@
                 <string name="termux_surface_tuning_peek_dock_size">Dock size</string>
                 <string name="termux_surface_tuning_peek_dock_icons">Apps per page</string>
                 <string name="termux_surface_tuning_peek_keyboard_height">Keyboard height</string>
-                <string name="termux_surface_tuning_sessions_hint">The sessions drawer only appears while the in-app multiplexer is off. Turn split panes on and the status bar replaces it.</string>
                 <string name="termux_surface_tuning_unsaved_badge">Unsaved</string>
                 <string name="termux_surface_tuning_unsaved_title">Unsaved changes</string>
                 <string name="termux_surface_tuning_unsaved_message">Discard them and put every surface back to how it looked when you opened the editor, or save and close?</string>

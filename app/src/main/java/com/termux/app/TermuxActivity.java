@@ -6584,7 +6584,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         TextView terminalGapValue = findViewById(R.id.dock_tuning_terminal_gap_value);
         SeekBar wallpaperOpacity = findViewById(R.id.dock_tuning_wallpaper_opacity_slider);
         TextView wallpaperOpacityValue = findViewById(R.id.dock_tuning_wallpaper_opacity_value);
-        SeekBar sessions = findViewById(R.id.dock_tuning_sessions_slider);
         SeekBar size = findViewById(R.id.dock_tuning_size_slider);
         SeekBar icons = findViewById(R.id.dock_tuning_icons_slider);
         SeekBar keyboardHeight = findViewById(R.id.surface_tuning_keyboard_height_slider);
@@ -6601,7 +6600,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         TextView grainValue = findViewById(R.id.dock_tuning_grain_value);
         TextView dockRadiusValue = findViewById(R.id.dock_tuning_radius_value);
         TextView terminalValue = findViewById(R.id.dock_tuning_terminal_value);
-        TextView sessionsValue = findViewById(R.id.dock_tuning_sessions_value);
         TextView sizeValue = findViewById(R.id.dock_tuning_size_value);
         TextView iconsValue = findViewById(R.id.dock_tuning_icons_value);
         TextView keyboardHeightValue = findViewById(R.id.surface_tuning_keyboard_height_value);
@@ -6619,7 +6617,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View dismiss = findViewById(R.id.dock_tuning_dismiss);
         if (controls == null || sectionGroup == null || keyboardColors == null
             || blur == null || opacity == null || grain == null || dockRadius == null
-            || terminal == null || sessions == null || size == null || icons == null
+            || terminal == null || size == null || icons == null
             || keyboardHeight == null || keyboardSpacing == null || keyboardRadius == null
             || keyboardKeyOpacity == null || keyboardKeyOpacityValue == null
             || keyboardBgOpacity == null || keyboardBgOpacityValue == null
@@ -6627,7 +6625,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || statusRadius == null
             || blurValue == null || opacityValue == null || grainValue == null
             || dockRadiusValue == null
-            || terminalValue == null || sessionsValue == null || sizeValue == null
+            || terminalValue == null || sizeValue == null
             || iconsValue == null || keyboardHeightValue == null || keyboardSpacingValue == null
             || keyboardRadiusValue == null || statusBlurValue == null
             || statusOpacityValue == null || statusGrainValue == null
@@ -6657,7 +6655,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final int initialTerminalCornerRadius = mPreferences.getTerminalCornerRadius();
         final int initialTerminalGap = mPreferences.getTerminalPaneGap();
         final int initialWallpaperDim = mPreferences.getWallpaperBackdropDim();
-        final int initialSessions = mPreferences.getSessionsOpacity();
         final float initialBarHeight = mPreferences.getAppLauncherBarHeightScale();
         final int initialSizeIndex = DockLayoutPolicy.nearestSizePresetIndex(initialBarHeight);
         final int initialButtonCount = mPreferences.getAppLauncherButtonCount();
@@ -6711,7 +6708,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (wallpaperOpacity != null) wallpaperOpacity.setProgress(initialWallpaperDim);
         if (wallpaperOpacityValue != null) wallpaperOpacityValue.setText(
             getString(R.string.termux_dock_tuning_value_percent, initialWallpaperDim));
-        sessions.setProgress(initialSessions);
         size.setProgress(initialSizeIndex);
         icons.setProgress(Math.max(1, Math.min(20, initialButtonCount)));
         keyboardHeight.setProgress(keyboardEditorProgress(initialKeyboardHeight,
@@ -6733,7 +6729,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         dockRadiusValue.setText(getString(R.string.termux_dock_tuning_value_dp,
             editorRadius(TermuxAppSharedPreferences.SurfaceSlot.DOCK, initialDockRadius)));
         terminalValue.setText(getString(R.string.termux_dock_tuning_value_percent, initialTerminal));
-        sessionsValue.setText(getString(R.string.termux_dock_tuning_value_percent, initialSessions));
         sizeValue.setText(dockSizePresetLabel(initialSizeIndex));
         iconsValue.setText(Integer.toString(Math.max(1, initialButtonCount)));
         keyboardHeightValue.setText(getString(R.string.termux_dock_tuning_value_percent,
@@ -6757,12 +6752,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         styleGroup.clearOnButtonCheckedListeners();
         styleGroup.check(SegmentedPillPreference.VALUE_ROUNDED.equals(initialStyle)
             ? R.id.dock_tuning_style_capsule : R.id.dock_tuning_style_default);
-        com.google.android.material.button.MaterialButton fourthTab =
-            findViewById(R.id.surface_tuning_section_status);
-        if (fourthTab != null)
-            fourthTab.setText(isSurfaceTuningSessionsSlot()
-                ? R.string.termux_dock_tuning_section_sessions
-                : R.string.termux_surface_tuning_status);
         int initialSectionId = surfaceTuningSectionId(initialSection);
         sectionGroup.check(initialSectionId);
         showSurfaceTuningPanel(initialSectionId);
@@ -6899,17 +6888,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             });
         }
-        sessions.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                sessionsValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
-                if (fromUser) {
-                    // The sessions drawer is standalone: it is not glass, it cannot be previewed
-                    // while the editor is open, and so it takes no part in inheritance.
-                    mPreferences.setSessionsOpacity(progress);
-                    requestDockTuningPreview(TUNING_PREVIEW_SURFACES | TUNING_PREVIEW_KEYBOARD);
-                }
-            }
-        });
         size.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
             R.string.termux_surface_tuning_peek_dock_size) {
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
@@ -7111,8 +7089,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.reattachSurface(TermuxAppSharedPreferences.SurfaceSlot.CANVAS);
                 mPreferences.setTerminalBackgroundOpacity(
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY);
-                mPreferences.setSessionsOpacity(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_SESSIONS_OPACITY);
                 mPreferences.setTerminalBorderEnabled(
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERMINAL_BORDER_ENABLED);
                 mPreferences.setTerminalGlassBlurRadius(
@@ -7168,7 +7144,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 terminalGap.setProgress(mPreferences.getTerminalPaneGap());
             if (wallpaperOpacity != null)
                 wallpaperOpacity.setProgress(mPreferences.getWallpaperBackdropDim());
-            sessions.setProgress(mPreferences.getSessionsOpacity());
             syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_DOCK);
             syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_KEYBOARD);
             syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_STATUS);
@@ -7203,7 +7178,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mPaneController != null) mPaneController.refreshPaneLayout();
                     applyTerminalSurfaceAppearance();
                 }
-                mPreferences.setSessionsOpacity(initialSessions);
                 mPreferences.setAppLauncherBarHeightScale(initialBarHeight);
                 mPreferences.setAppLauncherButtonCount(initialButtonCount);
                 mPreferences.setAppLauncherDockStyle(initialStyle);
@@ -7243,20 +7217,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         controls.post(this::adjustDockTuningCardHeight);
     }
 
-    /**
-     * Whether the fourth tab is the status pane or the legacy sessions drawer. They are mutually
-     * exclusive: {@code terminal_window_bar_host} is GONE with split panes off, which left the
-     * Status tab previewing against nothing, and the sessions drawer only exists in that same mode.
-     */
-    private boolean isSurfaceTuningSessionsSlot() {
-        return !isSplitPanesEnabled();
-    }
-
     private int surfaceTuningSectionId(@Nullable String section) {
         if ("base".equals(section)) return R.id.surface_tuning_section_base;
         if ("keyboard".equals(section)) return R.id.surface_tuning_section_keyboard;
-        // The two share a slot, so a section remembered in one mode resolves in the other rather
-        // than silently falling through to Dock.
+        // "sessions" is what older builds stored while the legacy drawer shared this tab; its
+        // opacity control lives in Settings > Appearance now, so the remembered section lands on
+        // Status rather than silently falling through to Dock.
         if ("status".equals(section) || "sessions".equals(section))
             return R.id.surface_tuning_section_status;
         if ("other".equals(section) || "terminal".equals(section))
@@ -7267,8 +7233,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private String surfaceTuningSectionKey(int sectionId) {
         if (sectionId == R.id.surface_tuning_section_base) return "base";
         if (sectionId == R.id.surface_tuning_section_keyboard) return "keyboard";
-        if (sectionId == R.id.surface_tuning_section_status)
-            return isSurfaceTuningSessionsSlot() ? "sessions" : "status";
+        if (sectionId == R.id.surface_tuning_section_status) return "status";
         // Written as "terminal" now; "other" is still read above for sections stored by older
         // builds, which named this tab after what it wasn't.
         if (sectionId == R.id.surface_tuning_section_terminal) return "terminal";
@@ -7296,9 +7261,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void showSurfaceTuningPanel(int checkedId) {
         // The status section tunes the expanded top pane: show the clock face while it is open so
         // the sliders preview against it, and give the space back when another section takes over.
-        boolean sessionsSlot = isSurfaceTuningSessionsSlot();
         if (mDockTuningMode) {
-            boolean collapse = checkedId != R.id.surface_tuning_section_status || sessionsSlot;
+            boolean collapse = checkedId != R.id.surface_tuning_section_status;
             mSurfaceEditorExpandedStatusPane = !collapse && mPreferences != null
                 && mPreferences.isTopPaneClockCollapsed();
             setTopStatusBarCollapsed(collapse, true);
@@ -7308,7 +7272,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View dockContinuation = findViewById(R.id.surface_tuning_dock_continuation_panel);
         View keyboard = findViewById(R.id.surface_tuning_keyboard_panel);
         View status = findViewById(R.id.surface_tuning_status_panel);
-        View sessions = findViewById(R.id.surface_tuning_sessions_panel);
         View other = findViewById(R.id.surface_tuning_terminal_panel);
         if (base != null) base.setVisibility(
             checkedId == R.id.surface_tuning_section_base ? View.VISIBLE : View.GONE);
@@ -7318,11 +7281,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             dockContinuation.setVisibility(showDock ? View.VISIBLE : View.GONE);
         if (keyboard != null) keyboard.setVisibility(
             checkedId == R.id.surface_tuning_section_keyboard ? View.VISIBLE : View.GONE);
-        boolean fourthSlot = checkedId == R.id.surface_tuning_section_status;
         if (status != null) status.setVisibility(
-            fourthSlot && !sessionsSlot ? View.VISIBLE : View.GONE);
-        if (sessions != null) sessions.setVisibility(
-            fourthSlot && sessionsSlot ? View.VISIBLE : View.GONE);
+            checkedId == R.id.surface_tuning_section_status ? View.VISIBLE : View.GONE);
         if (other != null) other.setVisibility(
             checkedId == R.id.surface_tuning_section_terminal ? View.VISIBLE : View.GONE);
         syncSurfaceReattachAllVisibility();
@@ -7439,7 +7399,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPreferences.getTerminalGlassGrain());
         setSeekBarProgress(R.id.dock_tuning_terminal_slider,
             mPreferences.getTerminalBackgroundOpacity());
-        setSeekBarProgress(R.id.dock_tuning_sessions_slider, mPreferences.getSessionsOpacity());
         setSeekBarProgress(R.id.surface_tuning_keyboard_bg_opacity_slider,
             mPreferences.getInAppKeyboardBackgroundOpacity());
         syncTerminalRadiusRow();
@@ -7596,7 +7555,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .append(mPreferences.getTerminalCornerRadius()).append('|')
             .append(mPreferences.getTerminalPaneGap()).append('|')
             .append(mPreferences.getWallpaperBackdropDim()).append('|')
-            .append(mPreferences.getSessionsOpacity()).append('|')
             .append(surfaceEditorLinkSignature())
             .append('|')
             .append(mPreferences.getSurfaceBaseValue(
@@ -7897,9 +7855,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int base = entry.getKey() == TermuxAppSharedPreferences.SurfaceSlot.CANVAS
                 ? R.string.termux_surface_tuning_terminal
                 : SurfaceEditorRows.slotLabel(entry.getKey());
-            if (entry.getKey() == TermuxAppSharedPreferences.SurfaceSlot.STATUS
-                && isSurfaceTuningSessionsSlot())
-                base = R.string.termux_dock_tuning_section_sessions;
             int overrides = mPreferences.surfaceOverrideCount(entry.getKey());
             // A dot, not a count: the tab only needs to say "something here left Base", and a
             // bare number next to a tab name read as part of the name ("Dock 1").
