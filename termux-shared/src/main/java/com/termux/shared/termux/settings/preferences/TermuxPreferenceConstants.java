@@ -264,28 +264,6 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_APP_LAUNCHER_DRAWER_VIEW_TYPE =
             APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL;
 
-        public static final String KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_VERTICAL =
-            "app_launcher_drawer_grid_columns_vertical";
-        public static final String KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_HORIZONTAL =
-            "app_launcher_drawer_grid_columns_horizontal";
-        public static final String KEY_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL =
-            "app_launcher_drawer_grid_rows_horizontal";
-        public static final String KEY_APP_LAUNCHER_DRAWER_ICON_SIZE_DP =
-            "app_launcher_drawer_icon_size_dp";
-        public static final String KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_CATEGORIES =
-            "app_launcher_drawer_grid_columns_categories";
-        public static final int DEFAULT_APP_LAUNCHER_DRAWER_GRID_COLUMNS_VERTICAL = 0;
-        public static final int DEFAULT_APP_LAUNCHER_DRAWER_GRID_COLUMNS_HORIZONTAL = 0;
-        public static final int DEFAULT_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL = 0;
-        public static final int DEFAULT_APP_LAUNCHER_DRAWER_ICON_SIZE_DP = 0;
-        public static final int DEFAULT_APP_LAUNCHER_DRAWER_GRID_COLUMNS_CATEGORIES = 0;
-        public static final int MIN_APP_LAUNCHER_DRAWER_GRID_COLUMNS = 4;
-        public static final int MAX_APP_LAUNCHER_DRAWER_GRID_COLUMNS = 6;
-        public static final int MIN_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL = 2;
-        public static final int MAX_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL = 6;
-        public static final int MIN_APP_LAUNCHER_DRAWER_GRID_COLUMNS_CATEGORIES = 1;
-        public static final int MAX_APP_LAUNCHER_DRAWER_GRID_COLUMNS_CATEGORIES = 3;
-
         /** Custom drawer corner radius in dp, or -1 to follow the shared rounded-surface token. */
         public static final String KEY_APP_LAUNCHER_DRAWER_CORNER_RADIUS =
             "app_launcher_drawer_corner_radius";
@@ -835,12 +813,11 @@ public final class TermuxPreferenceConstants {
          * Defines whether a thin outline border is drawn around the terminal surface.
          */
         public static final String KEY_TERMINAL_BORDER_ENABLED = "terminal_border_enabled";
-        /** Whether the surface editor writes its glass controls to every surface at once. */
         /*
          * Surface inheritance. Five properties are shared across the surfaces; each surface either
          * follows the Base value or holds an override of its own. The per-surface value keys already
          * exist above and keep their meaning - they are simply only consulted once a surface has
-         * detached. Replaces KEY_SURFACE_TUNING_NORMALIZED, which was all-or-nothing and could not
+         * detached. Replaces the old all-or-nothing normalize flag, which could not
          * express "the same everywhere except this one thing".
          */
         public static final String KEY_SURFACE_BASE_BLUR = "surface_base_blur";
@@ -876,10 +853,15 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_SHIPPED_SURFACE_DEFAULTS_ADOPTED =
             "shipped_surface_defaults_adopted";
 
+        /**
+         * The old all-or-nothing "match all surfaces" switch. Read once by
+         * {@code migrateSurfaceInheritance} to decide whether an upgrading install starts fully
+         * linked, but never written again.
+         */
         public static final String KEY_SURFACE_TUNING_NORMALIZED = "surface_tuning_normalized";
+        public static final boolean DEFAULT_VALUE_SURFACE_TUNING_NORMALIZED = false;
 
         public static final boolean DEFAULT_VALUE_TERMINAL_BORDER_ENABLED = true;
-        public static final boolean DEFAULT_VALUE_SURFACE_TUNING_NORMALIZED = false;
 
         /**
          * Stores the user's preferred terminal opacity while wallpaper mode is enabled so it can

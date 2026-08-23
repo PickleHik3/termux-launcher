@@ -1,7 +1,5 @@
 package com.termux.app.fragments.settings.termux;
 
-import android.app.WallpaperInfo;
-import android.app.WallpaperManager;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
@@ -14,7 +12,6 @@ import androidx.annotation.NonNull;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
-import androidx.preference.SeekBarPreference;
 import androidx.preference.SwitchPreferenceCompat;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
@@ -34,10 +31,6 @@ import java.util.Properties;
 
 @Keep
 public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
-
-    // Dock size is the sole geometry control. Icon size is derived from it by TermuxActivity, so
-    // the UI cannot put dock height and icon scale into contradictory states.
-    static final float[] APP_LAUNCHER_BAR_HEIGHT_PRESETS = {1.72f, 1.95f, 2.18f, 2.45f};
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -59,10 +52,8 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
                 return true;
             });
         }
-        configureDockPreferencePresentation();
         configureTerminalContrastPreference();
         configureDynamicColorsHint();
-        updateDockBlurAvailability();
     }
 
     @Override
@@ -75,7 +66,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         if (context != null) {
             LauncherIconPackPreferenceController.configure(this, context);
         }
-        updateDockBlurAvailability();
         configureTerminalContrastPreference();
         configureDynamicColorsHint();
     }
@@ -126,88 +116,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         contrast.setSummary(getString(R.string.settings_terminal_contrast_summary, label));
     }
 
-    private void updateDockBlurAvailability() {
-        Context context = getContext();
-        if (context == null) return;
-
-        boolean liveWallpaperActive = isLiveWallpaperActive(context);
-        SeekBarPreference dockBlurPreference = findPreference("extrakeys_blur_radius");
-
-        if (dockBlurPreference != null) {
-            dockBlurPreference.setEnabled(!liveWallpaperActive);
-            dockBlurPreference.setSummary(
-                liveWallpaperActive
-                    ? R.string.termux_extrakeys_blur_live_wallpaper_active_note
-                    : R.string.termux_extrakeys_blur_live_wallpaper_note
-            );
-        }
-
-        // A live wallpaper cannot provide a stable bitmap for this blur pipeline. Keep the user's
-        // chosen value intact and only disable its effective rendering until a static wallpaper is
-        // active again.
-    }
-
-    private boolean isLiveWallpaperActive(@NonNull Context context) {
-        try {
-            WallpaperInfo wallpaperInfo = WallpaperManager.getInstance(context).getWallpaperInfo();
-            return wallpaperInfo != null;
-        } catch (Exception e) {
-            Logger.logStackTraceWithMessage("TermuxStylePreferences", "Failed to detect live wallpaper state", e);
-            return false;
-        }
-    }
-
-    private void configureDockPreferencePresentation() {
-        SeekBarPreference barHeightPreference = findPreference("app_launcher_bar_height_percent");
-        if (barHeightPreference != null) {
-            updateBarHeightSummary(barHeightPreference, barHeightPreference.getValue());
-            barHeightPreference.setOnPreferenceChangeListener((preference, newValue) -> {
-                if (newValue instanceof Integer) {
-                    updateBarHeightSummary(barHeightPreference, (Integer) newValue);
-                }
-                return true;
-            });
-        }
-    }
-
-    private void updateBarHeightSummary(@NonNull SeekBarPreference preference, int value) {
-        preference.setSummary(getDockPresetLabel(value));
-    }
-
-    @NonNull
-    private String getDockPresetLabel(int value) {
-        switch (clampDockPresetIndex(value, APP_LAUNCHER_BAR_HEIGHT_PRESETS)) {
-            case 0:
-                return getString(R.string.termux_dock_preset_smallest);
-            case 1:
-                return getString(R.string.termux_dock_preset_small);
-            case 2:
-                return getString(R.string.termux_dock_preset_default);
-            default:
-                return getString(R.string.termux_dock_preset_large);
-        }
-    }
-
-    static int clampDockPresetIndex(int value, @NonNull float[] presets) {
-        return DataUtils.clamp(value, 0, Math.max(0, presets.length - 1));
-    }
-
-    static int nearestDockPresetIndex(float value, @NonNull float[] presets) {
-        int bestIndex = 0;
-        float bestDistance = Float.MAX_VALUE;
-        for (int i = 0; i < presets.length; i++) {
-            float distance = Math.abs(value - presets[i]);
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                bestIndex = i;
-            }
-        }
-        return bestIndex;
-    }
-
-    static float barHeightForPreset(int preset) {
-        return APP_LAUNCHER_BAR_HEIGHT_PRESETS[clampDockPresetIndex(preset, APP_LAUNCHER_BAR_HEIGHT_PRESETS)];
-    }
 }
 
 class TermuxStylePreferencesDataStore extends PreferenceDataStore {
@@ -263,19 +171,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         switch(key) {
             case "use_system_wallpaper":
                 TermuxActivity.setWallpaperModeEnabled(mContext, value);
-                break;
-            case "extrakeys_blur_enabled":
-                // Legacy compatibility: map old boolean writes to the new radius-driven model.
-                mPreferences.setExtraKeysBlurRadius(value ? Math.max(1, mPreferences.getExtraKeysBlurRadius()) : 0);
-                break;
-            case "sessions_blur_enabled":
-                // Sessions blur is no longer user-facing in the hybrid model.
-                break;
-            case "monet_background_enabled":
-                // Legacy compatibility: material overlay is always enabled now.
-                break;
-            case "monet_overlay_enabled":
-                // Legacy compatibility: material overlay is always enabled now.
                 break;
             case "terminal_dynamic_colors_enabled":
                 // This switch is the whole palette decision: on, the terminal and the chrome both
@@ -358,13 +253,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         switch(key) {
             case "use_system_wallpaper":
                 return mPreferences.isUseSystemWallpaperEnabled();
-            case "extrakeys_blur_enabled":
-                return mPreferences.getExtraKeysBlurRadius() > 0;
-            case "sessions_blur_enabled":
-                return false;
-            case "monet_background_enabled":
-            case "monet_overlay_enabled":
-                return true;
             case "terminal_dynamic_colors_enabled":
                 return mPreferences.isTerminalDynamicColorsEnabled();
             case "app_launcher_bw_icons":
@@ -421,50 +309,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setSessionsOpacity(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
-            case "extrakeys_blur_radius":
-                mPreferences.setExtraKeysBlurRadius(value);
-                scheduleTermuxActivityStylingSync(false);
-                break;
-            case "app_bar_opacity":
-                mPreferences.setAppBarOpacity(value);
-                scheduleTermuxActivityStylingSync(false);
-                break;
-            case "dock_glass_grain":
-                mPreferences.setDockGlassGrain(value);
-                scheduleTermuxActivityStylingSync(false);
-                break;
-            case "app_launcher_button_count":
-                mPreferences.setAppLauncherButtonCount(value);
-                scheduleTermuxActivityStylingSync(false);
-                break;
-            case "app_launcher_bar_height_percent":
-                mPreferences.setAppLauncherBarHeightScale(TermuxStylePreferencesFragment.barHeightForPreset(value));
-                scheduleTermuxActivityStylingSync(false);
-                break;
-            case "app_launcher_dock_corner_radius":
-                mPreferences.setAppLauncherDockCornerRadius(value);
-                scheduleTermuxActivityStylingSync(false);
-                break;
-            case "app_launcher_drawer_icon_size_dp":
-                mPreferences.setAppLauncherDrawerIconSizeDp(value);
-                scheduleAppDrawerSync();
-                break;
-            case "app_launcher_drawer_grid_columns_vertical":
-                mPreferences.setAppLauncherDrawerGridColumnsVertical(value);
-                scheduleAppDrawerSync();
-                break;
-            case "app_launcher_drawer_grid_columns_horizontal":
-                mPreferences.setAppLauncherDrawerGridColumnsHorizontal(value);
-                scheduleAppDrawerSync();
-                break;
-            case "app_launcher_drawer_grid_rows_horizontal":
-                mPreferences.setAppLauncherDrawerGridRowsHorizontal(value);
-                scheduleAppDrawerSync();
-                break;
-            case "app_launcher_drawer_grid_columns_categories":
-                mPreferences.setAppLauncherDrawerGridColumnsCategories(value);
-                scheduleAppDrawerSync();
-                break;
             default:
                 break;
         }
@@ -481,33 +325,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getTerminalBackgroundOpacity();
             case "sessions_opacity":
                 return mPreferences.getSessionsOpacity();
-            case "extrakeys_blur_radius":
-                return mPreferences.getExtraKeysBlurRadius();
-            case "app_bar_opacity":
-                return mPreferences.getAppBarOpacity();
-            case "dock_glass_grain":
-                return mPreferences.getDockGlassGrain();
-            case "app_launcher_button_count":
-                return mPreferences.getAppLauncherButtonCount();
-            case "app_launcher_bar_height_percent":
-                return TermuxStylePreferencesFragment.nearestDockPresetIndex(
-                    mPreferences.getAppLauncherBarHeightScale(),
-                    TermuxStylePreferencesFragment.APP_LAUNCHER_BAR_HEIGHT_PRESETS
-                );
-            case "app_launcher_dock_corner_radius":
-                int radius = mPreferences.getAppLauncherDockCornerRadius();
-                return radius < 0 ? TermuxAppSharedPreferences.resolveAutoCornerRadiusDp(
-                    TermuxAppSharedPreferences.SurfaceSlot.DOCK, true) : radius;
-            case "app_launcher_drawer_icon_size_dp":
-                return mPreferences.getAppLauncherDrawerIconSizeDp();
-            case "app_launcher_drawer_grid_columns_vertical":
-                return mPreferences.getAppLauncherDrawerGridColumnsVertical();
-            case "app_launcher_drawer_grid_columns_horizontal":
-                return mPreferences.getAppLauncherDrawerGridColumnsHorizontal();
-            case "app_launcher_drawer_grid_rows_horizontal":
-                return mPreferences.getAppLauncherDrawerGridRowsHorizontal();
-            case "app_launcher_drawer_grid_columns_categories":
-                return mPreferences.getAppLauncherDrawerGridColumnsCategories();
             default:
                 return defValue;
         }
@@ -529,10 +346,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 TermuxThemeUtils.setAppNightMode(value);
                 scheduleTermuxActivityStylingSync(true);
                 break;
-            case "app_launcher_button_count":
-                mPreferences.setAppLauncherButtonCount(DataUtils.getIntFromString(value, mPreferences.getAppLauncherButtonCount()));
-                scheduleTermuxActivityStylingSync(false);
-                break;
             case "app_launcher_input_char":
                 mPreferences.setAppLauncherInputChar(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -546,10 +359,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 // surface is rebuilt against the new state instead of restyled in place.
                 scheduleTermuxActivityStylingSync(true);
                 break;
-            case "app_launcher_dock_style":
-                mPreferences.setAppLauncherDockStyle(value);
-                scheduleTermuxActivityStylingSync(false);
-                break;
             case "app_launcher_dock_rail_side":
                 mPreferences.setAppLauncherDockRailSide(value);
                 // The side moves the rail's layout gravity and the content root's cutout padding,
@@ -559,26 +368,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 break;
             case "app_launcher_drawer_view_type":
                 mPreferences.setAppLauncherDrawerViewType(value);
-                scheduleAppDrawerSync();
-                break;
-            case "app_launcher_drawer_icon_size_dp":
-                mPreferences.setAppLauncherDrawerIconSizeDp(DataUtils.getIntFromString(value, 0));
-                scheduleAppDrawerSync();
-                break;
-            case "app_launcher_drawer_grid_columns_vertical":
-                mPreferences.setAppLauncherDrawerGridColumnsVertical(DataUtils.getIntFromString(value, 0));
-                scheduleAppDrawerSync();
-                break;
-            case "app_launcher_drawer_grid_columns_horizontal":
-                mPreferences.setAppLauncherDrawerGridColumnsHorizontal(DataUtils.getIntFromString(value, 0));
-                scheduleAppDrawerSync();
-                break;
-            case "app_launcher_drawer_grid_rows_horizontal":
-                mPreferences.setAppLauncherDrawerGridRowsHorizontal(DataUtils.getIntFromString(value, 0));
-                scheduleAppDrawerSync();
-                break;
-            case "app_launcher_drawer_grid_columns_categories":
-                mPreferences.setAppLauncherDrawerGridColumnsCategories(DataUtils.getIntFromString(value, 0));
                 scheduleAppDrawerSync();
                 break;
             case "app_launcher_default_buttons":
@@ -593,17 +382,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_launcher_pinned_icon_pack_package":
                 mPreferences.setAppLauncherPinnedIconPackPackage(value);
                 com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(mContext).invalidate();
-                scheduleTermuxActivityStylingSync(false);
-                break;
-            case "app_launcher_bar_height":
-                mPreferences.setAppLauncherBarHeightScale(
-                    TermuxStylePreferencesFragment.barHeightForPreset(
-                        TermuxStylePreferencesFragment.nearestDockPresetIndex(
-                            DataUtils.getFloatFromString(value, mPreferences.getAppLauncherBarHeightScale()),
-                            TermuxStylePreferencesFragment.APP_LAUNCHER_BAR_HEIGHT_PRESETS
-                        )
-                    )
-                );
                 scheduleTermuxActivityStylingSync(false);
                 break;
             default:
@@ -622,38 +400,22 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getTerminalContrastLevel().value;
             case "theme_mode":
                 return TermuxSharedProperties.getNightMode(mContext);
-            case "app_launcher_button_count":
-                return Integer.toString(mPreferences.getAppLauncherButtonCount());
             case "app_launcher_input_char":
                 return mPreferences.getAppLauncherInputChar();
             case "app_launcher_az_lock_method":
                 return mPreferences.getAppLauncherAzLockMethod();
             case "app_launcher_use_case_mode":
                 return com.termux.app.launcher.LauncherUseCaseMode.currentMode(mPreferences);
-            case "app_launcher_dock_style":
-                return mPreferences.getAppLauncherDockStyle();
             case "app_launcher_dock_rail_side":
                 return mPreferences.getAppLauncherDockRailSide();
             case "app_launcher_drawer_view_type":
                 return mPreferences.getAppLauncherDrawerViewType();
-            case "app_launcher_drawer_icon_size_dp":
-                return Integer.toString(mPreferences.getAppLauncherDrawerIconSizeDp());
-            case "app_launcher_drawer_grid_columns_vertical":
-                return Integer.toString(mPreferences.getAppLauncherDrawerGridColumnsVertical());
-            case "app_launcher_drawer_grid_columns_horizontal":
-                return Integer.toString(mPreferences.getAppLauncherDrawerGridColumnsHorizontal());
-            case "app_launcher_drawer_grid_rows_horizontal":
-                return Integer.toString(mPreferences.getAppLauncherDrawerGridRowsHorizontal());
-            case "app_launcher_drawer_grid_columns_categories":
-                return Integer.toString(mPreferences.getAppLauncherDrawerGridColumnsCategories());
             case "app_launcher_default_buttons":
                 return mPreferences.getAppLauncherDefaultButtons();
             case "app_launcher_icon_pack_package":
                 return mPreferences.getAppLauncherIconPackPackage();
             case "app_launcher_pinned_icon_pack_package":
                 return mPreferences.getAppLauncherPinnedIconPackPackage();
-            case "app_launcher_bar_height":
-                return Float.toString(mPreferences.getAppLauncherBarHeightScale());
             default:
                 return defValue;
         }

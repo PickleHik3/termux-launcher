@@ -52,8 +52,11 @@ public class AppDrawerControllerCategoriesTest {
 
     @Test public void prepareUsesFullWidthRadiusSharedBudgetAndNoGridPreferences() {
         preferences.setAppLauncherDrawerViewType("categories");
-        preferences.setAppLauncherDrawerGridColumnsVertical(6);
-        preferences.setAppLauncherDrawerGridColumnsHorizontal(6);
+        // Written raw: the grid keys have no setters any more; stale values must stay ignored.
+        activity.getSharedPreferences("b4-categories", Context.MODE_PRIVATE).edit()
+            .putInt("app_launcher_drawer_grid_columns_vertical", 6)
+            .putInt("app_launcher_drawer_grid_columns_horizontal", 6)
+            .commit();
         ReflectionHelpers.setField(controller, "mLayoutConfig",
             AppDrawerLayoutConfig.from(preferences));
         invokePrepare();

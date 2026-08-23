@@ -999,8 +999,6 @@
             <string name="termux_fullscreen_summary">Hide system bars while using the launcher</string>
                 
             <!-- Extra Keys Category -->
-                <string name="termux_extrakeys_blur_live_wallpaper_note">Controls background blur in dp. Set to 0 for clear glass.</string>
-                <string name="termux_extrakeys_blur_live_wallpaper_active_note">Temporarily unavailable with a live wallpaper. Your value is preserved.</string>
                 <string name="termux_dock_tune_live_title">Surface editor</string>
                 <string name="termux_dock_tune_live_summary">Customize dock, keyboard, status panel, terminal, and sessions live on the home screen.</string>
                 <string name="termux_dock_tuning_title">Surface editor</string>
@@ -1044,7 +1042,6 @@
                 <string name="termux_dock_tuning_terminal_contrast_harder">Harder</string>
                 <string name="termux_dock_tuning_terminal_border">Border</string>
                 <string name="termux_dock_tuning_sessions">Opacity</string>
-                <string name="termux_surface_tuning_normalize">Match all surfaces</string>
                 <string name="termux_surface_tuning_clock">Clock</string>
                 <string name="termux_dock_tuning_section_dock">Dock</string>
                 <string name="termux_dock_tuning_section_terminal">Terminal</string>

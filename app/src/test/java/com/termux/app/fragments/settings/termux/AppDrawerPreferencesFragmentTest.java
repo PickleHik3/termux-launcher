@@ -28,11 +28,11 @@ public class AppDrawerPreferencesFragmentTest {
         // geometry from the plane's width, and the category cards size their previews to fill, so a
         // pinned size could only put the dead space back.
         for (String removed : new String[] {
-            TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ICON_SIZE_DP,
-            TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_VERTICAL,
-            TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_HORIZONTAL,
-            TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL,
-            TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_CATEGORIES}) {
+            "app_launcher_drawer_icon_size_dp",
+            "app_launcher_drawer_grid_columns_vertical",
+            "app_launcher_drawer_grid_columns_horizontal",
+            "app_launcher_drawer_grid_rows_horizontal",
+            "app_launcher_drawer_grid_columns_categories"}) {
             assertNull(removed, fragment.findPreference(removed));
         }
         assertSame(activity, fragment.getActivity());

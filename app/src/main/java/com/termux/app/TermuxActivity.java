@@ -3105,9 +3105,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private boolean shouldShowDecorNavBarSurface(@NonNull ChromeSpec state) {
         // Floating capsules leave the gesture-pill inset showing wallpaper; edge-to-edge surfaces
-        // (dock glass, or the embedded keyboard's own background) continue under the pill. The
-        // keyboard's shape is decoupled from the dock style via the dock-match mode, so it owns
-        // its own capsule decision.
+        // (dock glass, or the embedded keyboard's own background) continue under the pill.
         return shouldShowDecorNavBarSurface(state.toolbarShown, state.keyboardShown,
             mNavBarHeight, mKeyboardGeometry.lastImeVisible() || isImeVisible(), isRoundedDockStyle(),
             isInAppKeyboardCapsule());
@@ -3471,14 +3469,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return contentHeight / (float) (contentHeight + navHeight);
     }
 
-    /** Keyboard shape always follows the single global surface shape. */
-    private boolean isInAppKeyboardShapeMatch() {
-        return true;
-    }
-
     /** True when the keyboard renders as the floating Rounded surface. */
     private boolean isInAppKeyboardCapsule() {
-        return isRoundedDockStyle() && isInAppKeyboardShapeMatch();
+        // The keyboard's shape always follows the single global surface shape; the old dock-match
+        // mode that let it differ is gone.
+        return isRoundedDockStyle();
     }
 
     /**
