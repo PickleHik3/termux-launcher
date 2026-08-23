@@ -82,17 +82,40 @@ public final class ChromePolicy {
                                                      boolean enabled) {
         if (enabled) {
             preferences.setUseSystemWallpaperEnabled(true);
-            preferences.setTerminalBackgroundOpacity(preferences.getWallpaperEnabledTerminalBackgroundOpacity());
-            preferences.setAppBarOpacity(preferences.getWallpaperEnabledAppBarOpacity());
-            preferences.setExtraKeysBlurRadius(preferences.getWallpaperEnabledExtraKeysBlurRadius());
+            int terminal = preferences.getWallpaperEnabledTerminalBackgroundOpacity();
+            int appBar = preferences.getWallpaperEnabledAppBarOpacity();
+            int blur = preferences.getWallpaperEnabledExtraKeysBlurRadius();
+            // Restore the shared layer first, so every surface that was following it comes back
+            // with it, then place the surfaces that remembered something different. Writing these
+            // through the plain setters would have made each one overwrite the last, because while
+            // they are linked they all name the same Base value.
+            preferences.setSurfaceBaseValue(
+                TermuxAppSharedPreferences.SurfaceProperty.OPACITY, appBar);
+            preferences.setSurfaceBaseValue(
+                TermuxAppSharedPreferences.SurfaceProperty.BLUR, blur);
+            preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
+                TermuxAppSharedPreferences.SurfaceProperty.OPACITY, appBar);
+            preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.CANVAS,
+                TermuxAppSharedPreferences.SurfaceProperty.OPACITY, terminal);
+            preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
+                TermuxAppSharedPreferences.SurfaceProperty.BLUR, blur);
         } else {
             preferences.setWallpaperEnabledTerminalBackgroundOpacity(preferences.getTerminalBackgroundOpacity());
             preferences.setWallpaperEnabledAppBarOpacity(preferences.getAppBarOpacity());
             preferences.setWallpaperEnabledExtraKeysBlurRadius(preferences.getExtraKeysBlurRadius());
             preferences.setUseSystemWallpaperEnabled(false);
-            preferences.setTerminalBackgroundOpacity(100);
-            preferences.setAppBarOpacity(100);
-            preferences.setExtraKeysBlurRadius(0);
+            // Opaque and unblurred is a uniform state, so it belongs on the shared layer: every
+            // surface goes opaque, including the ones this policy never named individually.
+            preferences.setSurfaceBaseValue(
+                TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 100);
+            preferences.setSurfaceBaseValue(
+                TermuxAppSharedPreferences.SurfaceProperty.BLUR, 0);
+            preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
+                TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 100);
+            preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.CANVAS,
+                TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 100);
+            preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
+                TermuxAppSharedPreferences.SurfaceProperty.BLUR, 0);
         }
     }
 }

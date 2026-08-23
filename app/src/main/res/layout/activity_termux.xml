@@ -836,6 +836,25 @@
                         android:background="@drawable/surface_tuning_gesture_pill" />
                 </FrameLayout>
             </FrameLayout>
+
+            <!-- Value echo for peeking controls. The card fades while a control whose surface sits
+                 under it is dragged, so the number it is changing has to appear somewhere the user
+                 is already looking. Not clickable: it is a read-out over the live surface. -->
+            <TextView
+                android:id="@+id/surface_tuning_peek_readout"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:background="@drawable/dock_tuning_done_pill"
+                android:clickable="false"
+                android:focusable="false"
+                android:importantForAccessibility="no"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="7dp"
+                android:textColor="?attr/termuxColorOnAccentContainer"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
         </FrameLayout>
 
         <!-- Scrollback find strip: one text line above the dock, so the transcript it searches
@@ -916,6 +935,23 @@
                             android:textSize="14sp"
                             android:textStyle="bold" />
 
+                        <!-- The editor writes through to preferences so the preview is live, so
+                             "unsaved" is tracked against the snapshot taken on entry rather than a
+                             draft buffer. This is the standing signal that leaving now would need a
+                             decision; the ✕ and the back press ask for it. -->
+                        <TextView
+                            android:id="@+id/surface_tuning_dirty_badge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="4dp"
+                            android:paddingHorizontal="7dp"
+                            android:paddingVertical="2dp"
+                            android:text="@string/termux_surface_tuning_unsaved_badge"
+                            android:textColor="?attr/termuxColorPrimary"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:visibility="gone" />
+
                         <TextView
                             android:id="@+id/dock_tuning_dismiss"
                             android:layout_width="36dp"
@@ -944,6 +980,20 @@
                             app:singleSelection="true">
 
                             <com.google.android.material.button.MaterialButton
+                                android:id="@+id/surface_tuning_section_base"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:insetTop="0dp"
+                                android:insetBottom="0dp"
+                                android:minWidth="0dp"
+                                android:minHeight="34dp"
+                                android:paddingHorizontal="2dp"
+                                android:text="@string/termux_surface_tuning_base"
+                                android:textSize="10sp" />
+
+                            <com.google.android.material.button.MaterialButton
                                 android:id="@+id/surface_tuning_section_dock"
                                 style="?attr/materialButtonOutlinedStyle"
                                 android:layout_width="0dp"
@@ -952,9 +1002,9 @@
                                 android:insetTop="0dp"
                                 android:insetBottom="0dp"
                                 android:minHeight="34dp"
-                                android:paddingHorizontal="4dp"
+                                android:paddingHorizontal="2dp"
                                 android:text="@string/termux_surface_tuning_dock"
-                                android:textSize="10.5sp" />
+                                android:textSize="10sp" />
 
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/surface_tuning_section_keyboard"
@@ -965,9 +1015,9 @@
                                 android:insetTop="0dp"
                                 android:insetBottom="0dp"
                                 android:minHeight="34dp"
-                                android:paddingHorizontal="4dp"
+                                android:paddingHorizontal="2dp"
                                 android:text="@string/termux_surface_tuning_keyboard"
-                                android:textSize="10.5sp" />
+                                android:textSize="10sp" />
 
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/surface_tuning_section_status"
@@ -978,9 +1028,9 @@
                                 android:insetTop="0dp"
                                 android:insetBottom="0dp"
                                 android:minHeight="34dp"
-                                android:paddingHorizontal="4dp"
+                                android:paddingHorizontal="2dp"
                                 android:text="@string/termux_surface_tuning_status"
-                                android:textSize="10.5sp" />
+                                android:textSize="10sp" />
 
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/surface_tuning_section_other"
@@ -991,9 +1041,9 @@
                                 android:insetTop="0dp"
                                 android:insetBottom="0dp"
                                 android:minHeight="34dp"
-                                android:paddingHorizontal="4dp"
+                                android:paddingHorizontal="2dp"
                                 android:text="@string/termux_surface_tuning_other"
-                                android:textSize="10.5sp" />
+                                android:textSize="10sp" />
                         </com.google.android.material.button.MaterialButtonToggleGroup>
                     </LinearLayout>
 
@@ -1008,6 +1058,71 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:orientation="vertical">
+
+                    <!-- The shared layer. These five move every surface that still follows them;
+                         a surface stops following the moment its own control is touched, and only
+                         for that one property. -->
+                    <LinearLayout
+                        android:id="@+id/surface_tuning_base_panel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:letterSpacing="0.12"
+                            android:text="@string/termux_surface_tuning_base_section"
+                            android:textAllCaps="true"
+                            android:textColor="?attr/termuxColorPrimary"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginTop="3dp"
+                            android:layout_marginBottom="4dp"
+                            android:alpha="0.35"
+                            android:background="?attr/termuxColorPrimary" />
+
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
+                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:labelFor="@id/surface_tuning_base_blur_slider" android:text="@string/termux_dock_tuning_blur" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <SeekBar android:id="@+id/surface_tuning_base_blur_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="30" android:splitTrack="false" />
+                            <TextView android:id="@+id/surface_tuning_base_blur_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                        </LinearLayout>
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
+                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:labelFor="@id/surface_tuning_base_opacity_slider" android:text="@string/termux_dock_tuning_opacity" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <SeekBar android:id="@+id/surface_tuning_base_opacity_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="100" android:splitTrack="false" />
+                            <TextView android:id="@+id/surface_tuning_base_opacity_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                        </LinearLayout>
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
+                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:labelFor="@id/surface_tuning_base_grain_slider" android:text="@string/termux_dock_tuning_grain" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <SeekBar android:id="@+id/surface_tuning_base_grain_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="100" android:splitTrack="false" />
+                            <TextView android:id="@+id/surface_tuning_base_grain_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                        </LinearLayout>
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
+                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:labelFor="@id/surface_tuning_base_radius_slider" android:text="@string/termux_dock_tuning_radius" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <SeekBar android:id="@+id/surface_tuning_base_radius_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="40" android:splitTrack="false" />
+                            <TextView android:id="@+id/surface_tuning_base_radius_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                        </LinearLayout>
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
+                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:labelFor="@id/surface_tuning_base_gap_slider" android:text="@string/termux_surface_tuning_edges" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <SeekBar android:id="@+id/surface_tuning_base_gap_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="48" android:splitTrack="false" />
+                            <TextView android:id="@+id/surface_tuning_base_gap_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/surface_tuning_base_followers"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:alpha="0.75"
+                            android:textColor="?attr/termuxColorOnSurfaceVariant"
+                            android:textSize="11sp" />
+                    </LinearLayout>
 
                     <LinearLayout
                         android:id="@+id/surface_tuning_dock_panel"
@@ -1098,7 +1213,8 @@
                             android:layout_height="wrap_content"
                             android:text="@string/termux_dock_tuning_size"
                             android:textColor="?attr/termuxColorOnSurface"
-                            android:textSize="12sp" />
+                            android:textSize="12sp"
+                            android:labelFor="@id/dock_tuning_size_slider" />
 
                         <SeekBar
                             android:id="@+id/dock_tuning_size_slider"
@@ -1128,7 +1244,8 @@
                             android:layout_height="wrap_content"
                             android:text="@string/termux_dock_tuning_radius"
                             android:textColor="?attr/termuxColorOnSurface"
-                            android:textSize="12sp" />
+                            android:textSize="12sp"
+                            android:labelFor="@id/dock_tuning_radius_slider" />
 
                         <SeekBar
                             android:id="@+id/dock_tuning_radius_slider"
@@ -1145,12 +1262,15 @@
                             android:gravity="center"
                             android:textColor="?attr/termuxColorOnSurfaceVariant"
                             android:textSize="11sp" />
+                            <TextView android:id="@+id/surface_link_dock_radius" android:layout_width="wrap_content" android:layout_height="28dp" android:minWidth="30dp" android:background="?attr/selectableItemBackgroundBorderless" android:gravity="center" android:textSize="11sp" />
                     </LinearLayout>
 
                     <LinearLayout android:layout_width="match_parent" android:layout_height="36dp" android:gravity="center_vertical" android:orientation="horizontal">
-                        <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_edges" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                        <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_edges" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp"
+                            android:labelFor="@id/surface_tuning_dock_inset_slider" />
                         <SeekBar android:id="@+id/surface_tuning_dock_inset_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="48" android:splitTrack="false" />
                         <TextView android:id="@+id/surface_tuning_dock_inset_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                        <TextView android:id="@+id/surface_link_dock_gap" android:layout_width="wrap_content" android:layout_height="28dp" android:minWidth="30dp" android:background="?attr/selectableItemBackgroundBorderless" android:gravity="center" android:textSize="11sp" />
                     </LinearLayout>
 
                     </LinearLayout>
@@ -1176,39 +1296,47 @@
                             android:textSize="11sp" />
 
                         <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
-                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_keyboard_height" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_keyboard_height" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp"
+                            android:labelFor="@id/surface_tuning_keyboard_height_slider" />
                             <SeekBar android:id="@+id/surface_tuning_keyboard_height_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="100" android:splitTrack="false" />
                             <TextView android:id="@+id/surface_tuning_keyboard_height_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
                         </LinearLayout>
 
                         <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
-                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_keyboard_spacing" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_keyboard_spacing" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp"
+                            android:labelFor="@id/surface_tuning_keyboard_spacing_slider" />
                             <SeekBar android:id="@+id/surface_tuning_keyboard_spacing_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="100" android:splitTrack="false" />
                             <TextView android:id="@+id/surface_tuning_keyboard_spacing_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
                         </LinearLayout>
 
                         <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
-                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_dock_tuning_radius" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_dock_tuning_radius" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp"
+                            android:labelFor="@id/surface_tuning_keyboard_radius_slider" />
                             <SeekBar android:id="@+id/surface_tuning_keyboard_radius_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="240" android:splitTrack="false" />
                             <TextView android:id="@+id/surface_tuning_keyboard_radius_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
                         </LinearLayout>
 
                         <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
-                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_keyboard_key_opacity" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_keyboard_key_opacity" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp"
+                            android:labelFor="@id/surface_tuning_keyboard_key_opacity_slider" />
                             <SeekBar android:id="@+id/surface_tuning_keyboard_key_opacity_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="100" android:splitTrack="false" />
                             <TextView android:id="@+id/surface_tuning_keyboard_key_opacity_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
                         </LinearLayout>
 
                         <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
-                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_keyboard_bg_opacity" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_keyboard_bg_opacity" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp"
+                            android:labelFor="@id/surface_tuning_keyboard_bg_opacity_slider" />
                             <SeekBar android:id="@+id/surface_tuning_keyboard_bg_opacity_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="100" android:splitTrack="false" />
                             <TextView android:id="@+id/surface_tuning_keyboard_bg_opacity_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                            <TextView android:id="@+id/surface_link_keyboard_opacity" android:layout_width="wrap_content" android:layout_height="28dp" android:minWidth="30dp" android:background="?attr/selectableItemBackgroundBorderless" android:gravity="center" android:textSize="11sp" />
                         </LinearLayout>
 
                         <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
-                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_edges" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_edges" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp"
+                            android:labelFor="@id/surface_tuning_keyboard_inset_slider" />
                             <SeekBar android:id="@+id/surface_tuning_keyboard_inset_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="48" android:splitTrack="false" />
                             <TextView android:id="@+id/surface_tuning_keyboard_inset_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                            <TextView android:id="@+id/surface_link_keyboard_gap" android:layout_width="wrap_content" android:layout_height="28dp" android:minWidth="30dp" android:background="?attr/selectableItemBackgroundBorderless" android:gravity="center" android:textSize="11sp" />
                         </LinearLayout>
                     </LinearLayout>
 
@@ -1219,48 +1347,142 @@
                         android:orientation="vertical"
                         android:visibility="gone">
 
-                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:paddingTop="2dp" android:paddingBottom="2dp">
-                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_clock" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                        <!-- Six clock faces do not fit across a ~300dp card at a legible size: as
+                             equal-weight cells they were 34dp tall with 8sp text, roughly half the
+                             minimum touch target and unreadable. They scroll horizontally instead,
+                             at a real size, with the label promoted to its own line. -->
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:labelFor="@id/surface_tuning_status_clock_group"
+                            android:paddingTop="4dp"
+                            android:paddingBottom="2dp"
+                            android:text="@string/termux_surface_tuning_clock"
+                            android:textColor="?attr/termuxColorOnSurface"
+                            android:textSize="12sp" />
+
+                        <HorizontalScrollView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:paddingBottom="4dp"
+                            android:scrollbars="none"
+                            android:overScrollMode="ifContentScrolls">
+
                             <com.google.android.material.button.MaterialButtonToggleGroup
                                 android:id="@+id/surface_tuning_status_clock_group"
-                                android:layout_width="0dp"
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_weight="1"
                                 app:singleSelection="true"
                                 app:selectionRequired="true">
-                                <com.google.android.material.button.MaterialButton android:id="@+id/surface_tuning_status_clock_flip" style="?attr/materialButtonOutlinedStyle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="34dp" android:insetTop="0dp" android:insetBottom="0dp" android:minWidth="0dp" android:minHeight="34dp" android:paddingLeft="1dp" android:paddingRight="1dp" android:text="@string/termux_top_pane_clock_style_flip" android:textSize="8sp" />
-                                <com.google.android.material.button.MaterialButton android:id="@+id/surface_tuning_status_clock_lcd" style="?attr/materialButtonOutlinedStyle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="34dp" android:insetTop="0dp" android:insetBottom="0dp" android:minWidth="0dp" android:minHeight="34dp" android:paddingLeft="1dp" android:paddingRight="1dp" android:text="@string/termux_top_pane_clock_style_lcd" android:textSize="8sp" />
-                                <com.google.android.material.button.MaterialButton android:id="@+id/surface_tuning_status_clock_minimal" style="?attr/materialButtonOutlinedStyle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="34dp" android:insetTop="0dp" android:insetBottom="0dp" android:minWidth="0dp" android:minHeight="34dp" android:paddingLeft="1dp" android:paddingRight="1dp" android:text="@string/termux_top_pane_clock_style_minimal_short" android:textSize="8sp" />
-                                <com.google.android.material.button.MaterialButton android:id="@+id/surface_tuning_status_clock_led" style="?attr/materialButtonOutlinedStyle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="34dp" android:insetTop="0dp" android:insetBottom="0dp" android:minWidth="0dp" android:minHeight="34dp" android:paddingLeft="1dp" android:paddingRight="1dp" android:text="@string/termux_top_pane_clock_style_led_short" android:textSize="8sp" />
-                                <com.google.android.material.button.MaterialButton android:id="@+id/surface_tuning_status_clock_tape" style="?attr/materialButtonOutlinedStyle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="34dp" android:insetTop="0dp" android:insetBottom="0dp" android:minWidth="0dp" android:minHeight="34dp" android:paddingLeft="1dp" android:paddingRight="1dp" android:text="@string/termux_top_pane_clock_style_tape" android:textSize="8sp" />
-                                <com.google.android.material.button.MaterialButton android:id="@+id/surface_tuning_status_clock_slab" style="?attr/materialButtonOutlinedStyle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="34dp" android:insetTop="0dp" android:insetBottom="0dp" android:minWidth="0dp" android:minHeight="34dp" android:paddingLeft="1dp" android:paddingRight="1dp" android:text="@string/termux_top_pane_clock_style_slab" android:textSize="8sp" />
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/surface_tuning_status_clock_flip"
+                                    style="?attr/materialButtonOutlinedStyle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:insetTop="0dp"
+                                    android:insetBottom="0dp"
+                                    android:minWidth="56dp"
+                                    android:minHeight="40dp"
+                                    android:paddingHorizontal="12dp"
+                                    android:text="@string/termux_top_pane_clock_style_flip"
+                                    android:textSize="11sp" />
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/surface_tuning_status_clock_lcd"
+                                    style="?attr/materialButtonOutlinedStyle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:insetTop="0dp"
+                                    android:insetBottom="0dp"
+                                    android:minWidth="56dp"
+                                    android:minHeight="40dp"
+                                    android:paddingHorizontal="12dp"
+                                    android:text="@string/termux_top_pane_clock_style_lcd"
+                                    android:textSize="11sp" />
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/surface_tuning_status_clock_minimal"
+                                    style="?attr/materialButtonOutlinedStyle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:insetTop="0dp"
+                                    android:insetBottom="0dp"
+                                    android:minWidth="56dp"
+                                    android:minHeight="40dp"
+                                    android:paddingHorizontal="12dp"
+                                    android:text="@string/termux_top_pane_clock_style_minimal_short"
+                                    android:textSize="11sp" />
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/surface_tuning_status_clock_led"
+                                    style="?attr/materialButtonOutlinedStyle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:insetTop="0dp"
+                                    android:insetBottom="0dp"
+                                    android:minWidth="56dp"
+                                    android:minHeight="40dp"
+                                    android:paddingHorizontal="12dp"
+                                    android:text="@string/termux_top_pane_clock_style_led_short"
+                                    android:textSize="11sp" />
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/surface_tuning_status_clock_tape"
+                                    style="?attr/materialButtonOutlinedStyle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:insetTop="0dp"
+                                    android:insetBottom="0dp"
+                                    android:minWidth="56dp"
+                                    android:minHeight="40dp"
+                                    android:paddingHorizontal="12dp"
+                                    android:text="@string/termux_top_pane_clock_style_tape"
+                                    android:textSize="11sp" />
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/surface_tuning_status_clock_slab"
+                                    style="?attr/materialButtonOutlinedStyle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:insetTop="0dp"
+                                    android:insetBottom="0dp"
+                                    android:minWidth="56dp"
+                                    android:minHeight="40dp"
+                                    android:paddingHorizontal="12dp"
+                                    android:text="@string/termux_top_pane_clock_style_slab"
+                                    android:textSize="11sp" />
                             </com.google.android.material.button.MaterialButtonToggleGroup>
-                        </LinearLayout>
+                        </HorizontalScrollView>
 
                         <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
-                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_dock_tuning_blur" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_dock_tuning_blur" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp"
+                            android:labelFor="@id/surface_tuning_status_blur_slider" />
                             <SeekBar android:id="@+id/surface_tuning_status_blur_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="30" android:splitTrack="false" />
                             <TextView android:id="@+id/surface_tuning_status_blur_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                            <TextView android:id="@+id/surface_link_status_blur" android:layout_width="wrap_content" android:layout_height="28dp" android:minWidth="30dp" android:background="?attr/selectableItemBackgroundBorderless" android:gravity="center" android:textSize="11sp" />
                         </LinearLayout>
                         <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
-                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_dock_tuning_opacity" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_dock_tuning_opacity" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp"
+                            android:labelFor="@id/surface_tuning_status_opacity_slider" />
                             <SeekBar android:id="@+id/surface_tuning_status_opacity_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="100" android:splitTrack="false" />
                             <TextView android:id="@+id/surface_tuning_status_opacity_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                            <TextView android:id="@+id/surface_link_status_opacity" android:layout_width="wrap_content" android:layout_height="28dp" android:minWidth="30dp" android:background="?attr/selectableItemBackgroundBorderless" android:gravity="center" android:textSize="11sp" />
                         </LinearLayout>
                         <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
-                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_dock_tuning_grain" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_dock_tuning_grain" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp"
+                            android:labelFor="@id/surface_tuning_status_grain_slider" />
                             <SeekBar android:id="@+id/surface_tuning_status_grain_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="100" android:splitTrack="false" />
                             <TextView android:id="@+id/surface_tuning_status_grain_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                            <TextView android:id="@+id/surface_link_status_grain" android:layout_width="wrap_content" android:layout_height="28dp" android:minWidth="30dp" android:background="?attr/selectableItemBackgroundBorderless" android:gravity="center" android:textSize="11sp" />
                         </LinearLayout>
                         <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
-                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_dock_tuning_radius" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_dock_tuning_radius" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp"
+                            android:labelFor="@id/surface_tuning_status_radius_slider" />
                             <SeekBar android:id="@+id/surface_tuning_status_radius_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="40" android:splitTrack="false" />
                             <TextView android:id="@+id/surface_tuning_status_radius_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                            <TextView android:id="@+id/surface_link_status_radius" android:layout_width="wrap_content" android:layout_height="28dp" android:minWidth="30dp" android:background="?attr/selectableItemBackgroundBorderless" android:gravity="center" android:textSize="11sp" />
                         </LinearLayout>
                         <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal">
-                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_edges" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp" />
+                            <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="@string/termux_surface_tuning_edges" android:textColor="?attr/termuxColorOnSurface" android:textSize="12sp"
+                            android:labelFor="@id/surface_tuning_status_inset_slider" />
                             <SeekBar android:id="@+id/surface_tuning_status_inset_slider" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1" android:max="48" android:splitTrack="false" />
                             <TextView android:id="@+id/surface_tuning_status_inset_value" android:layout_width="48dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="?attr/termuxColorOnSurfaceVariant" android:textSize="11sp" />
+                            <TextView android:id="@+id/surface_link_status_gap" android:layout_width="wrap_content" android:layout_height="28dp" android:minWidth="30dp" android:background="?attr/selectableItemBackgroundBorderless" android:gravity="center" android:textSize="11sp" />
                         </LinearLayout>
                     </LinearLayout>
 
@@ -1282,7 +1504,8 @@
                             android:layout_height="wrap_content"
                             android:text="@string/termux_dock_tuning_icons"
                             android:textColor="?attr/termuxColorOnSurface"
-                            android:textSize="12sp" />
+                            android:textSize="12sp"
+                            android:labelFor="@id/dock_tuning_icons_slider" />
 
                         <SeekBar
                             android:id="@+id/dock_tuning_icons_slider"
@@ -1312,7 +1535,8 @@
                             android:layout_height="wrap_content"
                             android:text="@string/termux_dock_tuning_blur"
                             android:textColor="?attr/termuxColorOnSurface"
-                            android:textSize="12sp" />
+                            android:textSize="12sp"
+                            android:labelFor="@id/dock_tuning_blur_slider" />
 
                         <SeekBar
                             android:id="@+id/dock_tuning_blur_slider"
@@ -1329,6 +1553,7 @@
                             android:gravity="center"
                             android:textColor="?attr/termuxColorOnSurfaceVariant"
                             android:textSize="11sp" />
+                            <TextView android:id="@+id/surface_link_dock_blur" android:layout_width="wrap_content" android:layout_height="28dp" android:minWidth="30dp" android:background="?attr/selectableItemBackgroundBorderless" android:gravity="center" android:textSize="11sp" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -1342,7 +1567,8 @@
                             android:layout_height="wrap_content"
                             android:text="@string/termux_dock_tuning_opacity"
                             android:textColor="?attr/termuxColorOnSurface"
-                            android:textSize="12sp" />
+                            android:textSize="12sp"
+                            android:labelFor="@id/dock_tuning_opacity_slider" />
 
                         <SeekBar
                             android:id="@+id/dock_tuning_opacity_slider"
@@ -1359,6 +1585,7 @@
                             android:gravity="center"
                             android:textColor="?attr/termuxColorOnSurfaceVariant"
                             android:textSize="11sp" />
+                            <TextView android:id="@+id/surface_link_dock_opacity" android:layout_width="wrap_content" android:layout_height="28dp" android:minWidth="30dp" android:background="?attr/selectableItemBackgroundBorderless" android:gravity="center" android:textSize="11sp" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -1372,7 +1599,8 @@
                             android:layout_height="wrap_content"
                             android:text="@string/termux_dock_tuning_grain"
                             android:textColor="?attr/termuxColorOnSurface"
-                            android:textSize="12sp" />
+                            android:textSize="12sp"
+                            android:labelFor="@id/dock_tuning_grain_slider" />
 
                         <SeekBar
                             android:id="@+id/dock_tuning_grain_slider"
@@ -1389,8 +1617,79 @@
                             android:gravity="center"
                             android:textColor="?attr/termuxColorOnSurfaceVariant"
                             android:textSize="11sp" />
+                            <TextView android:id="@+id/surface_link_dock_grain" android:layout_width="wrap_content" android:layout_height="28dp" android:minWidth="30dp" android:background="?attr/selectableItemBackgroundBorderless" android:gravity="center" android:textSize="11sp" />
                     </LinearLayout>
 
+                    </LinearLayout>
+
+                    <!-- Compatibility mode only. With split panes on there is no legacy sessions
+                         drawer to tune - the status bar owns that job - so this panel takes the
+                         Status tab's slot rather than adding a fifth one. It used to sit in the
+                         Canvas tab, which is the one place its surface is never visible. -->
+                    <LinearLayout
+                        android:id="@+id/surface_tuning_sessions_panel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:letterSpacing="0.12"
+                            android:text="@string/termux_dock_tuning_section_sessions"
+                            android:textAllCaps="true"
+                            android:textColor="?attr/termuxColorPrimary"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginTop="3dp"
+                            android:layout_marginBottom="4dp"
+                            android:alpha="0.35"
+                            android:background="?attr/termuxColorPrimary" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="36dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="64dp"
+                            android:layout_height="wrap_content"
+                            android:text="@string/termux_dock_tuning_sessions"
+                            android:textColor="?attr/termuxColorOnSurface"
+                            android:textSize="12sp"
+                            android:labelFor="@id/dock_tuning_sessions_slider" />
+
+                        <SeekBar
+                            android:id="@+id/dock_tuning_sessions_slider"
+                            android:layout_width="0dp"
+                            android:layout_height="36dp"
+                            android:layout_weight="1"
+                            android:max="100"
+                            android:splitTrack="false" />
+
+                        <TextView
+                            android:id="@+id/dock_tuning_sessions_value"
+                            android:layout_width="60dp"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:textColor="?attr/termuxColorOnSurfaceVariant"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:alpha="0.7"
+                            android:text="@string/termux_surface_tuning_sessions_hint"
+                            android:textColor="?attr/termuxColorOnSurfaceVariant"
+                            android:textSize="11sp" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -1430,7 +1729,8 @@
                             android:layout_height="wrap_content"
                             android:text="@string/termux_dock_tuning_terminal"
                             android:textColor="?attr/termuxColorOnSurface"
-                            android:textSize="12sp" />
+                            android:textSize="12sp"
+                            android:labelFor="@id/dock_tuning_terminal_slider" />
 
                         <SeekBar
                             android:id="@+id/dock_tuning_terminal_slider"
@@ -1447,6 +1747,7 @@
                             android:gravity="center"
                             android:textColor="?attr/termuxColorOnSurfaceVariant"
                             android:textSize="11sp" />
+                            <TextView android:id="@+id/surface_link_canvas_opacity" android:layout_width="wrap_content" android:layout_height="28dp" android:minWidth="30dp" android:background="?attr/selectableItemBackgroundBorderless" android:gravity="center" android:textSize="11sp" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -1566,7 +1867,8 @@
                                 android:layout_height="wrap_content"
                                 android:text="@string/termux_dock_tuning_blur"
                                 android:textColor="?attr/termuxColorOnSurface"
-                                android:textSize="12sp" />
+                                android:textSize="12sp"
+                            android:labelFor="@id/dock_tuning_terminal_blur_slider" />
 
                             <SeekBar
                                 android:id="@+id/dock_tuning_terminal_blur_slider"
@@ -1583,6 +1885,7 @@
                                 android:gravity="center"
                                 android:textColor="?attr/termuxColorOnSurfaceVariant"
                                 android:textSize="11sp" />
+                                <TextView android:id="@+id/surface_link_canvas_blur" android:layout_width="wrap_content" android:layout_height="28dp" android:minWidth="30dp" android:background="?attr/selectableItemBackgroundBorderless" android:gravity="center" android:textSize="11sp" />
                         </LinearLayout>
 
                         <LinearLayout
@@ -1596,7 +1899,8 @@
                                 android:layout_height="wrap_content"
                                 android:text="@string/termux_dock_tuning_grain"
                                 android:textColor="?attr/termuxColorOnSurface"
-                                android:textSize="12sp" />
+                                android:textSize="12sp"
+                            android:labelFor="@id/dock_tuning_terminal_grain_slider" />
 
                             <SeekBar
                                 android:id="@+id/dock_tuning_terminal_grain_slider"
@@ -1613,6 +1917,7 @@
                                 android:gravity="center"
                                 android:textColor="?attr/termuxColorOnSurfaceVariant"
                                 android:textSize="11sp" />
+                                <TextView android:id="@+id/surface_link_canvas_grain" android:layout_width="wrap_content" android:layout_height="28dp" android:minWidth="30dp" android:background="?attr/selectableItemBackgroundBorderless" android:gravity="center" android:textSize="11sp" />
                         </LinearLayout>
                     </LinearLayout>
 
@@ -1627,7 +1932,8 @@
                             android:layout_height="wrap_content"
                             android:text="@string/termux_dock_tuning_terminal_inner_padding"
                             android:textColor="?attr/termuxColorOnSurface"
-                            android:textSize="12sp" />
+                            android:textSize="12sp"
+                            android:labelFor="@id/dock_tuning_terminal_gap_slider" />
 
                         <SeekBar
                             android:id="@+id/dock_tuning_terminal_gap_slider"
@@ -1676,7 +1982,8 @@
                             android:layout_height="wrap_content"
                             android:text="@string/termux_dock_tuning_opacity"
                             android:textColor="?attr/termuxColorOnSurface"
-                            android:textSize="12sp" />
+                            android:textSize="12sp"
+                            android:labelFor="@id/dock_tuning_wallpaper_opacity_slider" />
 
                         <SeekBar
                             android:id="@+id/dock_tuning_wallpaper_opacity_slider"
@@ -1695,53 +2002,6 @@
                             android:textSize="11sp" />
                     </LinearLayout>
 
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:letterSpacing="0.12"
-                        android:text="@string/termux_dock_tuning_section_sessions"
-                        android:textAllCaps="true"
-                        android:textColor="?attr/termuxColorPrimary"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:layout_marginTop="3dp"
-                        android:layout_marginBottom="4dp"
-                        android:alpha="0.35"
-                        android:background="?attr/termuxColorPrimary" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="36dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="64dp"
-                            android:layout_height="wrap_content"
-                            android:text="@string/termux_dock_tuning_sessions"
-                            android:textColor="?attr/termuxColorOnSurface"
-                            android:textSize="12sp" />
-
-                        <SeekBar
-                            android:id="@+id/dock_tuning_sessions_slider"
-                            android:layout_width="0dp"
-                            android:layout_height="36dp"
-                            android:layout_weight="1"
-                            android:max="100"
-                            android:splitTrack="false" />
-
-                        <TextView
-                            android:id="@+id/dock_tuning_sessions_value"
-                            android:layout_width="60dp"
-                            android:layout_height="wrap_content"
-                            android:gravity="center"
-                            android:textColor="?attr/termuxColorOnSurfaceVariant"
-                            android:textSize="11sp" />
                     </LinearLayout>
 
                     </LinearLayout>
@@ -1757,25 +2017,20 @@
                         android:gravity="center_vertical"
                         android:orientation="horizontal">
 
-                        <!-- Cross-section control, so it lives with the actions rather than in one
-                             section's scroll content. Label and switch sit together; the trailing
-                             spacer pushes Reset and Done right. The scale keeps the M3 switch in
-                             proportion with the popup's compact 12sp rows. -->
+                        <!-- Reattaching lives here rather than on a row: it is the whole-surface
+                             counterpart to a single row's ↺, and it is the only action that puts a
+                             tab's badge back to zero. -->
                         <TextView
-                            android:id="@+id/surface_tuning_status_normalize_label"
+                            android:id="@+id/surface_tuning_reattach_all"
                             android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/termux_surface_tuning_normalize"
-                            android:textColor="?attr/termuxColorOnSurface"
-                            android:textSize="12sp" />
-
-                        <com.google.android.material.materialswitch.MaterialSwitch
-                            android:id="@+id/surface_tuning_status_normalize_switch"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="2dp"
-                            android:scaleX="0.75"
-                            android:scaleY="0.75" />
+                            android:layout_height="36dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:gravity="center"
+                            android:paddingHorizontal="8dp"
+                            android:text="@string/termux_surface_tuning_reattach_all"
+                            android:textColor="?attr/termuxColorPrimary"
+                            android:textSize="12sp"
+                            android:visibility="gone" />
 
                         <Space
                             android:layout_width="0dp"

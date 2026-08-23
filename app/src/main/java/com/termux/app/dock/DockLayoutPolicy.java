@@ -272,10 +272,13 @@ public final class DockLayoutPolicy {
      * default first, so their shape stays flush until the user pushes past that baseline.
      */
     public static int surfaceHorizontalInsetPx(int configuredDp, boolean capsule, float density) {
-        int insetDp = TermuxAppSharedPreferences.clampSurfaceHorizontalInset(configuredDp);
+        // Docked surfaces are flush with the screen edges by definition - that is what separates
+        // them from Floating - so the side gap simply does not apply there. It used to spend the
+        // 10dp shipped default first and then start moving, which made a control that is supposed
+        // to be inert in this style quietly do something past a threshold.
         if (!capsule)
-            insetDp = Math.max(0, insetDp
-                - TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET);
+            return 0;
+        int insetDp = TermuxAppSharedPreferences.clampSurfaceHorizontalInset(configuredDp);
         return Math.round(Math.max(0f, density) * insetDp);
     }
 

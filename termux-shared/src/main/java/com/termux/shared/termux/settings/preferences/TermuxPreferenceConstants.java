@@ -808,6 +808,27 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_TERMINAL_BORDER_ENABLED = "terminal_border_enabled";
         /** Whether the surface editor writes its glass controls to every surface at once. */
+        /*
+         * Surface inheritance. Five properties are shared across the surfaces; each surface either
+         * follows the Base value or holds an override of its own. The per-surface value keys already
+         * exist above and keep their meaning - they are simply only consulted once a surface has
+         * detached. Replaces KEY_SURFACE_TUNING_NORMALIZED, which was all-or-nothing and could not
+         * express "the same everywhere except this one thing".
+         */
+        public static final String KEY_SURFACE_BASE_BLUR = "surface_base_blur";
+        public static final String KEY_SURFACE_BASE_OPACITY = "surface_base_opacity";
+        public static final String KEY_SURFACE_BASE_GRAIN = "surface_base_grain";
+        public static final String KEY_SURFACE_BASE_CORNER_RADIUS = "surface_base_corner_radius";
+        public static final String KEY_SURFACE_BASE_SIDE_GAP = "surface_base_side_gap";
+
+        /** Prefix for the per-(surface, property) detach flags: {@code surface_inherit_dock_blur}. */
+        public static final String KEY_SURFACE_INHERIT_PREFIX = "surface_inherit_";
+        /** A surface follows Base until the user moves that one control. */
+        public static final boolean DEFAULT_VALUE_SURFACE_INHERITS_BASE = true;
+
+        /** Set once the one-time inheritance migration has folded the old per-surface values in. */
+        public static final String KEY_SURFACE_INHERITANCE_MIGRATED = "surface_inheritance_migrated";
+
         public static final String KEY_SURFACE_TUNING_NORMALIZED = "surface_tuning_normalized";
 
         public static final boolean DEFAULT_VALUE_TERMINAL_BORDER_ENABLED = false;
