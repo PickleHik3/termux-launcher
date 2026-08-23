@@ -1879,7 +1879,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private int resolveAccessoryGlassBaseColor() {
-        if (isNightThemeActive()) {
+        // In dark wallpaper mode the glass base deliberately reads the framework's Material You
+        // neutral so the dock matches the system exactly; when the chrome belongs to the terminal
+        // scheme that bypass would keep every glass surface on the wallpaper palette.
+        if (isNightThemeActive() && !LauncherSchemeTheme.isSchemeChromeActive(this)) {
             return resolveMaterialDarkBackgroundColor();
         }
         return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh, R.color.termux_surface_panel_high);
@@ -2333,7 +2336,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return com.termux.app.terminal.MaterialTerminalColorScheme.backgroundColor(
                 this, mPreferences.getTerminalContrastLevel());
         }
-        if (isNightThemeActive()) {
+        if (isNightThemeActive() || LauncherSchemeTheme.isSchemeChromeActive(this)) {
             return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
         }
         return Color.parseColor("#1C1B1F");

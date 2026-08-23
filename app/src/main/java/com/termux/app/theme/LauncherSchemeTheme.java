@@ -2,6 +2,7 @@ package com.termux.app.theme;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Context;
 import android.content.res.Resources;
 import android.os.Build;
 
@@ -64,6 +65,7 @@ public final class LauncherSchemeTheme {
 
     private static LinkedHashMap<String, Integer> sCachedTokens;
     private static long sCachedFingerprint;
+    private static Boolean sCachedChromeActive;
 
     private LauncherSchemeTheme() {}
 
@@ -77,6 +79,25 @@ public final class LauncherSchemeTheme {
         return preferences != null
             && COLOR_SOURCE_SCHEME.equals(preferences.getUiColorSource())
             && TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE.isFile();
+    }
+
+    /**
+     * Whether the scheme palette is driving this context's chrome — supported, selected, and with
+     * a readable scheme behind it.
+     *
+     * <p>The launcher chrome has a handful of colours that deliberately bypass the theme in
+     * wallpaper mode (the glass base reads the framework's {@code system_neutral1_900} so the dock
+     * matches Material You exactly). Those sites must not bypass it when the chrome belongs to the
+     * scheme, and this is the predicate they gate on.
+     */
+    public static synchronized boolean isSchemeChromeActive(@NonNull Context context) {
+        if (!isSupported()) return false;
+        // Cached because glass colours are resolved on chrome-apply paths: every route that flips
+        // ui_color_source or rewrites the scheme calls invalidate(), which clears this too.
+        if (sCachedChromeActive != null) return sCachedChromeActive;
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context);
+        sCachedChromeActive = isEnabled(preferences) && tokens() != null;
+        return sCachedChromeActive;
     }
 
     /**
@@ -162,6 +183,7 @@ public final class LauncherSchemeTheme {
     public static synchronized void invalidate() {
         sCachedTokens = null;
         sCachedFingerprint = 0;
+        sCachedChromeActive = null;
     }
 
     /**
@@ -275,6 +297,15 @@ public final class LauncherSchemeTheme {
 
     private static long fileFingerprint(@NonNull File file) {
         if (!file.isFile()) return 0L;
-        return file.lastModified() * 31L + file.length();
+        long fingerprint = file.lastModified() * 31L + file.length();
+        // On the Nix edition the scheme is usually a home-manager symlink into /nix/store, where
+        // every file carries the same fixed epoch mtime — two generations of equal length would
+        // fingerprint identically and serve a stale palette. The store path changes per
+        // generation, so mix the resolved target in.
+        try {
+            fingerprint = fingerprint * 31L + file.getCanonicalPath().hashCode();
+        } catch (Exception ignored) {
+        }
+        return fingerprint;
     }
 }

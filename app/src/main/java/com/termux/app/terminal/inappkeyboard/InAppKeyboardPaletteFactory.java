@@ -165,7 +165,10 @@ public final class InAppKeyboardPaletteFactory {
      */
     @ColorInt
     public static int resolveDockGlassBaseColor(@NonNull Context context) {
-        if (isNightMode(context)) {
+        // Same scheme gate as TermuxActivity#resolveAccessoryGlassBaseColor(): the Material You
+        // neutral is only the right base while the chrome is on wallpaper colours.
+        if (isNightMode(context)
+                && !com.termux.app.theme.LauncherSchemeTheme.isSchemeChromeActive(context)) {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                 int colorResId = context.getResources()
                     .getIdentifier("system_neutral1_900", "color", "android");
