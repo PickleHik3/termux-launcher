@@ -1819,6 +1819,22 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return SharedPreferenceUtils.getInt(mSharedPreferences, overrideKey, overrideDefault);
     }
 
+    /**
+     * The dp a stored -1 corner radius ("follow the style") stands for. This is the ONE place the
+     * sentinel is resolved for display; the render paths keep their own px caps (half the surface
+     * height) on top of it. Docked resolves to a straight edge whatever the slot - Docked has
+     * always been square, and an upgrade must not quietly round it. Floating resolves to the
+     * shared rounded-surface token, except the status surface, which shipped with its own larger
+     * adaptive radius and keeps it. A null slot is any non-slot rounded surface (the drawer).
+     */
+    public static int resolveAutoCornerRadiusDp(@Nullable SurfaceSlot slot, boolean floating) {
+        if (!floating)
+            return 0;
+        return slot == SurfaceSlot.STATUS
+            ? TERMUX_APP.STATUS_AUTO_CORNER_RADIUS_MAX_DP
+            : TERMUX_APP.DEFAULT_ROUNDED_SURFACE_CORNER_RADIUS_DP;
+    }
+
     /** The surface's own stored number, ignoring inheritance. For the editor's detached rows. */
     public int getSurfaceOverrideValue(SurfaceSlot slot, SurfaceProperty property) {
         switch (slot) {

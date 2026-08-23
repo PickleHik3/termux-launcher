@@ -2850,7 +2850,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (configuredRadius >= 0) {
             return Math.min(dpToPx(configuredRadius), surfaceHeightPx / 2f);
         }
-        return Math.max(dpToPx(16), Math.min(dpToPx(26), surfaceHeightPx / 2f));
+        return Math.max(
+            dpToPx(TermuxPreferenceConstants.TERMUX_APP.STATUS_AUTO_CORNER_RADIUS_MIN_DP),
+            Math.min(dpToPx(TermuxAppSharedPreferences.resolveAutoCornerRadiusDp(
+                TermuxAppSharedPreferences.SurfaceSlot.STATUS, true)), surfaceHeightPx / 2f));
     }
 
     private int targetStatusBarHeightPx(boolean capsule, boolean collapsed) {
@@ -6696,7 +6699,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         blur.setProgress(initialBlur);
         opacity.setProgress(initialOpacity);
         grain.setProgress(initialGrain);
-        dockRadius.setProgress(editorRadius(initialDockRadius));
+        dockRadius.setProgress(editorRadius(TermuxAppSharedPreferences.SurfaceSlot.DOCK, initialDockRadius));
         terminal.setProgress(initialTerminal);
         if (terminalBorder != null) {
             terminalBorder.setOnCheckedChangeListener(null);
@@ -6734,12 +6737,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         statusBlur.setProgress(initialStatusBlur);
         statusOpacity.setProgress(initialStatusOpacity);
         statusGrain.setProgress(initialStatusGrain);
-        statusRadius.setProgress(editorRadius(initialStatusRadius));
+        statusRadius.setProgress(editorRadius(TermuxAppSharedPreferences.SurfaceSlot.STATUS, initialStatusRadius));
         blurValue.setText(getString(R.string.termux_dock_tuning_value_dp, initialBlur));
         opacityValue.setText(getString(R.string.termux_dock_tuning_value_percent, initialOpacity));
         grainValue.setText(getString(R.string.termux_dock_tuning_value_percent, initialGrain));
         dockRadiusValue.setText(getString(R.string.termux_dock_tuning_value_dp,
-            editorRadius(initialDockRadius)));
+            editorRadius(TermuxAppSharedPreferences.SurfaceSlot.DOCK, initialDockRadius)));
         terminalValue.setText(getString(R.string.termux_dock_tuning_value_percent, initialTerminal));
         sessionsValue.setText(getString(R.string.termux_dock_tuning_value_percent, initialSessions));
         sizeValue.setText(dockSizePresetLabel(initialSizeIndex));
@@ -6760,7 +6763,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         statusGrainValue.setText(getString(R.string.termux_dock_tuning_value_percent,
             initialStatusGrain));
         statusRadiusValue.setText(getString(R.string.termux_dock_tuning_value_dp,
-            editorRadius(initialStatusRadius)));
+            editorRadius(TermuxAppSharedPreferences.SurfaceSlot.STATUS, initialStatusRadius)));
         sectionGroup.clearOnButtonCheckedListeners();
         styleGroup.clearOnButtonCheckedListeners();
         styleGroup.check(SegmentedPillPreference.VALUE_ROUNDED.equals(initialStyle)
@@ -7156,7 +7159,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             blur.setProgress(mPreferences.getExtraKeysBlurRadius());
             opacity.setProgress(mPreferences.getAppBarOpacity());
             grain.setProgress(mPreferences.getDockGlassGrain());
-            dockRadius.setProgress(editorRadius(mPreferences.getAppLauncherDockCornerRadius()));
+            dockRadius.setProgress(editorRadius(TermuxAppSharedPreferences.SurfaceSlot.DOCK, mPreferences.getAppLauncherDockCornerRadius()));
             size.setProgress(DockLayoutPolicy.nearestSizePresetIndex(mPreferences.getAppLauncherBarHeightScale()));
             icons.setProgress(mPreferences.getAppLauncherButtonCount());
             styleGroup.check(SegmentedPillPreference.VALUE_ROUNDED.equals(
@@ -7178,7 +7181,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             statusBlur.setProgress(mPreferences.getStatusBarBlurRadius());
             statusOpacity.setProgress(mPreferences.getStatusBarOpacity());
             statusGrain.setProgress(mPreferences.getStatusBarGrain());
-            statusRadius.setProgress(editorRadius(mPreferences.getStatusBarCornerRadius()));
+            statusRadius.setProgress(editorRadius(TermuxAppSharedPreferences.SurfaceSlot.STATUS, mPreferences.getStatusBarCornerRadius()));
             terminal.setProgress(mPreferences.getTerminalBackgroundOpacity());
             if (terminalBorder != null)
                 terminalBorder.setChecked(mPreferences.isTerminalBorderEnabled());
@@ -7310,8 +7313,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return "dock";
     }
 
-    private int editorRadius(int value) {
-        return value < 0 ? 26 : Math.min(40, value);
+    private int editorRadius(TermuxAppSharedPreferences.SurfaceSlot slot, int value) {
+        if (value < 0)
+            return TermuxAppSharedPreferences.resolveAutoCornerRadiusDp(slot, isRoundedDockStyle());
+        return Math.min(40, value);
     }
 
     static int keyboardEditorProgress(float value, float minValue, float maxValue) {
@@ -7772,15 +7777,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * surface will actually use instead - the capsule's own radius while Floating, a straight edge
      * while Docked - so the control is never parked somewhere the surface is not.
      */
-    private int surfaceEditorSliderValue(TermuxAppSharedPreferences.SurfaceProperty property,
+    private int surfaceEditorSliderValue(@Nullable TermuxAppSharedPreferences.SurfaceSlot slot,
+                                         TermuxAppSharedPreferences.SurfaceProperty property,
                                          int stored) {
         if (property != TermuxAppSharedPreferences.SurfaceProperty.CORNER_RADIUS || stored >= 0)
             return stored;
-        return isRoundedDockStyle() ? SURFACE_TUNING_AUTO_RADIUS_DP : 0;
+        return TermuxAppSharedPreferences.resolveAutoCornerRadiusDp(slot, isRoundedDockStyle());
     }
-
-    /** What the theme-defined corner radius resolves to on a floating capsule. */
-    private static final int SURFACE_TUNING_AUTO_RADIUS_DP = 26;
 
     /** Formats one row's number in its own unit. */
     private String surfaceRowValueText(@NonNull SurfaceEditorRows.Row row, int value) {
@@ -7825,7 +7828,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
             boolean inheriting = mPreferences.isSurfaceInheriting(row.slot, row.property);
-            int resolved = surfaceEditorSliderValue(row.property, inheriting
+            int resolved = surfaceEditorSliderValue(row.slot, row.property, inheriting
                 ? mPreferences.getSurfaceBaseValue(row.property)
                 : mPreferences.getSurfaceOverrideValue(row.slot, row.property));
             resolved = Math.max(0, Math.min(row.max, resolved));
@@ -7911,7 +7914,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (slider == null || mPreferences == null)
             return;
         int current = Math.max(0, Math.min(max,
-            surfaceEditorSliderValue(property, mPreferences.getSurfaceBaseValue(property))));
+            surfaceEditorSliderValue(null, property, mPreferences.getSurfaceBaseValue(property))));
         if (slider.getTag(R.id.surface_tuning_base_panel) == null) {
             slider.setTag(R.id.surface_tuning_base_panel, Boolean.TRUE);
             slider.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {

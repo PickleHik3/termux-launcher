@@ -496,7 +496,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 );
             case "app_launcher_dock_corner_radius":
                 int radius = mPreferences.getAppLauncherDockCornerRadius();
-                return radius < 0 ? 28 : radius;
+                return radius < 0 ? TermuxAppSharedPreferences.resolveAutoCornerRadiusDp(
+                    TermuxAppSharedPreferences.SurfaceSlot.DOCK, true) : radius;
             case "app_launcher_drawer_icon_size_dp":
                 return mPreferences.getAppLauncherDrawerIconSizeDp();
             case "app_launcher_drawer_grid_columns_vertical":

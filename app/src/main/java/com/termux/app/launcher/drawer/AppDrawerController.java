@@ -783,7 +783,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         int configured = preferences == null
             ? -1 : preferences.getAppLauncherDrawerCornerRadius();
         if (configured < 0)
-            configured = TermuxPreferenceConstants.TERMUX_APP.DEFAULT_ROUNDED_SURFACE_CORNER_RADIUS_DP;
+            configured = TermuxAppSharedPreferences.resolveAutoCornerRadiusDp(null, true);
         return dp(configured);
     }
 

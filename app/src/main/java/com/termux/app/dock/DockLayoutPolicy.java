@@ -292,8 +292,8 @@ public final class DockLayoutPolicy {
         if (configuredCornerRadiusDp >= 0) {
             return Math.min(safeDensity * configuredCornerRadiusDp, surfaceHeightPx / 2f);
         }
-        return Math.min(safeDensity
-            * TermuxPreferenceConstants.TERMUX_APP.DEFAULT_ROUNDED_SURFACE_CORNER_RADIUS_DP,
+        return Math.min(safeDensity * TermuxAppSharedPreferences.resolveAutoCornerRadiusDp(
+            TermuxAppSharedPreferences.SurfaceSlot.DOCK, true),
             surfaceHeightPx / 2f);
     }
 
