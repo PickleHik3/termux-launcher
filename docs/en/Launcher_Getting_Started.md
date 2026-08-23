@@ -127,7 +127,9 @@ None of these are required for the basic launcher and terminal:
   [Nix getting started](Nix_Getting_Started.md) and [Nix package management](Nix_Package_Management.md).
   [`setup-nvim`](examples/setup-nvim) still sets up Neovim with the distro of your choice — AstroNvim
   (default), NvChad, LazyVim, kickstart, or stock — plus OSC 52 clipboard, line wrap, and, on
-  AstroNvim and NvChad, a colorscheme generated from the wallpaper palette.
+  AstroNvim and NvChad, a colorscheme generated from the wallpaper palette — on a transparent
+  background, so the wallpaper shows through the editor the way it does through the terminal.
+  `:MaterialTransparent off` gives you solid Material surfaces instead.
 
 ## 9. Your first recovery commands
 

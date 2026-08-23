@@ -7,11 +7,6 @@
 > [!CAUTION]
 > The native AI backends—**Google LiteRT** and **Alibaba MNN**—are highly experimental. Be mindful of your device’s available RAM and processor capabilities when selecting models.
 
-> [!NOTE]
-> ~~If the terminal slows down, run `termux-reload-settings`.~~
-> All hail Fable for exorcising this daemon-basically yeeted it in seconds, on God.
-
-
 > [!IMPORTANT]
 > **This is an independent fork.** Termux Launcher is not affiliated with, endorsed by, or
 > supported by the official [Termux](https://github.com/termux/termux-app) project or its
@@ -23,7 +18,7 @@
 
 Termux Launcher is a terminal-first Android home launcher inspired by [TEL](https://github.com/t-e-l/tel), built on [termux-app](https://github.com/termux/termux-app) and [termux-monet](https://github.com/Termux-Monet/termux-monet).
 
-**[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | [Download builds](https://github.com/PickleHik3/termux-launcher/releases) | [Getting Started](docs/en/Launcher_Getting_Started.md) | [Modern terminal](docs/en/Terminal_Modernization.md) | [Local AI API](docs/en/LauncherCtl_API.md) | [Termux AI](docs/en/Termux_AI.md) | [Changelog](CHANGELOG.md)
+**[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | [Download builds](https://github.com/PickleHik3/termux-launcher/releases) | [Local AI API](docs/en/LauncherCtl_API.md) | [Termux AI](docs/en/Termux_AI.md) | [Changelog](CHANGELOG.md)
 
 > **Three editions are available.** The **`com.termux`** build is the **recommended** version — it stays fully compatible with the upstream Termux package ecosystem. The new **`com.termux.launcher.nix`** build swaps APT for the **[Nix](https://nixos.org) package manager**: it installs side-by-side with a stock Termux and pulls prebuilt packages straight from the official `nixpkgs` binary cache — see [Nix package management](docs/en/Nix_Package_Management.md). The **`io.vaj.tl`** build is a legacy **demo edition** on a small hand-maintained APT repository, kept only for preview installs. See [Editions](#editions).
 
@@ -48,8 +43,10 @@ All credits go to the amazing developers and contributors of Termux, TEL, and Te
 - Native sessions, windows, recursive split and floating panes, layouts, workspace restore, and session browser
 - Kitty keyboard/graphics protocols, safe hyperlinks, prompt navigation, and advanced font shaping
 - TUI-tuned touch, unlike stock Termux: drags scroll mouse-aware apps, taps click, and a brief press-and-hold turns the finger into a held mouse button — drag vim selections or resize tmux/TUI panes by touch
-- Searchable terminal command palette with customizable chords and modal keymaps
-- App dock with terminal app search
+- Searchable terminal command palette, tmux-style leader key, modal keymaps, and on-screen key hints
+- Scrollback search with vim-style copy mode over the transcript
+- App dock, full app drawer (vertical, horizontal, and category layouts) with folders and AI-assisted app categorization
+- Android widget pages and an expandable status bar with live CPU, RAM, and weather
 - Android Material theme integration for launcher surfaces and Termux shell theming
 - Built-in terminal keyboard by default on fresh installs, with Android keyboard and no-keyboard options
 - Launch Android apps from the shell with `launcherctl launch`
@@ -69,7 +66,7 @@ Every release ships the same launcher built from the same source; the editions d
 | Alongside official Termux? | ❌ No — same package name, replaces it | ✅ Yes — installs side by side | ✅ Yes — installs side by side |
 | Package manager | `pkg` / APT | [Nix](https://nixos.org) ([guide](docs/en/Nix_Package_Management.md)) | `pkg` / APT |
 | Package repository | official Termux repos | official `nixpkgs` binary cache | small VAJ APT repo (`https://repo.pathayam.xyz`) |
-| Architectures | arm64-v8a, armeabi-v7a, x86_64, x86 | arm64-v8a (aarch64), bootstrap downloaded on first run | arm64-v8a (aarch64) only, bootstrap downloaded on first run |
+| Architectures | arm64-v8a, armeabi-v7a, x86_64, x86 | arm64-v8a, x86_64 — bootstrap downloaded on first run | arm64-v8a (aarch64) only, bootstrap downloaded on first run |
 | Companion add-ons | [Termux:API](https://github.com/PickleHik3/termux-api/releases) / [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases) (plain tags) | [TLNix:API](https://github.com/PickleHik3/termux-api/releases/tag/nix-v0.53.1) / [TLNix:Styling](https://github.com/PickleHik3/termux-styling/releases/tag/nix-v0.32.2) (`nix-v*` tags) | same forks, `-vaj` tagged releases |
 
 Pick the **Termux edition** for the classic Termux experience — the launcher as your Termux, fully compatible with the upstream Termux package ecosystem. Pick the **Nix edition** if you want the entire `nixpkgs` collection, declarative configs, and rollbacks next to an existing Termux install — it is built on a [Nix-on-Droid](https://github.com/nix-community/nix-on-droid)-style environment; new to Nix? start with the [beginner's guide](docs/en/Nix_Getting_Started.md), then the [package management reference](docs/en/Nix_Package_Management.md). The **VAJ edition is a legacy demo**: it predates the Nix edition as the side-by-side option and is kept only for preview installs.
@@ -115,19 +112,14 @@ and wires up curated families, Nerd Font builds included.
 
 ## Documentation
 
-- [What’s new in v0.2.31](docs/en/Whats_New_0.2.31.md): onboarding, landscape, workspace command restart, per-pane zoom, fonts, key binding, attention states, and compatibility.
-- [Getting Started](docs/en/Launcher_Getting_Started.md): choose an edition, install, complete first-run setup, and make the app your Home screen.
-- [Using Termux Launcher](docs/en/Launcher_Usage.md): dock search, status widgets, sessions, windows, panes, workspaces, and the built-in keyboard.
-- [Settings map](docs/en/Launcher_Settings.md): exact v0.2.31 settings destinations and what each controls.
-- [Troubleshooting](docs/en/Launcher_Troubleshooting.md): installation, storage, input, panes, workspaces, appearance, permissions, Shizuku, and TAI.
-- [Modern terminal guide](docs/en/Terminal_Modernization.md): panes, windows, sessions, layouts, workspaces, bindings, fonts, protocols, and diagnostics.
-- [Terminal fonts](docs/en/Terminal_Fonts.md): picker, config priority, drop-ins, fallback, symbols, ligatures, geometry, and troubleshooting.
-- [Kitty protocols](docs/en/Terminal_Kitty_Protocols.md): keyboard negotiation, multiple cursors, graphics, animation, Sixel, and terminal detection.
-- [Nix beginner's guide](docs/en/Nix_Getting_Started.md): the Nix edition's first hour — first launch, the shell template, installing packages, undoing changes, and the vocabulary.
-- [Nix package management](docs/en/Nix_Package_Management.md): the Nix edition's package manager — everyday commands, declarative setup, rollbacks, and caveats.
-- [Building showcase tools](docs/en/Building_Terminal_Showcase_Tools.md): reproducible Termux recipes for Sigye and animated-Kitty Fastfetch.
+**User documentation lives on the [website](https://picklehik3.github.io/termux-launcher-site/)** — getting started, the launcher tour, terminal and multiplexer guides, fonts, keybindings, extra keys, notifications, backups, and the Nix edition pages, kept current with each release.
+
+In-repo references:
+
 - [Local AI API](docs/en/LauncherCtl_API.md): OpenAI/Ollama-compatible localhost endpoint, app launch, model management, auth, and route tables.
 - [Termux AI](docs/en/Termux_AI.md): local model setup, `tai`, OpenAI-compatible clients, and troubleshooting.
+- [Building showcase tools](docs/en/Building_Terminal_Showcase_Tools.md): reproducible recipes for Sigye and animated-Kitty Fastfetch, on device and cross-built.
+- [VAJ to Nix migration](docs/en/VAJ_To_Nix_Migration.md): moving off the deprecated VAJ edition.
 - [Developer Docs](docs/en/Developer_Docs.md): advanced API routes, runtime notes, helper scripts, and security details.
 
 ## Upstream Base

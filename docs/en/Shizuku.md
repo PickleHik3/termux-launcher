@@ -51,9 +51,9 @@ in the Shizuku app, then return to the launcher and request it again.
 ## rish in the terminal
 
 `rish` is Shizuku's shell helper. It gives commands inside the terminal an ADB-privileged shell,
-which can read system process data and run tools outside Termux's app sandbox. The repository's
-[`setup-btop-rish`](examples/setup-btop-rish) example installs `btop` under `/data/local/tmp` and
-creates the `btop-shizuku` and `mini-btop-shizuku` wrapper commands.
+which can read system process data and run tools outside Termux's app sandbox. Anything installed
+under `/data/local/tmp` runs from there, so tools the sandbox would refuse to execute work when
+launched through `rish`.
 
 ## Troubleshooting
 

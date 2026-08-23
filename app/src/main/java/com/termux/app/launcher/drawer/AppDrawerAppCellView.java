@@ -145,7 +145,17 @@ public class AppDrawerAppCellView extends LinearLayout {
         }
         int gap = Math.round(AppDrawerGridMetrics.LABEL_GAP_DP
             * getResources().getDisplayMetrics().density);
-        label.setPadding(0, gap, 0, 0);
+        if (label.getPaddingTop() != gap) label.setPadding(0, gap, 0, 0);
+    }
+
+    /**
+     * The icon sits above the label; nothing in this cell draws over anything else. Saying so lets
+     * the scrub dim ({@code setAlpha(0.28f)} on 24-36 attached cells per frame) propagate alpha to
+     * the children directly instead of allocating an offscreen layer per dimmed cell per frame.
+     */
+    @Override
+    public boolean hasOverlappingRendering() {
+        return false;
     }
 
     public void setScrubAppearance(char letter, char activeLetter, float strength) {

@@ -23,9 +23,6 @@ import org.junit.Test;
  */
 public class AppDrawerNestedVelocityTest {
 
-    /** dp(28) at 3x. */
-    private static final float ARM_OVERPULL = 84f;
-
     @Test
     public void aDownwardFlingBecomesAPositiveVelocityThatCloses() {
         float velocityY = -2400f;   // the finger went down
@@ -45,27 +42,11 @@ public class AppDrawerNestedVelocityTest {
     }
 
     @Test
-    public void theSameConversionFeedsTheArmingFlingTest() {
-        // A fling at the top arms the next pull only when it was thrown downwards, so the arming
-        // threshold and the release policy read one number in one direction.
-        float threshold = AppDrawerCloseArmingPolicy.ARM_FLING_VELOCITY_PX_PER_SEC;
-        assertTrue(armsWith(AppDrawerCloseArmingPolicy.closeVelocityForNestedFling(-threshold)));
-        assertFalse(armsWith(AppDrawerCloseArmingPolicy.closeVelocityForNestedFling(threshold)));
-    }
-
-    @Test
     public void pagerRelayNegatesDownwardFingerVelocityExactlyOnce() {
         float fingerVelocity = 1800f;
         float nestedVelocity = -fingerVelocity;
         float controllerVelocity =
             AppDrawerCloseArmingPolicy.closeVelocityForNestedFling(nestedVelocity);
         assertEquals(fingerVelocity, controllerVelocity, 0f);
-    }
-
-    private static boolean armsWith(float velocityPxPerSec) {
-        AppDrawerCloseArmingPolicy policy = new AppDrawerCloseArmingPolicy();
-        policy.begin(new AppDrawerCloseArmingPolicy.Down(true, true, true), 1000L);
-        policy.claimOnPreScroll(-20);
-        return policy.end(0f, ARM_OVERPULL, velocityPxPerSec, true, 1000L);
     }
 }

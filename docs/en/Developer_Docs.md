@@ -12,7 +12,7 @@ Important local areas:
 - `app/src/main/java/com/termux/launcherctl/LauncherCtlNotificationListener.java`: notification and media cache source for the in-app status bar UI.
 - `app/src/main/java/com/termux/ai/`: TAI settings, model registry, model downloads/imports, and runtime adapters.
 - `resources/bin/tai`: installed TAI shell helper.
-- `docs/en/examples/`: optional shell, Neovim, tmux, status, weather, and Shizuku helper scripts.
+- `docs/en/examples/`: optional shell and Neovim setup scripts, plus the terminal, font, and keyboard config examples.
 
 ## LauncherCtl Internals
 
@@ -222,22 +222,14 @@ The helper scripts in `docs/en/examples/` are not installed by the APK. The begi
 Scripts:
 
 - `setup-nvim`: interactive Neovim setup. Installs AstroNvim (default), NvChad, LazyVim, kickstart, or a stock config, plus launcher integrations: OSC 52 clipboard, always-on line wrap, and — on AstroNvim and NvChad — a colorscheme generated from `~/.termux/material-colors.sh` that retints live on wallpaper changes.
-- `setup-tmux-btop`: deprecated apt-edition installer for Fish + Oh My Posh, tmux theme/plugin setup, and optional Shizuku `btop`. It calls `pkg`, which this edition does not have — kept only as a reference.
 - The shell environment is not scripted from this directory: `setup-launcher` (shipped in the nix base environment) installs the flake template and switches, and `setup-toolkits` (shipped by that template) picks the toolkits — shell, eye candy, editor, build, node, go, python. See [Nix package management](Nix_Package_Management.md).
-- `launcher-system-monitor`: cached CPU/RAM formatter for tmux status bars.
-- `launcher-weather-widget`: cached weather formatter using wttr.in.
-- `setup-btop-rish`: installs Linux `btop` under `/data/local/tmp` through Shizuku `rish`.
-- `kew-tmux-status`: optional second tmux status row for `kew-now-playing`.
-- `config.fish`, `conf.d-personal.fish`, and `aliens-material.omp.json`: optional Fish and Oh My Posh defaults. `config.fish` is launcher-owned and replaced on re-install; `conf.d-personal.fish` is copied once to `~/.config/fish/conf.d/personal.fish` and never overwritten, so personal edits survive re-runs. `termux-launcher.omp.json` is the older, fuller prompt theme, kept only for the deprecated `setup-tmux-btop`; `setup-launcher` no longer installs it and `config.fish` no longer falls back to it.
-- `tmux.conf` and `material-theme.tmux`: manual tmux examples.
+- `config.fish`, `conf.d-personal.fish`, and `aliens-material.omp.json`: optional Fish and Oh My Posh defaults. `config.fish` is launcher-owned and replaced on re-install; `conf.d-personal.fish` is copied once to `~/.config/fish/conf.d/personal.fish` and never overwritten, so personal edits survive re-runs. It is the Termux-edition copy — the Nix edition ships its own, with nix-on-droid shortcuts in place of the `pkg`/`pacman` ones.
 
-`launcher-system-monitor` samples `/proc/stat` and `/proc/meminfo` directly when Shizuku `rish` is available, so it works in plain Termux plus Shizuku setups without any launcher HTTP route. It keeps a short cache file so tmux status bars do not fork a Shizuku shell on every refresh.
-
-Refresh installed helper scripts after an APK or docs update by re-running the example installer (`setup-tmux-btop`) or re-downloading the script from `docs/en/examples/`. This updates repo-owned helper scripts and leaves `~/.tmux.conf` alone.
+Refresh installed helper scripts after an APK or docs update by re-running `setup-launcher`, or by re-downloading the single script from `docs/en/examples/`. Every template it replaces gets a timestamped `.bak` first.
 
 ## Shizuku and rish
 
-Normal launcher usage does not require Shizuku. Optional Shizuku-backed behavior includes lock-screen handling and helper workflows such as `btop-shizuku`.
+Normal launcher usage does not require Shizuku. Its optional uses are privileged ones the app sandbox cannot reach on its own, such as the Shizuku lock method.
 
 For direct Shizuku shell commands, call `rish` directly:
 
@@ -262,11 +254,3 @@ If `rish` fails to start, the most common cause is a stale or missing `rish_shiz
 4. Confirm the bottom of `rish` sets `RISH_APPLICATION_ID` to this app's package name (`com.termux` for the standard edition or `io.vaj.tl` for the VAJ edition).
 5. Run `rish -c "id"` once and grant the Shizuku permission prompt.
 
-`setup-btop-rish` creates:
-
-```text
-btop-shizuku
-mini-btop-shizuku
-```
-
-The mini layout is better for small Android terminal panes because it keeps CPU and process panels visible and uses a slower refresh.

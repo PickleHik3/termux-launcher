@@ -8,7 +8,6 @@ import android.widget.LinearLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.TermuxActivity;
 import com.termux.app.launcher.LauncherAppLauncher;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherRankingEngine;
@@ -32,14 +31,14 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Executes registry-registered terminal hierarchy actions against the live
- * {@link TermuxActivity}.
+ * {@link TerminalHost}.
  *
  * <p>Terminal actions differ from the other tools in {@link LauncherToolRegistry}:
  * they need a foreground Activity and must run on the main thread, while callers
  * may arrive on arbitrary background threads. This class is the single seam
  * between the two.
  *
- * <p>The Activity is held weakly and attached only between
+ * <p>The host is held weakly and attached only between
  * {@code onResume} and {@code onStop}. When nothing is attached, callers get a
  * {@code 409 activity_not_running} rather than a silent no-op — an agent must be
  * able to tell "did nothing" from "could not act".
@@ -129,7 +128,7 @@ public final class TerminalActionDispatcher {
     private static final TerminalActionDispatcher INSTANCE = new TerminalActionDispatcher();
 
     @NonNull
-    private final AtomicReference<WeakReference<TermuxActivity>> activityRef =
+    private final AtomicReference<WeakReference<TerminalHost>> hostRef =
         new AtomicReference<>(new WeakReference<>(null));
 
     private TerminalActionDispatcher() {
@@ -141,26 +140,26 @@ public final class TerminalActionDispatcher {
     }
 
     /** Called from {@code TermuxActivity.onResume()}. */
-    public void attach(@NonNull TermuxActivity activity) {
-        activityRef.set(new WeakReference<>(activity));
+    public void attach(@NonNull TerminalHost host) {
+        hostRef.set(new WeakReference<>(host));
     }
 
     /**
      * Called from {@code TermuxActivity.onStop()} and {@code onDestroy()}. Ignores
-     * the call when a different Activity instance has already attached, so an
-     * old instance's teardown cannot detach its replacement during recreation.
+     * the call when a different host has already attached, so an old activity's
+     * teardown cannot detach its replacement during recreation.
      */
-    public void detach(@NonNull TermuxActivity activity) {
-        WeakReference<TermuxActivity> current = activityRef.get();
-        TermuxActivity attached = current == null ? null : current.get();
-        if (attached == null || attached == activity) {
-            activityRef.set(new WeakReference<>(null));
+    public void detach(@NonNull TerminalHost host) {
+        WeakReference<TerminalHost> current = hostRef.get();
+        TerminalHost attached = current == null ? null : current.get();
+        if (attached == null || attached == host) {
+            hostRef.set(new WeakReference<>(null));
         }
     }
 
     /** Whether a foreground Activity is currently able to execute terminal actions. */
     public boolean isAttached() {
-        return currentActivity() != null;
+        return currentHost() != null;
     }
 
     /** Whether {@code toolName} is a terminal action handled by this dispatcher. */
@@ -252,10 +251,10 @@ public final class TerminalActionDispatcher {
      */
     @NonNull
     public LauncherToolRegistry.ActionContext actionContext() {
-        TermuxActivity activity = currentActivity();
-        final boolean splits = activity != null && activity.isSplitPanesEnabled();
-        final boolean session = activity != null && activity.getCurrentSession() != null;
-        final boolean selection = activity != null && hasSelectedText(activity);
+        TerminalHost host = currentHost();
+        final boolean splits = host != null && host.isSplitPanesEnabled();
+        final boolean session = host != null && host.currentSession() != null;
+        final boolean selection = host != null && hasSelectedText(host);
         return new LauncherToolRegistry.ActionContext() {
             @Override
             public boolean isSplitPanesEnabled() {
@@ -274,21 +273,21 @@ public final class TerminalActionDispatcher {
         };
     }
 
-    private static boolean hasSelectedText(@NonNull TermuxActivity activity) {
-        com.termux.view.TerminalView view = activity.getTerminalView();
+    private static boolean hasSelectedText(@NonNull TerminalHost host) {
+        com.termux.view.TerminalView view = host.focusedView();
         if (view == null) return false;
         String selected = view.getStoredSelectedText();
         return selected != null && !selected.isEmpty();
     }
 
     @Nullable
-    private TermuxActivity currentActivity() {
-        WeakReference<TermuxActivity> ref = activityRef.get();
-        TermuxActivity activity = ref == null ? null : ref.get();
-        if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+    private TerminalHost currentHost() {
+        WeakReference<TerminalHost> ref = hostRef.get();
+        TerminalHost host = ref == null ? null : ref.get();
+        if (host == null || !host.isHostAlive()) {
             return null;
         }
-        return activity;
+        return host;
     }
 
     /**
@@ -348,8 +347,8 @@ public final class TerminalActionDispatcher {
     private JSONObject executeOnMainThread(@NonNull String toolName, @NonNull JSONObject arguments) {
         JSONObject result = executeOnMainThreadInternal(toolName, arguments);
         if (result != null && result.optBoolean("ok", false)) {
-            TermuxActivity activity = currentActivity();
-            if (activity != null) activity.showTerminalActionHint(toolName);
+            TerminalHost host = currentHost();
+            if (host != null) host.showTerminalActionHint(toolName);
         }
         return result;
     }
@@ -357,8 +356,8 @@ public final class TerminalActionDispatcher {
     @NonNull
     private JSONObject executeOnMainThreadInternal(@NonNull String toolName,
                                                    @NonNull JSONObject arguments) {
-        TermuxActivity activity = currentActivity();
-        if (activity == null) {
+        TerminalHost host = currentHost();
+        if (host == null) {
             return error(409, "activity_not_running",
                 "The terminal UI is not in the foreground, so '" + toolName + "' cannot run");
         }
@@ -367,13 +366,13 @@ public final class TerminalActionDispatcher {
             switch (toolName) {
                 case TOOL_TERMINAL_STATE:
                     if (arguments.optBoolean("resetPerformance", false)) {
-                        activity.resetTerminalPerformanceMetrics();
+                        host.resetTerminalPerformanceMetrics();
                     }
-                    return buildState(activity);
+                    return buildState(host);
 
                 case TOOL_WORKSPACE_SAVE: {
                     if (!arguments.has("name")) return error(400, "bad_request", "Missing 'name'");
-                    TerminalWorkspace workspace = activity.saveWorkspace(arguments.optString("name", ""),
+                    TerminalWorkspace workspace = host.saveWorkspace(arguments.optString("name", ""),
                         arguments.optBoolean("overwrite", false),
                         arguments.optBoolean("captureCommands", false));
                     return ok().put("name", workspace.name)
@@ -386,7 +385,7 @@ public final class TerminalActionDispatcher {
                     String mode = arguments.optString("mode", "append");
                     if (!"append".equals(mode) && !"replace".equals(mode))
                         return error(400, "bad_request", "Invalid 'mode'; expected append or replace");
-                    TermuxActivity.WorkspaceLoadResult result = activity.loadWorkspace(
+                    TerminalWorkspace.LoadResult result = host.loadWorkspace(
                         arguments.optString("name", ""), "replace".equals(mode),
                         arguments.optBoolean("runCommands", false));
                     return ok().put("name", arguments.optString("name", "").trim())
@@ -399,7 +398,7 @@ public final class TerminalActionDispatcher {
                 }
                 case TOOL_WORKSPACE_LIST: {
                     JSONArray entries = new JSONArray();
-                    for (TerminalWorkspaceStore.Entry entry : activity.listWorkspaces()) {
+                    for (TerminalWorkspaceStore.Entry entry : host.listWorkspaces()) {
                         entries.put(new JSONObject().put("name", entry.name)
                             .put("modifiedAtEpochMs", entry.modifiedAtEpochMs)
                             .put("sizeBytes", entry.sizeBytes));
@@ -409,61 +408,61 @@ public final class TerminalActionDispatcher {
                 case TOOL_WORKSPACE_DELETE:
                     if (!arguments.has("name")) return error(400, "bad_request", "Missing 'name'");
                     String deletedName = TerminalWorkspaceStore.validateName(arguments.optString("name", ""));
-                    activity.deleteWorkspace(deletedName);
+                    host.deleteWorkspace(deletedName);
                     return ok().put("name", deletedName).put("deleted", true);
 
                 case TOOL_PANE_SPLIT_VERTICAL:
-                    return doSplit(activity, LinearLayout.HORIZONTAL, "vertical");
+                    return doSplit(host, LinearLayout.HORIZONTAL, "vertical");
                 case TOOL_PANE_SPLIT_HORIZONTAL:
-                    return doSplit(activity, LinearLayout.VERTICAL, "horizontal");
+                    return doSplit(host, LinearLayout.VERTICAL, "horizontal");
 
                 case TOOL_PANE_FOCUS_DIRECTION: {
                     Integer keyCode = directionToKeyCode(arguments.optString("direction", ""));
                     if (keyCode == null) return badDirection();
-                    return ok().put("handled", activity.focusPaneDirection(keyCode));
+                    return ok().put("handled", host.focusPaneDirection(keyCode));
                 }
                 case TOOL_PANE_RESIZE: {
                     Integer keyCode = directionToKeyCode(arguments.optString("direction", ""));
                     if (keyCode == null) return badDirection();
-                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
-                    return ok().put("handled", activity.resizeActivePane(keyCode));
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    return ok().put("handled", host.resizeActivePane(keyCode));
                 }
                 case TOOL_PANE_KILL_FOCUSED:
-                    return ok().put("killed", activity.killFocusedPane());
+                    return ok().put("killed", host.killFocusedPane());
 
                 case TOOL_PANE_LAYOUT: {
-                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
                     if (!arguments.has("layout")) return error(400, "bad_request", "Missing 'layout'");
                     String layout = arguments.optString("layout", "");
                     if (!isPaneLayout(layout)) {
                         return error(400, "bad_request",
                             "Invalid 'layout'; expected stack, grid, tall, fat, horizontal, or vertical");
                     }
-                    if (!activity.applyPaneLayout(layout)) return noSession(toolName);
+                    if (!host.applyPaneLayout(layout)) return noSession(toolName);
                     return ok().put("layout", layout);
                 }
                 case TOOL_PANE_NEXT_LAYOUT: {
-                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
-                    if (!activity.cyclePaneLayout()) return noSession(toolName);
-                    return ok().put("layout", activity.activePaneLayoutPolicy());
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    if (!host.cyclePaneLayout()) return noSession(toolName);
+                    return ok().put("layout", host.activePaneLayoutPolicy());
                 }
                 case TOOL_PANE_EQUALIZE:
-                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
-                    if (!activity.equalizePaneLayout()) return noSession(toolName);
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    if (!host.equalizePaneLayout()) return noSession(toolName);
                     return ok().put("equalized", true);
                 case TOOL_PANE_ROTATE: {
-                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
                     String direction = arguments.optString("direction", "clockwise");
                     if (!"clockwise".equals(direction) && !"counterclockwise".equals(direction)) {
                         return error(400, "bad_request",
                             "Invalid 'direction'; expected clockwise or counterclockwise");
                     }
-                    if (!activity.rotatePaneLayout("clockwise".equals(direction))) return noSession(toolName);
+                    if (!host.rotatePaneLayout("clockwise".equals(direction))) return noSession(toolName);
                     return ok().put("direction", direction);
                 }
                 case TOOL_PANE_TOGGLE_FLOAT: {
-                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
-                    TerminalPaneController controller = activity.getPaneController();
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    TerminalPaneController controller = host.paneController();
                     if (controller == null) return noSession(toolName);
                     switch (controller.toggleFloatActivePane()) {
                         case TerminalPaneController.FLOAT_TOGGLE_FLOATED:
@@ -478,8 +477,8 @@ public final class TerminalActionDispatcher {
                     }
                 }
                 case TOOL_TERMINAL_TOGGLE_SCRATCHPAD: {
-                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
-                    TerminalPaneController controller = activity.getPaneController();
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    TerminalPaneController controller = host.paneController();
                     if (controller == null) return noSession(toolName);
                     switch (controller.toggleScratchpad()) {
                         case TerminalPaneController.SCRATCHPAD_TOGGLE_SHOWN:
@@ -491,81 +490,81 @@ public final class TerminalActionDispatcher {
                     }
                 }
                 case TOOL_EXTRA_KEYS_EDIT:
-                    activity.showExtraKeysRowEditor();
+                    host.showExtraKeysRowEditor();
                     return ok();
                 case TOOL_WORKSPACE_PICKER:
-                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
-                    activity.showWorkspacePicker();
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    host.showWorkspacePicker();
                     return ok();
                 case TOOL_WORKSPACE_SAVE_PROMPT:
-                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
-                    activity.promptSaveWorkspace();
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    host.promptSaveWorkspace();
                     return ok();
                 case TOOL_PANE_MOVE_TO_EDGE: {
-                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
                     if (!arguments.has("edge")) return error(400, "bad_request", "Missing 'edge'");
                     String edge = arguments.optString("edge", "");
                     if (!isPaneEdge(edge)) {
                         return error(400, "bad_request", "Invalid 'edge'; expected left, right, up, or down");
                     }
-                    if (!activity.moveFocusedPaneToEdge(edge)) {
+                    if (!host.moveFocusedPaneToEdge(edge)) {
                         return error(409, "single_pane", "Moving to an edge requires at least two panes");
                     }
                     return ok().put("edge", edge);
                 }
 
                 case TOOL_WINDOW_NEW:
-                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
-                    activity.createNewWindow();
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    host.createNewWindow();
                     return ok();
                 case TOOL_WINDOW_CLOSE:
-                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
-                    activity.closeCurrentWindow();
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    host.closeCurrentWindow();
                     return ok();
                 case TOOL_WINDOW_NEXT:
-                    activity.switchWindow(true);
+                    host.switchWindow(true);
                     return ok();
                 case TOOL_WINDOW_PREVIOUS:
-                    activity.switchWindow(false);
+                    host.switchWindow(false);
                     return ok();
 
                 case TOOL_SESSION_NEW: {
-                    TermuxTerminalSessionActivityClient client = activity.getTermuxTerminalSessionClient();
+                    TermuxTerminalSessionActivityClient client = host.sessionClient();
                     if (client == null) return error(503, "unavailable", "Session client is not ready");
                     String name = arguments.optString("name", "").trim();
                     client.addNewSession(arguments.optBoolean("failsafe", false), name.isEmpty() ? null : name);
                     return ok();
                 }
                 case TOOL_SESSION_BROWSER:
-                    TerminalSessionBrowser.show(activity);
+                    host.showSessionBrowser();
                     return ok().put("browserOpen", true);
                 case TOOL_SESSION_PANEL:
-                    activity.toggleSessionsPanel();
-                    return ok().put("panelOpen", activity.isSessionsPanelShowing());
+                    host.toggleSessionsPanel();
+                    return ok().put("panelOpen", host.isSessionsPanelShowing());
                 case TOOL_SESSION_CLONE_CURRENT:
-                    if (!activity.cloneCurrentBrowserSession()) return noSession(toolName);
+                    if (!host.cloneCurrentBrowserSession()) return noSession(toolName);
                     return ok().put("cloned", true);
                 case TOOL_SESSION_NEXT:
                 case TOOL_SESSION_PREVIOUS: {
-                    TermuxTerminalSessionActivityClient client = activity.getTermuxTerminalSessionClient();
+                    TermuxTerminalSessionActivityClient client = host.sessionClient();
                     if (client == null) return error(503, "unavailable", "Session client is not ready");
                     client.switchToSession(TOOL_SESSION_NEXT.equals(toolName));
                     return ok();
                 }
                 case TOOL_SESSION_CLOSE_CURRENT:
-                    activity.closeCurrentSession();
+                    host.closeCurrentSession();
                     return ok();
 
                 case TOOL_TERMINAL_TOGGLE_TOOLBAR:
-                    activity.toggleTerminalToolbar();
+                    host.toggleTerminalToolbar();
                     return ok();
 
                 case TOOL_TERMINAL_RESET:
-                    return activity.resetCurrentSession() ? ok() : noSession(toolName);
+                    return host.resetCurrentSession() ? ok() : noSession(toolName);
 
                 case TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT:
                 case TOOL_TERMINAL_JUMP_NEXT_PROMPT: {
-                    com.termux.view.TerminalView view = activity.getTerminalView();
+                    com.termux.view.TerminalView view = host.focusedView();
                     if (view == null || view.mEmulator == null) return noSession(toolName);
                     boolean backwards = TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT.equals(toolName);
                     if (!view.jumpToPrompt(backwards)) {
@@ -578,30 +577,30 @@ public final class TerminalActionDispatcher {
                 }
 
                 case TOOL_APPEARANCE_SET_WALLPAPER:
-                    activity.openWallpaperPicker();
+                    host.openWallpaperPicker();
                     return ok();
                 case TOOL_APPEARANCE_TOGGLE_WALLPAPER:
-                    return ok().put("wallpaperEnabled", activity.toggleWallpaperMode());
+                    return ok().put("wallpaperEnabled", host.toggleWallpaperMode());
                 case TOOL_APPEARANCE_TOGGLE_CURSOR_TRAIL:
-                    return ok().put("cursorTrailEnabled", activity.toggleCursorTrail());
+                    return ok().put("cursorTrailEnabled", host.toggleCursorTrail());
                 case TOOL_APPEARANCE_GLASS_LAB:
-                    activity.openGlassLab();
+                    host.openGlassLab();
                     return ok();
                 case TOOL_APP_OPEN_SETTINGS:
-                    activity.openSettings();
+                    host.openSettings();
                     return ok();
                 case TOOL_APP_OPEN_LOOK_AND_FEEL:
-                    activity.openLookAndFeel();
+                    host.openLookAndFeel();
                     return ok();
                 case TOOL_APP_OPEN_APPS_BAR:
-                    activity.openAppsBar();
+                    host.openAppsBar();
                     return ok();
 
                 case TOOL_FONTS_PICK:
                     // Straight to the settings screen rather than through an Activity helper: the
                     // picker is an ordinary preference fragment and needs nothing from the terminal.
-                    com.termux.shared.activity.ActivityUtils.startActivity(activity,
-                        com.termux.app.activities.SettingsActivity.createFragmentIntent(activity,
+                    com.termux.shared.activity.ActivityUtils.startActivity(host.context(),
+                        com.termux.app.activities.SettingsActivity.createFragmentIntent(host.context(),
                             com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment.class,
                             com.termux.R.string.termux_fonts_preferences_title));
                     return ok();
@@ -609,7 +608,7 @@ public final class TerminalActionDispatcher {
                     String familyId = arguments.optString("id", "").trim();
                     if (familyId.isEmpty()) return error(400, "bad_request", "Missing 'id'");
                     com.termux.app.fonts.FontCatalog.Family family =
-                        com.termux.app.fonts.FontCatalog.load(activity).family(familyId);
+                        com.termux.app.fonts.FontCatalog.load(host.context()).family(familyId);
                     if (family == null) {
                         return error(404, "not_found", "No font family '" + familyId
                             + "' in the bundled catalog");
@@ -621,7 +620,7 @@ public final class TerminalActionDispatcher {
                             true,
                             arguments.optInt("weight", 0));
                     com.termux.app.fonts.FontInstallCoordinator coordinator =
-                        com.termux.app.fonts.FontInstallCoordinator.getInstance(activity);
+                        com.termux.app.fonts.FontInstallCoordinator.getInstance(host.context());
                     // Already on disk: no transfer, just rewrite the managed config and reload.
                     if (new com.termux.app.fonts.FontInstaller().isInstalled(family)) {
                         if (!coordinator.reapply(family, options)) {
@@ -639,80 +638,80 @@ public final class TerminalActionDispatcher {
                 }
 
                 case TOOL_APP_COMMAND_PALETTE:
-                    TerminalCommandPalette.show(activity);
+                    host.showCommandPalette();
                     return ok();
                 case TOOL_APP_LAUNCH: {
                     String query = arguments.optString("query", "").trim();
                     if (query.isEmpty()) return error(400, "bad_request", "Missing 'query'");
-                    LauncherAppEntry app = resolveApp(activity, query);
+                    LauncherAppEntry app = resolveApp(host.context(), query);
                     if (app == null) {
                         return error(404, "not_found", "No installed app matches '" + query + "'");
                     }
-                    if (!LauncherAppLauncher.launchEntry(activity, app)) {
+                    if (!LauncherAppLauncher.launchEntry(host.context(), app)) {
                         return error(500, "execution_failed", "Could not launch " + app.label);
                     }
                     // Same bookkeeping the suggestion bar does, so a launch from a
                     // binding or the palette also shapes the usage ranking.
-                    LauncherUsageStatsStore.getInstance(activity)
+                    LauncherUsageStatsStore.getInstance(host.context())
                         .recordLaunch(app.appRef.stableId());
                     return ok().put("package", app.appRef.packageName).put("label", app.label);
                 }
                 case TOOL_APP_KEY_INSPECTOR:
-                    return ok().put("keyInspectorOpen", TerminalKeyInspector.toggle(activity));
+                    return ok().put("keyInspectorOpen", host.toggleKeyInspector());
                 case TOOL_APP_OPEN_DRAWER:
-                    activity.getDrawer().openDrawer(android.view.Gravity.LEFT);
+                    host.openDrawer();
                     return ok();
                 case TOOL_APP_CLOSE_DRAWER:
-                    activity.getDrawer().closeDrawers();
+                    host.closeDrawers();
                     return ok();
                 case TOOL_TERMINAL_ACTION_SHEET:
-                    return activity.showTerminalActionSheet() ? ok() : noSession(toolName);
+                    return host.showTerminalActionSheet(null) ? ok() : noSession(toolName);
 
                 case TOOL_SESSION_ACTIVATE_BY_INDEX: {
-                    TermuxTerminalSessionActivityClient indexClient = activity.getTermuxTerminalSessionClient();
+                    TermuxTerminalSessionActivityClient indexClient = host.sessionClient();
                     if (indexClient == null) return error(503, "unavailable", "Session client is not ready");
                     if (!arguments.has("index")) return error(400, "bad_request", "Missing 'index'");
                     int sessionIndex = arguments.optInt("index", -1);
-                    if (sessionIndex < 0 || sessionIndex >= activity.mDrawerSessions.size()) {
+                    if (sessionIndex < 0 || sessionIndex >= host.sessions().count()) {
                         return error(400, "bad_request", "No session at index " + sessionIndex
-                            + "; there are " + activity.mDrawerSessions.size());
+                            + "; there are " + host.sessions().count());
                     }
                     indexClient.switchToSession(sessionIndex);
                     return ok().put("index", sessionIndex);
                 }
 
                 case TOOL_WINDOW_RENAME_PROMPT:
-                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
-                    if (!activity.promptCurrentWindowRename())
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    if (!host.promptCurrentWindowRename())
                         return error(409, "no_window", "There is no window to rename");
                     return ok();
                 case TOOL_TERMINAL_SHARE_SELECTED:
                 case TOOL_CLIPBOARD_COPY_SELECTED: {
-                    com.termux.view.TerminalView view = activity.getTerminalView();
+                    com.termux.view.TerminalView view = host.focusedView();
                     String selected = view == null ? null : view.getStoredSelectedText();
                     if (selected == null || selected.isEmpty()) {
                         return error(409, "no_selection",
                             "There is no selected text, so '" + toolName + "' cannot run");
                     }
                     if (TOOL_TERMINAL_SHARE_SELECTED.equals(toolName)) {
-                        TermuxTerminalViewClient shareClient = activity.getTermuxTerminalViewClient();
+                        TermuxTerminalViewClient shareClient = host.viewClient();
                         if (shareClient == null) return error(503, "unavailable", "Terminal view client is not ready");
                         shareClient.shareSelectedText();
                     } else {
-                        com.termux.shared.interact.ShareUtils.copyTextToClipboard(activity, selected);
+                        com.termux.shared.interact.ShareUtils.copyTextToClipboard(host.context(), selected);
                     }
                     return ok().put("characters", selected.length());
                 }
 
                 case TOOL_SESSION_RENAME_PROMPT: {
-                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
-                    if (!activity.promptCurrentSessionRename())
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    if (!host.promptCurrentSessionRename())
                         return error(409, "no_session", "There is no session to rename");
                     return ok();
                 }
 
                 case TOOL_PANE_RENAME_PROMPT: {
-                    TermuxTerminalSessionActivityClient promptClient = activity.getTermuxTerminalSessionClient();
+                    TermuxTerminalSessionActivityClient promptClient = host.sessionClient();
                     if (promptClient == null) return error(503, "unavailable", "Session client is not ready");
                     // The pane's own shell, never the session the drawer row stands for: those are
                     // session.rename_prompt's job, and conflating them is what made Ctrl+Alt+R and
@@ -722,45 +721,45 @@ public final class TerminalActionDispatcher {
                 }
 
                 case TOOL_WINDOW_SELECT: {
-                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
                     if (!arguments.has("index")) {
                         return error(400, "bad_request", "Missing 'index'");
                     }
                     int index = arguments.optInt("index", -1);
-                    if (!activity.selectWindow(index)) {
+                    if (!host.selectWindow(index)) {
                         return error(400, "bad_request", "No window at index " + index
-                            + "; the current session has " + activity.getCurrentWindowCount());
+                            + "; the current session has " + host.currentWindowCount());
                     }
                     return ok().put("index", index);
                 }
 
                 case TOOL_WINDOW_RENAME: {
-                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
                     // An explicit empty name restores the automatic tab label; only an absent key
                     // is an error.
                     if (!arguments.has("name")) return error(400, "bad_request", "Missing 'name'");
-                    if (!activity.renameCurrentWindowTo(arguments.optString("name", ""))) {
+                    if (!host.renameCurrentWindowTo(arguments.optString("name", ""))) {
                         return error(409, "no_window", "There is no window to rename");
                     }
                     // Report the stored name: TerminalNamePolicy caps it, so what
                     // was asked for and what was kept can differ.
-                    String storedWindow = activity.getCurrentWindowName();
+                    String storedWindow = host.currentWindowName();
                     return ok().put("name", storedWindow == null ? JSONObject.NULL : storedWindow);
                 }
 
                 case TOOL_SESSION_RENAME: {
-                    if (!activity.isSplitPanesEnabled()) return splitsDisabled();
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
                     // An explicit empty name clears the label; only an absent key is an error.
                     if (!arguments.has("name")) return error(400, "bad_request", "Missing 'name'");
-                    if (!activity.renameCurrentSessionTo(arguments.optString("name", ""))) {
+                    if (!host.renameCurrentSessionTo(arguments.optString("name", ""))) {
                         return error(409, "no_session", "There is no session to rename");
                     }
-                    String stored = activity.getCurrentSessionName();
+                    String stored = host.currentSessionName();
                     return ok().put("name", stored == null ? JSONObject.NULL : stored);
                 }
 
                 case TOOL_PANE_RENAME: {
-                    TermuxTerminalSessionActivityClient renameClient = activity.getTermuxTerminalSessionClient();
+                    TermuxTerminalSessionActivityClient renameClient = host.sessionClient();
                     if (renameClient == null) return error(503, "unavailable", "Session client is not ready");
                     if (!arguments.has("name")) return error(400, "bad_request", "Missing 'name'");
                     String paneName = arguments.optString("name", "").trim();
@@ -775,13 +774,13 @@ public final class TerminalActionDispatcher {
                     int sessionIndex = arguments.optInt("index", -1);
                     // Deliberately the browser index, not the drawer index: rebuildDrawerSessions
                     // skips window-less sessions, so the two can diverge.
-                    if (!activity.renameBrowserSession(sessionIndex,
+                    if (!host.renameBrowserSession(sessionIndex,
                             arguments.optString("name", ""))) {
                         return error(400, "bad_request", "No session at index " + sessionIndex);
                     }
                     // Report the stored name: TerminalNamePolicy caps it, so what was asked for
                     // and what was kept can differ.
-                    String storedName = activity.getBrowserSessionName(sessionIndex);
+                    String storedName = host.browserSessionName(sessionIndex);
                     return ok().put("index", sessionIndex)
                         .put("name", storedName == null ? JSONObject.NULL : storedName);
                 }
@@ -790,9 +789,9 @@ public final class TerminalActionDispatcher {
                 case TOOL_TERMINAL_SELECT_ALL: {
                     // Selection lives on the view, not the view client: it has no session-level
                     // side effects, and the view is the only thing that knows the cursor cell.
-                    com.termux.view.TerminalView selectView = activity.getTerminalView();
+                    com.termux.view.TerminalView selectView = host.focusedView();
                     if (selectView == null) return error(503, "unavailable", "Terminal view is not ready");
-                    if (activity.getCurrentSession() == null) return noSession(toolName);
+                    if (host.currentSession() == null) return noSession(toolName);
                     if (TOOL_TERMINAL_SELECT_ALL.equals(toolName)) {
                         selectView.selectAllText();
                     } else {
@@ -809,9 +808,9 @@ public final class TerminalActionDispatcher {
                 case TOOL_TERMINAL_SEARCH_SCROLLBACK:
                 case TOOL_TERMINAL_SHARE_TRANSCRIPT:
                 case TOOL_CLIPBOARD_PASTE: {
-                    TermuxTerminalViewClient viewClient = activity.getTermuxTerminalViewClient();
+                    TermuxTerminalViewClient viewClient = host.viewClient();
                     if (viewClient == null) return error(503, "unavailable", "Terminal view client is not ready");
-                    if (activity.getCurrentSession() == null) return noSession(toolName);
+                    if (host.currentSession() == null) return noSession(toolName);
                     switch (toolName) {
                         case TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD:
                             viewClient.onToggleSoftKeyboardRequest();
@@ -855,9 +854,9 @@ public final class TerminalActionDispatcher {
     }
 
     @NonNull
-    private JSONObject doSplit(@NonNull TermuxActivity activity, int orientation, @NonNull String label) {
-        if (!activity.isSplitPanesEnabled()) return splitsDisabled();
-        activity.splitCurrentPane(orientation);
+    private JSONObject doSplit(@NonNull TerminalHost host, int orientation, @NonNull String label) {
+        if (!host.isSplitPanesEnabled()) return splitsDisabled();
+        host.splitCurrentPane(orientation);
         try {
             return ok().put("split", label);
         } catch (JSONException e) {
@@ -867,30 +866,30 @@ public final class TerminalActionDispatcher {
 
     /**
      * Read-only snapshot, so a caller can tell what the split/window state is
-     * before issuing commands. Uses only public {@link TermuxActivity} API.
+     * before issuing commands. Uses only the {@link TerminalHost} surface.
      */
     @NonNull
-    private JSONObject buildState(@NonNull TermuxActivity activity) {
+    private JSONObject buildState(@NonNull TerminalHost host) {
         try {
             JSONObject state = ok();
-            state.put("splitPanesEnabled", activity.isSplitPanesEnabled());
-            state.put("drawerSessions", activity.mDrawerSessions.size());
-            state.put("hasCurrentSession", activity.getCurrentSession() != null);
-            TerminalPaneController controller = activity.getPaneController();
+            state.put("splitPanesEnabled", host.isSplitPanesEnabled());
+            state.put("drawerSessions", host.sessions().count());
+            state.put("hasCurrentSession", host.currentSession() != null);
+            TerminalPaneController controller = host.paneController();
             state.put("visiblePanes", controller == null ? 0 : controller.getVisiblePaneViews().size());
             state.put("floatingPanes", controller == null ? 0 : controller.activeFloatingPaneCount());
             state.put("focusedPaneFloating", controller != null && controller.isActivePaneFloating());
-            state.put("windows", activity.getCurrentWindowCount());
-            state.put("currentWindow", activity.getCurrentWindowIndex());
+            state.put("windows", host.currentWindowCount());
+            state.put("currentWindow", host.currentWindowIndex());
             // The retained automatic layout, absent when the window is manually managed. Without
             // this the policy is invisible to agents and to any device check.
-            String paneLayout = activity.activePaneLayoutPolicy();
+            String paneLayout = host.activePaneLayoutPolicy();
             if (paneLayout != null) state.put("paneLayout", paneLayout);
-            String sessionName = activity.getCurrentSessionName();
+            String sessionName = host.currentSessionName();
             if (sessionName != null) state.put("windowSessionName", sessionName);
-            state.put("wallpaperEnabled", activity.isWallpaperModeEnabled());
-            state.put("cursorTrailEnabled", activity.isCursorTrailEnabled());
-            state.put("performance", buildPerformanceState(activity));
+            state.put("wallpaperEnabled", host.isWallpaperModeEnabled());
+            state.put("cursorTrailEnabled", host.isCursorTrailEnabled());
+            state.put("performance", buildPerformanceState(host));
             return state;
         } catch (JSONException e) {
             return error(500, "execution_failed", "Failed to build terminal state");
@@ -898,8 +897,8 @@ public final class TerminalActionDispatcher {
     }
 
     @NonNull
-    private JSONObject buildPerformanceState(@NonNull TermuxActivity activity) throws JSONException {
-        TerminalFrameMetricsMonitor.Snapshot window = activity.getTerminalFrameMetricsSnapshot();
+    private JSONObject buildPerformanceState(@NonNull TerminalHost host) throws JSONException {
+        TerminalFrameMetricsMonitor.Snapshot window = host.frameMetricsSnapshot();
         JSONObject performance = new JSONObject();
         performance.put("measurementActiveMs", nanosToMillis(window.activeDurationNanos));
         performance.put("allocationScope", "whole_process_since_reset");
@@ -924,8 +923,8 @@ public final class TerminalActionDispatcher {
         performance.put("windowFrames", frames);
 
         JSONArray panes = new JSONArray();
-        java.util.List<TerminalView> visiblePanes = activity.getTerminalPaneViews();
-        TerminalView activePane = activity.getTerminalView();
+        java.util.List<TerminalView> visiblePanes = host.paneViews();
+        TerminalView activePane = host.focusedView();
         for (int i = 0; i < visiblePanes.size(); i++) {
             TerminalView pane = visiblePanes.get(i);
             TerminalRenderMetrics.Snapshot render = pane.getRenderMetricsSnapshot();
@@ -1003,9 +1002,9 @@ public final class TerminalActionDispatcher {
      * one PackageManager query.
      */
     @Nullable
-    private static LauncherAppEntry resolveApp(@NonNull TermuxActivity activity,
+    private static LauncherAppEntry resolveApp(@NonNull android.content.Context context,
                                                @NonNull String query) {
-        return resolveApp(LauncherAppDataProvider.getInstance(activity), query, true);
+        return resolveApp(LauncherAppDataProvider.getInstance(context), query, true);
     }
 
     /**

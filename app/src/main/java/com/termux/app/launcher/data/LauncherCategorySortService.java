@@ -17,7 +17,6 @@ import com.termux.R;
 import com.termux.ai.TaiManager;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.launcher.model.LauncherAppEntry;
-import com.termux.shared.termux.TermuxConstants;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -52,7 +51,6 @@ public final class LauncherCategorySortService extends Service {
      */
     private static final int NOTIFICATION_ID = 24112;
     private static final int RESULT_NOTIFICATION_ID = 24113;
-    private static final String CATEGORY_FILE_NAME = "app-categories.conf";
     private static final int MAX_TOKENS = 24;
     private static final long NOTIFICATION_INTERVAL_MS = 750L;
 
@@ -146,7 +144,7 @@ public final class LauncherCategorySortService extends Service {
             labelByPackage.put(entry.appRef.packageName, entry.label);
         }
 
-        File file = new File(TermuxConstants.TERMUX_HOME_DIR_PATH + "/" + CATEGORY_FILE_NAME);
+        File file = LauncherCategoryFile.defaultFile();
         LauncherCategoryFile existing;
         try {
             existing = LauncherCategoryFile.parse(file);

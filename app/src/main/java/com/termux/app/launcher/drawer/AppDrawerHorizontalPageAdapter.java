@@ -1,6 +1,5 @@
 package com.termux.app.launcher.drawer;
 
-import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.GridLayout;
@@ -154,12 +153,22 @@ public final class AppDrawerHorizontalPageAdapter
         int cellHeight = metrics == null ? 1 : Math.max(1, Math.round(metrics.rowHeightPx));
         for (int i = 0; i < holder.cells.size(); i++) {
             AppDrawerAppCellView cell = holder.cells.get(i);
-            GridLayout.LayoutParams params = new GridLayout.LayoutParams(
-                GridLayout.spec(i / columns), GridLayout.spec(i % columns));
-            params.width = cellWidth;
-            params.height = cellHeight;
-            params.setGravity(Gravity.FILL);
-            cell.setLayoutParams(params);
+            // FILL alignment carried in the specs themselves (not via setGravity, which would
+            // rewrite them and defeat the equality check below).
+            GridLayout.Spec rowSpec = GridLayout.spec(i / columns, GridLayout.FILL);
+            GridLayout.Spec columnSpec = GridLayout.spec(i % columns, GridLayout.FILL);
+            GridLayout.LayoutParams params =
+                cell.getLayoutParams() instanceof GridLayout.LayoutParams
+                    ? (GridLayout.LayoutParams) cell.getLayoutParams() : null;
+            // Unconditional setLayoutParams here re-ran GridLayout's constraint solver twenty
+            // times per page bind; a recycled page almost always keeps its exact grid geometry.
+            if (params == null || params.width != cellWidth || params.height != cellHeight
+                || !rowSpec.equals(params.rowSpec) || !columnSpec.equals(params.columnSpec)) {
+                params = new GridLayout.LayoutParams(rowSpec, columnSpec);
+                params.width = cellWidth;
+                params.height = cellHeight;
+                cell.setLayoutParams(params);
+            }
             int entryIndex = start + i;
             if (entryIndex < end) {
                 AppDrawerItem item = mItems.get(entryIndex);

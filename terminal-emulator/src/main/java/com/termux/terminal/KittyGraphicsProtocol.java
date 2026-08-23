@@ -391,6 +391,11 @@ final class KittyGraphicsProtocol {
             return;
         }
         decodeBytesInFlight += transmittedBytes;
+        // The cursor advance below linefeeds over the image's rows right now, scrolling the screen
+        // when the cursor sits near the bottom, while the placement lands only after the decode. The
+        // captured row is a screen row, so it must drop by however many lines scroll in between —
+        // otherwise the image lands that many rows below its anchor, leaving blank lines above it.
+        final long scrollsAtSubmit = emulator.scrollEventCount();
         emulator.advanceKittyGraphicsCursor(command, displaySize[0] + offsetX, displaySize[1] + offsetY,
             row, col, cellWidth, cellHeight);
         final boolean storeCopy = storeRequested;
@@ -462,7 +467,8 @@ final class KittyGraphicsProtocol {
                 int[] transform = storeCopy
                     ? new int[] { 0, 0, sourceWidth, sourceHeight, displaySize[0], displaySize[1], offsetX, offsetY }
                     : null;
-                if (!emulator.placeKittyGraphics(result, command, effectiveId, row, col, cellWidth, cellHeight, transform)) {
+                int anchorRow = row - (int) (emulator.scrollEventCount() - scrollsAtSubmit);
+                if (!emulator.placeKittyGraphics(result, command, effectiveId, anchorRow, col, cellWidth, cellHeight, transform)) {
                     result.recycle();
                     reply(command, "EINVAL:image placement failed", true, false, effectiveId);
                     return;
@@ -523,6 +529,9 @@ final class KittyGraphicsProtocol {
         final long acceptedGeneration = generation;
         final int row = emulator.getCursorRow();
         final int col = emulator.getCursorCol();
+        // Same anchor discipline as submitDecode: the advance may scroll now, the placement lands
+        // later, and the captured screen row has to follow the content it was captured against.
+        final long scrollsAtSubmit = emulator.scrollEventCount();
         emulator.advanceKittyGraphicsCursor(command, displaySize[0] + offsetX, displaySize[1] + offsetY,
             row, col, cellWidth, cellHeight);
 
@@ -575,7 +584,8 @@ final class KittyGraphicsProtocol {
                     }
                     int[] transform = new int[] { crop[0], crop[1], crop[2], crop[3],
                         displaySize[0], displaySize[1], offsetX, offsetY };
-                    if (!emulator.placeKittyGraphics(result, command, id, row, col, cellWidth, cellHeight, transform)) {
+                    int anchorRow = row - (int) (emulator.scrollEventCount() - scrollsAtSubmit);
+                    if (!emulator.placeKittyGraphics(result, command, id, anchorRow, col, cellWidth, cellHeight, transform)) {
                         result.recycle();
                         reply(command, "EINVAL:image placement failed", true, false, id);
                         return;

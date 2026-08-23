@@ -554,6 +554,14 @@ public final class TerminalEmulator {
     private int mScrollCounter = 0;
 
     /**
+     * Total lines ever scrolled off the top, never reset (unlike {@link #mScrollCounter}, which the
+     * view consumes and clears). A kitty graphics placement captures the cursor row when the command
+     * arrives but lands after an asynchronous decode; the difference in this count across that gap is
+     * how many rows the captured anchor has since moved up.
+     */
+    private long mScrollEventCount;
+
+    /**
      * If automatic scrolling of terminal is disabled
      */
     private boolean mAutoScrollDisabled;
@@ -590,6 +598,10 @@ public final class TerminalEmulator {
     public void setCellSize(int w, int h) {
         cellW = w;
         cellH = h;
+    }
+
+    long scrollEventCount() {
+        return mScrollEventCount;
     }
 
     public int getCellWidthPixels() {
@@ -3396,6 +3408,7 @@ public final class TerminalEmulator {
 
     private void scrollDownOneLine() {
         mScrollCounter++;
+        mScrollEventCount++;
         long currentStyle = getStyle();
         if (mLeftMargin != 0 || mRightMargin != mColumns) {
             // Horizontal margin: Do not put anything into scroll history, just non-margin part of screen up.
