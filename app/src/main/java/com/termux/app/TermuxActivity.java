@@ -95,6 +95,7 @@ import com.termux.app.chrome.ChromeSpec;
 import com.termux.app.chrome.SurfaceDirtyLedger;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
+import com.termux.app.surfaces.SurfaceEditorCardMetrics;
 import com.termux.app.surfaces.SurfaceEditorRows;
 import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
@@ -351,6 +352,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Restores that entry state. Held so the close gate can offer Discard. */
     @Nullable private Runnable mSurfaceEditorRevert;
     private ViewTreeObserver.OnGlobalLayoutListener mDockTuningLayoutListener;
+    /**
+     * Height the slider region is heading for. Compared against instead of the live layout height
+     * so the resize animation's own layout passes do not each look like a fresh change.
+     */
+    private int mSurfaceEditorScrollTarget;
+    @Nullable private android.animation.ValueAnimator mSurfaceEditorScrollAnimator;
 
     /**
      * Termux app shared preferences manager.
@@ -7994,8 +8001,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Dimming for an editor control the current dock style makes inapplicable. */
     private static final float SURFACE_TUNING_DISABLED_ALPHA = 0.38f;
-    /** How much of the screen the editor card may occupy before its slider region starts scrolling. */
-    private static final float SURFACE_TUNING_CARD_MAX_SCREEN_FRACTION = 0.45f;
+    /** Length of the slide when a section needs the card a different height. */
+    private static final long SURFACE_TUNING_RESIZE_DURATION_MS = 140L;
     /** Card opacity while a peeking control is being dragged. */
     private static final float SURFACE_TUNING_PEEK_ALPHA = 0.28f;
     private static final long SURFACE_TUNING_PEEK_OUT_MS = 90;
@@ -8577,9 +8584,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Caps the scrollable slider region so the header and Done button always stay on screen above
-     * the accessory stack (dock, and the in-app keyboard when shown), regardless of screen size or
-     * density. When the content fits it stays wrap-content; when it would overflow it scrolls.
+     * Sizes the editor card against the room it actually has.
+     *
+     * <p>The card is pinned above the accessory stack, and how much room that leaves changes while
+     * the editor is open: hiding the in-app keyboard frees hundreds of pixels, and a card that kept
+     * its old height sat in the bottom corner with a band of empty terminal above it. So the height
+     * is recomputed on every layout — {@link SurfaceEditorCardMetrics} decides how much of the
+     * space to spend — and the scroll region takes the height its current section needs, up to that
+     * ceiling. Header, tabs and the action row stay on screen at every size.
      */
     private void adjustDockTuningCardHeight() {
         if (!mDockTuningMode)
@@ -8598,47 +8610,91 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View scrollChild = scroll.getChildCount() > 0 ? scroll.getChildAt(0) : null;
         if (scrollChild == null)
             return;
+        // Before the first measure the chrome reports zero height, and a ceiling computed from that
+        // is tall enough to push the card's own header up behind the launcher's status bar. The next
+        // layout pass calls back with real numbers.
+        if (headerRow.getHeight() <= 0 || actions.getHeight() <= 0)
+            return;
 
-        // The card may grow until just under the launcher's own status bar — a 2dp seam, not a
-        // band of empty terminal. Positions are compared in the card parent's coordinate space,
-        // so the window bar (a child of the terminal container) is converted through the window.
-        int statusBottom = Math.max(mLastStatusBarInsetTop, Math.round(dpToPx(24)));
+        // The card may grow until just under the launcher's own status bar — a small seam, not a
+        // band of empty terminal. Both bounds are in the card parent's coordinate space: the status
+        // inset and the window bar are measured against the window, and the parent starts below the
+        // inset, so each is converted rather than compared raw. Skipping the conversion cost the
+        // card a status bar's worth of height it was entitled to.
+        int parentTopInWindow = 0;
+        if (controls.getParent() instanceof View) {
+            int[] location = new int[2];
+            ((View) controls.getParent()).getLocationInWindow(location);
+            parentTopInWindow = location[1];
+        }
+        int statusBottom = Math.max(0, mLastStatusBarInsetTop - parentTopInWindow);
         View windowBar = findViewById(R.id.terminal_window_bar_host);
         if (windowBar != null && windowBar.getVisibility() == View.VISIBLE
-            && windowBar.getHeight() > 0 && controls.getParent() instanceof View) {
+            && windowBar.getHeight() > 0) {
             int[] location = new int[2];
             windowBar.getLocationInWindow(location);
-            int barBottomInWindow = location[1] + windowBar.getHeight();
-            ((View) controls.getParent()).getLocationInWindow(location);
-            statusBottom = Math.max(statusBottom, barBottomInWindow - location[1]);
+            statusBottom = Math.max(statusBottom,
+                location[1] + windowBar.getHeight() - parentTopInWindow);
         }
-        int topLimit = statusBottom + Math.round(dpToPx(2));
+        int topLimit = statusBottom + Math.round(dpToPx(6));
         int cardMarginBottom = Math.round(dpToPx(10));
         int availableCard = (stack.getTop() - cardMarginBottom) - topLimit;
-        // Never let the card eat the screen. It is a live editor: whatever is being tuned has to
-        // stay on screen next to the control tuning it, and a card grown all the way to the status
-        // bar covered the terminal on the section that edits the terminal. The scroll region takes
-        // the overflow instead.
-        availableCard = Math.min(availableCard,
-            Math.round(getResources().getDisplayMetrics().heightPixels
-                * SURFACE_TUNING_CARD_MAX_SCREEN_FRACTION));
-        // Chrome outside the scroll region: card top/bottom padding (10 + 12), Done top margin (6),
-        // plus the measured header and Done heights.
+        // Chrome outside the scroll region: card top/bottom padding (10 + 12), the action row's top
+        // margin (6), plus the measured header, tab row and action row.
         int chrome = Math.round(dpToPx(10 + 12 + 6)) + headerRow.getHeight()
             + navigation.getHeight() + actions.getHeight();
-        int maxScroll = availableCard - chrome;
-        int minScroll = Math.round(dpToPx(96));
-        if (maxScroll < minScroll)
-            maxScroll = minScroll;
+        int screenHeight = getResources().getDisplayMetrics().heightPixels;
+        float pxPerDp = dpToPx(1);
+        int target = SurfaceEditorCardMetrics.scrollHeightPx(availableCard, chrome,
+            scrollChild.getMeasuredHeight(), screenHeight, pxPerDp);
+        setSurfaceEditorScrollHeight(scroll, target);
+    }
 
+    /**
+     * Moves the slider region to {@code target}, animating anything but the first pass.
+     *
+     * <p>The card is anchored to its bottom edge, so a resize moves its header and tabs. Snapping
+     * them mid-gesture — the section tab that was just tapped jumping out from under the finger —
+     * is what a fixed-height card was avoiding; a short slide reads as the panel fitting itself to
+     * the section instead, and costs none of the empty glass a fixed height left under the short
+     * sections.
+     */
+    private void setSurfaceEditorScrollHeight(@NonNull ScrollView scroll, int target) {
+        boolean animating = mSurfaceEditorScrollAnimator != null
+            && mSurfaceEditorScrollAnimator.isRunning();
+        // The animation lays the card out on every frame, and each of those passes lands back here.
+        // Restarting the slide from wherever it had got to stretched a 140ms move over half a
+        // second, so a run already heading for this target is left alone.
+        if (target == mSurfaceEditorScrollTarget
+            && (animating || scroll.getLayoutParams().height == target))
+            return;
+        mSurfaceEditorScrollTarget = target;
+        if (mSurfaceEditorScrollAnimator != null) {
+            mSurfaceEditorScrollAnimator.cancel();
+            mSurfaceEditorScrollAnimator = null;
+        }
         ViewGroup.LayoutParams lp = scroll.getLayoutParams();
-        // Keep the card and tab row stationary as sections change. A wrap-content scroll area made
-        // shorter panels pull the whole bottom-anchored card downward under the user's finger.
-        int target = maxScroll;
-        if (lp.height != target) {
+        int from = lp.height;
+        // No animation into the first measured height, or from one: there is nothing on screen yet
+        // to slide, and the pass that discovers the height must not leave the card half-sized.
+        if (from <= 0 || Math.abs(target - from) < Math.round(dpToPx(4))) {
             lp.height = target;
             scroll.setLayoutParams(lp);
+            return;
         }
+        android.animation.ValueAnimator animator =
+            android.animation.ValueAnimator.ofInt(from, target);
+        animator.setDuration(SURFACE_TUNING_RESIZE_DURATION_MS);
+        animator.setInterpolator(new android.view.animation.DecelerateInterpolator());
+        animator.addUpdateListener(update -> {
+            if (!mDockTuningMode)
+                return;
+            ViewGroup.LayoutParams params = scroll.getLayoutParams();
+            params.height = (int) update.getAnimatedValue();
+            scroll.setLayoutParams(params);
+        });
+        mSurfaceEditorScrollAnimator = animator;
+        animator.start();
     }
 
     private void applyDockTuningPreview(boolean blurChanged) {
@@ -8789,6 +8845,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mDockTuningMode = false;
         setSurfaceTuningGestureOverlayVisible(false);
         unregisterDockTuningLayoutListener();
+        if (mSurfaceEditorScrollAnimator != null) {
+            mSurfaceEditorScrollAnimator.cancel();
+            mSurfaceEditorScrollAnimator = null;
+        }
+        mSurfaceEditorScrollTarget = 0;
         ScrollView scroll = findViewById(R.id.dock_tuning_scroll);
         if (scroll != null) {
             ViewGroup.LayoutParams lp = scroll.getLayoutParams();
@@ -15686,6 +15747,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         Logger.logInfo(LOG_TAG, "Termux:Styling wrote a colour scheme; disabling wallpaper colours");
         mPreferences.setTerminalDynamicColorsEnabled(false);
+        // A second reason to drop the cache: that write also hands the chrome to the scheme, and
+        // the recreate this broadcast triggers must theme from the new answer, not the old one.
+        LauncherSchemeTheme.invalidate();
     }
 
     private void fixTermuxActivityBroadcastReceiverIntent(Intent intent) {
