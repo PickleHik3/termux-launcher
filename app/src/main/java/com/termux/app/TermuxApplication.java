@@ -48,6 +48,11 @@ public class TermuxApplication extends Application {
         TermuxBootstrap.setTermuxPackageManagerAndVariant(BuildConfig.TERMUX_PACKAGE_VARIANT);
         // Terminal name and version reported to applications via XTVERSION ("CSI > 0 q")
         com.termux.terminal.TerminalEmulator.setXtVersion(BuildConfig.VERSION_NAME);
+        // Fold the old per-surface glass values into Base plus overrides. Must run before anything
+        // reads a surface value, because every one of those reads now resolves through the link.
+        TermuxAppSharedPreferences surfacePreferences = TermuxAppSharedPreferences.build(context);
+        if (surfacePreferences != null)
+            surfacePreferences.migrateSurfaceInheritance();
         // Init app wide SharedProperties loaded from termux.properties
         TermuxAppSharedProperties properties = TermuxAppSharedProperties.init(context);
         // Init app wide shell manager

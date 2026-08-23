@@ -38,8 +38,11 @@ public class WallpaperModePreferencesTest {
     @Test
     public void disablingWallpaperForcesOpaqueUnblurredSurfacesAndEnablingRestoresValues() {
         preferences.setUseSystemWallpaperEnabled(true);
-        preferences.setTerminalBackgroundOpacity(37);
+        // A user whose terminal and dock differ has, by definition, taken the terminal off the
+        // shared layer - while linked the two name the same value and cannot disagree.
         preferences.setAppBarOpacity(63);
+        preferences.detachSurfaceValue(TermuxAppSharedPreferences.SurfaceSlot.CANVAS,
+            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 37);
         preferences.setExtraKeysBlurRadius(19);
 
         ChromePolicy.applyWallpaperModePreferences(preferences, false);

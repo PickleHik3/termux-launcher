@@ -233,11 +233,13 @@ public class DockLayoutPolicyTest {
     }
 
     @Test
-    public void horizontalInset_spendsTheShippedDefaultBeforeAFlushStyleMovesAtAll() {
-        // Flush styles subtract the 10dp default: 10dp reads as flush, 24dp as 14dp of margin.
+    public void horizontalInset_isInertWhileDockedAndVerbatimWhileFloating() {
+        // Docked is flush with the screen edges, so the side gap does nothing at any configured
+        // value - it no longer spends the 10dp default and then starts moving past that.
         assertEquals(0, DockLayoutPolicy.surfaceHorizontalInsetPx(10, false, DENSITY));
         assertEquals(0, DockLayoutPolicy.surfaceHorizontalInsetPx(0, false, DENSITY));
-        assertEquals(39, DockLayoutPolicy.surfaceHorizontalInsetPx(24, false, DENSITY));
+        assertEquals(0, DockLayoutPolicy.surfaceHorizontalInsetPx(24, false, DENSITY));
+        assertEquals(0, DockLayoutPolicy.surfaceHorizontalInsetPx(96, false, DENSITY));
         // A capsule keeps its configured inset as-is, clamped to the 48dp ceiling.
         assertEquals(28, DockLayoutPolicy.surfaceHorizontalInsetPx(10, true, DENSITY));
         assertEquals(66, DockLayoutPolicy.surfaceHorizontalInsetPx(24, true, DENSITY));

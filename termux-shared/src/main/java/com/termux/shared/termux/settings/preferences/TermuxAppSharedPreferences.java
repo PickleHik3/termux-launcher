@@ -173,19 +173,16 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public int getAppLauncherDockCornerRadius() {
-        int value = SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS,
-            TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS);
+        int value = resolveSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.CORNER_RADIUS,
+            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS, TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS);
         if (value < 0) return TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS;
         return Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS, value);
     }
 
     public void setAppLauncherDockCornerRadius(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS,
-            value < 0 ? TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS
-                : Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS, value),
-            false);
+        writeSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.CORNER_RADIUS,
+            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS, value < 0 ? TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS
+                : Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS, value));
     }
 
     public boolean isAppLauncherDrawerEnabled() {
@@ -311,89 +308,111 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public int getStatusBarBlurRadius() {
-        int fallback = mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS)
-            ? TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS : getExtraKeysBlurRadius();
-        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, fallback), 0, 30);
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
+            TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS), 0, 30);
     }
 
     public void setStatusBarBlurRadius(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS,
-            DataUtils.clamp(value, 0, 30), false);
+        writeSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
+            TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, DataUtils.clamp(value, 0, 30));
     }
 
     public int getStatusBarOpacity() {
-        int fallback = mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_OPACITY)
-            ? TERMUX_APP.DEFAULT_STATUS_BAR_OPACITY : getAppBarOpacity();
-        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_STATUS_BAR_OPACITY, fallback), 0, 100);
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.OPACITY,
+            TERMUX_APP.KEY_STATUS_BAR_OPACITY, TERMUX_APP.DEFAULT_STATUS_BAR_OPACITY), 0, 100);
     }
 
     public void setStatusBarOpacity(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_OPACITY,
-            DataUtils.clamp(value, 0, 100), false);
+        writeSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.OPACITY,
+            TERMUX_APP.KEY_STATUS_BAR_OPACITY, DataUtils.clamp(value, 0, 100));
     }
 
     public int getStatusBarGrain() {
-        int fallback = mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_GRAIN)
-            ? TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN : getDockGlassGrain();
-        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_STATUS_BAR_GRAIN, fallback), 0, 100);
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.GRAIN,
+            TERMUX_APP.KEY_STATUS_BAR_GRAIN, TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN), 0, 100);
     }
 
     public void setStatusBarGrain(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_GRAIN,
-            DataUtils.clamp(value, 0, 100), false);
+        writeSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.GRAIN,
+            TERMUX_APP.KEY_STATUS_BAR_GRAIN, DataUtils.clamp(value, 0, 100));
     }
 
     public int getStatusBarCornerRadius() {
-        int fallback = mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS)
-            ? TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS : getAppLauncherDockCornerRadius();
-        int value = SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS, fallback);
+        int value = resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.CORNER_RADIUS,
+            TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS, TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS);
         return value < 0 ? TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS
             : Math.min(TERMUX_APP.MAX_STATUS_BAR_CORNER_RADIUS, value);
     }
 
     public void setStatusBarCornerRadius(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS,
-            value < 0 ? TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS
-                : Math.min(TERMUX_APP.MAX_STATUS_BAR_CORNER_RADIUS, value), false);
+        writeSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.CORNER_RADIUS,
+            TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS, value < 0 ? TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS
+                : Math.min(TERMUX_APP.MAX_STATUS_BAR_CORNER_RADIUS, value));
     }
 
     /** Wallpaper blur radius (dp) of the terminal's bordered glass pane; 0 disables. */
-    public int getTerminalGlassBlurRadius() {
+    /**
+     * Docked terminal frame corner radius (dp). Deliberately outside the surface cascade — see
+     * {@link TERMUX_APP#KEY_TERMINAL_CORNER_RADIUS} — so it neither detaches from nor follows Base.
+     */
+    public int getTerminalCornerRadius() {
         return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS,
-            TERMUX_APP.DEFAULT_TERMINAL_GLASS_BLUR_RADIUS), 0, 30);
+                TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS, TERMUX_APP.DEFAULT_TERMINAL_CORNER_RADIUS),
+            0, TERMUX_APP.MAX_TERMINAL_CORNER_RADIUS);
+    }
+
+    public void setTerminalCornerRadius(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS,
+            DataUtils.clamp(value, 0, TERMUX_APP.MAX_TERMINAL_CORNER_RADIUS), false);
+    }
+
+    public int getTerminalGlassBlurRadius() {
+        // The 30dp ceiling is the terminal's own; a larger inherited Base narrows here rather than
+        // leaking a value the pane cannot render.
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.BLUR,
+            TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS, TERMUX_APP.DEFAULT_TERMINAL_GLASS_BLUR_RADIUS), 0, 30);
     }
 
     public void setTerminalGlassBlurRadius(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS,
-            DataUtils.clamp(value, 0, 30), false);
+        writeSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.BLUR,
+            TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS, DataUtils.clamp(value, 0, 30));
     }
 
     /** Film-grain strength (percent) of the terminal's bordered glass pane; 0 disables. */
     public int getTerminalGlassGrain() {
-        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_TERMINAL_GLASS_GRAIN,
-            TERMUX_APP.DEFAULT_TERMINAL_GLASS_GRAIN), 0, 100);
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.GRAIN,
+            TERMUX_APP.KEY_TERMINAL_GLASS_GRAIN, TERMUX_APP.DEFAULT_TERMINAL_GLASS_GRAIN), 0, 100);
     }
 
     public void setTerminalGlassGrain(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_GLASS_GRAIN,
-            DataUtils.clamp(value, 0, 100), false);
+        writeSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.GRAIN,
+            TERMUX_APP.KEY_TERMINAL_GLASS_GRAIN, DataUtils.clamp(value, 0, 100));
     }
 
-    /** Opacity of the wallpaper behind every surface (percent); 100 leaves it undimmed. */
-    public int getWallpaperBackdropOpacity() {
-        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_WALLPAPER_BACKDROP_OPACITY,
-            TERMUX_APP.DEFAULT_WALLPAPER_BACKDROP_OPACITY), 0, 100);
+    /**
+     * Opacity of the black backdrop over the wallpaper, behind every surface (percent); 0 leaves
+     * the wallpaper undimmed.
+     *
+     * <p>Supersedes the old {@code wallpaper_backdrop_opacity}, which stored the complement — the
+     * wallpaper's own visibility — and so ran backwards under a slider labelled Opacity. A value
+     * left over from that key is complemented on read rather than rewritten, so the migration is
+     * idempotent and a downgrade still finds its own key intact.
+     */
+    public int getWallpaperBackdropDim() {
+        int stored = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, -1);
+        if (stored < 0) {
+            int legacy = SharedPreferenceUtils.getInt(mSharedPreferences,
+                TERMUX_APP.KEY_WALLPAPER_BACKDROP_OPACITY, -1);
+            stored = legacy < 0
+                ? TERMUX_APP.DEFAULT_WALLPAPER_BACKDROP_DIM
+                : 100 - DataUtils.clamp(legacy, 0, 100);
+        }
+        return DataUtils.clamp(stored, 0, 100);
     }
 
-    public void setWallpaperBackdropOpacity(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_BACKDROP_OPACITY,
+    public void setWallpaperBackdropDim(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM,
             DataUtils.clamp(value, 0, 100), false);
     }
 
@@ -414,37 +433,33 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public int getDockHorizontalInset() {
-        return clampSurfaceHorizontalInset(SharedPreferenceUtils.getInt(mSharedPreferences,
+        return clampSurfaceHorizontalInset(resolveSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.SIDE_GAP,
             TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET, TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET));
     }
 
     public void setDockHorizontalInset(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET,
-            clampSurfaceHorizontalInset(value), false);
+        writeSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.SIDE_GAP,
+            TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET, clampSurfaceHorizontalInset(value));
     }
 
     public int getInAppKeyboardHorizontalInset() {
-        return clampSurfaceHorizontalInset(SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET,
-            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET));
+        return clampSurfaceHorizontalInset(resolveSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.SIDE_GAP,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET));
     }
 
     public void setInAppKeyboardHorizontalInset(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET,
-            clampSurfaceHorizontalInset(value), false);
+        writeSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.SIDE_GAP,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET, clampSurfaceHorizontalInset(value));
     }
 
     public int getStatusBarHorizontalInset() {
-        return clampSurfaceHorizontalInset(SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET,
-            TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET));
+        return clampSurfaceHorizontalInset(resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.SIDE_GAP,
+            TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET, TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET));
     }
 
     public void setStatusBarHorizontalInset(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences,
-            TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET,
-            clampSurfaceHorizontalInset(value), false);
+        writeSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.SIDE_GAP,
+            TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET, clampSurfaceHorizontalInset(value));
     }
 
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_LAZY_MODE}. */
@@ -1155,15 +1170,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public int getInAppKeyboardBackgroundOpacity() {
-        return clampInAppKeyboardBackgroundOpacity(SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY,
-            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY));
+        return clampInAppKeyboardBackgroundOpacity(resolveSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY));
     }
 
     public void setInAppKeyboardBackgroundOpacity(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY,
-            clampInAppKeyboardBackgroundOpacity(value), false);
+        writeSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY, clampInAppKeyboardBackgroundOpacity(value));
     }
 
     public static int clampInAppKeyboardBackgroundOpacity(int value) {
@@ -1439,13 +1452,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public int getTerminalBackgroundOpacity() {
-        int opacity = SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY, TERMUX_APP.DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY);
-        return DataUtils.clamp(opacity, 0, 100);
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY,
+            TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY, TERMUX_APP.DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY), 0, 100);
     }
 
     public void setTerminalBackgroundOpacity(int value) {
         int clamped = DataUtils.clamp(value, 0, 100);
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY, clamped, false);
+        writeSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY,
+            TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY, clamped);
         if (isUseSystemWallpaperEnabled()) {
             setWallpaperEnabledTerminalBackgroundOpacity(clamped);
         }
@@ -1460,23 +1474,420 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_SESSIONS_OPACITY, DataUtils.clamp(value, 0, 100), false);
     }
 
+    /**
+     * One-time fold of the old per-surface values into Base plus overrides. Runs before anything
+     * reads a surface value, and is written so that every install keeps exactly the look it had:
+     * Base takes the dock's numbers, and any surface whose stored value already differed starts
+     * detached. Installs that had the old all-or-nothing "match all surfaces" switch on are fully
+     * linked, which is what that switch meant.
+     *
+     * <p>Deliberately reads the raw keys rather than the getters - the getters resolve through
+     * inheritance, which is exactly what is not established yet.
+     */
+    public synchronized void migrateSurfaceInheritance() {
+        adoptShippedSurfaceDefaults();
+        if (SharedPreferenceUtils.getBoolean(mSharedPreferences,
+                TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, false))
+            return;
+
+        boolean wasNormalized = SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_SURFACE_TUNING_NORMALIZED,
+            TERMUX_APP.DEFAULT_VALUE_SURFACE_TUNING_NORMALIZED);
+
+        for (SurfaceProperty property : SurfaceProperty.values()) {
+            // The dock is the reference surface: it is the one every other surface's legacy
+            // "fall back to the dock" branch already pointed at.
+            int base = getSurfaceOverrideValue(SurfaceSlot.DOCK, property);
+            setSurfaceBaseValue(property, base);
+
+            for (SurfaceSlot slot : SurfaceSlot.values()) {
+                if (!hasSurfaceProperty(slot, property))
+                    continue;
+                // Only a value the user actually stored can justify starting detached. A surface
+                // that was never touched has no opinion to preserve, so it joins Base - which is
+                // also what keeps a fresh install from opening with override badges already lit.
+                String key = surfaceOverrideKey(slot, property);
+                boolean stored = key != null && mSharedPreferences.contains(key);
+                boolean matches = wasNormalized || !stored
+                    || getSurfaceOverrideValue(slot, property) == base;
+                setSurfaceInheriting(slot, property, matches);
+            }
+        }
+
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, true, true);
+    }
+
+    /**
+     * Decides, once, whether this install gets the shipped Docked look or keeps the one it already
+     * had. A new install simply reads the current defaults, so the only thing it needs written is
+     * the one asymmetry a default cannot express. An existing install has the pre-shipped numbers
+     * pinned into every key it never set, which is what keeps changing what ships from reaching
+     * anyone who has already been using the app.
+     *
+     * <p>Runs before {@link #migrateSurfaceInheritance()}'s fold and carries its own marker, since
+     * an install can have folded under an earlier build and still need this.
+     */
+    private void adoptShippedSurfaceDefaults() {
+        if (SharedPreferenceUtils.getBoolean(mSharedPreferences,
+                TERMUX_APP.KEY_SHIPPED_SURFACE_DEFAULTS_ADOPTED, false))
+            return;
+
+        if (isFreshInstall()) {
+            // The shipped look sits the dock a few points denser than the surfaces behind it, and
+            // "denser than Base" is a detached row by definition — so this is the one thing about
+            // it that has to be written rather than defaulted. A fresh install opens with exactly
+            // one override badge lit, which is the truth about the look it is wearing.
+            setSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, false);
+            setSurfaceRawValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
+                TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY);
+            // Nothing to fold either, and folding would do harm: the fold seeds Base from the
+            // dock's numbers, which here means the dock's own denser opacity rather than the
+            // shared one the other surfaces are meant to open at.
+            SharedPreferenceUtils.setBoolean(mSharedPreferences,
+                TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, true, false);
+        } else {
+            // The dock's numbers come first because the fold reads them as its reference for Base:
+            // an install that never touched a dock control would otherwise be handed the new
+            // shared layer through the back door.
+            pinPreShippedDefaults(PRE_SHIPPED_DOCK_DEFAULTS);
+            pinPreShippedDefaults(PRE_SHIPPED_DEFAULTS);
+        }
+
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_SHIPPED_SURFACE_DEFAULTS_ADOPTED, true, true);
+    }
+
+    /**
+     * Whether this install has never run. The logger writes the log level before anything else on
+     * every launch, including the very first, so it is the one key a genuinely fresh install can
+     * already have; any other key means the app has been used and its look is the user's, not the
+     * shipped one's.
+     */
+    private boolean isFreshInstall() {
+        for (String key : mSharedPreferences.getAll().keySet()) {
+            if (!TERMUX_APP.KEY_LOG_LEVEL.equals(key))
+                return false;
+        }
+        return true;
+    }
+
+    /**
+     * The surface values as they stood before the shipped Docked look was captured from a tuned
+     * device. Written into an install that predates it, for every key it never set, so that
+     * changing what ships changes only what new installs see. Values the editor writes on detach
+     * are deliberately absent: those keys are filled from the resolved number at the moment a row
+     * is detached, so a stale default can never surface through them.
+     */
+    private static final Object[][] PRE_SHIPPED_DOCK_DEFAULTS = {
+        {TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, 10},
+        {TERMUX_APP.KEY_APP_BAR_OPACITY, 46},
+        {TERMUX_APP.KEY_DOCK_GLASS_GRAIN, 39},
+        {TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS, -1},
+        {TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET, 10},
+    };
+
+    private static final Object[][] PRE_SHIPPED_DEFAULTS = {
+        {TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED, Boolean.FALSE},
+        {TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS, 0},
+        {TERMUX_APP.KEY_TERMINAL_PANE_GAP, 1},
+        {TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE, 1.0830541f},
+        {TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP, 2.7f},
+        {TERMUX_APP.KEY_TOP_PANE_CLOCK_STYLE, TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP},
+        {TERMUX_APP.KEY_TOP_PANE_CLOCK_AM_PM, Boolean.FALSE},
+        {TERMUX_APP.KEY_TOP_PANE_CLOCK_COLLAPSED, Boolean.FALSE},
+        {TERMUX_APP.KEY_WALLPAPER_ENABLED_TERMINAL_BACKGROUND_OPACITY, 47},
+        {TERMUX_APP.KEY_WALLPAPER_ENABLED_APP_BAR_OPACITY, 46},
+        {TERMUX_APP.KEY_WALLPAPER_ENABLED_EXTRAKEYS_BLUR_RADIUS, 10},
+    };
+
+    /** Writes each pre-shipped value that this install has no opinion of its own about. */
+    private void pinPreShippedDefaults(@NonNull Object[][] defaults) {
+        for (Object[] entry : defaults) {
+            String key = (String) entry[0];
+            if (mSharedPreferences.contains(key))
+                continue;
+            Object value = entry[1];
+            if (value instanceof Boolean)
+                SharedPreferenceUtils.setBoolean(mSharedPreferences, key, (Boolean) value, false);
+            else if (value instanceof Float)
+                SharedPreferenceUtils.setFloat(mSharedPreferences, key, (Float) value, false);
+            else if (value instanceof String)
+                SharedPreferenceUtils.setString(mSharedPreferences, key, (String) value, false);
+            else
+                SharedPreferenceUtils.setInt(mSharedPreferences, key, (Integer) value, false);
+        }
+    }
+
+    /**
+     * Writes a surface's value through whatever link it currently has: while the surface follows
+     * Base the number lands on Base and every other follower moves with it, and once detached it
+     * lands on the surface's own key. This is what keeps callers that legitimately mean "make this
+     * surface look like X" - the Settings sliders, the wallpaper-mode policy - from silently
+     * detaching a surface as a side effect, and it is why every existing setter can stay as-is.
+     */
+    private void writeSurfaceValue(SurfaceSlot slot, SurfaceProperty property, String overrideKey,
+                                   int value) {
+        if (hasSurfaceProperty(slot, property) && isSurfaceInheriting(slot, property))
+            setSurfaceBaseValue(property, value);
+        else
+            SharedPreferenceUtils.setInt(mSharedPreferences, overrideKey, value, false);
+    }
+
+    /**
+     * Makes a surface show exactly {@code value} while disturbing the others as little as it can:
+     * it stays on (or returns to) Base when Base already gives that number, and detaches only when
+     * it genuinely cannot. For callers restoring a remembered per-surface picture - wallpaper mode
+     * - where some surfaces agreed and some did not.
+     */
+    public void setSurfaceValueExact(SurfaceSlot slot, SurfaceProperty property, int value) {
+        if (!hasSurfaceProperty(slot, property))
+            return;
+        writeSurfaceRaw(slot, property, value);
+        setSurfaceInheriting(slot, property, getSurfaceBaseValue(property) == value);
+    }
+
+    /** Writes the surface's own key regardless of the link, without changing it. Migration/undo. */
+    public void setSurfaceRawValue(SurfaceSlot slot, SurfaceProperty property, int value) {
+        writeSurfaceRaw(slot, property, value);
+    }
+
+    /** Detaches this one property from Base and gives it {@code value}. The editor's drag path. */
+    public void detachSurfaceValue(SurfaceSlot slot, SurfaceProperty property, int value) {
+        if (!hasSurfaceProperty(slot, property))
+            return;
+        setSurfaceInheriting(slot, property, false);
+        writeSurfaceRaw(slot, property, value);
+    }
+
+    private void writeSurfaceRaw(SurfaceSlot slot, SurfaceProperty property, int value) {
+        String key = surfaceOverrideKey(slot, property);
+        if (key != null)
+            SharedPreferenceUtils.setInt(mSharedPreferences, key, value, false);
+    }
+
+    private static String surfaceOverrideKey(SurfaceSlot slot, SurfaceProperty property) {
+        if (!hasSurfaceProperty(slot, property))
+            return null;
+        switch (slot) {
+            case KEYBOARD:
+                return property == SurfaceProperty.OPACITY
+                    ? TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY
+                    : TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET;
+            case STATUS:
+                switch (property) {
+                    case BLUR: return TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS;
+                    case OPACITY: return TERMUX_APP.KEY_STATUS_BAR_OPACITY;
+                    case GRAIN: return TERMUX_APP.KEY_STATUS_BAR_GRAIN;
+                    case CORNER_RADIUS: return TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS;
+                    default: return TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET;
+                }
+            case CANVAS:
+                switch (property) {
+                    case BLUR: return TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS;
+                    case GRAIN: return TERMUX_APP.KEY_TERMINAL_GLASS_GRAIN;
+                    default: return TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY;
+                }
+            default:
+                switch (property) {
+                    case BLUR: return TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS;
+                    case OPACITY: return TERMUX_APP.KEY_APP_BAR_OPACITY;
+                    case GRAIN: return TERMUX_APP.KEY_DOCK_GLASS_GRAIN;
+                    case CORNER_RADIUS: return TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS;
+                    default: return TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET;
+                }
+        }
+    }
+
+    // ------------------------------------------------------------------ surface inheritance
+    //
+    // Five properties are shared across the surfaces. Each (surface, property) pair either follows
+    // the Base value or holds its own override, and the resolution runs here rather than at the
+    // call sites: every existing getter below already returns the resolved number, so the whole
+    // render pipeline sees the right value without knowing inheritance exists. Only the editor
+    // reaches for the raw halves.
+
+    /** The surfaces that can carry an override. Sessions is deliberately not one: it is not glass. */
+    public enum SurfaceSlot {
+        DOCK("dock"), KEYBOARD("keyboard"), STATUS("status"), CANVAS("canvas");
+
+        public final String key;
+        SurfaceSlot(String key) { this.key = key; }
+    }
+
+    /** The shared properties. Not every slot has every one - see {@link #hasSurfaceProperty}. */
+    public enum SurfaceProperty {
+        BLUR("blur"), OPACITY("opacity"), GRAIN("grain"),
+        CORNER_RADIUS("corner_radius"), SIDE_GAP("side_gap");
+
+        public final String key;
+        SurfaceProperty(String key) { this.key = key; }
+    }
+
+    /**
+     * Whether a property is real for a slot. The keyboard renders on the dock's material, so it has
+     * no blur, grain or radius of its own; the terminal canvas has no capsule radius and no screen
+     * edge gap. Showing an inherited row for one of these would display a number controlling
+     * nothing.
+     */
+    public static boolean hasSurfaceProperty(SurfaceSlot slot, SurfaceProperty property) {
+        switch (slot) {
+            case KEYBOARD:
+                return property == SurfaceProperty.OPACITY || property == SurfaceProperty.SIDE_GAP;
+            case CANVAS:
+                return property == SurfaceProperty.BLUR || property == SurfaceProperty.OPACITY
+                    || property == SurfaceProperty.GRAIN;
+            default:
+                return true;
+        }
+    }
+
+    private static String surfaceInheritKey(SurfaceSlot slot, SurfaceProperty property) {
+        return TERMUX_APP.KEY_SURFACE_INHERIT_PREFIX + slot.key + "_" + property.key;
+    }
+
+    /** True while this surface still follows Base for this property. */
+    public boolean isSurfaceInheriting(SurfaceSlot slot, SurfaceProperty property) {
+        if (!hasSurfaceProperty(slot, property))
+            return true;
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            surfaceInheritKey(slot, property), TERMUX_APP.DEFAULT_VALUE_SURFACE_INHERITS_BASE);
+    }
+
+    public void setSurfaceInheriting(SurfaceSlot slot, SurfaceProperty property, boolean inherit) {
+        if (!hasSurfaceProperty(slot, property))
+            return;
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            surfaceInheritKey(slot, property), inherit, false);
+    }
+
+    /** How many properties this surface has detached from Base - the editor's tab badge. */
+    public int surfaceOverrideCount(SurfaceSlot slot) {
+        int count = 0;
+        for (SurfaceProperty property : SurfaceProperty.values()) {
+            if (hasSurfaceProperty(slot, property) && !isSurfaceInheriting(slot, property))
+                count++;
+        }
+        return count;
+    }
+
+    /** Puts every property of a surface back on Base. */
+    public void reattachSurface(SurfaceSlot slot) {
+        for (SurfaceProperty property : SurfaceProperty.values())
+            setSurfaceInheriting(slot, property, true);
+    }
+
+    private static String surfaceBaseKey(SurfaceProperty property) {
+        switch (property) {
+            case BLUR: return TERMUX_APP.KEY_SURFACE_BASE_BLUR;
+            case OPACITY: return TERMUX_APP.KEY_SURFACE_BASE_OPACITY;
+            case GRAIN: return TERMUX_APP.KEY_SURFACE_BASE_GRAIN;
+            case CORNER_RADIUS: return TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS;
+            default: return TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP;
+        }
+    }
+
+    private static int surfaceBaseDefault(SurfaceProperty property) {
+        switch (property) {
+            case BLUR: return TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR;
+            case OPACITY: return TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY;
+            case GRAIN: return TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN;
+            case CORNER_RADIUS: return TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS;
+            default: return TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP;
+        }
+    }
+
+    /** The shared value for a property, before any surface's clamp is applied to it. */
+    public int getSurfaceBaseValue(SurfaceProperty property) {
+        return SharedPreferenceUtils.getInt(mSharedPreferences, surfaceBaseKey(property),
+            surfaceBaseDefault(property));
+    }
+
+    public void setSurfaceBaseValue(SurfaceProperty property, int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, surfaceBaseKey(property), value, false);
+    }
+
+    /**
+     * The number a surface should actually use: its own override when detached, Base otherwise.
+     * Callers still apply their own clamp, so a Base value outside one surface's range (the
+     * terminal's 30dp blur ceiling, say) narrows there instead of leaking.
+     */
+    private int resolveSurfaceValue(SurfaceSlot slot, SurfaceProperty property,
+                                    String overrideKey, int overrideDefault) {
+        if (isSurfaceInheriting(slot, property))
+            return getSurfaceBaseValue(property);
+        return SharedPreferenceUtils.getInt(mSharedPreferences, overrideKey, overrideDefault);
+    }
+
+    /** The surface's own stored number, ignoring inheritance. For the editor's detached rows. */
+    public int getSurfaceOverrideValue(SurfaceSlot slot, SurfaceProperty property) {
+        switch (slot) {
+            case KEYBOARD:
+                return property == SurfaceProperty.OPACITY
+                    ? SharedPreferenceUtils.getInt(mSharedPreferences,
+                        TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY,
+                        TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY)
+                    : SharedPreferenceUtils.getInt(mSharedPreferences,
+                        TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET,
+                        TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET);
+            case STATUS:
+                switch (property) {
+                    case BLUR: return SharedPreferenceUtils.getInt(mSharedPreferences,
+                        TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS);
+                    case OPACITY: return SharedPreferenceUtils.getInt(mSharedPreferences,
+                        TERMUX_APP.KEY_STATUS_BAR_OPACITY, TERMUX_APP.DEFAULT_STATUS_BAR_OPACITY);
+                    case GRAIN: return SharedPreferenceUtils.getInt(mSharedPreferences,
+                        TERMUX_APP.KEY_STATUS_BAR_GRAIN, TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN);
+                    case CORNER_RADIUS: return SharedPreferenceUtils.getInt(mSharedPreferences,
+                        TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS, TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS);
+                    default: return SharedPreferenceUtils.getInt(mSharedPreferences,
+                        TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET, TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET);
+                }
+            case CANVAS:
+                switch (property) {
+                    case BLUR: return SharedPreferenceUtils.getInt(mSharedPreferences,
+                        TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS, TERMUX_APP.DEFAULT_TERMINAL_GLASS_BLUR_RADIUS);
+                    case GRAIN: return SharedPreferenceUtils.getInt(mSharedPreferences,
+                        TERMUX_APP.KEY_TERMINAL_GLASS_GRAIN, TERMUX_APP.DEFAULT_TERMINAL_GLASS_GRAIN);
+                    default: return SharedPreferenceUtils.getInt(mSharedPreferences,
+                        TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY,
+                        TERMUX_APP.DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY);
+                }
+            default:
+                switch (property) {
+                    case BLUR: return SharedPreferenceUtils.getInt(mSharedPreferences,
+                        TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, TERMUX_APP.DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS);
+                    case OPACITY: return SharedPreferenceUtils.getInt(mSharedPreferences,
+                        TERMUX_APP.KEY_APP_BAR_OPACITY, TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY);
+                    case GRAIN: return SharedPreferenceUtils.getInt(mSharedPreferences,
+                        TERMUX_APP.KEY_DOCK_GLASS_GRAIN, TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN);
+                    case CORNER_RADIUS: return SharedPreferenceUtils.getInt(mSharedPreferences,
+                        TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS,
+                        TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS);
+                    default: return SharedPreferenceUtils.getInt(mSharedPreferences,
+                        TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET, TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET);
+                }
+        }
+    }
+
     public int getExtraKeysBlurRadius() {
-        int radius = SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, TERMUX_APP.DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS);
-        return DataUtils.clamp(radius, 0, 30);
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.BLUR,
+            TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, TERMUX_APP.DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS), 0, 30);
     }
 
     public void setExtraKeysBlurRadius(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS,
-            DataUtils.clamp(value, 0, 30), false);
+        writeSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.BLUR,
+            TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, DataUtils.clamp(value, 0, 30));
     }
 
     public int getDockGlassGrain() {
-        int grain = SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_DOCK_GLASS_GRAIN, TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN);
-        return DataUtils.clamp(grain, 0, 100);
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.GRAIN,
+            TERMUX_APP.KEY_DOCK_GLASS_GRAIN, TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN), 0, 100);
     }
 
     public void setDockGlassGrain(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_DOCK_GLASS_GRAIN, DataUtils.clamp(value, 0, 100), false);
+        writeSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.GRAIN,
+            TERMUX_APP.KEY_DOCK_GLASS_GRAIN, DataUtils.clamp(value, 0, 100));
     }
 
     public boolean isTerminalFlushDockEnabled() {
@@ -1511,13 +1922,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public int getAppBarOpacity() {
-        int opacity = SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_APP_BAR_OPACITY, TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY);
-        return DataUtils.clamp(opacity, 0, 100);
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
+            TERMUX_APP.KEY_APP_BAR_OPACITY, TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY), 0, 100);
     }
 
     public void setAppBarOpacity(int value) {
         int clamped = DataUtils.clamp(value, 0, 100);
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_APP_BAR_OPACITY, clamped, false);
+        writeSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
+            TERMUX_APP.KEY_APP_BAR_OPACITY, clamped);
         if (isUseSystemWallpaperEnabled()) {
             setWallpaperEnabledAppBarOpacity(clamped);
         }

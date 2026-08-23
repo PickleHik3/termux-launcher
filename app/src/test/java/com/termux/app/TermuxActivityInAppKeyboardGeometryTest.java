@@ -20,6 +20,7 @@ import com.termux.app.terminal.TermuxTerminalViewClient;
 import com.termux.app.terminal.inappkeyboard.KeyboardGeometryChoreographer;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
 import com.termux.view.TerminalView;
 
@@ -187,7 +188,8 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         // An edited scheme or a moved opacity slider owns the keyboard surface on its own...
         assertTrue(ChromePolicy.hasInAppKeyboardBackgroundOverride(false, 0xFF203040, 100));
         assertTrue(ChromePolicy.hasInAppKeyboardBackgroundOverride(false, null, 60));
-        assertFalse(ChromePolicy.hasInAppKeyboardBackgroundOverride(false, null, 100));
+        assertFalse(ChromePolicy.hasInAppKeyboardBackgroundOverride(false, null,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY));
         // ...but not while surfaces are normalized, which is what left the keyboard lighter than
         // every other surface until the keyboard section was reset by hand.
         assertFalse(ChromePolicy.hasInAppKeyboardBackgroundOverride(true, 0xFF203040, 60));

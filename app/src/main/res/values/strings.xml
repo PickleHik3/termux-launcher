@@ -488,7 +488,7 @@
     <string name="notice_tap_to_open">tap to open</string>
     <string name="notice_shell_wants_attention">%1$s wants attention</string>
     <string name="action_open_settings">Settings</string>
-    <string name="action_glass_lab">Edit surfaces</string>
+    <string name="action_glass_lab">Surface editor</string>
     <string name="msg_generating_report">Generating Report</string>
     <string name="msg_add_termux_debug_info">Add &TERMUX_APP_NAME; debug info to report?</string>
 
@@ -1017,16 +1017,30 @@
                 <string name="termux_dock_tune_live_title">Surface editor</string>
                 <string name="termux_dock_tune_live_summary">Customize dock, keyboard, status panel, terminal, and sessions live on the home screen.</string>
                 <string name="termux_dock_tuning_title">Surface editor</string>
+                <string name="termux_surface_tuning_base">Base</string>
+                <string name="termux_surface_tuning_base_section">All surfaces</string>
+                <!-- The link chip on a shared row: an arrow while the surface follows Base, an
+                     undo glyph once it has its own value. -->
+                <string name="termux_surface_tuning_link_inherited">↗</string>
+                <string name="termux_surface_tuning_link_detached">↺</string>
+                <string name="termux_surface_tuning_link_inherited_description">Following Base. Move this control to give %1$s its own value.</string>
+                <string name="termux_surface_tuning_link_detached_description">%1$s has its own value. Tap to follow Base again.</string>
+                <string name="termux_surface_tuning_followers_all">Every surface is following Base.</string>
+                <plurals name="termux_surface_tuning_followers_some">
+                    <item quantity="one">%1$d property has its own value. Its ↺ puts it back.</item>
+                    <item quantity="other">%1$d properties have their own values. Their ↺ puts them back.</item>
+                </plurals>
+                <string name="termux_surface_tuning_reattach_all">Reattach all</string>
                 <string name="termux_surface_tuning_dock">Dock</string>
                 <string name="termux_surface_tuning_keyboard">Keyboard</string>
                 <string name="termux_surface_tuning_status">Status</string>
                 <string name="termux_surface_tuning_other">Terminal</string>
-                <string name="termux_surface_tuning_reset">Reset tab</string>
+                <string name="termux_surface_tuning_reset">Reset</string>
                 <string name="termux_surface_tuning_keyboard_height">Height</string>
                 <string name="termux_surface_tuning_keyboard_spacing">Spacing</string>
                 <string name="termux_surface_tuning_keyboard_key_opacity">Keys opacity</string>
                 <string name="termux_surface_tuning_keyboard_bg_opacity">Bg opacity</string>
-                <string name="termux_surface_tuning_edges">Padding</string>
+                <string name="termux_surface_tuning_edges">Margin</string>
                 <string name="termux_surface_tuning_dock_height_handle">Drag to resize the dock</string>
                 <string name="termux_surface_tuning_keyboard_height_handle">Drag to resize the keyboard</string>
                 <string name="termux_dock_tuning_blur">Blur</string>
@@ -1050,8 +1064,32 @@
                 <string name="termux_dock_tuning_section_sessions">Sessions</string>
                 <string name="termux_dock_tuning_section_wallpaper">Wallpaper</string>
                 <string name="termux_dock_tuning_terminal_inner_padding">Inner padding</string>
+                <!-- Docked spends the same knob on the terminal's outer air as well as the gap
+                     between panes, so there it is a margin. Floating insets the frame from the
+                     capsule instead, and the knob only gaps the panes. -->
+                <string name="termux_dock_tuning_terminal_margin">Margin</string>
                 <string name="termux_dock_tuning_done">Done</string>
                 <string name="termux_dock_tuning_cancel">Close</string>
+                <string name="termux_surface_tuning_value_not_applicable">—</string>
+                <string name="termux_surface_tuning_peek_readout">%1$s · %2$s</string>
+                <!-- Fully qualified names for the peek echo. The card's own 88dp label column is
+                     too narrow for these, and there the section heading disambiguates anyway. -->
+                <string name="termux_surface_tuning_peek_terminal_opacity">Terminal opacity</string>
+                <string name="termux_surface_tuning_peek_terminal_blur">Terminal blur</string>
+                <string name="termux_surface_tuning_peek_terminal_grain">Terminal grain</string>
+                <string name="termux_surface_tuning_peek_terminal_gap">Inner padding</string>
+                <string name="termux_surface_tuning_peek_terminal_margin">Terminal margin</string>
+                <string name="termux_surface_tuning_peek_wallpaper_opacity">Wallpaper opacity</string>
+                <string name="termux_surface_tuning_peek_dock_size">Dock size</string>
+                <string name="termux_surface_tuning_peek_dock_icons">Apps per page</string>
+                <string name="termux_surface_tuning_peek_keyboard_height">Keyboard height</string>
+                <string name="termux_surface_tuning_sessions_hint">The sessions drawer only appears while the in-app multiplexer is off. Turn split panes on and the status bar replaces it.</string>
+                <string name="termux_surface_tuning_unsaved_badge">Unsaved</string>
+                <string name="termux_surface_tuning_unsaved_title">Unsaved changes</string>
+                <string name="termux_surface_tuning_unsaved_message">Discard them and put every surface back to how it looked when you opened the editor, or save and close?</string>
+                <string name="termux_surface_tuning_unsaved_discard">Discard</string>
+                <string name="termux_surface_tuning_unsaved_save">Save</string>
+                <string name="termux_surface_tuning_unsaved_keep_editing">Keep editing</string>
                 <string name="termux_dock_tuning_value_dp">%1$d dp</string>
                 <string name="termux_dock_tuning_value_percent">%1$d%%</string>
 
@@ -1077,8 +1115,8 @@
                 <string name="termux_app_launcher_accessibility_lock_prompt_title">Enable accessibility lock</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_message">Enable Termux Launcher Lock Service to lock the screen from the alphabets row.</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_enable">Enable</string>
-                <string name="termux_app_launcher_dock_style_default">Default</string>
-                <string name="termux_app_launcher_dock_style_rounded">Rounded</string>
+                <string name="termux_app_launcher_dock_style_default">Docked</string>
+                <string name="termux_app_launcher_dock_style_rounded">Floating</string>
                 <string name="termux_dock_preset_smallest">Smallest</string>
                 <string name="termux_dock_preset_small">Small</string>
                 <string name="termux_dock_preset_default">Default</string>
@@ -1223,7 +1261,7 @@
     <string name="tool_app_key_inspector">Key inspector</string>
     <string name="tool_terminal_jump_previous_prompt">Jump to previous prompt</string>
     <string name="tool_terminal_jump_next_prompt">Jump to next prompt</string>
-    <string name="tool_appearance_glass_lab">Edit surfaces</string>
+    <string name="tool_appearance_glass_lab">Surface editor</string>
     <string name="tool_app_open_settings">Open settings</string>
     <string name="tool_app_open_look_and_feel">Look and feel settings</string>
     <string name="tool_app_open_apps_bar">Apps bar settings</string>
@@ -1519,6 +1557,6 @@
     <string name="onboarding_page_three_body">Create persistent terminal windows, split the workspace, and open live system details without leaving your command line.</string>
     <string name="onboarding_page_three_tip_one">+ creates another terminal window</string>
     <string name="onboarding_page_three_tip_two">Tap CPU, memory, or weather for details</string>
-    <string name="onboarding_page_three_footer">Long-press a surface to personalize it</string>
+    <string name="onboarding_page_three_footer">Long-press the terminal to restyle the dock, keys and status bar</string>
 
 </resources>

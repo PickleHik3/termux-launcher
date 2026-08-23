@@ -285,7 +285,11 @@ public final class SessionsPanelView extends LinearLayout {
                 child.title.setTypeface(null, window.current ? Typeface.BOLD : Typeface.NORMAL);
                 child.subtitle.setText(getResources().getQuantityString(
                     R.plurals.session_browser_pane_count, window.panes.size(), window.panes.size()));
-                styleRowSurface(child.surface, session.current && window.current);
+                boolean focused = session.current && window.current;
+                child.title.setTextColor(focused ? mPrimary : mOnSurface);
+                child.subtitle.setTextColor(ColorUtils.setAlphaComponent(
+                    focused ? mPrimary : mOnSurfaceVariant, focused ? 190 : 160));
+                styleWindowRowSurface(child.surface);
                 child.row.setContentDescription(windowTitle(window) + " · " + child.subtitle.getText());
             }
         }
@@ -357,6 +361,19 @@ public final class SessionsPanelView extends LinearLayout {
      * open, and each row keeps its own instance rather than sharing one: a shared drawable would have
      * the 40dp headers and the 36dp window rows fighting over its bounds.
      */
+    /**
+     * A window row never carries the framed treatment its session header does. The header already
+     * draws a lit border around the current session, and a single-window session put a second
+     * border immediately inside the first — two concentric strokes a pixel apart, which reads as a
+     * rendering fault rather than as two levels of focus. The child says "focused" in its text
+     * colour instead, which cannot collide with the frame around it.
+     */
+    private void styleWindowRowSurface(@NonNull GradientDrawable surface) {
+        surface.setCornerRadius(mCapsuleSurface ? Math.min(mStatusBarRadiusPx, dp(20)) : 0f);
+        surface.setColor(ColorUtils.setAlphaComponent(mSecondary, 10));
+        surface.setStroke(0, android.graphics.Color.TRANSPARENT);
+    }
+
     private void styleRowSurface(@NonNull GradientDrawable surface, boolean current) {
         surface.setCornerRadius(mCapsuleSurface ? Math.min(mStatusBarRadiusPx, dp(20)) : 0f);
         surface.setColor(current ? ColorUtils.setAlphaComponent(mPrimary, 52)
