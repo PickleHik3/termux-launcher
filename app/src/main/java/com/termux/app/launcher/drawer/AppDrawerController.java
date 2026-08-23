@@ -22,6 +22,7 @@ import com.termux.R;
 import com.termux.app.Spring;
 import com.termux.app.SuggestionBarView;
 import com.termux.app.TermuxActivity;
+import com.termux.app.dock.DockLayout;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory;
@@ -46,9 +47,9 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
  * engaged.
  *
  * <p><b>The invisible handoff.</b> At {@code p == 0} the plane rectangle <em>is</em> the dock glass
- * rect: same bounds from {@code accessory_surface_host}, same corner radius from
- * {@link TermuxActivity#resolveDockCapsuleCornerRadiusPx}, same horizontal inset from
- * {@link TermuxActivity#getDockHorizontalInsetPx()}. The first tenth of the transition is then a
+ * rect: same bounds from {@code accessory_surface_host}, and the same corner radius and horizontal
+ * inset the dock itself is laid out with, both read off the one {@link DockLayout} the activity
+ * resolves through {@link TermuxActivity#getDockLayout()}. The first tenth of the transition is then a
  * cross-fade between two identical rectangles, which is what makes the drawer look like the dock
  * growing rather than a sheet appearing over it. Any change that lets the seed rect drift from the
  * dock rect breaks that, visibly.
@@ -649,9 +650,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (dockRect == null) return false;
         mDockRect = dockRect;
 
-        mRoundedStyle = mActivity.isRoundedDockStyle();
-        mSeedRadiusPx = mRoundedStyle
-            ? mActivity.resolveDockCapsuleCornerRadiusPx(dock.getHeight()) : 0f;
+        // One dock-geometry snapshot for the whole capture: style, seed radius and (via
+        // resolveOpenRect) the outer inset all come off the same value.
+        DockLayout dockLayout = mActivity.getDockLayout();
+        mRoundedStyle = dockLayout.capsule;
+        mSeedRadiusPx = mRoundedStyle ? dockLayout.capsuleCornerRadiusPx(dock.getHeight()) : 0f;
         mOpenRadiusPx = resolveOpenRadiusPx();
 
         mOpenRect = resolveOpenRect();
@@ -673,7 +676,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mAzFxOverlay = mActivity.findViewById(R.id.apps_bar_az_fx_overlay);
         mAzLabelOverlay = mActivity.findViewById(R.id.apps_bar_az_label_overlay);
         captureBands(dockRect);
-        captureStatusBand();
+        captureStatusBand(dockLayout);
         return true;
     }
 
@@ -682,19 +685,19 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      *
      * <p>Captured like the bottom bands and for the same reason: the pane's height <em>is</em> the
      * terminal's height, so the transition may only transform it. The compact height comes from the
-     * activity's own resolver rather than being assumed, because the rounded style's pane is a
-     * different size and the collapse channel is the difference between the two.
+     * dock layout rather than being assumed, because the rounded style's pane is a different size
+     * and the collapse channel is the difference between the two.
      *
      * <p>A hidden bar (terminal-only styles, fullscreen) leaves a null band and no writes at all,
      * which is what keeps a pane that is {@code GONE} from being handed a translation it would still
      * be wearing the next time something makes it visible.
      */
-    private void captureStatusBand() {
+    private void captureStatusBand(@NonNull DockLayout dockLayout) {
         mStatusBarView = mActivity.findViewById(R.id.terminal_window_bar_host);
         Frame bar = isBandVisible(mStatusBarView) ? frameOf(mStatusBarView) : null;
         mStatusBand = bar == null ? null
             : new AppDrawerAccessoryChoreography.Band(bar.top, bar.height());
-        mStatusCompactHeightPx = mActivity.getCompactTopStatusBarHeightPx();
+        mStatusCompactHeightPx = dockLayout.compactStatusBarHeightPx;
     }
 
     /**
@@ -719,8 +722,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // The drawer keeps the dock's outer margin rather than inventing one — same preference,
         // same edge. The horizontal lerp is carried by the plane rect itself, whose seed left/right
         // are the dock's and whose open left/right are this inset.
-        float inset = AppDrawerTransitionGeometry.resolveInsetPx(
-            mActivity.getDockHorizontalInsetPx(), mActivity.getDockHorizontalInsetPx(), 1f);
+        int dockInsetPx = mActivity.getDockLayout().horizontalInsetPx;
+        float inset = AppDrawerTransitionGeometry.resolveInsetPx(dockInsetPx, dockInsetPx, 1f);
         // Square bottom corners in default style are expressed by pushing the bottom edge one
         // radius past the host: Outline clipping is a single-radius round rect, and a Path clip
         // would cost the cheap outline clip for two corners nobody can see.

@@ -1,4 +1,4 @@
-package com.termux.app;
+package com.termux.app.chrome;
 
 import android.app.Application;
 import android.content.Context;
@@ -42,7 +42,7 @@ public class WallpaperModePreferencesTest {
         preferences.setAppBarOpacity(63);
         preferences.setExtraKeysBlurRadius(19);
 
-        TermuxActivity.applyWallpaperModePreferences(preferences, false);
+        ChromePolicy.applyWallpaperModePreferences(preferences, false);
 
         assertFalse(preferences.isUseSystemWallpaperEnabled());
         assertEquals(100, preferences.getTerminalBackgroundOpacity());
@@ -52,7 +52,7 @@ public class WallpaperModePreferencesTest {
         assertEquals(63, preferences.getWallpaperEnabledAppBarOpacity());
         assertEquals(19, preferences.getWallpaperEnabledExtraKeysBlurRadius());
 
-        TermuxActivity.applyWallpaperModePreferences(preferences, true);
+        ChromePolicy.applyWallpaperModePreferences(preferences, true);
 
         assertTrue(preferences.isUseSystemWallpaperEnabled());
         assertEquals(37, preferences.getTerminalBackgroundOpacity());

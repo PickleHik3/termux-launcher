@@ -1,5 +1,8 @@
 package com.termux.app;
 
+import com.termux.app.chrome.ChromePolicy;
+import com.termux.app.chrome.ChromeRenderer;
+
 import android.app.Application;
 import android.content.Context;
 import android.content.Intent;
@@ -14,6 +17,7 @@ import android.widget.SeekBar;
 import com.termux.R;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
 import com.termux.app.terminal.TermuxTerminalViewClient;
+import com.termux.app.terminal.inappkeyboard.KeyboardGeometryChoreographer;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
@@ -166,40 +170,40 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
     @Test
     public void unifiedKeyboardGlassIsExclusiveToDefaultDock() {
-        assertTrue(TermuxActivity.shouldUseUnifiedDefaultKeyboardGlassSurface(
+        assertTrue(ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(
             true, true, false, true));
-        assertFalse(TermuxActivity.shouldUseUnifiedDefaultKeyboardGlassSurface(
+        assertFalse(ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(
             true, true, true, true));
-        assertFalse(TermuxActivity.shouldUseUnifiedDefaultKeyboardGlassSurface(
+        assertFalse(ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(
             true, true, false, false));
-        assertFalse(TermuxActivity.shouldUseUnifiedDefaultKeyboardGlassSurface(
+        assertFalse(ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(
             false, true, false, true));
-        assertFalse(TermuxActivity.shouldUseUnifiedDefaultKeyboardGlassSurface(
+        assertFalse(ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(
             true, false, false, true));
     }
 
     @Test
     public void matchAllSurfacesOutranksAnEditedKeyboardBackground() {
         // An edited scheme or a moved opacity slider owns the keyboard surface on its own...
-        assertTrue(TermuxActivity.hasInAppKeyboardBackgroundOverride(false, 0xFF203040, 100));
-        assertTrue(TermuxActivity.hasInAppKeyboardBackgroundOverride(false, null, 60));
-        assertFalse(TermuxActivity.hasInAppKeyboardBackgroundOverride(false, null, 100));
+        assertTrue(ChromePolicy.hasInAppKeyboardBackgroundOverride(false, 0xFF203040, 100));
+        assertTrue(ChromePolicy.hasInAppKeyboardBackgroundOverride(false, null, 60));
+        assertFalse(ChromePolicy.hasInAppKeyboardBackgroundOverride(false, null, 100));
         // ...but not while surfaces are normalized, which is what left the keyboard lighter than
         // every other surface until the keyboard section was reset by hand.
-        assertFalse(TermuxActivity.hasInAppKeyboardBackgroundOverride(true, 0xFF203040, 60));
+        assertFalse(ChromePolicy.hasInAppKeyboardBackgroundOverride(true, 0xFF203040, 60));
     }
 
     @Test
     public void blurredUnifiedKeyboardRevealWaitsOnlyForDestinationBackdrop() {
-        assertTrue(TermuxActivity.shouldDeferInAppKeyboardReveal(
+        assertTrue(KeyboardGeometryChoreographer.shouldDeferReveal(
             true, true, true, false));
-        assertFalse(TermuxActivity.shouldDeferInAppKeyboardReveal(
+        assertFalse(KeyboardGeometryChoreographer.shouldDeferReveal(
             true, true, true, true));
-        assertFalse(TermuxActivity.shouldDeferInAppKeyboardReveal(
+        assertFalse(KeyboardGeometryChoreographer.shouldDeferReveal(
             false, true, true, false));
-        assertFalse(TermuxActivity.shouldDeferInAppKeyboardReveal(
+        assertFalse(KeyboardGeometryChoreographer.shouldDeferReveal(
             true, false, true, false));
-        assertFalse(TermuxActivity.shouldDeferInAppKeyboardReveal(
+        assertFalse(KeyboardGeometryChoreographer.shouldDeferReveal(
             true, true, false, false));
     }
 
@@ -263,8 +267,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         assertEquals(View.VISIBLE, keyboardContainer.getVisibility());
         assertEquals(View.VISIBLE, accessoryContainer.getVisibility());
         int shownHeight = accessoryContainer.getLayoutParams().height;
-        int desiredKeyboardHeight = ReflectionHelpers.getField(
-            mActivity, "mDesiredInAppKeyboardHeightPx");
+        int desiredKeyboardHeight = desiredKeyboardHeightPx();
         assertTrue("four-plus-row keyboard must not reuse the old ~110px stack height",
             desiredKeyboardHeight > 110);
         assertEquals(desiredKeyboardHeight, shownHeight);
@@ -279,8 +282,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         assertEquals(View.VISIBLE, keyboardContainer.getVisibility());
         assertEquals(View.VISIBLE, accessoryContainer.getVisibility());
-        assertEquals(ReflectionHelpers.<Integer>getField(
-            mActivity, "mDesiredInAppKeyboardHeightPx").intValue(),
+        assertEquals(desiredKeyboardHeightPx(),
             accessoryContainer.getLayoutParams().height);
     }
 
@@ -298,7 +300,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         mController = ReflectionHelpers.getField(mActivity, "mInAppKeyboard");
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         layoutActivityRoot();
-        ReflectionHelpers.callInstanceMethod(mActivity, "configureExtraKeysBackground");
+        mActivity.getChromeRenderer().requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         layoutActivityRoot();
 
@@ -306,8 +308,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         View accessoryContainer = mActivity.findViewById(R.id.accessory_stack_container);
         View firstAccessoryContent = mActivity.findViewById(R.id.accessory_surface_host);
         View keyboardContainer = mActivity.findViewById(R.id.inapp_keyboard_container);
-        int desiredKeyboardHeight = ReflectionHelpers.getField(
-            mActivity, "mDesiredInAppKeyboardHeightPx");
+        int desiredKeyboardHeight = desiredKeyboardHeightPx();
 
         assertTrue("accessory stack must use its own exact height, not the content-root height",
             accessoryContainer.getHeight() != root.getHeight());
@@ -345,8 +346,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         View appsBar = mActivity.findViewById(R.id.apps_bar_viewpager);
         int dockContentHeight = toolbarPager.getLayoutParams().height
             + appsBar.getLayoutParams().height;
-        int keyboardHeight = ReflectionHelpers.getField(
-            mActivity, "mDesiredInAppKeyboardHeightPx");
+        int keyboardHeight = desiredKeyboardHeightPx();
         int[] location = new int[2];
         rootRelativeLayout.getLocationInWindow(location);
         int accessoryBottom = location[1] + rootRelativeLayout.getHeight();
@@ -424,23 +424,20 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         View accessory = mActivity.findViewById(R.id.accessory_stack_container);
         View keyboard = mActivity.findViewById(R.id.inapp_keyboard_container);
         TerminalView terminal = mActivity.findViewById(R.id.terminal_view);
-        int initialHeight = ReflectionHelpers.getField(
-            mActivity, "mDesiredInAppKeyboardHeightPx");
+        int initialHeight = desiredKeyboardHeightPx();
 
         mController.beginHeightAdjustment();
         mController.previewHeightScale(1.4f);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         layoutActivityRoot();
 
-        int previewHeight = ReflectionHelpers.getField(
-            mActivity, "mDesiredInAppKeyboardHeightPx");
+        int previewHeight = desiredKeyboardHeightPx();
         assertTrue(previewHeight > initialHeight);
         assertEquals(previewHeight, accessory.getLayoutParams().height);
         assertEquals(previewHeight, keyboard.getHeight());
         assertEquals(accessory.getTop(), terminal.getBottom());
         assertEquals(root.getHeight() - previewHeight, terminal.getHeight());
-        assertFalse(ReflectionHelpers.<Boolean>getField(
-            mActivity, "mInAppKeyboardHeightDirty"));
+        assertFalse(keyboardHeightDirty());
 
         Keyboard2View keyboardView = (Keyboard2View) ReflectionHelpers.getField(
             mActivity, "mAttachedInAppKeyboardView");
@@ -453,17 +450,14 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         assertEquals(12f * mActivity.getResources().getDisplayMetrics().density,
             keyboardView.getKeyCornerRadiusOverride(), 0.0001f);
         assertEquals("spacing-only remeasure must preserve deterministic desired height",
-            previewHeight, ReflectionHelpers.<Integer>getField(
-                mActivity, "mDesiredInAppKeyboardHeightPx").intValue());
-        assertFalse(ReflectionHelpers.<Boolean>getField(
-            mActivity, "mInAppKeyboardHeightDirty"));
+            previewHeight, desiredKeyboardHeightPx());
+        assertFalse(keyboardHeightDirty());
 
         mController.cancelHeightAdjustment();
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         layoutActivityRoot();
 
-        assertEquals(initialHeight, ReflectionHelpers.<Integer>getField(
-            mActivity, "mDesiredInAppKeyboardHeightPx").intValue());
+        assertEquals(initialHeight, desiredKeyboardHeightPx());
         assertEquals(initialHeight, accessory.getLayoutParams().height);
         assertEquals(initialHeight, keyboard.getHeight());
         assertEquals(accessory.getTop(), terminal.getBottom());
@@ -519,9 +513,9 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         paneHost.addView(pane);
         TerminalView terminalView = pane.findViewById(R.id.terminal_view);
         TermuxTerminalSessionActivityClient sessionClient =
-            new TermuxTerminalSessionActivityClient(mActivity);
+            mActivity.createTermuxTerminalSessionClient();
         TermuxTerminalViewClient viewClient =
-            new TermuxTerminalViewClient(mActivity, sessionClient);
+            mActivity.createTermuxTerminalViewClient(sessionClient);
         terminalView.setTerminalViewClient(viewClient);
         TermuxAppSharedProperties properties = TermuxAppSharedProperties.init(mActivity);
         properties.loadTermuxPropertiesFromDisk();
@@ -537,6 +531,19 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
         layoutActivityRoot();
         return preferences;
+    }
+
+    /** The keyboard's measurement memo, which phase 4c moved onto the choreographer. */
+    private int desiredKeyboardHeightPx() {
+        return choreographer().desiredHeightPx();
+    }
+
+    private boolean keyboardHeightDirty() {
+        return ReflectionHelpers.getField(choreographer(), "mHeightDirty");
+    }
+
+    private KeyboardGeometryChoreographer choreographer() {
+        return ReflectionHelpers.getField(mActivity, "mKeyboardGeometry");
     }
 
     private void layoutActivityRoot() {

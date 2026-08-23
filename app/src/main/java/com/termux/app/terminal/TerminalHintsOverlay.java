@@ -30,7 +30,7 @@ import java.util.Locale;
  * the copy variant rides along as the case of the character rather than as a modifier flag no soft
  * keyboard reports.
  */
-final class TerminalHintsOverlay {
+public final class TerminalHintsOverlay {
 
     /** One result row's height. Compact, because this is a bar and not a browser. */
     private static final float ROW_HEIGHT_DP = 30f;
@@ -41,7 +41,7 @@ final class TerminalHintsOverlay {
 
     private TerminalHintsOverlay() {}
 
-    static void show(@NonNull TermuxActivity activity, @NonNull String transcript) {
+    public static void show(@NonNull TermuxActivity activity, @NonNull String transcript) {
         List<TerminalHintsModel.Hint> hints = TerminalHintsModel.extract(transcript);
         TerminalSheetController sheet = activity.getTerminalSheetController();
         float density = activity.getResources().getDisplayMetrics().density;

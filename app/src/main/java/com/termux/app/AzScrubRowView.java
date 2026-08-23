@@ -18,6 +18,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.AppCompatTextView;
 
+import com.termux.app.launcher.az.AzScrubGesture;
+
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -61,7 +63,7 @@ public final class AzScrubRowView extends AppCompatTextView {
         default void onDoubleTap() {}
     }
 
-    public static final char PINNED_APPS_SYMBOL = '\u2606';
+    public static final char PINNED_APPS_SYMBOL = AzScrubGesture.PINNED_APPS_SYMBOL;
     private static final char[] ALPHABET_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#".toCharArray();
     private static final char[] LETTERS = (PINNED_APPS_SYMBOL + "ABCDEFGHIJKLMNOPQRSTUVWXYZ#").toCharArray();
     private char[] visibleLetters = LETTERS;
