@@ -351,6 +351,21 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     /** Wallpaper blur radius (dp) of the terminal's bordered glass pane; 0 disables. */
+    /**
+     * Docked terminal frame corner radius (dp). Deliberately outside the surface cascade — see
+     * {@link TERMUX_APP#KEY_TERMINAL_CORNER_RADIUS} — so it neither detaches from nor follows Base.
+     */
+    public int getTerminalCornerRadius() {
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+                TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS, TERMUX_APP.DEFAULT_TERMINAL_CORNER_RADIUS),
+            0, TERMUX_APP.MAX_TERMINAL_CORNER_RADIUS);
+    }
+
+    public void setTerminalCornerRadius(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS,
+            DataUtils.clamp(value, 0, TERMUX_APP.MAX_TERMINAL_CORNER_RADIUS), false);
+    }
+
     public int getTerminalGlassBlurRadius() {
         // The 30dp ceiling is the terminal's own; a larger inherited Base narrows here rather than
         // leaking a value the pane cannot render.

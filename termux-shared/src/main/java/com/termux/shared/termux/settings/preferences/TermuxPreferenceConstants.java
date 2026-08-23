@@ -315,6 +315,16 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_STATUS_BAR_CORNER_RADIUS = 40;
 
         /**
+         * Corner radius (dp) of the Docked terminal's bordered frame. Not part of the Base
+         * cascade: Floating derives the frame radius from the capsule, so this only exists where
+         * the user can actually see it act — Docked with the border on. Defaults to the flush
+         * square frame Docked always drew.
+         */
+        public static final String KEY_TERMINAL_CORNER_RADIUS = "terminal_corner_radius";
+        public static final int DEFAULT_TERMINAL_CORNER_RADIUS = 0;
+        public static final int MAX_TERMINAL_CORNER_RADIUS = 40;
+
+        /**
          * Terminal glass pane, available while the terminal border is on: wallpaper blur radius
          * (dp, 0 disables) and film grain (percent) localised to the bordered terminal area.
          * Both default off so the border alone stays the plain outline it always was.

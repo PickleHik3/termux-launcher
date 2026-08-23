@@ -763,6 +763,7 @@
                 android:visibility="gone">
 
                 <View
+                    android:id="@+id/surface_tuning_dock_pill_left"
                     android:layout_width="3dp"
                     android:layout_height="28dp"
                     android:layout_gravity="start|center_vertical"
@@ -771,6 +772,7 @@
                     android:background="@drawable/surface_tuning_gesture_pill" />
 
                 <View
+                    android:id="@+id/surface_tuning_dock_pill_right"
                     android:layout_width="3dp"
                     android:layout_height="28dp"
                     android:layout_gravity="end|center_vertical"
@@ -805,6 +807,7 @@
                 android:visibility="gone">
 
                 <View
+                    android:id="@+id/surface_tuning_keyboard_pill_left"
                     android:layout_width="3dp"
                     android:layout_height="28dp"
                     android:layout_gravity="start|center_vertical"
@@ -813,6 +816,7 @@
                     android:background="@drawable/surface_tuning_gesture_pill" />
 
                 <View
+                    android:id="@+id/surface_tuning_keyboard_pill_right"
                     android:layout_width="3dp"
                     android:layout_height="28dp"
                     android:layout_gravity="end|center_vertical"
@@ -1933,6 +1937,39 @@
                                 android:textColor="?attr/termuxColorOnSurfaceVariant"
                                 android:textSize="11sp" />
                                 <TextView android:id="@+id/surface_link_canvas_grain" android:layout_width="30dp" android:layout_height="28dp" android:background="?attr/selectableItemBackgroundBorderless" android:gravity="center" android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/dock_tuning_terminal_radius_row"
+                            android:layout_width="match_parent"
+                            android:layout_height="36dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="88dp"
+                                android:layout_height="wrap_content"
+                                android:text="@string/termux_dock_tuning_radius"
+                                android:textColor="?attr/termuxColorOnSurface"
+                                android:textSize="12sp"
+                                android:labelFor="@id/dock_tuning_terminal_radius_slider" />
+
+                            <SeekBar
+                                android:id="@+id/dock_tuning_terminal_radius_slider"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:max="40"
+                                android:splitTrack="false" />
+
+                            <TextView
+                                android:id="@+id/dock_tuning_terminal_radius_value"
+                                android:layout_width="48dp"
+                                android:layout_height="wrap_content"
+                                android:gravity="center"
+                                android:textColor="?attr/termuxColorOnSurfaceVariant"
+                                android:textSize="11sp" />
+                            <View android:layout_width="30dp" android:layout_height="1dp" />
                         </LinearLayout>
                     </LinearLayout>
 

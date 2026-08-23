@@ -1127,6 +1127,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // neither onStart nor onResume calls. Without this the CPU and memory readings never
         // resumed after leaving the app and coming back.
         updateStatusWidgets();
+        applySessionsDrawerLockState();
         syncRecentsVisibilityPolicy();
         configureBackgroundBlur(R.id.sessions_backgroundblur, R.id.sessions_background, false, mPreferences.getSessionsOpacity() / 100f, 0);
         mChrome.requestSync(ChromeRenderer.SCOPE_BLUR_HEALTH);
@@ -1472,7 +1473,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         int strokePx = Math.max(1, Math.round(dpToPx(1)));
-        float cornerRadiusPx = capsule ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
+        // Floating keeps the capsule-derived frame; Docked rounds by the terminal's own knob
+        // (default 0 = the flush square frame it always drew).
+        float cornerRadiusPx = capsule ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE)
+            : dpToPx(mPreferences.getTerminalCornerRadius());
 
         // Clearance inside the frame line, so a glyph never touches the stroke. Only the terminal
         // border needs it: pane borders draw their own stroke on the frame line itself, and adding
@@ -1531,7 +1535,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setupTerminalPlankFx(false);
         updateTerminalGlassFrost();
 
-        float innerRadiusPx = capsule ? Math.max(0f, cornerRadiusPx - paneInsetPx) : 0f;
+        float innerRadiusPx = Math.max(0f, cornerRadiusPx - paneInsetPx);
         // A rounded rect of radius r reaches r·(1 - 1/√2) ≈ 0.293r past its own corner along the
         // diagonal, so content that starts at the corner of a clip with radius r loses that much of
         // its first cell. Padding the host by the arc's depth is what keeps the corner glyphs whole,
@@ -1541,7 +1545,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyPaneHostCornerPadding(paneHost, Math.round(innerRadiusPx * 0.30f));
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            if (capsule) {
+            if (innerRadiusPx > 0f) {
                 paneHost.setOutlineProvider(new ViewOutlineProvider() {
                     @Override
                     public void getOutline(View view, android.graphics.Outline outline) {
@@ -2408,6 +2412,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return ThemeUtils.getSystemAttrColor(this, attr, ContextCompat.getColor(this, fallbackRes));
     }
 
+    /**
+     * The legacy left sessions drawer is retired while split panes are on: the sessions panel
+     * under the status pill replaces it, and two session managers reachable at once made every
+     * rename/close land in the wrong list half the time.
+     */
+    private void applySessionsDrawerLockState() {
+        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+        if (drawer == null)
+            return;
+        if (isSplitPanesEnabled()) {
+            drawer.closeDrawers();
+            drawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED);
+        } else if (drawer.getDrawerLockMode(Gravity.LEFT)
+            == DrawerLayout.LOCK_MODE_LOCKED_CLOSED) {
+            // Copy mode re-asserts its own lock through setDrawerLocked whenever it toggles.
+            drawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED);
+        }
+    }
+
     private boolean isNightThemeActive() {
         return (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
             == Configuration.UI_MODE_NIGHT_YES;
@@ -2726,7 +2749,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Internal row inset only; the floating capsule's outer screen margin remains unchanged. */
     private int statusBarContentEdgeInsetPx(boolean capsule) {
-        return Math.round(dpToPx(capsule ? 8 : 3));
+        int base = Math.round(dpToPx(capsule ? 8 : 3));
+        if (!capsule) {
+            // Docked rounds the pane's bottom corners by the user's inner-edge radius, and the
+            // bottom row (sessions chip on the left, status widgets on the right) sits exactly in
+            // those corners — at higher radii it spilled outside the clip. Half the radius is the
+            // arc's worst-case encroachment over the row's height, so the content starts past it.
+            boolean collapsed = mPreferences != null && mPreferences.isTopPaneClockCollapsed();
+            base += Math.round(resolveDockedStatusInnerRadiusPx(
+                targetStatusBarHeightPx(false, collapsed)) * 0.5f);
+        }
+        return base;
     }
 
     private float resolveStatusBarCapsuleCornerRadiusPx(int surfaceHeightPx) {
@@ -6545,6 +6578,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final boolean initialTerminalBorder = mPreferences.isTerminalBorderEnabled();
         final int initialTerminalGlassBlur = mPreferences.getTerminalGlassBlurRadius();
         final int initialTerminalGlassGrain = mPreferences.getTerminalGlassGrain();
+        final int initialTerminalCornerRadius = mPreferences.getTerminalCornerRadius();
         final int initialTerminalGap = mPreferences.getTerminalPaneGap();
         final int initialWallpaperOpacity = mPreferences.getWallpaperBackdropOpacity();
         final String initialTerminalContrast = mPreferences.getTerminalContrastLevel().value;
@@ -6957,6 +6991,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bindSurfaceTuningGestures();
         bindSurfaceInheritanceChips();
         bindSurfaceReattachAll();
+        bindTerminalRadiusRow();
+        syncTerminalRadiusRow();
         reset.setOnClickListener(view -> {
             int section = sectionGroup.getCheckedButtonId();
             if (section == R.id.surface_tuning_section_dock) {
@@ -7021,6 +7057,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_GLASS_BLUR_RADIUS);
                 mPreferences.setTerminalGlassGrain(
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_GLASS_GRAIN);
+                mPreferences.setTerminalCornerRadius(
+                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_CORNER_RADIUS);
+                syncTerminalRadiusRow();
                 mPreferences.setWallpaperBackdropOpacity(
                     TermuxPreferenceConstants.TERMUX_APP.DEFAULT_WALLPAPER_BACKDROP_OPACITY);
                 mPreferences.setTerminalPaneGap(
@@ -7097,6 +7136,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.setTerminalBorderEnabled(initialTerminalBorder);
                 mPreferences.setTerminalGlassBlurRadius(initialTerminalGlassBlur);
                 mPreferences.setTerminalGlassGrain(initialTerminalGlassGrain);
+                if (mPreferences.getTerminalCornerRadius() != initialTerminalCornerRadius) {
+                    mPreferences.setTerminalCornerRadius(initialTerminalCornerRadius);
+                    applyTerminalBorderAppearance();
+                }
                 mPreferences.setWallpaperBackdropOpacity(initialWallpaperOpacity);
                 if (mPreferences.getTerminalPaneGap() != initialTerminalGap) {
                     mPreferences.setTerminalPaneGap(initialTerminalGap);
@@ -7350,6 +7393,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setSeekBarProgress(R.id.dock_tuning_sessions_slider, mPreferences.getSessionsOpacity());
         setSeekBarProgress(R.id.surface_tuning_keyboard_bg_opacity_slider,
             mPreferences.getInAppKeyboardBackgroundOpacity());
+        syncTerminalRadiusRow();
+    }
+
+    /**
+     * The Docked terminal frame's own radius. Floating derives the frame from the capsule, so the
+     * row only shows in Docked — the one mode where this number acts. Lives outside the Base
+     * cascade for the same reason.
+     */
+    private void bindTerminalRadiusRow() {
+        SeekBar slider = findViewById(R.id.dock_tuning_terminal_radius_slider);
+        if (slider == null)
+            return;
+        slider.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                TextView value = findViewById(R.id.dock_tuning_terminal_radius_value);
+                if (value != null)
+                    value.setText(getString(R.string.termux_dock_tuning_value_dp, progress));
+                if (fromUser && mPreferences != null) {
+                    mPreferences.setTerminalCornerRadius(progress);
+                    applyTerminalBorderAppearance();
+                }
+            }
+        });
+    }
+
+    private void syncTerminalRadiusRow() {
+        View row = findViewById(R.id.dock_tuning_terminal_radius_row);
+        if (row == null || mPreferences == null)
+            return;
+        row.setVisibility(isRoundedDockStyle() ? View.GONE : View.VISIBLE);
+        int current = mPreferences.getTerminalCornerRadius();
+        setSeekBarProgress(R.id.dock_tuning_terminal_radius_slider, current);
+        TextView value = findViewById(R.id.dock_tuning_terminal_radius_value);
+        if (value != null)
+            value.setText(getString(R.string.termux_dock_tuning_value_dp, current));
     }
 
     private void setSeekBarProgress(int sliderId, int progress) {
@@ -7494,6 +7572,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .append(mPreferences.isTerminalBorderEnabled()).append('|')
             .append(mPreferences.getTerminalGlassBlurRadius()).append('|')
             .append(mPreferences.getTerminalGlassGrain()).append('|')
+            .append(mPreferences.getTerminalCornerRadius()).append('|')
             .append(mPreferences.getTerminalPaneGap()).append('|')
             .append(mPreferences.getTerminalContrastLevel().value).append('|')
             .append(mPreferences.getWallpaperBackdropOpacity()).append('|')
@@ -8177,6 +8256,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             findViewById(R.id.accessory_surface_host));
         positionSurfaceTuningGestureGroup(R.id.surface_tuning_keyboard_gesture_group, overlay,
             isInAppKeyboardShown() ? findViewById(R.id.inapp_keyboard_view_host) : null);
+        // Docked surfaces are flush with the screen edges: the margin drag is inert there (see
+        // bindSurfaceTuningInsetGesture), so the side pills advertising it must not render either.
+        boolean sideDrag = isRoundedDockStyle();
+        setSurfaceTuningSidePillVisible(R.id.surface_tuning_status_pill_left, sideDrag);
+        setSurfaceTuningSidePillVisible(R.id.surface_tuning_status_pill_right, sideDrag);
+        setSurfaceTuningSidePillVisible(R.id.surface_tuning_dock_pill_left, sideDrag);
+        setSurfaceTuningSidePillVisible(R.id.surface_tuning_dock_pill_right, sideDrag);
+        setSurfaceTuningSidePillVisible(R.id.surface_tuning_keyboard_pill_left, sideDrag);
+        setSurfaceTuningSidePillVisible(R.id.surface_tuning_keyboard_pill_right, sideDrag);
+    }
+
+    private void setSurfaceTuningSidePillVisible(int pillId, boolean visible) {
+        View pill = findViewById(pillId);
+        if (pill != null)
+            pill.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     /**
@@ -10939,7 +11033,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             requestSurfaceEditorClose();
         } else if (getDrawer().isDrawerOpen(Gravity.LEFT)) {
             getDrawer().closeDrawers();
-        } else if (!getDrawer().isDrawerOpen(Gravity.LEFT)) {
+        } else if (!isSplitPanesEnabled() && !getDrawer().isDrawerOpen(Gravity.LEFT)) {
+            // The legacy sessions drawer only exists without the in-app multiplexer: with split
+            // panes on, sessions live in the status pill's own panel and this drawer stays shut.
             getDrawer().openDrawer(Gravity.LEFT);
         }
     }
@@ -14194,7 +14290,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void setDrawerLocked(boolean locked) {
-            getDrawer().setDrawerLockMode(locked ? DrawerLayout.LOCK_MODE_LOCKED_CLOSED
+            // Split panes retire the legacy sessions drawer entirely, so leaving copy mode must
+            // not unlock it.
+            getDrawer().setDrawerLockMode(locked || isSplitPanesEnabled()
+                ? DrawerLayout.LOCK_MODE_LOCKED_CLOSED
                 : DrawerLayout.LOCK_MODE_UNLOCKED);
         }
 
