@@ -287,9 +287,11 @@ public final class TermuxPreferenceConstants {
         public static final int STATUS_AUTO_CORNER_RADIUS_MIN_DP = 16;
         public static final int STATUS_AUTO_CORNER_RADIUS_MAX_DP = 26;
 
-        /** Section the surface editor last had open ("dock", "keyboard", "status", "other"). */
-        public static final String KEY_SURFACE_TUNING_LAST_SECTION = "surface_tuning_last_section";
-        public static final String DEFAULT_SURFACE_TUNING_LAST_SECTION = "dock";
+        /*
+         * There is no per-session "last section" key any more: the editor became one page when its
+         * five tabs were dissolved, so there is no section to remember. A stored
+         * "surface_tuning_last_section" from an older build is ignored.
+         */
 
         /** Independent status-surface glass controls used by the live surface editor. */
         public static final String KEY_STATUS_BAR_BLUR_RADIUS = "status_bar_blur_radius";

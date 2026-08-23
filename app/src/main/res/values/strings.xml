@@ -1001,9 +1001,8 @@
                 
             <!-- Extra Keys Category -->
                 <string name="termux_dock_tune_live_title">Surface editor</string>
-                <string name="termux_dock_tune_live_summary">Customize dock, keyboard, status panel, terminal, and sessions live on the home screen.</string>
+                <string name="termux_dock_tune_live_summary">Customize dock, keyboard, status panel, and terminal live on the home screen.</string>
                 <string name="termux_dock_tuning_title">Surface editor</string>
-                <string name="termux_surface_tuning_base">Base</string>
                 <string name="termux_surface_tuning_base_section">All surfaces</string>
                 <!-- The link chip on a shared row: an arrow while the surface follows Base, an
                      undo glyph once it has its own value. -->
@@ -1017,6 +1016,10 @@
                     <item quantity="other">%1$d properties have their own values. Their ↺ puts them back.</item>
                 </plurals>
                 <string name="termux_surface_tuning_reattach_all">Reattach all</string>
+                <!-- The fold between the shared controls and the per-surface override groups. -->
+                <string name="termux_surface_tuning_advanced">Per-surface fine-tuning</string>
+                <string name="termux_surface_tuning_advanced_chevron_closed">▸</string>
+                <string name="termux_surface_tuning_advanced_chevron_open">▾</string>
                 <string name="termux_surface_tuning_dock">Dock</string>
                 <string name="termux_surface_tuning_keyboard">Keyboard</string>
                 <string name="termux_surface_tuning_status">Status</string>
@@ -1038,8 +1041,6 @@
                 <string name="termux_dock_tuning_icons">Apps per page</string>
                 <string name="termux_dock_tuning_terminal">Opacity</string>
                 <string name="termux_dock_tuning_terminal_border">Border</string>
-                <string name="termux_dock_tuning_section_dock">Dock</string>
-                <string name="termux_dock_tuning_section_terminal">Terminal</string>
                 <string name="termux_dock_tuning_section_wallpaper">Wallpaper</string>
                 <string name="termux_dock_tuning_terminal_inner_padding">Inner padding</string>
                 <!-- Docked spends the same knob on the terminal's outer air as well as the gap
