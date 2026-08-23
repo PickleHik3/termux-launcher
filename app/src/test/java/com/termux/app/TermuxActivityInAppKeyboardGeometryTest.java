@@ -1,5 +1,6 @@
 package com.termux.app;
 
+import com.termux.app.surfaces.SurfaceEditorController;
 import com.termux.app.chrome.ChromePolicy;
 import com.termux.app.chrome.ChromeRenderer;
 
@@ -52,14 +53,14 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
     @Test
     public void surfaceEditorKeyboardSlidersNormalizeFullStoredRanges() {
-        assertEquals(0, TermuxActivity.keyboardEditorProgress(0.5f, 0.5f, 1.6f));
-        assertEquals(100, TermuxActivity.keyboardEditorProgress(1.6f, 0.5f, 1.6f));
-        assertEquals(0.5f, TermuxActivity.keyboardEditorValue(0, 0.5f, 1.6f), 0.0001f);
-        assertEquals(1.6f, TermuxActivity.keyboardEditorValue(100, 0.5f, 1.6f), 0.0001f);
+        assertEquals(0, SurfaceEditorController.keyboardEditorProgress(0.5f, 0.5f, 1.6f));
+        assertEquals(100, SurfaceEditorController.keyboardEditorProgress(1.6f, 0.5f, 1.6f));
+        assertEquals(0.5f, SurfaceEditorController.keyboardEditorValue(0, 0.5f, 1.6f), 0.0001f);
+        assertEquals(1.6f, SurfaceEditorController.keyboardEditorValue(100, 0.5f, 1.6f), 0.0001f);
 
-        assertEquals(0, TermuxActivity.keyboardEditorProgress(0f, 0f, 8f));
-        assertEquals(100, TermuxActivity.keyboardEditorProgress(8f, 0f, 8f));
-        assertEquals(4f, TermuxActivity.keyboardEditorValue(50, 0f, 8f), 0.0001f);
+        assertEquals(0, SurfaceEditorController.keyboardEditorProgress(0f, 0f, 8f));
+        assertEquals(100, SurfaceEditorController.keyboardEditorProgress(8f, 0f, 8f));
+        assertEquals(4f, SurfaceEditorController.keyboardEditorValue(50, 0f, 8f), 0.0001f);
     }
 
     @After

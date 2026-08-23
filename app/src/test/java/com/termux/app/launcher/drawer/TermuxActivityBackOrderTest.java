@@ -39,12 +39,13 @@ public class TermuxActivityBackOrderTest {
     public void theDrawerConsumesBackBeforeDockTuning() {
         TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
         AppDrawerController controller = openDrawer(activity);
-        ReflectionHelpers.setField(activity, "mDockTuningMode", true);
+        Object editor = ReflectionHelpers.getField(activity, "mSurfaceEditor");
+        ReflectionHelpers.setField(editor, "mDockTuningMode", true);
 
         activity.onBackPressed();
 
         assertFalse(controller.isOpen());
-        boolean dockTuningMode = ReflectionHelpers.getField(activity, "mDockTuningMode");
+        boolean dockTuningMode = ReflectionHelpers.getField(editor, "mDockTuningMode");
         assertTrue("dock tuning must not consume a back press aimed at the drawer", dockTuningMode);
     }
 
