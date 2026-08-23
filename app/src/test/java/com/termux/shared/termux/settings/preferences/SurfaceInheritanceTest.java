@@ -277,6 +277,39 @@ public class SurfaceInheritanceTest {
     }
 
     @Test
+    public void switchingToFloatingKeepsTheShippedNumbers() {
+        // A fresh install opens Docked, and the shipped numbers are the shape's neighbours rather
+        // than its property: flipping to Floating changes what they are spent on — the capsule's
+        // radius, the screen-edge gaps that only a floating surface can show — and must not change
+        // any of them. Without this, per-shape presets would be the only way to keep the Floating
+        // look right, and there is nothing here that needs them.
+        preferences.migrateSurfaceInheritance();
+        int blur = preferences.getExtraKeysBlurRadius();
+        int dockOpacity = preferences.getAppBarOpacity();
+        int baseOpacity = preferences.getStatusBarOpacity();
+        int grain = preferences.getDockGlassGrain();
+        int radius = preferences.getAppLauncherDockCornerRadius();
+        int sideGap = preferences.getDockHorizontalInset();
+        int terminalRadius = preferences.getTerminalCornerRadius();
+        int paneGap = preferences.getTerminalPaneGap();
+
+        preferences.setAppLauncherDockStyle(TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED);
+
+        assertEquals(TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED,
+            preferences.getAppLauncherDockStyle());
+        assertEquals(blur, preferences.getExtraKeysBlurRadius());
+        assertEquals(dockOpacity, preferences.getAppBarOpacity());
+        assertEquals(baseOpacity, preferences.getStatusBarOpacity());
+        assertEquals(grain, preferences.getDockGlassGrain());
+        assertEquals(radius, preferences.getAppLauncherDockCornerRadius());
+        assertEquals(sideGap, preferences.getDockHorizontalInset());
+        assertEquals(terminalRadius, preferences.getTerminalCornerRadius());
+        assertEquals(paneGap, preferences.getTerminalPaneGap());
+        assertFalse("the dock keeps the one detach the shipped look asks for",
+            preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY));
+    }
+
+    @Test
     public void anAlreadyFoldedInstallStillKeepsThePreShippedLook() {
         // Anyone who ran a build between the inheritance fold and the Docked theme has the fold's
         // marker set already. Hanging the pin off that marker would have skipped exactly those
