@@ -232,6 +232,67 @@ public class SurfaceInheritanceTest {
     }
 
     @Test
+    public void migration_relinksAKeyboardOpacityDetachedAtTheOldSentinel() {
+        // Before the tuned Docked look, a stored 100 was the keyboard-opacity default — "never
+        // touched, render the shared dock material". The fold must not leave it behind as a
+        // detached override, or the unified dock/keyboard/nav glass sheet splits at the
+        // keyboard's bottom edge the moment the default moves.
+        putRaw(TERMUX_APP.KEY_APP_BAR_OPACITY, 46);
+        putRaw(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY,
+            TERMUX_APP.LEGACY_IN_APP_KEYBOARD_BACKGROUND_OPACITY_SENTINEL);
+
+        preferences.migrateSurfaceInheritance();
+
+        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY));
+        assertEquals("the keyboard renders the shared material again",
+            46, preferences.getInAppKeyboardBackgroundOpacity());
+    }
+
+    @Test
+    public void migration_healsAnInstallThatAlreadyFoldedUnderAnEarlierBuild() {
+        // The regression shipped: installs exist that folded the sentinel into a detach before
+        // the heal was written. The heal carries its own marker exactly so those still recover.
+        putRaw(TERMUX_APP.KEY_APP_BAR_OPACITY, 46);
+        putRaw(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY,
+            TERMUX_APP.LEGACY_IN_APP_KEYBOARD_BACKGROUND_OPACITY_SENTINEL);
+        store.edit()
+            .putBoolean(TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, true)
+            .putBoolean(TERMUX_APP.KEY_SHIPPED_SURFACE_DEFAULTS_ADOPTED, true)
+            .putBoolean(TERMUX_APP.KEY_SURFACE_INHERIT_PREFIX + "keyboard_opacity", false)
+            .commit();
+
+        preferences.migrateSurfaceInheritance();
+
+        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY));
+    }
+
+    @Test
+    public void migration_keepsAKeyboardOpacityTheUserActuallyChose() {
+        putRaw(TERMUX_APP.KEY_APP_BAR_OPACITY, 46);
+        putRaw(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY, 60);
+
+        preferences.migrateSurfaceInheritance();
+
+        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY));
+        assertEquals(60, preferences.getInAppKeyboardBackgroundOpacity());
+    }
+
+    @Test
+    public void sentinelHeal_runsOnceAndNeverUndoesALaterDeliberateDetach() {
+        preferences.migrateSurfaceInheritance();
+        // The editor's drag path lands the user on exactly 100 — a real opinion now, because the
+        // heal has already spent itself.
+        preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
+            TERMUX_APP.LEGACY_IN_APP_KEYBOARD_BACKGROUND_OPACITY_SENTINEL);
+
+        preferences.migrateSurfaceInheritance();
+
+        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY));
+        assertEquals(TERMUX_APP.LEGACY_IN_APP_KEYBOARD_BACKGROUND_OPACITY_SENTINEL,
+            preferences.getInAppKeyboardBackgroundOpacity());
+    }
+
+    @Test
     public void migration_leavesAnUntouchedSurfaceLinked() {
         // Nothing stored means no opinion to preserve. Without this an untouched keyboard would
         // start detached purely because its shipped default differed.

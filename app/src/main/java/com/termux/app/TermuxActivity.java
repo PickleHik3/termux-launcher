@@ -3415,7 +3415,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean hasInAppKeyboardBackgroundOverride() {
         return ChromePolicy.hasInAppKeyboardBackgroundOverride(isInAppKeyboardOpacityLinked(),
             resolveInAppKeyboardSchemeBackgroundColor(),
-            getInAppKeyboardBackgroundOpacityPercent());
+            getInAppKeyboardBackgroundOpacityPercent(),
+            mPreferences != null ? mPreferences.getAppBarOpacity()
+                : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY);
     }
 
 

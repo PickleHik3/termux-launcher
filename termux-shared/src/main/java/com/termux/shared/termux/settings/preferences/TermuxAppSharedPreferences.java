@@ -1391,8 +1391,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public synchronized void migrateSurfaceInheritance() {
         adoptShippedSurfaceDefaults();
         if (SharedPreferenceUtils.getBoolean(mSharedPreferences,
-                TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, false))
+                TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, false)) {
+            healKeyboardOpacitySentinel();
             return;
+        }
 
         boolean wasNormalized = SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_SURFACE_TUNING_NORMALIZED,
@@ -1420,6 +1422,35 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
         SharedPreferenceUtils.setBoolean(mSharedPreferences,
             TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, true, true);
+        healKeyboardOpacitySentinel();
+    }
+
+    /**
+     * Relinks a keyboard-opacity row the fold detached at the old sentinel default. Before the
+     * tuned Docked look, {@code 100} on the keyboard-opacity key meant "never touched — render the
+     * shared dock material"; the fold read it as a stored opinion and detached it, and once the
+     * default moved off 100 the detach started counting as a background override — which silently
+     * split the unified dock/keyboard/nav glass sheet at the keyboard's bottom edge. A detached row
+     * holding exactly the sentinel can only be that fold artifact (even a hand-dragged 100 meant
+     * "no override" under the old semantics), so it goes back to following Base. Any other value is
+     * a real opinion and stays. Runs once, after the fold, under its own marker — installs that
+     * folded under earlier builds still need it.
+     */
+    private void healKeyboardOpacitySentinel() {
+        if (SharedPreferenceUtils.getBoolean(mSharedPreferences,
+                TERMUX_APP.KEY_KEYBOARD_OPACITY_SENTINEL_HEALED, false))
+            return;
+
+        boolean detachedAtSentinel =
+            !isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY)
+            && SharedPreferenceUtils.getInt(mSharedPreferences,
+                TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY, Integer.MIN_VALUE)
+                == TERMUX_APP.LEGACY_IN_APP_KEYBOARD_BACKGROUND_OPACITY_SENTINEL;
+        if (detachedAtSentinel)
+            setSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY, true);
+
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_KEYBOARD_OPACITY_SENTINEL_HEALED, true, true);
     }
 
     /**

@@ -872,6 +872,20 @@ public final class TermuxPreferenceConstants {
             "shipped_surface_defaults_adopted";
 
         /**
+         * Set once the keyboard-opacity rows detached at the old sentinel default have been
+         * relinked to Base. Before the tuned Docked look, {@code 100} on
+         * {@link #KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY} meant "never touched — render the shared
+         * dock material", and the inheritance fold turned that sentinel into a detached override.
+         * When the default then changed, those installs silently lost the unified
+         * dock/keyboard/nav glass sheet.
+         */
+        public static final String KEY_KEYBOARD_OPACITY_SENTINEL_HEALED =
+            "keyboard_opacity_sentinel_healed";
+
+        /** The pre-tuned-look keyboard-opacity default, which doubled as the "untouched" sentinel. */
+        public static final int LEGACY_IN_APP_KEYBOARD_BACKGROUND_OPACITY_SENTINEL = 100;
+
+        /**
          * The old all-or-nothing "match all surfaces" switch. Read once by
          * {@code migrateSurfaceInheritance} to decide whether an upgrading install starts fully
          * linked, but never written again.
