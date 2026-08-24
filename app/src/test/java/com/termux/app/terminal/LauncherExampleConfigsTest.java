@@ -36,6 +36,9 @@ public class LauncherExampleConfigsTest {
     /** A commented `key = value` line, as opposed to the prose around it. */
     private static final Pattern PROPERTY_DIRECTIVE =
         Pattern.compile("^#\\s?([a-z][a-z0-9.\\-]*\\s*=.*)$");
+    /** An uncommented `key = value` line: a default the shipped file actually sets. */
+    private static final Pattern LIVE_PROPERTY_DIRECTIVE =
+        Pattern.compile("^([a-z][a-z0-9.\\-]*\\s*=.*)$");
 
     @Test
     public void everyCommentedBindingDirectiveParses() throws Exception {
@@ -80,6 +83,24 @@ public class LauncherExampleConfigsTest {
             sawTerm |= TermuxPropertyConstants.KEY_TERMINAL_TERM.equals(key);
         }
         assertTrue("terminal-term is missing from the shipped example", sawTerm);
+    }
+
+    /**
+     * The shipped file sets tap-to-open URLs as this fork's fresh-install default; every live
+     * line it carries must be a key termux actually loads, or the default silently vanishes.
+     */
+    @Test
+    public void everyLivePropertyIsARealKey() throws Exception {
+        String live = uncomment("termux.properties", LIVE_PROPERTY_DIRECTIVE);
+        boolean sawOnclickUrl = false;
+        for (String line : live.split("\n")) {
+            if (line.isEmpty()) continue;
+            String key = line.substring(0, line.indexOf('=')).trim();
+            assertTrue("the shipped example sets a property termux does not load: " + key,
+                TermuxPropertyConstants.TERMUX_APP_PROPERTIES_LIST.contains(key));
+            sawOnclickUrl |= TermuxPropertyConstants.KEY_TERMINAL_ONCLICK_URL_OPEN.equals(key);
+        }
+        assertTrue("tap-to-open URLs no longer ships enabled", sawOnclickUrl);
     }
 
     private static String uncomment(String name, Pattern directive) throws IOException {
