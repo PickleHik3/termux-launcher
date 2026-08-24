@@ -855,6 +855,13 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_SURFACE_MATERIAL = SURFACE_MATERIAL_GLASS;
         public static final int DEFAULT_SURFACE_MATERIAL_INTENSITY = 50;
 
+        /**
+         * The look the user pinned as the editor's Custom preset, as the preset format's JSON.
+         * Written only by the editor's save glyph — never by Done, which commits the live
+         * preferences and would otherwise replace the pin every time someone left the editor.
+         */
+        public static final String KEY_SURFACE_CUSTOM_PRESET = "surface_custom_preset";
+
         /** Prefix for the per-(surface, property) detach flags: {@code surface_inherit_dock_blur}. */
         public static final String KEY_SURFACE_INHERIT_PREFIX = "surface_inherit_";
         /** A surface follows Base until the user moves that one control. */

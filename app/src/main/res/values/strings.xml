@@ -1004,37 +1004,47 @@
                 <string name="termux_dock_tune_live_summary">Customize dock, keyboard, status panel, and terminal live on the home screen.</string>
                 <string name="termux_dock_tuning_title">Surface editor</string>
                 <string name="termux_surface_tuning_presets_section">Presets</string>
-                <string name="termux_surface_preset_stock">Stock</string>
-                <string name="termux_surface_preset_glass">Glass</string>
-                <string name="termux_surface_preset_frost">Frost</string>
-                <string name="termux_surface_preset_solid">Solid</string>
-                <string name="termux_surface_preset_minimal">Minimal</string>
+                <!-- Preset names describe the whole look, deliberately not the material family:
+                     "Glass", "Frost" and "Solid" are what the Material control is called, and a
+                     preset named after one of them read as a shortcut to that control rather than
+                     as a complete look. -->
+                <string name="termux_surface_preset_stock">Classic</string>
+                <string name="termux_surface_preset_frost">Mist</string>
+                <string name="termux_surface_preset_solid">Slate</string>
+                <string name="termux_surface_preset_minimal">Bare</string>
+                <string name="termux_surface_preset_custom">Custom</string>
                 <string name="termux_surface_preset_applied">%1$s applied</string>
-                <string name="termux_surface_preset_undo">Undo</string>
+                <string name="termux_surface_preset_saved">Look saved as Custom</string>
+                <string name="termux_surface_preset_custom_empty">No saved look yet</string>
+                <string name="termux_surface_preset_custom_empty_hint">Use ⤓ in the editor\'s title bar to save the look you have now.</string>
+                <string name="termux_surface_tuning_save_look">⤓</string>
+                <string name="termux_surface_tuning_save_look_description">Save this look as the Custom preset</string>
+                <!-- Subtitle on the "applied" notice chip, whose tap undoes the preset. -->
+                <string name="termux_surface_preset_undo_hint">Tap to undo</string>
                 <string name="termux_surface_preset_card_description">%1$s preset</string>
                 <string name="termux_surface_preset_apply_action">apply this look</string>
                 <string name="termux_surface_preset_current_look">Current look</string>
-                <string name="termux_surface_tuning_base_section">All surfaces</string>
+                <string name="termux_surface_tuning_base_section">Global</string>
                 <string name="termux_surface_tuning_material">Material</string>
                 <string name="termux_surface_tuning_material_solid">Solid</string>
                 <string name="termux_surface_tuning_material_glass">Glass</string>
                 <string name="termux_surface_tuning_material_frost">Frost</string>
                 <string name="termux_surface_tuning_material_intensity">Intensity</string>
                 <string name="termux_surface_tuning_material_custom">Custom</string>
-                <!-- The link chip on a shared row: an arrow while the surface follows Base, an
+                <!-- The link chip on a shared row: a tick while the surface follows Base, an
                      undo glyph once it has its own value. -->
-                <string name="termux_surface_tuning_link_inherited">↗</string>
+                <string name="termux_surface_tuning_link_inherited">✓</string>
                 <string name="termux_surface_tuning_link_detached">↺</string>
                 <string name="termux_surface_tuning_link_inherited_description">Following Base. Move this control to give %1$s its own value.</string>
                 <string name="termux_surface_tuning_link_detached_description">%1$s has its own value. Tap to follow Base again.</string>
-                <string name="termux_surface_tuning_followers_all">Every surface is following Base.</string>
                 <plurals name="termux_surface_tuning_followers_some">
                     <item quantity="one">%1$d property has its own value. Its ↺ puts it back.</item>
                     <item quantity="other">%1$d properties have their own values. Their ↺ puts them back.</item>
                 </plurals>
                 <string name="termux_surface_tuning_reattach_all">Reattach all</string>
-                <!-- The fold between the shared controls and the per-surface override groups. -->
-                <string name="termux_surface_tuning_advanced">Per-surface fine-tuning</string>
+                <!-- The fold between the global controls and the per-surface groups, one of
+                     which shows at a time behind the surface pills. -->
+                <string name="termux_surface_tuning_advanced">Fine tune</string>
                 <string name="termux_surface_tuning_advanced_chevron_closed">▸</string>
                 <string name="termux_surface_tuning_advanced_chevron_open">▾</string>
                 <string name="termux_surface_tuning_dock">Dock</string>

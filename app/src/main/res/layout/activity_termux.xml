@@ -883,35 +883,22 @@
             android:layout_alignWithParentIfMissing="true"
             android:elevation="18dp"
             android:visibility="gone"
-            app:cardBackgroundColor="@android:color/transparent"
+            app:cardBackgroundColor="?attr/termuxColorSurfacePanelHigh"
             app:cardCornerRadius="18dp"
             app:cardElevation="0dp"
-            app:strokeColor="?attr/termuxColorOnSurfaceVariant"
+            app:strokeColor="?attr/termuxColorOutlineVariant"
             app:strokeWidth="1dp">
 
+            <!-- An opaque Material sheet, deliberately not a glass one. The card used to be a
+                 blurred translucent panel: glass drawn on top of the glass surfaces it edits, its
+                 hairline crossing the terminal's own border, so neither edge read as belonging to
+                 anything. Solid fill plus the elevation shadow says "this is a sheet over the home
+                 screen", which is what it is — and it stops competing with the material the sliders
+                 are there to tune. It also drops one realtime blur from the frame the editor is
+                 previewing. -->
             <RelativeLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
-
-                <!-- Blur and scrim track the content's measured bounds; letting them use
-                     match_parent inside a wrap_content FrameLayout made the card fill the
-                     whole area above the dock (default View onMeasure expands under AT_MOST). -->
-                <com.github.mmin18.widget.RealtimeBlurView
-                    android:id="@+id/dock_tuning_blur_backdrop"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_alignTop="@+id/dock_tuning_content"
-                    android:layout_alignBottom="@+id/dock_tuning_content"
-                    app:realtimeBlurRadius="14dp"
-                    app:realtimeOverlayColor="@android:color/transparent" />
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_alignTop="@+id/dock_tuning_content"
-                    android:layout_alignBottom="@+id/dock_tuning_content"
-                    android:alpha="0.72"
-                    android:background="?attr/termuxColorSurfacePanelHigh" />
 
                 <LinearLayout
                     android:id="@+id/dock_tuning_content"
@@ -955,6 +942,20 @@
                             android:textSize="10sp"
                             android:textStyle="bold"
                             android:visibility="gone" />
+
+                        <!-- Pins the current look as the Custom preset. Next to the unsaved badge
+                             because that is where "is this look kept anywhere?" gets asked; it is
+                             not the same question as Done, which commits the live edit. -->
+                        <TextView
+                            android:id="@+id/surface_tuning_save_look"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="@string/termux_surface_tuning_save_look_description"
+                            android:gravity="center"
+                            android:text="@string/termux_surface_tuning_save_look"
+                            android:textColor="?attr/termuxColorPrimary"
+                            android:textSize="16sp" />
 
                         <TextView
                             android:id="@+id/dock_tuning_dismiss"
@@ -1254,6 +1255,67 @@
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
                         android:visibility="gone">
+
+                    <!-- Which surface the group below belongs to. One pill per surface, wrapping
+                         onto as many rows as they need, so a fifth surface is a chip rather than a
+                         layout. Only the picked surface's group is in the tree's visible state: the
+                         fold used to stack all four, which made the fine-tune section a long
+                         scroll of near-identical sliders with no way to tell where you were.
+                         Swapping groups cannot resize the card — the scroll region is sized to the
+                         room the card has, not to its contents — so this is the one place a
+                         selector costs nothing in layout jump. -->
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/surface_editor_surface_chips"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:layout_marginBottom="2dp"
+                        app:chipSpacingHorizontal="6dp"
+                        app:chipSpacingVertical="2dp"
+                        app:selectionRequired="true"
+                        app:singleLine="false"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/surface_editor_chip_dock"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checkable="true"
+                            android:text="@string/termux_surface_tuning_dock"
+                            android:textSize="12sp"
+                            app:chipMinHeight="32dp" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/surface_editor_chip_keyboard"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checkable="true"
+                            android:text="@string/termux_surface_tuning_keyboard"
+                            android:textSize="12sp"
+                            app:chipMinHeight="32dp" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/surface_editor_chip_status"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checkable="true"
+                            android:text="@string/termux_surface_tuning_status"
+                            android:textSize="12sp"
+                            app:chipMinHeight="32dp" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/surface_editor_chip_terminal"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checkable="true"
+                            android:text="@string/termux_surface_tuning_terminal"
+                            android:textSize="12sp"
+                            app:chipMinHeight="32dp" />
+                    </com.google.android.material.chip.ChipGroup>
 
                     <LinearLayout
                         android:id="@+id/surface_editor_group_dock"

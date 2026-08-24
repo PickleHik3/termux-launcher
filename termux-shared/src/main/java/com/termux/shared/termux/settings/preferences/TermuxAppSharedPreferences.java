@@ -1774,6 +1774,18 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             Math.max(0, Math.min(100, intensity)), false);
     }
 
+    /** The pinned Custom look, as stored JSON; empty until the user saves one. */
+    @NonNull
+    public String getSurfaceCustomPreset() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_SURFACE_CUSTOM_PRESET, "", true);
+    }
+
+    public void setSurfaceCustomPreset(@Nullable String look) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_SURFACE_CUSTOM_PRESET,
+            look == null ? "" : look, false);
+    }
+
     /**
      * The number a surface should actually use: its own override when detached, Base otherwise.
      * Callers still apply their own clamp, so a Base value outside one surface's range (the

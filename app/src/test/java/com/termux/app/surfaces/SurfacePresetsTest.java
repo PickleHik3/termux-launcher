@@ -19,12 +19,15 @@ import org.robolectric.annotation.Config;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Pins the preset round-trip that "Stock" is named after: applied to any state, it is the shipped
- * look — the shipped Base numbers, the dock's one denser detached opacity, and nothing else
- * detached — and the selection ring's match test agrees.
+ * Pins the preset round-trip the first card ("Classic", id {@code stock}) is named after: applied
+ * to any state, it is the shipped look — the shipped Base numbers, the dock's one denser detached
+ * opacity, and nothing else detached — and the selection ring's match test agrees. Plus the fifth
+ * card, which is the user's own saved look rather than one this build ships.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -70,6 +73,54 @@ public class SurfacePresetsTest {
 
         assertTrue(SurfacePresets.matches(preferences, stock));
         assertFalse(SurfacePresets.matches(preferences, SurfacePresets.presets().get(1)));
+    }
+
+    /**
+     * The saved look is a pin, not a snapshot of "now": it has to survive every later edit, which
+     * is the whole difference between the Custom card and simply leaving the editor alone.
+     */
+    @Test
+    public void savedCustomLookOutlivesLaterEdits() {
+        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 21);
+        preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.GRAIN, 63);
+        SurfacePresets.saveCustom(preferences);
+
+        SurfacePresets.Preset custom = SurfacePresets.custom(preferences);
+        assertNotNull(custom);
+        assertEquals(SurfacePresets.CUSTOM_ID, custom.id);
+        assertTrue(SurfacePresets.matches(preferences, custom));
+
+        // Wander off, then come back through the card.
+        SurfacePresets.apply(preferences, SurfacePresets.presets().get(0));
+        assertFalse(SurfacePresets.matches(preferences, custom));
+        assertEquals(21, SurfacePresets.custom(preferences).values
+            .get(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
+
+        SurfacePresets.apply(preferences, SurfacePresets.custom(preferences));
+        assertEquals(21, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.GRAIN));
+        assertEquals(63,
+            preferences.getSurfaceOverrideValue(SurfaceSlot.STATUS, SurfaceProperty.GRAIN));
+    }
+
+    /** Nothing saved is not an empty look: the card has to be able to tell those apart. */
+    @Test
+    public void thereIsNoCustomPresetUntilOneIsSaved() {
+        assertNull(SurfacePresets.custom(preferences));
+        assertNull(SurfacePresets.deserialize(""));
+        assertNull(SurfacePresets.deserialize("not json"));
+    }
+
+    /** JSON widens ints on the way out; a look that read back as Long would not apply. */
+    @Test
+    public void aStoredLookReadsBackAsTheTypesTheFormatUses() {
+        SurfacePresets.saveCustom(preferences);
+        java.util.Map<String, Object> look =
+            SurfacePresets.deserialize(preferences.getSurfaceCustomPreset());
+        assertNotNull(look);
+        assertTrue(look.get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY) instanceof Integer);
+        assertTrue(look.get(TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED) instanceof Boolean);
+        assertTrue(look.get(TERMUX_APP.KEY_SURFACE_MATERIAL) instanceof String);
     }
 
     @Test

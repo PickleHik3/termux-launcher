@@ -365,6 +365,8 @@ public final class SurfaceEditorController {
         styleGroup.check(SegmentedPillPreference.VALUE_ROUNDED.equals(initialStyle)
             ? R.id.dock_tuning_style_capsule : R.id.dock_tuning_style_default);
         bindAdvancedToggle();
+        bindFineTuneChips();
+        bindSaveLook();
         // A settings deep link ("Customize keyboard appearance") lands on that surface's group
         // inside the fold; opened plainly, the fold starts closed and the shared page is the editor.
         TermuxAppSharedPreferences.SurfaceSlot deepLinkSlot = slotForSectionKey(initialSection);
@@ -919,6 +921,104 @@ public final class SurfaceEditorController {
         // content, so the fold changes only what is inside the scroll region — no re-measure.
     }
 
+    // ------------------------------------------------------------------- the fine-tune selector
+    //
+    // The four per-surface groups are one page each, picked by a pill, rather than four stacked
+    // folds. Stacked, the section was a long run of near-identical sliders where "which surface am
+    // I looking at?" could only be answered by scrolling back to the last header.
+
+    /** Which surface's group the fine-tune section is showing. Kept across editor sessions. */
+    @NonNull
+    private TermuxAppSharedPreferences.SurfaceSlot mFineTuneSlot =
+        TermuxAppSharedPreferences.SurfaceSlot.DOCK;
+    /**
+     * True while the pills are being restated in code. Checking a chip fires the same callback a
+     * finger does, and treating an open-the-editor restate as a pick would fade the group in and
+     * scroll the card on entry — motion nobody asked for.
+     */
+    private boolean mFineTuneRestating;
+
+    private static int slotChipId(@NonNull TermuxAppSharedPreferences.SurfaceSlot slot) {
+        switch (slot) {
+            case KEYBOARD: return R.id.surface_editor_chip_keyboard;
+            case STATUS: return R.id.surface_editor_chip_status;
+            case CANVAS: return R.id.surface_editor_chip_terminal;
+            default: return R.id.surface_editor_chip_dock;
+        }
+    }
+
+    @Nullable
+    private static TermuxAppSharedPreferences.SurfaceSlot slotForChipId(int chipId) {
+        for (TermuxAppSharedPreferences.SurfaceSlot slot
+                : TermuxAppSharedPreferences.SurfaceSlot.values()) {
+            if (slotChipId(slot) == chipId)
+                return slot;
+        }
+        return null;
+    }
+
+    private void bindFineTuneChips() {
+        com.google.android.material.chip.ChipGroup chips =
+            mHost.findView(R.id.surface_editor_surface_chips);
+        if (chips == null)
+            return;
+        chips.setOnCheckedStateChangeListener((group, checkedIds) -> {
+            if (mFineTuneRestating || checkedIds.isEmpty())
+                return;
+            TermuxAppSharedPreferences.SurfaceSlot picked = slotForChipId(checkedIds.get(0));
+            if (picked != null)
+                showFineTuneSlot(picked, true);
+        });
+        showFineTuneSlot(mFineTuneSlot, false);
+    }
+
+    /**
+     * Shows one surface's group and hides the rest.
+     *
+     * <p>Hidden groups stay in the tree with their controls at their real values — every sync path
+     * writes them by id whether they are drawn or not — so switching back shows the surface as it
+     * stands rather than as it was when it was last on screen.
+     *
+     * @param animate a user pick, which fades and lifts the incoming group and pulls the pills up
+     *                to the top of the scroll so the group has the room; false while restating.
+     */
+    private void showFineTuneSlot(@NonNull TermuxAppSharedPreferences.SurfaceSlot slot,
+                                  boolean animate) {
+        mFineTuneSlot = slot;
+        com.google.android.material.chip.ChipGroup chips =
+            mHost.findView(R.id.surface_editor_surface_chips);
+        if (chips != null && chips.getCheckedChipId() != slotChipId(slot)) {
+            mFineTuneRestating = true;
+            try {
+                chips.check(slotChipId(slot));
+            } finally {
+                mFineTuneRestating = false;
+            }
+        }
+        for (TermuxAppSharedPreferences.SurfaceSlot each
+                : TermuxAppSharedPreferences.SurfaceSlot.values()) {
+            View group = mHost.findView(slotGroupId(each));
+            if (group != null)
+                group.setVisibility(each == slot ? View.VISIBLE : View.GONE);
+        }
+        if (!animate)
+            return;
+        View group = mHost.findView(slotGroupId(slot));
+        if (group != null) {
+            group.animate().cancel();
+            group.setAlpha(0f);
+            group.setTranslationY(dpToPx(6));
+            group.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(SURFACE_TUNING_RESIZE_DURATION_MS)
+                .setInterpolator(com.termux.app.terminal.Motion.settle())
+                .start();
+        }
+        if (chips != null)
+            scrollEditorViewToTop(chips);
+    }
+
     private int slotGroupId(@NonNull TermuxAppSharedPreferences.SurfaceSlot slot) {
         switch (slot) {
             case KEYBOARD: return R.id.surface_editor_group_keyboard;
@@ -928,24 +1028,37 @@ public final class SurfaceEditorController {
         }
     }
 
-    /** Brings a deep-linked surface's group to the top of the scroll once it has a layout. */
+    /**
+     * Lands a deep link ("Customize keyboard appearance") on that surface: its pill picked, and the
+     * selector scrolled to the top of the card so the group under it is the page.
+     */
     private void scrollToSlotGroup(@NonNull TermuxAppSharedPreferences.SurfaceSlot slot) {
+        showFineTuneSlot(slot, false);
+        View chips = mHost.findView(R.id.surface_editor_surface_chips);
+        scrollEditorViewToTop(chips != null ? chips : mHost.findView(slotGroupId(slot)));
+    }
+
+    /** Smooth-scrolls the card so {@code target} sits at the top of the scroll region. */
+    private void scrollEditorViewToTop(@Nullable View target) {
         ScrollView scroll = mHost.findView(R.id.dock_tuning_scroll);
-        View group = mHost.findView(slotGroupId(slot));
-        if (scroll == null || group == null)
+        if (scroll == null || target == null)
             return;
         scroll.post(() -> {
             View scrollChild = scroll.getChildCount() > 0 ? scroll.getChildAt(0) : null;
             if (scrollChild == null)
                 return;
             int top = 0;
-            View walk = group;
+            View walk = target;
             while (walk != null && walk != scrollChild) {
                 top += walk.getTop();
                 android.view.ViewParent parent = walk.getParent();
                 walk = parent instanceof View ? (View) parent : null;
             }
-            scroll.smoothScrollTo(0, Math.max(0, top));
+            top = Math.max(0, top);
+            // A pill tap that would move the page by a hair is worse than not moving it: the
+            // motion reads as a glitch rather than as the group taking the room.
+            if (Math.abs(top - scroll.getScrollY()) > dpToPx(8))
+                scroll.smoothScrollTo(0, top);
         });
     }
 
@@ -1347,7 +1460,7 @@ public final class SurfaceEditorController {
             holder.value.setText(surfaceRowValueText(row, resolved));
 
             TextView chip = holder.chip;
-            // Both states render: ↗ while the row follows Base — muted, because it is a statement,
+            // Both states render: ✓ while the row follows Base — muted, because it is a statement,
             // not a control — and ↺ once the row has its own value, as the way back. Making the
             // attached state visible is what lets "is this slider mine or shared?" be answered
             // before touching anything.
@@ -1434,9 +1547,12 @@ public final class SurfaceEditorController {
         for (TermuxAppSharedPreferences.SurfaceSlot slot
                 : TermuxAppSharedPreferences.SurfaceSlot.values())
             detached += prefs().surfaceOverrideCount(slot);
-        followers.setText(detached == 0
-            ? getString(R.string.termux_surface_tuning_followers_all)
-            : getResources().getQuantityString(
+        // With nothing detached there is nothing to report: the ✓ on every row already says the
+        // surfaces are following Base, and a standing line of prose saying so again was noise on
+        // the state the editor is in most of the time.
+        followers.setVisibility(detached == 0 ? View.GONE : View.VISIBLE);
+        if (detached > 0)
+            followers.setText(getResources().getQuantityString(
                 R.plurals.termux_surface_tuning_followers_some, detached, detached));
     }
 
@@ -1513,75 +1629,142 @@ public final class SurfaceEditorController {
         android.widget.LinearLayout row = new android.widget.LinearLayout(context);
         row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
         row.setPadding(0, Math.round(dpToPx(6)), 0, Math.round(dpToPx(2)));
-        for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
-            android.widget.LinearLayout item = new android.widget.LinearLayout(context);
-            item.setOrientation(android.widget.LinearLayout.VERTICAL);
-            item.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
-            android.widget.LinearLayout.LayoutParams itemParams =
-                new android.widget.LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            itemParams.rightMargin = Math.round(dpToPx(10));
-            item.setLayoutParams(itemParams);
-
-            View preview = new View(context);
-            android.widget.LinearLayout.LayoutParams previewParams =
-                new android.widget.LinearLayout.LayoutParams(
-                    Math.round(dpToPx(SurfaceEditorPresetPreview.CARD_WIDTH_DP)),
-                    Math.round(dpToPx(SurfaceEditorPresetPreview.CARD_HEIGHT_DP)));
-            preview.setLayoutParams(previewParams);
-            float cardCornerPx = dpToPx(SurfaceEditorPresetPreview.CARD_CORNER_DP);
-            preview.setOutlineProvider(new android.view.ViewOutlineProvider() {
-                @Override public void getOutline(View view, android.graphics.Outline outline) {
-                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cardCornerPx);
-                }
-            });
-            preview.setClipToOutline(true);
-            preview.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            item.addView(preview);
-
-            TextView name = new TextView(context);
-            name.setText(preset.nameRes);
-            name.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 10);
-            name.setMaxLines(1);
-            name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            name.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            android.widget.LinearLayout.LayoutParams nameParams =
-                new android.widget.LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            nameParams.topMargin = Math.round(dpToPx(3));
-            name.setLayoutParams(nameParams);
-            item.addView(name);
-
-            // The card is the control that applies the look, so it carries the full accessibility
-            // node: a name, a button role and a spoken click action. Before this the strip had no
-            // usable nodes at all and TalkBack could not apply presets.
-            item.setContentDescription(getString(
-                R.string.termux_surface_preset_card_description, getString(preset.nameRes)));
-            item.setFocusable(true);
-            androidx.core.view.ViewCompat.setAccessibilityDelegate(item,
-                new androidx.core.view.AccessibilityDelegateCompat() {
-                    @Override public void onInitializeAccessibilityNodeInfo(@NonNull View host,
-                            @NonNull androidx.core.view.accessibility
-                                .AccessibilityNodeInfoCompat info) {
-                        super.onInitializeAccessibilityNodeInfo(host, info);
-                        info.setClassName(android.widget.Button.class.getName());
-                        info.addAction(new androidx.core.view.accessibility
-                            .AccessibilityNodeInfoCompat.AccessibilityActionCompat(
-                                androidx.core.view.accessibility.AccessibilityNodeInfoCompat
-                                    .ACTION_CLICK,
-                                getString(R.string.termux_surface_preset_apply_action)));
-                    }
-                });
-            item.setOnClickListener(view -> applyPreset(preset));
-            row.addView(item);
-            mPresetItems.put(preset.id, android.util.Pair.create(preview, name));
-        }
+        for (SurfacePresets.Preset preset : SurfacePresets.presets())
+            addPresetCard(context, row, preset.id, preset.nameRes, () -> applyPreset(preset));
+        // Custom is last and always present, saved or not: an empty slot that says where a saved
+        // look would go is what makes the save glyph discoverable.
+        addPresetCard(context, row, SurfacePresets.CUSTOM_ID,
+            R.string.termux_surface_preset_custom, this::applyCustomPreset);
         strip.addView(row);
         column.addView(strip);
         container.addView(column);
         container.setVisibility(View.VISIBLE);
         // enter() refreshes the card art right after this, against the live wallpaper and theme.
         syncPresetSelection();
+    }
+
+    /** One card in the strip: the mock, its name, and the node that applies the look. */
+    private void addPresetCard(@NonNull Context context, @NonNull ViewGroup row,
+                               @NonNull String id, @StringRes int nameRes,
+                               @NonNull Runnable onApply) {
+        android.widget.LinearLayout item = new android.widget.LinearLayout(context);
+        item.setOrientation(android.widget.LinearLayout.VERTICAL);
+        item.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        android.widget.LinearLayout.LayoutParams itemParams =
+            new android.widget.LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        itemParams.rightMargin = Math.round(dpToPx(10));
+        item.setLayoutParams(itemParams);
+
+        View preview = new View(context);
+        android.widget.LinearLayout.LayoutParams previewParams =
+            new android.widget.LinearLayout.LayoutParams(
+                Math.round(dpToPx(SurfaceEditorPresetPreview.CARD_WIDTH_DP)),
+                Math.round(dpToPx(SurfaceEditorPresetPreview.CARD_HEIGHT_DP)));
+        preview.setLayoutParams(previewParams);
+        float cardCornerPx = dpToPx(SurfaceEditorPresetPreview.CARD_CORNER_DP);
+        preview.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            @Override public void getOutline(View view, android.graphics.Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cardCornerPx);
+            }
+        });
+        preview.setClipToOutline(true);
+        preview.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        item.addView(preview);
+
+        TextView name = new TextView(context);
+        name.setText(nameRes);
+        name.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 10);
+        name.setMaxLines(1);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        name.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        android.widget.LinearLayout.LayoutParams nameParams =
+            new android.widget.LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        nameParams.topMargin = Math.round(dpToPx(3));
+        name.setLayoutParams(nameParams);
+        item.addView(name);
+
+        // The card is the control that applies the look, so it carries the full accessibility
+        // node: a name, a button role and a spoken click action. Before this the strip had no
+        // usable nodes at all and TalkBack could not apply presets.
+        item.setContentDescription(getString(
+            R.string.termux_surface_preset_card_description, getString(nameRes)));
+        item.setFocusable(true);
+        androidx.core.view.ViewCompat.setAccessibilityDelegate(item,
+            new androidx.core.view.AccessibilityDelegateCompat() {
+                @Override public void onInitializeAccessibilityNodeInfo(@NonNull View host,
+                        @NonNull androidx.core.view.accessibility
+                            .AccessibilityNodeInfoCompat info) {
+                    super.onInitializeAccessibilityNodeInfo(host, info);
+                    info.setClassName(android.widget.Button.class.getName());
+                    info.addAction(new androidx.core.view.accessibility
+                        .AccessibilityNodeInfoCompat.AccessibilityActionCompat(
+                            androidx.core.view.accessibility.AccessibilityNodeInfoCompat
+                                .ACTION_CLICK,
+                            getString(R.string.termux_surface_preset_apply_action)));
+                }
+            });
+        item.setOnClickListener(view -> onApply.run());
+        row.addView(item);
+        mPresetItems.put(id, android.util.Pair.create(preview, name));
+    }
+
+    // ------------------------------------------------------------------------- the saved look
+
+    @Nullable
+    private SurfacePresets.Preset customPreset() {
+        return prefs() == null ? null : SurfacePresets.custom(prefs());
+    }
+
+    /**
+     * Pins the live look as Custom. Deliberately its own action rather than a side effect of Done:
+     * Done commits the edit, which happens every time the editor closes, and a pin that every exit
+     * overwrote would not be a pin.
+     */
+    private void bindSaveLook() {
+        View save = mHost.findView(R.id.surface_tuning_save_look);
+        if (save == null)
+            return;
+        save.setOnClickListener(view -> {
+            if (prefs() == null)
+                return;
+            SurfacePresets.saveCustom(prefs());
+            refreshPresetPreviews();
+            syncPresetSelection();
+            com.termux.app.notice.AppNotice.success(mHost.context(),
+                getString(R.string.termux_surface_preset_saved));
+        });
+    }
+
+    /** The Custom card applies the saved look, or explains where a saved look comes from. */
+    private void applyCustomPreset() {
+        SurfacePresets.Preset custom = customPreset();
+        if (custom == null) {
+            com.termux.app.notice.AppNotice.show(mHost.context(),
+                com.termux.app.notice.AppNoticeItem.Kind.INFO,
+                getString(R.string.termux_surface_tuning_save_look),
+                getString(R.string.termux_surface_preset_custom_empty),
+                getString(R.string.termux_surface_preset_custom_empty_hint), true);
+            return;
+        }
+        applyPreset(custom);
+    }
+
+    /** An empty Custom slot: the card's outline, dashed, with nothing wearing it yet. */
+    @NonNull
+    private android.graphics.drawable.Drawable buildEmptyPresetCard() {
+        android.graphics.drawable.GradientDrawable empty =
+            new android.graphics.drawable.GradientDrawable();
+        empty.setColor(withAlpha(mHost.themeColor(
+            com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+            R.color.termux_on_surface_variant), 20));
+        empty.setCornerRadius(dpToPx(SurfaceEditorPresetPreview.CARD_CORNER_DP));
+        empty.setStroke(Math.max(1, Math.round(dpToPx(1))),
+            withAlpha(mHost.themeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+                R.color.termux_on_surface_variant), 110),
+            dpToPx(3), dpToPx(3));
+        return empty;
     }
 
     /** Re-renders every preset card against the current wallpaper and theme. */
@@ -1596,6 +1779,15 @@ public final class SurfaceEditorController {
             android.util.Pair<View, TextView> item = mPresetItems.get(preset.id);
             if (item != null)
                 item.first.setBackground(buildPresetPreview(preset, thumb, widthPx, heightPx));
+        }
+        android.util.Pair<View, TextView> customItem =
+            mPresetItems.get(SurfacePresets.CUSTOM_ID);
+        if (customItem != null) {
+            SurfacePresets.Preset custom = customPreset();
+            customItem.first.setBackground(custom == null
+                ? buildEmptyPresetCard()
+                : buildPresetPreview(custom, thumb, widthPx, heightPx));
+            customItem.first.setAlpha(custom == null ? 0.6f : 1f);
         }
     }
 
@@ -1696,27 +1888,32 @@ public final class SurfaceEditorController {
     private void syncPresetSelection() {
         if (prefs() == null || mPresetItems.isEmpty())
             return;
-        for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
-            android.util.Pair<View, TextView> item = mPresetItems.get(preset.id);
-            if (item == null)
-                continue;
-            boolean selected = SurfacePresets.matches(prefs(), preset);
-            if (selected == Boolean.TRUE.equals(item.first.getTag()))
-                continue;
-            item.first.setTag(selected);
-            item.first.setForeground(selected ? buildPresetRing() : null);
-            item.second.setTextColor(selected
-                ? mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary,
-                    R.color.termux_primary)
-                : mHost.themeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
-                    R.color.termux_on_surface_variant));
-            // The ring is visual only; the card's node carries the same state for TalkBack.
-            if (item.first.getParent() instanceof View) {
-                View card = (View) item.first.getParent();
-                card.setSelected(selected);
-                androidx.core.view.ViewCompat.setStateDescription(card, selected
-                    ? getString(R.string.termux_surface_preset_current_look) : null);
-            }
+        for (SurfacePresets.Preset preset : SurfacePresets.presets())
+            setPresetCardSelected(preset.id, SurfacePresets.matches(prefs(), preset));
+        SurfacePresets.Preset custom = customPreset();
+        setPresetCardSelected(SurfacePresets.CUSTOM_ID,
+            custom != null && SurfacePresets.matches(prefs(), custom));
+    }
+
+    private void setPresetCardSelected(@NonNull String id, boolean selected) {
+        android.util.Pair<View, TextView> item = mPresetItems.get(id);
+        if (item == null)
+            return;
+        if (selected == Boolean.TRUE.equals(item.first.getTag()))
+            return;
+        item.first.setTag(selected);
+        item.first.setForeground(selected ? buildPresetRing() : null);
+        item.second.setTextColor(selected
+            ? mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary,
+                R.color.termux_primary)
+            : mHost.themeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+                R.color.termux_on_surface_variant));
+        // The ring is visual only; the card's node carries the same state for TalkBack.
+        if (item.first.getParent() instanceof View) {
+            View card = (View) item.first.getParent();
+            card.setSelected(selected);
+            androidx.core.view.ViewCompat.setStateDescription(card, selected
+                ? getString(R.string.termux_surface_preset_current_look) : null);
         }
     }
 
@@ -1737,22 +1934,18 @@ public final class SurfaceEditorController {
         final Runnable undo = capturePresetUndo();
         SurfacePresets.apply(prefs(), preset);
         syncEditorAfterPresetWrite();
-        View card = mHost.findView(R.id.dock_tuning_controls);
-        if (card == null)
-            return;
-        com.google.android.material.snackbar.Snackbar
-            .make(card, getString(R.string.termux_surface_preset_applied,
-                getString(preset.nameRes)),
-                com.google.android.material.snackbar.Snackbar.LENGTH_LONG)
-            // A preset just overwrote the whole look, detached overrides included; the default
-            // 2.75s is gone before the surfaces even finish re-rendering. Ten seconds is long
-            // enough to see the result and change one's mind.
-            .setDuration(10000)
-            .setAction(R.string.termux_surface_preset_undo, view -> {
+        // The confirmation goes to the app's own notice chip, not a snackbar. A snackbar lands
+        // bottom-centre: on top of the editor card it was raised from, under the soft keyboard,
+        // into the display cutouts, in Material's palette rather than this app's, and with no
+        // swipe to get rid of it. The chip sits in the top-trailing corner the rest of the app's
+        // notices use, and its tap is the Undo.
+        com.termux.app.notice.AppNotice.undoable(mHost.context(),
+            getString(R.string.termux_surface_preset_applied, getString(preset.nameRes)),
+            getString(R.string.termux_surface_preset_undo_hint),
+            () -> {
                 undo.run();
                 syncEditorAfterPresetWrite();
-            })
-            .show();
+            });
     }
 
     /**
@@ -2443,7 +2636,6 @@ public final class SurfaceEditorController {
         }
     }
 
-
     private void registerDockTuningLayoutListener(@NonNull View controls) {
         if (mDockTuningLayoutListener != null)
             return;
@@ -2611,7 +2803,6 @@ public final class SurfaceEditorController {
         mSurfaceEditorScrollAnimator = animator;
         animator.start();
     }
-
 
     // Live-preview scopes for the surface editor. Sliders fire onProgressChanged far faster than
     // a full re-apply fits in a frame, so requests carry only the scopes their control touches and
