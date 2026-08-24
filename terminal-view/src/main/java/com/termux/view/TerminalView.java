@@ -1091,6 +1091,11 @@ public final class TerminalView extends View {
         return new int[] { column, row };
     }
 
+    /** The renderer's line spacing in pixels, or 0 before a renderer exists. */
+    public int getFontLineSpacing() {
+        return mRenderer == null ? 0 : mRenderer.mFontLineSpacing;
+    }
+
     private int getColumnForX(float x) {
         return (int) ((x - getHorizontalContentOffset()) / mRenderer.mFontWidth);
     }

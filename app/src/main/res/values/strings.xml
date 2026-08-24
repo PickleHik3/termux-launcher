@@ -431,7 +431,6 @@
     <string name="msg_select_url_copied_to_clipboard">URL copied to clipboard</string>
 
     <!-- OSC 8 hyperlinks -->
-    <string name="title_hyperlink_dialog">Open link?</string>
     <string name="action_hyperlink_open">Open</string>
     <string name="action_hyperlink_copy">Copy</string>
 

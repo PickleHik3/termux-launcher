@@ -52,6 +52,12 @@ public final class TerminalSheetController
     private static final float VERTICAL_INSET_DP = 28f;
     /** An anchored card is a menu, not a page: it takes the width its rows need and no more. */
     private static final float ANCHORED_MAX_WIDTH_DP = 260f;
+    /** A strip is one row of actions; its buttons carry their own touch padding. */
+    private static final float STRIP_MAX_WIDTH_DP = 420f;
+    private static final float STRIP_PADDING_DP = 2f;
+    /** Half the strip's ~44dp height: a full pill, the Material shape for a floating action row. */
+    private static final float STRIP_CORNER_RADIUS_DP = 22f;
+    private static final float STRIP_ELEVATION_DP = 3f;
     /** How far a page key moves a list selection, in rows. */
     private static final int PAGE_ARROW_ROWS = 5;
     private static final float CORNER_RADIUS_DP = 22f;
@@ -83,17 +89,20 @@ public final class TerminalSheetController
 
     /** Where a card sits on the plane. */
     public static final class Placement {
-        private static final Placement CENTERED = new Placement(null, false, false);
+        private static final Placement CENTERED = new Placement(null, false, false, false);
 
         @Nullable final PointF anchor;
         final boolean docked;
         /** No plane backdrop: the surface behind this card stays exactly as it was. */
         final boolean bare;
+        /** A thin one-line card whose bottom edge sits at the anchor instead of its top. */
+        final boolean strip;
 
-        private Placement(@Nullable PointF anchor, boolean docked, boolean bare) {
+        private Placement(@Nullable PointF anchor, boolean docked, boolean bare, boolean strip) {
             this.anchor = anchor;
             this.docked = docked;
             this.bare = bare;
+            this.strip = strip;
         }
 
         /** The default: a centred card with side and vertical insets. */
@@ -105,7 +114,19 @@ public final class TerminalSheetController
         /** A compact menu at a touch point, clamped inside the plane. */
         @NonNull
         public static Placement at(@Nullable PointF screenPoint) {
-            return screenPoint == null ? CENTERED : new Placement(screenPoint, false, false);
+            return screenPoint == null ? CENTERED : new Placement(screenPoint, false, false, false);
+        }
+
+        /**
+         * A thin strip whose bottom edge lands at the touch point, with no backdrop.
+         *
+         * <p>For a card that is <em>about</em> the text under the finger — the tapped hyperlink's
+         * strip must not cover the link it names, and frosting the transcript would take away the
+         * very line being asked about.
+         */
+        @NonNull
+        public static Placement stripAbove(@Nullable PointF screenPoint) {
+            return screenPoint == null ? CENTERED : new Placement(screenPoint, false, true, true);
         }
 
         /**
@@ -117,7 +138,7 @@ public final class TerminalSheetController
          */
         @NonNull
         public static Placement aboveDock() {
-            return new Placement(null, true, false);
+            return new Placement(null, true, false, false);
         }
 
         /**
@@ -130,7 +151,7 @@ public final class TerminalSheetController
          */
         @NonNull
         public static Placement aboveDockBare() {
-            return new Placement(null, true, true);
+            return new Placement(null, true, true, false);
         }
     }
 
@@ -457,9 +478,20 @@ public final class TerminalSheetController
         Context context = mStackHost.getContext();
         LinearLayout card = new LinearLayout(context);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(mActivity.buildTerminalSheetSurface());
-        int padding = dp(CARD_PADDING_DP);
-        card.setPadding(padding, padding, padding, padding);
+        if (mPendingPlacement.strip) {
+            // A strip is one row of actions on a flat opaque surface: the glass sheet material and
+            // the page padding would both spend more screen than the strip's content does.
+            card.setBackground(buildStripSurface(context));
+            // Separation comes from the shadow, not a border: the pill background provides the
+            // rounded outline the shadow is cast from.
+            card.setElevation(dp(STRIP_ELEVATION_DP));
+            int pad = dp(STRIP_PADDING_DP);
+            card.setPadding(pad, pad, pad, pad);
+        } else {
+            card.setBackground(mActivity.buildTerminalSheetSurface());
+            int padding = dp(CARD_PADDING_DP);
+            card.setPadding(padding, padding, padding, padding);
+        }
         // A card swallows the taps that land on it, so the host's listener only ever sees the ones
         // that fell outside every sheet.
         card.setClickable(true);
@@ -473,6 +505,21 @@ public final class TerminalSheetController
         // already are. Prompts and confirmations still title themselves.
         if (title.length() > 0) addHeading(card, context, title);
         return finishCard(card, content, fillHeight);
+    }
+
+    /** The strip's flat material: an opaque borderless pill, no glass and no blur. */
+    @NonNull
+    private android.graphics.drawable.Drawable buildStripSurface(@NonNull Context context) {
+        android.graphics.drawable.GradientDrawable surface =
+            new android.graphics.drawable.GradientDrawable();
+        surface.setColor(com.google.android.material.color.MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorSurfaceContainerHigh,
+            com.google.android.material.color.MaterialColors.getColor(context,
+                com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+                androidx.core.content.ContextCompat.getColor(context,
+                    R.color.termux_surface_panel_high))));
+        surface.setCornerRadius(dp(STRIP_CORNER_RADIUS_DP));
+        return surface;
     }
 
     private void addHeading(@NonNull LinearLayout card, @NonNull Context context,
@@ -500,7 +547,7 @@ public final class TerminalSheetController
         Placement placement = mPendingPlacement;
         mPendingPlacement = Placement.centered();
         if (placement.anchor != null) {
-            card.setLayoutParams(anchoredParams(card, placement.anchor));
+            card.setLayoutParams(anchoredParams(card, placement));
             return card;
         }
         if (placement.docked) {
@@ -564,23 +611,29 @@ public final class TerminalSheetController
      * absolute, so nothing here depends on the plane's own gravity.
      */
     @NonNull
-    private FrameLayout.LayoutParams anchoredParams(@NonNull View card, @NonNull PointF anchor) {
+    private FrameLayout.LayoutParams anchoredParams(@NonNull View card,
+                                                    @NonNull Placement placement) {
+        PointF anchor = placement.anchor;
         int planeWidth = mStackHost.getWidth();
         int planeHeight = mStackHost.getHeight();
-        int maxWidth = Math.min(dp(ANCHORED_MAX_WIDTH_DP),
+        int maxWidth = Math.min(dp(placement.strip ? STRIP_MAX_WIDTH_DP : ANCHORED_MAX_WIDTH_DP),
             Math.max(dp(160f), planeWidth - 2 * dp(SIDE_INSET_DP)));
         card.measure(
             View.MeasureSpec.makeMeasureSpec(maxWidth, View.MeasureSpec.AT_MOST),
             View.MeasureSpec.makeMeasureSpec(Math.max(0, planeHeight - 2 * dp(SIDE_INSET_DP)),
                 View.MeasureSpec.AT_MOST));
-        int width = Math.min(maxWidth, Math.max(card.getMeasuredWidth(), dp(160f)));
+        // A strip is exactly its actions wide; the menu minimum would pad it with dead surface.
+        int minWidth = placement.strip ? dp(48f) : dp(160f);
+        int width = Math.min(maxWidth, Math.max(card.getMeasuredWidth(), minWidth));
         int height = card.getMeasuredHeight();
 
         int[] planeOnScreen = new int[2];
         mStackHost.getLocationOnScreen(planeOnScreen);
         int inset = dp(SIDE_INSET_DP);
         int left = Math.round(anchor.x) - planeOnScreen[0] - width / 2;
-        int top = Math.round(anchor.y) - planeOnScreen[1];
+        // A strip hangs from its anchor rather than growing down from it, so the tapped line —
+        // the thing the strip is about — stays visible below it.
+        int top = Math.round(anchor.y) - planeOnScreen[1] - (placement.strip ? height : 0);
         if (planeWidth > 0)
             left = Math.max(inset, Math.min(left, planeWidth - width - inset));
         if (planeHeight > 0 && height > 0)
