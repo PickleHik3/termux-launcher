@@ -6600,9 +6600,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.getSessionsOpacity() / 100f, 0);
         }
 
-        @Override public void applyGeometryPreview() {
+        @Override public void applyGeometryPreview(boolean commit) {
             updateAppLauncherBarHeight();
-            setTerminalToolbarHeight(true);
+            // Without commit the dock/keyboard visuals still track the drag live; only the
+            // terminal resize (a SIGWINCH into the shell per reflow) waits for the release.
+            setTerminalToolbarHeight(commit);
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
         }
 

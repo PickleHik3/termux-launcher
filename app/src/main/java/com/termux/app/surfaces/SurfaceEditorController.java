@@ -58,8 +58,12 @@ public final class SurfaceEditorController {
         void refreshTerminalWindowBar();
         /** Re-applies the sessions panel background at its stored opacity. */
         void applySessionsSurfaceBackground();
-        /** Dock geometry changed: bar height, toolbar height, immediate chrome apply. */
-        void applyGeometryPreview();
+        /**
+         * Dock geometry changed: bar height, toolbar height, immediate chrome apply. With
+         * {@code commit} the terminal is also resized to the new geometry — a shell reflow worth
+         * paying once per gesture, on release, not per tick.
+         */
+        void applyGeometryPreview(boolean commit);
         /** The coalesced glass re-render; {@code blurChanged} also drops the blur cache. */
         void applyGlassPreview(boolean blurChanged);
         void openKeyboardColors();
@@ -132,6 +136,9 @@ public final class SurfaceEditorController {
     /** Last anchor geometry the layout listener acted on; layouts that move nothing are skipped. */
     private long mDockTuningAnchorSignature = Long.MIN_VALUE;
     private final int[] mTmpAnchorLocation = new int[2];
+    /** Each generated row's controls, found once per editor session. */
+    private final java.util.Map<SurfaceEditorRows.Row, RowHolder> mRowHolders =
+        new java.util.HashMap<>();
     /**
      * Height the slider region is heading for. Compared against instead of the live layout height
      * so the resize animation's own layout passes do not each look like a fresh change.
@@ -540,6 +547,7 @@ public final class SurfaceEditorController {
             }
 
             @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                super.onStopTrackingTouch(seekBar);
                 prefs().setInAppKeyboardKeyMarginScale(keyboardEditorValue(seekBar.getProgress(),
                     TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
                     TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_MARGIN_SCALE));
@@ -557,6 +565,7 @@ public final class SurfaceEditorController {
             }
 
             @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                super.onStopTrackingTouch(seekBar);
                 prefs().setInAppKeyboardKeyCornerRadiusDp(seekBar.getProgress() / 10f);
             }
         });
@@ -573,6 +582,7 @@ public final class SurfaceEditorController {
             }
 
             @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                super.onStopTrackingTouch(seekBar);
                 prefs().setInAppKeyboardKeyOpacity(seekBar.getProgress());
             }
         });
@@ -791,6 +801,9 @@ public final class SurfaceEditorController {
             mSurfaceEditorRevert = revertAll;
             mSurfaceEditorEntrySignature = surfaceEditorStateSignature();
         }
+        // A theme change between sessions restyles the chips, so the cached shown-state must not
+        // suppress the first restatement of this session.
+        mRowHolders.clear();
         syncSurfaceInheritanceUi();
         updateSurfaceEditorDirtyBadge();
         controls.bringToFront();
@@ -1304,16 +1317,21 @@ public final class SurfaceEditorController {
                 : prefs().getSurfaceOverrideValue(row.slot, row.property));
             resolved = Math.max(0, Math.min(row.max, resolved));
 
-            SeekBar slider = mHost.findView(row.sliderId);
-            if (slider != null && slider.getProgress() != resolved)
-                slider.setProgress(resolved);
-            TextView value = mHost.findView(row.valueId);
-            if (value != null)
-                value.setText(surfaceRowValueText(row, resolved));
-
-            TextView chip = mHost.findView(row.chipId);
-            if (chip == null)
+            RowHolder holder = rowHolder(row);
+            if (holder == null)
                 continue;
+            // This restates once per frame while a Base slider is dragged, so a row whose shown
+            // state is already right is skipped whole — most rows, most frames.
+            if (holder.shownResolved == resolved && holder.shownInheriting == (inheriting ? 1 : 0))
+                continue;
+            holder.shownResolved = resolved;
+            holder.shownInheriting = inheriting ? 1 : 0;
+
+            if (holder.slider.getProgress() != resolved)
+                holder.slider.setProgress(resolved);
+            holder.value.setText(surfaceRowValueText(row, resolved));
+
+            TextView chip = holder.chip;
             // Both states render: ↗ while the row follows Base — muted, because it is a statement,
             // not a control — and ↺ once the row has its own value, as the way back. Making the
             // attached state visible is what lets "is this slider mine or shared?" be answered
@@ -1332,8 +1350,43 @@ public final class SurfaceEditorController {
                 : R.string.termux_surface_tuning_link_detached_description, slotName));
         }
         syncSurfaceBaseSliders();
-        syncSurfaceReattachAllVisibility();
-        syncPresetSelection();
+        // The preset-match walk reads every preset key and the reattach row re-counts every
+        // override — per-frame cost with no per-frame reader. They square up on release.
+        if (!mSliderDragActive) {
+            syncSurfaceReattachAllVisibility();
+            syncPresetSelection();
+        }
+    }
+
+    /** One row's controls, found once. The re-id in {@link #ensureGeneratedRows} makes the lookup
+     * a full-tree walk per view, which is too much to repeat 45 times per dragged frame. */
+    @Nullable
+    private RowHolder rowHolder(@NonNull SurfaceEditorRows.Row row) {
+        RowHolder holder = mRowHolders.get(row);
+        if (holder != null)
+            return holder;
+        SeekBar slider = mHost.findView(row.sliderId);
+        TextView value = mHost.findView(row.valueId);
+        TextView chip = mHost.findView(row.chipId);
+        if (slider == null || value == null || chip == null)
+            return null;
+        holder = new RowHolder(slider, value, chip);
+        mRowHolders.put(row, holder);
+        return holder;
+    }
+
+    private static final class RowHolder {
+        final SeekBar slider;
+        final TextView value;
+        final TextView chip;
+        int shownResolved = Integer.MIN_VALUE;
+        int shownInheriting = -1;
+
+        RowHolder(SeekBar slider, TextView value, TextView chip) {
+            this.slider = slider;
+            this.value = value;
+            this.chip = chip;
+        }
     }
 
     private int getSurfaceLinkChipColor(boolean inheriting) {
@@ -1391,9 +1444,10 @@ public final class SurfaceEditorController {
                     if (!fromUser || prefs() == null)
                         return;
                     prefs().setSurfaceBaseValue(property, progress);
-                    // Everything still following Base moves with it, so the whole editor restates.
-                    syncSurfaceInheritanceUi();
-                    requestDockTuningPreview(TUNING_PREVIEW_ALL);
+                    // Everything still following Base moves with it — but radius and margin never
+                    // touch the blur, and the coalesced preview pass restates the editor UI once
+                    // per frame on its own.
+                    requestDockTuningPreview(TUNING_PREVIEW_ALL_BUT_BLUR);
                 }
             });
         }
@@ -1719,6 +1773,8 @@ public final class SurfaceEditorController {
             return;
         prefs().setSurfaceMaterial(material);
         prefs().setSurfaceMaterialIntensity(intensity);
+        int previousBlur = prefs().getSurfaceBaseValue(
+            TermuxAppSharedPreferences.SurfaceProperty.BLUR);
         int[] triple = SurfaceMaterials.triple(material, intensity);
         prefs().setSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.BLUR,
             triple[SurfaceMaterials.BLUR]);
@@ -1726,10 +1782,11 @@ public final class SurfaceEditorController {
             triple[SurfaceMaterials.OPACITY]);
         prefs().setSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.GRAIN,
             triple[SurfaceMaterials.GRAIN]);
-        // Everything still following Base moves with it, so the whole editor restates. Blur is in
-        // the triple, so the pre-blurred wallpaper cache has to go too.
-        syncSurfaceInheritanceUi();
-        requestDockTuningPreview(TUNING_PREVIEW_ALL);
+        // Everything still following Base moves with it; the coalesced preview pass restates the
+        // editor UI once per frame. The blur curve moves a whole dp only every few intensity
+        // ticks, and only a tick that actually moved it may throw away the pre-blurred wallpaper.
+        requestDockTuningPreview(triple[SurfaceMaterials.BLUR] != previousBlur
+            ? TUNING_PREVIEW_ALL : TUNING_PREVIEW_ALL_BUT_BLUR);
     }
 
     /**
@@ -2056,7 +2113,9 @@ public final class SurfaceEditorController {
                     if (Float.compare(scale, prefs().getAppLauncherBarHeightScale()) != 0) {
                         prefs().setAppLauncherBarHeightScale(scale);
                         syncSurfaceTuningDockHeightSlider();
-                        applyDockTuningStructuralPreview();
+                        // Preview only while the finger is down; the terminal resize settles once
+                        // on release rather than reflowing the shell on every travelled pixel.
+                        requestDockTuningPreview(TUNING_PREVIEW_ALL);
                     }
                     setSurfaceTuningPeekReadout(
                         getString(R.string.termux_surface_tuning_peek_dock_size),
@@ -2065,6 +2124,7 @@ public final class SurfaceEditorController {
                 }
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
+                    requestDockTuningPreview(TUNING_PREVIEW_GEOMETRY_COMMIT);
                     setSurfaceTuningCardPeek(false);
                     view.getParent().requestDisallowInterceptTouchEvent(false);
                     return true;
@@ -2459,14 +2519,36 @@ public final class SurfaceEditorController {
     private static final int TUNING_PREVIEW_GEOMETRY = 1 << 2;
     private static final int TUNING_PREVIEW_SURFACES = 1 << 3;
     private static final int TUNING_PREVIEW_KEYBOARD = 1 << 4;
+    /**
+     * Lets the geometry pass tell the shell: the terminal resize (a SIGWINCH per reflow) is worth
+     * one settle on release, not one per tick of a drag. Drag ticks preview geometry without it;
+     * {@link SimpleSeekBarChangeListener} adds it when the finger lifts off a drag that touched
+     * geometry, and every one-shot path requests it directly.
+     */
+    private static final int TUNING_PREVIEW_GEOMETRY_COMMIT = 1 << 5;
     private static final int TUNING_PREVIEW_ALL = TUNING_PREVIEW_GLASS | TUNING_PREVIEW_BLUR
         | TUNING_PREVIEW_GEOMETRY | TUNING_PREVIEW_SURFACES | TUNING_PREVIEW_KEYBOARD;
+    /**
+     * The Base radius/margin sliders move every following surface, but never the blur — dropping
+     * the BLUR bit is what keeps their ticks from throwing away the pre-blurred wallpaper frames,
+     * which was the visible stutter in the editor.
+     */
+    private static final int TUNING_PREVIEW_ALL_BUT_BLUR =
+        TUNING_PREVIEW_ALL & ~TUNING_PREVIEW_BLUR;
 
     private int mPendingTuningPreviewScopes;
     private boolean mTuningPreviewScheduled;
     private final Runnable mTuningPreviewRunnable = this::runPendingTuningPreview;
+    /** Effective blur inputs the last BLUR-scoped apply saw; an unchanged set skips the re-blur. */
+    private long mLastPreviewBlurSignature = Long.MIN_VALUE;
+    /** True while a slider thumb is down; heavy per-tick syncs wait for the release. */
+    private boolean mSliderDragActive;
+    /** Whether the active drag previewed geometry, so the release knows to commit it. */
+    private boolean mDragTouchedGeometry;
 
     private void requestDockTuningPreview(int scopes) {
+        if (mSliderDragActive && (scopes & TUNING_PREVIEW_GEOMETRY) != 0)
+            mDragTouchedGeometry = true;
         mPendingTuningPreviewScopes |= scopes | TUNING_PREVIEW_GLASS;
         if (mTuningPreviewScheduled)
             return;
@@ -2485,8 +2567,8 @@ public final class SurfaceEditorController {
         mPendingTuningPreviewScopes = 0;
         if (scopes == 0 || prefs() == null)
             return;
-        if ((scopes & TUNING_PREVIEW_GEOMETRY) != 0)
-            mHost.applyGeometryPreview();
+        if ((scopes & (TUNING_PREVIEW_GEOMETRY | TUNING_PREVIEW_GEOMETRY_COMMIT)) != 0)
+            mHost.applyGeometryPreview((scopes & TUNING_PREVIEW_GEOMETRY_COMMIT) != 0);
         if ((scopes & TUNING_PREVIEW_SURFACES) != 0) {
             mHost.applyTerminalSurfaceAppearance();
             mHost.refreshTerminalWindowBar();
@@ -2494,14 +2576,33 @@ public final class SurfaceEditorController {
         }
         if ((scopes & TUNING_PREVIEW_KEYBOARD) != 0 && keyboard() != null)
             keyboard().onPreferencesReloaded();
-        mHost.applyGlassPreview((scopes & TUNING_PREVIEW_BLUR) != 0);
+        // A BLUR request only really re-blurs when a blur input moved: the blur slider ticks far
+        // more often than its integer value changes, and Undo/preset restores ask broadly. The
+        // resolved per-surface radii are the whole input set, so comparing them is exact.
+        boolean blurChanged = false;
+        if ((scopes & TUNING_PREVIEW_BLUR) != 0) {
+            long blurSignature = currentBlurSignature();
+            blurChanged = blurSignature != mLastPreviewBlurSignature;
+            mLastPreviewBlurSignature = blurSignature;
+        }
+        mHost.applyGlassPreview(blurChanged);
         if (mDockTuningMode) syncSurfaceInheritanceUi();
         updateSurfaceEditorDirtyBadge();
     }
 
+    /** Every resolved blur radius the glass pipeline reads, folded to one number. */
+    private long currentBlurSignature() {
+        TermuxAppSharedPreferences preferences = prefs();
+        if (preferences == null)
+            return Long.MIN_VALUE;
+        long signature = preferences.getExtraKeysBlurRadius();
+        signature = signature * 1_000_003L + preferences.getStatusBarBlurRadius();
+        return signature * 1_000_003L + preferences.getTerminalGlassBlurRadius();
+    }
+
     /** Broader live re-apply for controls that change dock geometry, terminal, or sessions surfaces. */
     private void applyDockTuningStructuralPreview() {
-        requestDockTuningPreview(TUNING_PREVIEW_ALL);
+        requestDockTuningPreview(TUNING_PREVIEW_ALL | TUNING_PREVIEW_GEOMETRY_COMMIT);
     }
 
     @NonNull
@@ -2594,10 +2695,23 @@ public final class SurfaceEditorController {
         }
 
         @Override public void onStartTrackingTouch(SeekBar seekBar) {
+            mSliderDragActive = true;
+            mDragTouchedGeometry = false;
             if (peekLabelRes != 0) setSurfaceTuningCardPeek(true);
         }
 
         @Override public void onStopTrackingTouch(SeekBar seekBar) {
+            mSliderDragActive = false;
+            // The drag previewed geometry per tick without the terminal resize; the release is
+            // where the shell reflow is worth paying for, once.
+            if (mDragTouchedGeometry) {
+                mDragTouchedGeometry = false;
+                requestDockTuningPreview(TUNING_PREVIEW_GEOMETRY_COMMIT);
+            }
+            // The per-tick syncs skip the preset-match walk and the reattach-all row while the
+            // thumb is down; one full restatement here squares the strip with where the drag ended.
+            if (mDockTuningMode)
+                syncSurfaceInheritanceUi();
             if (peekLabelRes != 0) setSurfaceTuningCardPeek(false);
         }
     }
