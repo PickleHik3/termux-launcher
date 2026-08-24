@@ -129,6 +129,9 @@ public final class SurfaceEditorController {
     /** Restores that entry state. Held so the close gate can offer Discard. */
     @Nullable private Runnable mSurfaceEditorRevert;
     private ViewTreeObserver.OnGlobalLayoutListener mDockTuningLayoutListener;
+    /** Last anchor geometry the layout listener acted on; layouts that move nothing are skipped. */
+    private long mDockTuningAnchorSignature = Long.MIN_VALUE;
+    private final int[] mTmpAnchorLocation = new int[2];
     /**
      * Height the slider region is heading for. Compared against instead of the live layout height
      * so the resize animation's own layout passes do not each look like a fresh change.
@@ -884,9 +887,8 @@ public final class SurfaceEditorController {
             chevron.setText(expanded
                 ? R.string.termux_surface_tuning_advanced_chevron_open
                 : R.string.termux_surface_tuning_advanced_chevron_closed);
-        ScrollView scroll = mHost.findView(R.id.dock_tuning_scroll);
-        if (scroll != null)
-            scroll.post(this::adjustDockTuningCardHeight);
+        // The card fills the space between the status pills and the accessory stack regardless of
+        // content, so the fold changes only what is inside the scroll region — no re-measure.
     }
 
     private int slotGroupId(@NonNull TermuxAppSharedPreferences.SurfaceSlot slot) {
@@ -2280,11 +2282,55 @@ public final class SurfaceEditorController {
     private void registerDockTuningLayoutListener(@NonNull View controls) {
         if (mDockTuningLayoutListener != null)
             return;
+        mDockTuningAnchorSignature = Long.MIN_VALUE;
         mDockTuningLayoutListener = () -> {
+            // Global layout fires for every text change a slider tick causes; the card and the
+            // gesture overlay only care when one of their anchors — the stack, the status inset,
+            // the window bar, a surface host — actually moved. Anything else is skipped whole,
+            // including the walk that would re-derive the same geometry.
+            long signature = computeDockTuningAnchorSignature();
+            if (signature == mDockTuningAnchorSignature)
+                return;
+            mDockTuningAnchorSignature = signature;
             adjustDockTuningCardHeight();
             positionSurfaceTuningGestureTargets();
         };
         controls.getViewTreeObserver().addOnGlobalLayoutListener(mDockTuningLayoutListener);
+    }
+
+    /** Everything the card height and the gesture-target placement read, folded to one number. */
+    private long computeDockTuningAnchorSignature() {
+        View stack = mHost.findView(R.id.accessory_stack_container);
+        View headerRow = mHost.findView(R.id.dock_tuning_header_row);
+        View actions = mHost.findView(R.id.surface_tuning_actions);
+        View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
+        long signature = mHost.statusBarInsetTop();
+        signature = mixAnchor(signature, stack != null ? stack.getTop() : -1);
+        signature = mixAnchor(signature, headerRow != null ? headerRow.getHeight() : -1);
+        signature = mixAnchor(signature, actions != null ? actions.getHeight() : -1);
+        signature = mixAnchor(signature, overlay != null ? overlay.getWidth() : -1);
+        signature = mixAnchor(signature,
+            anchorRectSignature(mHost.findView(R.id.terminal_window_bar_host)));
+        signature = mixAnchor(signature,
+            anchorRectSignature(mHost.findView(R.id.accessory_surface_host)));
+        signature = mixAnchor(signature, anchorRectSignature(mHost.isInAppKeyboardShown()
+            ? mHost.findView(R.id.inapp_keyboard_view_host) : null));
+        signature = mixAnchor(signature, mHost.isRoundedDockStyle() ? 1 : 0);
+        return signature;
+    }
+
+    private long anchorRectSignature(@Nullable View view) {
+        if (view == null || view.getVisibility() != View.VISIBLE)
+            return -1;
+        view.getLocationInWindow(mTmpAnchorLocation);
+        long signature = mTmpAnchorLocation[0];
+        signature = mixAnchor(signature, mTmpAnchorLocation[1]);
+        signature = mixAnchor(signature, view.getWidth());
+        return mixAnchor(signature, view.getHeight());
+    }
+
+    private static long mixAnchor(long signature, long value) {
+        return signature * 1_000_003L + value;
     }
 
     private void unregisterDockTuningLayoutListener() {
@@ -2299,12 +2345,12 @@ public final class SurfaceEditorController {
     /**
      * Sizes the editor card against the room it actually has.
      *
-     * <p>The card is pinned above the accessory stack, and how much room that leaves changes while
-     * the editor is open: hiding the in-app keyboard frees hundreds of pixels, and a card that kept
-     * its old height sat in the bottom corner with a band of empty terminal above it. So the height
-     * is recomputed on every layout — {@link SurfaceEditorCardMetrics} decides how much of the
-     * space to spend — and the scroll region takes the height its current section needs, up to that
-     * ceiling. Header, tabs and the action row stay on screen at every size.
+     * <p>The card is pinned above the accessory stack and spans up to just under the launcher's
+     * status pills: {@link SurfaceEditorCardMetrics} hands the scroll region everything between
+     * those two anchors, so the only thing that changes the height while the editor is open is the
+     * anchors themselves moving — hiding the in-app keyboard frees hundreds of pixels, and the card
+     * spends them. Header and the action row stay on screen at every size; the peek-on-drag fade is
+     * what keeps the surfaces themselves visible while a slider moves.
      */
     private void adjustDockTuningCardHeight() {
         if (!mDockTuningMode)
@@ -2318,9 +2364,6 @@ public final class SurfaceEditorController {
             || actions == null || stack == null)
             return;
         if (controls.getVisibility() != View.VISIBLE)
-            return;
-        View scrollChild = scroll.getChildCount() > 0 ? scroll.getChildAt(0) : null;
-        if (scrollChild == null)
             return;
         // Before the first measure the chrome reports zero height, and a ceiling computed from that
         // is tall enough to push the card's own header up behind the launcher's status bar. The next
@@ -2355,21 +2398,16 @@ public final class SurfaceEditorController {
         // margin (6), plus the measured header and action row.
         int chrome = Math.round(dpToPx(10 + 12 + 6)) + headerRow.getHeight()
             + actions.getHeight();
-        int screenHeight = getResources().getDisplayMetrics().heightPixels;
-        float pxPerDp = dpToPx(1);
-        int target = SurfaceEditorCardMetrics.scrollHeightPx(availableCard, chrome,
-            scrollChild.getMeasuredHeight(), screenHeight, pxPerDp);
+        int target = SurfaceEditorCardMetrics.scrollHeightPx(availableCard, chrome);
         setSurfaceEditorScrollHeight(scroll, target);
     }
 
     /**
      * Moves the slider region to {@code target}, animating anything but the first pass.
      *
-     * <p>The card is anchored to its bottom edge, so a resize moves its header and tabs. Snapping
-     * them mid-gesture — the section tab that was just tapped jumping out from under the finger —
-     * is what a fixed-height card was avoiding; a short slide reads as the panel fitting itself to
-     * the section instead, and costs none of the empty glass a fixed height left under the short
-     * sections.
+     * <p>The card is anchored to its bottom edge, so a resize moves its header. Heights change
+     * only when an anchor moves — showing or hiding the keyboard, mostly — and a short slide
+     * reads as the panel following the keyboard instead of snapping over it.
      */
     private void setSurfaceEditorScrollHeight(@NonNull ScrollView scroll, int target) {
         boolean animating = mSurfaceEditorScrollAnimator != null
