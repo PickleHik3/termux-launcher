@@ -71,4 +71,23 @@ public class SurfacePresetsTest {
         assertTrue(SurfacePresets.matches(preferences, stock));
         assertFalse(SurfacePresets.matches(preferences, SurfacePresets.presets().get(1)));
     }
+
+    @Test
+    public void everyPresetCarriesTheKeysItsCardRenders() {
+        // The device-mock cards read these five directly; a preset omitting one would silently
+        // fall back to a hardcoded number and the card would lie about the look it applies.
+        String[] rendered = {
+            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE,
+            TERMUX_APP.KEY_SURFACE_BASE_OPACITY,
+            TERMUX_APP.KEY_SURFACE_BASE_GRAIN,
+            TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS,
+            TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP,
+        };
+        for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
+            for (String key : rendered)
+                assertTrue(preset.id + " misses " + key, preset.values.containsKey(key));
+            assertTrue(preset.id + " misses the border switch",
+                preset.values.containsKey(TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED));
+        }
+    }
 }

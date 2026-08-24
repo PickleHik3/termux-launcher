@@ -6621,6 +6621,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             startActivity(SettingsActivity.createFragmentIntent(TermuxActivity.this,
                 KeyboardColorSchemeFragment.class, R.string.settings_keyboard_colors_title));
         }
+
+        @Override @Nullable public Bitmap wallpaperPreviewThumb(int widthPx, int heightPx) {
+            if (mPreferences == null || widthPx <= 0 || heightPx <= 0)
+                return null;
+            View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+            if (wallpaperFrame == null || wallpaperFrame.getWidth() <= 0)
+                return null;
+            // The dock's radius is the frame most likely already resident in the LRU; clamp off 0
+            // so a blur-less look still gets a soft thumb rather than a full-res wallpaper copy.
+            int radiusDp = Math.max(1, mPreferences.getExtraKeysBlurRadius());
+            Bitmap frame = mChrome.blurCache().obtain(radiusDp, wallpaperFrame);
+            if (frame == null || frame.isRecycled())
+                return null;
+            Bitmap thumb = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(thumb);
+            float scale = Math.max(widthPx / (float) frame.getWidth(),
+                heightPx / (float) frame.getHeight());
+            Matrix matrix = new Matrix();
+            matrix.setScale(scale, scale);
+            matrix.postTranslate((widthPx - frame.getWidth() * scale) / 2f,
+                (heightPx - frame.getHeight() * scale) / 2f);
+            Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
+            canvas.drawBitmap(frame, matrix, paint);
+            return thumb;
+        }
+
+        @Override @NonNull public Drawable presetGlassSurface(float barAlpha, int grainPercent,
+                                                              float cornerRadiusPx,
+                                                              boolean withRim) {
+            return mChrome.glass().surface(barAlpha, 0f, 1f, true, grainPercent, cornerRadiusPx,
+                withRim);
+        }
     }
 
     /**

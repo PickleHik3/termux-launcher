@@ -67,6 +67,18 @@ public final class SurfaceEditorController {
         /** The coalesced glass re-render; {@code blurChanged} also drops the blur cache. */
         void applyGlassPreview(boolean blurChanged);
         void openKeyboardColors();
+        /**
+         * A small center-cropped copy of the blurred wallpaper for the preset mocks, or null when
+         * no frame is available (fallback: a neutral gradient). A copy, so the blur cache recycling
+         * a frame never pulls the bitmap out from under a card.
+         */
+        @Nullable android.graphics.Bitmap wallpaperPreviewThumb(int widthPx, int heightPx);
+        /**
+         * The live glass recipe at caller-supplied opacity/grain — what makes a preset card show
+         * the material the preset would actually render, not a sketch of it.
+         */
+        @NonNull android.graphics.drawable.Drawable presetGlassSurface(
+            float barAlpha, int grainPercent, float cornerRadiusPx, boolean withRim);
     }
 
     @NonNull
@@ -157,6 +169,9 @@ public final class SurfaceEditorController {
             return;
         ensureGeneratedRows();
         ensurePresetsStrip();
+        // The mocks render the live wallpaper and theme, both of which can change between editor
+        // sessions while the strip's views persist.
+        refreshPresetPreviews();
         View controls = mHost.findView(R.id.dock_tuning_controls);
         View advanced = mHost.findView(R.id.surface_editor_advanced);
         View keyboardColors = mHost.findView(R.id.surface_tuning_keyboard_colors);
@@ -1511,9 +1526,17 @@ public final class SurfaceEditorController {
             View preview = new View(context);
             android.widget.LinearLayout.LayoutParams previewParams =
                 new android.widget.LinearLayout.LayoutParams(
-                    Math.round(dpToPx(56)), Math.round(dpToPx(38)));
+                    Math.round(dpToPx(SurfaceEditorPresetPreview.CARD_WIDTH_DP)),
+                    Math.round(dpToPx(SurfaceEditorPresetPreview.CARD_HEIGHT_DP)));
             preview.setLayoutParams(previewParams);
-            preview.setBackground(buildPresetPreview(preset));
+            float cardCornerPx = dpToPx(SurfaceEditorPresetPreview.CARD_CORNER_DP);
+            preview.setOutlineProvider(new android.view.ViewOutlineProvider() {
+                @Override public void getOutline(View view, android.graphics.Outline outline) {
+                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cardCornerPx);
+                }
+            });
+            preview.setClipToOutline(true);
+            preview.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             item.addView(preview);
 
             TextView name = new TextView(context);
@@ -1521,6 +1544,7 @@ public final class SurfaceEditorController {
             name.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 10);
             name.setMaxLines(1);
             name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            name.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             android.widget.LinearLayout.LayoutParams nameParams =
                 new android.widget.LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -1528,7 +1552,26 @@ public final class SurfaceEditorController {
             name.setLayoutParams(nameParams);
             item.addView(name);
 
-            item.setContentDescription(getString(preset.nameRes));
+            // The card is the control that applies the look, so it carries the full accessibility
+            // node: a name, a button role and a spoken click action. Before this the strip had no
+            // usable nodes at all and TalkBack could not apply presets.
+            item.setContentDescription(getString(
+                R.string.termux_surface_preset_card_description, getString(preset.nameRes)));
+            item.setFocusable(true);
+            androidx.core.view.ViewCompat.setAccessibilityDelegate(item,
+                new androidx.core.view.AccessibilityDelegateCompat() {
+                    @Override public void onInitializeAccessibilityNodeInfo(@NonNull View host,
+                            @NonNull androidx.core.view.accessibility
+                                .AccessibilityNodeInfoCompat info) {
+                        super.onInitializeAccessibilityNodeInfo(host, info);
+                        info.setClassName(android.widget.Button.class.getName());
+                        info.addAction(new androidx.core.view.accessibility
+                            .AccessibilityNodeInfoCompat.AccessibilityActionCompat(
+                                androidx.core.view.accessibility.AccessibilityNodeInfoCompat
+                                    .ACTION_CLICK,
+                                getString(R.string.termux_surface_preset_apply_action)));
+                    }
+                });
             item.setOnClickListener(view -> applyPreset(preset));
             row.addView(item);
             mPresetItems.put(preset.id, android.util.Pair.create(preview, name));
@@ -1537,57 +1580,112 @@ public final class SurfaceEditorController {
         column.addView(strip);
         container.addView(column);
         container.setVisibility(View.VISIBLE);
+        // enter() refreshes the card art right after this, against the live wallpaper and theme.
         syncPresetSelection();
     }
 
+    /** Re-renders every preset card against the current wallpaper and theme. */
+    private void refreshPresetPreviews() {
+        if (mPresetItems.isEmpty())
+            return;
+        int widthPx = Math.round(dpToPx(SurfaceEditorPresetPreview.CARD_WIDTH_DP));
+        int heightPx = Math.round(dpToPx(SurfaceEditorPresetPreview.CARD_HEIGHT_DP));
+        // One thumb shared by every card: the wallpaper is the same behind all five looks.
+        android.graphics.Bitmap thumb = mHost.wallpaperPreviewThumb(widthPx, heightPx);
+        for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
+            android.util.Pair<View, TextView> item = mPresetItems.get(preset.id);
+            if (item != null)
+                item.first.setBackground(buildPresetPreview(preset, thumb, widthPx, heightPx));
+        }
+    }
+
     /**
-     * A stylized reading of the preset's own numbers: status strip, canvas, dock strip, at the
-     * preset's opacity and radius, edge-to-edge when Docked and inset when Floating. A sketch,
-     * not a screenshot - enough to tell the looks apart at a glance.
+     * A mini device mock wearing the preset: the blurred wallpaper behind the terminal field, the
+     * status pill and the dock/keyboard slab — the latter two rendered by the live glass recipe at
+     * the preset's own opacity and grain, placed by {@link SurfaceEditorPresetPreview}. Docked
+     * runs the slab flush to the card's edges; Floating pulls it in and rounds it, so the one
+     * decision the presets disagree on most is the one the cards show most clearly.
      */
     @NonNull
     private android.graphics.drawable.Drawable buildPresetPreview(
-            @NonNull SurfacePresets.Preset preset) {
-        Object radiusValue = preset.values.get(
-            TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS);
-        Object opacityValue = preset.values.get(
-            TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_BASE_OPACITY);
-        int radiusDp = radiusValue instanceof Integer ? (Integer) radiusValue : 24;
-        int opacity = opacityValue instanceof Integer ? (Integer) opacityValue : 34;
+            @NonNull SurfacePresets.Preset preset,
+            @Nullable android.graphics.Bitmap wallpaperThumb, int widthPx, int heightPx) {
+        int radiusDp = presetInt(preset,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS, 24);
+        int opacity = presetInt(preset,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_BASE_OPACITY, 34);
+        int grain = presetInt(preset,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 0);
+        int sideGapDp = presetInt(preset,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP, 10);
+        int terminalRadiusDp = presetInt(preset,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_CORNER_RADIUS);
+        int paneGapDp = presetInt(preset,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERMINAL_PANE_GAP,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP);
         boolean floating = SegmentedPillPreference.VALUE_ROUNDED.equals(preset.values.get(
             TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE));
+        boolean border = Boolean.TRUE.equals(preset.values.get(
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED));
 
-        int canvasColor = mHost.themeColor(
-            com.termux.shared.R.attr.termuxColorOnSurfaceVariant, R.color.termux_on_surface_variant);
-        int stripColor = mHost.themeColor(
-            com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary);
-        int stripAlpha = Math.min(255, 80 + Math.round(opacity * 1.6f));
+        float density = dpToPx(1);
 
-        android.graphics.drawable.GradientDrawable canvas =
-            new android.graphics.drawable.GradientDrawable();
-        canvas.setColor(withAlpha(canvasColor, 36));
-        canvas.setCornerRadius(dpToPx(9));
+        android.graphics.drawable.Drawable wallpaper;
+        if (wallpaperThumb != null && !wallpaperThumb.isRecycled()) {
+            wallpaper = new android.graphics.drawable.BitmapDrawable(
+                getResources(), wallpaperThumb);
+        } else {
+            android.graphics.drawable.GradientDrawable fallback =
+                new android.graphics.drawable.GradientDrawable(
+                    android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[] {
+                        withAlpha(mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary,
+                            R.color.termux_primary), 70),
+                        withAlpha(mHost.themeColor(
+                            com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+                            R.color.termux_on_surface_variant), 40)});
+            wallpaper = fallback;
+        }
 
-        float stripRadius = dpToPx(Math.min(40, Math.max(0, radiusDp)) * 0.09f);
-        android.graphics.drawable.GradientDrawable status =
+        android.graphics.drawable.GradientDrawable terminal =
             new android.graphics.drawable.GradientDrawable();
-        status.setColor(withAlpha(stripColor, stripAlpha));
-        status.setCornerRadius(stripRadius);
-        android.graphics.drawable.GradientDrawable dock =
-            new android.graphics.drawable.GradientDrawable();
-        dock.setColor(withAlpha(stripColor, stripAlpha));
-        dock.setCornerRadius(stripRadius);
+        terminal.setColor(withAlpha(android.graphics.Color.BLACK, 120));
+        terminal.setCornerRadius(
+            SurfaceEditorPresetPreview.terminalRadiusPx(density, terminalRadiusDp));
+        if (border) {
+            terminal.setStroke(Math.max(1, Math.round(density)),
+                withAlpha(mHost.themeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+                    R.color.termux_on_surface_variant), 90));
+        }
+
+        float glassRadiusPx =
+            SurfaceEditorPresetPreview.surfaceRadiusPx(density, radiusDp, floating);
+        android.graphics.drawable.Drawable status =
+            mHost.presetGlassSurface(opacity / 100f, grain, glassRadiusPx, floating);
+        android.graphics.drawable.Drawable slab =
+            mHost.presetGlassSurface(opacity / 100f, grain, glassRadiusPx, floating);
 
         android.graphics.drawable.LayerDrawable layers =
             new android.graphics.drawable.LayerDrawable(
-                new android.graphics.drawable.Drawable[] {canvas, status, dock});
-        int side = Math.round(dpToPx(floating ? 5 : 2));
-        int stripHeight = Math.round(dpToPx(6));
-        int edge = Math.round(dpToPx(floating ? 3 : 0)) + Math.round(dpToPx(2));
-        int height = Math.round(dpToPx(38));
-        layers.setLayerInset(1, side, edge, side, height - edge - stripHeight);
-        layers.setLayerInset(2, side, height - edge - stripHeight, side, edge);
+                new android.graphics.drawable.Drawable[] {wallpaper, terminal, status, slab});
+        int[] terminalInsets = SurfaceEditorPresetPreview.terminalInsets(
+            widthPx, heightPx, density, paneGapDp, terminalRadiusDp);
+        int[] statusInsets = SurfaceEditorPresetPreview.statusInsets(
+            widthPx, heightPx, density, sideGapDp);
+        int[] slabInsets = SurfaceEditorPresetPreview.bottomSlabInsets(
+            widthPx, heightPx, density, sideGapDp, floating);
+        layers.setLayerInset(1,
+            terminalInsets[0], terminalInsets[1], terminalInsets[2], terminalInsets[3]);
+        layers.setLayerInset(2, statusInsets[0], statusInsets[1], statusInsets[2], statusInsets[3]);
+        layers.setLayerInset(3, slabInsets[0], slabInsets[1], slabInsets[2], slabInsets[3]);
         return layers;
+    }
+
+    private static int presetInt(@NonNull SurfacePresets.Preset preset, @NonNull String key,
+                                 int fallback) {
+        Object value = preset.values.get(key);
+        return value instanceof Integer ? (Integer) value : fallback;
     }
 
     private static int withAlpha(int color, int alpha) {
@@ -1612,6 +1710,13 @@ public final class SurfaceEditorController {
                     R.color.termux_primary)
                 : mHost.themeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
                     R.color.termux_on_surface_variant));
+            // The ring is visual only; the card's node carries the same state for TalkBack.
+            if (item.first.getParent() instanceof View) {
+                View card = (View) item.first.getParent();
+                card.setSelected(selected);
+                androidx.core.view.ViewCompat.setStateDescription(card, selected
+                    ? getString(R.string.termux_surface_preset_current_look) : null);
+            }
         }
     }
 
