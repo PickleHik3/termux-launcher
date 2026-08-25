@@ -6,9 +6,11 @@ import android.util.Log;
 
 import androidx.annotation.Nullable;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -501,7 +503,52 @@ public class ShizukuBackend implements PrivilegedBackend {
         } catch (Throwable ignored) {
             // Already gone, or the remote refuses a second destroy; either way it is released.
         }
+        detachRemoteProcess(process);
     }
+
+    /**
+     * Do by hand what {@code binderDied} would have done, because nothing else ever will.
+     *
+     * <p>{@code ShizukuRemoteProcess} links a binder death recipient in its constructor and adds
+     * itself to a static strong {@code CACHE}, and drops out of both only when the remote binder
+     * dies. {@code destroy()} kills the remote child; it does not unlink and does not uncache. The
+     * death recipient is a JNI global reference, so it is a garbage-collection root that holds the
+     * process object, its {@code IRemoteProcess} proxy and both pipe file descriptors — one set per
+     * command, forever. The stats sampler and the foreground-window resolver each run commands
+     * every second or two, and a single session here had accumulated 5,497 of them: 98% of every
+     * binder proxy in the process, and 10,994 live file descriptors against a limit of 32,768.
+     *
+     * <p>dev.rikka.shizuku:api:13.1.5 exposes no release call, so this drops the cache entry and
+     * lets go of the proxy directly. Once nothing Java-side holds the {@code BinderProxy} its
+     * native peer is freed, and the driver's death registration — the root itself — goes with it.
+     * Reflective and therefore best-effort: if the library's shape ever changes this logs once and
+     * the old behaviour returns, rather than breaking privileged commands.</p>
+     */
+    private static void detachRemoteProcess(Process process) {
+        if (sRemoteProcessDetachBroken) return;
+        try {
+            Class<?> type = process.getClass();
+            Field cacheField = type.getDeclaredField("CACHE");
+            cacheField.setAccessible(true);
+            Object cache = cacheField.get(null);
+            if (cache instanceof Set) ((Set<?>) cache).remove(process);
+            // The proxy first: it is what roots the binder registration. The two pipe streams are
+            // already closed above, but the objects keep their file descriptors until they go too.
+            for (String name : REMOTE_PROCESS_FIELDS) {
+                Field field = type.getDeclaredField(name);
+                field.setAccessible(true);
+                field.set(process, null);
+            }
+        } catch (Throwable e) {
+            sRemoteProcessDetachBroken = true;
+            Log.w(TAG, "Cannot release Shizuku remote processes; they will accumulate", e);
+        }
+    }
+
+    private static final String[] REMOTE_PROCESS_FIELDS = { "remote", "is", "os" };
+
+    /** Set once the reflective release fails, so a broken library shape is reported once, not per command. */
+    private static volatile boolean sRemoteProcessDetachBroken;
 
     private static void closeQuietly(@Nullable java.io.Closeable closeable) {
         if (closeable == null) return;
