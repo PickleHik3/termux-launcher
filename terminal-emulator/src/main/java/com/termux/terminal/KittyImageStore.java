@@ -68,6 +68,14 @@ final class KittyImageStore {
 
         /** Extra animation frames; index 0 is protocol frame 2. */
         final List<Frame> frames = new ArrayList<>();
+        /** Frames accepted against the quota whose decode has not landed yet. */
+        int pendingFrames;
+        /**
+         * Whether this image has ever reached a cell. Until it has, it is mid-transmission — an
+         * animation is loaded frame by frame before it is placed — and its frames are not garbage
+         * just because nothing displays them yet.
+         */
+        boolean everPlaced;
         /** The root frame's gap; the protocol sets it via {@code a=a,r=1,z=...}. */
         int rootGapMs;
         int animationState;
@@ -243,6 +251,7 @@ final class KittyImageStore {
         latestIdByNumber.clear();
         totalBytes = 0;
         totalFrameBytes = 0;
+        pendingFrameBytes = 0;
     }
 
     long totalBytes() {
@@ -256,6 +265,7 @@ final class KittyImageStore {
     // ------------------------------------------------------------------ animation frames
 
     private long totalFrameBytes;
+    private long pendingFrameBytes;
 
     /** Frame count including the root frame, so protocol frame numbers are 1..frameCount. */
     static int frameCount(Entry entry) {
@@ -287,9 +297,32 @@ final class KittyImageStore {
         entry.animationDurationMs += gapMs - previous;
     }
 
+    /**
+     * Whether one more frame of {@code byteCount} would break the quota, counting frames already
+     * accepted whose decode has not landed. A frame is charged where it is accepted and credited
+     * where it commits, and the two are a decode apart: an animation arrives as one burst, so a
+     * gate that measured only committed bytes would wave the whole burst through against a ledger
+     * that is empty until the last of it lands.
+     */
     boolean wouldExceedFrameLimits(Entry entry, int byteCount) {
-        return totalFrameBytes + byteCount > MAX_FRAME_BYTES
-            || entry.frames.size() + 1 > MAX_FRAMES_PER_IMAGE;
+        return totalFrameBytes + pendingFrameBytes + byteCount > MAX_FRAME_BYTES
+            || entry.frames.size() + entry.pendingFrames + 1 > MAX_FRAMES_PER_IMAGE;
+    }
+
+    /** Charge an accepted frame against the quota until its decode commits or fails. */
+    void reserveFrameBytes(Entry entry, int byteCount) {
+        pendingFrameBytes += byteCount;
+        entry.pendingFrames++;
+    }
+
+    /**
+     * Release an accepted frame's charge. Every path out of a frame transmission — commit, decode
+     * failure, a vanished or replaced image — must release exactly once, or the quota bleeds away
+     * a frame at a time. The floors keep an intervening {@link #clear} from driving it negative.
+     */
+    void releaseFrameBytes(Entry entry, int byteCount) {
+        pendingFrameBytes = Math.max(0, pendingFrameBytes - byteCount);
+        entry.pendingFrames = Math.max(0, entry.pendingFrames - 1);
     }
 
     /**
@@ -435,6 +468,48 @@ final class KittyImageStore {
         return true;
     }
 
+    /**
+     * Move an animation to where it would have reached by {@code now} had it never been suspended,
+     * without stepping through every frame it missed. Whole cycles collapse into the loop counter,
+     * so the walk is bounded by one cycle however long the suspension lasted. Returns whether the
+     * displayed frame changed, so the caller knows whether to composite.
+     */
+    static boolean catchUpAnimation(Entry entry, long now) {
+        long elapsed = now - entry.frameShownAtUptime;
+        if (elapsed <= 0) return false;
+        if (!isAnimatable(entry)) {
+            entry.frameShownAtUptime = now;
+            return false;
+        }
+        int before = entry.currentFrame;
+        long duration = entry.animationDurationMs;
+        long cycles = elapsed / duration;
+        elapsed %= duration;
+        if (entry.maxLoops != 0 && cycles > 0) {
+            entry.currentLoop = (int) Math.min(entry.maxLoops, entry.currentLoop + cycles);
+            if (!isAnimatable(entry)) {
+                // It ran out of loops while suspended, so it rests where it was left.
+                entry.frameShownAtUptime = now;
+                return false;
+            }
+        }
+        int count = frameCount(entry);
+        // What is left is under one cycle, so one pass over the frames consumes it.
+        for (int guard = count; guard > 0; guard--) {
+            int gap = frameGap(entry, entry.currentFrame + 1);
+            if (elapsed < gap) break;
+            elapsed -= gap;
+            int next = (entry.currentFrame + 1) % count;
+            if (next == 0) {
+                if (entry.animationState == ANIMATION_LOADING) break;
+                if (entry.maxLoops != 0 && ++entry.currentLoop >= entry.maxLoops) break;
+            }
+            entry.currentFrame = next;
+        }
+        entry.frameShownAtUptime = now - elapsed;
+        return entry.currentFrame != before;
+    }
+
     /** The uptime the entry's next flip is due at, or -1 when it will not animate on its own. */
     static long nextAnimationDeadline(Entry entry) {
         if (!isAnimatable(entry)) return -1;
@@ -452,5 +527,9 @@ final class KittyImageStore {
 
     long totalFrameBytes() {
         return totalFrameBytes;
+    }
+
+    long pendingFrameBytes() {
+        return pendingFrameBytes;
     }
 }

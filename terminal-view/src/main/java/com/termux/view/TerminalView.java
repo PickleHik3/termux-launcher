@@ -37,6 +37,7 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.widget.Scroller;
 import android.widget.Toast;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import com.termux.terminal.KeyHandler;
@@ -466,8 +467,10 @@ public final class TerminalView extends View {
         if (session == mTermSession)
             return false;
         mTopRow = 0;
+        updateKittyAnimationVisibility();
         mTermSession = session;
         mEmulator = null;
+        updateKittyAnimationVisibility();
         mCombiningAccent = 0;
         // A different session's cursor is somewhere else entirely; do not streak across the switch.
         mCursorTrail.reset();
@@ -1915,6 +1918,7 @@ public final class TerminalView extends View {
             mTermSession.updateSize(newColumns, newRows, (int) mRenderer.getFontWidth(),
                 mRenderer.getFontLineSpacing(), keepCursorAtBottom);
             mEmulator = mTermSession.getEmulator();
+            updateKittyAnimationVisibility();
             mClient.onEmulatorSet();
             // Update mTerminalCursorBlinkerRunnable inner class mEmulator on session change
             if (mTerminalCursorBlinkerRunnable != null)
@@ -2576,14 +2580,59 @@ public final class TerminalView extends View {
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        updateKittyAnimationVisibility();
         if (mTextSelectionCursorController != null) {
             getViewTreeObserver().addOnTouchModeChangeListener(mTextSelectionCursorController);
         }
     }
 
+    /**
+     * The session this view has last reported as on screen, so the report can be withdrawn when it
+     * stops being so. A kitty animation ticks and composites a frame at a time forever otherwise,
+     * whether or not anything can see it — a hidden pane and a dark screen both keep it running.
+     */
+    private TerminalSession mKittyAnimatingSession;
+
+    /**
+     * Tell the emulator whether its output is on screen. Playback is only suspended, never thrown
+     * away: the frames and the place in them survive, so scrolling an animation back into view or
+     * coming back to its pane picks it up where it would have been.
+     */
+    private void updateKittyAnimationVisibility() {
+        boolean onScreen = isShown() && getWindowVisibility() == View.VISIBLE;
+        TerminalSession target = onScreen && mEmulator != null ? mTermSession : null;
+        if (mKittyAnimatingSession != null && mKittyAnimatingSession != target) {
+            TerminalEmulator emulator = mKittyAnimatingSession.getEmulator();
+            if (emulator != null) {
+                emulator.setKittyAnimationsVisible(false);
+                // The emulator outlives this view, so the scroll-position callback has to go with
+                // the view or it holds the whole activity through it.
+                emulator.setTopRowProvider(null);
+            }
+        }
+        mKittyAnimatingSession = target;
+        if (target != null) {
+            target.getEmulator().setTopRowProvider(() -> mTopRow);
+            target.getEmulator().setKittyAnimationsVisible(true);
+        }
+    }
+
+    @Override
+    protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        updateKittyAnimationVisibility();
+    }
+
+    @Override
+    protected void onVisibilityChanged(@NonNull View changedView, int visibility) {
+        super.onVisibilityChanged(changedView, visibility);
+        updateKittyAnimationVisibility();
+    }
+
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        updateKittyAnimationVisibility();
         if (mTextSelectionCursorController != null) {
             // Might solve the following exception
             // android.view.WindowLeaked: Activity com.termux.app.TermuxActivity has leaked window android.widget.PopupWindow

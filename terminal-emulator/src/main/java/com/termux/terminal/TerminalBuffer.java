@@ -664,6 +664,7 @@ public final class TerminalBuffer {
         // Visible bitmap cells still reference their image data after ED 3 clears scrollback.
         collectUnusedBitmaps();
         terminalSixel = null;
+        notifyKittyCellsCollected();
     }
 
     public Bitmap getSixelBitmap(int codePoint, long style) {
@@ -787,6 +788,27 @@ public final class TerminalBuffer {
     }
 
     /** Collect the live placements of one kitty image, for animation frame re-rendering. */
+    /**
+     * Whether any cell displaying {@code imageId} lies in the {@code rowCount} rows starting at
+     * external row {@code topRow} — what the user is actually looking at. Rows without a bitmap
+     * cell cost one flag read, so this is cheap enough to ask on every animation frame.
+     */
+    boolean hasKittyImageInRows(long imageId, int topRow, int rowCount) {
+        int firstRow = Math.max(-getActiveTranscriptRows(), topRow);
+        int lastRow = Math.min(mScreenRows, topRow + rowCount);
+        for (int row = firstRow; row < lastRow; row++) {
+            TerminalRow line = mLines[externalToInternalRow(row)];
+            if (line == null || !line.mHasBitmap) continue;
+            for (int column = 0; column < mColumns; column++) {
+                long style = line.getStyle(column);
+                if (!TextStyle.isBitmap(style)) continue;
+                TerminalBitmap bitmap = bitmaps.get(TextStyle.bitmapNum(style));
+                if (bitmap != null && bitmap.kittyImageId == imageId) return true;
+            }
+        }
+        return false;
+    }
+
     void collectKittyPlacements(long imageId, java.util.List<TerminalBitmap> out) {
         for (TerminalBitmap bitmap : bitmaps.values()) {
             if (bitmap.kittyImageId == imageId && bitmap.bitmap != null && bitmap.kittyTransform != null)
@@ -848,12 +870,31 @@ public final class TerminalBuffer {
         }
     }
 
+    /**
+     * Notified after a sweep that could have left stored kitty images with no cell to display
+     * them — a scroll past the transcript limit, or a cleared transcript.
+     */
+    interface UnreachableImageListener {
+        void onKittyCellsCollected();
+    }
+
+    private UnreachableImageListener mUnreachableImageListener;
+
+    void setUnreachableImageListener(UnreachableImageListener listener) {
+        mUnreachableImageListener = listener;
+    }
+
+    private void notifyKittyCellsCollected() {
+        if (mUnreachableImageListener != null) mUnreachableImageListener.onKittyCellsCollected();
+    }
+
     public void bitmapGC(int timeDelta) {
         if (!hasBitmaps || bitmapLastGC + timeDelta > SystemClock.uptimeMillis()) {
             return;
         }
         collectUnusedBitmaps();
         bitmapLastGC = SystemClock.uptimeMillis();
+        notifyKittyCellsCollected();
     }
 
     private void collectUnusedBitmaps() {

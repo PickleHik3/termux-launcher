@@ -153,6 +153,69 @@ public class KittyImageStoreTest extends TestCase {
             -1, KittyImageStore.nextAnimationDeadline(entry));
     }
 
+    /** Three frames of 100 ms each; the entry starts on the root frame at uptime 0. */
+    private static KittyImageStore.Entry runningAnimation(KittyImageStore store, int maxLoops) {
+        store.reserve(1, 0, 4, 4, 64);
+        KittyImageStore.Entry entry = store.get(1);
+        KittyImageStore.setFrameGap(entry, 1, 100);
+        store.addFrame(entry, null, 64, 100);
+        store.addFrame(entry, null, 64, 100);
+        entry.animationState = KittyImageStore.ANIMATION_RUNNING;
+        entry.maxLoops = maxLoops;
+        entry.frameShownAtUptime = 0;
+        return entry;
+    }
+
+    public void testCatchUpLandsWhereTheAnimationWouldHaveBeen() {
+        KittyImageStore store = new KittyImageStore();
+        KittyImageStore.Entry entry = runningAnimation(store, 0);
+        assertTrue(KittyImageStore.catchUpAnimation(entry, 250));
+        assertEquals("two whole gaps and half of a third", 2, entry.currentFrame);
+        assertEquals("the half-gap already served still counts", 200, entry.frameShownAtUptime);
+        // Playback carries on from there rather than restarting the gap.
+        assertFalse(KittyImageStore.advanceAnimation(entry, 250));
+        assertTrue(KittyImageStore.advanceAnimation(entry, 300));
+        assertEquals(0, entry.currentFrame);
+    }
+
+    public void testCatchUpCollapsesWholeCyclesInsteadOfWalkingThem() {
+        KittyImageStore store = new KittyImageStore();
+        KittyImageStore.Entry entry = runningAnimation(store, 0);
+        // A day of suspension at 300 ms a cycle: the walk must not step through 288,000 frames.
+        assertTrue(KittyImageStore.catchUpAnimation(entry, 86_400_000L + 150));
+        assertEquals(1, entry.currentFrame);
+        assertEquals(86_400_000L + 100, entry.frameShownAtUptime);
+    }
+
+    public void testCatchUpCountsTheLoopsItSleptThroughAndStops() {
+        KittyImageStore store = new KittyImageStore();
+        KittyImageStore.Entry entry = runningAnimation(store, 3);
+        assertFalse("ten cycles exhaust a three-loop animation",
+            KittyImageStore.catchUpAnimation(entry, 3000));
+        assertEquals(3, entry.currentLoop);
+        assertFalse(KittyImageStore.isAnimatable(entry));
+        assertEquals("a finished animation rests where it was left", 0, entry.currentFrame);
+    }
+
+    public void testCatchUpOnAStoppedAnimationOnlyResetsTheClock() {
+        KittyImageStore store = new KittyImageStore();
+        KittyImageStore.Entry entry = runningAnimation(store, 0);
+        entry.animationState = KittyImageStore.ANIMATION_STOPPED;
+        assertFalse(KittyImageStore.catchUpAnimation(entry, 5000));
+        assertEquals(0, entry.currentFrame);
+        assertEquals("it resumes its gap from now, not from before the suspension",
+            5000, entry.frameShownAtUptime);
+    }
+
+    public void testCatchUpIsANoOpWithoutElapsedTime() {
+        KittyImageStore store = new KittyImageStore();
+        KittyImageStore.Entry entry = runningAnimation(store, 0);
+        entry.frameShownAtUptime = 500;
+        assertFalse(KittyImageStore.catchUpAnimation(entry, 500));
+        assertEquals(0, entry.currentFrame);
+        assertEquals(500, entry.frameShownAtUptime);
+    }
+
     public void testRemoveFramePromotesRootAndFollowsCurrent() {
         KittyImageStore store = new KittyImageStore();
         KittyImageStore.Entry entry = animatedEntry(store, 3, 100);
@@ -190,6 +253,56 @@ public class KittyImageStoreTest extends TestCase {
         assertFalse(KittyImageStore.isAnimatable(entry));
         assertEquals("the image itself survives and stays placeable", entry, store.get(1));
         assertEquals(0, store.dropFrames(entry));
+    }
+
+    public void testInFlightFramesHoldTheQuotaUntilTheyAreReleased() {
+        KittyImageStore store = new KittyImageStore();
+        store.reserve(1, 0, 8, 8, 256);
+        KittyImageStore.Entry entry = store.get(1);
+        int half = (int) (KittyImageStore.MAX_FRAME_BYTES / 2);
+        store.reserveFrameBytes(entry, half);
+        assertEquals(half, store.pendingFrameBytes());
+        assertEquals("nothing has committed yet", 0, store.totalFrameBytes());
+        assertFalse("the other half is still free", store.wouldExceedFrameLimits(entry, half));
+        store.reserveFrameBytes(entry, half);
+        assertTrue("two frames in flight fill the quota between them",
+            store.wouldExceedFrameLimits(entry, 1));
+
+        // A commit hands the charge over to the committed ledger, leaving the total unchanged.
+        store.releaseFrameBytes(entry, half);
+        store.addFrame(entry, null, half, 40);
+        assertEquals(half, store.pendingFrameBytes());
+        assertEquals(half, store.totalFrameBytes());
+        assertTrue(store.wouldExceedFrameLimits(entry, 1));
+
+        // A failure releases without committing, so the quota comes back.
+        store.releaseFrameBytes(entry, half);
+        assertEquals(0, store.pendingFrameBytes());
+        assertFalse(store.wouldExceedFrameLimits(entry, half));
+    }
+
+    public void testInFlightFramesCountAgainstThePerImageFrameLimit() {
+        KittyImageStore store = new KittyImageStore();
+        store.reserve(1, 0, 2, 2, 16);
+        KittyImageStore.Entry entry = store.get(1);
+        for (int i = 0; i < KittyImageStore.MAX_FRAMES_PER_IMAGE; i++) store.reserveFrameBytes(entry, 16);
+        assertTrue("frames in flight fill the count too", store.wouldExceedFrameLimits(entry, 16));
+        store.releaseFrameBytes(entry, 16);
+        assertFalse(store.wouldExceedFrameLimits(entry, 16));
+    }
+
+    public void testReleasingAcrossAClearCannotDriveTheLedgerNegative() {
+        KittyImageStore store = new KittyImageStore();
+        store.reserve(1, 0, 8, 8, 256);
+        KittyImageStore.Entry entry = store.get(1);
+        store.reserveFrameBytes(entry, 4096);
+        store.clear();
+        // The decode that was in flight during the clear still lands and releases.
+        store.releaseFrameBytes(entry, 4096);
+        assertEquals(0, store.pendingFrameBytes());
+        store.reserve(2, 0, 8, 8, 256);
+        assertFalse("a cleared store starts from a clean quota",
+            store.wouldExceedFrameLimits(store.get(2), (int) KittyImageStore.MAX_FRAME_BYTES));
     }
 
     public void testReclaimFrameBudgetDropsOnlyUnreachableAnimations() {
