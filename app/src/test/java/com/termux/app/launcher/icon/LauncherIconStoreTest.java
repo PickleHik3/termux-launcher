@@ -155,6 +155,93 @@ public class LauncherIconStoreTest {
         assertSame(vectorLike, store.artwork(entry("alpha", null)));
     }
 
+    /**
+     * What the framework actually hands back for a modern app: an adaptive icon wrapping layers
+     * that are themselves oversized bitmaps. Its own intrinsic size is derived from those layers,
+     * so this is the case the whole change exists for.
+     */
+    @Test
+    public void anAdaptiveIconWrappingOversizedLayers_isRasterisedDown() {
+        Drawable adaptive = new android.graphics.drawable.AdaptiveIconDrawable(
+            artwork(284), artwork(284));
+        LauncherIconStore store = store(256, adaptive);
+        Drawable held = store.artwork(entry("alpha", null));
+        assertTrue("an adaptive icon of 284x284 layers must not be kept whole, was "
+                + held.getIntrinsicWidth() + "x" + held.getIntrinsicHeight()
+                + " (" + held.getClass().getSimpleName() + ")",
+            held.getIntrinsicWidth() <= LauncherIconStore.MAX_RETAINED_PX
+                && held.getIntrinsicHeight() <= LauncherIconStore.MAX_RETAINED_PX);
+    }
+
+    /**
+     * The layers of a real adaptive icon are rarely bare bitmaps — the framework hands them back
+     * wrapped in insets and scales. Looking only one level down declares such an icon "not made of
+     * pixels" and keeps all of them.
+     */
+    @Test
+    public void anAdaptiveIconWhoseLayersAreWrapped_isStillRasterisedDown() {
+        Drawable adaptive = new android.graphics.drawable.AdaptiveIconDrawable(
+            new android.graphics.drawable.InsetDrawable(artwork(284), 0),
+            new android.graphics.drawable.InsetDrawable(artwork(284), 0));
+        LauncherIconStore store = store(256, adaptive);
+        Drawable held = store.artwork(entry("alpha", null));
+        assertTrue("wrapped layers must not hide the pixels, was "
+                + held.getIntrinsicWidth() + "x" + held.getIntrinsicHeight(),
+            held.getIntrinsicWidth() <= LauncherIconStore.MAX_RETAINED_PX);
+    }
+
+    /** The same one level further out: a layer list of bitmaps is still made of pixels. */
+    @Test
+    public void aLayerListOfOversizedBitmaps_isRasterisedDown() {
+        Drawable layers = new android.graphics.drawable.LayerDrawable(
+            new Drawable[] { artwork(284), artwork(284) });
+        LauncherIconStore store = store(256, layers);
+        Drawable held = store.artwork(entry("alpha", null));
+        assertTrue("a layer list must not hide the pixels, was "
+                + held.getIntrinsicWidth() + "x" + held.getIntrinsicHeight(),
+            held.getIntrinsicWidth() <= LauncherIconStore.MAX_RETAINED_PX);
+    }
+
+    /**
+     * A container that does not report an intrinsic size at all. Believing it — and it is what the
+     * framework hands back for some packages — means an icon of 284x284 layers looks like it is
+     * already small enough, and every one of them is kept whole.
+     */
+    @Test
+    public void artworkThatReportsNoIntrinsicSize_isMeasuredByThePixelsItHolds() {
+        Drawable sizeless = new android.graphics.drawable.LayerDrawable(
+            new Drawable[] { artwork(284) }) {
+            @Override public int getIntrinsicWidth() { return -1; }
+            @Override public int getIntrinsicHeight() { return -1; }
+        };
+        LauncherIconStore store = store(256, sizeless);
+        Drawable held = store.artwork(entry("alpha", null));
+        assertTrue("a sizeless container of oversized bitmaps must still be rasterised, was "
+                + held.getIntrinsicWidth() + "x" + held.getIntrinsicHeight(),
+            held.getIntrinsicWidth() > 0
+                && held.getIntrinsicWidth() <= LauncherIconStore.MAX_RETAINED_PX);
+    }
+
+    /**
+     * The case that actually occurs, and the one a size check alone cannot see: an adaptive icon
+     * declares the nominal 72dp — 189px at this density — while the layers it holds are the 108dp
+     * rasterisation at 284px. Believing the declaration keeps 323 KB per app to draw 143 KB of it.
+     */
+    @Test
+    public void artworkDeclaringLessThanItHolds_isRedrawnAtWhatItDeclares() {
+        Drawable understated = new android.graphics.drawable.LayerDrawable(
+            new Drawable[] { artwork(284) }) {
+            @Override public int getIntrinsicWidth() { return 189; }
+            @Override public int getIntrinsicHeight() { return 189; }
+        };
+        LauncherIconStore store = store(256, understated);
+        Drawable held = store.artwork(entry("alpha", null));
+        assertEquals("redrawn at its own declared size, not kept at its layers'",
+            189, held.getIntrinsicWidth());
+        assertTrue("and it must actually be flattened", held instanceof BitmapDrawable);
+        assertEquals(189, ((BitmapDrawable) held).getBitmap().getWidth());
+    }
+
     @Test
     public void aNonSquareOversizedIcon_keepsItsProportions() {
         Drawable wide = new BitmapDrawable(resources,

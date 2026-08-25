@@ -739,7 +739,8 @@ public final class SuggestionBarView extends GridLayout
      * under the finger for no change in what it looks like.
      */
     private void invalidateIconArtwork() {
-        LauncherAppDataProvider.getInstance(getContext()).icons().invalidateAll();
+        LauncherAppDataProvider existing = LauncherAppDataProvider.peekInstance();
+        if (existing != null) existing.icons().invalidateAll();
         invalidateRenderedIconCaches();
     }
 

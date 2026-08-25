@@ -78,6 +78,17 @@ public final class LauncherAppDataProvider {
         return iconStore;
     }
 
+    /**
+     * The provider if one has already been built, and null otherwise. Clearing a cache is not a
+     * reason to construct the thing that owns it: there is nothing held to clear until something
+     * has asked for artwork, and building a catalogue provider as a side effect of an invalidation
+     * pulls the whole icon-resolution stack up with it.
+     */
+    @Nullable
+    public static synchronized LauncherAppDataProvider peekInstance() {
+        return instance;
+    }
+
     /** Shorthand for {@code getInstance(context).icons().artwork(entry)}. */
     @Nullable
     public static Drawable artworkFor(@NonNull Context context,
