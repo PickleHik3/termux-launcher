@@ -2808,19 +2808,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : mPreferences.getStatusBarHorizontalInset(), isRoundedDockStyle());
     }
 
-    /** Internal row inset only; the floating capsule's outer screen margin remains unchanged. */
+    /**
+     * Internal row inset only; the floating capsule's outer screen margin remains unchanged.
+     *
+     * <p>The bottom row — sessions chip on the left, status widgets on the right — is bottom-gravity
+     * and therefore sits in the surface's bottom corners. Whatever radius rounds those corners eats
+     * into the row, so the inset that keeps the content clear of the clip has to follow the radius
+     * rather than be a fixed number. Half the radius is the arc's worst-case encroachment over the
+     * row's height, which is what both styles grow by.</p>
+     *
+     * <p>They start from different places because their radii do. Docked is square by default, so
+     * its 3dp baseline is the whole story at rest and every bit of radius the user dials in is new
+     * encroachment. Floating is a card whose corners are already rounded at rest — 26dp, the auto
+     * radius — and its 8dp baseline was measured against exactly that, so only radius beyond the
+     * default is encroachment the baseline does not already answer. That keeps a stock Floating
+     * surface looking precisely as it did while a raised radius stops clipping the chips.</p>
+     */
     private int statusBarContentEdgeInsetPx(boolean capsule) {
-        int base = Math.round(dpToPx(capsule ? 8 : 3));
-        if (!capsule) {
-            // Docked rounds the pane's bottom corners by the user's inner-edge radius, and the
-            // bottom row (sessions chip on the left, status widgets on the right) sits exactly in
-            // those corners — at higher radii it spilled outside the clip. Half the radius is the
-            // arc's worst-case encroachment over the row's height, so the content starts past it.
-            boolean collapsed = mPreferences != null && mPreferences.isTopPaneClockCollapsed();
-            base += Math.round(resolveDockedStatusInnerRadiusPx(
-                targetStatusBarHeightPx(false, collapsed)) * 0.5f);
-        }
-        return base;
+        boolean collapsed = mPreferences != null && mPreferences.isTopPaneClockCollapsed();
+        float radiusPx = capsule
+            ? resolveStatusBarCapsuleCornerRadiusPx(targetStatusBarHeightPx(true, collapsed))
+            : resolveDockedStatusInnerRadiusPx(targetStatusBarHeightPx(false, collapsed));
+        float baselineRadiusPx = capsule
+            ? dpToPx(TermuxPreferenceConstants.TERMUX_APP.STATUS_AUTO_CORNER_RADIUS_MAX_DP)
+            : 0f;
+        return DockLayoutPolicy.statusBarContentEdgeInsetPx(capsule, radiusPx, baselineRadiusPx,
+            getResources().getDisplayMetrics().density);
     }
 
     private float resolveStatusBarCapsuleCornerRadiusPx(int surfaceHeightPx) {
