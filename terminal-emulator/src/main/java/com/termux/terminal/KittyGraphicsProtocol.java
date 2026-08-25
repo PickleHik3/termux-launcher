@@ -1296,6 +1296,21 @@ final class KittyGraphicsProtocol {
         emulator.deleteAllKittyGraphics();
     }
 
+    /**
+     * Move between the normal and alternate screens. This is not a reset: the two buffers own their
+     * own cells, so an image displayed on one is already invisible from the other, and the
+     * alternate buffer is blanked as it is entered. Destroying the store here took the images of
+     * whatever was on the normal screen with it — running anything full-screen, a multiplexer, an
+     * editor, a pager, left a hole where the logo above the prompt had been, and exiting did not
+     * bring it back because there was nothing left to bring back.
+     *
+     * <p>A chunked transmission is the one thing that must not survive: half an image addressed to
+     * the screen being left is not the start of an image on the screen being entered.</p>
+     */
+    void screenSwitched() {
+        resetUploadAndDecodes();
+    }
+
     void screenCleared() {
         resetUploadAndDecodes();
         emulator.deleteVisibleKittyGraphics();

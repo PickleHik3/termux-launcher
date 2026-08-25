@@ -248,6 +248,30 @@ public class KittyGraphicsProtocolTest extends TerminalTestCase {
             "\033_Gi=61;ENOENT:image not found\033\\");
     }
 
+    /**
+     * A full-screen program — herdr, tmux, vim, less — enters the alternate screen when it starts
+     * and leaves it when it exits. Neither is a reason to destroy the images the main screen is
+     * displaying: the two buffers own their own cells, so nothing needs throwing away to keep them
+     * apart, and the alternate buffer is blanked on entry anyway. Running one used to take the
+     * fastfetch banner with it and leave a hole where the logo had been.
+     */
+    public void testStoredImagesSurviveAnAlternateScreenRoundTrip() {
+        enterString("\033_Gi=70,a=t,f=24,s=1,v=1;AAAA\033\\");
+        mOutput.getOutputAndClear();
+        enterString("\033[?1049h");
+        enterString("\033[?1049l");
+        assertEnteringStringGivesResponse("\033_Gi=70,a=a\033\\", "");
+    }
+
+    /** A full terminal reset is still a reset: RIS means start again from nothing. */
+    public void testAFullResetStillClearsTheStore() {
+        enterString("\033_Gi=71,a=t,f=24,s=1,v=1;AAAA\033\\");
+        mOutput.getOutputAndClear();
+        enterString("\033c");
+        assertEnteringStringGivesResponse("\033_Gi=71,a=a\033\\",
+            "\033_Gi=71;ENOENT:image not found\033\\");
+    }
+
     public void testDeleteFrameFormsOnAFramelessImage() {
         enterString("\033_Gi=49,a=t,f=24,s=1,v=1;AAAA\033\\");
         // d=f with no extra frames is a no-op; d=F deletes the whole image.
