@@ -4015,6 +4015,15 @@ public final class TerminalEmulator {
         mKittyGraphics.shutdown();
     }
 
+    /**
+     * Under memory pressure, give up animation and keep the picture: every stored animation drops
+     * its frames and rests on the still image it started from. The placements stay, so no cell goes
+     * blank and no session is lost.
+     */
+    public void dropKittyAnimationFrames() {
+        mKittyGraphics.dropAllAnimationFrames();
+    }
+
     private void onKittyCellsCollected() {
         if (mPlacingKittyGraphics) return;
         mKittyGraphics.dropFramesOfUnreachableImages();

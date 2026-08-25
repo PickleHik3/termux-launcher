@@ -148,6 +148,7 @@ import com.termux.shared.theme.NightMode;
 import com.termux.shared.theme.ThemeUtils;
 import com.termux.shared.view.KeyboardUtils;
 import com.termux.shared.view.ViewUtils;
+import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
 import com.termux.view.TerminalView;
@@ -4122,7 +4123,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (wallpaper == null) {
             return null;
         }
+        try {
+            return drawWallpaperBackdrop(wallpaper, targetRect);
+        } finally {
+            // getDrawable() leaves the framework holding the decoded wallpaper in
+            // WallpaperManager$Globals for the life of the process — 16.6 MB of this one, at
+            // 1400x3100 against a 1080x2412 screen, because the wallpaper is zoomed. It is a pure
+            // cache and nothing here reads it again: the crop drawn just now is what gets cached,
+            // and this runs only when that cache misses, so the re-read costs nothing anyone waits
+            // for. Ours is drawn by the time this runs.
+            try {
+                wallpaperManager.forgetLoadedWallpaper();
+            } catch (Exception ignored) {
+                // A vendor implementation that refuses simply keeps its cache.
+            }
+        }
+    }
 
+    private Bitmap drawWallpaperBackdrop(@NonNull Drawable wallpaper, @NonNull Rect targetRect) {
         int targetWidth = Math.max(1, targetRect.width());
         int targetHeight = Math.max(1, targetRect.height());
         Rect frameRect = getManagedWallpaperFrameRect();
@@ -4954,12 +4972,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onTrimMemory(int level) {
         super.onTrimMemory(level);
-        if (level < TRIM_MEMORY_BACKGROUND || mIsInvalidState) {
+        if (mIsInvalidState) return;
+        // The terminal hears about pressure before the chrome does, and at levels the chrome
+        // ignores. RUNNING_LOW and RUNNING_CRITICAL arrive while we are still in front — which for
+        // a home app is exactly when a vendor's killer is circling — and the biggest thing a
+        // terminal holds by far is decoded animation frames: a single full-rate 512x512 GIF is
+        // over a hundred megabytes of them. Giving those up costs the logos their motion and
+        // nothing else; being killed costs every open session.
+        //
+        // RUNNING_MODERATE and UI_HIDDEN are deliberately not enough. The first is a hint, not
+        // pressure, and the second only means the UI went away — an animation that is merely
+        // hidden already costs nothing, because the visibility gate has stopped it.
+        if (level >= TRIM_MEMORY_RUNNING_LOW) dropTerminalAnimationFrames();
+        if (level < TRIM_MEMORY_BACKGROUND) {
             return;
         }
         mChrome.onTrimMemory();
         clearInAppKeyboardBackdrop();
         clearAccessoryRenderEffectBackdrop();
+    }
+
+    /** Drop every session's kitty animation frames, keeping the still image each rests on. */
+    private void dropTerminalAnimationFrames() {
+        if (mTermuxService == null) return;
+        for (com.termux.shared.termux.shell.command.runner.terminal.TermuxSession session
+                : mTermuxService.getTermuxSessions()) {
+            TerminalSession terminalSession = session.getTerminalSession();
+            if (terminalSession == null) continue;
+            TerminalEmulator emulator = terminalSession.getEmulator();
+            if (emulator != null) emulator.dropKittyAnimationFrames();
+        }
     }
 
     @Override

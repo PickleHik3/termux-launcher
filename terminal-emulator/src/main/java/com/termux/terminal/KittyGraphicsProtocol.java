@@ -1041,6 +1041,20 @@ final class KittyGraphicsProtocol {
         cancelAnimationTickIfNothingAnimates();
     }
 
+    /**
+     * Give up every animation, keeping the still image each one rests on. Frames are the one thing
+     * a terminal holds that it can lose without losing content: a logo stops moving where deleting
+     * the image would leave blank cells, and being killed would lose the session. Unlike the
+     * visibility gate this is not reversible — the sender has long exited and cannot retransmit —
+     * so it belongs to real memory pressure and nothing less.
+     */
+    void dropAllAnimationFrames() {
+        for (KittyImageStore.Entry entry : store.entries()) {
+            if (!entry.frames.isEmpty()) store.dropFrames(entry);
+        }
+        cancelAnimationTick();
+    }
+
     private void markPlaced(long imageId) {
         KittyImageStore.Entry entry = store.get(imageId);
         if (entry != null) entry.everPlaced = true;
