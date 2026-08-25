@@ -647,7 +647,9 @@ final class KittyGraphicsProtocol {
         final int editNumber = (command.displayRows >= 1 && command.displayRows <= frameCountAtAccept)
             ? command.displayRows : 0;
         final int estimate = (int) Math.min(Integer.MAX_VALUE, (long) initial.width * initial.height * 4L);
-        if (editNumber == 0 && store.wouldExceedFrameLimits(initial, estimate)) {
+        if (editNumber == 0 && store.wouldExceedFrameLimits(initial, estimate)
+            && !store.reclaimFrameBudget(initial, estimate,
+                imageId -> !emulator.kittyPlacementsFor(imageId).isEmpty())) {
             reply(command, "ENOSPC:frame store is full", true, false, id);
             return;
         }

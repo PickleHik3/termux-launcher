@@ -20,8 +20,10 @@ import java.util.Map;
  *
  * <p>The store is bounded in both image count and decoded bytes, and a full store answers
  * {@code ENOSPC} rather than evicting: escape sequences are untrusted input, and a client that
- * wants space back has the delete forms. Byte accounting uses explicit counts so the bookkeeping
- * is testable on the JVM, where {@link Bitmap} methods return defaults.</p>
+ * wants space back has the delete forms. Animation frames are the one exception — see
+ * {@link #reclaimFrameBudget} — because they are the only content whose loss degrades an image
+ * instead of removing it. Byte accounting uses explicit counts so the bookkeeping is testable on
+ * the JVM, where {@link Bitmap} methods return defaults.</p>
  */
 final class KittyImageStore {
 
@@ -107,6 +109,11 @@ final class KittyImageStore {
             this.columns = columns;
             this.rows = rows;
         }
+    }
+
+    /** Whether anything on either screen can still display an image; supplied by the caller. */
+    interface PlacementProbe {
+        boolean isPlaced(long imageId);
     }
 
     private final Map<Long, Entry> images = new LinkedHashMap<>();
@@ -283,6 +290,58 @@ final class KittyImageStore {
     boolean wouldExceedFrameLimits(Entry entry, int byteCount) {
         return totalFrameBytes + byteCount > MAX_FRAME_BYTES
             || entry.frames.size() + 1 > MAX_FRAMES_PER_IMAGE;
+    }
+
+    /**
+     * Make room in the frame quota for {@code needed} bytes, and report whether the frame now
+     * fits. Animations are dropped whole, and the newest transmission — the one being looked at —
+     * is dropped last: first the ones nothing can display any more, then, if the quota is still
+     * full, the oldest of the rest.
+     *
+     * <p>Unlike the image quota this reclaims rather than refusing. A full frame quota is normally
+     * the residue of animations the client can no longer reach — a sender that transmits with
+     * {@code I=} gets a fresh id per animation, so every previous one is orphaned, and the cells
+     * of the older ones sit in the scrollback where their playback is not worth a byte. Refusing
+     * instead turns every later animation in the session into a still image, with only a
+     * suppressible {@code ENOSPC} to say why. Losing frames costs an image its motion, not its
+     * pixels: it keeps displaying its root frame, and kitty is harsher here — it deletes whole
+     * images, which leaves blank cells behind.</p>
+     */
+    boolean reclaimFrameBudget(Entry keep, int needed, PlacementProbe probe) {
+        dropFramesUntilItFits(keep, needed, probe, true);
+        dropFramesUntilItFits(keep, needed, probe, false);
+        return !wouldExceedFrameLimits(keep, needed);
+    }
+
+    /** Oldest transmission first, so the animation on screen now is the last one to lose motion. */
+    private void dropFramesUntilItFits(Entry keep, int needed, PlacementProbe probe,
+                                       boolean unreachableOnly) {
+        for (Entry entry : images.values()) {
+            if (!wouldExceedFrameLimits(keep, needed)) return;
+            if (entry == keep || entry.frames.isEmpty()) continue;
+            if (unreachableOnly && (!entry.virtualPlacements.isEmpty()
+                || (probe != null && probe.isPlaced(entry.id)))) continue;
+            dropFrames(entry);
+        }
+    }
+
+    /**
+     * Drop an entry's extra frames and stop its animation, leaving the root frame as what it
+     * displays. Returns the bytes reclaimed. The bitmaps are dropped, never recycled: a compose or
+     * a placement rasterization on the decode worker may still be reading one.
+     */
+    int dropFrames(Entry entry) {
+        int freed = 0;
+        for (Frame frame : entry.frames) freed += frame.byteCount;
+        entry.frames.clear();
+        totalFrameBytes -= freed;
+        entry.animationState = ANIMATION_STOPPED;
+        entry.currentFrame = 0;
+        entry.currentLoop = 0;
+        entry.frameShownAtUptime = 0;
+        // Only the root frame's gap is left to count.
+        entry.animationDurationMs = entry.rootGapMs;
+        return freed;
     }
 
     void addFrame(Entry entry, Bitmap bitmap, int byteCount, int gapMs) {

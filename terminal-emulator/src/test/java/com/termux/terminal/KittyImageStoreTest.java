@@ -76,6 +76,17 @@ public class KittyImageStoreTest extends TestCase {
         assertEquals(0, store.resolveId(0, 7));
     }
 
+    /** An animated entry under an arbitrary id, so several can share one store. */
+    private static KittyImageStore.Entry animatedEntry(KittyImageStore store, long id, int frames,
+                                                       int gapMs, int frameBytes) {
+        store.reserve(id, 0, 2, 2, 16);
+        store.complete(id, null, 16);
+        KittyImageStore.Entry entry = store.get(id);
+        KittyImageStore.setFrameGap(entry, 1, gapMs);
+        for (int i = 0; i < frames; i++) store.addFrame(entry, null, frameBytes, gapMs);
+        return entry;
+    }
+
     private static KittyImageStore.Entry animatedEntry(KittyImageStore store, int frames, int gapMs) {
         store.reserve(1, 0, 2, 2, 16);
         store.complete(1, null, 16);
@@ -160,5 +171,76 @@ public class KittyImageStoreTest extends TestCase {
         assertTrue(store.removeFrame(entry, 99));
         assertEquals("an out-of-range number clamps to the last frame", 1, KittyImageStore.frameCount(entry));
         assertFalse("no extra frames left to delete", store.removeFrame(entry, 1));
+    }
+
+    public void testDropFramesReleasesTheQuotaAndStopsTheAnimation() {
+        KittyImageStore store = new KittyImageStore();
+        KittyImageStore.Entry entry = animatedEntry(store, 3, 100);
+        entry.animationState = KittyImageStore.ANIMATION_RUNNING;
+        entry.currentFrame = 2;
+        entry.currentLoop = 1;
+        entry.frameShownAtUptime = 5000;
+
+        assertEquals(48, store.dropFrames(entry));
+        assertEquals(0, store.totalFrameBytes());
+        assertEquals("only the root frame is left", 1, KittyImageStore.frameCount(entry));
+        assertEquals("the root frame becomes what is displayed", 0, entry.currentFrame);
+        assertEquals(KittyImageStore.ANIMATION_STOPPED, entry.animationState);
+        assertEquals("the root gap is all the duration that is left", 100, entry.animationDurationMs);
+        assertFalse(KittyImageStore.isAnimatable(entry));
+        assertEquals("the image itself survives and stays placeable", entry, store.get(1));
+        assertEquals(0, store.dropFrames(entry));
+    }
+
+    public void testReclaimFrameBudgetDropsOnlyUnreachableAnimations() {
+        KittyImageStore store = new KittyImageStore();
+        int frameBytes = (int) (KittyImageStore.MAX_FRAME_BYTES / 4);
+        KittyImageStore.Entry orphan = animatedEntry(store, 1, 2, 100, frameBytes);
+        KittyImageStore.Entry placed = animatedEntry(store, 2, 1, 100, frameBytes);
+        KittyImageStore.Entry placeholder = animatedEntry(store, 3, 1, 100, frameBytes);
+        store.putVirtualPlacement(placeholder,
+            new KittyImageStore.VirtualPlacement(0, 0, 0, 2, 2, 2, 2));
+        KittyImageStore.Entry incoming = animatedEntry(store, 4, 0, 100, frameBytes);
+
+        assertTrue("the quota is full", store.wouldExceedFrameLimits(incoming, frameBytes));
+        assertTrue(store.reclaimFrameBudget(incoming, frameBytes, id -> id == 2));
+        assertEquals("the unreachable animation paid for the new frame", 1,
+            KittyImageStore.frameCount(orphan));
+        assertEquals("an animation with a placement is untouched", 2,
+            KittyImageStore.frameCount(placed));
+        assertEquals("an animation with a placeholder prototype is untouched", 2,
+            KittyImageStore.frameCount(placeholder));
+        assertFalse(store.wouldExceedFrameLimits(incoming, frameBytes));
+    }
+
+    public void testReclaimFrameBudgetFallsBackToTheOldestPlacedAnimation() {
+        KittyImageStore store = new KittyImageStore();
+        int frameBytes = (int) (KittyImageStore.MAX_FRAME_BYTES / 2);
+        KittyImageStore.Entry oldest = animatedEntry(store, 1, 1, 100, frameBytes);
+        KittyImageStore.Entry incoming = animatedEntry(store, 2, 1, 100, frameBytes);
+
+        assertTrue("the quota is full with nothing unreachable in it",
+            store.wouldExceedFrameLimits(incoming, frameBytes));
+        assertTrue(store.reclaimFrameBudget(incoming, frameBytes, id -> true));
+        assertEquals("the oldest animation gave up its motion", 1,
+            KittyImageStore.frameCount(oldest));
+        assertEquals("the growing animation never drops its own frames", 2,
+            KittyImageStore.frameCount(incoming));
+    }
+
+    public void testReclaimFrameBudgetRefusesWhatCannotFitAtAll() {
+        KittyImageStore store = new KittyImageStore();
+        KittyImageStore.Entry entry = animatedEntry(store, 1, 1, 100, 16);
+        int impossible = (int) Math.min(Integer.MAX_VALUE, KittyImageStore.MAX_FRAME_BYTES + 1);
+
+        assertFalse("no amount of reclaiming fits a frame larger than the whole quota",
+            store.reclaimFrameBudget(entry, impossible, id -> false));
+        assertEquals("and nothing was thrown away chasing it", 2,
+            KittyImageStore.frameCount(entry));
+
+        KittyImageStore.Entry full = animatedEntry(store, 2, KittyImageStore.MAX_FRAMES_PER_IMAGE,
+            100, 0);
+        assertFalse("a per-image frame count is not a byte problem, so reclaiming cannot help",
+            store.reclaimFrameBudget(full, 0, id -> false));
     }
 }
