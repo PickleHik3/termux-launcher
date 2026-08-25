@@ -181,7 +181,7 @@ index bc33e67..4c83f6c 100644
      #endif
  
      char* chars = imageData->ffBase64Encode(blob, length, &length);
-@@ -530,26 +640,84 @@ static bool printImageKitty(FFLogoRequestData* requestData, const ImageData* ima
+@@ -530,26 +640,89 @@ static bool printImageKitty(FFLogoRequestData* requestData, const ImageData* ima
          return false;
      }
  
@@ -264,8 +264,13 @@ index bc33e67..4c83f6c 100644
 +    if (frameIndex > 1) {
 +        // The base frame has no delay by default. Set it explicitly, then let the
 +        // terminal loop the uploaded frames after fastfetch has exited.
++        //
++        // v is a loop count, and kitty reads v=1 as "loop forever" (it stores v - 1, and zero
++        // means endless) — so the obvious spelling never stops. A startup banner does not need
++        // endless playback: it keeps the terminal compositing a frame at a time, and holding
++        // every frame, for as long as the session lives. v=4 plays it three times and rests.
 +        ffStrbufAppendF(&result, "\033_Ga=a,i=%u,q=2,r=1,z=%u\033\\", (unsigned) FF_KITTY_IMAGE_ID, firstFrameDelay);
-+        ffStrbufAppendF(&result, "\033_Ga=a,i=%u,q=2,s=3,v=1\033\\", (unsigned) FF_KITTY_IMAGE_ID);
++        ffStrbufAppendF(&result, "\033_Ga=a,i=%u,q=2,s=3,v=4\033\\", (unsigned) FF_KITTY_IMAGE_ID);
 +    }
 +
 +    printImagePixels(requestData, &result, allCompressed ? FF_CACHE_FILE_KITTY_COMPRESSED : FF_CACHE_FILE_KITTY_UNCOMPRESSED);
@@ -275,7 +280,7 @@ index bc33e67..4c83f6c 100644
      #ifdef FF_HAVE_CHAFA
          #include <chafa.h>
  static bool printImageChafa(FFLogoRequestData* requestData, const ImageData* imageData) {
-@@ -661,10 +829,12 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
+@@ -661,10 +834,12 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
      FF_LIBRARY_LOAD_SYMBOL(imData->library, DestroyImage, FF_LOGO_IMAGE_RESULT_INIT_ERROR)
  
      ImageData imageData;
@@ -288,7 +293,7 @@ index bc33e67..4c83f6c 100644
  
      ffMagickCoreGenesis(nullptr, MagickFalse);
  
-@@ -692,6 +862,18 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
+@@ -692,6 +867,18 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
          return FF_LOGO_IMAGE_RESULT_RUN_ERROR;
      }
  
@@ -307,7 +312,7 @@ index bc33e67..4c83f6c 100644
      if (requestData->logoPixelWidth == 0 && requestData->logoPixelHeight == 0) {
          requestData->logoPixelWidth = (uint32_t) imageData.image->columns;
          requestData->logoPixelHeight = (uint32_t) imageData.image->rows;
-@@ -711,14 +893,16 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
+@@ -711,14 +898,16 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
          return FF_LOGO_IMAGE_RESULT_RUN_ERROR;
      }
  
@@ -331,7 +336,7 @@ index bc33e67..4c83f6c 100644
  
      imageData.imageInfo = ffAcquireImageInfo();
      if (imageData.imageInfo == nullptr) {
-@@ -734,7 +918,7 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
+@@ -734,7 +923,7 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
          printSuccessful = printImageChafa(requestData, &imageData);
      #endif
      } else if (requestData->type == FF_LOGO_TYPE_IMAGE_KITTY) {
@@ -340,7 +345,7 @@ index bc33e67..4c83f6c 100644
      } else if (requestData->type == FF_LOGO_TYPE_IMAGE_SIXEL) {
          printSuccessful = printImageSixel(requestData, &imageData);
      }
-@@ -862,8 +1046,17 @@ static bool printCachedPixel(FFLogoRequestData* requestData) {
+@@ -862,8 +1051,17 @@ static bool printCachedPixel(FFLogoRequestData* requestData) {
          }
      }
  
