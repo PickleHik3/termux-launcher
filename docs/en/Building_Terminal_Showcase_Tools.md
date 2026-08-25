@@ -97,10 +97,28 @@ Use `"kitty"`, not `"kitty-direct"`: Android terminals cannot use Kitty's deskto
 path, while the direct in-band protocol is supported. Fastfetch's image cache is versioned by the
 patch so an old static cached logo is not reused.
 
-The patch sends the image with a column count but no row count. Giving both makes a terminal
-stretch the image to fill that exact cell box, and the row count can only be a whole number of
-cells, so a logo whose pixel height is not a multiple of the cell height comes out visibly
-squashed. With columns alone the terminal derives the height from the image's own aspect ratio.
+The patch places the logo through Kitty's Unicode placeholders, the mechanism
+`kitten icat --unicode-placeholder` uses: the image is transmitted once as a virtual placement
+(`U=1`) and Fastfetch then prints a grid of U+10EEEE cells whose foreground colour names the image
+id and whose combining marks name each cell's row and column. Nothing about the placement depends
+on where a terminal leaves the cursor after a graphics command, and the logo is ordinary text, so
+it scrolls with the buffer and is repainted from the stored image by anything that redraws those
+cells — tmux, a full-screen editor, a resize.
+
+A placeholder grid is a whole number of cells, so the transmission carries both a column and a row
+count and a logo whose pixel height is not a multiple of the cell height sits in a box up to one
+cell taller than itself; Termux Launcher scales it to fit that box without distorting it. The image
+cache is versioned by the patch (`kittyc4`/`kittyu4`), so a logo cached by an earlier build is not
+replayed.
+
+This needs a terminal that implements Unicode placeholders, not only the graphics protocol. Termux
+Launcher does; a terminal that ignores `U=1` stores the image, draws nothing, and shows the
+placeholder cells as missing glyphs.
+
+Set `"printRemaining": true` whenever the logo is taller than the module list. The logo is text
+now, so the shell prompt that lands inside it clears those lines and the bottom of the image
+disappears; `printRemaining` pads past the logo before Fastfetch exits. Sizing the logo to the
+module list (`"width"`/`"height"`) does the same job by making it shorter.
 
 Cross-building instead of building on the phone needs one extra piece: `recipes/cross/
 termux-pwd-polyfill.h`, force-included by `recipes/cross/build-fastfetch.sh`. Bionic answers

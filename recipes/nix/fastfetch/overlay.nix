@@ -2,8 +2,9 @@
 final: prev: {
   # fastfetch with the kitty animation-frames patch (animated gif logos,
   # matching the com.termux daily setup). Patch decodes gif frames via
-  # ImageMagick's CoalesceImages and transmits them with the kitty
-  # animation protocol, which the launcher terminal implements.
+  # ImageMagick's CoalesceImages, transmits them with the kitty animation
+  # protocol, and places the logo through Unicode placeholders (U=1), both
+  # of which the launcher terminal implements.
   fastfetch = prev.fastfetch.overrideAttrs (old: {
     version = "2.67.0";
     src = final.fetchFromGitHub {

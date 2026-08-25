@@ -1,5 +1,5 @@
 diff --git a/src/logo/image/image.c b/src/logo/image/image.c
-index bc33e67f7..3863dc451 100644
+index bc33e67..4c83f6c 100644
 --- a/src/logo/image/image.c
 +++ b/src/logo/image/image.c
 @@ -347,8 +347,8 @@ static bool printImageKittyDirect(bool printError) {
@@ -8,10 +8,10 @@ index bc33e67f7..3863dc451 100644
      #define FF_CACHE_FILE_SIXEL "sixel"
 -    #define FF_CACHE_FILE_KITTY_COMPRESSED "kittyc"
 -    #define FF_CACHE_FILE_KITTY_UNCOMPRESSED "kittyu"
-+    #define FF_CACHE_FILE_KITTY_COMPRESSED "kittyc3"
-+    #define FF_CACHE_FILE_KITTY_UNCOMPRESSED "kittyu3"
++    #define FF_CACHE_FILE_KITTY_COMPRESSED "kittyc4"
++    #define FF_CACHE_FILE_KITTY_UNCOMPRESSED "kittyu4"
      #define FF_CACHE_FILE_CHAFA "chafa"
-
+ 
      #include <string.h>
 @@ -403,6 +403,8 @@ typedef struct ImageData {
      FF_LIBRARY_SYMBOL(CopyMagickString)
@@ -19,26 +19,128 @@ index bc33e67f7..3863dc451 100644
      FF_LIBRARY_SYMBOL(Base64Encode)
 +    FF_LIBRARY_SYMBOL(CoalesceImages)
 +    FF_LIBRARY_SYMBOL(DestroyImage)
-
+ 
      ImageInfo* imageInfo;
      Image* image;
-@@ -463,7 +465,7 @@ static void printImagePixels(FFLogoRequestData* requestData, const FFstrbuf* res
+@@ -436,6 +438,99 @@ static void writeCacheUint32(FFLogoRequestData* requestData, uint32_t value, con
+     writeCacheStrbuf(requestData, &content, cacheFileName);
+ }
+ 
++// The logo is placed the way `kitten icat --unicode-placeholder` places one: the image is
++// transmitted as a virtual placement (U=1) and then referenced by a grid of U+10EEEE cells whose
++// foreground colour carries the image id and whose combining marks carry the cell's row and column
++// in the image. Nothing depends on where a terminal leaves the cursor after a graphics command,
++// and the grid is ordinary text, so the logo scrolls with the buffer and is redrawn from the
++// stored image by anything that repaints those cells — tmux, an editor, a resize.
++//
++// The image id is fixed rather than random because a cached transmission is replayed by a later
++// run, which then has to print placeholders naming the same id. All three of its bytes are
++// non-zero, so nothing is lost when it is written out as an RGB colour.
++    #define FF_KITTY_IMAGE_ID 0xFA57FEu
++
++// kitty's rowcolumn-diacritics.txt: the array index is the row or column the mark encodes.
++static const uint32_t kittyRowColumnDiacritics[] = {
++    0x0305, 0x030d, 0x030e, 0x0310, 0x0312, 0x033d, 0x033e, 0x033f,
++    0x0346, 0x034a, 0x034b, 0x034c, 0x0350, 0x0351, 0x0352, 0x0357,
++    0x035b, 0x0363, 0x0364, 0x0365, 0x0366, 0x0367, 0x0368, 0x0369,
++    0x036a, 0x036b, 0x036c, 0x036d, 0x036e, 0x036f, 0x0483, 0x0484,
++    0x0485, 0x0486, 0x0487, 0x0592, 0x0593, 0x0594, 0x0595, 0x0597,
++    0x0598, 0x0599, 0x059c, 0x059d, 0x059e, 0x059f, 0x05a0, 0x05a1,
++    0x05a8, 0x05a9, 0x05ab, 0x05ac, 0x05af, 0x05c4, 0x0610, 0x0611,
++    0x0612, 0x0613, 0x0614, 0x0615, 0x0616, 0x0617, 0x0657, 0x0658,
++    0x0659, 0x065a, 0x065b, 0x065d, 0x065e, 0x06d6, 0x06d7, 0x06d8,
++    0x06d9, 0x06da, 0x06db, 0x06dc, 0x06df, 0x06e0, 0x06e1, 0x06e2,
++    0x06e4, 0x06e7, 0x06e8, 0x06eb, 0x06ec, 0x0730, 0x0732, 0x0733,
++    0x0735, 0x0736, 0x073a, 0x073d, 0x073f, 0x0740, 0x0741, 0x0743,
++    0x0745, 0x0747, 0x0749, 0x074a, 0x07eb, 0x07ec, 0x07ed, 0x07ee,
++    0x07ef, 0x07f0, 0x07f1, 0x07f3, 0x0816, 0x0817, 0x0818, 0x0819,
++    0x081b, 0x081c, 0x081d, 0x081e, 0x081f, 0x0820, 0x0821, 0x0822,
++    0x0823, 0x0825, 0x0826, 0x0827, 0x0829, 0x082a, 0x082b, 0x082c,
++    0x082d, 0x0951, 0x0953, 0x0954, 0x0f82, 0x0f83, 0x0f86, 0x0f87,
++    0x135d, 0x135e, 0x135f, 0x17dd, 0x193a, 0x1a17, 0x1a75, 0x1a76,
++    0x1a77, 0x1a78, 0x1a79, 0x1a7a, 0x1a7b, 0x1a7c, 0x1b6b, 0x1b6d,
++    0x1b6e, 0x1b6f, 0x1b70, 0x1b71, 0x1b72, 0x1b73, 0x1cd0, 0x1cd1,
++    0x1cd2, 0x1cda, 0x1cdb, 0x1ce0, 0x1dc0, 0x1dc1, 0x1dc3, 0x1dc4,
++    0x1dc5, 0x1dc6, 0x1dc7, 0x1dc8, 0x1dc9, 0x1dcb, 0x1dcc, 0x1dd1,
++    0x1dd2, 0x1dd3, 0x1dd4, 0x1dd5, 0x1dd6, 0x1dd7, 0x1dd8, 0x1dd9,
++    0x1dda, 0x1ddb, 0x1ddc, 0x1ddd, 0x1dde, 0x1ddf, 0x1de0, 0x1de1,
++    0x1de2, 0x1de3, 0x1de4, 0x1de5, 0x1de6, 0x1dfe, 0x20d0, 0x20d1,
++    0x20d4, 0x20d5, 0x20d6, 0x20d7, 0x20db, 0x20dc, 0x20e1, 0x20e7,
++    0x20e9, 0x20f0, 0x2cef, 0x2cf0, 0x2cf1, 0x2de0, 0x2de1, 0x2de2,
++    0x2de3, 0x2de4, 0x2de5, 0x2de6, 0x2de7, 0x2de8, 0x2de9, 0x2dea,
++    0x2deb, 0x2dec, 0x2ded, 0x2dee, 0x2def, 0x2df0, 0x2df1, 0x2df2,
++    0x2df3, 0x2df4, 0x2df5, 0x2df6, 0x2df7, 0x2df8, 0x2df9, 0x2dfa,
++    0x2dfb, 0x2dfc, 0x2dfd, 0x2dfe, 0x2dff, 0xa66f, 0xa67c, 0xa67d,
++    0xa6f0, 0xa6f1, 0xa8e0, 0xa8e1, 0xa8e2, 0xa8e3, 0xa8e4, 0xa8e5,
++    0xa8e6, 0xa8e7, 0xa8e8, 0xa8e9, 0xa8ea, 0xa8eb, 0xa8ec, 0xa8ed,
++    0xa8ee, 0xa8ef, 0xa8f0, 0xa8f1, 0xaab0, 0xaab2, 0xaab3, 0xaab7,
++    0xaab8, 0xaabe, 0xaabf, 0xaac1, 0xfe20, 0xfe21, 0xfe22, 0xfe23,
++    0xfe24, 0xfe25, 0xfe26, 0x10a0f, 0x10a38, 0x1d185, 0x1d186, 0x1d187,
++    0x1d188, 0x1d189, 0x1d1aa, 0x1d1ab, 0x1d1ac, 0x1d1ad, 0x1d242, 0x1d243,
++    0x1d244
++};
++
++static void appendKittyPlaceholderRow(FFstrbuf* result, uint32_t row, uint32_t columns) {
++    ffStrbufAppendF(result, "\e[38;2;%u;%u;%um",
++        (unsigned) ((FF_KITTY_IMAGE_ID >> 16) & 0xFF),
++        (unsigned) ((FF_KITTY_IMAGE_ID >> 8) & 0xFF),
++        (unsigned) (FF_KITTY_IMAGE_ID & 0xFF));
++    for (uint32_t column = 0; column < columns; ++column) {
++        ffStrbufAppendUtf32CodePoint(result, 0x10EEEEu);
++        ffStrbufAppendUtf32CodePoint(result, kittyRowColumnDiacritics[row]);
++        ffStrbufAppendUtf32CodePoint(result, kittyRowColumnDiacritics[column]);
++    }
++    ffStrbufAppendS(result, "\e[39m");
++}
++
++// Print the grid that references the transmitted image, one image row per terminal line. It ends
++// on the image's last row, which is where a cursor-moving graphics command would have left the
++// cursor, so the callers' existing cursor arithmetic still holds. The grid is printed rather than
++// stored in the transmission cache so that changing a padding does not replay a stale layout.
++static void printKittyPlaceholders(uint32_t characterWidth, uint32_t characterHeight) {
++    const FFOptionsLogo* options = &instance.config.logo;
++    uint32_t limit = (uint32_t) (sizeof(kittyRowColumnDiacritics) / sizeof(*kittyRowColumnDiacritics));
++    uint32_t columns = characterWidth < limit ? characterWidth : limit;
++    uint32_t rows = characterHeight < limit ? characterHeight : limit;
++
++    FF_STRBUF_AUTO_DESTROY result = ffStrbufCreateA(rows * (columns * 12 + 64));
++    for (uint32_t row = 0; row < rows; ++row) {
++        if (row > 0) {
++            ffStrbufAppendC(&result, '\n');
++            if (options->position == FF_LOGO_POSITION_RIGHT) {
++                ffStrbufAppendF(&result, "\e[9999999C\e[%uD", (unsigned) (options->paddingRight + columns));
++            } else if (options->paddingLeft) {
++                ffStrbufAppendF(&result, "\e[%uC", (unsigned) options->paddingLeft);
++            }
++        }
++        appendKittyPlaceholderRow(&result, row, columns);
++    }
++    fflush(stdout);
++    ffWriteFDBuffer(FFUnixFD2NativeFD(STDOUT_FILENO), &result);
++}
++
+ static void printImagePixels(FFLogoRequestData* requestData, const FFstrbuf* result, const char* cacheFileName) {
+     const FFOptionsLogo* options = &instance.config.logo;
+     // Calculate character dimensions
+@@ -463,6 +558,10 @@ static void printImagePixels(FFLogoRequestData* requestData, const FFstrbuf* res
      fflush(stdout);
      ffWriteFDBuffer(FFUnixFD2NativeFD(STDOUT_FILENO), result);
-
--    if (options->position != FF_LOGO_POSITION_TOP) {
-+    if (options->position != FF_LOGO_POSITION_TOP && !(requestData->type == FF_LOGO_TYPE_IMAGE_KITTY && options->position == FF_LOGO_POSITION_LEFT)) {
+ 
++    if (requestData->type == FF_LOGO_TYPE_IMAGE_KITTY) {
++        printKittyPlaceholders(requestData->logoCharacterWidth, requestData->logoCharacterHeight);
++    }
++
+     if (options->position != FF_LOGO_POSITION_TOP) {
          // Go to upper left corner
          printf("\e[1G\e[%uA", instance.state.logoHeight);
-     }
-@@ -492,11 +494,14 @@ static bool printImageSixel(FFLogoRequestData* requestData, const ImageData* ima
+@@ -492,11 +591,14 @@ static bool printImageSixel(FFLogoRequestData* requestData, const ImageData* ima
      return true;
  }
-
+ 
 -static void appendKittyChunk(FFstrbuf* result, const char** blob, size_t* length, bool printEscapeCode) {
 +static void appendKittyChunk(FFstrbuf* result, const char** blob, size_t* length, bool printEscapeCode, bool animationFrame) {
      uint32_t chunkSize = *length > FF_KITTY_MAX_CHUNK_SIZE ? FF_KITTY_MAX_CHUNK_SIZE : (uint32_t) *length;
-
+ 
      if (printEscapeCode) {
          ffStrbufAppendS(result, "\033_G");
 +        if (animationFrame) {
@@ -47,10 +149,10 @@ index bc33e67f7..3863dc451 100644
      } else {
          ffStrbufAppendC(result, ',');
      }
-@@ -509,19 +514,27 @@ static void appendKittyChunk(FFstrbuf* result, const char** blob, size_t* length
+@@ -509,19 +611,27 @@ static void appendKittyChunk(FFstrbuf* result, const char** blob, size_t* length
      *blob += chunkSize;
  }
-
+ 
 -static bool printImageKitty(FFLogoRequestData* requestData, const ImageData* imageData) {
 +static bool appendImageKitty(
 +    FFstrbuf* result,
@@ -62,14 +164,14 @@ index bc33e67f7..3863dc451 100644
 +    bool* compressed
 +) {
      imageData->ffCopyMagickString(imageData->imageInfo->magick, "RGBA", 5);
-
+ 
      size_t length;
 -    void* blob = imageData->ffImageToBlob(imageData->imageInfo, imageData->image, &length, imageData->exceptionInfo);
 +    void* blob = imageData->ffImageToBlob(imageData->imageInfo, image, &length, imageData->exceptionInfo);
      if (!checkAllocationResult(blob, length)) {
          return false;
      }
-
+ 
      #ifdef FF_HAVE_ZLIB
 -    bool isCompressed = compressBlob(&blob, &length);
 +    *compressed = compressBlob(&blob, &length);
@@ -77,27 +179,28 @@ index bc33e67f7..3863dc451 100644
 -    bool isCompressed = false;
 +    *compressed = false;
      #endif
-
+ 
      char* chars = imageData->ffBase64Encode(blob, length, &length);
-@@ -530,26 +543,83 @@ static bool printImageKitty(FFLogoRequestData* requestData, const ImageData* ima
+@@ -530,26 +640,84 @@ static bool printImageKitty(FFLogoRequestData* requestData, const ImageData* ima
          return false;
      }
-
+ 
 -    FF_STRBUF_AUTO_DESTROY result = ffStrbufCreateA((uint32_t) (length + 1024));
 -
      const char* currentPos = chars;
      size_t remainingLength = length;
-
+ 
 -    ffStrbufAppendF(&result, "\033_Ga=T,f=32,s=%u,v=%u", requestData->logoPixelWidth, requestData->logoPixelHeight);
 -    if (isCompressed) {
 -        ffStrbufAppendS(&result, ",o=z");
 +    if (animationFrame) {
-+        ffStrbufAppendF(result, "\033_Ga=f,I=1,q=2,f=32,s=%u,v=%u,z=%u,X=1", requestData->logoPixelWidth, requestData->logoPixelHeight, frameDelay);
++        ffStrbufAppendF(result, "\033_Ga=f,i=%u,q=2,f=32,s=%u,v=%u,z=%u,X=1", (unsigned) FF_KITTY_IMAGE_ID, requestData->logoPixelWidth, requestData->logoPixelHeight, frameDelay);
 +    } else {
-+        ffStrbufAppendF(result, "\033_Ga=T,I=1,q=2,f=32,s=%u,v=%u,c=%u", requestData->logoPixelWidth, requestData->logoPixelHeight, requestData->logoCharacterWidth);
-+        if (instance.config.logo.position == FF_LOGO_POSITION_LEFT) {
-+            ffStrbufAppendS(result, ",C=1");
-+        }
++        // U=1 asks for a virtual placement: the terminal keeps the image and draws it only where
++        // placeholder cells ask for it, so this transmission paints nothing and moves nothing.
++        // c and r size that grid, and a grid is a whole number of cells, so a logo whose pixel
++        // height is not a multiple of the cell height is placed in a box up to one cell taller.
++        ffStrbufAppendF(result, "\033_Ga=T,U=1,i=%u,q=2,f=32,s=%u,v=%u,c=%u,r=%u", (unsigned) FF_KITTY_IMAGE_ID, requestData->logoPixelWidth, requestData->logoPixelHeight, requestData->logoCharacterWidth, requestData->logoCharacterHeight);
      }
 -    appendKittyChunk(&result, &currentPos, &remainingLength, false);
 +    if (*compressed) {
@@ -108,13 +211,13 @@ index bc33e67f7..3863dc451 100644
 -        appendKittyChunk(&result, &currentPos, &remainingLength, true);
 +        appendKittyChunk(result, &currentPos, &remainingLength, true, animationFrame);
      }
-
+ 
 -    printImagePixels(requestData, &result, isCompressed ? FF_CACHE_FILE_KITTY_COMPRESSED : FF_CACHE_FILE_KITTY_UNCOMPRESSED);
 -
      free(chars);
      return true;
  }
-
+ 
 +static uint32_t getFrameDelayMs(const Image* image) {
 +    if (image->delay == 0) {
 +        return 40;
@@ -161,8 +264,8 @@ index bc33e67f7..3863dc451 100644
 +    if (frameIndex > 1) {
 +        // The base frame has no delay by default. Set it explicitly, then let the
 +        // terminal loop the uploaded frames after fastfetch has exited.
-+        ffStrbufAppendF(&result, "\033_Ga=a,I=1,q=2,r=1,z=%u\033\\", firstFrameDelay);
-+        ffStrbufAppendS(&result, "\033_Ga=a,I=1,q=2,s=3,v=1\033\\");
++        ffStrbufAppendF(&result, "\033_Ga=a,i=%u,q=2,r=1,z=%u\033\\", (unsigned) FF_KITTY_IMAGE_ID, firstFrameDelay);
++        ffStrbufAppendF(&result, "\033_Ga=a,i=%u,q=2,s=3,v=1\033\\", (unsigned) FF_KITTY_IMAGE_ID);
 +    }
 +
 +    printImagePixels(requestData, &result, allCompressed ? FF_CACHE_FILE_KITTY_COMPRESSED : FF_CACHE_FILE_KITTY_UNCOMPRESSED);
@@ -172,23 +275,23 @@ index bc33e67f7..3863dc451 100644
      #ifdef FF_HAVE_CHAFA
          #include <chafa.h>
  static bool printImageChafa(FFLogoRequestData* requestData, const ImageData* imageData) {
-@@ -661,10 +731,12 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
+@@ -661,10 +829,12 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
      FF_LIBRARY_LOAD_SYMBOL(imData->library, DestroyImage, FF_LOGO_IMAGE_RESULT_INIT_ERROR)
-
+ 
      ImageData imageData;
 +    imageData.ffDestroyImage = ffDestroyImage;
-
+ 
      FF_LIBRARY_LOAD_SYMBOL_VAR(imData->library, imageData, CopyMagickString, FF_LOGO_IMAGE_RESULT_INIT_ERROR)
      FF_LIBRARY_LOAD_SYMBOL_VAR(imData->library, imageData, ImageToBlob, FF_LOGO_IMAGE_RESULT_INIT_ERROR)
      FF_LIBRARY_LOAD_SYMBOL_VAR(imData->library, imageData, Base64Encode, FF_LOGO_IMAGE_RESULT_INIT_ERROR)
 +    FF_LIBRARY_LOAD_SYMBOL_VAR(imData->library, imageData, CoalesceImages, FF_LOGO_IMAGE_RESULT_INIT_ERROR)
-
+ 
      ffMagickCoreGenesis(nullptr, MagickFalse);
-
-@@ -692,6 +764,18 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
+ 
+@@ -692,6 +862,18 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
          return FF_LOGO_IMAGE_RESULT_RUN_ERROR;
      }
-
+ 
 +    if (requestData->type == FF_LOGO_TYPE_IMAGE_KITTY && imageData.image->next != nullptr) {
 +        Image* coalesced = imageData.ffCoalesceImages(imageData.image, imageData.exceptionInfo);
 +        if (coalesced == nullptr) {
@@ -204,10 +307,10 @@ index bc33e67f7..3863dc451 100644
      if (requestData->logoPixelWidth == 0 && requestData->logoPixelHeight == 0) {
          requestData->logoPixelWidth = (uint32_t) imageData.image->columns;
          requestData->logoPixelHeight = (uint32_t) imageData.image->rows;
-@@ -711,14 +795,16 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
+@@ -711,14 +893,16 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
          return FF_LOGO_IMAGE_RESULT_RUN_ERROR;
      }
-
+ 
 -    Image* resized = imData->resizeFunc(imageData.image, requestData->logoPixelWidth, requestData->logoPixelHeight, imageData.exceptionInfo);
 -    ffDestroyImage(imageData.image);
 -    if (resized == nullptr) {
@@ -225,10 +328,10 @@ index bc33e67f7..3863dc451 100644
 +        imageData.image = resized;
      }
 -    imageData.image = resized;
-
+ 
      imageData.imageInfo = ffAcquireImageInfo();
      if (imageData.imageInfo == nullptr) {
-@@ -734,7 +820,7 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
+@@ -734,7 +918,7 @@ FFLogoImageResult ffLogoPrintImageImpl(FFLogoRequestData* requestData, const FFI
          printSuccessful = printImageChafa(requestData, &imageData);
      #endif
      } else if (requestData->type == FF_LOGO_TYPE_IMAGE_KITTY) {
@@ -237,12 +340,21 @@ index bc33e67f7..3863dc451 100644
      } else if (requestData->type == FF_LOGO_TYPE_IMAGE_SIXEL) {
          printSuccessful = printImageSixel(requestData, &imageData);
      }
-@@ -865,7 +951,7 @@ static bool printCachedPixel(FFLogoRequestData* requestData) {
+@@ -862,8 +1046,17 @@ static bool printCachedPixel(FFLogoRequestData* requestData) {
+         }
+     }
+ 
++    if (requestData->type == FF_LOGO_TYPE_IMAGE_KITTY) {
++        printKittyPlaceholders(requestData->logoCharacterWidth, requestData->logoCharacterHeight);
++    }
++
      instance.state.logoWidth = requestData->logoCharacterWidth + options->paddingLeft + options->paddingRight;
      instance.state.logoHeight = requestData->logoCharacterHeight + options->paddingTop;
-
--    if (options->position != FF_LOGO_POSITION_TOP) {
-+    if (options->position != FF_LOGO_POSITION_TOP && !(requestData->type == FF_LOGO_TYPE_IMAGE_KITTY && options->position == FF_LOGO_POSITION_LEFT)) {
++    if (requestData->type == FF_LOGO_TYPE_IMAGE_KITTY) {
++        // The placeholder grid ends on the image's last row, so the cursor is one row higher than
++        // this path assumes; printImagePixels() subtracts the same row on the uncached path.
++        --instance.state.logoHeight;
++    }
+ 
+     if (options->position != FF_LOGO_POSITION_TOP) {
          // Go to upper left corner
-         printf("\e[1G\e[%uA", instance.state.logoHeight);
-     }
