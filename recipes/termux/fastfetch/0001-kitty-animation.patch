@@ -265,12 +265,12 @@ index bc33e67..4c83f6c 100644
 +        // The base frame has no delay by default. Set it explicitly, then let the
 +        // terminal loop the uploaded frames after fastfetch has exited.
 +        //
-+        // v is a loop count, and kitty reads v=1 as "loop forever" (it stores v - 1, and zero
-+        // means endless) — so the obvious spelling never stops. A startup banner does not need
-+        // endless playback: it keeps the terminal compositing a frame at a time, and holding
-+        // every frame, for as long as the session lives. v=4 plays it three times and rests.
++        // v is a loop count and kitty stores v - 1, where zero means endless — so v=1, which
++        // reads like "play it once", is the one value that means never stop. That is what is
++        // wanted here: the terminal suspends an animation nothing can see, so a banner that has
++        // scrolled away costs nothing, and one scrolled back to is still running.
 +        ffStrbufAppendF(&result, "\033_Ga=a,i=%u,q=2,r=1,z=%u\033\\", (unsigned) FF_KITTY_IMAGE_ID, firstFrameDelay);
-+        ffStrbufAppendF(&result, "\033_Ga=a,i=%u,q=2,s=3,v=4\033\\", (unsigned) FF_KITTY_IMAGE_ID);
++        ffStrbufAppendF(&result, "\033_Ga=a,i=%u,q=2,s=3,v=1\033\\", (unsigned) FF_KITTY_IMAGE_ID);
 +    }
 +
 +    printImagePixels(requestData, &result, allCompressed ? FF_CACHE_FILE_KITTY_COMPRESSED : FF_CACHE_FILE_KITTY_UNCOMPRESSED);
