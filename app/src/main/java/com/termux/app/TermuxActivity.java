@@ -6044,7 +6044,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Drawable focusedIcon = interactionMode == LauncherAzGestureFxView.InteractionMode.ICON_TRACK_LOCKED
             && focusResult != null
             && focusResult.entry != null
-            ? focusResult.entry.icon
+            ? com.termux.app.launcher.data.LauncherAppDataProvider.artworkFor(this, focusResult.entry)
             : null;
         if (focusedIcon == null && interactionMode == LauncherAzGestureFxView.InteractionMode.ICON_TRACK_LOCKED
             && focusResult != null && focusResult.entry != null) {
@@ -7333,10 +7333,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int spacingPx = Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_ICON_SPACING_DP));
         for (com.termux.app.launcher.model.LauncherAppEntry entry
                 : mSuggestionBarView.getDockRailEntries()) {
-            if (entry.icon == null)
+            Drawable railArtwork =
+                com.termux.app.launcher.data.LauncherAppDataProvider.artworkFor(this, entry);
+            if (railArtwork == null)
                 continue;
             ImageView iconView = new ImageView(this);
-            iconView.setImageDrawable(entry.icon);
+            iconView.setImageDrawable(railArtwork);
             iconView.setContentDescription(entry.label);
             LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(iconSizePx, iconSizePx);
             iconParams.topMargin = spacingPx;

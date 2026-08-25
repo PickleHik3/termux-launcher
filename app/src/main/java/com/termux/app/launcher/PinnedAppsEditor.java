@@ -351,7 +351,8 @@ public final class PinnedAppsEditor {
             chip.setBackground(chipBg);
 
             ImageView icon = new ImageView(context);
-            if (entry.icon != null) icon.setImageDrawable(entry.icon);
+            Drawable chipArtwork = LauncherAppDataProvider.artworkFor(context, entry);
+            if (chipArtwork != null) icon.setImageDrawable(chipArtwork);
             LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(34), dp(34));
             chip.addView(icon, iconParams);
 
@@ -477,7 +478,7 @@ public final class PinnedAppsEditor {
             ImageView icon = (ImageView) row.getChildAt(0);
             TextView label = (TextView) row.getChildAt(1);
             CheckBox check = (CheckBox) row.getChildAt(2);
-            icon.setImageDrawable(entry.icon);
+            icon.setImageDrawable(LauncherAppDataProvider.artworkFor(context, entry));
             label.setText(entry.label);
             check.setChecked(selectedIds.contains(entry.appRef.stableId()));
             GradientDrawable bg = new GradientDrawable();
@@ -596,7 +597,7 @@ public final class PinnedAppsEditor {
     private Drawable iconForPinned(@NonNull PinnedItem item) {
         if (item instanceof PinnedAppItem) {
             LauncherAppEntry entry = appByStableId.get(((PinnedAppItem) item).appRef.stableId());
-            return entry == null ? null : entry.icon;
+            return LauncherAppDataProvider.artworkFor(context, entry);
         }
         Drawable folder = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_folder_24);
         if (folder != null) folder.setTint(colorAccent);
