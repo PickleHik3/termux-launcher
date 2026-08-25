@@ -4020,6 +4020,11 @@ public final class TerminalEmulator {
         mKittyGraphics.dropFramesOfUnreachableImages();
     }
 
+    /** Whether a U+10EEEE cell survives on either screen, so virtual placements stay reachable. */
+    boolean hasAnyKittyPlaceholderCell() {
+        return mMainBuffer.hasAnyKittyPlaceholderCell() || mAltBuffer.hasAnyKittyPlaceholderCell();
+    }
+
     /** Live placements of one stored kitty image on both screens, for animation frame flips. */
     java.util.List<TerminalBitmap> kittyPlacementsFor(long imageId) {
         java.util.List<TerminalBitmap> result = new java.util.ArrayList<>();

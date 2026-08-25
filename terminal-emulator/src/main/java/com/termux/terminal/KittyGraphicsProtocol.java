@@ -616,6 +616,11 @@ final class KittyGraphicsProtocol {
         KittyImageStore.VirtualPlacement placement = KittyImageStore.virtualPlacement(entry, placementId);
         Bitmap bitmap = KittyImageStore.frameBitmap(entry, entry.currentFrame + 1);
         if (placement == null || bitmap == null) return false;
+        // The renderer is about to draw this image through a placeholder cell, which is the only
+        // moment a virtually-placed image is provably on a screen. Marking it here rather than at
+        // transmission is what keeps the sweep off an animation that is still loading: frames
+        // arrive before the shell has printed the placeholder grid that will display them.
+        entry.everPlaced = true;
         out.bitmap = bitmap;
         out.sourceX = placement.sourceX;
         out.sourceY = placement.sourceY;
@@ -1012,10 +1017,18 @@ final class KittyGraphicsProtocol {
      * is still being transmitted has no placement yet and must keep the frames it is collecting.
      */
     void dropFramesOfUnreachableImages() {
+        // The placeholder scan walks the whole transcript, so it is only worth asking when there
+        // is an animation placed that way with frames still to reclaim — and then only once.
+        Boolean placeholderCellsRemain = null;
         for (KittyImageStore.Entry entry : store.entries()) {
             if (entry.frames.isEmpty() || !entry.everPlaced) continue;
-            if (!entry.virtualPlacements.isEmpty()) continue;
-            if (!emulator.kittyPlacementsFor(entry.id).isEmpty()) continue;
+            if (!entry.virtualPlacements.isEmpty()) {
+                if (placeholderCellsRemain == null)
+                    placeholderCellsRemain = emulator.hasAnyKittyPlaceholderCell();
+                if (placeholderCellsRemain) continue;
+            } else if (!emulator.kittyPlacementsFor(entry.id).isEmpty()) {
+                continue;
+            }
             store.dropFrames(entry);
         }
         cancelAnimationTickIfNothingAnimates();
