@@ -655,9 +655,11 @@ final class KittyGraphicsProtocol {
         final int editNumber = (command.displayRows >= 1 && command.displayRows <= frameCountAtAccept)
             ? command.displayRows : 0;
         final int estimate = (int) Math.min(Integer.MAX_VALUE, (long) initial.width * initial.height * 4L);
-        if (editNumber == 0 && store.wouldExceedFrameLimits(initial, estimate)
-            && !store.reclaimFrameBudget(initial, estimate,
-                imageId -> !emulator.kittyPlacementsFor(imageId).isEmpty())) {
+        // Only the count is decided here. The byte quota is settled at commit, where the pixels are
+        // actually allocated and where a full quota can thin this animation instead of refusing the
+        // rest of it — a queued frame holds nothing but its compressed payload, which
+        // MAX_TRANSMITTED_BYTES already bounds.
+        if (editNumber == 0 && store.wouldExceedFrameCount(initial)) {
             reply(command, "ENOSPC:frame store is full", true, false, id);
             return;
         }
@@ -784,6 +786,11 @@ final class KittyGraphicsProtocol {
                         } else {
                             int gap = command.z > 0 ? command.z
                                 : command.z < 0 ? 0 : KittyImageStore.DEFAULT_FRAME_GAP_MS;
+                            if (!store.makeRoomForFrame(entry, byteCount,
+                                    imageId -> !emulator.kittyPlacementsFor(imageId).isEmpty())) {
+                                reply(command, "ENOSPC:frame store is full", true, false, id);
+                                return;
+                            }
                             store.addFrame(entry, frameBitmap, byteCount, gap);
                         }
                         reply(command, "OK", false, false, id);

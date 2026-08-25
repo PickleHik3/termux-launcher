@@ -29,8 +29,60 @@ final class KittyImageStore {
 
     static final long MAX_STORED_BYTES = 32L * 1024 * 1024;
     static final int MAX_STORED_IMAGES = 256;
-    /** Animation frames have their own larger quota, mirroring kitty's separate frame quota. */
-    static final long MAX_FRAME_BYTES = 64L * 1024 * 1024;
+
+    /**
+     * The animation frame quota, mirroring kitty's separate frame quota and sized to the device.
+     *
+     * <p>It has to hold a whole animation or the animation is not worth having: a 170-frame
+     * 512x512 GIF is 170 MB of {@code ARGB_8888}, and a quota that seats two thirds of it buys
+     * memory by handing back a logo that jumps. Frames are transient now — they die with the last
+     * cell that can display them and with the session — so the ceiling can be generous on a phone
+     * with memory to spare and stays at the old 64 MB on one without.</p>
+     */
+    static final long MAX_FRAME_BYTES = frameQuotaForThisDevice();
+
+    private static long frameQuotaForThisDevice() {
+        long floor = 64L * 1024 * 1024;
+        long ceiling = 256L * 1024 * 1024;
+        long totalBytes = deviceMemoryBytes();
+        if (totalBytes <= 0) return floor;
+        return Math.max(floor, Math.min(ceiling, totalBytes / 48));
+    }
+
+    /** Total RAM from {@code /proc/meminfo}, or 0 when it cannot be read (the JVM in tests). */
+    private static long deviceMemoryBytes() {
+        try (java.io.BufferedReader reader =
+                 new java.io.BufferedReader(new java.io.FileReader("/proc/meminfo"))) {
+            String line = reader.readLine();
+            if (line == null || !line.startsWith("MemTotal:")) return 0;
+            String[] parts = line.trim().split("\\s+");
+            return parts.length < 2 ? 0 : Long.parseLong(parts[1]) * 1024L;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Frame bytes are budgeted across every terminal in the process, not per terminal. The store
+     * hangs off a {@link TerminalEmulator}, so a per-store quota multiplies by the number of open
+     * panes — three sessions would nominally be owed three whole quotas of animation frames, which
+     * is the one thing a generous quota must not mean. kitty's {@code storage_limit} is per
+     * instance across all images; this matches it.
+     */
+    static final class FrameBudget {
+        private long used;
+
+        long used() {
+            return used;
+        }
+
+        void spend(long delta) {
+            used = Math.max(0, used + delta);
+        }
+    }
+
+    /** The budget every live terminal shares. Tests construct their own store with a private one. */
+    private static final FrameBudget SHARED_FRAME_BUDGET = new FrameBudget();
     static final int MAX_FRAMES_PER_IMAGE = 512;
     /** The gap kitty gives a transmitted frame that did not specify one. */
     static final int DEFAULT_FRAME_GAP_MS = 40;
@@ -70,6 +122,8 @@ final class KittyImageStore {
         final List<Frame> frames = new ArrayList<>();
         /** Frames accepted against the quota whose decode has not landed yet. */
         int pendingFrames;
+        /** Where the next fold falls, so thinning walks the animation instead of eating its front. */
+        int thinCursor;
         /**
          * Whether this image has ever reached a cell. Until it has, it is mid-transmission — an
          * animation is loaded frame by frame before it is placed — and its frames are not garbage
@@ -127,6 +181,21 @@ final class KittyImageStore {
     private final Map<Long, Entry> images = new LinkedHashMap<>();
     private final Map<Long, Long> latestIdByNumber = new HashMap<>();
     private long totalBytes;
+    private final FrameBudget frameBudget;
+
+    KittyImageStore() {
+        this(SHARED_FRAME_BUDGET);
+    }
+
+    KittyImageStore(FrameBudget frameBudget) {
+        this.frameBudget = frameBudget;
+    }
+
+    /** Every change to this store's frame bytes goes through here, so the two ledgers cannot drift. */
+    private void spendFrameBytes(long delta) {
+        totalFrameBytes += delta;
+        frameBudget.spend(delta);
+    }
 
     /** The id an {@code i=}/{@code I=} pair refers to, or 0 when it resolves to nothing. */
     long resolveId(long imageId, long number) {
@@ -219,7 +288,7 @@ final class KittyImageStore {
         Entry removed = images.remove(id);
         if (removed == null) return;
         totalBytes -= removed.byteCount;
-        for (Frame frame : removed.frames) totalFrameBytes -= frame.byteCount;
+        for (Frame frame : removed.frames) spendFrameBytes(-frame.byteCount);
         // Stored bitmaps are dropped, never recycled: a placement rasterization on the decode
         // worker may still be reading one, and the garbage collector reclaims them safely.
         if (removed.number != 0 && Long.valueOf(id).equals(latestIdByNumber.get(removed.number))) {
@@ -250,7 +319,7 @@ final class KittyImageStore {
         images.clear();
         latestIdByNumber.clear();
         totalBytes = 0;
-        totalFrameBytes = 0;
+        spendFrameBytes(-totalFrameBytes);
         pendingFrameBytes = 0;
     }
 
@@ -298,15 +367,76 @@ final class KittyImageStore {
     }
 
     /**
-     * Whether one more frame of {@code byteCount} would break the quota, counting frames already
-     * accepted whose decode has not landed. A frame is charged where it is accepted and credited
-     * where it commits, and the two are a decode apart: an animation arrives as one burst, so a
-     * gate that measured only committed bytes would wave the whole burst through against a ledger
-     * that is empty until the last of it lands.
+     * Whether one more accepted frame would break the per-image frame count, counting frames whose
+     * decode has not landed yet. A frame is charged where it is accepted and credited where it
+     * commits, and the two are a decode apart: an animation arrives as one burst, and a gate that
+     * counted only committed frames would wave the whole burst through against a ledger that stays
+     * empty until the last of it lands.
      */
+    boolean wouldExceedFrameCount(Entry entry) {
+        return entry.frames.size() + entry.pendingFrames + 1 > MAX_FRAMES_PER_IMAGE;
+    }
+
+    /**
+     * Whether one more committed frame would break the byte quota. Bytes are checked here rather
+     * than where the frame was accepted because this is where they are allocated: a queued frame
+     * holds only its compressed payload, and the decoder is one thread, so the pixels of exactly
+     * one frame at a time exist outside this ledger.
+     */
+    boolean wouldExceedFrameBytes(int byteCount) {
+        return frameBudget.used() + byteCount > MAX_FRAME_BYTES;
+    }
+
     boolean wouldExceedFrameLimits(Entry entry, int byteCount) {
-        return totalFrameBytes + pendingFrameBytes + byteCount > MAX_FRAME_BYTES
-            || entry.frames.size() + entry.pendingFrames + 1 > MAX_FRAMES_PER_IMAGE;
+        return wouldExceedFrameBytes(byteCount) || wouldExceedFrameCount(entry);
+    }
+
+    /**
+     * Make room for one more committed frame, thinning the animation being loaded rather than
+     * refusing the rest of it.
+     *
+     * <p>Refusing is what truncates: a 170-frame 512x512 GIF is 170 MB of {@code ARGB_8888} against
+     * a 64 MB quota, so the tail of it used to answer {@code ENOSPC} — suppressed, since senders
+     * use {@code q=2} — and the animation played the first 38% of its loop and snapped back.
+     * Thinning keeps the whole arc of the motion and spends the quota on a coarser frame rate
+     * instead, which is the trade a viewer would choose: an animation that plays through at half
+     * the frames still reads as the thing it is, where one that stops a third of the way through
+     * does not.</p>
+     */
+    boolean makeRoomForFrame(Entry entry, int byteCount, PlacementProbe probe) {
+        if (!wouldExceedFrameBytes(byteCount)) return true;
+        // Other animations first, whole, oldest and unreachable ones before this one loses detail.
+        reclaimFrameBudget(entry, byteCount, probe);
+        while (wouldExceedFrameBytes(byteCount) && foldOneFrame(entry) > 0) {
+            // One frame at a time, so the quota is spent to the last byte rather than halved and
+            // refilled — the difference between an animation kept at the cap and one that keeps
+            // throwing away half of what it just decoded.
+        }
+        return !wouldExceedFrameBytes(byteCount);
+    }
+
+    /**
+     * Drop one frame and hand its gap to the frame before it, so the animation loses a step of
+     * smoothness and none of its length or its shape. Returns the bytes reclaimed, or zero when
+     * there is no extra frame left to fold.
+     *
+     * <p>The cursor is what keeps the thinning even. It advances to just past the survivor that
+     * absorbed the gap, so a pass over the list takes every other frame and the next pass takes
+     * every other survivor — rather than eating the front of the animation, which would leave a
+     * skeleton that only ever collapses and is never seen getting up. The root frame is not a
+     * candidate: it is what a stopped animation rests on.</p>
+     */
+    int foldOneFrame(Entry entry) {
+        if (entry.frames.isEmpty()) return 0;
+        int index = Math.floorMod(entry.thinCursor, entry.frames.size());
+        Frame folded = entry.frames.remove(index);
+        spendFrameBytes(-folded.byteCount);
+        if (index == 0) entry.rootGapMs += folded.gapMs;
+        else entry.frames.get(index - 1).gapMs += folded.gapMs;
+        entry.thinCursor = index + 1;
+        // The displayed frame keeps its place; a viewer on the folded one sees the frame before it.
+        if (entry.currentFrame > index) entry.currentFrame--;
+        return folded.byteCount;
     }
 
     /** Charge an accepted frame against the quota until its decode commits or fails. */
@@ -367,10 +497,11 @@ final class KittyImageStore {
         int freed = 0;
         for (Frame frame : entry.frames) freed += frame.byteCount;
         entry.frames.clear();
-        totalFrameBytes -= freed;
+        spendFrameBytes(-freed);
         entry.animationState = ANIMATION_STOPPED;
         entry.currentFrame = 0;
         entry.currentLoop = 0;
+        entry.thinCursor = 0;
         entry.frameShownAtUptime = 0;
         // Only the root frame's gap is left to count.
         entry.animationDurationMs = entry.rootGapMs;
@@ -381,7 +512,7 @@ final class KittyImageStore {
         gapMs = Math.max(0, gapMs);
         entry.frames.add(new Frame(bitmap, gapMs, byteCount));
         entry.animationDurationMs += gapMs;
-        totalFrameBytes += byteCount;
+        spendFrameBytes(byteCount);
     }
 
     /** Replace the pixels of 1-based frame {@code number} after an edit or composition. */
@@ -393,7 +524,7 @@ final class KittyImageStore {
             return;
         }
         Frame frame = entry.frames.get(number - 2);
-        totalFrameBytes += byteCount - frame.byteCount;
+        spendFrameBytes(byteCount - frame.byteCount);
         frame.bitmap = bitmap;
         frame.byteCount = byteCount;
     }
@@ -411,7 +542,7 @@ final class KittyImageStore {
             Frame promoted = entry.frames.remove(0);
             removedGap = entry.rootGapMs;
             // The promoted frame's bytes move from the frame quota to the image quota.
-            totalFrameBytes -= promoted.byteCount;
+            spendFrameBytes(-promoted.byteCount);
             totalBytes += promoted.byteCount - entry.byteCount;
             entry.bitmap = promoted.bitmap;
             entry.byteCount = promoted.byteCount;
@@ -419,7 +550,7 @@ final class KittyImageStore {
         } else {
             Frame removed = entry.frames.remove(number - 2);
             removedGap = removed.gapMs;
-            totalFrameBytes -= removed.byteCount;
+            spendFrameBytes(-removed.byteCount);
         }
         entry.animationDurationMs = Math.max(0, entry.animationDurationMs - removedGap);
         int removedIndex = number - 1;

@@ -214,22 +214,22 @@ public class KittyGraphicsProtocolTest extends TerminalTestCase {
 
     /**
      * A GIF arrives as one burst of a=f, and each frame's decode lands back on the update thread
-     * long after the whole burst has been accepted. The accept-time gate must therefore charge the
-     * quota for the frame it just let through; measuring only what has already committed lets the
-     * entire burst pass against a stale ledger.
+     * long after the whole burst has been accepted. The accept-time gate must therefore count the
+     * frame it just let through; counting only what has already committed lets the entire burst
+     * pass against a ledger that stays empty until the last of it lands.
      */
-    public void testFrameBurstDoesNotOverrunTheFrameQuotaWhileDecodesAreInFlight() {
+    public void testFrameBurstIsCountedWhileItsDecodesAreStillInFlight() {
         // o=z skips the synchronous payload-length check, so s and v alone fix the reservation and
-        // the never-drained decode stands in for a slow one. Every frame of this image costs 1 MiB.
-        enterString("\033_Gi=60,a=t,f=24,o=z,s=512,v=512;AAAA\033\\");
+        // the never-drained decodes stand in for slow ones.
+        enterString("\033_Gi=60,a=t,f=24,o=z,s=4,v=4;AAAA\033\\");
         mOutput.getOutputAndClear();
-        String frame = "\033_Gi=60,a=f,f=24,o=z,s=512,v=512,z=40;AAAA\033\\";
-        int fits = (int) (KittyImageStore.MAX_FRAME_BYTES / (512 * 512 * 4));
-        for (int i = 0; i < fits; i++) {
+        String frame = "\033_Gi=60,a=f,f=24,o=z,s=4,v=4,z=40;AAAA\033\\";
+        for (int i = 0; i < KittyImageStore.MAX_FRAMES_PER_IMAGE; i++) {
             enterString(frame);
-            assertEquals("frame " + i + " fits the quota", "", mOutput.getOutputAndClear());
+            assertEquals("frame " + i + " is within the per-image limit", "",
+                mOutput.getOutputAndClear());
         }
-        // The quota is now fully spoken for by frames that are still decoding.
+        // Every frame of the limit is spoken for by one that is still decoding.
         assertEnteringStringGivesResponse(frame, "\033_Gi=60;ENOSPC:frame store is full\033\\");
     }
 
