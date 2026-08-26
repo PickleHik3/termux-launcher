@@ -98,6 +98,8 @@ public class KeybindHintPresenterTest {
         boolean splitPanes = true;
         boolean showKeyHints = true;
         boolean cardShowing;
+        boolean cardWide;
+        String pulseToken;
         View cardContent;
         Runnable cardOutsideTap;
         int cardShows;
@@ -138,20 +140,21 @@ public class KeybindHintPresenterTest {
         }
 
         @Override
-        public boolean isCardShowing() {
+        public boolean isHintPanelShowing() {
             return cardShowing;
         }
 
         @Override
-        public void showCard(View content, Runnable onOutsideTap) {
+        public void showHintPanel(View content, boolean wide, Runnable onOutsideTap) {
             cardShowing = true;
             cardContent = content;
+            cardWide = wide;
             cardOutsideTap = onOutsideTap;
             cardShows++;
         }
 
         @Override
-        public void dismissCard(boolean animated) {
+        public void dismissHintPanel(boolean animated) {
             cardShowing = false;
             cardContent = null;
             cardOutsideTap = null;
@@ -162,6 +165,11 @@ public class KeybindHintPresenterTest {
         public void setKeyboardHintHighlights(Map<String, Integer> litTokens) {
             highlights = litTokens;
             highlightWrites++;
+        }
+
+        @Override
+        public void setKeyboardHintPulse(String token) {
+            pulseToken = token;
         }
     }
 
@@ -209,8 +217,14 @@ public class KeybindHintPresenterTest {
             (toolName, bindingLabel) -> bindingLabel != null ? bindingLabel : toolName);
     }
 
+    /** The A-Z row's slot, which now belongs to the extra-key readout alone. */
     private boolean dockRowUp() {
         return mSurface.dockRow.getVisibility() == View.VISIBLE;
+    }
+
+    /** The hints, wherever they are: one panel on the terminal, in both sizes. */
+    private boolean hintsUp() {
+        return mSurface.cardShowing;
     }
 
     private void hold() {
@@ -221,51 +235,117 @@ public class KeybindHintPresenterTest {
         mPresenter.setHardwarePrefix(null, false);
     }
 
-    // ------------------------------------------------------------------ where the strip lands
+    // ------------------------------------------------------------------ where the hints land
 
+    /**
+     * One place to look. The hints used to take over the dock's A-Z row when it happened to be
+     * enabled and drop from the status bar when it was not, which put the answer to "what can I
+     * press" in two different places depending on a setting that has nothing to do with it.
+     */
     @Test
-    public void aHeldPrefixPutsTheStripInTheAzRowsSlotAndLightsTheCaps() {
+    public void aHeldPrefixHangsTheHintsOffTheTerminalAndLightsTheirCaps() {
         hold();
 
-        assertTrue(dockRowUp());
-        assertEquals(1, mSurface.dockRow.getChildCount());
-        assertEquals(View.INVISIBLE, mSurface.azRow.getVisibility());
-        assertEquals(0, mSurface.cardShows);
+        assertTrue(hintsUp());
+        assertFalse("the alphabet row is not the hints' surface any more", dockRowUp());
+        assertEquals(View.VISIBLE, mSurface.azRow.getVisibility());
+        assertFalse("the compact hints are the corner card, not the wide table", mSurface.cardWide);
         assertTrue(mPresenter.isVisible());
-        // Every bound cap of the held table lights, curated strip or not.
+        // The strip names all five of this table's binds, so all five light — plus the ? that
+        // opens the rest of the keymap.
         assertNotNull(mSurface.highlights);
-        assertEquals(5, mSurface.highlights.size());
+        assertEquals(6, mSurface.highlights.size());
+        assertTrue(mSurface.highlights.containsKey("?"));
+    }
+
+    /**
+     * The strip and the keyboard have to give one answer. Lighting every bind under a strip that
+     * lists five of them made the five that matter the hardest to find in the lit field.
+     */
+    @Test
+    public void aHeldPrefixLightsOnlyTheCapsTheStripNames() {
+        mHints.bind("ctrl+alt+", "v", "pane.split_vertical", "c", "window.new",
+            "x", "window.close", "left", "window.previous", "right", "window.next",
+            "u", "terminal.hints", "s", "terminal.search_scrollback");
+
+        hold();
+
+        assertTrue(hintsUp());
+        assertNotNull(mSurface.highlights);
+        assertTrue(mSurface.highlights.containsKey("v"));
+        assertTrue(mSurface.highlights.containsKey("left"));
+        assertFalse("a bind the strip does not name must stay dark until ? is asked",
+            mSurface.highlights.containsKey("u"));
+        assertFalse(mSurface.highlights.containsKey("s"));
+        // And the way to the rest of them is advertised on the cap that opens it — lit, since the
+        // pulse modulates a cap's own lighting and would otherwise breathe against nothing.
+        assertTrue(mSurface.highlights.containsKey("?"));
+        assertEquals("?", mSurface.pulseToken);
     }
 
     @Test
-    public void withoutTheAzRowsSlotTheStripFallsBackToTheCard() {
+    public void theQuestionTableLightsEverythingAndStopsInviting() {
+        mHints.bind("ctrl+alt+", "v", "pane.split_vertical", "c", "window.new",
+            "x", "window.close", "left", "window.previous", "right", "window.next",
+            "u", "terminal.hints");
+        hold();
+
+        mPresenter.toggleFullPopup();
+
+        assertNotNull(mSurface.highlights);
+        assertTrue("the question has been asked, so the whole keymap answers",
+            mSurface.highlights.containsKey("u"));
+        assertNull(mSurface.pulseToken);
+        // The table is the terminal-wide panel, not the corner strip.
+        assertTrue(mSurface.cardShowing);
+        assertTrue(mSurface.cardWide);
+        assertNotNull(mSurface.cardOutsideTap);
+    }
+
+    /**
+     * Shaped like the copy-mode and search legends — a titled card whose entries wrap — rather than
+     * the one horizontal band the dock row used to demand.
+     */
+    @Test
+    public void theCompactHintsAreACardOfLinesNotOneRow() {
+        hold();
+
+        assertTrue(mSurface.cardContent instanceof LinearLayout);
+        LinearLayout card = (LinearLayout) mSurface.cardContent;
+        assertEquals(LinearLayout.VERTICAL, card.getOrientation());
+        // A title, at least one row of binds, and the row that opens the whole keymap.
+        assertTrue("the entries must be free to wrap onto more than one line",
+            card.getChildCount() >= 3);
+    }
+
+    @Test
+    public void theCornerStripIsNeverTheWidePanel() {
         mSurface.azRow = null;
 
         hold();
 
-        assertFalse(dockRowUp());
-        assertEquals(1, mSurface.cardShows);
-        assertTrue(mSurface.cardContent instanceof LinearLayout);
-        // The strip tracks the hold alone; only the sticky table watches for an outside tap.
-        assertNull(mSurface.cardOutsideTap);
-        assertTrue(mPresenter.isVisible());
+        assertTrue(mSurface.cardShowing);
+        assertFalse(mSurface.cardWide);
     }
 
     @Test
-    public void aSlotThatIsOffScreenIsNotTheSlot() {
-        mSurface.azRow.shown = false;
+    public void theHintsLandTheSameWayWithNoAzRowAtAll() {
+        mSurface.azRow = null;
 
         hold();
 
-        assertFalse(dockRowUp());
         assertEquals(1, mSurface.cardShows);
+        assertTrue(mSurface.cardContent instanceof LinearLayout);
+        // The compact hints track the hold alone; only the sticky table watches for an outside tap.
+        assertNull(mSurface.cardOutsideTap);
+        assertTrue(mPresenter.isVisible());
     }
 
     @Test
     public void nothingBoundUnderThePrefixRaisesNothing() {
         mPresenter.setHardwarePrefix("ctrl+space>", false);
 
-        assertFalse(dockRowUp());
+        assertFalse(hintsUp());
         assertEquals(0, mSurface.cardShows);
         assertFalse(mPresenter.isVisible());
         assertNull(mSurface.highlights);
@@ -277,7 +357,7 @@ public class KeybindHintPresenterTest {
 
         hold();
 
-        assertFalse(dockRowUp());
+        assertFalse(hintsUp());
         assertEquals(0, mSurface.cardShows);
         assertTrue(mHints.asked.isEmpty());
     }
@@ -288,7 +368,7 @@ public class KeybindHintPresenterTest {
 
         hold();
 
-        assertFalse(dockRowUp());
+        assertFalse(hintsUp());
         assertEquals(0, mSurface.cardShows);
         assertEquals(Collections.singleton("?"), mSurface.highlights.keySet());
     }
@@ -297,13 +377,15 @@ public class KeybindHintPresenterTest {
     public void repeatedCallbacksForTheSameLatchDoNotRebuild() {
         hold();
         int writes = mSurface.highlightWrites;
-        View strip = mSurface.dockRow.getChildAt(0);
+        View content = mSurface.cardContent;
+        int shows = mSurface.cardShows;
 
         mPresenter.setHardwarePrefix("ctrl+alt+", false);   // identical state: ignored outright
         mPresenter.onInAppModifiersChanged(TerminalModifiers.NONE);   // hardware still outranks
 
         assertEquals(writes, mSurface.highlightWrites);
-        assertEquals(strip, mSurface.dockRow.getChildAt(0));
+        assertEquals(shows, mSurface.cardShows);
+        assertEquals(content, mSurface.cardContent);
     }
 
     @Test
@@ -311,11 +393,12 @@ public class KeybindHintPresenterTest {
         hold();
         mPresenter.setHardwarePrefix("ctrl+alt+", true);
 
-        assertTrue(dockRowUp());
+        assertTrue(hintsUp());
         assertEquals(Collections.singletonList("ctrl+alt+"), mHints.asked.subList(0, 1));
         assertEquals("ctrl+alt+shift+", mHints.asked.get(1));
-        // The Shift table's two binds are what lights now.
-        assertEquals(2, mSurface.highlights.size());
+        // The Shift table's two binds are what lights now, plus the ? that opens the rest.
+        assertEquals(3, mSurface.highlights.size());
+        assertTrue(mSurface.highlights.containsKey("?"));
     }
 
     // ------------------------------------------------------------------ the spend
@@ -323,21 +406,21 @@ public class KeybindHintPresenterTest {
     @Test
     public void aConsumedBindTakesTheHintsDownAtOnceAndKeepsThemDown() {
         hold();
-        assertTrue(dockRowUp());
+        assertTrue(hintsUp());
+        int shows = mSurface.cardShows;
 
         mPresenter.onConsumed();
 
-        assertFalse(dockRowUp());
+        assertFalse(hintsUp());
         assertNull(mSurface.highlights);
         assertFalse(mPresenter.isVisible());
         // No lingering hide is left armed: the surface is already gone.
         assertFalse(mScheduler.hasPending());
-        assertEquals(View.VISIBLE, mSurface.azRow.getVisibility());
 
         // Still holding the same prefix: the answer to "what can I press now" is nothing.
         mPresenter.setHardwarePrefix("ctrl+alt+", true);
-        assertFalse(dockRowUp());
-        assertEquals(0, mSurface.cardShows);
+        assertFalse(hintsUp());
+        assertEquals(shows, mSurface.cardShows);
         assertNull(mSurface.highlights);
     }
 
@@ -346,12 +429,12 @@ public class KeybindHintPresenterTest {
         hold();
         mPresenter.onConsumed();
         release();
-        assertFalse(dockRowUp());
+        assertFalse(hintsUp());
 
         hold();
 
-        assertTrue(dockRowUp());
-        assertEquals(5, mSurface.highlights.size());
+        assertTrue(hintsUp());
+        assertEquals(6, mSurface.highlights.size());
     }
 
     @Test
@@ -363,23 +446,19 @@ public class KeybindHintPresenterTest {
 
         hold();
 
-        assertTrue(dockRowUp());
+        assertTrue(hintsUp());
     }
 
     @Test
-    public void aConsumedBindLeavesWithinTheExitWindowRatherThanVanishing() {
+    public void aConsumedBindTakesThePanelDownWithoutLingering() {
         mSurface.reducedMotion = false;
         hold();
-        assertTrue(dockRowUp());
+        assertTrue(hintsUp());
 
         mPresenter.onConsumed();
 
-        // The letters are back at once; the strip fades over them instead of blinking out.
-        assertEquals(View.VISIBLE, mSurface.azRow.getVisibility());
-        shadowOf(Looper.getMainLooper())
-            .idleFor(Duration.ofMillis(KeybindHintPresenter.CONSUMED_EXIT_MS + 32));
-        assertEquals(View.GONE, mSurface.dockRow.getVisibility());
-        assertEquals(0, mSurface.dockRow.getChildCount());
+        assertFalse(hintsUp());
+        assertFalse(mScheduler.hasPending());
     }
 
     /** A plain hide is not a spend: only a bind, or a touch on the terminal, spends the prefix. */
@@ -391,7 +470,7 @@ public class KeybindHintPresenterTest {
         mPresenter.setHardwarePrefix("ctrl+alt+", true);
 
         // hideNow alone is not a spend: a still-held prefix redraws.
-        assertTrue(dockRowUp());
+        assertTrue(hintsUp());
     }
 
     // ------------------------------------------------------------------ release and linger
@@ -403,13 +482,13 @@ public class KeybindHintPresenterTest {
         release();
 
         // Still readable: releasing the prefix is also how a stroke is typed.
-        assertTrue(dockRowUp());
+        assertTrue(hintsUp());
         assertEquals(Long.valueOf(KeybindHintPresenter.LINGER_MS),
             mScheduler.delayOfOnlyPending());
 
         mScheduler.advance(KeybindHintPresenter.LINGER_MS);
 
-        assertFalse(dockRowUp());
+        assertFalse(hintsUp());
         assertNull(mSurface.highlights);
     }
 
@@ -422,7 +501,7 @@ public class KeybindHintPresenterTest {
         hold();
 
         assertFalse(mScheduler.hasPending());
-        assertTrue(dockRowUp());
+        assertTrue(hintsUp());
     }
 
     @Test
@@ -432,7 +511,7 @@ public class KeybindHintPresenterTest {
         // The in-app keyboard reports "no modifiers" on every key it releases.
         mPresenter.onInAppModifiersChanged(TerminalModifiers.NONE);
 
-        assertTrue(dockRowUp());
+        assertTrue(hintsUp());
         assertFalse(mScheduler.hasPending());
     }
 
@@ -440,7 +519,7 @@ public class KeybindHintPresenterTest {
     public void theInAppLatchRaisesTheSameSurfaceAndItsReleaseLingers() {
         mPresenter.onInAppModifiersChanged(ctrlAlt());
 
-        assertTrue(dockRowUp());
+        assertTrue(hintsUp());
 
         mPresenter.onInAppModifiersChanged(TerminalModifiers.NONE);
 
@@ -456,9 +535,9 @@ public class KeybindHintPresenterTest {
 
         mPresenter.toggleFullPopup();
 
-        // The table is a card, and it evicts the strip from the dock row.
-        assertEquals(1, mSurface.cardShows);
-        assertFalse(dockRowUp());
+        // Same panel, promoted: the compact card becomes the terminal-wide table in place.
+        assertEquals(2, mSurface.cardShows);
+        assertTrue(mSurface.cardWide);
         assertNotNull(mSurface.cardOutsideTap);
         // The full table also lists the plain Ctrl strokes alongside the prefixed ones.
         assertTrue(mHints.asked.contains("ctrl+"));
@@ -493,8 +572,8 @@ public class KeybindHintPresenterTest {
 
         mPresenter.toggleFullPopup();
 
-        assertTrue(dockRowUp());
-        assertFalse(mSurface.cardShowing);
+        assertTrue(hintsUp());
+        assertFalse("back to the corner card, not the wide table", mSurface.cardWide);
     }
 
     @Test
@@ -508,11 +587,13 @@ public class KeybindHintPresenterTest {
     @Test
     public void askingForTheTableForgivesABindThatAlreadyRan() {
         hold();
+        int shows = mSurface.cardShows;
         mPresenter.onConsumed();
 
         mPresenter.toggleFullPopup();
 
-        assertEquals(1, mSurface.cardShows);
+        assertEquals(shows + 1, mSurface.cardShows);
+        assertTrue(mSurface.cardWide);
     }
 
     // ------------------------------------------------------------------ the readout that shares the slot
@@ -536,19 +617,20 @@ public class KeybindHintPresenterTest {
 
         hold();
 
-        assertTrue(dockRowUp());
-        // The readout's hide must die with it or it would take the strip down mid-latch.
+        // The hints take the terminal, and the readout gives the row back rather than sitting
+        // under them with a hide still armed.
+        assertTrue(hintsUp());
+        assertFalse(dockRowUp());
         assertFalse(mScheduler.hasPending());
     }
 
     @Test
     public void theReadoutStaysQuietWhileTheStripAnswersAQuestion() {
         hold();
-        View strip = mSurface.dockRow.getChildAt(0);
 
         mPresenter.showExtraKeyPressReadout("Ctrl+C");
 
-        assertEquals(strip, mSurface.dockRow.getChildAt(0));
+        assertFalse("the hints are answering a question the user is still asking", dockRowUp());
         assertFalse(mScheduler.hasPending());
     }
 

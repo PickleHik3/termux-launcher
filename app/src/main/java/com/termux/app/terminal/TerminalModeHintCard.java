@@ -2,7 +2,6 @@ package com.termux.app.terminal;
 
 import android.content.Context;
 import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -15,7 +14,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.core.content.ContextCompat;
-import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
@@ -62,17 +60,15 @@ public final class TerminalModeHintCard extends LinearLayout {
     private static final long ENTER_MS = 200L;
     private static final long EXIT_MS = 140L;
     /** Alpha the card settles at: live output has to stay readable through it. */
-    private static final float REST_ALPHA = 0.94f;
-    /** Flat material, so the fill carries the surface on its own. */
-    private static final int SURFACE_ALPHA = 224;
-    private static final int OUTLINE_ALPHA = 70;
+    private static final float REST_ALPHA = TerminalHintSurface.REST_ALPHA;
     private static final int MAX_WIDTH_DP = 236;
 
     private final TextView mTitle;
     private final TextView mBody;
-    private final GradientDrawable mBackground;
     @Nullable private Mode mMode;
     private float mTopCornerRadiusPx;
+    /** What the free corners were last cut to, so a resize only re-cuts when it moves them. */
+    private float mFreeCornerRadiusPx = -1f;
 
     public TerminalModeHintCard(@NonNull Context context) {
         super(context);
@@ -105,18 +101,6 @@ public final class TerminalModeHintCard extends LinearLayout {
         bodyParams.topMargin = dp(3);
         addView(mBody, bodyParams);
 
-        mBackground = new GradientDrawable();
-        int surface = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorSurfaceContainerHigh,
-            MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
-                ContextCompat.getColor(context, R.color.termux_surface_panel_high)));
-        int outline = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorOutlineVariant,
-            ContextCompat.getColor(context, R.color.termux_outline_variant));
-        mBackground.setColor(ColorUtils.setAlphaComponent(surface, SURFACE_ALPHA));
-        mBackground.setStroke(Math.max(1, dp(1)),
-            ColorUtils.setAlphaComponent(outline, OUTLINE_ALPHA));
-        setBackground(mBackground);
         applyCornerRadii();
 
         setVisibility(GONE);
@@ -125,13 +109,24 @@ public final class TerminalModeHintCard extends LinearLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        int maxWidthPx = dp(MAX_WIDTH_DP);
-        if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED
-            && MeasureSpec.getSize(widthMeasureSpec) > maxWidthPx) {
+        // Never wider than a card wants to be, and never wider than the terminal it hangs in: the
+        // incoming spec is the terminal's width less the user's margins.
+        if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
+            int maxWidthPx = Math.min(dp(MAX_WIDTH_DP), MeasureSpec.getSize(widthMeasureSpec));
             widthMeasureSpec = MeasureSpec.makeMeasureSpec(maxWidthPx,
                 MeasureSpec.getMode(widthMeasureSpec));
         }
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+    }
+
+    @Override
+    protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
+        super.onSizeChanged(width, height, oldWidth, oldHeight);
+        // The free corners are clamped against the card's own height, so a legend that swaps to a
+        // taller body has to re-cut them — but only when the clamp actually moves.
+        if (TerminalHintSurface.freeCornerRadiusPx(getContext(), mTopCornerRadiusPx, height)
+            != mFreeCornerRadiusPx)
+            applyCornerRadii();
     }
 
     /**
@@ -157,18 +152,14 @@ public final class TerminalModeHintCard extends LinearLayout {
     }
 
     /**
-     * Square where it meets the terminal's top edge, rounded where it leaves it: the shape is what
-     * makes it read as an extension of the window rather than as a card floating on top of one.
+     * The shared hint dress, with the trailing top corner taking the terminal's own radius: the
+     * card hangs in that corner, so the two arcs have to be one arc.
      */
     private void applyCornerRadii() {
-        float bottom = dp(14);
-        float topEnd = mTopCornerRadiusPx;
-        // top-left, top-right, bottom-right, bottom-left (x and y per corner)
-        mBackground.setCornerRadii(new float[]{
-            0f, 0f,
-            topEnd, topEnd,
-            bottom, bottom,
-            bottom, bottom});
+        float free = TerminalHintSurface.freeCornerRadiusPx(getContext(), mTopCornerRadiusPx,
+            getHeight());
+        mFreeCornerRadiusPx = free;
+        setBackground(TerminalHintSurface.background(getContext(), 0f, mTopCornerRadiusPx, free));
         invalidate();
     }
 

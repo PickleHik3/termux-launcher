@@ -245,11 +245,15 @@ public final class KeybindHintModel {
         @NonNull public final String label;
         /** First bound token of the chip, i.e. the one whose group colour the caps wear. */
         @NonNull public final String colorToken;
+        /** Every bound token this chip prints — what the keyboard may light under the strip. */
+        @NonNull public final List<String> tokens;
 
-        StripChip(@NonNull String caps, @NonNull String label, @NonNull String colorToken) {
+        StripChip(@NonNull String caps, @NonNull String label, @NonNull String colorToken,
+                  @NonNull List<String> tokens) {
             this.caps = caps;
             this.label = label;
             this.colorToken = colorToken;
+            this.tokens = Collections.unmodifiableList(tokens);
         }
     }
 
@@ -266,16 +270,70 @@ public final class KeybindHintModel {
         for (String[] spec : shift ? STRIP_SHIFT : STRIP_BASE) {
             StringBuilder caps = new StringBuilder();
             String colorToken = null;
+            List<String> tokens = new ArrayList<>(4);
             for (String token : spec[0].split(" ")) {
                 if (!hints.containsKey(token)) continue;
                 if (caps.length() > 0) caps.append(' ');
                 caps.append(capText(token, shift));
                 if (colorToken == null) colorToken = token;
+                tokens.add(token);
             }
             if (caps.length() == 0) continue;
-            chips.add(new StripChip(caps.toString(), spec[1], colorToken));
+            chips.add(new StripChip(caps.toString(), spec[1], colorToken, tokens));
         }
         return Collections.unmodifiableList(chips);
+    }
+
+    /**
+     * The held chord, spelled for a human: {@code "ctrl+alt+"} is {@code "Ctrl+Alt"}, and a leader
+     * waiting for its second key ({@code "ctrl+space>"}) keeps the {@code ▸} that says so.
+     */
+    @NonNull
+    public static String prefixLabel(@NonNull String prefix) {
+        boolean leader = prefix.endsWith(">");
+        String body = prefix;
+        while (body.endsWith("+") || body.endsWith(">"))
+            body = body.substring(0, body.length() - 1);
+        StringBuilder label = new StringBuilder(body.length() + 2);
+        for (String part : body.split("\\+")) {
+            if (part.isEmpty()) continue;
+            if (label.length() > 0) label.append('+');
+            label.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
+        }
+        if (leader) label.append(" \u25b8");
+        return label.toString();
+    }
+
+    /**
+     * The caps the strip is entitled to light: the tokens its own chips print, and nothing else.
+     *
+     * <p>Holding the prefix used to light every bound key on the keyboard while the strip named
+     * five of them. That is two different answers to one question — the strip says "here is what
+     * you can do", the keyboard said "here is everything that exists" — and the lit field was dense
+     * enough that the five that matter were the hardest to find in it. The full table is where
+     * everything lights, and {@code ?} is how you ask for it.
+     */
+    @NonNull
+    public static Map<String, Integer> stripLitTokens(
+            @NonNull Map<String, TerminalKeyBindingResolver.Hint> hints, boolean shift,
+            @NonNull GroupColors colors) {
+        EnumMap<KeybindGroupPalette.Group, Integer> groupColors =
+            new EnumMap<>(KeybindGroupPalette.Group.class);
+        Map<String, Integer> lit = new LinkedHashMap<>();
+        for (StripChip chip : stripChips(hints, shift)) {
+            for (String token : chip.tokens) {
+                TerminalKeyBindingResolver.Hint hint = hints.get(token);
+                if (hint == null) continue;
+                KeybindGroupPalette.Group group = KeybindGroupPalette.groupFor(hint.toolName);
+                Integer color = groupColors.get(group);
+                if (color == null) {
+                    color = colors.colorFor(group);
+                    groupColors.put(group, color);
+                }
+                lit.put(token, color);
+            }
+        }
+        return lit;
     }
 
     /**

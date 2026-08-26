@@ -1349,6 +1349,8 @@
     <string name="terminal_find_yanked">Copied selection</string>
     <!-- The legend card that hangs off the terminal's top-trailing corner while a modal terminal
          mode is up. Keys first, meaning second, and only the keys that mean something right now. -->
+    <!-- The entry that opens the full keymap from the compact keybind hints. -->
+    <string name="keybind_hint_all_shortcuts">all shortcuts</string>
     <string name="terminal_mode_hint_search_title">Search scrollback</string>
     <string name="terminal_mode_hint_search_body">Type to match · ⏎ jump\n↑ ↓ step · ⌫ edit · esc close</string>
     <string name="terminal_mode_hint_copy_title">Copy mode</string>

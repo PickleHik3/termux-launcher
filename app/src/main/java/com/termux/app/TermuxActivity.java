@@ -1138,6 +1138,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         feedDockPlank(ev);
         feedTerminalPlank(ev);
         mKeybindHintPresenter.onTerminalTouch(ev);
+        notifyKeybindHintPanelTouch(ev);
         return super.dispatchTouchEvent(ev);
     }
 
@@ -1395,6 +1396,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     /** Gap the terminal border keeps from the status bar above it and the dock below it, in dp. */
     private static final int TERMINAL_BORDER_VERTICAL_INSET_DP = 5;
+    /**
+     * Ceiling on the radius Floating lends the terminal's edge. The dock capsule is a pill; the
+     * terminal it floats above is a tall slab, and a pill's radius on a slab reads as a lozenge, so
+     * the edge takes the capsule's radius only up to here.
+     */
+    private static final int TERMINAL_PANE_MAX_CAPSULE_RADIUS_DP = 14;
 
     /**
      * Tiled panes in the active window. A maximized pane counts as one, which is the point:
@@ -1428,6 +1435,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null || isRoundedDockStyle())
             return 0f;
         return dpToPx(mPreferences.getTerminalCornerRadius());
+    }
+
+    /**
+     * The radius the terminal's own top corners actually draw with, which is what any surface
+     * hanging off them has to match.
+     *
+     * <p>Docked rounds by the terminal's knob. Floating's slabs round by the dock capsule but
+     * capped well under its pill — see {@code paneGlassCornerRadiusPx} — so reading the capsule
+     * itself here rounded the hints harder than the window they hang from.
+     */
+    private float terminalEdgeCornerRadiusPx() {
+        if (!isRoundedDockStyle())
+            return dockedTerminalCornerRadiusPx();
+        return Math.min(dpToPx(TERMINAL_PANE_MAX_CAPSULE_RADIUS_DP),
+            resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE));
     }
 
     /**
@@ -1733,7 +1755,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override public float paneGlassCornerRadiusPx() {
                 if (isRoundedDockStyle())
-                    return Math.min(dpToPx(14), resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE));
+                    return terminalEdgeCornerRadiusPx();
                 // Docked: the glass slabs are the terminal's edge, so they round by the terminal's
                 // own knob. Its default 0 keeps the 4dp softening the slabs always had — a glass
                 // pane with literally square corners reads as a torn rectangle, not a slab.
@@ -6821,14 +6843,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     // ------------------------------------------------------------------ keybind hint popup
 
     /**
-     * The hint surfaces' own card host, so an open stats or weather card and a chord narration
-     * never dismiss each other. Cards from this host are passive: they take no focus and swallow
-     * no outside touch, because the keyboard hold that raised them must keep working underneath.
-     */
-    private final com.termux.app.statusbar.StatusCardHost mKeybindHintCard =
-        new com.termux.app.statusbar.StatusCardHost();
-
-    /**
      * The keybind hint surfaces — lit caps on the in-app keyboard, the strip in the A-Z row's slot,
      * the full grouped table behind {@code ?} — all live in
      * {@link com.termux.app.terminal.keybind.KeybindHintPresenter}. The activity only lends it its
@@ -6887,23 +6901,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
-        public boolean isCardShowing() {
-            return mKeybindHintCard.isShowing();
+        public boolean isHintPanelShowing() {
+            return mKeybindHintPanel != null && mKeybindHintPanel.isShowing();
         }
 
         @Override
-        public void showCard(@NonNull View content, @Nullable Runnable onOutsideTap) {
-            View anchor = keybindHintCardAnchor();
-            if (anchor == null) return;
-            mKeybindHintCard.setDropEdge(findViewById(R.id.terminal_window_bar_host));
-            mKeybindHintCard.showPassive(anchor, content, statusCardStyleProvider(),
-                com.termux.app.statusbar.StatusCardHost.STANDARD_WIDTH_DP, null, onOutsideTap);
+        public void showHintPanel(@NonNull View content, boolean wide,
+                                  @Nullable Runnable onOutsideTap) {
+            com.termux.app.terminal.TerminalHintPanelView panel = obtainKeybindHintPanel();
+            if (panel == null) return;
+            syncTerminalHintPanelFrame(panel);
+            mKeybindHintPanelOutsideTap = onOutsideTap;
+            panel.show(content, wide);
         }
 
         @Override
-        public void dismissCard(boolean animated) {
-            if (animated) mKeybindHintCard.dismissAnimated();
-            else mKeybindHintCard.dismiss();
+        public void dismissHintPanel(boolean animated) {
+            mKeybindHintPanelOutsideTap = null;
+            if (mKeybindHintPanel != null) mKeybindHintPanel.hide(animated);
         }
 
         @Override
@@ -6911,18 +6926,53 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mInAppKeyboard != null)
                 mInAppKeyboard.setKeybindHintHighlights(litTokens);
         }
+
+        @Override
+        public void setKeyboardHintPulse(@Nullable String token) {
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.setKeybindHintPulse(token);
+        }
     }
 
-    /** The surface every hint card drops from, mirroring the status widgets' detail cards. */
+    @Nullable private com.termux.app.terminal.TerminalHintPanelView mKeybindHintPanel;
+    /** Retires the sticky {@code ?} table on a tap anywhere else; null while the strip is up. */
+    @Nullable private Runnable mKeybindHintPanelOutsideTap;
+
     @Nullable
-    private View keybindHintCardAnchor() {
-        View bar = findViewById(R.id.terminal_window_bar_host);
-        if (bar != null && bar.isAttachedToWindow() && bar.getVisibility() == View.VISIBLE)
-            return bar;
-        View statusBackground = findViewById(R.id.terminal_status_bar_background);
-        if (statusBackground != null && statusBackground.isAttachedToWindow())
-            return statusBackground;
-        return null;
+    private com.termux.app.terminal.TerminalHintPanelView obtainKeybindHintPanel() {
+        FrameLayout host = findViewById(R.id.terminal_surface_host);
+        if (host == null)
+            return null;
+        if (mKeybindHintPanel == null)
+            mKeybindHintPanel = new com.termux.app.terminal.TerminalHintPanelView(this);
+        if (mKeybindHintPanel.getParent() == null) {
+            host.addView(mKeybindHintPanel,
+                com.termux.app.terminal.TerminalHintPanelView.buildHostLayoutParams());
+        }
+        mKeybindHintPanel.bringToFront();
+        return mKeybindHintPanel;
+    }
+
+    /** The hints sit on the terminal's live edge, exactly as the mode legends do. */
+    private void syncTerminalHintPanelFrame(
+            @NonNull com.termux.app.terminal.TerminalHintPanelView panel) {
+        float radiusPx = terminalEdgeCornerRadiusPx();
+        panel.setTerminalFrame(terminalFrameInsetPx(false), terminalFrameInsetPx(true),
+            terminalFrameInsetPx(true), radiusPx);
+    }
+
+    /**
+     * A touch that misses the {@code ?} table retires it. The panel is passive — the prefix that
+     * raised it is still being held and the terminal underneath must keep working — so the tap is
+     * watched here rather than swallowed by a scrim.
+     */
+    private void notifyKeybindHintPanelTouch(@NonNull MotionEvent event) {
+        if (event.getActionMasked() != MotionEvent.ACTION_DOWN) return;
+        Runnable onOutsideTap = mKeybindHintPanelOutsideTap;
+        if (onOutsideTap == null || mKeybindHintPanel == null) return;
+        if (mKeybindHintPanel.containsScreenPoint(event.getRawX(), event.getRawY())) return;
+        mKeybindHintPanelOutsideTap = null;
+        onOutsideTap.run();
     }
 
     /**
@@ -9326,9 +9376,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncTerminalModeHintFrame(
             @NonNull com.termux.app.terminal.TerminalModeHintCard card) {
-        float radiusPx = isRoundedDockStyle()
-            ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE)
-            : dockedTerminalCornerRadiusPx();
+        float radiusPx = terminalEdgeCornerRadiusPx();
         card.setTerminalFrame(terminalFrameInsetPx(false), terminalFrameInsetPx(true), radiusPx);
     }
 
