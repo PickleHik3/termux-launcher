@@ -55,7 +55,6 @@ project-plan.md
 knowledge-base.md
 CLAUDE.md
 project-ledger.md
-AGENTS.md
 
 # Agent workspace (keep config/scripts tracked, ignore runtime logs)
 /work-logs/build-error.log
