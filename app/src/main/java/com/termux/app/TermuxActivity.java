@@ -1430,6 +1430,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return dpToPx(mPreferences.getTerminalCornerRadius());
     }
 
+    /**
+     * The pane host's clip when it is there to contain, not to shape: a rect inflated by the room a
+     * pressed pane travels into.
+     *
+     * <p>The host clips so a dragged float cannot paint over the dock. Its bounds are the pane area,
+     * which is also exactly where a pressed pane's tilt and slide take it — so the clip cut the
+     * press off along the margin, taking the slab's lit rim with it, and the border stopped reading
+     * as part of the terminal. Slack of a few dp contains the float and lets the press happen. The
+     * shaping clips (a Docked radius, the frame's inner radius) are left exact: they are the
+     * terminal's own corners, nothing tilts under them, and inflating those would let the corner
+     * cells poke past the arc.
+     */
+    @NonNull
+    private ViewOutlineProvider paneHostContainmentOutlineProvider() {
+        final int slackPx = Math.round(dpToPx(
+            com.termux.app.terminal.TerminalPaneController.PANE_PRESS_SLACK_DP));
+        return new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, android.graphics.Outline outline) {
+                outline.setRect(-slackPx, -slackPx,
+                    view.getWidth() + slackPx, view.getHeight() + slackPx);
+            }
+        };
+    }
+
     @NonNull
     private static ViewOutlineProvider roundedOutlineProvider(float radiusPx) {
         return new ViewOutlineProvider() {
@@ -1562,7 +1587,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyPaneHostCornerPadding(paneHost, Math.round(hostRadiusPx * 0.30f));
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 paneHost.setOutlineProvider(hostRadiusPx > 0f
-                    ? roundedOutlineProvider(hostRadiusPx) : ViewOutlineProvider.BOUNDS);
+                    ? roundedOutlineProvider(hostRadiusPx)
+                    : paneHostContainmentOutlineProvider());
                 paneHost.setClipToOutline(glass || hostRadiusPx > 0f);
             }
             setupTerminalPlankFx(glass);

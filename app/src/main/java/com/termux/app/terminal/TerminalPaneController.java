@@ -2245,6 +2245,17 @@ public class TerminalPaneController {
      * border detaching from the terminal rather than as the terminal being pressed.
      */
     private static final float PANE_DIP_TRAVEL_DP = 1f;
+    /**
+     * Room a pressed pane needs outside its own bounds: the plank's slide plus the perspective
+     * growth of whichever edge tilts toward the finger.
+     *
+     * <p>The pane host clips its children to keep a dragged float inside the terminal, and its
+     * bounds are the pane area — margin and frame inset already taken off. So the very travel this
+     * gesture is made of was being clipped away: the pressed slab, and with it the lit rim that is
+     * the pane's edge, was cut off abruptly along the margin the moment it moved. The clip needs
+     * this much slack to contain a float and still let a press happen.
+     */
+    public static final float PANE_PRESS_SLACK_DP = 4f;
 
     private final Map<FrameLayout, DockPlankController> mPanePlanks = new HashMap<>();
     @Nullable private DockPlankController mPressedPlank;
