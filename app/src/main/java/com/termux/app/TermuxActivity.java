@@ -3265,18 +3265,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyDecorNavBarSurfaceBounds(overlay, true);
 
         if (mDecorNavBarTintOverlay != null) {
-            if (state.keyboardShown && !isInAppKeyboardGlassSurface()) {
-                // The activity content ends at fitSystemWindows' bottom boundary. Continue the
-                // opaque keyboard surface through the decor-owned gesture-navigation inset.
-                mDecorNavBarTintOverlay.setBackgroundColor(resolveInAppKeyboardBackgroundColor());
-            } else {
-                // The under-pill strip is the bottom slice [f, 1] of the shared light model; the
-                // in-content surface above it (dock stack when keyboard-off, keyboard host when
-                // keyboard-on) renders [0, f]. Both states stack a content-level surface + this
-                // nav-only strip, so a single foot lands under the pill identically either way.
-                mDecorNavBarTintOverlay.setBackground(
-                    mChrome.glass().dockSurface(state.barAlpha, defaultDockGlassFootFraction(), 1f, false));
-            }
+            mDecorNavBarTintOverlay.setBackground(buildDecorNavBarTint(state));
             mDecorNavBarTintOverlay.setAlpha(1f);
             mDecorNavBarTintOverlay.setVisibility(View.VISIBLE);
         }
@@ -3288,6 +3277,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         overlay.setVisibility(View.VISIBLE);
+    }
+
+    /**
+     * The under-pill strip's tint: the bottom slice {@code [f, 1]} of the same light model the
+     * surface directly above it renders as {@code [0, f]}, so one foot lands under the pill.
+     *
+     * <p>Which surface that is depends on the keyboard. The strip used to take the dock's material
+     * in both states, which was right only while the keyboard followed Base: a keyboard with its
+     * own opacity — or a scheme background colour — painted itself near-solid and left the strip
+     * under it at the dock's opacity, so the material visibly stopped at the keyboard's bottom edge
+     * and the gesture-nav band read as bare wallpaper. The strip now takes whichever surface is
+     * above it, which is what makes the two read as one slab in both states.
+     */
+    @NonNull
+    private Drawable buildDecorNavBarTint(@NonNull ChromeSpec state) {
+        float foot = defaultDockGlassFootFraction();
+        if (!state.keyboardShown)
+            return mChrome.glass().dockSurface(state.barAlpha, foot, 1f, false);
+        // Same three values buildInAppKeyboardSurfaceBackground resolves, so the strip cannot
+        // disagree with the keyboard about its own material.
+        boolean normalized = isInAppKeyboardOpacityLinked();
+        Integer schemeBackground = normalized ? null : resolveInAppKeyboardSchemeBackgroundColor();
+        int backgroundAlpha = normalized ? 255 : Math.round(
+            255f * getInAppKeyboardBackgroundOpacityPercent() / 100f);
+        if (schemeBackground != null)
+            return new ColorDrawable(withAlphaComponent(schemeBackground, backgroundAlpha));
+        Drawable tint = mChrome.glass().dockSurface(state.barAlpha, foot, 1f, false);
+        if (backgroundAlpha < 255)
+            tint.setAlpha(backgroundAlpha);
+        return tint;
     }
 
     @Nullable
