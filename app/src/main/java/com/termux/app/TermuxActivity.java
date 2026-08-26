@@ -1440,6 +1440,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         };
     }
 
+    /**
+     * Where the terminal's frame sits inside its host, on one axis.
+     *
+     * <p>Sideways, Floating tucks under the dock's own capsule inset, which gives it visible air.
+     * Vertically it had none, so its edges butted against the status bar and the dock and read as
+     * one merged frame; it is held off both by the gap the capsule surfaces leave. Docked spends
+     * the user's own Margin knob evenly on all four sides instead.
+     *
+     * <p>Shared with whatever else has to sit on that edge — the mode hint card hangs off the
+     * top-trailing corner and must land on the terminal's edge, not near it.
+     *
+     * @param framed whether a frame line (the border preference, or the glass rim) is being drawn,
+     *     which is what buys the Floating frame its vertical air.
+     */
+    private int terminalFrameInsetPx(boolean vertical, boolean framed) {
+        if (!isRoundedDockStyle())
+            return dockedTerminalMarginPx();
+        return vertical
+            ? (framed ? Math.round(dpToPx(TERMINAL_BORDER_VERTICAL_INSET_DP)) : 0)
+            : getDockLayout().horizontalInsetPx;
+    }
+
+    /** The same two numbers the frame is laid out with, for a surface that has to meet its edge. */
+    private int terminalFrameInsetPx(boolean vertical) {
+        boolean framed = mPreferences != null
+            && (mPreferences.isTerminalBorderEnabled() || isTerminalPaneGlassActive());
+        return terminalFrameInsetPx(vertical, framed);
+    }
+
     private void applyTerminalBorderAppearance() {
         if (mPreferences == null) {
             return;
@@ -1471,18 +1500,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         //
         // Keyed off the preference rather than off `enabled`, so splitting a window does not shift
         // the terminal: the pane borders land exactly where the terminal border was.
-        int borderVerticalInsetPx = preferBorder || glass
-            ? Math.round(dpToPx(TERMINAL_BORDER_VERTICAL_INSET_DP)) : 0;
-        int borderHorizontalInsetPx = capsuleMarginPx;
-        if (!capsule) {
-            // Default surface: the terminal's outer air is the user's own "Inner padding" knob —
-            // the same value that gaps the panes — applied evenly on all four sides. Before this,
-            // the vertical edges had a fixed 5dp of air while the sides sat flush against the
-            // screen, and no setting reached either. Rounded keeps its capsule heuristics.
-            int outerPx = dockedTerminalMarginPx();
-            borderHorizontalInsetPx = outerPx;
-            borderVerticalInsetPx = outerPx;
-        }
+        int borderVerticalInsetPx = terminalFrameInsetPx(true, preferBorder || glass);
+        int borderHorizontalInsetPx = terminalFrameInsetPx(false, preferBorder || glass);
 
         ViewGroup.LayoutParams borderParams = borderView.getLayoutParams();
         if (borderParams instanceof ViewGroup.MarginLayoutParams) {
@@ -1926,6 +1945,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void showTerminalActionHint(@NonNull TextView chip, @NonNull CharSequence label) {
         if (mActionHintHideRunnable != null)
             chip.removeCallbacks(mActionHintHideRunnable);
+        // Both hang from the terminal's top-trailing corner. While a mode legend is up it owns that
+        // corner, so the chip stacks underneath it instead of arriving behind it unseen.
+        ViewGroup.LayoutParams chipParams = chip.getLayoutParams();
+        if (chipParams instanceof ViewGroup.MarginLayoutParams) {
+            int cardPx = mModeHintCard != null ? mModeHintCard.occupancyPx() : 0;
+            int targetTop = cardPx > 0 ? cardPx + Math.round(dpToPx(6)) : 0;
+            ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) chipParams;
+            if (marginParams.topMargin != targetTop) {
+                marginParams.topMargin = targetTop;
+                chip.setLayoutParams(marginParams);
+            }
+        }
 
         chip.setText(label);
         chip.setTextColor(getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
@@ -8799,6 +8830,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
+        public void showModeHint(
+                @Nullable com.termux.app.terminal.TerminalModeHintCard.Mode mode) {
+            if (mode == null) TermuxActivity.this.hideTerminalModeHint();
+            else TermuxActivity.this.showTerminalModeHint(mode);
+        }
+
+        @Override
         public void copyToClipboard(@NonNull String text) {
             android.content.ClipboardManager clipboard =
                 (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
@@ -9196,6 +9234,55 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** True while a window/pane operation is deliberately running silent. */
     public boolean areNoticesSuppressed() {
         return mNoticeSuppressionDepth > 0;
+    }
+
+    // ------------------------------------------------------------- "how do I drive this mode?"
+    //
+    // Copy mode and scrollback search are entered from a chord and then own every key. The find
+    // strip could only afford three words about that at its trailing end, and the view's own text
+    // selection said nothing at all. The card is the legend for whichever of them is up.
+
+    @Nullable private com.termux.app.terminal.TerminalModeHintCard mModeHintCard;
+
+    /** Shows (or swaps) the legend for a modal terminal mode. */
+    public void showTerminalModeHint(
+            @NonNull com.termux.app.terminal.TerminalModeHintCard.Mode mode) {
+        com.termux.app.terminal.TerminalModeHintCard card = obtainModeHintCard();
+        if (card == null)
+            return;
+        syncTerminalModeHintFrame(card);
+        card.show(mode);
+    }
+
+    public void hideTerminalModeHint() {
+        if (mModeHintCard != null) mModeHintCard.hide();
+    }
+
+    @Nullable
+    private com.termux.app.terminal.TerminalModeHintCard obtainModeHintCard() {
+        FrameLayout host = findViewById(R.id.terminal_surface_host);
+        if (host == null)
+            return null;
+        if (mModeHintCard == null)
+            mModeHintCard = new com.termux.app.terminal.TerminalModeHintCard(this);
+        if (mModeHintCard.getParent() == null) {
+            host.addView(mModeHintCard,
+                com.termux.app.terminal.TerminalModeHintCard.buildHostLayoutParams());
+        }
+        mModeHintCard.bringToFront();
+        return mModeHintCard;
+    }
+
+    /**
+     * Re-seats the card on the terminal's current edge. Margins, shape and style are all live
+     * settings, so this is read at every show rather than once at construction.
+     */
+    private void syncTerminalModeHintFrame(
+            @NonNull com.termux.app.terminal.TerminalModeHintCard card) {
+        float radiusPx = isRoundedDockStyle()
+            ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE)
+            : dockedTerminalCornerRadiusPx();
+        card.setTerminalFrame(terminalFrameInsetPx(false), terminalFrameInsetPx(true), radiusPx);
     }
 
     @Nullable
@@ -12386,6 +12473,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void setRootViewLoggingEnabled(boolean enabled) {
             getTermuxActivityRootView().setIsRootViewLoggingEnabled(enabled);
+        }
+
+        @Override public void showTerminalModeHint(
+                @Nullable com.termux.app.terminal.TerminalModeHintCard.Mode mode) {
+            // Qualified: this inner class declares the same name, so an unqualified call is a
+            // recursion into itself rather than a call to the activity's own method.
+            if (mode == null) TermuxActivity.this.hideTerminalModeHint();
+            else TermuxActivity.this.showTerminalModeHint(mode);
         }
 
         @Override public void setDrawerLocked(boolean locked) {

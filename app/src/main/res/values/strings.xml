@@ -1333,6 +1333,16 @@
     <string name="tool_desc_terminal_search_scrollback">Find text in this pane’s scrollback and jump to a match.</string>
     <string name="terminal_scrollback_search_hint">Search text</string>
     <string name="terminal_find_yanked">Copied selection</string>
+    <!-- The legend card that hangs off the terminal's top-trailing corner while a modal terminal
+         mode is up. Keys first, meaning second, and only the keys that mean something right now. -->
+    <string name="terminal_mode_hint_search_title">Search scrollback</string>
+    <string name="terminal_mode_hint_search_body">Type to match · ⏎ jump\n↑ ↓ step · ⌫ edit · esc close</string>
+    <string name="terminal_mode_hint_copy_title">Copy mode</string>
+    <string name="terminal_mode_hint_copy_body">h j k l or arrows move · w b words\nn N match · g G ends\nv char · V line · ⌃V block\ny copy · / search again · esc leave</string>
+    <string name="terminal_mode_hint_copy_select_title">Copy mode · selecting</string>
+    <string name="terminal_mode_hint_copy_select_body">Move to extend the selection\ny copy and leave · esc drop it</string>
+    <string name="terminal_mode_hint_selection_title">Text selected</string>
+    <string name="terminal_mode_hint_selection_body">Drag the handles to adjust\nCopy or More… on the bar\nesc or a tap cancels</string>
     <string name="terminal_scrollback_search_row">Row %1$s   %2$s</string>
     <plurals name="terminal_scrollback_search_results">
         <item quantity="one">1 match</item>

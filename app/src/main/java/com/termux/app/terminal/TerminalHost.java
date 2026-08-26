@@ -59,6 +59,13 @@ public interface TerminalHost {
     /** Locks the drawer closed, e.g. while a selection is being copied. */
     void setDrawerLocked(boolean locked);
 
+    /**
+     * Shows the legend for a modal terminal mode on the terminal's top-trailing corner, or takes it
+     * down with {@code null}. Copy mode and search repurpose every key, and a mode nobody can see
+     * the rules of is a mode people leave rather than use.
+     */
+    void showTerminalModeHint(@Nullable TerminalModeHintCard.Mode mode);
+
     /** Shows or hides the terminal toolbar, as the fn+q/fn+k writing mode keys do. */
     void toggleTerminalToolbar();
 

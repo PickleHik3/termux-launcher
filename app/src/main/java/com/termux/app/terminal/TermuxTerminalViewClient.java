@@ -334,6 +334,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     public void copyModeChanged(boolean copyMode) {
         // Disable drawer while copying.
         mHost.setDrawerLocked(copyMode);
+        // Selection handles and a floating Copy button are the whole interface, and neither says
+        // what the keys do or how to get out; the legend does.
+        mHost.showTerminalModeHint(copyMode ? TerminalModeHintCard.Mode.SELECTION : null);
     }
 
     @SuppressLint("RtlHardcoded")

@@ -232,6 +232,13 @@ class FakeTerminalHost implements TerminalHost {
         drawerLocked = locked;
     }
 
+    /** The legend the terminal is currently showing, or null while no mode is up. */
+    public TerminalModeHintCard.Mode modeHint;
+
+    @Override public void showTerminalModeHint(TerminalModeHintCard.Mode mode) {
+        modeHint = mode;
+    }
+
     @Override public void toggleTerminalToolbar() {
         record("toggleTerminalToolbar");
         toolbarToggles++;
