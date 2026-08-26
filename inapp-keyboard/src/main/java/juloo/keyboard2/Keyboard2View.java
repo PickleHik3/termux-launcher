@@ -352,6 +352,34 @@ public class Keyboard2View extends View
   private static final long HINT_BREATH_PERIOD_MS = 3800L;
   /** How far a lit color sinks toward black at the bottom of a breath. */
   private static final float HINT_BREATH_DEPTH = 0.18f;
+  /**
+   * The invitation's beacon. One cap — the ? that opens the full keymap — is not a binding among
+   * the lit ones but the way to see the rest of them, so it must not read as a louder version of
+   * what they are doing. They swell and sink on a slow sine; this snaps bright and eases back, and
+   * it lifts toward white rather than dimming, so the two signals differ in kind and not degree.
+   */
+  private static final float HINT_PULSE_LIFT = 0.62f;
+  private static final long HINT_PULSE_PERIOD_MS = 1400L;
+  /** Share of the beacon's period spent snapping to full brightness. */
+  private static final float HINT_PULSE_ATTACK = 0.12f;
+  /** Key the ? invitation sits on while the hints are up, or -1. */
+  private int _hintPulseKeyId = -1;
+  /** Phase of the faster pulse, on the same animator's clock as the breath. */
+  private float _hintPulseWave;
+
+  /**
+   * Marks one cap as the invitation rather than as a binding. Null clears it. Costs nothing when
+   * no hint lighting is up: the breath animator drives both waves and only runs while lit.
+   */
+  public void setKeybindHintPulseToken(String token)
+  {
+    requireMainThread();
+    int id = token == null ? -1 : parseKeyId(token);
+    if (_hintPulseKeyId == id)
+      return;
+    _hintPulseKeyId = id;
+    invalidate();
+  }
 
   private void updateHintBreathAnimator()
   {
@@ -365,6 +393,7 @@ public class Keyboard2View extends View
         _hintBreathAnimator = null;
       }
       _hintBreathWave = 0f;
+      _hintPulseWave = 0f;
       return;
     }
     if (_hintBreathAnimator != null)
@@ -376,6 +405,14 @@ public class Keyboard2View extends View
     animator.addUpdateListener(a -> {
       float phase = (Float) a.getAnimatedValue();
       _hintBreathWave = 0.5f - 0.5f * (float) Math.cos(2.0 * Math.PI * phase);
+      // The beacon rides the same clock, so one animator still runs the whole surface. Its
+      // envelope is asymmetric on purpose: a fast rise and a long fall is a flash, and a flash is
+      // what says "press this" without joining the breath around it.
+      double pulsePhase = phase * (double) HINT_BREATH_PERIOD_MS / HINT_PULSE_PERIOD_MS;
+      float beat = (float) (pulsePhase - Math.floor(pulsePhase));
+      _hintPulseWave = beat < HINT_PULSE_ATTACK
+        ? beat / HINT_PULSE_ATTACK
+        : (float) Math.pow(1f - (beat - HINT_PULSE_ATTACK) / (1f - HINT_PULSE_ATTACK), 2.2);
       invalidate();
     });
     animator.start();
@@ -389,11 +426,13 @@ public class Keyboard2View extends View
     updateHintBreathAnimator();
   }
 
-  /** A lit hint color at the current point of the breath. */
-  private int hintBreathe(int color)
+  /** A lit hint color at the current point of the breath, or of the beacon for the ? cap. */
+  private int hintBreathe(int color, int keyIdValue)
   {
     if (_hintBreathAnimator == null)
       return color;
+    if (keyIdValue >= 0 && keyIdValue == _hintPulseKeyId)
+      return lerpColor(color, Color.WHITE, HINT_PULSE_LIFT * _hintPulseWave);
     float keep = 1f - HINT_BREATH_DEPTH * _hintBreathWave;
     return Color.argb(Color.alpha(color), Math.round(Color.red(color) * keep),
         Math.round(Color.green(color) * keep), Math.round(Color.blue(color) * keep));
@@ -1155,9 +1194,9 @@ public class Keyboard2View extends View
         {
           // Only the hint lighting breathes; color-scheme overrides stay steady.
           if (frameBackground != null)
-            frameBackground = hintBreathe(frameBackground);
+            frameBackground = hintBreathe(frameBackground, keyIdValue);
           if (frameBorder != null)
-            frameBorder = hintBreathe(frameBorder);
+            frameBorder = hintBreathe(frameBorder, keyIdValue);
         }
         drawKeyFrame(canvas, x, y, keyW, keyH, tc_key, frameBackground, frameBorder);
         // The latched Ctrl/Alt/Shift caps are the hint popup's prefix indicator; trace them
@@ -1357,6 +1396,7 @@ public class Keyboard2View extends View
       _hintBreathAnimator.cancel();
       _hintBreathAnimator = null;
       _hintBreathWave = 0f;
+      _hintPulseWave = 0f;
     }
     resetInputStateInternal(true);
     requestDisallowIntercept(false);
