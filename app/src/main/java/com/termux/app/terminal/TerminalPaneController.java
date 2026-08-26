@@ -2238,6 +2238,13 @@ public class TerminalPaneController {
     // default 1dp gap and rode over its neighbour's rim, which read as a detached border.
     private static final float PANE_SHIFT_DP = 0.5f;
     private static final float PANE_PRESS_DIP = 0.006f;
+    /**
+     * How far the press dip may pull a pane's edge in, whatever the pane's size. A pane is most of
+     * the screen, so the dock's proportional dip moved each edge more than a dozen pixels here: the
+     * slab shrank away from the terminal's own edge and its lit rim went with it, which read as the
+     * border detaching from the terminal rather than as the terminal being pressed.
+     */
+    private static final float PANE_DIP_TRAVEL_DP = 1f;
 
     private final Map<FrameLayout, DockPlankController> mPanePlanks = new HashMap<>();
     @Nullable private DockPlankController mPressedPlank;
@@ -2268,6 +2275,7 @@ public class TerminalPaneController {
                         PANE_TILT_DEG, PANE_SHIFT_DP, PANE_PRESS_DIP);
                     plank.setHingeMode(false);
                     plank.setMotionEnabled(true);
+                    plank.setMaxDipTravelDp(PANE_DIP_TRAVEL_DP);
                     mPanePlanks.put(frame, plank);
                 }
                 plank.setReducedMotion(reducedMotion);
@@ -2387,17 +2395,25 @@ public class TerminalPaneController {
                 releasePanePlank(frame);
                 continue;
             }
+            // Against the pane's own size, not the window's: after four or five splits a pane is a
+            // few rows tall and the window's radius would be half of it.
+            float paneRadiusPx = PaneShape.radiusForBounds(radiusPx,
+                frame.getWidth(), frame.getHeight());
             backdrop.setGlass(mSurfaceStyle.paneGlassBlurFrame(),
                 mSurfaceStyle.paneGlassBlurFrameRect(), mSurfaceStyle.paneGlassTintColor(),
-                mSurfaceStyle.paneGlassGrainLayer(), radiusPx,
+                mSurfaceStyle.paneGlassGrainLayer(), paneRadiusPx,
                 mSurfaceStyle.paneGlassFrostFilter());
             backdrop.setVisibility(View.VISIBLE);
             // The terminal paints rectangular cell backgrounds; without the clip they poke past
             // the slab's rounded corners exactly as they did past the float's.
-            final float paneRadiusPx = radiusPx;
+            final float requestedRadiusPx = radiusPx;
             frame.setOutlineProvider(new ViewOutlineProvider() {
                 @Override public void getOutline(View view, Outline outline) {
-                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), paneRadiusPx);
+                    // Re-capped here as well as above: a drag on a split divider resizes the frame
+                    // without going back through applyPaneGlass, and the outline is asked again.
+                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(),
+                        PaneShape.radiusForBounds(requestedRadiusPx,
+                            view.getWidth(), view.getHeight()));
                 }
             });
             frame.setClipToOutline(true);
