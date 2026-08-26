@@ -284,8 +284,10 @@ public final class SurfaceEditorController {
         final int initialKeyboardInset = prefs().getInAppKeyboardHorizontalInset();
         final int initialStatusInset = prefs().getStatusBarHorizontalInset();
         // Captured too, so "Revert all" really means all. These are written straight to
-        // preferences by the keyboard colour sub-screen rather than through the sliders, and
-        // leaving them out left a half-reverted state behind.
+        // preferences by the clock face picker and the keyboard colour sub-screen rather than
+        // through the sliders, and leaving them out left a half-reverted state behind.
+        final String initialClockStyle = prefs().getTopPaneClockStyle();
+        final int initialIndicatorRadius = prefs().getStatusIndicatorCornerRadius();
         final String initialLinks = surfaceEditorLinkSignature();
         final String initialKeyboardColorScheme = prefs().getInAppKeyboardColorScheme();
         final String initialKeyboardTheme = prefs().getInAppKeyboardTheme();
@@ -643,6 +645,8 @@ public final class SurfaceEditorController {
             TUNING_PREVIEW_SURFACES | TUNING_PREVIEW_GEOMETRY,
             value -> writeSurfaceCornerRadius(SURFACE_TUNING_TARGET_STATUS, value));
         bindSurfaceTuningGestures();
+        bindStatusClockRow();
+        bindStatusIndicatorRadiusRow();
         bindMaterialMacro();
         bindSurfaceInheritanceChips();
         bindSurfaceReattachAll();
@@ -701,6 +705,11 @@ public final class SurfaceEditorController {
             syncTerminalRadiusRow();
             prefs().setWallpaperBackdropDim(
                 TermuxPreferenceConstants.TERMUX_APP.DEFAULT_WALLPAPER_BACKDROP_DIM);
+            // The clock face is a look the editor owns, so one page, one reset covers it too.
+            prefs().setTopPaneClockStyle(
+                TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_STYLE);
+            prefs().setStatusIndicatorCornerRadius(
+                TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_INDICATOR_CORNER_RADIUS);
             prefs().setTerminalPaneGap(
                 TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP);
             mHost.refreshPaneLayout();
@@ -747,6 +756,10 @@ public final class SurfaceEditorController {
             syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_DOCK);
             syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_KEYBOARD);
             syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_STATUS);
+            // Reads the restored face and chip shape onto the live bar, then onto the rows.
+            mHost.refreshTerminalWindowBar();
+            syncStatusClockRow();
+            syncStatusIndicatorRadiusRow();
             syncSurfaceInheritanceUi();
             applyDockTuningStructuralPreview();
         });
@@ -795,6 +808,8 @@ public final class SurfaceEditorController {
                 prefs().setStatusBarHorizontalInset(initialStatusInset);
                 prefs().setInAppKeyboardColorScheme(initialKeyboardColorScheme);
                 prefs().setInAppKeyboardTheme(initialKeyboardTheme);
+                prefs().setTopPaneClockStyle(initialClockStyle);
+                prefs().setStatusIndicatorCornerRadius(initialIndicatorRadius);
                 // The legacy setters above restore Base through whichever links were attached, but
                 // a property every surface had detached leaves Base itself unrestored - and the
                 // macro writes Base directly - so the shared layer is put back explicitly, last,
@@ -804,6 +819,11 @@ public final class SurfaceEditorController {
                     prefs().setSurfaceBaseValue(property, initialBase[property.ordinal()]);
                 prefs().setSurfaceMaterial(initialMaterial);
                 prefs().setSurfaceMaterialIntensity(initialMaterialIntensity);
+                // One place re-reads the clock's face, alignment, 12-hour and lazy mode — and
+                // restyles the row's chips.
+                mHost.refreshTerminalWindowBar();
+                syncStatusClockRow();
+                syncStatusIndicatorRadiusRow();
                 if (keyboard() != null) {
                     keyboard().previewSurfaceEditorHeightScale(initialKeyboardHeight);
                     keyboard().previewSurfaceEditorKeyOpacity(initialKeyboardKeyOpacity);
@@ -1291,6 +1311,8 @@ public final class SurfaceEditorController {
             .append(prefs().getStatusBarGrain()).append('|')
             .append(prefs().getStatusBarCornerRadius()).append('|')
             .append(prefs().getStatusBarHorizontalInset()).append('|')
+            .append(prefs().getTopPaneClockStyle()).append('|')
+            .append(prefs().getStatusIndicatorCornerRadius()).append('|')
             .append(prefs().getTerminalBackgroundOpacity()).append('|')
             .append(prefs().isTerminalBorderEnabled()).append('|')
             .append(prefs().getTerminalGlassBlurRadius()).append('|')
@@ -1361,6 +1383,263 @@ public final class SurfaceEditorController {
             .setPositiveButton(R.string.termux_surface_tuning_unsaved_save,
                 (dialog, which) -> exitDockTuningMode())
             .show();
+    }
+
+    // ------------------------------------------------------------------------- the clock face
+    //
+    // Status's other five rows are numbers on a slider; the clock is a look, and looks pick badly
+    // from a list of words - which is why the six-face toggle group used to sit here, and why
+    // losing it to the settings list cost the editor something a settings list cannot give back.
+    // It returns as one row instead of six buttons: the row draws the live face, and the picker
+    // draws all six as themselves, at the compact size the pane uses when it is collapsed. That
+    // matters more here than it looks - the editor collapses the status pane out of its own way on
+    // entry, so these previews are the only place the choice can be seen while it is being made.
+
+    /** Package-private so a test can hold it against the settings list's own entry values. */
+    static final String[] CLOCK_STYLES = {
+        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP,
+        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD,
+        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL,
+        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED,
+        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE,
+        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB};
+
+    /** Same fallback the widget itself applies to an unknown stored value. */
+    @StringRes
+    static int clockStyleLabel(@Nullable String style) {
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD.equals(style))
+            return R.string.termux_top_pane_clock_style_lcd;
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL.equals(style))
+            return R.string.termux_top_pane_clock_style_minimal;
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED.equals(style))
+            return R.string.termux_top_pane_clock_style_led;
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(style))
+            return R.string.termux_top_pane_clock_style_tape;
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB.equals(style))
+            return R.string.termux_top_pane_clock_style_slab;
+        return R.string.termux_top_pane_clock_style_flip;
+    }
+
+    private void bindStatusClockRow() {
+        View row = mHost.findView(R.id.surface_tuning_status_clock_row);
+        if (row == null)
+            return;
+        row.setOnClickListener(view -> showClockFacePicker());
+        syncStatusClockRow();
+    }
+
+    /** Restates the row against the stored face: the preview, and what TalkBack reads out. */
+    private void syncStatusClockRow() {
+        if (prefs() == null)
+            return;
+        String style = prefs().getTopPaneClockStyle();
+        com.termux.app.terminal.TerminalClockWidget preview =
+            mHost.findView(R.id.surface_tuning_status_clock_preview);
+        if (preview != null)
+            applyClockPreview(preview, style);
+        View row = mHost.findView(R.id.surface_tuning_status_clock_row);
+        if (row != null)
+            row.setContentDescription(getString(
+                R.string.termux_surface_tuning_clock_row_description,
+                getString(clockStyleLabel(style))));
+    }
+
+    /**
+     * A face at the size the collapsed pane draws it, honouring the 12-hour and lazy-mode
+     * preferences so a preview never animates in a build where the real clock does not.
+     */
+    private void applyClockPreview(@NonNull com.termux.app.terminal.TerminalClockWidget widget,
+                                   @NonNull String style) {
+        widget.setForm(com.termux.app.statusbar.TopPaneClockForm.COMPACT);
+        widget.setStyle(style);
+        if (prefs() == null)
+            return;
+        widget.setUseAmPm(prefs().isTopPaneClockAmPmEnabled());
+        widget.setLazyMode(prefs().isLazyModeEnabled());
+    }
+
+    private void showClockFacePicker() {
+        if (prefs() == null)
+            return;
+        Context context = mHost.context();
+        android.widget.LinearLayout column = new android.widget.LinearLayout(context);
+        column.setOrientation(android.widget.LinearLayout.VERTICAL);
+        column.setPadding(Math.round(dpToPx(16)), Math.round(dpToPx(6)),
+            Math.round(dpToPx(16)), Math.round(dpToPx(6)));
+        // The app's dialog panel is translucent, and six faces of thin digits over whatever the
+        // editor and the keyboard are drawing behind it is not a fair look at any of them. The
+        // list carries its own solid field so every face is judged against the same ground.
+        android.graphics.drawable.GradientDrawable field =
+            new android.graphics.drawable.GradientDrawable();
+        field.setCornerRadius(dpToPx(14));
+        field.setColor(mHost.themeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+            R.color.termux_surface_panel_high));
+        column.setBackground(field);
+        ScrollView scroller = new ScrollView(context);
+        scroller.setFillViewport(true);
+        scroller.addView(column);
+
+        // Created before the rows so each row's tap can dismiss the sheet it lives in: a picked
+        // face is applied and the picker is done, the way a dropdown behaves.
+        androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.termux_surface_tuning_clock_picker_title)
+            .setView(scroller)
+            .setNegativeButton(R.string.termux_dock_tuning_cancel, null)
+            .create();
+
+        String current = prefs().getTopPaneClockStyle();
+        for (String style : CLOCK_STYLES)
+            column.addView(clockFaceRow(context, style, current, dialog));
+
+        TextView elsewhere = new TextView(context);
+        elsewhere.setText(R.string.termux_surface_tuning_clock_elsewhere);
+        elsewhere.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 11);
+        elsewhere.setTextColor(mHost.themeColor(
+            com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+            R.color.termux_on_surface_variant));
+        elsewhere.setPadding(Math.round(dpToPx(4)), Math.round(dpToPx(10)),
+            Math.round(dpToPx(4)), 0);
+        column.addView(elsewhere);
+
+        dialog.show();
+    }
+
+    /** One face in the picker: its name, the face itself, and a tick on the one in use. */
+    @NonNull
+    private View clockFaceRow(@NonNull Context context, @NonNull String style,
+                              @NonNull String current,
+                              @NonNull androidx.appcompat.app.AlertDialog dialog) {
+        android.widget.LinearLayout row = new android.widget.LinearLayout(context);
+        row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setMinimumHeight(Math.round(dpToPx(48)));
+        android.util.TypedValue ripple = new android.util.TypedValue();
+        if (context.getTheme().resolveAttribute(
+                android.R.attr.selectableItemBackground, ripple, true))
+            row.setBackgroundResource(ripple.resourceId);
+        boolean selected = style.equals(current);
+
+        TextView name = new TextView(context);
+        name.setText(clockStyleLabel(style));
+        name.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 13);
+        // Two lines, so a large font scale wraps "LED matrix" instead of clipping it - the column
+        // stays a fixed width either way, which is what keeps the six faces vertically aligned.
+        name.setMaxLines(2);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        name.setTextColor(selected
+            ? mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary)
+            : mHost.themeColor(com.termux.shared.R.attr.termuxColorOnSurface,
+                R.color.termux_on_surface));
+        name.setLayoutParams(new android.widget.LinearLayout.LayoutParams(
+            Math.round(dpToPx(84)), ViewGroup.LayoutParams.WRAP_CONTENT));
+        row.addView(name);
+
+        com.termux.app.terminal.TerminalClockWidget preview =
+            new com.termux.app.terminal.TerminalClockWidget(context, null);
+        applyClockPreview(preview, style);
+        preview.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        android.widget.LinearLayout.LayoutParams previewParams =
+            new android.widget.LinearLayout.LayoutParams(
+                0, Math.round(dpToPx(30)), 1f);
+        preview.setLayoutParams(previewParams);
+        row.addView(preview);
+
+        TextView tick = new TextView(context);
+        tick.setText(R.string.termux_surface_tuning_clock_selected);
+        tick.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 14);
+        tick.setGravity(android.view.Gravity.CENTER);
+        tick.setTextColor(mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary,
+            R.color.termux_primary));
+        tick.setVisibility(selected ? View.VISIBLE : View.INVISIBLE);
+        tick.setLayoutParams(new android.widget.LinearLayout.LayoutParams(
+            Math.round(dpToPx(24)), ViewGroup.LayoutParams.WRAP_CONTENT));
+        row.addView(tick);
+
+        // The row is the control, so it carries the node: the face's name, a button role, and the
+        // selected state - a preview draws no text TalkBack could read.
+        row.setContentDescription(getString(R.string.termux_surface_tuning_clock_face_description,
+            getString(clockStyleLabel(style))));
+        row.setClickable(true);
+        row.setFocusable(true);
+        final boolean isSelected = selected;
+        androidx.core.view.ViewCompat.setAccessibilityDelegate(row,
+            new androidx.core.view.AccessibilityDelegateCompat() {
+                @Override public void onInitializeAccessibilityNodeInfo(@NonNull View host,
+                        @NonNull androidx.core.view.accessibility
+                            .AccessibilityNodeInfoCompat info) {
+                    super.onInitializeAccessibilityNodeInfo(host, info);
+                    info.setClassName(android.widget.Button.class.getName());
+                    info.setCheckable(true);
+                    info.setChecked(isSelected);
+                }
+            });
+        row.setOnClickListener(view -> {
+            pickClockStyle(style);
+            dialog.dismiss();
+        });
+        return row;
+    }
+
+    // ------------------------------------------------------------------------ the row's chips
+    //
+    // The sessions indicator and the window pills are content inside the status surface, not
+    // surfaces of their own: they take no blur, no grain and no opacity of their own, and they had
+    // no shape of their own either — square while Docked, the capsule's radius while Floating,
+    // with nothing in between. One knob gives them a shape, and gives them the same one, which is
+    // the only way two chips sitting side by side in one row can look deliberate.
+
+    private void bindStatusIndicatorRadiusRow() {
+        SeekBar slider = mHost.findView(R.id.surface_tuning_status_indicator_radius_slider);
+        if (slider == null)
+            return;
+        slider.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                TextView value =
+                    mHost.findView(R.id.surface_tuning_status_indicator_radius_value);
+                if (value != null)
+                    value.setText(getString(R.string.termux_dock_tuning_value_dp, progress));
+                if (!fromUser || prefs() == null)
+                    return;
+                prefs().setStatusIndicatorCornerRadius(progress);
+                // The bar restyles both chips from one place, so they cannot drift apart.
+                mHost.refreshTerminalWindowBar();
+                updateSurfaceEditorDirtyBadge();
+            }
+        });
+        syncStatusIndicatorRadiusRow();
+    }
+
+    /**
+     * Restates the row from preferences. The stored {@code -1} — "still following the bar" — is
+     * shown as the shape the bar is actually giving the chips right now, so the slider starts where
+     * the eye says it should and the first drag moves from there rather than from zero.
+     */
+    private void syncStatusIndicatorRadiusRow() {
+        SeekBar slider = mHost.findView(R.id.surface_tuning_status_indicator_radius_slider);
+        if (slider == null || prefs() == null)
+            return;
+        int stored = prefs().getStatusIndicatorCornerRadius();
+        int shown = stored >= 0 ? stored
+            : (mHost.isRoundedDockStyle()
+                ? Math.min(TermuxPreferenceConstants.TERMUX_APP.MAX_STATUS_INDICATOR_CORNER_RADIUS,
+                    editorRadius(TermuxAppSharedPreferences.SurfaceSlot.STATUS,
+                        prefs().getStatusBarCornerRadius()))
+                : 0);
+        slider.setProgress(shown);
+        TextView value = mHost.findView(R.id.surface_tuning_status_indicator_radius_value);
+        if (value != null)
+            value.setText(getString(R.string.termux_dock_tuning_value_dp, shown));
+    }
+
+    /** Live like every other editor control: written through, previewed, and gated by Done. */
+    private void pickClockStyle(@NonNull String style) {
+        if (prefs() == null || style.equals(prefs().getTopPaneClockStyle()))
+            return;
+        prefs().setTopPaneClockStyle(style);
+        // One place re-reads face, alignment, 12-hour and lazy mode onto the live widget.
+        mHost.refreshTerminalWindowBar();
+        syncStatusClockRow();
+        updateSurfaceEditorDirtyBadge();
     }
 
     // ------------------------------------------------------------------ surface inheritance UI

@@ -254,6 +254,24 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 : Math.min(TERMUX_APP.MAX_STATUS_BAR_CORNER_RADIUS, value));
     }
 
+    /**
+     * Shape of the status row's two chips — the sessions indicator and the window pills — in dp, or
+     * {@code -1} while they still follow the bar's own shape.
+     */
+    public int getStatusIndicatorCornerRadius() {
+        int value = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_INDICATOR_CORNER_RADIUS,
+            TERMUX_APP.DEFAULT_STATUS_INDICATOR_CORNER_RADIUS);
+        return value < 0 ? -1
+            : Math.min(TERMUX_APP.MAX_STATUS_INDICATOR_CORNER_RADIUS, value);
+    }
+
+    public void setStatusIndicatorCornerRadius(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_INDICATOR_CORNER_RADIUS,
+            value < 0 ? -1 : Math.min(TERMUX_APP.MAX_STATUS_INDICATOR_CORNER_RADIUS, value), false);
+    }
+
     /** Wallpaper blur radius (dp) of the terminal's bordered glass pane; 0 disables. */
     /**
      * Docked terminal frame corner radius (dp). Deliberately outside the surface cascade — see

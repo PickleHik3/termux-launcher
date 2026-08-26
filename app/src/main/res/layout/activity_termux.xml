@@ -1590,6 +1590,84 @@
                             android:alpha="0.35"
                             android:background="?attr/termuxColorPrimary" />
 
+                        <!-- The face picker the editor lost when the six-button toggle group
+                             came out: one row, showing the live face rather than naming it. -->
+                        <LinearLayout
+                            android:id="@+id/surface_tuning_status_clock_row"
+                            android:layout_width="match_parent"
+                            android:layout_height="44dp"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="88dp"
+                                android:layout_height="wrap_content"
+                                android:ellipsize="end"
+                                android:maxLines="1"
+                                android:text="@string/termux_surface_tuning_clock"
+                                android:textColor="?attr/termuxColorOnSurface"
+                                android:textSize="12sp" />
+
+                            <com.termux.app.terminal.TerminalClockWidget
+                                android:id="@+id/surface_tuning_status_clock_preview"
+                                android:layout_width="0dp"
+                                android:layout_height="28dp"
+                                android:layout_weight="1"
+                                android:importantForAccessibility="no" />
+
+                            <TextView
+                                android:layout_width="30dp"
+                                android:layout_height="wrap_content"
+                                android:gravity="center"
+                                android:text="@string/termux_surface_tuning_clock_chevron"
+                                android:textColor="?attr/termuxColorPrimary"
+                                android:textSize="14sp" />
+                        </LinearLayout>
+
+                        <!-- The status row's two chips wear one shape between them: content inside
+                             the bar rather than a surface of its own, so it sits outside the shared
+                             rows and their inheritance chips. -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="88dp"
+                                android:layout_height="wrap_content"
+                                android:ellipsize="end"
+                                android:maxLines="1"
+                                android:labelFor="@id/surface_tuning_status_indicator_radius_slider"
+                                android:text="@string/termux_surface_tuning_indicator_radius"
+                                android:textColor="?attr/termuxColorOnSurface"
+                                android:textSize="12sp" />
+
+                            <SeekBar
+                                android:id="@+id/surface_tuning_status_indicator_radius_slider"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:contentDescription="@string/termux_surface_tuning_indicator_radius_description"
+                                android:max="16"
+                                android:splitTrack="false" />
+
+                            <TextView
+                                android:id="@+id/surface_tuning_status_indicator_radius_value"
+                                android:layout_width="48dp"
+                                android:layout_height="wrap_content"
+                                android:gravity="center"
+                                android:textColor="?attr/termuxColorOnSurfaceVariant"
+                                android:textSize="11sp" />
+
+                            <View
+                                android:layout_width="30dp"
+                                android:layout_height="1dp" />
+                        </LinearLayout>
+
                         <!-- All five of Status's rows are shared, so the whole group is generated. -->
                         <LinearLayout
                             android:id="@+id/surface_editor_rows_status"

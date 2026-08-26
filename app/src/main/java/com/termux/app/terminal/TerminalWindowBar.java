@@ -245,7 +245,11 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         return super.onTouchEvent(event);
     }
 
-    /** Keep window containers square in the default bar and capsule-rounded in Rounded. */
+    /**
+     * The pills' shape. The caller resolves it — the status row's own chip-radius knob, falling back
+     * to the bar's shape while that knob is untouched — so a Docked bar can carry rounded pills and
+     * the sessions indicator beside them can never disagree about the number.
+     */
     public void setSurfaceStyle(boolean capsule, float statusBarRadiusPx) {
         float radius = Math.max(0f, statusBarRadiusPx);
         if (mCapsuleSurface == capsule && mStatusBarRadiusPx == radius) return;
@@ -583,7 +587,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mSelectedFillColor = ColorUtils.setAlphaComponent(primary, 58);
         mSelectedStrokeColor = ColorUtils.setAlphaComponent(primary, 112);
         mTabs.setHighlightStyle(mSelectedFillColor, mSelectedStrokeColor,
-            mCapsuleSurface ? mStatusBarRadiusPx : 0f, dp(1));
+            mStatusBarRadiusPx, dp(1));
         // Tertiary, like the row's other "something is happening" accents. Opaque here: the breath
         // owns the rim's alpha, so a pre-dimmed base would flatten the swell it is made of.
         // Error for attention: it is the one Material role that is warm in every generated palette,
@@ -605,7 +609,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     private GradientDrawable buildUnselectedChip() {
         GradientDrawable chip = new GradientDrawable();
-        chip.setCornerRadius(mCapsuleSurface ? mStatusBarRadiusPx : 0f);
+        chip.setCornerRadius(mStatusBarRadiusPx);
         chip.setColor(mUnselectedFillColor);
         chip.setStroke(dp(1), mUnselectedStrokeColor);
         return chip;

@@ -2755,7 +2755,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 if (sessions instanceof com.termux.app.statusbar.SessionsIndicatorView) {
                     ((com.termux.app.statusbar.SessionsIndicatorView) sessions).setSurfaceStyle(
-                        capsule, resolveStatusBarCapsuleCornerRadiusPx(targetHeight));
+                        capsule, resolveStatusIndicatorCornerRadiusPx(targetHeight, capsule));
                 }
             }
 
@@ -2763,7 +2763,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 findViewById(R.id.terminal_window_bar);
             if (windows != null) {
                 windows.setSurfaceStyle(capsule,
-                    resolveStatusBarCapsuleCornerRadiusPx(targetHeight));
+                    resolveStatusIndicatorCornerRadiusPx(targetHeight, capsule));
             }
 
             View statusWidgets = findViewById(R.id.terminal_status_widgets);
@@ -2865,6 +2865,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : 0f;
         return DockLayoutPolicy.statusBarContentEdgeInsetPx(capsule, radiusPx, baselineRadiusPx,
             getResources().getDisplayMetrics().density);
+    }
+
+    /**
+     * The shape the status row's two chips wear: the sessions indicator and the window pills.
+     *
+     * <p>They are content inside the status surface rather than surfaces of their own, so they are
+     * not part of the Base cascade and have their own knob. Until it is touched they follow the bar
+     * — square while Docked, the capsule's radius while Floating — which is what they always did.
+     * Once it is set, that shape holds in both styles, clamped so a chip can never round past half
+     * of its own height.
+     */
+    private float resolveStatusIndicatorCornerRadiusPx(int surfaceHeightPx, boolean capsule) {
+        int configured = mPreferences == null
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_INDICATOR_CORNER_RADIUS
+            : mPreferences.getStatusIndicatorCornerRadius();
+        if (configured < 0)
+            return capsule ? resolveStatusBarCapsuleCornerRadiusPx(surfaceHeightPx) : 0f;
+        // No clamp of our own: both chips draw rounded rects, which already stop at half of the
+        // shorter side, and the two chips are not the same height — clamping here would cap the
+        // taller one at the shorter one's pill.
+        return dpToPx(configured);
     }
 
     private float resolveStatusBarCapsuleCornerRadiusPx(int surfaceHeightPx) {

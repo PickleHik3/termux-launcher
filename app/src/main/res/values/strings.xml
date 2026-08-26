@@ -1046,6 +1046,20 @@
                 <string name="termux_surface_tuning_advanced">Fine tune</string>
                 <string name="termux_surface_tuning_advanced_chevron_closed">▸</string>
                 <string name="termux_surface_tuning_advanced_chevron_open">▾</string>
+                <!-- The clock row in the editor's Status group. The pane's clock is the one
+                     thing in that group that is a look rather than a number, so the row shows the
+                     face itself and hides the six of them behind one tap. -->
+                <string name="termux_surface_tuning_clock">Clock</string>
+                <!-- One shape for the two chips on the status row: the sessions indicator and the
+                     window pills. Content inside the bar, not a surface, so it has its own knob. -->
+                <string name="termux_surface_tuning_indicator_radius">Chip radius</string>
+                <string name="termux_surface_tuning_indicator_radius_description">Corner radius of the sessions indicator and the window pills</string>
+                <string name="termux_surface_tuning_clock_chevron">▾</string>
+                <string name="termux_surface_tuning_clock_picker_title">Clock face</string>
+                <string name="termux_surface_tuning_clock_row_description">Clock face: %1$s. Tap to change.</string>
+                <string name="termux_surface_tuning_clock_face_description">%1$s clock face</string>
+                <string name="termux_surface_tuning_clock_selected">✓</string>
+                <string name="termux_surface_tuning_clock_elsewhere">Alignment and 12-hour time stay in Settings, under Terminal and status.</string>
                 <string name="termux_surface_tuning_dock">Dock</string>
                 <string name="termux_surface_tuning_keyboard">Keyboard</string>
                 <string name="termux_surface_tuning_status">Status</string>

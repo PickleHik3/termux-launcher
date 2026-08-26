@@ -305,6 +305,20 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_STATUS_BAR_CORNER_RADIUS = 40;
 
         /**
+         * Corner radius (dp) of the two chips on the status row — the sessions indicator and the
+         * window pills — which wear one shape between them.
+         *
+         * <p>Outside the Base cascade, like the terminal frame's radius: this is the shape of two
+         * pieces of content inside the status surface, not the shape of a surface. {@code -1} is
+         * the shipped "follow the bar" state, which is square while Docked and the capsule's own
+         * radius while Floating; any value the user dials in holds in both styles.
+         */
+        public static final String KEY_STATUS_INDICATOR_CORNER_RADIUS =
+            "status_indicator_corner_radius";
+        public static final int DEFAULT_STATUS_INDICATOR_CORNER_RADIUS = -1;
+        public static final int MAX_STATUS_INDICATOR_CORNER_RADIUS = 16;
+
+        /**
          * Corner radius (dp) of the Docked terminal's bordered frame. Not part of the Base
          * cascade: Floating derives the frame radius from the capsule, so this only exists where
          * the user can actually see it act — Docked with the border on. Defaults to the flush
