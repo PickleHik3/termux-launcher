@@ -117,7 +117,7 @@ public class FileReceiverActivity extends AppCompatActivity {
                 File file = new File(path);
                 try {
                     FileInputStream in = new FileInputStream(file);
-                    promptNameAndSave(in, file.getName());
+                    promptNameAndSave(in, file.getName(), file.getAbsolutePath());
                 } catch (FileNotFoundException e) {
                     showErrorDialogAndQuit("Cannot open file: " + e.getMessage() + ".");
                 }
@@ -230,7 +230,19 @@ public class FileReceiverActivity extends AppCompatActivity {
     }
     
     void promptNameAndSave(final InputStream in, final String attachmentFileName) {
-        TextInputDialogUtils.textInput(this, R.string.title_file_received, attachmentFileName, R.string.action_file_received_edit, text -> {
+        promptNameAndSave(in, attachmentFileName, null);
+    }
+
+    /**
+     * @param sourcePath If non-null, shown to the user before saving. The incoming intent's data
+     *                    URI is not scoped by any content-provider grant when it uses the "file"
+     *                    scheme, so the path being read may lie outside anything the calling app
+     *                    itself has access to; surfacing it lets the user notice a suspicious source
+     *                    before approving the save.
+     */
+    void promptNameAndSave(final InputStream in, final String attachmentFileName, final String sourcePath) {
+        String message = sourcePath != null ? getString(R.string.msg_file_received_source, sourcePath) : null;
+        TextInputDialogUtils.textInput(this, R.string.title_file_received, message, attachmentFileName, R.string.action_file_received_edit, text -> {
             File outFile = saveStreamWithName(in, text);
             if (outFile == null)
                 return;
