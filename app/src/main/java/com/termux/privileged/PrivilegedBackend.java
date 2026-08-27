@@ -112,4 +112,13 @@ public interface PrivilegedBackend {
      * Cleanup resources when backend is no longer needed
      */
     void cleanup();
+
+    /**
+     * Mask file paths and package names in a command string before it is logged.
+     */
+    static String maskSensitiveCommand(String command) {
+        if (command == null) return null;
+        return command.replaceAll("/[\\w/.-]+\\.apk", "<apk>")
+                      .replaceAll("[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)+", "<package>");
+    }
 }

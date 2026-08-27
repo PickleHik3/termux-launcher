@@ -334,12 +334,12 @@ public class ShizukuBackend implements PrivilegedBackend {
                 return executeShizukuCommand(List.of("sh", "-c", command));
                 
             } catch (Exception e) {
-                Log.e(TAG, "Failed to execute command: " + command, e);
+                Log.e(TAG, "Failed to execute command: " + PrivilegedBackend.maskSensitiveCommand(command), e);
                 return "Error: " + e.getMessage();
             }
         }, PrivilegedExecutors.commands());
     }
-    
+
     @Override
     public boolean isOperationSupported(PrivilegedOperation operation) {
         // Shizuku backend supports most operations through UserService
