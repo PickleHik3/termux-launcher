@@ -2,7 +2,7 @@
 
 Version 0.2.31 focuses on making the native launcher and terminal easier to discover, more useful in
 landscape, and safer to restore. This page covers user-visible changes; the complete fix list remains
-in the [changelog](../../CHANGELOG.md#0231).
+in the [v0.2.31 release notes](https://github.com/PickleHik3/termux-launcher/releases/tag/v0.2.31).
 
 ## Start faster
 

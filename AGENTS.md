@@ -253,17 +253,29 @@ Per edition: bump `versionName` (it **must** equal the tag minus `v` or CI abort
 push, tag, `gh release create --notes-file …`, then dispatch `attach_debug_apks_to_release.yml` with
 the tag. `versionCode` stays **1020** for upstream parity — never change it.
 
-Release notes live at `project-docs/release-notes-v<version>.md`. `CHANGELOG.md` is the technical
-record; the notes file is its plain-language translation for someone holding the phone, written
-*from* the changelog rather than pasting it. Since v0.2.35 they are split by edition and the split is
-the point:
+Release notes live at `project-docs/release-notes-v<version>.md` and are the **only** changelog.
+There is no `CHANGELOG.md` — it was deleted after v0.2.35-a as a second hand-maintained history that
+duplicated the notes and drifted from them. The technical record is `git log`: commit bodies carry
+the mechanism, the measurements and the reasoning, which is where a reader who wants that should be
+sent. Write the notes from the commit range (`git log v<previous>..dev`), not from another document.
 
-- `release-notes-v<version>.md` carries the **whole** changelog and ships with the `com.termux`
-  release. Group under `## New` / `## Changes` / `## Fixes` with `###` sub-headings per surface
-  (App Drawer, Widgets Page, Keybinds, Terminal, Launcher, Extra Keys). Leave out defects that only
-  ever existed mid-development.
+The notes are for someone holding the phone. One line per item, saying what they can now do or what
+stopped happening — not how it works. No mechanism, no root cause, no class or file names, no heap
+figures or test counts, no bold lead-ins. Name an issue number where a reported fix closes one.
+Config paths appear only because people type them.
+
+**Leave out everything that is not visible to a user of the released build**: refactors, extracted
+seams, performance internals, and any defect that was introduced and fixed inside the same release
+cycle. A reader must never learn that something was briefly broken between two tags.
+
+Since v0.2.35 they are split by edition and the split is the point:
+
+- `release-notes-v<version>.md` is the whole changelog and ships with the `com.termux` release.
+  Group under `## New` / `## Changes` / `## Fixes` (and `## Security` when a review is behind it),
+  with `###` sub-headings per surface under `## New` (App Drawer, Widgets Page, Keybinds, Terminal,
+  Launcher, Extra Keys).
 - `release-notes-v<version>-vaj.md` and `-nix.md` carry **only** what is exclusive to that edition
-  and link back to the main notes. Do not restate the shared changelog.
+  and link back to the main notes. Do not restate the shared notes.
 
 ## Commits, PRs and work artifacts
 
