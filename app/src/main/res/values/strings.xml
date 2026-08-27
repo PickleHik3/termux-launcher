@@ -523,6 +523,7 @@
 
     <!-- Termux File Receiver -->
     <string name="title_file_received">Save file in ~/downloads/</string>
+    <string name="msg_file_received_source">Source: %1$s</string>
     <string name="action_file_received_edit">Edit</string>
     <string name="action_file_received_open_directory">Open directory</string>
 

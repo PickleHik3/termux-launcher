@@ -8,6 +8,7 @@ import android.view.KeyEvent;
 import android.view.ViewGroup.LayoutParams;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import androidx.appcompat.app.AlertDialog;
 
@@ -21,6 +22,15 @@ public final class TextInputDialogUtils {
     }
 
     public static void textInput(Activity activity, int titleText, String initialText, int positiveButtonText, final TextSetListener onPositive, int neutralButtonText, final TextSetListener onNeutral, int negativeButtonText, final TextSetListener onNegative, final DialogInterface.OnDismissListener onDismiss) {
+        textInput(activity, titleText, null, initialText, positiveButtonText, onPositive, neutralButtonText, onNeutral, negativeButtonText, onNegative, onDismiss);
+    }
+
+    /**
+     * Same as {@link #textInput(Activity, int, String, int, TextSetListener, int, TextSetListener, int, TextSetListener, DialogInterface.OnDismissListener)},
+     * but with an optional message shown above the input field (e.g. to disclose the real source
+     * of a file being saved, since {@code initialText} is only ever the suggested file name).
+     */
+    public static void textInput(Activity activity, int titleText, String message, String initialText, int positiveButtonText, final TextSetListener onPositive, int neutralButtonText, final TextSetListener onNeutral, int negativeButtonText, final TextSetListener onNegative, final DialogInterface.OnDismissListener onDismiss) {
         final EditText input = new EditText(activity);
         input.setSingleLine();
         if (initialText != null) {
@@ -43,6 +53,12 @@ public final class TextInputDialogUtils {
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setLayoutParams(new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
         layout.setPadding(paddingSides, paddingTop, paddingSides, paddingBottom);
+        if (message != null) {
+            TextView messageView = new TextView(activity);
+            messageView.setText(message);
+            messageView.setPadding(0, 0, 0, Math.round(8 * dipInPixels));
+            layout.addView(messageView);
+        }
         layout.addView(input);
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity).setTitle(titleText).setView(layout).setPositiveButton(positiveButtonText, (d, whichButton) -> onPositive.onTextSet(input.getText().toString()));
         if (onNeutral != null) {
