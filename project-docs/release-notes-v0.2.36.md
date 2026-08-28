@@ -1,8 +1,8 @@
 # Changelog — v0.2.36
 
 A big one: a rebuilt appearance editor, tappable links in the terminal,
-redesigned shortcut hints, and a large memory cleanup that takes typical usage
-from about 600 MB down to about 170 MB.
+redesigned shortcut hints, and a round of memory fixes that stop the launcher
+growing without bound over a long session.
 
 ## New
 
@@ -59,8 +59,10 @@ from about 600 MB down to about 170 MB.
 
 ### Memory and speed
 
-- **The launcher now settles around 171 MB, where it used to sit at 601 MB**
-  (measured on device).
+- **Memory no longer grows without bound.** A session that had loaded images and
+  run for a while could climb past 600 MB and stay there. That growth is gone,
+  and the memory now comes back on `clear`, when you close a pane, or when the
+  system needs it. Idle usage is unchanged — it was never the problem.
 - Animated images no longer hold onto their frames forever. Playback stops when
   they are off screen, and memory is released once nothing is showing them or
   when the system is running short. Running `clear` after a fastfetch banner
