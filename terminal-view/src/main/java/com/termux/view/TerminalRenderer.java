@@ -656,6 +656,10 @@ public final class TerminalRenderer {
             // The settings the run's matched symbol map resolved to; null outside a symbol run.
             String lastRunSymbolFeatures = null;
             String lastRunSymbolVariations = null;
+            // Raised by the cells that flush the run to their left and paint themselves — image,
+            // placeholder, synthesized glyph, expanded symbol — so the next iteration starts a
+            // fresh run at the cell after them.
+            boolean startFreshRun = false;
             int currentCharIndex = 0;
             float measuredWidthForRun = 0.f;
             // Both live in side tables on the row rather than in the style long, so they are only
@@ -665,6 +669,22 @@ public final class TerminalRenderer {
             KittyUnicodePlaceholder.Cell previousPlaceholder = null;
             int previousPlaceholderColumn = -2;
             for (int column = 0; column < columns; ) {
+                if (startFreshRun) {
+                    measuredWidthForRun = 0.f;
+                    lastRunStyle = 0;
+                    lastRunInsideCursor = false;
+                    lastRunInsideSelection = false;
+                    lastRunStartColumn = column;
+                    lastRunStartIndex = currentCharIndex;
+                    lastRunFontWidthMismatch = false;
+                    lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
+                    lastRunHyperlinkId = 0;
+                    lastRunSymbolTypeface = null;
+                    lastRunFallbackTypeface = null;
+                    lastRunSymbolFeatures = null;
+                    lastRunSymbolVariations = null;
+                    startFreshRun = false;
+                }
                 final char charAtIndex = line[currentCharIndex];
                 final boolean charIsHighsurrogate = Character.isHighSurrogate(charAtIndex);
                 final int charsForCodePoint = charIsHighsurrogate ? 2 : 1;
@@ -703,19 +723,7 @@ public final class TerminalRenderer {
                     }
                     column += 1;
                     currentCharIndex += charsForCodePoint;
-                    measuredWidthForRun = 0.f;
-                    lastRunStyle = 0;
-                    lastRunInsideCursor = false;
-                    lastRunInsideSelection = false;
-                    lastRunStartColumn = column;
-                    lastRunStartIndex = currentCharIndex;
-                    lastRunFontWidthMismatch = false;
-                    lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
-                    lastRunHyperlinkId = 0;
-                    lastRunSymbolTypeface = null;
-                    lastRunFallbackTypeface = null;
-                    lastRunSymbolFeatures = null;
-                    lastRunSymbolVariations = null;
+                    startFreshRun = true;
                     continue;
                 }
                 if (codePoint == KittyUnicodePlaceholder.CODE_POINT) {
@@ -766,19 +774,7 @@ public final class TerminalRenderer {
                             cursorShape, palette[TextStyle.COLOR_INDEX_CURSOR]);
                     column++;
                     currentCharIndex = clusterEnd;
-                    measuredWidthForRun = 0.f;
-                    lastRunStyle = 0;
-                    lastRunInsideCursor = false;
-                    lastRunInsideSelection = false;
-                    lastRunStartColumn = column;
-                    lastRunStartIndex = currentCharIndex;
-                    lastRunFontWidthMismatch = false;
-                    lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
-                    lastRunHyperlinkId = 0;
-                    lastRunSymbolTypeface = null;
-                    lastRunFallbackTypeface = null;
-                    lastRunSymbolFeatures = null;
-                    lastRunSymbolVariations = null;
+                    startFreshRun = true;
                     continue;
                 }
                 previousPlaceholder = null;
@@ -827,19 +823,7 @@ public final class TerminalRenderer {
                         && lineObject.getDisplayWidthAt(currentCharIndex) <= 0) {
                         currentCharIndex += Character.isHighSurrogate(line[currentCharIndex]) ? 2 : 1;
                     }
-                    measuredWidthForRun = 0.f;
-                    lastRunStyle = 0;
-                    lastRunInsideCursor = false;
-                    lastRunInsideSelection = false;
-                    lastRunStartColumn = column;
-                    lastRunStartIndex = currentCharIndex;
-                    lastRunFontWidthMismatch = false;
-                    lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
-                    lastRunHyperlinkId = 0;
-                    lastRunSymbolTypeface = null;
-                    lastRunFallbackTypeface = null;
-                    lastRunSymbolFeatures = null;
-                    lastRunSymbolVariations = null;
+                    startFreshRun = true;
                     continue;
                 }
                 final SymbolMap symbolMap = symbolMapFor(codePoint);
@@ -921,19 +905,7 @@ public final class TerminalRenderer {
                             currentCharIndex +=
                                 Character.isHighSurrogate(line[currentCharIndex]) ? 2 : 1;
                         }
-                        measuredWidthForRun = 0.f;
-                        lastRunStyle = 0;
-                        lastRunInsideCursor = false;
-                        lastRunInsideSelection = false;
-                        lastRunStartColumn = column;
-                        lastRunStartIndex = currentCharIndex;
-                        lastRunFontWidthMismatch = false;
-                        lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
-                        lastRunHyperlinkId = 0;
-                        lastRunSymbolTypeface = null;
-                        lastRunFallbackTypeface = null;
-                        lastRunSymbolFeatures = null;
-                        lastRunSymbolVariations = null;
+                        startFreshRun = true;
                         continue;
                     }
                 }
@@ -989,20 +961,23 @@ public final class TerminalRenderer {
                     currentCharIndex += Character.isHighSurrogate(line[currentCharIndex]) ? 2 : 1;
                 }
             }
-            final int columnWidthSinceLastRun = columns - lastRunStartColumn;
-            final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
-            int cursorColor = lastRunInsideCursor ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
-            boolean invertCursorTextColor = false;
-            if (lastRunInsideCursor && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK) {
-                invertCursorTextColor = true;
+            // A row that ends on one of those cells has already flushed everything before it.
+            if (!startFreshRun) {
+                final int columnWidthSinceLastRun = columns - lastRunStartColumn;
+                final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
+                int cursorColor = lastRunInsideCursor ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
+                boolean invertCursorTextColor = false;
+                if (lastRunInsideCursor && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK) {
+                    invertCursorTextColor = true;
+                }
+                drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
+                    columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
+                    measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, boldWithBright,
+                    reverseVideo || invertCursorTextColor || lastRunInsideSelection,
+                    horizontalOffset, lastRunDecorationColor, lastRunHyperlinkId != 0, 0,
+                    lastRunSymbolTypeface, lastRunFallbackTypeface, lastRunSymbolFeatures,
+                    lastRunSymbolVariations, false);
             }
-            drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
-                columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
-                measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, boldWithBright,
-                reverseVideo || invertCursorTextColor || lastRunInsideSelection,
-                horizontalOffset, lastRunDecorationColor, lastRunHyperlinkId != 0, 0,
-                lastRunSymbolTypeface, lastRunFallbackTypeface, lastRunSymbolFeatures,
-                lastRunSymbolVariations, false);
         }
         drawExtraCursors(mEmulator, canvas, screen, palette, topRow, endRow, boldWithBright, reverseVideo, horizontalOffset);
     }
@@ -1417,7 +1392,7 @@ public final class TerminalRenderer {
             final long style = lineObject.getStyle(column);
             if (TextStyle.isBitmap(style)) {
                 if (pendingStartColumn != -1) {
-                    drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor);
+                    drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor, mTextPaint);
                     pendingStartColumn = -1;
                 }
                 column += 1;
@@ -1434,11 +1409,11 @@ public final class TerminalRenderer {
                 reverseVideo || invertCursorTextColor || insideSelection);
             if (insideCursor) {
                 if (pendingStartColumn != -1) {
-                    drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor);
+                    drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor, mTextPaint);
                     pendingStartColumn = -1;
                 }
                 if (backColor != defaultBackColor)
-                    drawCellRect(canvas, column, column + cellColumns, top, y, horizontalOffset, backColor);
+                    drawCellRect(canvas, column, column + cellColumns, top, y, horizontalOffset, backColor, mTextPaint);
                 float left = horizontalOffset + column * mFontWidth;
                 float right = left + cellColumns * mFontWidth;
                 float cursorTop = top;
@@ -1453,13 +1428,13 @@ public final class TerminalRenderer {
                     pendingEndColumn = column + cellColumns;
                 } else {
                     if (pendingStartColumn != -1)
-                        drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor);
+                        drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor, mTextPaint);
                     pendingStartColumn = column;
                     pendingEndColumn = column + cellColumns;
                     pendingColor = backColor;
                 }
             } else if (pendingStartColumn != -1) {
-                drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor);
+                drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor, mTextPaint);
                 pendingStartColumn = -1;
             }
             column += codePointWcWidth;
@@ -1470,7 +1445,7 @@ public final class TerminalRenderer {
             }
         }
         if (pendingStartColumn != -1)
-            drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor);
+            drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor, mTextPaint);
     }
 
     /**
@@ -1645,20 +1620,19 @@ public final class TerminalRenderer {
         }
     }
 
+    /** One overlay span over inclusive columns, with the same pixel snapping as cell backgrounds. */
     private void drawOverlayRect(Canvas canvas, int row, int topRow, float firstRowTop,
                                  int startColumn, int endColumn, float horizontalOffset, int color) {
         if (endColumn < startColumn) return;
         float top = firstRowTop + (row - topRow) * mFontLineSpacing;
         // Its own paint: the text paint carries per-run typeface, skew and effects, and this pass
         // runs between frames of that state rather than inside it.
-        mOverlayPaint.setColor(color);
-        canvas.drawRect(Math.round(horizontalOffset + startColumn * mFontWidth), Math.round(top),
-            Math.round(horizontalOffset + (endColumn + 1) * mFontWidth),
-            Math.round(top + mFontLineSpacing), mOverlayPaint);
+        drawCellRect(canvas, startColumn, endColumn + 1, top, top + mFontLineSpacing,
+            horizontalOffset, color, mOverlayPaint);
     }
 
     /**
-     * One run's cell background, snapped to the pixel grid.
+     * One run's cell background, or an overlay span, snapped to the pixel grid.
      *
      * <p>Cell edges land on fractional pixels at most font sizes, and an anti-aliased rect edge
      * covers its boundary pixel only partly. Two runs meeting there each paint their own half of
@@ -1670,10 +1644,10 @@ public final class TerminalRenderer {
      * alacritty apply to cell backgrounds.
      */
     private void drawCellRect(Canvas canvas, int startColumn, int endColumn, float top, float bottom,
-                              float horizontalOffset, int color) {
-        mTextPaint.setColor(color);
+                              float horizontalOffset, int color, Paint paint) {
+        paint.setColor(color);
         canvas.drawRect(Math.round(horizontalOffset + startColumn * mFontWidth), Math.round(top),
-            Math.round(horizontalOffset + endColumn * mFontWidth), Math.round(bottom), mTextPaint);
+            Math.round(horizontalOffset + endColumn * mFontWidth), Math.round(bottom), paint);
     }
 
     /** Draw kitty-protocol cursors after the normal screen, so they do not perturb text run batching. */

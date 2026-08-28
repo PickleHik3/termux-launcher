@@ -28,5 +28,4 @@
 ## Project
 
 - [Developer docs](Developer_Docs.md)
-- [Changelog](../../CHANGELOG.md)
-- [Releases](https://github.com/PickleHik3/termux-launcher/releases)
+- [Releases & changelog](https://github.com/PickleHik3/termux-launcher/releases)

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- View ids for the surface editor's generated rows. The rows are inflated at runtime from
+     surface_editor_row.xml and re-id'd per SurfaceEditorRows entry, so these ids no longer appear
+     in any layout — they are declared here to keep existing, historical names on the views that
+     every binding and sync path still looks up by id. -->
+<resources>
+    <!-- Dock -->
+    <item type="id" name="dock_tuning_blur_slider" />
+    <item type="id" name="dock_tuning_blur_value" />
+    <item type="id" name="surface_link_dock_blur" />
+    <item type="id" name="dock_tuning_opacity_slider" />
+    <item type="id" name="dock_tuning_opacity_value" />
+    <item type="id" name="surface_link_dock_opacity" />
+    <item type="id" name="dock_tuning_grain_slider" />
+    <item type="id" name="dock_tuning_grain_value" />
+    <item type="id" name="surface_link_dock_grain" />
+    <item type="id" name="dock_tuning_radius_slider" />
+    <item type="id" name="dock_tuning_radius_value" />
+    <item type="id" name="surface_link_dock_radius" />
+    <item type="id" name="surface_tuning_dock_inset_slider" />
+    <item type="id" name="surface_tuning_dock_inset_value" />
+    <item type="id" name="surface_link_dock_gap" />
+
+    <!-- Keyboard -->
+    <item type="id" name="surface_tuning_keyboard_bg_opacity_slider" />
+    <item type="id" name="surface_tuning_keyboard_bg_opacity_value" />
+    <item type="id" name="surface_link_keyboard_opacity" />
+    <item type="id" name="surface_tuning_keyboard_inset_slider" />
+    <item type="id" name="surface_tuning_keyboard_inset_value" />
+    <item type="id" name="surface_link_keyboard_gap" />
+
+    <!-- Status -->
+    <item type="id" name="surface_tuning_status_blur_slider" />
+    <item type="id" name="surface_tuning_status_blur_value" />
+    <item type="id" name="surface_link_status_blur" />
+    <item type="id" name="surface_tuning_status_opacity_slider" />
+    <item type="id" name="surface_tuning_status_opacity_value" />
+    <item type="id" name="surface_link_status_opacity" />
+    <item type="id" name="surface_tuning_status_grain_slider" />
+    <item type="id" name="surface_tuning_status_grain_value" />
+    <item type="id" name="surface_link_status_grain" />
+    <item type="id" name="surface_tuning_status_radius_slider" />
+    <item type="id" name="surface_tuning_status_radius_value" />
+    <item type="id" name="surface_link_status_radius" />
+    <item type="id" name="surface_tuning_status_inset_slider" />
+    <item type="id" name="surface_tuning_status_inset_value" />
+    <item type="id" name="surface_link_status_gap" />
+
+    <!-- Terminal -->
+    <item type="id" name="dock_tuning_terminal_slider" />
+    <item type="id" name="dock_tuning_terminal_value" />
+    <item type="id" name="surface_link_canvas_opacity" />
+    <item type="id" name="dock_tuning_terminal_blur_slider" />
+    <item type="id" name="dock_tuning_terminal_blur_value" />
+    <item type="id" name="surface_link_canvas_blur" />
+    <item type="id" name="dock_tuning_terminal_grain_slider" />
+    <item type="id" name="dock_tuning_terminal_grain_value" />
+    <item type="id" name="surface_link_canvas_grain" />
+</resources>

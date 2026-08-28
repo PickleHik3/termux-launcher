@@ -7,6 +7,9 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.ActivityInfo;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
+import android.content.res.Resources;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.Rect;
 import android.appwidget.AppWidgetHostView;
@@ -16,12 +19,19 @@ import android.os.Looper;
 import android.os.Process;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.util.LruCache;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
+
+import com.termux.app.launcher.icon.DockIconCache;
+import com.termux.app.launcher.icon.DrawablePixels;
+import com.termux.app.launcher.icon.HeapBudget;
 
 import java.text.Collator;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -29,13 +39,20 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-/** Sheet-scoped, generation-tokened provider enumeration. */
-public final class WidgetProviderCatalogLoader {
+/**
+ * Sheet-scoped, generation-tokened provider enumeration.
+ *
+ * <p>The catalog itself — labels, spans, icons — is cached for the session so reopening the picker
+ * costs nothing. Previews are not part of it: {@code loadPreviewImage} hands back a full-density
+ * bitmap per provider, so they are resolved when a row binds, shrunk to the card's preview slot and
+ * held in a budgeted store that the picker empties when it closes.
+ */
+public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.PreviewLoader {
     public interface Callback {
         void onCatalog(long generation, @NonNull List<WidgetAppGroup> groups);
     }
     public interface PreviewCallback {
-        void onPreview(@NonNull WidgetProviderItem item);
+        void onPreview(@NonNull WidgetProviderItem item, @Nullable Drawable preview);
     }
     interface Boundary {
         @NonNull List<UserHandle> profiles();
@@ -53,9 +70,19 @@ public final class WidgetProviderCatalogLoader {
     }
 
     private static final Executor CATALOG_EXECUTOR = Executors.newSingleThreadExecutor();
+    /** Preview budget: one 32nd of the per-app heap, clamped into [2MB, 8MB]. */
+    private static final int PREVIEW_HEAP_DIVISOR = 32;
+    private static final int PREVIEW_MIN_BYTES = 2 * 1024 * 1024;
+    private static final int PREVIEW_MAX_BYTES = 8 * 1024 * 1024;
+    /** Held for a provider that has no preview, so the miss is not re-queried on every bind. */
+    private static final Drawable NO_PREVIEW = new ColorDrawable(Color.TRANSPARENT);
     private final Boundary boundary;
     private final Executor worker;
     private final Handler main;
+    private final Resources resources;
+    private final int previewExtentPx;
+    // Main-thread only, like the catalog cache below.
+    private final LruCache<String, Drawable> previews;
     private long generation;
     // Session-lifetime catalog cache: reopening the picker must not re-query AppWidgetManager.
     // All cache state is main-thread only; packageGeneration keeps a build that raced an
@@ -66,16 +93,28 @@ public final class WidgetProviderCatalogLoader {
     private long packageGeneration;
 
     public WidgetProviderCatalogLoader(@NonNull Context context) {
-        this(new AndroidBoundary(context), CATALOG_EXECUTOR,
-            new Handler(Looper.getMainLooper()), context.getResources().getDisplayMetrics().density);
+        this(new AndroidBoundary(context), CATALOG_EXECUTOR, new Handler(Looper.getMainLooper()),
+            context.getResources(), previewBudgetBytes(DockIconCache.memoryClassMb(context)));
     }
 
-    // Keep density injectable at this boundary so catalog tests can prove provider pixel fields
-    // remain unchanged on a real high-density display.
-    WidgetProviderCatalogLoader(Boundary boundary, Executor worker, Handler main, float density) {
+    WidgetProviderCatalogLoader(Boundary boundary, Executor worker, Handler main,
+                                Resources resources, int previewBudgetBytes) {
         this.boundary = boundary;
         this.worker = worker;
         this.main = main;
+        this.resources = resources;
+        this.previewExtentPx = Math.max(1, Math.round(
+            WidgetPickerAdapter.PREVIEW_DP * resources.getDisplayMetrics().density));
+        this.previews = new LruCache<String, Drawable>(previewBudgetBytes) {
+            @Override protected int sizeOf(String key, Drawable value) {
+                return DrawablePixels.heldBytes(value);
+            }
+        };
+    }
+
+    static int previewBudgetBytes(int memoryClassMb) {
+        return HeapBudget.of(memoryClassMb, PREVIEW_HEAP_DIVISOR, PREVIEW_MIN_BYTES,
+            PREVIEW_MAX_BYTES);
     }
 
     public long load(@NonNull WidgetGridMetrics metrics, long metricsRevision,
@@ -102,27 +141,41 @@ public final class WidgetProviderCatalogLoader {
         return token;
     }
 
-    /** Drops the cached catalog; the next load re-queries AppWidgetManager. */
+    /** Drops the cached catalog and its previews; the next load re-queries AppWidgetManager. */
     public void invalidate() {
         packageGeneration++;
         cachedGroups = null; cachedMetrics = null;
+        releasePreviews();
     }
 
     /**
-     * Resolves the item's preview off the main thread on its first bind. Already resolved items
-     * answer synchronously. Not generation-gated: the result lands on the item itself, so a late
+     * Resolves the item's preview off the main thread when the store does not hold it; a held one
+     * (including a remembered "no preview") answers synchronously. Not generation-gated: a late
      * arrival is still correct data and callers guard their views by item identity.
      */
+    @Override
     public void loadPreview(@NonNull WidgetProviderItem item, @NonNull PreviewCallback callback) {
-        if (item.previewResolved()) { callback.onPreview(item); return; }
+        String key = item.previewKey();
+        Drawable held = previews.get(key);
+        if (held != null) { callback.onPreview(item, held == NO_PREVIEW ? null : held); return; }
         worker.execute(() -> {
-            Drawable preview = safePreview(item.info);
+            Drawable preview = DrawablePixels.shrink(resources, safePreview(item.info),
+                previewExtentPx);
             main.post(() -> {
-                if (!item.previewResolved()) item.resolvePreview(preview);
-                callback.onPreview(item);
+                previews.put(key, preview == null ? NO_PREVIEW : preview);
+                callback.onPreview(item, preview);
             });
         });
     }
+
+    @Override
+    public void releasePreviews() { previews.evictAll(); }
+
+    /** Preview bytes currently held. */
+    @VisibleForTesting
+    int previewBytes() { return previews.size(); }
+    int previewBudgetBytes() { return previews.maxSize(); }
+    int previewExtentPx() { return previewExtentPx; }
 
     public void cancel() { generation++; }
     public long generation() { return generation; }
@@ -239,7 +292,7 @@ public final class WidgetProviderCatalogLoader {
             launcherApps = (LauncherApps) context.getSystemService(Context.LAUNCHER_APPS_SERVICE);
         }
         @Override public List<UserHandle> profiles() {
-            return users == null ? java.util.Collections.singletonList(Process.myUserHandle())
+            return users == null ? Collections.singletonList(Process.myUserHandle())
                 : users.getUserProfiles();
         }
         @Override public long serial(UserHandle profile) {

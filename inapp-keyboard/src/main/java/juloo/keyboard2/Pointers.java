@@ -253,6 +253,25 @@ public final class Pointers implements Handler.Callback
     _handler.onPointerDown(value, false);
   }
 
+  /**
+   * How much further a modifier's centre has to travel before the press becomes a swipe.
+   *
+   * <p>Modifiers are the keys that get hit fastest — Ctrl on the way to Ctrl+V — and a fast tap
+   * rolls the finger further than a deliberate one. At the shared threshold that roll selected the
+   * modifier key's side legend instead (or, when the side key is a slider, started a slide, which
+   * makes {@code onTouchDown} ignore the second finger entirely and the chord never happens). Their
+   * side keys are secondary, so they can afford to ask for a clearly deliberate swipe.
+   */
+  private static final float MODIFIER_SWIPE_SLACK = 1.75f;
+
+  /** The travel this pointer needs to leave its centre. */
+  private float swipeDistanceFor(Pointer ptr)
+  {
+    return ptr.hasFlagsAny(FLAG_P_LATCHABLE)
+      ? _config.swipeDistancePx * MODIFIER_SWIPE_SLACK
+      : _config.swipeDistancePx;
+  }
+
   static final int[] DIRECTION_TO_INDEX = new int[]{
     7, 2, 2, 6, 6, 4, 4, 8, 8, 3, 3, 5, 5, 1, 1, 7
   };
@@ -319,7 +338,7 @@ public final class Pointers implements Handler.Callback
     float dy = y - ptr.downY;
 
     float dist = Math.abs(dx) + Math.abs(dy);
-    if (dist < _config.swipeDistancePx)
+    if (dist < swipeDistanceFor(ptr))
     {
       // Pointer is still on the center.
       if (ptr.gesture == null || !ptr.gesture.is_in_progress())
@@ -327,7 +346,11 @@ public final class Pointers implements Handler.Callback
       // Gesture ended
       ptr.gesture.moved_to_center();
       ptr.value = apply_gesture(ptr, ptr.gesture.get_gesture());
-      ptr.flags = 0;
+      // Flags describe the value, here as everywhere else. Zeroing them cost a modifier that
+      // wandered off its centre and came back its latchability, so a fast Ctrl tap that rolled a
+      // few pixels landed as a plain press: the latch never happened and the next key arrived
+      // without Ctrl. Only a deliberate swipe should take a key's own behaviour away.
+      ptr.flags = ptr.value == null ? 0 : pointer_flags_of_kv(ptr.value);
 
     }
     else

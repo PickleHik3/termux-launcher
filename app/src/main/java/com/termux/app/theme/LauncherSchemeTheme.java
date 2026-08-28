@@ -49,11 +49,6 @@ public final class LauncherSchemeTheme {
     public static final String THEME_OVERRIDES_FILE_PATH =
         TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/launcher-theme.properties";
 
-    /** Value of {@code ui_color_source} that hands the chrome to the terminal scheme. */
-    public static final String COLOR_SOURCE_SCHEME = "scheme";
-    /** Value of {@code ui_color_source} that keeps the chrome on wallpaper/system colours. */
-    public static final String COLOR_SOURCE_WALLPAPER = "wallpaper";
-
     /**
      * Which {@code Resources} already carry which palette.
      *
@@ -74,10 +69,18 @@ public final class LauncherSchemeTheme {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.R;
     }
 
-    /** Whether the user asked for scheme-driven chrome and there is a scheme to drive it. */
+    /**
+     * Whether the chrome is on the terminal's own scheme, and there is a scheme to drive it.
+     *
+     * <p>Derived rather than chosen. There used to be a second control naming the chrome's colour
+     * source, which could disagree with the switch above it — chrome on the scheme while the
+     * terminal was on the wallpaper, or the reverse — and every combination but "both from the
+     * same place" is a launcher wearing two palettes at once. Turning wallpaper colours off is
+     * choosing the scheme, for the terminal and for the chrome together.
+     */
     public static boolean isEnabled(@Nullable TermuxAppSharedPreferences preferences) {
         return preferences != null
-            && COLOR_SOURCE_SCHEME.equals(preferences.getUiColorSource())
+            && !preferences.isTerminalDynamicColorsEnabled()
             && TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE.isFile();
     }
 
@@ -93,7 +96,8 @@ public final class LauncherSchemeTheme {
     public static synchronized boolean isSchemeChromeActive(@NonNull Context context) {
         if (!isSupported()) return false;
         // Cached because glass colours are resolved on chrome-apply paths: every route that flips
-        // ui_color_source or rewrites the scheme calls invalidate(), which clears this too.
+        // the wallpaper-colours switch or rewrites the scheme calls invalidate(), which clears
+        // this too.
         if (sCachedChromeActive != null) return sCachedChromeActive;
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context);
         sCachedChromeActive = isEnabled(preferences) && tokens() != null;

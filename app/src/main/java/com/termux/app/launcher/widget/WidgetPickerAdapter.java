@@ -1,5 +1,6 @@
 package com.termux.app.launcher.widget;
 
+import android.graphics.drawable.Drawable;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -22,7 +23,11 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
     public interface PreviewLoader {
         void loadPreview(@NonNull WidgetProviderItem item,
                          @NonNull WidgetProviderCatalogLoader.PreviewCallback callback);
+        /** The rows are gone, so is every preview that was held for them. */
+        void releasePreviews();
     }
+    /** Edge of the preview slot on a provider card; previews are never held larger than this. */
+    static final int PREVIEW_DP = 56;
     private static final int HEADER = 0;
     private static final int PROVIDER = 1;
     private final ArrayList<Object> rows = new ArrayList<>();
@@ -36,6 +41,7 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
     public void submit(@NonNull List<WidgetAppGroup> groups) {
         ArrayList<Object> next = new ArrayList<>();
         for (WidgetAppGroup group : groups) { next.add(group); next.addAll(group.providers); }
+        if (next.isEmpty() && previews != null) previews.releasePreviews();
         DiffUtil.DiffResult diff = DiffUtil.calculateDiff(new RowDiff(rows, next));
         rows.clear(); rows.addAll(next);
         diff.dispatchUpdatesTo(this);
@@ -69,7 +75,8 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
             Math.round(8 * density), Math.round(16 * density), Math.round(8 * density));
         ImageView preview = new ImageView(parent.getContext()); preview.setTag("preview");
         preview.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        card.addView(preview, new LinearLayout.LayoutParams(Math.round(56 * density), Math.round(56 * density)));
+        card.addView(preview, new LinearLayout.LayoutParams(Math.round(PREVIEW_DP * density),
+            Math.round(PREVIEW_DP * density)));
         LinearLayout labels = new LinearLayout(parent.getContext()); labels.setOrientation(LinearLayout.VERTICAL);
         TextView title = new TextView(parent.getContext()); title.setTag("title");
         TextView span = new TextView(parent.getContext()); span.setTag("span");
@@ -95,12 +102,12 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         TextView title = holder.itemView.findViewWithTag("title");
         TextView span = holder.itemView.findViewWithTag("span");
         // App icon (then gallery) doubles as the placeholder while the preview resolves.
-        applyPreview(preview, item);
-        if (!item.previewResolved() && previews != null) {
-            previews.loadPreview(item, loaded -> {
+        applyPreview(preview, item, null);
+        if (previews != null) {
+            previews.loadPreview(item, (loaded, drawable) -> {
                 // The holder may have been recycled onto another row by the time this lands.
                 if (cell.bound == loaded) {
-                    applyPreview(cell.itemView.findViewWithTag("preview"), loaded);
+                    applyPreview(cell.itemView.findViewWithTag("preview"), loaded, drawable);
                 }
             });
         }
@@ -123,9 +130,10 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         Object value = rows.get(adapterPosition);
         return value instanceof WidgetProviderItem ? (WidgetProviderItem) value : null;
     }
-    private static void applyPreview(@NonNull ImageView view, @NonNull WidgetProviderItem item) {
-        if (item.preview() != null || item.icon != null) {
-            view.setImageDrawable(item.preview() != null ? item.preview() : item.icon);
+    private static void applyPreview(@NonNull ImageView view, @NonNull WidgetProviderItem item,
+                                     @Nullable Drawable preview) {
+        if (preview != null || item.icon != null) {
+            view.setImageDrawable(preview != null ? preview : item.icon);
         } else {
             view.setImageResource(android.R.drawable.ic_menu_gallery);
         }

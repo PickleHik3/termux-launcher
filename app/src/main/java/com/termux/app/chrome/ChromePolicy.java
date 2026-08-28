@@ -5,7 +5,6 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.DockGlassRendering;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
-import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
 /**
  * The chrome module's pure decisions: the glass tuning curves, the unified-keyboard-material rule,
@@ -60,12 +59,16 @@ public final class ChromePolicy {
      */
     public static boolean hasInAppKeyboardBackgroundOverride(boolean surfacesNormalized,
                                                              @Nullable Integer schemeBackgroundColor,
-                                                             int backgroundOpacityPercent) {
+                                                             int backgroundOpacityPercent,
+                                                             int sharedMaterialOpacityPercent) {
         if (surfacesNormalized)
             return false;
+        // Compare against the opacity the shared dock material actually renders, not a
+        // compile-time default: a detached row holding the shared number repaints nothing, and
+        // judging it against a constant is what let a default flip silently split the unified
+        // dock/keyboard/nav glass sheet on every install detached at the old value.
         return schemeBackgroundColor != null
-            || backgroundOpacityPercent
-                != TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY;
+            || backgroundOpacityPercent != sharedMaterialOpacityPercent;
     }
 
     /**

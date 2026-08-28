@@ -1,5 +1,6 @@
 package com.termux.app.launcher.drawer;
 
+import android.content.Context;
 import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Rect;
@@ -21,7 +22,6 @@ import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.Spring;
 import com.termux.app.SuggestionBarView;
-import com.termux.app.TermuxActivity;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
@@ -49,7 +49,7 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
  * <p><b>The invisible handoff.</b> At {@code p == 0} the plane rectangle <em>is</em> the dock glass
  * rect: same bounds from {@code accessory_surface_host}, and the same corner radius and horizontal
  * inset the dock itself is laid out with, both read off the one {@link DockLayout} the activity
- * resolves through {@link TermuxActivity#getDockLayout()}. The first tenth of the transition is then a
+ * resolves through {@link Host#dockLayout()}. The first tenth of the transition is then a
  * cross-fade between two identical rectangles, which is what makes the drawer look like the dock
  * growing rather than a sheet appearing over it. Any change that lets the seed rect drift from the
  * dock rect breaks that, visibly.
@@ -86,6 +86,33 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     AppDrawerPlaneView.Callbacks, AppDrawerContentView.Callbacks,
     AppDrawerSearchController.Host {
 
+    /** What the plane needs from the activity: its views, its prefs, the dock it grows out of. */
+    public interface Host {
+        @NonNull Context context();
+
+        @Nullable <T extends View> T findView(int viewId);
+
+        @Nullable TermuxAppSharedPreferences preferences();
+
+        /** The one dock-geometry snapshot the seed rect, radius and inset all come off. */
+        @NonNull DockLayout dockLayout();
+
+        /** The launcher row the grid borrows icons, tint and launch ladder from; null before built. */
+        @Nullable SuggestionBarView suggestionBar();
+
+        /** Wallpaper frost for the plane's glass; true when the live blur should rest. */
+        boolean applyWallpaperFrost(@NonNull ImageView frost);
+
+        /** Re-applies the accessory geometry the engaged plane suppressed. Runs from a finally. */
+        void flushPendingAccessoryGeometry();
+
+        /** Claims (or releases) the in-app keyboard's single interceptor slot for the search. */
+        void setInterceptorActive(boolean active);
+
+        /** The search asked for a system IME while the terminal keeps focus. */
+        void requestSearchKeyboard();
+    }
+
     /**
      * The dock's half of the choreography. Implemented by {@code SuggestionBarView} in Step 6: the
      * controller owns the plane and the bands, the dock owns its own children (the pinned-icon
@@ -119,7 +146,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     /** Below this the closing spring is close enough to shut to tear the plane down. */
     private static final float CLOSED_EPSILON = 0.002f;
 
-    private final TermuxActivity mActivity;
+    private final Host mHost;
     private final float mDensity;
     private final Spring mProgress = new Spring(0f, STIFFNESS, DAMPING);
     /**
@@ -139,7 +166,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     /** Reused by {@code setClipBounds}, which copies; never handed out. */
     private final Rect mClipScratch = new Rect();
 
-    @Nullable private FrameLayout mHost;
+    @Nullable private FrameLayout mHostLayout;
     @Nullable private FrameLayout mGlass;
     @Nullable private AppDrawerPlaneView mPlane;
     @Nullable private AppDrawerContentView mContent;
@@ -195,15 +222,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private boolean mFrameScheduled;
     private long mLastFrameTimeNanos;
 
-    public AppDrawerController(@NonNull TermuxActivity activity) {
-        mActivity = activity;
-        mDensity = activity.getResources().getDisplayMetrics().density;
+    public AppDrawerController(@NonNull Host host) {
+        mHost = host;
+        mDensity = host.context().getResources().getDisplayMetrics().density;
         // Wired here rather than with the views: the three intake channels are routed through the
         // activity, which has no idea whether the plane has been built yet, and a search that only
         // answered once a RecyclerView existed would silently let the first keystrokes through to
         // the shell. isSearchActive() reads mOpen, so an unbuilt drawer still claims nothing.
         mSearch.setHost(this);
-        TermuxAppSharedPreferences preferences = activity.getPreferences();
+        TermuxAppSharedPreferences preferences = host.preferences();
         if (preferences != null) mLayoutConfig = AppDrawerLayoutConfig.from(preferences);
     }
 
@@ -461,7 +488,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     /** Applies a launcher preference reload without rebuilding the activity or drawer tree. */
     public void onPreferencesReloaded() {
-        TermuxAppSharedPreferences preferences = mActivity.getPreferences();
+        TermuxAppSharedPreferences preferences = mHost.preferences();
         AppDrawerLayoutConfig config = preferences == null ? AppDrawerLayoutConfig.defaults()
             : AppDrawerLayoutConfig.from(preferences);
         if (config.equals(mLayoutConfig)) return;
@@ -563,7 +590,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     }
 
     private boolean isReducedMotion() {
-        return Settings.Global.getFloat(mActivity.getContentResolver(),
+        return Settings.Global.getFloat(mHost.context().getContentResolver(),
             Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f;
     }
 
@@ -571,13 +598,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     private boolean bindViews() {
         if (mPlane != null) return true;
-        mHost = mActivity.findViewById(R.id.app_drawer_host);
-        mGlass = mActivity.findViewById(R.id.app_drawer_glass);
-        if (mHost == null || mGlass == null) return false;
+        mHostLayout = mHost.findView(R.id.app_drawer_host);
+        mGlass = mHost.findView(R.id.app_drawer_glass);
+        if (mHostLayout == null || mGlass == null) return false;
         // The handoff fades a ViewGroup, which by default means an offscreen layer allocated on
         // every frame of the ramp. The children it holds are two translucent surfaces at alpha
         // below 0.1 for a tenth of the transition; the layer buys a blend nobody can see.
-        mHost.forceHasOverlappingRendering(false);
+        mHostLayout.forceHasOverlappingRendering(false);
         mGlass.setClipToOutline(true);
         mGlass.setOutlineProvider(new ViewOutlineProvider() {
             @Override
@@ -593,11 +620,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                     mCurrentRadiusPx);
             }
         });
-        AppDrawerPlaneView plane = new AppDrawerPlaneView(mActivity);
+        AppDrawerPlaneView plane = new AppDrawerPlaneView(mHost.context());
         plane.setCallbacks(this);
         // Added after the glass pane, so it paints over the blur without needing an elevation that
         // would cast a shadow from a full-screen caster.
-        mHost.addView(plane, new FrameLayout.LayoutParams(
+        mHostLayout.addView(plane, new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         mPlane = plane;
         buildContent(plane);
@@ -616,12 +643,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * already exists for exactly this shape of work) — never onto the touch path itself.
      */
     private void buildContent(@NonNull AppDrawerPlaneView plane) {
-        AppDrawerContentView content = new AppDrawerContentView(mActivity,
-            mActivity.getSuggestionBarView());
+        AppDrawerContentView content = new AppDrawerContentView(mHost.context(),
+            mHost.suggestionBar());
         content.setCallbacks(this);
         content.setRevealListener(this::retargetReveal);
         content.setFrameRequestListener(this::requestFrames);
-        content.setSearchKeyboardRequestListener(mActivity::requestAppDrawerSearchKeyboard);
+        content.setSearchKeyboardRequestListener(mHost::requestSearchKeyboard);
         // A drawer that is not open is not a surface: interactivity is turned on by prepareOverlay
         // and off again on close, and never follows p.
         content.setInteractive(false);
@@ -640,8 +667,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      *     than run against a zero rect.
      */
     private boolean captureGeometry() {
-        FrameLayout host = mHost;
-        View dock = mActivity.findViewById(R.id.accessory_surface_host);
+        FrameLayout host = mHostLayout;
+        View dock = mHost.findView(R.id.accessory_surface_host);
         if (host == null || dock == null || host.getWidth() <= 0 || host.getHeight() <= 0
             || dock.getWidth() <= 0 || dock.getHeight() <= 0) return false;
 
@@ -652,7 +679,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
         // One dock-geometry snapshot for the whole capture: style, seed radius and (via
         // resolveOpenRect) the outer inset all come off the same value.
-        DockLayout dockLayout = mActivity.getDockLayout();
+        DockLayout dockLayout = mHost.dockLayout();
         mRoundedStyle = dockLayout.capsule;
         mSeedRadiusPx = mRoundedStyle ? dockLayout.capsuleCornerRadiusPx(dock.getHeight()) : 0f;
         mOpenRadiusPx = resolveOpenRadiusPx();
@@ -662,19 +689,19 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mTravelPx = AppDrawerTransitionGeometry.resolveOpenTravelPx(host.getHeight(),
             dp(MIN_TRAVEL_DP), dp(MAX_TRAVEL_DP));
         mLiftPx = dp(DOCK_LIFT_DP);
-        mSlopPx = ViewConfiguration.get(mActivity).getScaledTouchSlop();
+        mSlopPx = ViewConfiguration.get(mHost.context()).getScaledTouchSlop();
 
         mAccessorySurface = dock;
-        mAppsPager = mActivity.findViewById(R.id.apps_bar_viewpager);
-        mAzRow = mActivity.findViewById(R.id.apps_bar_az_row);
-        mIndicatorBand = mActivity.findViewById(R.id.apps_bar_indicator_band);
+        mAppsPager = mHost.findView(R.id.apps_bar_viewpager);
+        mAzRow = mHost.findView(R.id.apps_bar_az_row);
+        mIndicatorBand = mHost.findView(R.id.apps_bar_indicator_band);
         // The A-Z scrub's three effect layers fade on the row's ramp with the row itself. The label
         // overlay is the one that actually matters: it is a match_parent child of
         // activity_termux_root_relative_layout, a sibling of the drawer host that wins in z, so a
         // scrub label left painting would sit on top of the plane rather than behind it.
-        mAzFxUnderlay = mActivity.findViewById(R.id.apps_bar_az_fx_underlay);
-        mAzFxOverlay = mActivity.findViewById(R.id.apps_bar_az_fx_overlay);
-        mAzLabelOverlay = mActivity.findViewById(R.id.apps_bar_az_label_overlay);
+        mAzFxUnderlay = mHost.findView(R.id.apps_bar_az_fx_underlay);
+        mAzFxOverlay = mHost.findView(R.id.apps_bar_az_fx_overlay);
+        mAzLabelOverlay = mHost.findView(R.id.apps_bar_az_label_overlay);
         captureBands(dockRect);
         captureStatusBand(dockLayout);
         return true;
@@ -693,7 +720,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * be wearing the next time something makes it visible.
      */
     private void captureStatusBand(@NonNull DockLayout dockLayout) {
-        mStatusBarView = mActivity.findViewById(R.id.terminal_window_bar_host);
+        mStatusBarView = mHost.findView(R.id.terminal_window_bar_host);
         Frame bar = isBandVisible(mStatusBarView) ? frameOf(mStatusBarView) : null;
         mStatusBand = bar == null ? null
             : new AppDrawerAccessoryChoreography.Band(bar.top, bar.height());
@@ -716,13 +743,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      */
     @Nullable
     private Frame resolveOpenRect() {
-        FrameLayout host = mHost;
+        FrameLayout host = mHostLayout;
         if (host == null || host.getWidth() <= 0 || host.getHeight() <= 0) return null;
         host.getLocationOnScreen(mHostLocation);
         // The drawer keeps the dock's outer margin rather than inventing one — same preference,
         // same edge. The horizontal lerp is carried by the plane rect itself, whose seed left/right
         // are the dock's and whose open left/right are this inset.
-        int dockInsetPx = mActivity.getDockLayout().horizontalInsetPx;
+        int dockInsetPx = mHost.dockLayout().horizontalInsetPx;
         float inset = AppDrawerTransitionGeometry.resolveInsetPx(dockInsetPx, dockInsetPx, 1f);
         // Square bottom corners in default style are expressed by pushing the bottom edge one
         // radius past the host: Outline clipping is a single-radius round rect, and a Path clip
@@ -740,8 +767,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * has a real edge to hold the captured gap against.
      */
     private void captureBands(@NonNull Frame dockRect) {
-        mExtraKeysView = mActivity.findViewById(R.id.terminal_toolbar_view_pager);
-        mKeyboardView = mActivity.findViewById(R.id.inapp_keyboard_container);
+        mExtraKeysView = mHost.findView(R.id.terminal_toolbar_view_pager);
+        mKeyboardView = mHost.findView(R.id.inapp_keyboard_container);
         Frame extraKeys = isBandVisible(mExtraKeysView) ? frameOf(mExtraKeysView) : null;
         Frame keyboard = isBandVisible(mKeyboardView) ? frameOf(mKeyboardView) : null;
         mHasBands = extraKeys != null || keyboard != null;
@@ -770,7 +797,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     /** A view's on-screen bounds, in host coordinates. */
     @Nullable
     private Frame frameOf(@Nullable View view) {
-        if (view == null || mHost == null) return null;
+        if (view == null || mHostLayout == null) return null;
         view.getLocationOnScreen(mViewLocation);
         float left = mViewLocation[0] - mHostLocation[0];
         float top = mViewLocation[1] - mHostLocation[1];
@@ -779,21 +806,21 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     /** {@code -1} on the preference means "follow the rounded-surface token", as the dock's does. */
     private float resolveOpenRadiusPx() {
-        TermuxAppSharedPreferences preferences = mActivity.getPreferences();
+        TermuxAppSharedPreferences preferences = mHost.preferences();
         int configured = preferences == null
             ? -1 : preferences.getAppLauncherDrawerCornerRadius();
         if (configured < 0)
-            configured = TermuxPreferenceConstants.TERMUX_APP.DEFAULT_ROUNDED_SURFACE_CORNER_RADIUS_DP;
+            configured = TermuxAppSharedPreferences.resolveAutoCornerRadiusDp(null, true);
         return dp(configured);
     }
 
     /** Raises the overlay and picks its backdrop material for this open. */
     private void prepareOverlay() {
-        FrameLayout host = mHost;
+        FrameLayout host = mHostLayout;
         FrameLayout glass = mGlass;
         AppDrawerPlaneView plane = mPlane;
         if (host == null || glass == null || plane == null) return;
-        TermuxAppSharedPreferences preferences = mActivity.getPreferences();
+        TermuxAppSharedPreferences preferences = mHost.preferences();
         // Capped below the user's dock opacity so the drawer glass always stays see-through:
         // the terminal keeps running visibly behind the open drawer.
         float opacity = Math.min(0.45f,
@@ -802,9 +829,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN
             : preferences.getDockGlassGrain();
         plane.applyGlassMaterial(
-            InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(mActivity),
-            MaterialColors.getColor(mActivity, com.google.android.material.R.attr.colorPrimary,
-                ContextCompat.getColor(mActivity, R.color.termux_primary)),
+            InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(mHost.context()),
+            MaterialColors.getColor(mHost.context(), com.google.android.material.R.attr.colorPrimary,
+                ContextCompat.getColor(mHost.context(), R.color.termux_primary)),
             opacity, grain);
         glass.setVisibility(View.VISIBLE);
         host.setVisibility(View.VISIBLE);
@@ -826,7 +853,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerContentView content = mContent;
         Frame openRect = mOpenRect;
         if (content == null || openRect == null) return;
-        content.setDock(mActivity.getSuggestionBarView());
+        content.setDock(mHost.suggestionBar());
         plane.setContentInsets(openRect);
         content.setSurfaceRadiusPx(mOpenRadiusPx);
         AppDrawerLayoutConfig config = mLayoutConfig;
@@ -846,7 +873,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                     config.horizontalColumns, config.horizontalRows, config.iconSizeDp));
                 break;
             case CATEGORIES:
-                SuggestionBarView dock = mActivity.getSuggestionBarView();
+                SuggestionBarView dock = mHost.suggestionBar();
                 int budget = dock == null ? 6 * 1024 * 1024
                     : dock.getRenderedIconCacheBudgetBytes();
                 // Category search temporarily reuses the shipped vertical grid at full width. It
@@ -859,7 +886,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                     config.categoryColumns, config.iconSizeDp));
                 break;
         }
-        content.bind(LauncherAppDataProvider.getInstance(mActivity), mSearch);
+        content.bind(LauncherAppDataProvider.getInstance(mHost.context()), mSearch);
         // Visible, but not yet interactive: interactivity is settle()'s to grant, and it grants it
         // from mOpen alone. The plane's own alpha-driven visibility flip on the content host keeps
         // this hidden until the sprout has actually reached it.
@@ -888,7 +915,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                     mLayoutConfig.iconSizeDp));
                 break;
             case CATEGORIES:
-                SuggestionBarView dock = mActivity.getSuggestionBarView();
+                SuggestionBarView dock = mHost.suggestionBar();
                 int budget = dock == null ? 6 * 1024 * 1024 : dock.getRenderedIconCacheBudgetBytes();
                 content.setVerticalMetrics(AppDrawerGridMetrics.resolve(openRect.width(), mDensity,
                     labelHeightPx, 0, mLayoutConfig.iconSizeDp));
@@ -912,7 +939,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private float resolveCellLabelHeightPx() {
         Paint paint = new Paint();
         paint.setTextSize(AppDrawerAppsAdapter.LABEL_TEXT_SP
-            * mActivity.getResources().getDisplayMetrics().scaledDensity);
+            * mHost.context().getResources().getDisplayMetrics().scaledDensity);
         Paint.FontMetrics metrics = paint.getFontMetrics();
         return metrics.descent - metrics.ascent;
     }
@@ -927,13 +954,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private float resolveCategoryTileHeadingHeightPx() {
         Paint paint = new Paint();
         paint.setTextSize(AppDrawerCategoryTileView.HEADING_TEXT_SP
-            * mActivity.getResources().getDisplayMetrics().scaledDensity);
+            * mHost.context().getResources().getDisplayMetrics().scaledDensity);
         Paint.FontMetrics metrics = paint.getFontMetrics();
         return metrics.descent - metrics.ascent;
     }
 
     private void addHostLayoutListener() {
-        FrameLayout host = mHost;
+        FrameLayout host = mHostLayout;
         if (host == null || mHostLayoutListener != null) return;
         mHostLayoutListener = (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom)
             -> onHostLayoutChanged();
@@ -941,7 +968,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     }
 
     private void removeHostLayoutListener() {
-        FrameLayout host = mHost;
+        FrameLayout host = mHostLayout;
         if (host == null || mHostLayoutListener == null) return;
         host.removeOnLayoutChangeListener(mHostLayoutListener);
         mHostLayoutListener = null;
@@ -970,15 +997,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * wallpaper mode: the plane is simply tinted glass over whatever is behind it.
      */
     private void applyBackdropMaterial() {
-        ImageView frost = mActivity.findViewById(R.id.app_drawer_wallpaper_backdrop);
-        View blur = mActivity.findViewById(R.id.app_drawer_blur);
-        boolean frosted = frost != null && mActivity.applyAppDrawerWallpaperFrost(frost);
+        ImageView frost = mHost.findView(R.id.app_drawer_wallpaper_backdrop);
+        View blur = mHost.findView(R.id.app_drawer_blur);
+        boolean frosted = frost != null && mHost.applyWallpaperFrost(frost);
         if (blur == null) return;
         mLiveBlur = blur instanceof com.github.mmin18.widget.RealtimeBlurView
             ? (com.github.mmin18.widget.RealtimeBlurView) blur : null;
         // A fresh open always starts live; doFrame rests it again once the plane settles.
         if (mLiveBlur != null) mLiveBlur.setUpdatesPaused(false);
-        TermuxAppSharedPreferences preferences = mActivity.getPreferences();
+        TermuxAppSharedPreferences preferences = mHost.preferences();
         boolean wallpaperMode = preferences != null && preferences.isUseSystemWallpaperEnabled();
         // Frosted wallpaper mode keeps the live blur ON TOP of the frost: the blur can see the
         // window's own content (the running terminal), so it ghosts through the glass while the
@@ -997,7 +1024,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerPlaneView plane = mPlane;
         Frame dockRect = mDockRect;
         Frame openRect = mOpenRect;
-        if (plane == null || mHost == null || dockRect == null || openRect == null) return;
+        if (plane == null || mHostLayout == null || dockRect == null || openRect == null) return;
         float p = AppDrawerTransitionGeometry.clamp01(progress);
 
         float lift = -mLiftPx * AppDrawerTransitionGeometry.dockLiftFraction(p);
@@ -1020,12 +1047,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // Inverted standardized dim: the scene behind the drawer (terminal, dock) darkens with
         // the drawer's own spring while the glass keeps its opacity. setBackgroundColor reuses
         // the host's ColorDrawable after the first frame, so this stays allocation-free.
-        mHost.setBackgroundColor(com.termux.app.GlassBackdropTint.colorFor(p));
+        mHostLayout.setBackgroundColor(com.termux.app.GlassBackdropTint.colorFor(p));
 
         // Glass handoff: the host carries the fade so the frost/blur pane and the painted slab
         // cross over as one surface.
         float handoff = AppDrawerTransitionGeometry.ramp(p, 0f, GLASS_FADE_END);
-        mHost.setAlpha(handoff);
+        mHostLayout.setAlpha(handoff);
         applyAlpha(mAccessorySurface, 1f - handoff);
 
         // Dock lift rides the two rows, never accessory_stack_container: applyDockImeOffset owns
@@ -1170,12 +1197,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             applyBand(mStatusBarView, 0f, 0f, 1f);
             AppDrawerDockChoreographyTarget target = mDockTarget;
             if (target != null) target.setDrawerTransitionProgress(0f);
-            if (mHost != null) {
-                mHost.setAlpha(1f);
-                mHost.setVisibility(View.INVISIBLE);
+            if (mHostLayout != null) {
+                mHostLayout.setAlpha(1f);
+                mHostLayout.setVisibility(View.INVISIBLE);
             }
             if (mGlass != null) mGlass.setVisibility(View.INVISIBLE);
-            ImageView frost = mActivity.findViewById(R.id.app_drawer_wallpaper_backdrop);
+            ImageView frost = mHost.findView(R.id.app_drawer_wallpaper_backdrop);
             if (frost != null) {
                 frost.setImageDrawable(null);
                 frost.setVisibility(View.GONE);
@@ -1184,7 +1211,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mStatusBand = null;
         } finally {
             mEngaged = false;
-            mActivity.flushPendingAccessoryGeometry();
+            mHost.flushPendingAccessoryGeometry();
         }
     }
 
@@ -1199,7 +1226,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private void applyContentOpenState() {
         AppDrawerContentView content = mContent;
         if (content != null) content.setInteractive(mOpen);
-        mActivity.setAppDrawerInterceptorActive(mOpen);
+        mHost.setInterceptorActive(mOpen);
     }
 
     private float dp(float value) {

@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -57,7 +58,7 @@ final class WidgetPaneMenu {
             row.setMinHeight(Math.round(44f * density));
             row.setMinWidth(Math.round(180f * density));
             row.setPadding(Math.round(14f * density), 0, Math.round(14f * density), 0);
-            android.util.TypedValue ripple = new android.util.TypedValue();
+            TypedValue ripple = new TypedValue();
             context.getTheme().resolveAttribute(android.R.attr.selectableItemBackground,
                 ripple, true);
             row.setBackgroundResource(ripple.resourceId);

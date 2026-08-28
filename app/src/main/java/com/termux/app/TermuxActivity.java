@@ -69,7 +69,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.RelativeLayout;
-import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.ArrayAdapter;
@@ -78,7 +77,6 @@ import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import com.github.mmin18.widget.AndroidStockBlurImpl;
 import com.github.mmin18.widget.RealtimeBlurView;
-import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.canhub.cropper.CropImage;
@@ -95,8 +93,7 @@ import com.termux.app.chrome.ChromeSpec;
 import com.termux.app.chrome.SurfaceDirtyLedger;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
-import com.termux.app.surfaces.SurfaceEditorRows;
-import com.termux.app.fragments.settings.SegmentedPillPreference;
+import com.termux.app.surfaces.SurfaceEditorController;
 import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
 import com.termux.app.launcher.animation.LauncherTransitionController;
 import com.termux.app.launcher.az.AzScrubGesture;
@@ -151,6 +148,7 @@ import com.termux.shared.theme.NightMode;
 import com.termux.shared.theme.ThemeUtils;
 import com.termux.shared.view.KeyboardUtils;
 import com.termux.shared.view.ViewUtils;
+import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
 import com.termux.view.TerminalView;
@@ -202,9 +200,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     public static final String EXTRA_IN_APP_KEYBOARD_HEIGHT_ADJUST =
         "com.termux.app.extra.IN_APP_KEYBOARD_HEIGHT_ADJUST";
-    public static final String EXTRA_DOCK_TUNING =
+    /** Opens the surface editor over the live terminal. The value predates the editor's name. */
+    public static final String EXTRA_SURFACE_EDITOR =
         "com.termux.app.extra.DOCK_TUNING";
-    public static final String EXTRA_DOCK_TUNING_SECTION =
+    public static final String EXTRA_SURFACE_EDITOR_SECTION =
         "com.termux.app.extra.DOCK_TUNING_SECTION";
     /** Opens the extra-keys row editor over the live terminal, from Settings. */
     public static final String EXTRA_EDIT_EXTRA_KEYS =
@@ -338,19 +337,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mInAppKeyboardHeightDragStartY;
     private float mInAppKeyboardHeightDragStartScale;
     private float mInAppKeyboardUnscaledDragHeight;
-    private float mSurfaceTuningInsetDragStartX;
-    private int mSurfaceTuningInsetDragStartDp;
-    private float mSurfaceTuningDockHeightDragStartY;
-    private float mSurfaceTuningDockHeightDragStartScale;
-    private boolean mDockTuningMode;
-    private boolean mDockTuningRestoreExpandedStatus;
-    /** The status section expanded a collapsed pane for its preview, so closing gives it back. */
-    private boolean mSurfaceEditorExpandedStatusPane;
-    /** Editor state as it was on entry; anything different from this is unsaved. */
-    @Nullable private String mSurfaceEditorEntrySignature;
-    /** Restores that entry state. Held so the close gate can offer Discard. */
-    @Nullable private Runnable mSurfaceEditorRevert;
-    private ViewTreeObserver.OnGlobalLayoutListener mDockTuningLayoutListener;
+    /**
+     * The surface editor overlay. All of its UI, gestures and dirty tracking live in the
+     * controller; the activity lends it {@link SurfaceEditorHost} and keeps only the entry points.
+     */
+    private final SurfaceEditorController mSurfaceEditor =
+        new SurfaceEditorController(new SurfaceEditorHost());
 
     /**
      * Termux app shared preferences manager.
@@ -602,7 +594,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final int CONTEXT_MENU_RESET_TERMINAL_ID = 7;
 
-    private static final int CONTEXT_MENU_GLASS_LAB_ID = 9;
+    private static final int CONTEXT_MENU_SURFACE_EDITOR_ID = 9;
 
     private static final int CONTEXT_MENU_COMMAND_PALETTE_ID = 10;
 
@@ -742,14 +734,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return createWallpaperBackdropBitmapForRect(frameRect, wallpaperFrame);
         }
 
-        @Override public boolean isWallpaperBlurFrameInUse(@Nullable Bitmap frame) {
+        @Override public boolean isFrameInUse(@Nullable Bitmap frame) {
             // The keyboard's own backdrop may be the shared frame itself; recycling it under the
             // keyboard crashes its next draw exactly like recycling it under a frost would.
             return frame != null
                 && (frame == mInAppKeyboardBackdropBitmap || isSharedWallpaperBlurFrameInUse(frame));
         }
 
-        @Override public void onWallpaperBlurCacheCleared() {
+        @Override public void onCacheCleared() {
             mPaneGlassFrame = null;
         }
 
@@ -795,8 +787,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     });
 
     /** The accessory chrome module — the one way in to glass, blur, frost and backdrop work. */
+    @VisibleForTesting
     @NonNull
-    public ChromeRenderer getChromeRenderer() {
+    ChromeRenderer getChromeRenderer() {
         return mChrome;
     }
 
@@ -903,7 +896,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the original launch intent with the extra still set, which must not re-enter it.
         if (savedInstanceState == null) {
             handleInAppKeyboardHeightAdjustIntent(getIntent());
-            handleDockTuningIntent(getIntent());
+            handleSurfaceEditorIntent(getIntent());
             handleEditExtraKeysIntent(getIntent());
         }
         if (mRestoreFullStatusBar) {
@@ -1050,7 +1043,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         super.onNewIntent(intent);
         setIntent(intent);
         handleInAppKeyboardHeightAdjustIntent(intent);
-        handleDockTuningIntent(intent);
+        handleSurfaceEditorIntent(intent);
         handleEditExtraKeysIntent(intent);
         if (isLauncherHomeIntent(intent)) {
             mLastLaunchWasLauncherEntry = true;
@@ -1139,11 +1132,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         refreshCalendarIconsIfDayChanged();
         refreshSuggestionBarIfLauncherCatalogChanged();
         getWindow().getDecorView().post(() -> LauncherCtlApiServer.getInstance().ensureStartedAsync(getApplicationContext()));
-        if (mDockTuningMode && mDockTuningRestoreExpandedStatus
-            && !isSurfaceTuningStatusSectionActive()
-            && !mPreferences.isTopPaneClockCollapsed()) {
-            setTopStatusBarCollapsed(true, false);
-        }
+        mSurfaceEditor.collapseStatusPaneIfLeftExpanded();
     }
 
     @Override
@@ -1151,6 +1140,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         feedDockPlank(ev);
         feedTerminalPlank(ev);
         mKeybindHintPresenter.onTerminalTouch(ev);
+        notifyKeybindHintPanelTouch(ev);
         return super.dispatchTouchEvent(ev);
     }
 
@@ -1408,6 +1398,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     /** Gap the terminal border keeps from the status bar above it and the dock below it, in dp. */
     private static final int TERMINAL_BORDER_VERTICAL_INSET_DP = 5;
+    /**
+     * Ceiling on the radius Floating lends the terminal's edge. The dock capsule is a pill; the
+     * terminal it floats above is a tall slab, and a pill's radius on a slab reads as a lozenge, so
+     * the edge takes the capsule's radius only up to here.
+     */
+    private static final int TERMINAL_PANE_MAX_CAPSULE_RADIUS_DP = 14;
 
     /**
      * Tiled panes in the active window. A maximized pane counts as one, which is the point:
@@ -1443,6 +1439,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return dpToPx(mPreferences.getTerminalCornerRadius());
     }
 
+    /**
+     * The radius the terminal's own top corners actually draw with, which is what any surface
+     * hanging off them has to match.
+     *
+     * <p>Docked rounds by the terminal's knob. Floating's slabs round by the dock capsule but
+     * capped well under its pill — see {@code paneGlassCornerRadiusPx} — so reading the capsule
+     * itself here rounded the hints harder than the window they hang from.
+     */
+    private float terminalEdgeCornerRadiusPx() {
+        if (!isRoundedDockStyle())
+            return dockedTerminalCornerRadiusPx();
+        return Math.min(dpToPx(TERMINAL_PANE_MAX_CAPSULE_RADIUS_DP),
+            resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE));
+    }
+
+    /**
+     * The pane host's clip when it is there to contain, not to shape: a rect inflated by the room a
+     * pressed pane travels into.
+     *
+     * <p>The host clips so a dragged float cannot paint over the dock. Its bounds are the pane area,
+     * which is also exactly where a pressed pane's tilt and slide take it — so the clip cut the
+     * press off along the margin, taking the slab's lit rim with it, and the border stopped reading
+     * as part of the terminal. Slack of a few dp contains the float and lets the press happen. The
+     * shaping clips (a Docked radius, the frame's inner radius) are left exact: they are the
+     * terminal's own corners, nothing tilts under them, and inflating those would let the corner
+     * cells poke past the arc.
+     */
+    @NonNull
+    private ViewOutlineProvider paneHostContainmentOutlineProvider() {
+        final int slackPx = Math.round(dpToPx(
+            com.termux.app.terminal.TerminalPaneController.PANE_PRESS_SLACK_DP));
+        return new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, android.graphics.Outline outline) {
+                outline.setRect(-slackPx, -slackPx,
+                    view.getWidth() + slackPx, view.getHeight() + slackPx);
+            }
+        };
+    }
+
     @NonNull
     private static ViewOutlineProvider roundedOutlineProvider(float radiusPx) {
         return new ViewOutlineProvider() {
@@ -1451,6 +1487,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radiusPx);
             }
         };
+    }
+
+    /**
+     * Where the terminal's frame sits inside its host, on one axis.
+     *
+     * <p>Sideways, Floating tucks under the dock's own capsule inset, which gives it visible air.
+     * Vertically it had none, so its edges butted against the status bar and the dock and read as
+     * one merged frame; it is held off both by the gap the capsule surfaces leave. Docked spends
+     * the user's own Margin knob evenly on all four sides instead.
+     *
+     * <p>Shared with whatever else has to sit on that edge — the mode hint card hangs off the
+     * top-trailing corner and must land on the terminal's edge, not near it.
+     *
+     * @param framed whether a frame line (the border preference, or the glass rim) is being drawn,
+     *     which is what buys the Floating frame its vertical air.
+     */
+    private int terminalFrameInsetPx(boolean vertical, boolean framed) {
+        if (!isRoundedDockStyle())
+            return dockedTerminalMarginPx();
+        return vertical
+            ? (framed ? Math.round(dpToPx(TERMINAL_BORDER_VERTICAL_INSET_DP)) : 0)
+            : getDockLayout().horizontalInsetPx;
+    }
+
+    /** The same two numbers the frame is laid out with, for a surface that has to meet its edge. */
+    private int terminalFrameInsetPx(boolean vertical) {
+        boolean framed = mPreferences != null
+            && (mPreferences.isTerminalBorderEnabled() || isTerminalPaneGlassActive());
+        return terminalFrameInsetPx(vertical, framed);
     }
 
     private void applyTerminalBorderAppearance() {
@@ -1484,18 +1549,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         //
         // Keyed off the preference rather than off `enabled`, so splitting a window does not shift
         // the terminal: the pane borders land exactly where the terminal border was.
-        int borderVerticalInsetPx = preferBorder || glass
-            ? Math.round(dpToPx(TERMINAL_BORDER_VERTICAL_INSET_DP)) : 0;
-        int borderHorizontalInsetPx = capsuleMarginPx;
-        if (!capsule) {
-            // Default surface: the terminal's outer air is the user's own "Inner padding" knob —
-            // the same value that gaps the panes — applied evenly on all four sides. Before this,
-            // the vertical edges had a fixed 5dp of air while the sides sat flush against the
-            // screen, and no setting reached either. Rounded keeps its capsule heuristics.
-            int outerPx = dockedTerminalMarginPx();
-            borderHorizontalInsetPx = outerPx;
-            borderVerticalInsetPx = outerPx;
-        }
+        int borderVerticalInsetPx = terminalFrameInsetPx(true, preferBorder || glass);
+        int borderHorizontalInsetPx = terminalFrameInsetPx(false, preferBorder || glass);
 
         ViewGroup.LayoutParams borderParams = borderView.getLayoutParams();
         if (borderParams instanceof ViewGroup.MarginLayoutParams) {
@@ -1556,7 +1611,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyPaneHostCornerPadding(paneHost, Math.round(hostRadiusPx * 0.30f));
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 paneHost.setOutlineProvider(hostRadiusPx > 0f
-                    ? roundedOutlineProvider(hostRadiusPx) : ViewOutlineProvider.BOUNDS);
+                    ? roundedOutlineProvider(hostRadiusPx)
+                    : paneHostContainmentOutlineProvider());
                 paneHost.setClipToOutline(glass || hostRadiusPx > 0f);
             }
             setupTerminalPlankFx(glass);
@@ -1701,7 +1757,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override public float paneGlassCornerRadiusPx() {
                 if (isRoundedDockStyle())
-                    return Math.min(dpToPx(14), resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE));
+                    return terminalEdgeCornerRadiusPx();
                 // Docked: the glass slabs are the terminal's edge, so they round by the terminal's
                 // own knob. Its default 0 keeps the 4dp softening the slabs always had — a glass
                 // pane with literally square corners reads as a torn rectangle, not a slab.
@@ -1767,7 +1823,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void feedTerminalPlank(MotionEvent ev) {
         if (!mTerminalGlassActive || mPaneController == null) return;
-        if (isAppDrawerEngaged() || mDockTuningMode || isCommandPaletteOpen()
+        if (isAppDrawerEngaged() || mSurfaceEditor.isActive() || isCommandPaletteOpen()
             || isFullStatusBarEngaged()) {
             mPaneController.cancelPaneGlassTouch();
             return;
@@ -1939,6 +1995,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void showTerminalActionHint(@NonNull TextView chip, @NonNull CharSequence label) {
         if (mActionHintHideRunnable != null)
             chip.removeCallbacks(mActionHintHideRunnable);
+        // Both hang from the terminal's top-trailing corner. While a mode legend is up it owns that
+        // corner, so the chip stacks underneath it instead of arriving behind it unseen.
+        ViewGroup.LayoutParams chipParams = chip.getLayoutParams();
+        if (chipParams instanceof ViewGroup.MarginLayoutParams) {
+            int cardPx = mModeHintCard != null ? mModeHintCard.occupancyPx() : 0;
+            int targetTop = cardPx > 0 ? cardPx + Math.round(dpToPx(6)) : 0;
+            ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) chipParams;
+            if (marginParams.topMargin != targetTop) {
+                marginParams.topMargin = targetTop;
+                chip.setLayoutParams(marginParams);
+            }
+        }
 
         chip.setText(label);
         chip.setTextColor(getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
@@ -2262,7 +2330,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return specular;
     }
 
-    public boolean isReducedMotionEnabled() {
+    private boolean isReducedMotionEnabled() {
         try {
             float scale = Settings.Global.getFloat(
                 getContentResolver(), Settings.Global.ANIMATOR_DURATION_SCALE, 1f);
@@ -2737,7 +2805,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 if (sessions instanceof com.termux.app.statusbar.SessionsIndicatorView) {
                     ((com.termux.app.statusbar.SessionsIndicatorView) sessions).setSurfaceStyle(
-                        capsule, resolveStatusBarCapsuleCornerRadiusPx(targetHeight));
+                        capsule, resolveStatusIndicatorCornerRadiusPx(targetHeight, capsule));
                 }
             }
 
@@ -2745,7 +2813,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 findViewById(R.id.terminal_window_bar);
             if (windows != null) {
                 windows.setSurfaceStyle(capsule,
-                    resolveStatusBarCapsuleCornerRadiusPx(targetHeight));
+                    resolveStatusIndicatorCornerRadiusPx(targetHeight, capsule));
             }
 
             View statusWidgets = findViewById(R.id.terminal_status_widgets);
@@ -2821,19 +2889,53 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : mPreferences.getStatusBarHorizontalInset(), isRoundedDockStyle());
     }
 
-    /** Internal row inset only; the floating capsule's outer screen margin remains unchanged. */
+    /**
+     * Internal row inset only; the floating capsule's outer screen margin remains unchanged.
+     *
+     * <p>The bottom row — sessions chip on the left, status widgets on the right — is bottom-gravity
+     * and therefore sits in the surface's bottom corners. Whatever radius rounds those corners eats
+     * into the row, so the inset that keeps the content clear of the clip has to follow the radius
+     * rather than be a fixed number. Half the radius is the arc's worst-case encroachment over the
+     * row's height, which is what both styles grow by.</p>
+     *
+     * <p>They start from different places because their radii do. Docked is square by default, so
+     * its 3dp baseline is the whole story at rest and every bit of radius the user dials in is new
+     * encroachment. Floating is a card whose corners are already rounded at rest — 26dp, the auto
+     * radius — and its 8dp baseline was measured against exactly that, so only radius beyond the
+     * default is encroachment the baseline does not already answer. That keeps a stock Floating
+     * surface looking precisely as it did while a raised radius stops clipping the chips.</p>
+     */
     private int statusBarContentEdgeInsetPx(boolean capsule) {
-        int base = Math.round(dpToPx(capsule ? 8 : 3));
-        if (!capsule) {
-            // Docked rounds the pane's bottom corners by the user's inner-edge radius, and the
-            // bottom row (sessions chip on the left, status widgets on the right) sits exactly in
-            // those corners — at higher radii it spilled outside the clip. Half the radius is the
-            // arc's worst-case encroachment over the row's height, so the content starts past it.
-            boolean collapsed = mPreferences != null && mPreferences.isTopPaneClockCollapsed();
-            base += Math.round(resolveDockedStatusInnerRadiusPx(
-                targetStatusBarHeightPx(false, collapsed)) * 0.5f);
-        }
-        return base;
+        boolean collapsed = mPreferences != null && mPreferences.isTopPaneClockCollapsed();
+        float radiusPx = capsule
+            ? resolveStatusBarCapsuleCornerRadiusPx(targetStatusBarHeightPx(true, collapsed))
+            : resolveDockedStatusInnerRadiusPx(targetStatusBarHeightPx(false, collapsed));
+        float baselineRadiusPx = capsule
+            ? dpToPx(TermuxPreferenceConstants.TERMUX_APP.STATUS_AUTO_CORNER_RADIUS_MAX_DP)
+            : 0f;
+        return DockLayoutPolicy.statusBarContentEdgeInsetPx(capsule, radiusPx, baselineRadiusPx,
+            getResources().getDisplayMetrics().density);
+    }
+
+    /**
+     * The shape the status row's two chips wear: the sessions indicator and the window pills.
+     *
+     * <p>They are content inside the status surface rather than surfaces of their own, so they are
+     * not part of the Base cascade and have their own knob. Until it is touched they follow the bar
+     * — square while Docked, the capsule's radius while Floating — which is what they always did.
+     * Once it is set, that shape holds in both styles, clamped so a chip can never round past half
+     * of its own height.
+     */
+    private float resolveStatusIndicatorCornerRadiusPx(int surfaceHeightPx, boolean capsule) {
+        int configured = mPreferences == null
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_INDICATOR_CORNER_RADIUS
+            : mPreferences.getStatusIndicatorCornerRadius();
+        if (configured < 0)
+            return capsule ? resolveStatusBarCapsuleCornerRadiusPx(surfaceHeightPx) : 0f;
+        // No clamp of our own: both chips draw rounded rects, which already stop at half of the
+        // shorter side, and the two chips are not the same height — clamping here would cap the
+        // taller one at the shorter one's pill.
+        return dpToPx(configured);
     }
 
     private float resolveStatusBarCapsuleCornerRadiusPx(int surfaceHeightPx) {
@@ -2843,7 +2945,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (configuredRadius >= 0) {
             return Math.min(dpToPx(configuredRadius), surfaceHeightPx / 2f);
         }
-        return Math.max(dpToPx(16), Math.min(dpToPx(26), surfaceHeightPx / 2f));
+        return Math.max(
+            dpToPx(TermuxPreferenceConstants.TERMUX_APP.STATUS_AUTO_CORNER_RADIUS_MIN_DP),
+            Math.min(dpToPx(TermuxAppSharedPreferences.resolveAutoCornerRadiusDp(
+                TermuxAppSharedPreferences.SurfaceSlot.STATUS, true)), surfaceHeightPx / 2f));
     }
 
     private int targetStatusBarHeightPx(boolean capsule, boolean collapsed) {
@@ -3060,7 +3165,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      *
      * @return false when there is no dock laid out — a terminal-only install, or before first layout.
      */
-    public boolean dockBoundsOnScreen(@NonNull Rect out) {
+    private boolean dockBoundsOnScreen(@NonNull Rect out) {
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
         if (accessoryContainer == null || accessoryContainer.getVisibility() != View.VISIBLE
             || accessoryContainer.getWidth() <= 0 || accessoryContainer.getHeight() <= 0) {
@@ -3095,9 +3200,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private boolean shouldShowDecorNavBarSurface(@NonNull ChromeSpec state) {
         // Floating capsules leave the gesture-pill inset showing wallpaper; edge-to-edge surfaces
-        // (dock glass, or the embedded keyboard's own background) continue under the pill. The
-        // keyboard's shape is decoupled from the dock style via the dock-match mode, so it owns
-        // its own capsule decision.
+        // (dock glass, or the embedded keyboard's own background) continue under the pill.
         return shouldShowDecorNavBarSurface(state.toolbarShown, state.keyboardShown,
             mNavBarHeight, mKeyboardGeometry.lastImeVisible() || isImeVisible(), isRoundedDockStyle(),
             isInAppKeyboardCapsule());
@@ -3195,7 +3298,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mDecorNavBarSurfaceOverlay = surfaceOverlay;
         mDecorNavBarBlurBackdrop = blurBackdrop;
         mDecorNavBarTintOverlay = tintOverlay;
-        mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR);
+        mChrome.requestSync(ChromeRenderer.SCOPE_NAV_STRIP_BACKDROP);
     }
 
     private void removeDecorNavBarSurfaceOverlay() {
@@ -3244,7 +3347,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             params.rightMargin = targetHorizontalMargin;
             params.bottomMargin = targetBottomMargin;
             overlay.setLayoutParams(params);
-            mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR);
+            mChrome.requestSync(ChromeRenderer.SCOPE_NAV_STRIP_BACKDROP);
         }
     }
 
@@ -3264,18 +3367,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyDecorNavBarSurfaceBounds(overlay, true);
 
         if (mDecorNavBarTintOverlay != null) {
-            if (state.keyboardShown && !isInAppKeyboardGlassSurface()) {
-                // The activity content ends at fitSystemWindows' bottom boundary. Continue the
-                // opaque keyboard surface through the decor-owned gesture-navigation inset.
-                mDecorNavBarTintOverlay.setBackgroundColor(resolveInAppKeyboardBackgroundColor());
-            } else {
-                // The under-pill strip is the bottom slice [f, 1] of the shared light model; the
-                // in-content surface above it (dock stack when keyboard-off, keyboard host when
-                // keyboard-on) renders [0, f]. Both states stack a content-level surface + this
-                // nav-only strip, so a single foot lands under the pill identically either way.
-                mDecorNavBarTintOverlay.setBackground(
-                    mChrome.glass().dockSurface(state.barAlpha, defaultDockGlassFootFraction(), 1f, false));
-            }
+            mDecorNavBarTintOverlay.setBackground(buildDecorNavBarTint(state));
             mDecorNavBarTintOverlay.setAlpha(1f);
             mDecorNavBarTintOverlay.setVisibility(View.VISIBLE);
         }
@@ -3287,6 +3379,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         overlay.setVisibility(View.VISIBLE);
+    }
+
+    /**
+     * The under-pill strip's tint: the bottom slice {@code [f, 1]} of the same light model the
+     * surface directly above it renders as {@code [0, f]}, so one foot lands under the pill.
+     *
+     * <p>Which surface that is depends on the keyboard. The strip used to take the dock's material
+     * in both states, which was right only while the keyboard followed Base: a keyboard with its
+     * own opacity — or a scheme background colour — painted itself near-solid and left the strip
+     * under it at the dock's opacity, so the material visibly stopped at the keyboard's bottom edge
+     * and the gesture-nav band read as bare wallpaper. The strip now takes whichever surface is
+     * above it, which is what makes the two read as one slab in both states.
+     */
+    @NonNull
+    private Drawable buildDecorNavBarTint(@NonNull ChromeSpec state) {
+        float foot = defaultDockGlassFootFraction();
+        if (!state.keyboardShown)
+            return mChrome.glass().dockSurface(state.barAlpha, foot, 1f, false);
+        // Same three values buildInAppKeyboardSurfaceBackground resolves, so the strip cannot
+        // disagree with the keyboard about its own material.
+        boolean normalized = isInAppKeyboardOpacityLinked();
+        Integer schemeBackground = normalized ? null : resolveInAppKeyboardSchemeBackgroundColor();
+        int backgroundAlpha = normalized ? 255 : Math.round(
+            255f * getInAppKeyboardBackgroundOpacityPercent() / 100f);
+        if (schemeBackground != null)
+            return new ColorDrawable(withAlphaComponent(schemeBackground, backgroundAlpha));
+        Drawable tint = mChrome.glass().dockSurface(state.barAlpha, foot, 1f, false);
+        if (backgroundAlpha < 255)
+            tint.setAlpha(backgroundAlpha);
+        return tint;
     }
 
     @Nullable
@@ -3428,7 +3550,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean hasInAppKeyboardBackgroundOverride() {
         return ChromePolicy.hasInAppKeyboardBackgroundOverride(isInAppKeyboardOpacityLinked(),
             resolveInAppKeyboardSchemeBackgroundColor(),
-            getInAppKeyboardBackgroundOpacityPercent());
+            getInAppKeyboardBackgroundOpacityPercent(),
+            mPreferences != null ? mPreferences.getAppBarOpacity()
+                : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY);
     }
 
 
@@ -3461,14 +3585,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return contentHeight / (float) (contentHeight + navHeight);
     }
 
-    /** Keyboard shape always follows the single global surface shape. */
-    private boolean isInAppKeyboardShapeMatch() {
-        return true;
-    }
-
     /** True when the keyboard renders as the floating Rounded surface. */
     private boolean isInAppKeyboardCapsule() {
-        return isRoundedDockStyle() && isInAppKeyboardShapeMatch();
+        // The keyboard's shape always follows the single global surface shape; the old dock-match
+        // mode that let it differ is gone.
+        return isRoundedDockStyle();
     }
 
     /**
@@ -3507,7 +3628,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 params.bottomMargin = bottomMargin;
                 surfaceHost.setLayoutParams(params);
                 mKeyboardGeometry.markHeightDirty();
-                mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);
+                mChrome.requestSync(ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
             }
         }
         if (surfaceHost.getPaddingLeft() != innerPadding
@@ -3516,7 +3637,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || surfaceHost.getPaddingBottom() != innerPadding) {
             surfaceHost.setPadding(innerPadding, innerPadding, innerPadding, innerPadding);
             mKeyboardGeometry.markHeightDirty();
-            mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);
+            mChrome.requestSync(ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
         }
 
         float cornerRadiusPx = capsule ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
@@ -4136,7 +4257,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (wallpaper == null) {
             return null;
         }
+        try {
+            return drawWallpaperBackdrop(wallpaper, targetRect);
+        } finally {
+            // getDrawable() leaves the framework holding the decoded wallpaper in
+            // WallpaperManager$Globals for the life of the process — 16.6 MB of this one, at
+            // 1400x3100 against a 1080x2412 screen, because the wallpaper is zoomed. It is a pure
+            // cache and nothing here reads it again: the crop drawn just now is what gets cached,
+            // and this runs only when that cache misses, so the re-read costs nothing anyone waits
+            // for. Ours is drawn by the time this runs.
+            try {
+                wallpaperManager.forgetLoadedWallpaper();
+            } catch (Exception ignored) {
+                // A vendor implementation that refuses simply keeps its cache.
+            }
+        }
+    }
 
+    private Bitmap drawWallpaperBackdrop(@NonNull Drawable wallpaper, @NonNull Rect targetRect) {
         int targetWidth = Math.max(1, targetRect.width());
         int targetHeight = Math.max(1, targetRect.height());
         Rect frameRect = getManagedWallpaperFrameRect();
@@ -4559,12 +4697,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public void invalidateCloseSettledCrops() {
-                mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);
-                mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR);
+                mChrome.requestSync(ChromeRenderer.SCOPE_KEYBOARD_BACKDROP
+                    | ChromeRenderer.SCOPE_NAV_STRIP_BACKDROP);
             }
 
             @Override public void invalidateAccessoryCrop() {
-                mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
+                mChrome.requestSync(ChromeRenderer.SCOPE_DOCK_BACKDROP);
             }
 
             @Override public void onKeyboardClosed() {
@@ -4754,11 +4892,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Wallpaper frost for the command palette glass; true when the live blur should rest. */
     public boolean applyCommandPaletteWallpaperFrost(@NonNull ImageView frost) {
         return mChrome.frost().applyCommandPalette(frost);
-    }
-
-    /** Wallpaper frost for the app drawer plane's glass; true when the live blur should rest. */
-    public boolean applyAppDrawerWallpaperFrost(@NonNull ImageView frost) {
-        return mChrome.frost().applyAppDrawer(frost);
     }
 
     private float terminalWindowGlassStatusFraction(@NonNull View host) {
@@ -4955,7 +5088,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAzGestureHandler.removeCallbacks(mPackageRefreshRunnable);
         mAzGestureHandler.removeCallbacks(mLauncherCatalogWarmRunnable);
         getDrawer().closeDrawers();
-        restoreExpandedStatusAfterSurfaceEditor();
+        mSurfaceEditor.restoreExpandedStatusAfterSurfaceEditor();
     }
 
     /**
@@ -4968,12 +5101,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onTrimMemory(int level) {
         super.onTrimMemory(level);
-        if (level < TRIM_MEMORY_BACKGROUND || mIsInvalidState) {
+        if (mIsInvalidState) return;
+        // The terminal hears about pressure before the chrome does, and at levels the chrome
+        // ignores. RUNNING_LOW and RUNNING_CRITICAL arrive while we are still in front — which for
+        // a home app is exactly when a vendor's killer is circling — and the biggest thing a
+        // terminal holds by far is decoded animation frames: a single full-rate 512x512 GIF is
+        // over a hundred megabytes of them. Giving those up costs the logos their motion and
+        // nothing else; being killed costs every open session.
+        //
+        // RUNNING_MODERATE and UI_HIDDEN are deliberately not enough. The first is a hint, not
+        // pressure, and the second only means the UI went away — an animation that is merely
+        // hidden already costs nothing, because the visibility gate has stopped it.
+        if (level >= TRIM_MEMORY_RUNNING_LOW) dropTerminalAnimationFrames();
+        if (level < TRIM_MEMORY_BACKGROUND) {
             return;
         }
         mChrome.onTrimMemory();
         clearInAppKeyboardBackdrop();
         clearAccessoryRenderEffectBackdrop();
+    }
+
+    /** Drop every session's kitty animation frames, keeping the still image each rests on. */
+    private void dropTerminalAnimationFrames() {
+        if (mTermuxService == null) return;
+        for (com.termux.shared.termux.shell.command.runner.terminal.TermuxSession session
+                : mTermuxService.getTermuxSessions()) {
+            TerminalSession terminalSession = session.getTerminalSession();
+            if (terminalSession == null) continue;
+            TerminalEmulator emulator = terminalSession.getEmulator();
+            if (emulator != null) emulator.dropKittyAnimationFrames();
+        }
     }
 
     @Override
@@ -5408,8 +5565,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
 
                 @Override
-                public boolean isDockTuningActive() {
-                    return mDockTuningMode;
+                public boolean isSurfaceEditorActive() {
+                    return mSurfaceEditor.isActive();
                 }
 
                 @Override
@@ -6016,7 +6173,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Drawable focusedIcon = interactionMode == LauncherAzGestureFxView.InteractionMode.ICON_TRACK_LOCKED
             && focusResult != null
             && focusResult.entry != null
-            ? focusResult.entry.icon
+            ? com.termux.app.launcher.data.LauncherAppDataProvider.artworkFor(this, focusResult.entry)
             : null;
         if (focusedIcon == null && interactionMode == LauncherAzGestureFxView.InteractionMode.ICON_TRACK_LOCKED
             && focusResult != null && focusResult.entry != null) {
@@ -6541,888 +6698,131 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         else showExtraKeysRowEditor();
     }
 
-    private void handleDockTuningIntent(@Nullable Intent intent) {
-        if (intent == null || !intent.getBooleanExtra(EXTRA_DOCK_TUNING, false))
+    private void handleSurfaceEditorIntent(@Nullable Intent intent) {
+        if (intent == null || !intent.getBooleanExtra(EXTRA_SURFACE_EDITOR, false))
             return;
-        String initialSection = intent.getStringExtra(EXTRA_DOCK_TUNING_SECTION);
-        intent.removeExtra(EXTRA_DOCK_TUNING);
-        intent.removeExtra(EXTRA_DOCK_TUNING_SECTION);
-        enterDockTuningMode(initialSection);
+        String initialSection = intent.getStringExtra(EXTRA_SURFACE_EDITOR_SECTION);
+        intent.removeExtra(EXTRA_SURFACE_EDITOR);
+        intent.removeExtra(EXTRA_SURFACE_EDITOR_SECTION);
+        mSurfaceEditor.enter(initialSection);
     }
 
-    private void enterDockTuningMode() {
-        // No section asked for: reopen where the user last was.
-        enterDockTuningMode(mPreferences == null
-            ? null : mPreferences.getSurfaceTuningLastSection());
-    }
-
-    private void enterDockTuningMode(@Nullable String initialSection) {
-        if (isFullStatusBarEngaged()) return;
-        if (mPreferences == null)
-            return;
-        View controls = findViewById(R.id.dock_tuning_controls);
-        MaterialButtonToggleGroup sectionGroup = findViewById(R.id.surface_tuning_section_group);
-        View keyboardColors = findViewById(R.id.surface_tuning_keyboard_colors);
-        SeekBar blur = findViewById(R.id.dock_tuning_blur_slider);
-        SeekBar opacity = findViewById(R.id.dock_tuning_opacity_slider);
-        SeekBar grain = findViewById(R.id.dock_tuning_grain_slider);
-        SeekBar dockRadius = findViewById(R.id.dock_tuning_radius_slider);
-        SeekBar terminal = findViewById(R.id.dock_tuning_terminal_slider);
-        com.google.android.material.materialswitch.MaterialSwitch terminalBorder =
-            findViewById(R.id.dock_tuning_terminal_border_switch);
-        View terminalGlassGroup = findViewById(R.id.dock_tuning_terminal_glass_group);
-        SeekBar terminalGlassBlur = findViewById(R.id.dock_tuning_terminal_blur_slider);
-        SeekBar terminalGlassGrain = findViewById(R.id.dock_tuning_terminal_grain_slider);
-        TextView terminalGlassBlurValue = findViewById(R.id.dock_tuning_terminal_blur_value);
-        TextView terminalGlassGrainValue = findViewById(R.id.dock_tuning_terminal_grain_value);
-        SeekBar terminalGap = findViewById(R.id.dock_tuning_terminal_gap_slider);
-        TextView terminalGapValue = findViewById(R.id.dock_tuning_terminal_gap_value);
-        SeekBar wallpaperOpacity = findViewById(R.id.dock_tuning_wallpaper_opacity_slider);
-        TextView wallpaperOpacityValue = findViewById(R.id.dock_tuning_wallpaper_opacity_value);
-        MaterialButtonToggleGroup terminalContrast =
-            findViewById(R.id.dock_tuning_terminal_contrast_group);
-        TextView terminalContrastHint = findViewById(R.id.dock_tuning_terminal_contrast_hint);
-        SeekBar sessions = findViewById(R.id.dock_tuning_sessions_slider);
-        SeekBar size = findViewById(R.id.dock_tuning_size_slider);
-        SeekBar icons = findViewById(R.id.dock_tuning_icons_slider);
-        SeekBar keyboardHeight = findViewById(R.id.surface_tuning_keyboard_height_slider);
-        SeekBar keyboardSpacing = findViewById(R.id.surface_tuning_keyboard_spacing_slider);
-        SeekBar keyboardRadius = findViewById(R.id.surface_tuning_keyboard_radius_slider);
-        SeekBar keyboardKeyOpacity = findViewById(R.id.surface_tuning_keyboard_key_opacity_slider);
-        SeekBar keyboardBgOpacity = findViewById(R.id.surface_tuning_keyboard_bg_opacity_slider);
-        SeekBar statusBlur = findViewById(R.id.surface_tuning_status_blur_slider);
-        SeekBar statusOpacity = findViewById(R.id.surface_tuning_status_opacity_slider);
-        SeekBar statusGrain = findViewById(R.id.surface_tuning_status_grain_slider);
-        SeekBar statusRadius = findViewById(R.id.surface_tuning_status_radius_slider);
-        TextView blurValue = findViewById(R.id.dock_tuning_blur_value);
-        TextView opacityValue = findViewById(R.id.dock_tuning_opacity_value);
-        TextView grainValue = findViewById(R.id.dock_tuning_grain_value);
-        TextView dockRadiusValue = findViewById(R.id.dock_tuning_radius_value);
-        TextView terminalValue = findViewById(R.id.dock_tuning_terminal_value);
-        TextView sessionsValue = findViewById(R.id.dock_tuning_sessions_value);
-        TextView sizeValue = findViewById(R.id.dock_tuning_size_value);
-        TextView iconsValue = findViewById(R.id.dock_tuning_icons_value);
-        TextView keyboardHeightValue = findViewById(R.id.surface_tuning_keyboard_height_value);
-        TextView keyboardSpacingValue = findViewById(R.id.surface_tuning_keyboard_spacing_value);
-        TextView keyboardRadiusValue = findViewById(R.id.surface_tuning_keyboard_radius_value);
-        TextView keyboardKeyOpacityValue = findViewById(R.id.surface_tuning_keyboard_key_opacity_value);
-        TextView keyboardBgOpacityValue = findViewById(R.id.surface_tuning_keyboard_bg_opacity_value);
-        TextView statusBlurValue = findViewById(R.id.surface_tuning_status_blur_value);
-        TextView statusOpacityValue = findViewById(R.id.surface_tuning_status_opacity_value);
-        TextView statusGrainValue = findViewById(R.id.surface_tuning_status_grain_value);
-        TextView statusRadiusValue = findViewById(R.id.surface_tuning_status_radius_value);
-        MaterialButtonToggleGroup styleGroup = findViewById(R.id.dock_tuning_style_group);
-        View confirm = findViewById(R.id.dock_tuning_confirm);
-        View reset = findViewById(R.id.surface_tuning_reset);
-        View dismiss = findViewById(R.id.dock_tuning_dismiss);
-        if (controls == null || sectionGroup == null || keyboardColors == null
-            || blur == null || opacity == null || grain == null || dockRadius == null
-            || terminal == null || sessions == null || size == null || icons == null
-            || keyboardHeight == null || keyboardSpacing == null || keyboardRadius == null
-            || keyboardKeyOpacity == null || keyboardKeyOpacityValue == null
-            || keyboardBgOpacity == null || keyboardBgOpacityValue == null
-            || statusBlur == null || statusOpacity == null || statusGrain == null
-            || statusRadius == null
-            || blurValue == null || opacityValue == null || grainValue == null
-            || dockRadiusValue == null
-            || terminalValue == null || sessionsValue == null || sizeValue == null
-            || iconsValue == null || keyboardHeightValue == null || keyboardSpacingValue == null
-            || keyboardRadiusValue == null || statusBlurValue == null
-            || statusOpacityValue == null || statusGrainValue == null
-            || statusRadiusValue == null || styleGroup == null || confirm == null
-            || reset == null) {
-            mDockTuningMode = false;
-            return;
+    /** The activity's half of the surface editor's seam: its views, its prefs, its render pipeline. */
+    private final class SurfaceEditorHost implements SurfaceEditorController.Host {
+        @NonNull @Override public Context context() {
+            return TermuxActivity.this;
         }
-        // Re-entry with the editor already open (a second tuning intent, say) must not re-baseline:
-        // the snapshot below is what "unsaved" is measured against, and recapturing it mid-session
-        // would quietly adopt the user's in-progress edits as the thing Discard returns to.
-        final boolean freshEditorSession = !mDockTuningMode;
-        if (!mDockTuningMode) {
-            mDockTuningRestoreExpandedStatus = !mPreferences.isTopPaneClockCollapsed();
-            if (mDockTuningRestoreExpandedStatus) setTopStatusBarCollapsed(true, false);
+
+        @Nullable @Override public <T extends View> T findView(int viewId) {
+            return findViewById(viewId);
         }
-        mDockTuningMode = true;
-        controls.setVisibility(View.VISIBLE);
-        final int initialBlur = mPreferences.getExtraKeysBlurRadius();
-        final int initialOpacity = mPreferences.getAppBarOpacity();
-        final int initialGrain = mPreferences.getDockGlassGrain();
-        final int initialDockRadius = mPreferences.getAppLauncherDockCornerRadius();
-        final int initialTerminal = mPreferences.getTerminalBackgroundOpacity();
-        final boolean initialTerminalBorder = mPreferences.isTerminalBorderEnabled();
-        final int initialTerminalGlassBlur = mPreferences.getTerminalGlassBlurRadius();
-        final int initialTerminalGlassGrain = mPreferences.getTerminalGlassGrain();
-        final int initialTerminalCornerRadius = mPreferences.getTerminalCornerRadius();
-        final int initialTerminalGap = mPreferences.getTerminalPaneGap();
-        final int initialWallpaperDim = mPreferences.getWallpaperBackdropDim();
-        final String initialTerminalContrast = mPreferences.getTerminalContrastLevel().value;
-        final int initialSessions = mPreferences.getSessionsOpacity();
-        final float initialBarHeight = mPreferences.getAppLauncherBarHeightScale();
-        final int initialSizeIndex = DockLayoutPolicy.nearestSizePresetIndex(initialBarHeight);
-        final int initialButtonCount = mPreferences.getAppLauncherButtonCount();
-        final String initialStyle = mPreferences.getAppLauncherDockStyle();
-        final float initialKeyboardHeight = mPreferences.getInAppKeyboardHeightScale();
-        final float initialKeyboardSpacing = mPreferences.getInAppKeyboardKeyMarginScale();
-        final float initialKeyboardRadius = mPreferences.getInAppKeyboardKeyCornerRadiusDp();
-        // The stored value may be the -1 "theme-defined" sentinel; the slider always shows the
-        // effective percent, while dismiss restores the raw stored value.
-        final int initialKeyboardKeyOpacity = mPreferences.getInAppKeyboardKeyOpacity();
-        final int initialKeyboardKeyOpacityEffective = mInAppKeyboard != null
-            ? mInAppKeyboard.getEffectiveKeyOpacityPercent()
-            : Math.max(0, initialKeyboardKeyOpacity);
-        final int initialKeyboardBgOpacity = mPreferences.getInAppKeyboardBackgroundOpacity();
-        final int initialStatusBlur = mPreferences.getStatusBarBlurRadius();
-        final int initialStatusOpacity = mPreferences.getStatusBarOpacity();
-        final int initialStatusGrain = mPreferences.getStatusBarGrain();
-        final int initialStatusRadius = mPreferences.getStatusBarCornerRadius();
-        final int initialDockInset = mPreferences.getDockHorizontalInset();
-        final int initialKeyboardInset = mPreferences.getInAppKeyboardHorizontalInset();
-        final int initialStatusInset = mPreferences.getStatusBarHorizontalInset();
-        // Captured too, so "Revert all" really means all. These four are written straight to
-        // preferences by the clock picker, the normalize switch and the keyboard colour sub-screen
-        // rather than through the sliders, and leaving them out left a half-reverted state behind.
-        final String initialClockStyle = mPreferences.getTopPaneClockStyle();
-        final String initialLinks = surfaceEditorLinkSignature();
-        final String initialKeyboardColorScheme = mPreferences.getInAppKeyboardColorScheme();
-        final String initialKeyboardTheme = mPreferences.getInAppKeyboardTheme();
 
-        blur.setProgress(initialBlur);
-        opacity.setProgress(initialOpacity);
-        grain.setProgress(initialGrain);
-        dockRadius.setProgress(editorRadius(initialDockRadius));
-        terminal.setProgress(initialTerminal);
-        if (terminalBorder != null) {
-            terminalBorder.setOnCheckedChangeListener(null);
-            terminalBorder.setChecked(mPreferences.isTerminalBorderEnabled());
+        @Nullable @Override public TermuxAppSharedPreferences preferences() {
+            return mPreferences;
         }
-        if (terminalGlassGroup != null) {
-            terminalGlassGroup.setVisibility(
-                mPreferences.isTerminalBorderEnabled() ? View.VISIBLE : View.GONE);
+
+        @Nullable @Override public com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard inAppKeyboard() {
+            return mInAppKeyboard;
         }
-        if (terminalGlassBlur != null) terminalGlassBlur.setProgress(initialTerminalGlassBlur);
-        if (terminalGlassGrain != null) terminalGlassGrain.setProgress(initialTerminalGlassGrain);
-        if (terminalGlassBlurValue != null) terminalGlassBlurValue.setText(
-            getString(R.string.termux_dock_tuning_value_dp, initialTerminalGlassBlur));
-        if (terminalGlassGrainValue != null) terminalGlassGrainValue.setText(
-            getString(R.string.termux_dock_tuning_value_percent, initialTerminalGlassGrain));
-        if (terminalGap != null) terminalGap.setProgress(initialTerminalGap);
-        if (terminalGapValue != null) terminalGapValue.setText(
-            getString(R.string.termux_dock_tuning_value_dp, initialTerminalGap));
-        if (wallpaperOpacity != null) wallpaperOpacity.setProgress(initialWallpaperDim);
-        if (wallpaperOpacityValue != null) wallpaperOpacityValue.setText(
-            getString(R.string.termux_dock_tuning_value_percent, initialWallpaperDim));
-        syncTerminalContrastGroup(terminalContrast, terminalContrastHint);
-        sessions.setProgress(initialSessions);
-        size.setProgress(initialSizeIndex);
-        icons.setProgress(Math.max(1, Math.min(20, initialButtonCount)));
-        keyboardHeight.setProgress(keyboardEditorProgress(initialKeyboardHeight,
-            TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
-            TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE));
-        keyboardSpacing.setProgress(keyboardEditorProgress(initialKeyboardSpacing,
-            TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
-            TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_MARGIN_SCALE));
-        keyboardRadius.setProgress(Math.round(initialKeyboardRadius * 10f));
-        keyboardKeyOpacity.setProgress(initialKeyboardKeyOpacityEffective);
-        keyboardBgOpacity.setProgress(initialKeyboardBgOpacity);
-        statusBlur.setProgress(initialStatusBlur);
-        statusOpacity.setProgress(initialStatusOpacity);
-        statusGrain.setProgress(initialStatusGrain);
-        statusRadius.setProgress(editorRadius(initialStatusRadius));
-        blurValue.setText(getString(R.string.termux_dock_tuning_value_dp, initialBlur));
-        opacityValue.setText(getString(R.string.termux_dock_tuning_value_percent, initialOpacity));
-        grainValue.setText(getString(R.string.termux_dock_tuning_value_percent, initialGrain));
-        dockRadiusValue.setText(getString(R.string.termux_dock_tuning_value_dp,
-            editorRadius(initialDockRadius)));
-        terminalValue.setText(getString(R.string.termux_dock_tuning_value_percent, initialTerminal));
-        sessionsValue.setText(getString(R.string.termux_dock_tuning_value_percent, initialSessions));
-        sizeValue.setText(dockSizePresetLabel(initialSizeIndex));
-        iconsValue.setText(Integer.toString(Math.max(1, initialButtonCount)));
-        keyboardHeightValue.setText(getString(R.string.termux_dock_tuning_value_percent,
-            keyboardHeight.getProgress()));
-        keyboardSpacingValue.setText(getString(R.string.termux_dock_tuning_value_percent,
-            keyboardSpacing.getProgress()));
-        keyboardRadiusValue.setText(getString(R.string.termux_dock_tuning_value_dp,
-            Math.round(initialKeyboardRadius)));
-        keyboardKeyOpacityValue.setText(getString(R.string.termux_dock_tuning_value_percent,
-            initialKeyboardKeyOpacityEffective));
-        keyboardBgOpacityValue.setText(getString(R.string.termux_dock_tuning_value_percent,
-            initialKeyboardBgOpacity));
-        statusBlurValue.setText(getString(R.string.termux_dock_tuning_value_dp, initialStatusBlur));
-        statusOpacityValue.setText(getString(R.string.termux_dock_tuning_value_percent,
-            initialStatusOpacity));
-        statusGrainValue.setText(getString(R.string.termux_dock_tuning_value_percent,
-            initialStatusGrain));
-        statusRadiusValue.setText(getString(R.string.termux_dock_tuning_value_dp,
-            editorRadius(initialStatusRadius)));
-        sectionGroup.clearOnButtonCheckedListeners();
-        styleGroup.clearOnButtonCheckedListeners();
-        styleGroup.check(SegmentedPillPreference.VALUE_ROUNDED.equals(initialStyle)
-            ? R.id.dock_tuning_style_capsule : R.id.dock_tuning_style_default);
-        com.google.android.material.button.MaterialButton fourthTab =
-            findViewById(R.id.surface_tuning_section_status);
-        if (fourthTab != null)
-            fourthTab.setText(isSurfaceTuningSessionsSlot()
-                ? R.string.termux_dock_tuning_section_sessions
-                : R.string.termux_surface_tuning_status);
-        int initialSectionId = surfaceTuningSectionId(initialSection);
-        sectionGroup.check(initialSectionId);
-        showSurfaceTuningPanel(initialSectionId);
-        mPreferences.setSurfaceTuningLastSection(surfaceTuningSectionKey(initialSectionId));
 
-        sectionGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
-            if (isChecked) {
-                showSurfaceTuningPanel(checkedId);
-                mPreferences.setSurfaceTuningLastSection(surfaceTuningSectionKey(checkedId));
-            }
-        });
-
-        blur.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                blurValue.setText(getString(R.string.termux_dock_tuning_value_dp, progress));
-                if (fromUser) {
-                    detachSurfaceRowForEdit(SurfaceEditorRows.forSlider(seekBar.getId()));
-                    writeSurfaceBlur(SURFACE_TUNING_TARGET_DOCK, progress);
-                    requestDockTuningPreview(TUNING_PREVIEW_BLUR);
-                }
-            }
-        });
-        opacity.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                opacityValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
-                if (fromUser) {
-                    detachSurfaceRowForEdit(SurfaceEditorRows.forSlider(seekBar.getId()));
-                    writeSurfaceOpacity(SURFACE_TUNING_TARGET_DOCK, progress);
-                    requestDockTuningPreview(TUNING_PREVIEW_GLASS);
-                }
-            }
-        });
-        grain.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                grainValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
-                if (fromUser) {
-                    detachSurfaceRowForEdit(SurfaceEditorRows.forSlider(seekBar.getId()));
-                    writeSurfaceGrain(SURFACE_TUNING_TARGET_DOCK, progress);
-                    requestDockTuningPreview(TUNING_PREVIEW_GLASS);
-                }
-            }
-        });
-        dockRadius.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                dockRadiusValue.setText(getString(R.string.termux_dock_tuning_value_dp, progress));
-                if (fromUser) {
-                    detachSurfaceRowForEdit(SurfaceEditorRows.forSlider(seekBar.getId()));
-                    writeSurfaceCornerRadius(SURFACE_TUNING_TARGET_DOCK, progress);
-                    requestDockTuningPreview(TUNING_PREVIEW_GEOMETRY | TUNING_PREVIEW_SURFACES);
-                }
-            }
-        });
-        terminal.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
-            R.string.termux_surface_tuning_peek_terminal_opacity) {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                terminalValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
-                if (fromUser) {
-                    peekReadout(terminalValue.getText());
-                    detachSurfaceRowForEdit(SurfaceEditorRows.forSlider(seekBar.getId()));
-                    writeSurfaceOpacity(SURFACE_TUNING_TARGET_TERMINAL, progress);
-                    requestDockTuningPreview(TUNING_PREVIEW_SURFACES | TUNING_PREVIEW_KEYBOARD);
-                }
-            }
-        });
-        if (terminalBorder != null) {
-            terminalBorder.setOnCheckedChangeListener((button, isChecked) -> {
-                mPreferences.setTerminalBorderEnabled(isChecked);
-                if (terminalGlassGroup != null) {
-                    terminalGlassGroup.setVisibility(isChecked ? View.VISIBLE : View.GONE);
-                }
-                applyDockTuningStructuralPreview();
-            });
+        @Nullable @Override public View attachedInAppKeyboardView() {
+            return mAttachedInAppKeyboardView;
         }
-        if (terminalGlassBlur != null) {
-            terminalGlassBlur.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
-                R.string.termux_surface_tuning_peek_terminal_blur) {
-                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                    if (terminalGlassBlurValue != null) terminalGlassBlurValue.setText(
-                        getString(R.string.termux_dock_tuning_value_dp, progress));
-                    if (fromUser) {
-                        peekReadout(getString(R.string.termux_dock_tuning_value_dp, progress));
-                        detachSurfaceRowForEdit(SurfaceEditorRows.forSlider(seekBar.getId()));
-                        writeSurfaceBlur(SURFACE_TUNING_TARGET_TERMINAL, progress);
-                        requestDockTuningPreview(TUNING_PREVIEW_SURFACES);
-                    }
-                }
-            });
+
+        @Override public boolean isInAppKeyboardShown() {
+            return TermuxActivity.this.isInAppKeyboardShown();
         }
-        if (terminalGlassGrain != null) {
-            terminalGlassGrain.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
-                R.string.termux_surface_tuning_peek_terminal_grain) {
-                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                    if (terminalGlassGrainValue != null) terminalGlassGrainValue.setText(
-                        getString(R.string.termux_dock_tuning_value_percent, progress));
-                    if (fromUser) {
-                        peekReadout(getString(R.string.termux_dock_tuning_value_percent, progress));
-                        detachSurfaceRowForEdit(SurfaceEditorRows.forSlider(seekBar.getId()));
-                        writeSurfaceGrain(SURFACE_TUNING_TARGET_TERMINAL, progress);
-                        requestDockTuningPreview(TUNING_PREVIEW_SURFACES);
-                    }
-                }
-            });
+
+        @Override public boolean isFloatingDock() {
+            return TermuxActivity.this.isRoundedDockStyle();
         }
-        if (terminalGap != null) {
-            terminalGap.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
-                R.string.termux_surface_tuning_peek_terminal_gap) {
-                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                    if (terminalGapValue != null) terminalGapValue.setText(
-                        getString(R.string.termux_dock_tuning_value_dp, progress));
-                    if (fromUser) {
-                        setSurfaceTuningPeekReadout(getString(terminalGapPeekLabelRes()),
-                            getString(R.string.termux_dock_tuning_value_dp, progress));
-                        mPreferences.setTerminalPaneGap(progress);
-                        // The gap is laid out by the split tree, so it needs a re-render rather
-                        // than a restyle; the panes and their shells are reused across it.
-                        if (mPaneController != null) mPaneController.refreshPaneLayout();
-                        // On the default surface the same knob is the terminal's outer air too.
-                        requestDockTuningPreview(TUNING_PREVIEW_SURFACES);
-                    }
-                }
-            });
+
+        @Override public boolean isFullStatusBarEngaged() {
+            return TermuxActivity.this.isFullStatusBarEngaged();
         }
-        if (wallpaperOpacity != null) {
-            wallpaperOpacity.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
-                R.string.termux_surface_tuning_peek_wallpaper_opacity) {
-                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                    if (wallpaperOpacityValue != null) wallpaperOpacityValue.setText(
-                        getString(R.string.termux_dock_tuning_value_percent, progress));
-                    if (fromUser) {
-                        peekReadout(getString(R.string.termux_dock_tuning_value_percent, progress));
-                        mPreferences.setWallpaperBackdropDim(progress);
-                        requestDockTuningPreview(TUNING_PREVIEW_SURFACES);
-                    }
-                }
-            });
+
+        @Override public void setTopStatusBarCollapsed(boolean collapsed, boolean animate) {
+            TermuxActivity.this.setTopStatusBarCollapsed(collapsed, animate);
         }
-        if (terminalContrast != null) {
-            terminalContrast.clearOnButtonCheckedListeners();
-            terminalContrast.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
-                if (!isChecked) return;
-                String level = terminalContrastLevelForButton(checkedId);
-                if (level.equals(mPreferences.getTerminalContrastLevel().value)) return;
-                mPreferences.setTerminalContrastLevel(level);
-                applyTerminalContrastChange();
-                updateSurfaceEditorDirtyBadge();
-            });
+
+        @Override public int statusBarInsetTop() {
+            return mLastStatusBarInsetTop;
         }
-        sessions.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                sessionsValue.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
-                if (fromUser) {
-                    // The sessions drawer is standalone: it is not glass, it cannot be previewed
-                    // while the editor is open, and so it takes no part in inheritance.
-                    mPreferences.setSessionsOpacity(progress);
-                    requestDockTuningPreview(TUNING_PREVIEW_SURFACES | TUNING_PREVIEW_KEYBOARD);
-                }
-            }
-        });
-        size.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
-            R.string.termux_surface_tuning_peek_dock_size) {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                int index = Math.max(0, Math.min(DockLayoutPolicy.sizePresetCount() - 1, progress));
-                sizeValue.setText(dockSizePresetLabel(index));
-                if (fromUser) {
-                    peekReadout(sizeValue.getText());
-                    mPreferences.setAppLauncherBarHeightScale(DockLayoutPolicy.sizePreset(index));
-                    requestDockTuningPreview(TUNING_PREVIEW_GEOMETRY);
-                }
-            }
-        });
-        icons.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
-            R.string.termux_surface_tuning_peek_dock_icons) {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                int count = Math.max(1, progress);
-                iconsValue.setText(Integer.toString(count));
-                if (fromUser) {
-                    peekReadout(Integer.toString(count));
-                    mPreferences.setAppLauncherButtonCount(count);
-                    requestDockTuningPreview(TUNING_PREVIEW_GEOMETRY);
-                }
-            }
-        });
-        keyboardColors.setOnClickListener(view -> startActivity(SettingsActivity.createFragmentIntent(
-            this, KeyboardColorSchemeFragment.class, R.string.settings_keyboard_colors_title)));
-        keyboardHeight.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener(
-            R.string.termux_surface_tuning_peek_keyboard_height) {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                keyboardHeightValue.setText(getString(R.string.termux_dock_tuning_value_percent,
-                    progress));
-                if (!fromUser) return;
-                peekReadout(keyboardHeightValue.getText());
-                float scale = keyboardEditorValue(progress,
-                    TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
-                    TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE);
-                if (mInAppKeyboard != null)
-                    mInAppKeyboard.previewSurfaceEditorHeightScale(scale);
-                mPreferences.setInAppKeyboardHeightScale(scale);
-                updateSurfaceEditorDirtyBadge();
-            }
 
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {
-                super.onStopTrackingTouch(seekBar);
-                mPreferences.setInAppKeyboardHeightScale(keyboardEditorValue(seekBar.getProgress(),
-                    TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
-                    TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE));
-            }
-        });
-        keyboardSpacing.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                keyboardSpacingValue.setText(getString(R.string.termux_dock_tuning_value_percent,
-                    progress));
-                if (!fromUser) return;
-                float margin = keyboardEditorValue(progress,
-                    TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
-                    TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_MARGIN_SCALE);
-                if (mInAppKeyboard != null)
-                    mInAppKeyboard.previewSurfaceEditorKeyMarginScale(margin);
-                mPreferences.setInAppKeyboardKeyMarginScale(margin);
-                updateSurfaceEditorDirtyBadge();
-            }
-
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {
-                mPreferences.setInAppKeyboardKeyMarginScale(keyboardEditorValue(seekBar.getProgress(),
-                    TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
-                    TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_MARGIN_SCALE));
-            }
-        });
-        keyboardRadius.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                keyboardRadiusValue.setText(getString(R.string.termux_dock_tuning_value_dp,
-                    Math.round(progress / 10f)));
-                if (!fromUser) return;
-                if (mInAppKeyboard != null)
-                    mInAppKeyboard.previewSurfaceEditorKeyCornerRadiusDp(progress / 10f);
-                mPreferences.setInAppKeyboardKeyCornerRadiusDp(progress / 10f);
-                updateSurfaceEditorDirtyBadge();
-            }
-
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {
-                mPreferences.setInAppKeyboardKeyCornerRadiusDp(seekBar.getProgress() / 10f);
-            }
-        });
-        keyboardKeyOpacity.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                keyboardKeyOpacityValue.setText(getString(R.string.termux_dock_tuning_value_percent,
-                    progress));
-                // Scoped preview: repaints only the keyboard view, never the glass pipeline.
-                if (!fromUser) return;
-                if (mInAppKeyboard != null)
-                    mInAppKeyboard.previewSurfaceEditorKeyOpacity(progress);
-                mPreferences.setInAppKeyboardKeyOpacity(progress);
-                updateSurfaceEditorDirtyBadge();
-            }
-
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {
-                mPreferences.setInAppKeyboardKeyOpacity(seekBar.getProgress());
-            }
-        });
-        keyboardBgOpacity.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                keyboardBgOpacityValue.setText(getString(R.string.termux_dock_tuning_value_percent,
-                    progress));
-                // The render path reads this pref, so write-then-re-render is the live preview.
-                // Leaving 100 also flips the keyboard off the unified dock material, which the
-                // coalesced glass re-render (backdrop dirty + accessory sync) already handles.
-                if (fromUser) {
-                    detachSurfaceRowForEdit(SurfaceEditorRows.forSlider(seekBar.getId()));
-                    mPreferences.setInAppKeyboardBackgroundOpacity(progress);
-                    requestDockTuningPreview(TUNING_PREVIEW_GLASS);
-                }
-            }
-        });
-        styleGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
-            if (!isChecked)
-                return;
-            String style = checkedId == R.id.dock_tuning_style_capsule
-                ? SegmentedPillPreference.VALUE_ROUNDED : SegmentedPillPreference.VALUE_DEFAULT;
-            if (!style.equals(mPreferences.getAppLauncherDockStyle())) {
-                mPreferences.setAppLauncherDockStyle(style);
-                syncSurfaceTuningStyleDependentControls();
-                syncSurfaceInheritanceUi();
-                applyDockTuningStructuralPreview();
-            }
-        });
-        bindStatusSeekBar(statusBlur, statusBlurValue, true,
-            TUNING_PREVIEW_BLUR | TUNING_PREVIEW_SURFACES,
-            value -> writeSurfaceBlur(SURFACE_TUNING_TARGET_STATUS, value));
-        bindStatusSeekBar(statusOpacity, statusOpacityValue, false,
-            TUNING_PREVIEW_SURFACES,
-            value -> writeSurfaceOpacity(SURFACE_TUNING_TARGET_STATUS, value));
-        bindStatusSeekBar(statusGrain, statusGrainValue, false,
-            TUNING_PREVIEW_SURFACES,
-            value -> writeSurfaceGrain(SURFACE_TUNING_TARGET_STATUS, value));
-        // Radius also reshapes the dock capsule when "match all surfaces" is on.
-        bindStatusSeekBar(statusRadius, statusRadiusValue, true,
-            TUNING_PREVIEW_SURFACES | TUNING_PREVIEW_GEOMETRY,
-            value -> writeSurfaceCornerRadius(SURFACE_TUNING_TARGET_STATUS, value));
-        bindSurfaceTuningClockPicker();
-        bindSurfaceTuningGestures();
-        bindSurfaceInheritanceChips();
-        bindSurfaceReattachAll();
-        bindTerminalRadiusRow();
-        syncTerminalRadiusRow();
-        syncTerminalGapLabel();
-        reset.setOnClickListener(view -> {
-            int section = sectionGroup.getCheckedButtonId();
-            if (section == R.id.surface_tuning_section_dock) {
-                mPreferences.setExtraKeysBlurRadius(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS);
-                mPreferences.setAppBarOpacity(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY);
-                mPreferences.setDockGlassGrain(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN);
-                mPreferences.setAppLauncherDockCornerRadius(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS);
-                mPreferences.setAppLauncherBarHeightScale(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT);
-                mPreferences.setAppLauncherButtonCount(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_BUTTON_COUNT);
-                mPreferences.setAppLauncherDockStyle(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_STYLE);
-                mPreferences.setDockHorizontalInset(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET);
-                mPreferences.reattachSurface(TermuxAppSharedPreferences.SurfaceSlot.DOCK);
-            } else if (section == R.id.surface_tuning_section_keyboard) {
-                mPreferences.setInAppKeyboardHeightScale(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE);
-                mPreferences.setInAppKeyboardKeyMarginScale(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE);
-                mPreferences.setInAppKeyboardKeyCornerRadiusDp(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP);
-                mPreferences.setInAppKeyboardKeyOpacity(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY);
-                mPreferences.setInAppKeyboardBackgroundOpacity(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY);
-                mPreferences.setInAppKeyboardHorizontalInset(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET);
-                if (mInAppKeyboard != null) {
-                    mInAppKeyboard.previewSurfaceEditorHeightScale(
-                        TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE);
-                    mInAppKeyboard.previewSurfaceEditorKeyOpacity(
-                        TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY);
-                }
-                mPreferences.reattachSurface(TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD);
-            } else if (section == R.id.surface_tuning_section_status) {
-                mPreferences.setStatusBarBlurRadius(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS);
-                mPreferences.setStatusBarOpacity(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_OPACITY);
-                mPreferences.setStatusBarGrain(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN);
-                mPreferences.setStatusBarCornerRadius(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS);
-                mPreferences.setStatusBarHorizontalInset(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET);
-                mPreferences.reattachSurface(TermuxAppSharedPreferences.SurfaceSlot.STATUS);
-            } else {
-                mPreferences.reattachSurface(TermuxAppSharedPreferences.SurfaceSlot.CANVAS);
-                mPreferences.setTerminalBackgroundOpacity(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY);
-                mPreferences.setSessionsOpacity(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_SESSIONS_OPACITY);
-                mPreferences.setTerminalBorderEnabled(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERMINAL_BORDER_ENABLED);
-                mPreferences.setTerminalGlassBlurRadius(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_GLASS_BLUR_RADIUS);
-                mPreferences.setTerminalGlassGrain(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_GLASS_GRAIN);
-                mPreferences.setTerminalCornerRadius(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_CORNER_RADIUS);
-                syncTerminalRadiusRow();
-                mPreferences.setWallpaperBackdropDim(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_WALLPAPER_BACKDROP_DIM);
-                mPreferences.setTerminalPaneGap(
-                    TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP);
-                if (mPaneController != null) mPaneController.refreshPaneLayout();
-                applyTerminalSurfaceAppearance();
-                mPreferences.setTerminalContrastLevel(
-                    com.termux.shared.termux.settings.preferences.TerminalContrastLevel
-                        .DEFAULT.value);
-                applyTerminalContrastChange();
-            }
-            blur.setProgress(mPreferences.getExtraKeysBlurRadius());
-            opacity.setProgress(mPreferences.getAppBarOpacity());
-            grain.setProgress(mPreferences.getDockGlassGrain());
-            dockRadius.setProgress(editorRadius(mPreferences.getAppLauncherDockCornerRadius()));
-            size.setProgress(DockLayoutPolicy.nearestSizePresetIndex(mPreferences.getAppLauncherBarHeightScale()));
-            icons.setProgress(mPreferences.getAppLauncherButtonCount());
-            styleGroup.check(SegmentedPillPreference.VALUE_ROUNDED.equals(
-                mPreferences.getAppLauncherDockStyle())
-                ? R.id.dock_tuning_style_capsule : R.id.dock_tuning_style_default);
-            keyboardHeight.setProgress(keyboardEditorProgress(
-                mPreferences.getInAppKeyboardHeightScale(),
-                TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
-                TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE));
-            keyboardSpacing.setProgress(keyboardEditorProgress(
-                mPreferences.getInAppKeyboardKeyMarginScale(),
-                TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
-                TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_MARGIN_SCALE));
-            keyboardRadius.setProgress(Math.round(mPreferences.getInAppKeyboardKeyCornerRadiusDp() * 10f));
-            keyboardKeyOpacity.setProgress(mInAppKeyboard != null
-                ? mInAppKeyboard.getEffectiveKeyOpacityPercent()
-                : Math.max(0, mPreferences.getInAppKeyboardKeyOpacity()));
-            keyboardBgOpacity.setProgress(mPreferences.getInAppKeyboardBackgroundOpacity());
-            statusBlur.setProgress(mPreferences.getStatusBarBlurRadius());
-            statusOpacity.setProgress(mPreferences.getStatusBarOpacity());
-            statusGrain.setProgress(mPreferences.getStatusBarGrain());
-            statusRadius.setProgress(editorRadius(mPreferences.getStatusBarCornerRadius()));
-            terminal.setProgress(mPreferences.getTerminalBackgroundOpacity());
-            if (terminalBorder != null)
-                terminalBorder.setChecked(mPreferences.isTerminalBorderEnabled());
-            if (terminalGlassGroup != null) terminalGlassGroup.setVisibility(
-                mPreferences.isTerminalBorderEnabled() ? View.VISIBLE : View.GONE);
-            if (terminalGlassBlur != null)
-                terminalGlassBlur.setProgress(mPreferences.getTerminalGlassBlurRadius());
-            if (terminalGlassGrain != null)
-                terminalGlassGrain.setProgress(mPreferences.getTerminalGlassGrain());
-            if (terminalGap != null)
-                terminalGap.setProgress(mPreferences.getTerminalPaneGap());
-            if (wallpaperOpacity != null)
-                wallpaperOpacity.setProgress(mPreferences.getWallpaperBackdropDim());
-            syncTerminalContrastGroup(terminalContrast, terminalContrastHint);
-            sessions.setProgress(mPreferences.getSessionsOpacity());
-            syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_DOCK);
-            syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_KEYBOARD);
-            syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_STATUS);
-            syncSurfaceInheritanceUi();
-            applyDockTuningStructuralPreview();
-        });
-        confirm.setOnClickListener(view -> exitDockTuningMode());
-        // Done is the only commit. The ✕ and the back press both route through the unsaved-changes
-        // gate, so the two agree with each other - which was the original defect - without the
-        // close glyph silently throwing work away, which was the other half of it.
-        if (dismiss != null) {
-            dismiss.setOnClickListener(view -> requestSurfaceEditorClose());
+        @Override public int themeColor(int attr, int fallbackRes) {
+            return getTermuxThemeColor(attr, fallbackRes);
         }
-        final Runnable revertAll = () -> {
-                // Restores the values captured when tuning began.
-                restoreSurfaceEditorLinks(initialLinks);
-                mPreferences.setExtraKeysBlurRadius(initialBlur);
-                mPreferences.setAppBarOpacity(initialOpacity);
-                mPreferences.setDockGlassGrain(initialGrain);
-                mPreferences.setAppLauncherDockCornerRadius(initialDockRadius);
-                mPreferences.setTerminalBackgroundOpacity(initialTerminal);
-                mPreferences.setTerminalBorderEnabled(initialTerminalBorder);
-                mPreferences.setTerminalGlassBlurRadius(initialTerminalGlassBlur);
-                mPreferences.setTerminalGlassGrain(initialTerminalGlassGrain);
-                if (mPreferences.getTerminalCornerRadius() != initialTerminalCornerRadius) {
-                    mPreferences.setTerminalCornerRadius(initialTerminalCornerRadius);
-                    applyTerminalSurfaceAppearance();
-                }
-                mPreferences.setWallpaperBackdropDim(initialWallpaperDim);
-                if (mPreferences.getTerminalPaneGap() != initialTerminalGap) {
-                    mPreferences.setTerminalPaneGap(initialTerminalGap);
-                    if (mPaneController != null) mPaneController.refreshPaneLayout();
-                    applyTerminalSurfaceAppearance();
-                }
-                if (!initialTerminalContrast.equals(
-                        mPreferences.getTerminalContrastLevel().value)) {
-                    mPreferences.setTerminalContrastLevel(initialTerminalContrast);
-                    applyTerminalContrastChange();
-                }
-                mPreferences.setSessionsOpacity(initialSessions);
-                mPreferences.setAppLauncherBarHeightScale(initialBarHeight);
-                mPreferences.setAppLauncherButtonCount(initialButtonCount);
-                mPreferences.setAppLauncherDockStyle(initialStyle);
-                mPreferences.setInAppKeyboardHeightScale(initialKeyboardHeight);
-                mPreferences.setInAppKeyboardKeyMarginScale(initialKeyboardSpacing);
-                mPreferences.setInAppKeyboardKeyCornerRadiusDp(initialKeyboardRadius);
-                mPreferences.setInAppKeyboardKeyOpacity(initialKeyboardKeyOpacity);
-                mPreferences.setInAppKeyboardBackgroundOpacity(initialKeyboardBgOpacity);
-                mPreferences.setStatusBarBlurRadius(initialStatusBlur);
-                mPreferences.setStatusBarOpacity(initialStatusOpacity);
-                mPreferences.setStatusBarGrain(initialStatusGrain);
-                mPreferences.setStatusBarCornerRadius(initialStatusRadius);
-                mPreferences.setDockHorizontalInset(initialDockInset);
-                mPreferences.setInAppKeyboardHorizontalInset(initialKeyboardInset);
-                mPreferences.setStatusBarHorizontalInset(initialStatusInset);
-                mPreferences.setTopPaneClockStyle(initialClockStyle);
-                com.termux.app.terminal.TerminalClockWidget clock =
-                    findViewById(R.id.terminal_clock_widget);
-                if (clock != null) {
-                    clock.setStyle(initialClockStyle);
-                    clock.setAlignment(mPreferences.getTopPaneClockAlignment());
-                }
-                mPreferences.setInAppKeyboardColorScheme(initialKeyboardColorScheme);
-                mPreferences.setInAppKeyboardTheme(initialKeyboardTheme);
-                if (mInAppKeyboard != null) {
-                    mInAppKeyboard.previewSurfaceEditorHeightScale(initialKeyboardHeight);
-                    mInAppKeyboard.previewSurfaceEditorKeyOpacity(initialKeyboardKeyOpacity);
-                    // The colour scheme and theme are read at render time, so the keyboard has to
-                    // be told to re-read them; the preview calls above only touch geometry.
-                    mInAppKeyboard.onPreferencesReloaded();
-                }
-                applyDockTuningStructuralPreview();
-                exitDockTuningMode();
-        };
-        if (freshEditorSession || mSurfaceEditorEntrySignature == null) {
-            mSurfaceEditorRevert = revertAll;
-            mSurfaceEditorEntrySignature = surfaceEditorStateSignature();
+
+        @Override public void refreshPaneLayout() {
+            if (mPaneController != null) mPaneController.refreshPaneLayout();
         }
-        syncSurfaceInheritanceUi();
-        updateSurfaceEditorDirtyBadge();
-        controls.bringToFront();
-        setSurfaceTuningGestureOverlayVisible(true);
-        registerDockTuningLayoutListener(controls);
-        controls.post(this::adjustDockTuningCardHeight);
-    }
 
-    /**
-     * Whether the fourth tab is the status pane or the legacy sessions drawer. They are mutually
-     * exclusive: {@code terminal_window_bar_host} is GONE with split panes off, which left the
-     * Status tab previewing against nothing, and the sessions drawer only exists in that same mode.
-     */
-    private boolean isSurfaceTuningSessionsSlot() {
-        return !isSplitPanesEnabled();
-    }
-
-    private int surfaceTuningSectionId(@Nullable String section) {
-        if ("base".equals(section)) return R.id.surface_tuning_section_base;
-        if ("keyboard".equals(section)) return R.id.surface_tuning_section_keyboard;
-        // The two share a slot, so a section remembered in one mode resolves in the other rather
-        // than silently falling through to Dock.
-        if ("status".equals(section) || "sessions".equals(section))
-            return R.id.surface_tuning_section_status;
-        if ("other".equals(section) || "terminal".equals(section))
-            return R.id.surface_tuning_section_other;
-        return R.id.surface_tuning_section_dock;
-    }
-
-    private String surfaceTuningSectionKey(int sectionId) {
-        if (sectionId == R.id.surface_tuning_section_base) return "base";
-        if (sectionId == R.id.surface_tuning_section_keyboard) return "keyboard";
-        if (sectionId == R.id.surface_tuning_section_status)
-            return isSurfaceTuningSessionsSlot() ? "sessions" : "status";
-        if (sectionId == R.id.surface_tuning_section_other) return "other";
-        return "dock";
-    }
-
-    private int editorRadius(int value) {
-        return value < 0 ? 26 : Math.min(40, value);
-    }
-
-    static int keyboardEditorProgress(float value, float minValue, float maxValue) {
-        if (Float.isNaN(value) || Float.isInfinite(value) || maxValue <= minValue)
-            return 0;
-        float normalized = (value - minValue) / (maxValue - minValue);
-        return Math.max(0, Math.min(100, Math.round(normalized * 100f)));
-    }
-
-    static float keyboardEditorValue(int progress, float minValue, float maxValue) {
-        int normalizedProgress = Math.max(0, Math.min(100, progress));
-        return minValue + ((maxValue - minValue) * normalizedProgress / 100f);
-    }
-
-    private void showSurfaceTuningPanel(int checkedId) {
-        // The status section tunes the expanded top pane: show the clock face while it is open so
-        // the sliders preview against it, and give the space back when another section takes over.
-        boolean sessionsSlot = isSurfaceTuningSessionsSlot();
-        if (mDockTuningMode) {
-            boolean collapse = checkedId != R.id.surface_tuning_section_status || sessionsSlot;
-            mSurfaceEditorExpandedStatusPane = !collapse && mPreferences != null
-                && mPreferences.isTopPaneClockCollapsed();
-            setTopStatusBarCollapsed(collapse, true);
+        @Override public void applyTerminalSurfaceAppearance() {
+            TermuxActivity.this.applyTerminalSurfaceAppearance();
         }
-        View base = findViewById(R.id.surface_tuning_base_panel);
-        View dock = findViewById(R.id.surface_tuning_dock_panel);
-        View dockContinuation = findViewById(R.id.surface_tuning_dock_continuation_panel);
-        View keyboard = findViewById(R.id.surface_tuning_keyboard_panel);
-        View status = findViewById(R.id.surface_tuning_status_panel);
-        View sessions = findViewById(R.id.surface_tuning_sessions_panel);
-        View other = findViewById(R.id.surface_tuning_other_panel);
-        if (base != null) base.setVisibility(
-            checkedId == R.id.surface_tuning_section_base ? View.VISIBLE : View.GONE);
-        boolean showDock = checkedId == R.id.surface_tuning_section_dock;
-        if (dock != null) dock.setVisibility(showDock ? View.VISIBLE : View.GONE);
-        if (dockContinuation != null)
-            dockContinuation.setVisibility(showDock ? View.VISIBLE : View.GONE);
-        if (keyboard != null) keyboard.setVisibility(
-            checkedId == R.id.surface_tuning_section_keyboard ? View.VISIBLE : View.GONE);
-        boolean fourthSlot = checkedId == R.id.surface_tuning_section_status;
-        if (status != null) status.setVisibility(
-            fourthSlot && !sessionsSlot ? View.VISIBLE : View.GONE);
-        if (sessions != null) sessions.setVisibility(
-            fourthSlot && sessionsSlot ? View.VISIBLE : View.GONE);
-        if (other != null) other.setVisibility(
-            checkedId == R.id.surface_tuning_section_other ? View.VISIBLE : View.GONE);
-        syncSurfaceReattachAllVisibility();
-        ScrollView scroll = findViewById(R.id.dock_tuning_scroll);
-        if (scroll != null) {
-            scroll.scrollTo(0, 0);
-            scroll.post(this::adjustDockTuningCardHeight);
+
+        @Override public void refreshTerminalWindowBar() {
+            TermuxActivity.this.refreshTerminalWindowBar();
         }
-    }
 
-    private interface StatusValueSetter {
-        void set(int value);
-    }
-
-    private void bindStatusSeekBar(SeekBar seekBar, TextView valueView, boolean dp,
-                                   int previewScopes, StatusValueSetter setter) {
-        seekBar.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
-                valueView.setText(getString(dp ? R.string.termux_dock_tuning_value_dp
-                    : R.string.termux_dock_tuning_value_percent, progress));
-                if (fromUser) {
-                    detachSurfaceRowForEdit(SurfaceEditorRows.forSlider(bar.getId()));
-                    setter.set(progress);
-                    requestDockTuningPreview(previewScopes);
-                }
-            }
-        });
-    }
-
-    private static final int SURFACE_TUNING_TARGET_DOCK = 0;
-    private static final int SURFACE_TUNING_TARGET_KEYBOARD = 1;
-    private static final int SURFACE_TUNING_TARGET_STATUS = 2;
-    private static final int SURFACE_TUNING_TARGET_TERMINAL = 3;
-    /** The terminal glass slider's own ceiling; the dock's blur range runs further. */
-    private static final int TERMINAL_GLASS_MAX_BLUR_DP = 30;
-
-    // ---------------------------------------------------- surface glass, one writer per control
-    //
-    // The dock and the status bar keep separate preferences for the same five glass properties,
-    // which is what lets them be tuned apart. Every editor control funnels through the writers
-    // below so "match all surfaces" is a single branch per property instead of a rule duplicated
-    // at each slider. The in-app keyboard has no blur/opacity/grain/radius of its own — it renders
-    // on the dock's glass — so only padding fans out to all three.
-
-    /** Every link flag as one string, so the undo path can restore the shape as well as the numbers. */
-    @NonNull
-    private String surfaceEditorLinkSignature() {
-        if (mPreferences == null)
-            return "";
-        StringBuilder out = new StringBuilder(64);
-        for (TermuxAppSharedPreferences.SurfaceSlot slot
-                : TermuxAppSharedPreferences.SurfaceSlot.values()) {
-            for (TermuxAppSharedPreferences.SurfaceProperty property
-                    : TermuxAppSharedPreferences.SurfaceProperty.values()) {
-                out.append(mPreferences.isSurfaceInheriting(slot, property) ? '1' : '0');
-            }
+        @Override public void applySessionsSurfaceBackground() {
+            if (mPreferences == null) return;
+            configureBackgroundBlur(R.id.sessions_backgroundblur, R.id.sessions_background, false,
+                mPreferences.getSessionsOpacity() / 100f, 0);
         }
-        return out.toString();
-    }
 
-    /** Puts the links back the way {@link #surfaceEditorLinkSignature()} found them. */
-    private void restoreSurfaceEditorLinks(@Nullable String signature) {
-        if (mPreferences == null || signature == null)
-            return;
-        int index = 0;
-        for (TermuxAppSharedPreferences.SurfaceSlot slot
-                : TermuxAppSharedPreferences.SurfaceSlot.values()) {
-            for (TermuxAppSharedPreferences.SurfaceProperty property
-                    : TermuxAppSharedPreferences.SurfaceProperty.values()) {
-                if (index >= signature.length())
-                    return;
-                mPreferences.setSurfaceInheriting(slot, property,
-                    signature.charAt(index++) == '1');
-            }
+        @Override public void applyGeometryPreview(boolean commit) {
+            updateAppLauncherBarHeight();
+            // Without commit the dock/keyboard visuals still track the drag live; only the
+            // terminal resize (a SIGWINCH into the shell per reflow) waits for the release.
+            setTerminalToolbarHeight(commit);
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
+        }
+
+        @Override public void applyGlassPreview(boolean blurChanged) {
+            // Only a radius control may throw away the shared pre-blurred wallpaper frames; every
+            // other slider re-renders on top of them.
+            mChrome.requestSync((blurChanged ? ChromeRenderer.SCOPE_WALLPAPER_BLUR_CACHE : 0)
+                | ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
+            applySuggestionBarPreferences();
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        }
+
+        @Override public void openKeyboardColors() {
+            startActivity(SettingsActivity.createFragmentIntent(TermuxActivity.this,
+                KeyboardColorSchemeFragment.class, R.string.settings_keyboard_colors_title));
+        }
+
+        @Override @Nullable public Bitmap wallpaperPreviewThumb(int widthPx, int heightPx) {
+            if (mPreferences == null || widthPx <= 0 || heightPx <= 0)
+                return null;
+            View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+            if (wallpaperFrame == null || wallpaperFrame.getWidth() <= 0)
+                return null;
+            // The dock's radius is the frame most likely already resident in the LRU; clamp off 0
+            // so a blur-less look still gets a soft thumb rather than a full-res wallpaper copy.
+            int radiusDp = Math.max(1, mPreferences.getExtraKeysBlurRadius());
+            Bitmap frame = mChrome.blurCache().obtain(radiusDp, wallpaperFrame);
+            if (frame == null || frame.isRecycled())
+                return null;
+            Bitmap thumb = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(thumb);
+            float scale = Math.max(widthPx / (float) frame.getWidth(),
+                heightPx / (float) frame.getHeight());
+            Matrix matrix = new Matrix();
+            matrix.setScale(scale, scale);
+            matrix.postTranslate((widthPx - frame.getWidth() * scale) / 2f,
+                (heightPx - frame.getHeight() * scale) / 2f);
+            Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
+            canvas.drawBitmap(frame, matrix, paint);
+            return thumb;
+        }
+
+        @Override @NonNull public Drawable presetGlassSurface(float barAlpha, int grainPercent,
+                                                              float cornerRadiusPx,
+                                                              boolean withRim) {
+            return mChrome.glass().surface(barAlpha, 0f, 1f, true, grainPercent, cornerRadiusPx,
+                withRim);
         }
     }
 
@@ -7437,1020 +6837,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxAppSharedPreferences.SurfaceProperty.OPACITY);
     }
 
-    /**
-     * Pushes the stored values back onto both sections' sliders. Only one section is on screen at a
-     * time, so without this a normalized write would leave the hidden section showing the number it
-     * had before until the editor was reopened. Programmatic {@code setProgress} arrives with
-     * {@code fromUser == false}, which every binder here already ignores.
-     */
-    private void syncSurfaceGlassSliders() {
-        if (mPreferences == null)
-            return;
-        setSeekBarProgress(R.id.dock_tuning_blur_slider, mPreferences.getExtraKeysBlurRadius());
-        setSeekBarProgress(R.id.dock_tuning_opacity_slider, mPreferences.getAppBarOpacity());
-        setSeekBarProgress(R.id.dock_tuning_grain_slider, mPreferences.getDockGlassGrain());
-        setSeekBarProgress(R.id.dock_tuning_radius_slider,
-            mPreferences.getAppLauncherDockCornerRadius());
-        setSeekBarProgress(R.id.surface_tuning_status_blur_slider,
-            mPreferences.getStatusBarBlurRadius());
-        setSeekBarProgress(R.id.surface_tuning_status_opacity_slider,
-            mPreferences.getStatusBarOpacity());
-        setSeekBarProgress(R.id.surface_tuning_status_grain_slider,
-            mPreferences.getStatusBarGrain());
-        setSeekBarProgress(R.id.surface_tuning_status_radius_slider,
-            mPreferences.getStatusBarCornerRadius());
-        setSeekBarProgress(R.id.dock_tuning_terminal_blur_slider,
-            mPreferences.getTerminalGlassBlurRadius());
-        setSeekBarProgress(R.id.dock_tuning_terminal_grain_slider,
-            mPreferences.getTerminalGlassGrain());
-        setSeekBarProgress(R.id.dock_tuning_terminal_slider,
-            mPreferences.getTerminalBackgroundOpacity());
-        setSeekBarProgress(R.id.dock_tuning_sessions_slider, mPreferences.getSessionsOpacity());
-        setSeekBarProgress(R.id.surface_tuning_keyboard_bg_opacity_slider,
-            mPreferences.getInAppKeyboardBackgroundOpacity());
-        syncTerminalRadiusRow();
-        syncTerminalGapLabel();
-    }
-
-    /**
-     * The Docked terminal frame's own radius. Floating derives the frame from the capsule, so the
-     * row only shows in Docked — the one mode where this number acts. Lives outside the Base
-     * cascade for the same reason.
-     */
-    private void bindTerminalRadiusRow() {
-        SeekBar slider = findViewById(R.id.dock_tuning_terminal_radius_slider);
-        if (slider == null)
-            return;
-        slider.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
-                TextView value = findViewById(R.id.dock_tuning_terminal_radius_value);
-                if (value != null)
-                    value.setText(getString(R.string.termux_dock_tuning_value_dp, progress));
-                if (fromUser && mPreferences != null) {
-                    mPreferences.setTerminalCornerRadius(progress);
-                    // The radius reshapes the terminal's field, its frame line and its pane clip
-                    // together, so it needs the surface re-apply, not just the border pass.
-                    requestDockTuningPreview(TUNING_PREVIEW_SURFACES);
-                }
-            }
-        });
-    }
-
-    /**
-     * The gap knob answers to two names because it does two jobs. Docked spends it on the
-     * terminal's outer air as well as on the space between tiled panes, so there it is a margin;
-     * Floating insets the frame from the dock's capsule instead and the knob only gaps the panes.
-     */
-    @StringRes
-    private int terminalGapLabelRes() {
-        return isRoundedDockStyle() ? R.string.termux_dock_tuning_terminal_inner_padding
-            : R.string.termux_dock_tuning_terminal_margin;
-    }
-
-    @StringRes
-    private int terminalGapPeekLabelRes() {
-        return isRoundedDockStyle() ? R.string.termux_surface_tuning_peek_terminal_gap
-            : R.string.termux_surface_tuning_peek_terminal_margin;
-    }
-
-    private void syncTerminalGapLabel() {
-        TextView label = findViewById(R.id.dock_tuning_terminal_gap_label);
-        if (label != null)
-            label.setText(terminalGapLabelRes());
-    }
-
-    private void syncTerminalRadiusRow() {
-        View row = findViewById(R.id.dock_tuning_terminal_radius_row);
-        if (row == null || mPreferences == null)
-            return;
-        row.setVisibility(isRoundedDockStyle() ? View.GONE : View.VISIBLE);
-        int current = mPreferences.getTerminalCornerRadius();
-        setSeekBarProgress(R.id.dock_tuning_terminal_radius_slider, current);
-        TextView value = findViewById(R.id.dock_tuning_terminal_radius_value);
-        if (value != null)
-            value.setText(getString(R.string.termux_dock_tuning_value_dp, current));
-    }
-
-    private void setSeekBarProgress(int sliderId, int progress) {
-        SeekBar slider = findViewById(sliderId);
-        if (slider != null && slider.getProgress() != progress)
-            slider.setProgress(progress);
-    }
-
-    private void writeSurfaceBlur(int target, int value) {
-        if (mPreferences == null) return;
-        if (target == SURFACE_TUNING_TARGET_DOCK)
-            mPreferences.setExtraKeysBlurRadius(value);
-        else if (target == SURFACE_TUNING_TARGET_STATUS)
-            mPreferences.setStatusBarBlurRadius(value);
-        else if (target == SURFACE_TUNING_TARGET_TERMINAL)
-            mPreferences.setTerminalGlassBlurRadius(
-                Math.min(value, TERMINAL_GLASS_MAX_BLUR_DP));
-    }
-
-    /**
-     * "Match all surfaces" means every surface, which now includes the ones that were left out:
-     * the terminal's own tint, the keyboard's background and the sessions panel. Leaving them out
-     * is what made the switch feel unreliable — a slider moved two surfaces, and only toggling the
-     * switch off and on levelled the rest, because the toggle re-levels everything through these
-     * same writers while a slider only wrote its own target.
-     */
-    private void writeSurfaceOpacity(int target, int value) {
-        if (mPreferences == null) return;
-        if (target == SURFACE_TUNING_TARGET_DOCK)
-            mPreferences.setAppBarOpacity(value);
-        else if (target == SURFACE_TUNING_TARGET_STATUS)
-            mPreferences.setStatusBarOpacity(value);
-        else if (target == SURFACE_TUNING_TARGET_TERMINAL)
-            mPreferences.setTerminalBackgroundOpacity(value);
-    }
-
-    private void writeSurfaceGrain(int target, int value) {
-        if (mPreferences == null) return;
-        if (target == SURFACE_TUNING_TARGET_DOCK)
-            mPreferences.setDockGlassGrain(value);
-        else if (target == SURFACE_TUNING_TARGET_STATUS)
-            mPreferences.setStatusBarGrain(value);
-        else if (target == SURFACE_TUNING_TARGET_TERMINAL)
-            mPreferences.setTerminalGlassGrain(value);
-    }
-
-    private void writeSurfaceCornerRadius(int target, int value) {
-        if (mPreferences == null) return;
-        if (target == SURFACE_TUNING_TARGET_DOCK)
-            mPreferences.setAppLauncherDockCornerRadius(value);
-        else if (target == SURFACE_TUNING_TARGET_STATUS)
-            mPreferences.setStatusBarCornerRadius(value);
-    }
-
-    /** Clock style picker in the editor's Status section. */
-    private void bindSurfaceTuningClockPicker() {
-        com.google.android.material.button.MaterialButtonToggleGroup group =
-            findViewById(R.id.surface_tuning_status_clock_group);
-        if (group == null || mPreferences == null)
-            return;
-        group.clearOnButtonCheckedListeners();
-        group.check(surfaceTuningClockButtonId(mPreferences.getTopPaneClockStyle()));
-        group.addOnButtonCheckedListener((buttons, checkedId, isChecked) -> {
-            if (!isChecked || mPreferences == null)
-                return;
-            String style = surfaceTuningClockStyle(checkedId);
-            if (style.equals(mPreferences.getTopPaneClockStyle()))
-                return;
-            mPreferences.setTopPaneClockStyle(style);
-            com.termux.app.terminal.TerminalClockWidget clock =
-                findViewById(R.id.terminal_clock_widget);
-            if (clock != null) {
-                clock.setStyle(style);
-                clock.setAlignment(mPreferences.getTopPaneClockAlignment());
-            }
-            updateSurfaceEditorDirtyBadge();
-        });
-    }
-
-    private int surfaceTuningClockButtonId(String style) {
-        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD.equals(style))
-            return R.id.surface_tuning_status_clock_lcd;
-        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL.equals(style))
-            return R.id.surface_tuning_status_clock_minimal;
-        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED.equals(style))
-            return R.id.surface_tuning_status_clock_led;
-        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(style))
-            return R.id.surface_tuning_status_clock_tape;
-        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB.equals(style))
-            return R.id.surface_tuning_status_clock_slab;
-        return R.id.surface_tuning_status_clock_flip;
-    }
-
-    private String surfaceTuningClockStyle(int buttonId) {
-        if (buttonId == R.id.surface_tuning_status_clock_lcd)
-            return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD;
-        if (buttonId == R.id.surface_tuning_status_clock_minimal)
-            return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL;
-        if (buttonId == R.id.surface_tuning_status_clock_led)
-            return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED;
-        if (buttonId == R.id.surface_tuning_status_clock_tape)
-            return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE;
-        if (buttonId == R.id.surface_tuning_status_clock_slab)
-            return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB;
-        return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP;
-    }
-
-    /** A finger travel of 1dp moves a surface edge half a dp, so the 0..48dp span needs ~96dp. */
-    /**
-     * Every preference the editor can move, in one string. Compared against the value captured on
-     * entry to answer "is there anything to lose here?" - cheaper and far harder to get wrong than
-     * thirty hand-written field comparisons, and it only has to be kept in step in one place.
-     */
-    @NonNull
-    private String surfaceEditorStateSignature() {
-        if (mPreferences == null)
-            return "";
-        return new StringBuilder(256)
-            .append(mPreferences.getExtraKeysBlurRadius()).append('|')
-            .append(mPreferences.getAppBarOpacity()).append('|')
-            .append(mPreferences.getDockGlassGrain()).append('|')
-            .append(mPreferences.getAppLauncherDockCornerRadius()).append('|')
-            .append(mPreferences.getAppLauncherBarHeightScale()).append('|')
-            .append(mPreferences.getAppLauncherButtonCount()).append('|')
-            .append(mPreferences.getAppLauncherDockStyle()).append('|')
-            .append(mPreferences.getDockHorizontalInset()).append('|')
-            .append(mPreferences.getInAppKeyboardHeightScale()).append('|')
-            .append(mPreferences.getInAppKeyboardKeyMarginScale()).append('|')
-            .append(mPreferences.getInAppKeyboardKeyCornerRadiusDp()).append('|')
-            .append(mPreferences.getInAppKeyboardKeyOpacity()).append('|')
-            .append(mPreferences.getInAppKeyboardBackgroundOpacity()).append('|')
-            .append(mPreferences.getInAppKeyboardHorizontalInset()).append('|')
-            .append(mPreferences.getInAppKeyboardColorScheme()).append('|')
-            .append(mPreferences.getInAppKeyboardTheme()).append('|')
-            .append(mPreferences.getStatusBarBlurRadius()).append('|')
-            .append(mPreferences.getStatusBarOpacity()).append('|')
-            .append(mPreferences.getStatusBarGrain()).append('|')
-            .append(mPreferences.getStatusBarCornerRadius()).append('|')
-            .append(mPreferences.getStatusBarHorizontalInset()).append('|')
-            .append(mPreferences.getTopPaneClockStyle()).append('|')
-            .append(mPreferences.getTerminalBackgroundOpacity()).append('|')
-            .append(mPreferences.isTerminalBorderEnabled()).append('|')
-            .append(mPreferences.getTerminalGlassBlurRadius()).append('|')
-            .append(mPreferences.getTerminalGlassGrain()).append('|')
-            .append(mPreferences.getTerminalCornerRadius()).append('|')
-            .append(mPreferences.getTerminalPaneGap()).append('|')
-            .append(mPreferences.getTerminalContrastLevel().value).append('|')
-            .append(mPreferences.getWallpaperBackdropDim()).append('|')
-            .append(mPreferences.getSessionsOpacity()).append('|')
-            .append(surfaceEditorLinkSignature())
-            .append('|')
-            .append(mPreferences.getSurfaceBaseValue(
-                TermuxAppSharedPreferences.SurfaceProperty.BLUR))
-            .append('|')
-            .append(mPreferences.getSurfaceBaseValue(
-                TermuxAppSharedPreferences.SurfaceProperty.OPACITY))
-            .append('|')
-            .append(mPreferences.getSurfaceBaseValue(
-                TermuxAppSharedPreferences.SurfaceProperty.GRAIN))
-            .append('|')
-            .append(mPreferences.getSurfaceBaseValue(
-                TermuxAppSharedPreferences.SurfaceProperty.CORNER_RADIUS))
-            .append('|')
-            .append(mPreferences.getSurfaceBaseValue(
-                TermuxAppSharedPreferences.SurfaceProperty.SIDE_GAP))
-            .toString();
-    }
-
-    private boolean isSurfaceEditorDirty() {
-        return mSurfaceEditorEntrySignature != null
-            && !mSurfaceEditorEntrySignature.equals(surfaceEditorStateSignature());
-    }
-
-    /** Keeps the header badge in step with the snapshot. Cheap enough to call on every preview. */
-    private void updateSurfaceEditorDirtyBadge() {
-        View badge = findViewById(R.id.surface_tuning_dirty_badge);
-        if (badge == null)
-            return;
-        boolean show = mDockTuningMode && isSurfaceEditorDirty();
-        int target = show ? View.VISIBLE : View.GONE;
-        if (badge.getVisibility() != target)
-            badge.setVisibility(target);
-    }
-
-    /**
-     * The editor's only exit that is not a commit. Done commits; the ✕ and the back press come
-     * here, and when there is something to lose they ask rather than silently choosing for the
-     * user - the live write-through means "leave" would otherwise mean "keep" by accident.
-     */
-    private void requestSurfaceEditorClose() {
-        if (!mDockTuningMode)
-            return;
-        if (!isSurfaceEditorDirty()) {
-            exitDockTuningMode();
-            return;
-        }
-        final Runnable revert = mSurfaceEditorRevert;
-        new MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.termux_surface_tuning_unsaved_title)
-            .setMessage(R.string.termux_surface_tuning_unsaved_message)
-            .setNeutralButton(R.string.termux_surface_tuning_unsaved_keep_editing, null)
-            .setNegativeButton(R.string.termux_surface_tuning_unsaved_discard,
-                (dialog, which) -> {
-                    if (revert != null) revert.run();
-                    else exitDockTuningMode();
-                })
-            .setPositiveButton(R.string.termux_surface_tuning_unsaved_save,
-                (dialog, which) -> exitDockTuningMode())
-            .show();
-    }
-
-    // ------------------------------------------------------------------ surface inheritance UI
-    //
-    // The model lives in TermuxAppSharedPreferences: every render path already reads a resolved
-    // number. What is left here is showing the link and letting the user break or restore it.
-
-    private static final java.util.EnumMap<TermuxAppSharedPreferences.SurfaceSlot, Integer>
-        SURFACE_SLOT_TABS = new java.util.EnumMap<>(TermuxAppSharedPreferences.SurfaceSlot.class);
-
-    static {
-        SURFACE_SLOT_TABS.put(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
-            R.id.surface_tuning_section_dock);
-        SURFACE_SLOT_TABS.put(TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD,
-            R.id.surface_tuning_section_keyboard);
-        SURFACE_SLOT_TABS.put(TermuxAppSharedPreferences.SurfaceSlot.STATUS,
-            R.id.surface_tuning_section_status);
-        SURFACE_SLOT_TABS.put(TermuxAppSharedPreferences.SurfaceSlot.CANVAS,
-            R.id.surface_tuning_section_other);
-    }
-
-    /**
-     * Where a slider should sit for a stored value. Corner radius carries a "theme-defined"
-     * sentinel below zero, which is not a position on a 0-40 track; the slider shows the number the
-     * surface will actually use instead - the capsule's own radius while Floating, a straight edge
-     * while Docked - so the control is never parked somewhere the surface is not.
-     */
-    private int surfaceEditorSliderValue(TermuxAppSharedPreferences.SurfaceProperty property,
-                                         int stored) {
-        if (property != TermuxAppSharedPreferences.SurfaceProperty.CORNER_RADIUS || stored >= 0)
-            return stored;
-        return isRoundedDockStyle() ? SURFACE_TUNING_AUTO_RADIUS_DP : 0;
-    }
-
-    /** What the theme-defined corner radius resolves to on a floating capsule. */
-    private static final int SURFACE_TUNING_AUTO_RADIUS_DP = 26;
-
-    /** Formats one row's number in its own unit. */
-    private String surfaceRowValueText(@NonNull SurfaceEditorRows.Row row, int value) {
-        return getString(row.dp ? R.string.termux_dock_tuning_value_dp
-            : R.string.termux_dock_tuning_value_percent, value);
-    }
-
-    /**
-     * A shared control was moved. While the surface is still following Base this detaches it first,
-     * so the change lands on that surface alone rather than dragging every other surface with it -
-     * "the same everywhere, except this one thing" is the whole point of the model.
-     */
-    private void detachSurfaceRowForEdit(@Nullable SurfaceEditorRows.Row row) {
-        if (row == null || mPreferences == null)
-            return;
-        if (mPreferences.isSurfaceInheriting(row.slot, row.property)) {
-            mPreferences.detachSurfaceValue(row.slot, row.property,
-                mPreferences.getSurfaceOverrideValue(row.slot, row.property));
-        }
-    }
-
-    /** Chip taps put one property back on Base. Dragging is what takes it off. */
-    private void bindSurfaceInheritanceChips() {
-        for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
-            TextView chip = findViewById(row.chipId);
-            if (chip == null)
-                continue;
-            chip.setOnClickListener(view -> {
-                if (mPreferences == null
-                    || mPreferences.isSurfaceInheriting(row.slot, row.property))
-                    return;
-                mPreferences.setSurfaceInheriting(row.slot, row.property, true);
-                syncSurfaceInheritanceUi();
-                applyDockTuningStructuralPreview();
-            });
-        }
-    }
-
-    /** Pushes the resolved numbers and the link state back onto every shared row. */
-    private void syncSurfaceInheritanceUi() {
-        if (mPreferences == null)
-            return;
-        for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
-            boolean inheriting = mPreferences.isSurfaceInheriting(row.slot, row.property);
-            int resolved = surfaceEditorSliderValue(row.property, inheriting
-                ? mPreferences.getSurfaceBaseValue(row.property)
-                : mPreferences.getSurfaceOverrideValue(row.slot, row.property));
-            resolved = Math.max(0, Math.min(row.max, resolved));
-
-            SeekBar slider = findViewById(row.sliderId);
-            if (slider != null && slider.getProgress() != resolved)
-                slider.setProgress(resolved);
-            TextView value = findViewById(row.valueId);
-            if (value != null)
-                value.setText(surfaceRowValueText(row, resolved));
-
-            TextView chip = findViewById(row.chipId);
-            if (chip == null)
-                continue;
-            // An untouched row carries no glyph at all; the ↺ appears only once the row has its
-            // own value, as the way back to Base. INVISIBLE, not GONE, so the slot keeps its
-            // width and every track in the column stays the same length.
-            chip.setVisibility(inheriting ? View.INVISIBLE : View.VISIBLE);
-            chip.setClickable(!inheriting);
-            chip.setFocusable(!inheriting);
-            if (inheriting)
-                continue;
-            String slotName = getString(SurfaceEditorRows.slotLabel(row.slot));
-            chip.setText(R.string.termux_surface_tuning_link_detached);
-            chip.setTextColor(getSurfaceLinkChipColor(false));
-            chip.setAlpha(1f);
-            chip.setContentDescription(getString(
-                R.string.termux_surface_tuning_link_detached_description, slotName));
-        }
-        syncSurfaceBaseSliders();
-        syncSurfaceTabBadges();
-        syncSurfaceReattachAllVisibility();
-    }
-
-    private int getSurfaceLinkChipColor(boolean inheriting) {
-        // Muted while following Base, accented once the row is carrying its own value - the chip is
-        // the only place that distinction is visible on a per-row basis.
-        return inheriting
-            ? getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
-                R.color.termux_on_surface_variant)
-            : getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary,
-                R.color.termux_primary);
-    }
-
-    /** The Base tab's own five sliders, plus the "who is still following" line under them. */
-    private void syncSurfaceBaseSliders() {
-        if (mPreferences == null)
-            return;
-        bindOrSyncBaseSlider(R.id.surface_tuning_base_blur_slider,
-            R.id.surface_tuning_base_blur_value,
-            TermuxAppSharedPreferences.SurfaceProperty.BLUR, true, 30);
-        bindOrSyncBaseSlider(R.id.surface_tuning_base_opacity_slider,
-            R.id.surface_tuning_base_opacity_value,
-            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, false, 100);
-        bindOrSyncBaseSlider(R.id.surface_tuning_base_grain_slider,
-            R.id.surface_tuning_base_grain_value,
-            TermuxAppSharedPreferences.SurfaceProperty.GRAIN, false, 100);
-        bindOrSyncBaseSlider(R.id.surface_tuning_base_radius_slider,
-            R.id.surface_tuning_base_radius_value,
-            TermuxAppSharedPreferences.SurfaceProperty.CORNER_RADIUS, true, 40);
-        bindOrSyncBaseSlider(R.id.surface_tuning_base_gap_slider,
-            R.id.surface_tuning_base_gap_value,
-            TermuxAppSharedPreferences.SurfaceProperty.SIDE_GAP, true, 48);
-
-        TextView followers = findViewById(R.id.surface_tuning_base_followers);
-        if (followers == null)
-            return;
-        int detached = 0;
-        for (TermuxAppSharedPreferences.SurfaceSlot slot
-                : TermuxAppSharedPreferences.SurfaceSlot.values())
-            detached += mPreferences.surfaceOverrideCount(slot);
-        followers.setText(detached == 0
-            ? getString(R.string.termux_surface_tuning_followers_all)
-            : getResources().getQuantityString(
-                R.plurals.termux_surface_tuning_followers_some, detached, detached));
-    }
-
-    private void bindOrSyncBaseSlider(int sliderId, int valueId,
-                                      TermuxAppSharedPreferences.SurfaceProperty property,
-                                      boolean dp, int max) {
-        SeekBar slider = findViewById(sliderId);
-        TextView value = findViewById(valueId);
-        if (slider == null || mPreferences == null)
-            return;
-        int current = Math.max(0, Math.min(max,
-            surfaceEditorSliderValue(property, mPreferences.getSurfaceBaseValue(property))));
-        if (slider.getTag(R.id.surface_tuning_base_panel) == null) {
-            slider.setTag(R.id.surface_tuning_base_panel, Boolean.TRUE);
-            slider.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-                @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
-                    if (value != null) value.setText(getString(dp
-                        ? R.string.termux_dock_tuning_value_dp
-                        : R.string.termux_dock_tuning_value_percent, progress));
-                    if (!fromUser || mPreferences == null)
-                        return;
-                    mPreferences.setSurfaceBaseValue(property, progress);
-                    // Everything still following Base moves with it, so the whole editor restates.
-                    syncSurfaceInheritanceUi();
-                    requestDockTuningPreview(TUNING_PREVIEW_ALL);
-                }
-            });
-        }
-        if (slider.getProgress() != current)
-            slider.setProgress(current);
-        if (value != null) value.setText(getString(dp
-            ? R.string.termux_dock_tuning_value_dp
-            : R.string.termux_dock_tuning_value_percent, current));
-    }
-
-    /** The surface a tab edits, or null for Base - which has no link of its own to break. */
-    @Nullable
-    private TermuxAppSharedPreferences.SurfaceSlot surfaceSlotForSection(int sectionId) {
-        for (java.util.Map.Entry<TermuxAppSharedPreferences.SurfaceSlot, Integer> entry
-                : SURFACE_SLOT_TABS.entrySet()) {
-            if (entry.getValue() == sectionId) return entry.getKey();
-        }
-        return null;
-    }
-
-    private void bindSurfaceReattachAll() {
-        View reattach = findViewById(R.id.surface_tuning_reattach_all);
-        if (reattach == null)
-            return;
-        reattach.setOnClickListener(view -> {
-            MaterialButtonToggleGroup group = findViewById(R.id.surface_tuning_section_group);
-            if (group == null || mPreferences == null)
-                return;
-            TermuxAppSharedPreferences.SurfaceSlot slot =
-                surfaceSlotForSection(group.getCheckedButtonId());
-            if (slot == null)
-                return;
-            mPreferences.reattachSurface(slot);
-            syncSurfaceInheritanceUi();
-            applyDockTuningStructuralPreview();
-        });
-    }
-
-    /** Only meaningful on a surface tab that has something detached. */
-    private void syncSurfaceReattachAllVisibility() {
-        View reattach = findViewById(R.id.surface_tuning_reattach_all);
-        MaterialButtonToggleGroup group = findViewById(R.id.surface_tuning_section_group);
-        if (reattach == null || group == null || mPreferences == null)
-            return;
-        TermuxAppSharedPreferences.SurfaceSlot slot =
-            surfaceSlotForSection(group.getCheckedButtonId());
-        boolean show = slot != null && mPreferences.surfaceOverrideCount(slot) > 0;
-        reattach.setVisibility(show ? View.VISIBLE : View.GONE);
-    }
-
-    /** Each tab carries how many of its properties have left Base - the "what did I change" count. */
-    private void syncSurfaceTabBadges() {
-        if (mPreferences == null)
-            return;
-        for (java.util.Map.Entry<TermuxAppSharedPreferences.SurfaceSlot, Integer> entry
-                : SURFACE_SLOT_TABS.entrySet()) {
-            com.google.android.material.button.MaterialButton tab = findViewById(entry.getValue());
-            if (tab == null)
-                continue;
-            int base = entry.getKey() == TermuxAppSharedPreferences.SurfaceSlot.CANVAS
-                ? R.string.termux_surface_tuning_other
-                : SurfaceEditorRows.slotLabel(entry.getKey());
-            if (entry.getKey() == TermuxAppSharedPreferences.SurfaceSlot.STATUS
-                && isSurfaceTuningSessionsSlot())
-                base = R.string.termux_dock_tuning_section_sessions;
-            int overrides = mPreferences.surfaceOverrideCount(entry.getKey());
-            // A dot, not a count: the tab only needs to say "something here left Base", and a
-            // bare number next to a tab name read as part of the name ("Dock 1").
-            tab.setText(overrides == 0
-                ? getString(base)
-                : getString(base) + " •");
-        }
-    }
-
-    /** Dimming for an editor control the current dock style makes inapplicable. */
-    private static final float SURFACE_TUNING_DISABLED_ALPHA = 0.38f;
-    /** How much of the screen the editor card may occupy before its slider region starts scrolling. */
-    private static final float SURFACE_TUNING_CARD_MAX_SCREEN_FRACTION = 0.45f;
-    /** Card opacity while a peeking control is being dragged. */
-    private static final float SURFACE_TUNING_PEEK_ALPHA = 0.28f;
-    private static final long SURFACE_TUNING_PEEK_OUT_MS = 90;
-    private static final long SURFACE_TUNING_PEEK_IN_MS = 170;
-
-    /**
-     * Fades the editor card out of the way while a control whose surface it covers is being
-     * dragged. Purely visual: the card keeps its position and stays hit-testable, so the finger
-     * already on the thumb goes on working.
-     */
-    private void setSurfaceTuningCardPeek(boolean peek) {
-        View controls = findViewById(R.id.dock_tuning_controls);
-        if (controls == null || !mDockTuningMode)
-            return;
-        controls.animate().cancel();
-        controls.animate()
-            .alpha(peek ? SURFACE_TUNING_PEEK_ALPHA : 1f)
-            .setDuration(peek ? SURFACE_TUNING_PEEK_OUT_MS : SURFACE_TUNING_PEEK_IN_MS)
-            .setInterpolator(com.termux.app.terminal.Motion.settle())
-            .start();
-        if (!peek) hideSurfaceTuningPeekReadout();
-    }
-
-    /** The faded card's number, shown over the surface so peeking does not trade one blindness for another. */
-    private void setSurfaceTuningPeekReadout(@NonNull CharSequence label, @NonNull CharSequence value) {
-        TextView readout = findViewById(R.id.surface_tuning_peek_readout);
-        if (readout == null || !mDockTuningMode)
-            return;
-        readout.setText(getString(R.string.termux_surface_tuning_peek_readout, label, value));
-        if (readout.getVisibility() != View.VISIBLE) {
-            readout.setAlpha(0f);
-            readout.setVisibility(View.VISIBLE);
-            readout.animate().alpha(1f).setDuration(SURFACE_TUNING_PEEK_OUT_MS).start();
-        }
-    }
-
-    private void hideSurfaceTuningPeekReadout() {
-        TextView readout = findViewById(R.id.surface_tuning_peek_readout);
-        if (readout == null || readout.getVisibility() != View.VISIBLE)
-            return;
-        readout.animate().alpha(0f).setDuration(SURFACE_TUNING_PEEK_IN_MS)
-            .withEndAction(() -> readout.setVisibility(View.GONE)).start();
-    }
-
-    private static final float SURFACE_TUNING_INSET_DRAG_GAIN = 0.5f;
-    /** Finger travel that walks the dock across its whole preset height range. */
-    private static final float SURFACE_TUNING_DOCK_HEIGHT_DRAG_SPAN_DP = 40f;
-    /** How far the capture groups reach above their surface so the border handle is inside. */
-    private static final int SURFACE_TUNING_HANDLE_OVERHANG_DP = 14;
-    private static final long SURFACE_TUNING_FADE_DURATION_MS = 200;
-
-    private int surfaceTuningInsetDp(int target) {
-        if (mPreferences == null)
-            return TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET;
-        switch (target) {
-            case SURFACE_TUNING_TARGET_KEYBOARD:
-                return mPreferences.getInAppKeyboardHorizontalInset();
-            case SURFACE_TUNING_TARGET_STATUS:
-                return mPreferences.getStatusBarHorizontalInset();
-            default:
-                return mPreferences.getDockHorizontalInset();
-        }
-    }
-
-    private void setSurfaceTuningInsetDp(int target, int insetDp) {
-        if (mPreferences == null)
-            return;
-        switch (target) {
-            case SURFACE_TUNING_TARGET_KEYBOARD:
-                mPreferences.setInAppKeyboardHorizontalInset(insetDp);
-                break;
-            case SURFACE_TUNING_TARGET_STATUS:
-                mPreferences.setStatusBarHorizontalInset(insetDp);
-                break;
-            default:
-                mPreferences.setDockHorizontalInset(insetDp);
-                break;
-        }
-        syncSurfaceTuningInsetSlider(target);
-        applyDockTuningStructuralPreview();
-    }
-
-    private int surfaceTuningInsetSliderId(int target) {
-        switch (target) {
-            case SURFACE_TUNING_TARGET_KEYBOARD:
-                return R.id.surface_tuning_keyboard_inset_slider;
-            case SURFACE_TUNING_TARGET_STATUS:
-                return R.id.surface_tuning_status_inset_slider;
-            default:
-                return R.id.surface_tuning_dock_inset_slider;
-        }
-    }
-
-    private int surfaceTuningInsetValueId(int target) {
-        switch (target) {
-            case SURFACE_TUNING_TARGET_KEYBOARD:
-                return R.id.surface_tuning_keyboard_inset_value;
-            case SURFACE_TUNING_TARGET_STATUS:
-                return R.id.surface_tuning_status_inset_value;
-            default:
-                return R.id.surface_tuning_dock_inset_value;
-        }
-    }
-
-    private void syncSurfaceTuningInsetSlider(int target) {
-        int insetDp = surfaceTuningInsetDp(target);
-        SeekBar slider = findViewById(surfaceTuningInsetSliderId(target));
-        TextView value = findViewById(surfaceTuningInsetValueId(target));
-        boolean available = isRoundedDockStyle();
-        if (slider != null) {
-            if (slider.getProgress() != insetDp)
-                slider.setProgress(insetDp);
-            slider.setEnabled(available);
-            slider.setAlpha(available ? 1f : SURFACE_TUNING_DISABLED_ALPHA);
-        }
-        if (value != null) {
-            // Docked is flush by definition, so the stored number would be a lie here. Showing the
-            // dash rather than a frozen "12 dp" is what tells the user the control is inert, not
-            // stuck. The value survives untouched and comes back with Floating.
-            value.setText(available
-                ? getString(R.string.termux_dock_tuning_value_dp, insetDp)
-                : getString(R.string.termux_surface_tuning_value_not_applicable));
-            value.setAlpha(available ? 1f : SURFACE_TUNING_DISABLED_ALPHA);
-        }
-    }
-
-    /** Re-reads the dock style for every control whose availability depends on it. */
-    private void syncSurfaceTuningStyleDependentControls() {
-        syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_DOCK);
-        syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_KEYBOARD);
-        syncSurfaceTuningInsetSlider(SURFACE_TUNING_TARGET_STATUS);
-        // Both of these are Docked-only readings of a shared knob, so switching the shape has to
-        // move them with it rather than waiting for the editor to be reopened.
-        syncTerminalRadiusRow();
-        syncTerminalGapLabel();
-    }
-
-    private void bindSurfaceTuningInsetSeekBar(int target) {
-        SeekBar slider = findViewById(surfaceTuningInsetSliderId(target));
-        if (slider == null)
-            return;
-        slider.setOnSeekBarChangeListener(new SimpleSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
-                TextView value = findViewById(surfaceTuningInsetValueId(target));
-                if (value != null)
-                    value.setText(getString(R.string.termux_dock_tuning_value_dp, progress));
-                if (fromUser && mPreferences != null && isRoundedDockStyle()
-                    && progress != surfaceTuningInsetDp(target)) {
-                    detachSurfaceRowForEdit(SurfaceEditorRows.forSlider(bar.getId()));
-                    setSurfaceTuningInsetDp(target, progress);
-                }
-            }
-        });
-        syncSurfaceTuningInsetSlider(target);
-    }
-
-    /**
-     * Horizontal drag anywhere over a surface walks its symmetric screen-edge inset: right widens
-     * both edges, left narrows them. Previews land in preferences immediately like the card's own
-     * sliders, so Done keeps them and Close restores the values captured on entry.
-     */
-    @SuppressLint("ClickableViewAccessibility")
-    private void bindSurfaceTuningInsetGesture(int groupId, int target) {
-        View group = findViewById(groupId);
-        if (group == null)
-            return;
-        group.setOnTouchListener((view, event) -> {
-            // Docked surfaces are flush with the screen edges, so there is no gap to drag. Falling
-            // through rather than consuming keeps the surface underneath usable.
-            if (!mDockTuningMode || mPreferences == null || !isRoundedDockStyle())
-                return false;
-            switch (event.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    mSurfaceTuningInsetDragStartX = event.getRawX();
-                    mSurfaceTuningInsetDragStartDp = surfaceTuningInsetDp(target);
-                    view.getParent().requestDisallowInterceptTouchEvent(true);
-                    return true;
-                case MotionEvent.ACTION_MOVE: {
-                    float travelDp = pxToDp(event.getRawX() - mSurfaceTuningInsetDragStartX);
-                    int insetDp = TermuxAppSharedPreferences.clampSurfaceHorizontalInset(
-                        Math.round(mSurfaceTuningInsetDragStartDp
-                            + (travelDp * SURFACE_TUNING_INSET_DRAG_GAIN)));
-                    if (insetDp != surfaceTuningInsetDp(target))
-                        setSurfaceTuningInsetDp(target, insetDp);
-                    return true;
-                }
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    view.getParent().requestDisallowInterceptTouchEvent(false);
-                    return true;
-                default:
-                    return false;
-            }
-        });
-    }
-
-    /** Vertical drag on the dock's top-border pill walks the preset height range continuously. */
-    @SuppressLint("ClickableViewAccessibility")
-    private void bindSurfaceTuningDockHeightGesture() {
-        View handle = findViewById(R.id.surface_tuning_dock_height_handle);
-        if (handle == null)
-            return;
-        handle.setOnTouchListener((view, event) -> {
-            if (!mDockTuningMode || mPreferences == null)
-                return false;
-            switch (event.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    mSurfaceTuningDockHeightDragStartY = event.getRawY();
-                    mSurfaceTuningDockHeightDragStartScale =
-                        mPreferences.getAppLauncherBarHeightScale();
-                    setSurfaceTuningCardPeek(true);
-                    view.getParent().requestDisallowInterceptTouchEvent(true);
-                    return true;
-                case MotionEvent.ACTION_MOVE: {
-                    float minScale = DockLayoutPolicy.minSizePreset();
-                    float maxScale = DockLayoutPolicy.maxSizePreset();
-                    float travelDp = pxToDp(mSurfaceTuningDockHeightDragStartY - event.getRawY());
-                    float scale = mSurfaceTuningDockHeightDragStartScale
-                        + ((travelDp / SURFACE_TUNING_DOCK_HEIGHT_DRAG_SPAN_DP)
-                            * (maxScale - minScale));
-                    scale = Math.max(minScale, Math.min(maxScale, scale));
-                    if (Float.compare(scale, mPreferences.getAppLauncherBarHeightScale()) != 0) {
-                        mPreferences.setAppLauncherBarHeightScale(scale);
-                        syncSurfaceTuningDockHeightSlider();
-                        applyDockTuningStructuralPreview();
-                    }
-                    setSurfaceTuningPeekReadout(
-                        getString(R.string.termux_surface_tuning_peek_dock_size),
-                        dockSizePresetLabel(DockLayoutPolicy.nearestSizePresetIndex(scale)));
-                    return true;
-                }
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    setSurfaceTuningCardPeek(false);
-                    view.getParent().requestDisallowInterceptTouchEvent(false);
-                    return true;
-                default:
-                    return false;
-            }
-        });
-    }
-
-    /** Vertical drag on the keyboard's top-border pill, on the same 1:1 mapping as the old handle. */
-    @SuppressLint("ClickableViewAccessibility")
-    private void bindSurfaceTuningKeyboardHeightGesture() {
-        View handle = findViewById(R.id.surface_tuning_keyboard_height_handle);
-        if (handle == null)
-            return;
-        handle.setOnTouchListener((view, event) -> {
-            if (!mDockTuningMode || mPreferences == null || mInAppKeyboard == null)
-                return false;
-            switch (event.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    mInAppKeyboardHeightDragStartY = event.getRawY();
-                    mInAppKeyboardHeightDragStartScale = mInAppKeyboard.getHeightScale();
-                    int renderedHeight = mAttachedInAppKeyboardView == null
-                        ? 0 : mAttachedInAppKeyboardView.getMeasuredHeight();
-                    mInAppKeyboardUnscaledDragHeight = Math.max(1f,
-                        renderedHeight / Math.max(0.01f, mInAppKeyboardHeightDragStartScale));
-                    setSurfaceTuningCardPeek(true);
-                    view.getParent().requestDisallowInterceptTouchEvent(true);
-                    return true;
-                case MotionEvent.ACTION_MOVE: {
-                    float scale = TermuxInAppKeyboard.calculateHeightScaleForDrag(
-                        mInAppKeyboardHeightDragStartScale,
-                        event.getRawY() - mInAppKeyboardHeightDragStartY,
-                        mInAppKeyboardUnscaledDragHeight);
-                    mInAppKeyboard.previewSurfaceEditorHeightScale(scale);
-                    syncSurfaceTuningKeyboardHeightSlider(mInAppKeyboard.getHeightScale());
-                    setSurfaceTuningPeekReadout(
-                        getString(R.string.termux_surface_tuning_peek_keyboard_height),
-                        getString(R.string.termux_dock_tuning_value_percent, keyboardEditorProgress(
-                            mInAppKeyboard.getHeightScale(),
-                            TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
-                            TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE)));
-                    return true;
-                }
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    mPreferences.setInAppKeyboardHeightScale(mInAppKeyboard.getHeightScale());
-                    updateSurfaceEditorDirtyBadge();
-                    setSurfaceTuningCardPeek(false);
-                    view.getParent().requestDisallowInterceptTouchEvent(false);
-                    return true;
-                default:
-                    return false;
-            }
-        });
-    }
-
-    private void syncSurfaceTuningDockHeightSlider() {
-        if (mPreferences == null)
-            return;
-        int index = DockLayoutPolicy.nearestSizePresetIndex(mPreferences.getAppLauncherBarHeightScale());
-        SeekBar slider = findViewById(R.id.dock_tuning_size_slider);
-        TextView value = findViewById(R.id.dock_tuning_size_value);
-        if (slider != null && slider.getProgress() != index)
-            slider.setProgress(index);
-        if (value != null)
-            value.setText(dockSizePresetLabel(index));
-    }
-
-    private void syncSurfaceTuningKeyboardHeightSlider(float heightScale) {
-        int progress = keyboardEditorProgress(heightScale,
-            TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
-            TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE);
-        SeekBar slider = findViewById(R.id.surface_tuning_keyboard_height_slider);
-        TextView value = findViewById(R.id.surface_tuning_keyboard_height_value);
-        if (slider != null && slider.getProgress() != progress)
-            slider.setProgress(progress);
-        if (value != null)
-            value.setText(getString(R.string.termux_dock_tuning_value_percent, progress));
-    }
-
-    private void bindSurfaceTuningGestures() {
-        bindSurfaceTuningInsetSeekBar(SURFACE_TUNING_TARGET_DOCK);
-        bindSurfaceTuningInsetSeekBar(SURFACE_TUNING_TARGET_KEYBOARD);
-        bindSurfaceTuningInsetSeekBar(SURFACE_TUNING_TARGET_STATUS);
-        bindSurfaceTuningInsetGesture(R.id.surface_tuning_dock_gesture_group,
-            SURFACE_TUNING_TARGET_DOCK);
-        bindSurfaceTuningInsetGesture(R.id.surface_tuning_keyboard_gesture_group,
-            SURFACE_TUNING_TARGET_KEYBOARD);
-        bindSurfaceTuningInsetGesture(R.id.surface_tuning_status_gesture_group,
-            SURFACE_TUNING_TARGET_STATUS);
-        bindSurfaceTuningDockHeightGesture();
-        bindSurfaceTuningKeyboardHeightGesture();
-    }
-
-    private void setSurfaceTuningGestureOverlayVisible(boolean visible) {
-        View overlay = findViewById(R.id.surface_tuning_gesture_overlay);
-        if (overlay == null)
-            return;
-        overlay.animate().cancel();
-        if (visible) {
-            positionSurfaceTuningGestureTargets();
-            overlay.setAlpha(0f);
-            overlay.setVisibility(View.VISIBLE);
-            overlay.animate().alpha(1f).setDuration(SURFACE_TUNING_FADE_DURATION_MS)
-                .setInterpolator(surfaceTuningFadeInterpolator()).start();
-            return;
-        }
-        overlay.animate().alpha(0f).setDuration(SURFACE_TUNING_FADE_DURATION_MS)
-            .setInterpolator(surfaceTuningFadeInterpolator())
-            .withEndAction(() -> {
-                overlay.setVisibility(View.GONE);
-                overlay.setAlpha(1f);
-            }).start();
-    }
-
-    private android.view.animation.Interpolator surfaceTuningFadeInterpolator() {
-        return com.termux.app.terminal.Motion.settle();
-    }
-
-    private void positionSurfaceTuningGestureTargets() {
-        View overlay = findViewById(R.id.surface_tuning_gesture_overlay);
-        if (overlay == null || !mDockTuningMode || overlay.getWidth() <= 0)
-            return;
-        View statusSurface = findViewById(R.id.terminal_window_bar_host);
-        positionSurfaceTuningGestureGroup(R.id.surface_tuning_status_gesture_group, overlay,
-            statusSurface);
-        resizeStatusTuningPills(statusSurface);
-        positionSurfaceTuningGestureGroup(R.id.surface_tuning_dock_gesture_group, overlay,
-            findViewById(R.id.accessory_surface_host));
-        positionSurfaceTuningGestureGroup(R.id.surface_tuning_keyboard_gesture_group, overlay,
-            isInAppKeyboardShown() ? findViewById(R.id.inapp_keyboard_view_host) : null);
-        // Docked surfaces are flush with the screen edges: the margin drag is inert there (see
-        // bindSurfaceTuningInsetGesture), so the side pills advertising it must not render either.
-        boolean sideDrag = isRoundedDockStyle();
-        setSurfaceTuningSidePillVisible(R.id.surface_tuning_status_pill_left, sideDrag);
-        setSurfaceTuningSidePillVisible(R.id.surface_tuning_status_pill_right, sideDrag);
-        setSurfaceTuningSidePillVisible(R.id.surface_tuning_dock_pill_left, sideDrag);
-        setSurfaceTuningSidePillVisible(R.id.surface_tuning_dock_pill_right, sideDrag);
-        setSurfaceTuningSidePillVisible(R.id.surface_tuning_keyboard_pill_left, sideDrag);
-        setSurfaceTuningSidePillVisible(R.id.surface_tuning_keyboard_pill_right, sideDrag);
-    }
-
-    private void setSurfaceTuningSidePillVisible(int pillId, boolean visible) {
-        View pill = findViewById(pillId);
-        if (pill != null)
-            pill.setVisibility(visible ? View.VISIBLE : View.GONE);
-    }
-
-    /**
-     * Tracks one surface's measured rect with its capture group, reaching
-     * {@link #SURFACE_TUNING_HANDLE_OVERHANG_DP} further up so the pill centred on the top border
-     * still falls inside the group's hit area.
-     */
-    private void positionSurfaceTuningGestureGroup(int groupId, @NonNull View overlay,
-                                                   @Nullable View surface) {
-        View group = findViewById(groupId);
-        if (group == null)
-            return;
-        if (surface == null || surface.getVisibility() != View.VISIBLE
-            || surface.getWidth() <= 0 || surface.getHeight() <= 0) {
-            group.setVisibility(View.GONE);
-            return;
-        }
-        int[] overlayLocation = new int[2];
-        int[] surfaceLocation = new int[2];
-        overlay.getLocationInWindow(overlayLocation);
-        surface.getLocationInWindow(surfaceLocation);
-        int surfaceTop = surfaceLocation[1] - overlayLocation[1];
-        int top = Math.max(0, surfaceTop - Math.round(dpToPx(SURFACE_TUNING_HANDLE_OVERHANG_DP)));
-        int left = Math.max(0, surfaceLocation[0] - overlayLocation[0]);
-        // Pin both margins against a match_parent width so the group never depends on how the
-        // overlay resolves an absent horizontal gravity.
-        int right = Math.max(0, overlay.getWidth() - (left + surface.getWidth()));
-        int height = Math.max(1, (surfaceTop + surface.getHeight()) - top);
-        ViewGroup.LayoutParams layoutParams = group.getLayoutParams();
-        if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
-            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) layoutParams;
-            if (params.leftMargin != left || params.rightMargin != right
-                || params.topMargin != top || params.height != height) {
-                params.leftMargin = left;
-                params.rightMargin = right;
-                params.topMargin = top;
-                params.height = height;
-                group.setLayoutParams(params);
-            }
-        }
-        group.setVisibility(View.VISIBLE);
-    }
-
-    /**
-     * The status pane can collapse to a ~32dp compact bar, where the fixed 28dp side pills read
-     * as oversized bars instead of edge handles. Scale them to a bit over half the pane height,
-     * capped at the shared 28dp; the capsule drawable keeps proper arc ends at any height.
-     */
-    private void resizeStatusTuningPills(@Nullable View statusSurface) {
-        if (statusSurface == null || statusSurface.getHeight() <= 0)
-            return;
-        int target = Math.round(Math.min(dpToPx(28),
-            Math.max(dpToPx(12), statusSurface.getHeight() * 0.55f)));
-        int[] pillIds = {R.id.surface_tuning_status_pill_left, R.id.surface_tuning_status_pill_right};
-        for (int pillId : pillIds) {
-            View pill = findViewById(pillId);
-            if (pill == null)
-                continue;
-            ViewGroup.LayoutParams params = pill.getLayoutParams();
-            if (params != null && params.height != target) {
-                params.height = target;
-                pill.setLayoutParams(params);
-            }
-        }
-    }
-
     // ------------------------------------------------------------------ keybind hint popup
-
-    /**
-     * The hint surfaces' own card host, so an open stats or weather card and a chord narration
-     * never dismiss each other. Cards from this host are passive: they take no focus and swallow
-     * no outside touch, because the keyboard hold that raised them must keep working underneath.
-     */
-    private final com.termux.app.statusbar.StatusCardHost mKeybindHintCard =
-        new com.termux.app.statusbar.StatusCardHost();
 
     /**
      * The keybind hint surfaces — lit caps on the in-app keyboard, the strip in the A-Z row's slot,
@@ -8511,23 +6898,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
-        public boolean isCardShowing() {
-            return mKeybindHintCard.isShowing();
+        public boolean isHintPanelShowing() {
+            return mKeybindHintPanel != null && mKeybindHintPanel.isShowing();
         }
 
         @Override
-        public void showCard(@NonNull View content, @Nullable Runnable onOutsideTap) {
-            View anchor = keybindHintCardAnchor();
-            if (anchor == null) return;
-            mKeybindHintCard.setDropEdge(findViewById(R.id.terminal_window_bar_host));
-            mKeybindHintCard.showPassive(anchor, content, statusCardStyleProvider(),
-                com.termux.app.statusbar.StatusCardHost.STANDARD_WIDTH_DP, null, onOutsideTap);
+        public void showHintPanel(@NonNull View content, boolean wide,
+                                  @Nullable Runnable onOutsideTap) {
+            com.termux.app.terminal.TerminalHintPanelView panel = obtainKeybindHintPanel();
+            if (panel == null) return;
+            syncTerminalHintPanelFrame(panel);
+            mKeybindHintPanelOutsideTap = onOutsideTap;
+            panel.show(content, wide);
         }
 
         @Override
-        public void dismissCard(boolean animated) {
-            if (animated) mKeybindHintCard.dismissAnimated();
-            else mKeybindHintCard.dismiss();
+        public void dismissHintPanel(boolean animated) {
+            mKeybindHintPanelOutsideTap = null;
+            if (mKeybindHintPanel != null) mKeybindHintPanel.hide(animated);
         }
 
         @Override
@@ -8535,18 +6923,53 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mInAppKeyboard != null)
                 mInAppKeyboard.setKeybindHintHighlights(litTokens);
         }
+
+        @Override
+        public void setKeyboardHintPulse(@Nullable String token) {
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.setKeybindHintPulse(token);
+        }
     }
 
-    /** The surface every hint card drops from, mirroring the status widgets' detail cards. */
+    @Nullable private com.termux.app.terminal.TerminalHintPanelView mKeybindHintPanel;
+    /** Retires the sticky {@code ?} table on a tap anywhere else; null while the strip is up. */
+    @Nullable private Runnable mKeybindHintPanelOutsideTap;
+
     @Nullable
-    private View keybindHintCardAnchor() {
-        View bar = findViewById(R.id.terminal_window_bar_host);
-        if (bar != null && bar.isAttachedToWindow() && bar.getVisibility() == View.VISIBLE)
-            return bar;
-        View statusBackground = findViewById(R.id.terminal_status_bar_background);
-        if (statusBackground != null && statusBackground.isAttachedToWindow())
-            return statusBackground;
-        return null;
+    private com.termux.app.terminal.TerminalHintPanelView obtainKeybindHintPanel() {
+        FrameLayout host = findViewById(R.id.terminal_surface_host);
+        if (host == null)
+            return null;
+        if (mKeybindHintPanel == null)
+            mKeybindHintPanel = new com.termux.app.terminal.TerminalHintPanelView(this);
+        if (mKeybindHintPanel.getParent() == null) {
+            host.addView(mKeybindHintPanel,
+                com.termux.app.terminal.TerminalHintPanelView.buildHostLayoutParams());
+        }
+        mKeybindHintPanel.bringToFront();
+        return mKeybindHintPanel;
+    }
+
+    /** The hints sit on the terminal's live edge, exactly as the mode legends do. */
+    private void syncTerminalHintPanelFrame(
+            @NonNull com.termux.app.terminal.TerminalHintPanelView panel) {
+        float radiusPx = terminalEdgeCornerRadiusPx();
+        panel.setTerminalFrame(terminalFrameInsetPx(false), terminalFrameInsetPx(true),
+            terminalFrameInsetPx(true), radiusPx);
+    }
+
+    /**
+     * A touch that misses the {@code ?} table retires it. The panel is passive — the prefix that
+     * raised it is still being held and the terminal underneath must keep working — so the tap is
+     * watched here rather than swallowed by a scrim.
+     */
+    private void notifyKeybindHintPanelTouch(@NonNull MotionEvent event) {
+        if (event.getActionMasked() != MotionEvent.ACTION_DOWN) return;
+        Runnable onOutsideTap = mKeybindHintPanelOutsideTap;
+        if (onOutsideTap == null || mKeybindHintPanel == null) return;
+        if (mKeybindHintPanel.containsScreenPoint(event.getRawX(), event.getRawY())) return;
+        mKeybindHintPanelOutsideTap = null;
+        onOutsideTap.run();
     }
 
     /**
@@ -8555,312 +6978,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     public void showExtraKeyPressReadout(@Nullable CharSequence label) {
         mKeybindHintPresenter.showExtraKeyPressReadout(label);
-    }
-
-    private void registerDockTuningLayoutListener(@NonNull View controls) {
-        if (mDockTuningLayoutListener != null)
-            return;
-        mDockTuningLayoutListener = () -> {
-            adjustDockTuningCardHeight();
-            positionSurfaceTuningGestureTargets();
-        };
-        controls.getViewTreeObserver().addOnGlobalLayoutListener(mDockTuningLayoutListener);
-    }
-
-    private void unregisterDockTuningLayoutListener() {
-        if (mDockTuningLayoutListener == null)
-            return;
-        View controls = findViewById(R.id.dock_tuning_controls);
-        if (controls != null)
-            controls.getViewTreeObserver().removeOnGlobalLayoutListener(mDockTuningLayoutListener);
-        mDockTuningLayoutListener = null;
-    }
-
-    /**
-     * Caps the scrollable slider region so the header and Done button always stay on screen above
-     * the accessory stack (dock, and the in-app keyboard when shown), regardless of screen size or
-     * density. When the content fits it stays wrap-content; when it would overflow it scrolls.
-     */
-    private void adjustDockTuningCardHeight() {
-        if (!mDockTuningMode)
-            return;
-        View controls = findViewById(R.id.dock_tuning_controls);
-        ScrollView scroll = findViewById(R.id.dock_tuning_scroll);
-        View headerRow = findViewById(R.id.dock_tuning_header_row);
-        View navigation = findViewById(R.id.surface_tuning_navigation);
-        View actions = findViewById(R.id.surface_tuning_actions);
-        View stack = findViewById(R.id.accessory_stack_container);
-        if (controls == null || scroll == null || headerRow == null || navigation == null
-            || actions == null || stack == null)
-            return;
-        if (controls.getVisibility() != View.VISIBLE)
-            return;
-        View scrollChild = scroll.getChildCount() > 0 ? scroll.getChildAt(0) : null;
-        if (scrollChild == null)
-            return;
-
-        // The card may grow until just under the launcher's own status bar — a 2dp seam, not a
-        // band of empty terminal. Positions are compared in the card parent's coordinate space,
-        // so the window bar (a child of the terminal container) is converted through the window.
-        int statusBottom = Math.max(mLastStatusBarInsetTop, Math.round(dpToPx(24)));
-        View windowBar = findViewById(R.id.terminal_window_bar_host);
-        if (windowBar != null && windowBar.getVisibility() == View.VISIBLE
-            && windowBar.getHeight() > 0 && controls.getParent() instanceof View) {
-            int[] location = new int[2];
-            windowBar.getLocationInWindow(location);
-            int barBottomInWindow = location[1] + windowBar.getHeight();
-            ((View) controls.getParent()).getLocationInWindow(location);
-            statusBottom = Math.max(statusBottom, barBottomInWindow - location[1]);
-        }
-        int topLimit = statusBottom + Math.round(dpToPx(2));
-        int cardMarginBottom = Math.round(dpToPx(10));
-        int availableCard = (stack.getTop() - cardMarginBottom) - topLimit;
-        // Never let the card eat the screen. It is a live editor: whatever is being tuned has to
-        // stay on screen next to the control tuning it, and a card grown all the way to the status
-        // bar covered the terminal on the section that edits the terminal. The scroll region takes
-        // the overflow instead.
-        availableCard = Math.min(availableCard,
-            Math.round(getResources().getDisplayMetrics().heightPixels
-                * SURFACE_TUNING_CARD_MAX_SCREEN_FRACTION));
-        // Chrome outside the scroll region: card top/bottom padding (10 + 12), Done top margin (6),
-        // plus the measured header and Done heights.
-        int chrome = Math.round(dpToPx(10 + 12 + 6)) + headerRow.getHeight()
-            + navigation.getHeight() + actions.getHeight();
-        int maxScroll = availableCard - chrome;
-        int minScroll = Math.round(dpToPx(96));
-        if (maxScroll < minScroll)
-            maxScroll = minScroll;
-
-        ViewGroup.LayoutParams lp = scroll.getLayoutParams();
-        // Keep the card and tab row stationary as sections change. A wrap-content scroll area made
-        // shorter panels pull the whole bottom-anchored card downward under the user's finger.
-        int target = maxScroll;
-        if (lp.height != target) {
-            lp.height = target;
-            scroll.setLayoutParams(lp);
-        }
-    }
-
-    private void applyDockTuningPreview(boolean blurChanged) {
-        // Only a radius control may throw away the shared pre-blurred wallpaper frames; every other
-        // slider re-renders on top of them.
-        mChrome.requestSync((blurChanged ? ChromeRenderer.SCOPE_WALLPAPER_BLUR_CACHE : 0)
-            | ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
-        applySuggestionBarPreferences();
-        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-    }
-
-    // Live-preview scopes for the surface editor. Sliders fire onProgressChanged far faster than
-    // a full re-apply fits in a frame, so requests carry only the scopes their control touches and
-    // are coalesced to a single apply per animation frame. GLASS (the accessory re-render in
-    // applyDockTuningPreview) runs on every apply; BLUR additionally throws away the shared
-    // pre-blurred wallpaper bitmap, which is the single most expensive thing a slider can cause —
-    // only radius controls may request it.
-    private static final int TUNING_PREVIEW_GLASS = 1;
-    private static final int TUNING_PREVIEW_BLUR = 1 << 1;
-    private static final int TUNING_PREVIEW_GEOMETRY = 1 << 2;
-    private static final int TUNING_PREVIEW_SURFACES = 1 << 3;
-    private static final int TUNING_PREVIEW_KEYBOARD = 1 << 4;
-    private static final int TUNING_PREVIEW_ALL = TUNING_PREVIEW_GLASS | TUNING_PREVIEW_BLUR
-        | TUNING_PREVIEW_GEOMETRY | TUNING_PREVIEW_SURFACES | TUNING_PREVIEW_KEYBOARD;
-
-    private int mPendingTuningPreviewScopes;
-    private boolean mTuningPreviewScheduled;
-    private final Runnable mTuningPreviewRunnable = this::runPendingTuningPreview;
-
-    private void requestDockTuningPreview(int scopes) {
-        mPendingTuningPreviewScopes |= scopes | TUNING_PREVIEW_GLASS;
-        if (mTuningPreviewScheduled)
-            return;
-        View root = findViewById(R.id.activity_termux_root_view);
-        if (root == null) {
-            runPendingTuningPreview();
-            return;
-        }
-        mTuningPreviewScheduled = true;
-        root.postOnAnimation(mTuningPreviewRunnable);
-    }
-
-    private void runPendingTuningPreview() {
-        mTuningPreviewScheduled = false;
-        int scopes = mPendingTuningPreviewScopes;
-        mPendingTuningPreviewScopes = 0;
-        if (scopes == 0 || mPreferences == null)
-            return;
-        if ((scopes & TUNING_PREVIEW_GEOMETRY) != 0) {
-            updateAppLauncherBarHeight();
-            setTerminalToolbarHeight(true);
-            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
-        }
-        if ((scopes & TUNING_PREVIEW_SURFACES) != 0) {
-            applyTerminalSurfaceAppearance();
-            refreshTerminalWindowBar();
-            configureBackgroundBlur(R.id.sessions_backgroundblur, R.id.sessions_background, false,
-                mPreferences.getSessionsOpacity() / 100f, 0);
-        }
-        if ((scopes & TUNING_PREVIEW_KEYBOARD) != 0 && mInAppKeyboard != null)
-            mInAppKeyboard.onPreferencesReloaded();
-        applyDockTuningPreview((scopes & TUNING_PREVIEW_BLUR) != 0);
-        if (mDockTuningMode) syncSurfaceInheritanceUi();
-        updateSurfaceEditorDirtyBadge();
-    }
-
-    /** Broader live re-apply for controls that change dock geometry, terminal, or sessions surfaces. */
-    private void applyDockTuningStructuralPreview() {
-        requestDockTuningPreview(TUNING_PREVIEW_ALL);
-    }
-
-    @NonNull
-    private static String terminalContrastLevelForButton(int checkedId) {
-        com.termux.shared.termux.settings.preferences.TerminalContrastLevel level;
-        if (checkedId == R.id.dock_tuning_terminal_contrast_softer) {
-            level = com.termux.shared.termux.settings.preferences.TerminalContrastLevel.SOFTER;
-        } else if (checkedId == R.id.dock_tuning_terminal_contrast_harder) {
-            level = com.termux.shared.termux.settings.preferences.TerminalContrastLevel.HARDER;
-        } else {
-            level = com.termux.shared.termux.settings.preferences.TerminalContrastLevel.DEFAULT;
-        }
-        return level.value;
-    }
-
-    private static int terminalContrastButtonForLevel(
-            @NonNull com.termux.shared.termux.settings.preferences.TerminalContrastLevel level) {
-        switch (level) {
-            case SOFTER: return R.id.dock_tuning_terminal_contrast_softer;
-            case HARDER: return R.id.dock_tuning_terminal_contrast_harder;
-            default: return R.id.dock_tuning_terminal_contrast_default;
-        }
-    }
-
-    /**
-     * Selects the stored level without firing the listener, and disables the row when the palette it
-     * grades is not in use: contrast targets the generated wallpaper palette, so with wallpaper colours
-     * off there is nothing for it to act on. The hint says so rather than leaving a dead control.
-     */
-    private void syncTerminalContrastGroup(@Nullable MaterialButtonToggleGroup group,
-                                           @Nullable TextView hint) {
-        if (mPreferences == null || group == null) return;
-        boolean available = mPreferences.isTerminalDynamicColorsEnabled();
-        // No listener juggling: the reset button calls this too, and clearing here would leave the row
-        // dead afterwards. The listener is a no-op when the level it reads back is already stored.
-        group.check(terminalContrastButtonForLevel(mPreferences.getTerminalContrastLevel()));
-        for (int i = 0; i < group.getChildCount(); i++) group.getChildAt(i).setEnabled(available);
-        if (hint != null) hint.setVisibility(available ? View.GONE : View.VISIBLE);
-    }
-
-    /**
-     * Regenerate the terminal palette and restyle the surfaces that read it. Both halves are needed:
-     * the sessions take their colours from the generated palette, while the wallpaper-mode overlay
-     * takes only its background tone, and a contrast change moves both.
-     */
-    private void applyTerminalContrastChange() {
-        if (mTermuxTerminalSessionActivityClient != null)
-            mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();
-        applyTerminalSurfaceAppearance();
-    }
-
-    @NonNull
-    private String dockSizePresetLabel(int index) {
-        switch (Math.max(0, Math.min(DockLayoutPolicy.sizePresetCount() - 1, index))) {
-            case 0:
-                return getString(R.string.termux_dock_preset_smallest);
-            case 1:
-                return getString(R.string.termux_dock_preset_small);
-            case 2:
-                return getString(R.string.termux_dock_preset_default);
-            default:
-                return getString(R.string.termux_dock_preset_large);
-        }
-    }
-
-    private void exitDockTuningMode() {
-        // Cleared before the flag drops: both helpers no-op once mDockTuningMode is false, and a
-        // drag interrupted by Done would otherwise leave the card stuck at peek alpha.
-        View peeked = findViewById(R.id.dock_tuning_controls);
-        if (peeked != null) {
-            peeked.animate().cancel();
-            peeked.setAlpha(1f);
-        }
-        hideSurfaceTuningPeekReadout();
-        mSurfaceEditorEntrySignature = null;
-        mSurfaceEditorRevert = null;
-        View dirtyBadge = findViewById(R.id.surface_tuning_dirty_badge);
-        if (dirtyBadge != null) dirtyBadge.setVisibility(View.GONE);
-        mDockTuningMode = false;
-        setSurfaceTuningGestureOverlayVisible(false);
-        unregisterDockTuningLayoutListener();
-        ScrollView scroll = findViewById(R.id.dock_tuning_scroll);
-        if (scroll != null) {
-            ViewGroup.LayoutParams lp = scroll.getLayoutParams();
-            if (lp.height != ViewGroup.LayoutParams.WRAP_CONTENT) {
-                lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
-                scroll.setLayoutParams(lp);
-            }
-        }
-        View controls = findViewById(R.id.dock_tuning_controls);
-        if (controls != null)
-            controls.setVisibility(View.GONE);
-        restoreExpandedStatusAfterSurfaceEditor();
-        mDockTuningRestoreExpandedStatus = false;
-        mSurfaceEditorExpandedStatusPane = false;
-    }
-
-    private void restoreExpandedStatusAfterSurfaceEditor() {
-        if (mPreferences == null)
-            return;
-        // Only the editor's own temporary change is undone here. onStop() also calls this, and
-        // without the guard an expanded pane was collapsed — and the collapse persisted — every
-        // time the user left the app, so the clock never came back.
-        if (!mDockTuningRestoreExpandedStatus && !mSurfaceEditorExpandedStatusPane)
-            return;
-        if (mDockTuningRestoreExpandedStatus && mPreferences.isTopPaneClockCollapsed()) {
-            setTopStatusBarCollapsed(false, false);
-        } else if (!mDockTuningRestoreExpandedStatus && !mPreferences.isTopPaneClockCollapsed()) {
-            // Editor closed from the status section: the pane was expanded only for its preview.
-            setTopStatusBarCollapsed(true, false);
-        }
-    }
-
-    private boolean isSurfaceTuningStatusSectionActive() {
-        MaterialButtonToggleGroup sectionGroup = findViewById(R.id.surface_tuning_section_group);
-        return sectionGroup != null
-            && sectionGroup.getCheckedButtonId() == R.id.surface_tuning_section_status;
-    }
-
-    /**
-     * Base for every editor slider. A slider whose surface sits underneath the card - or whose drag
-     * moves the card, because the card is anchored above the accessory stack - passes a label and
-     * "peeks": the card fades while the thumb is down so the thing being edited stays visible, and
-     * the value it is changing is echoed over the surface instead.
-     *
-     * <p>Subclasses that override the tracking callbacks must call through, or the card never fades
-     * back in.
-     */
-    private abstract class SimpleSeekBarChangeListener
-        implements SeekBar.OnSeekBarChangeListener {
-        private final int peekLabelRes;
-
-        SimpleSeekBarChangeListener() {
-            this(0);
-        }
-
-        SimpleSeekBarChangeListener(int peekLabelRes) {
-            this.peekLabelRes = peekLabelRes;
-        }
-
-        /** Echoes the value over the surface while the card is faded. No-op for non-peek sliders. */
-        final void peekReadout(CharSequence value) {
-            if (peekLabelRes != 0)
-                setSurfaceTuningPeekReadout(getString(peekLabelRes), value);
-        }
-
-        @Override public void onStartTrackingTouch(SeekBar seekBar) {
-            if (peekLabelRes != 0) setSurfaceTuningCardPeek(true);
-        }
-
-        @Override public void onStopTrackingTouch(SeekBar seekBar) {
-            if (peekLabelRes != 0) setSurfaceTuningCardPeek(false);
-        }
     }
 
     public boolean isInAppKeyboardEnabled() {
@@ -9297,7 +7414,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     true,
                     true,
                     getDockLayout().railPull,
-                    !mDockTuningMode,
+                    !mSurfaceEditor.isActive(),
                     !isCommandPaletteOpen(),
                     true,
                     !isAppDrawerEngaged(),
@@ -9373,10 +7490,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int spacingPx = Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_ICON_SPACING_DP));
         for (com.termux.app.launcher.model.LauncherAppEntry entry
                 : mSuggestionBarView.getDockRailEntries()) {
-            if (entry.icon == null)
+            Drawable railArtwork =
+                com.termux.app.launcher.data.LauncherAppDataProvider.artworkFor(this, entry);
+            if (railArtwork == null)
                 continue;
             ImageView iconView = new ImageView(this);
-            iconView.setImageDrawable(entry.icon);
+            iconView.setImageDrawable(railArtwork);
             iconView.setContentDescription(entry.label);
             LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(iconSizePx, iconSizePx);
             iconParams.topMargin = spacingPx;
@@ -9703,7 +7822,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * were, and read by the app drawer's choreography through this same seam.
      */
     @NonNull
-    public DockLayout getDockLayout() {
+    private DockLayout getDockLayout() {
         return DockLayoutPolicy.compute(buildDockInputs(0));
     }
 
@@ -10189,8 +8308,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case CONTEXT_MENU_KILL_PROCESS_ID:
                 showKillSessionDialog(session);
                 return true;
-            case CONTEXT_MENU_GLASS_LAB_ID:
-                enterDockTuningMode();
+            case CONTEXT_MENU_SURFACE_EDITOR_ID:
+                mSurfaceEditor.enter();
                 return true;
             case CONTEXT_MENU_COMMAND_PALETTE_ID:
                 com.termux.app.terminal.TerminalCommandPalette.show(this);
@@ -10294,7 +8413,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? R.string.action_disable_background_image
                 : R.string.action_enable_background_image)
         ));
-        items.add(new TerminalActionItem(CONTEXT_MENU_GLASS_LAB_ID, getString(R.string.action_glass_lab)));
+        items.add(new TerminalActionItem(CONTEXT_MENU_SURFACE_EDITOR_ID, getString(R.string.action_surface_editor)));
         // Only when the companion is installed: a row that opens the Appearance settings under the
         // name of a plugin the device does not have is a broken promise, not a shortcut.
         if (isTerminalStylingAvailable()) {
@@ -10347,12 +8466,59 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     public com.termux.app.terminal.TerminalSheetController getTerminalSheetController() {
         if (mTerminalSheet == null)
-            mTerminalSheet = new com.termux.app.terminal.TerminalSheetController(this);
+            mTerminalSheet = new com.termux.app.terminal.TerminalSheetController(
+                new TerminalSheetHost());
         return mTerminalSheet;
     }
 
+    /** The activity's half of the sheet plane's seam. */
+    private final class TerminalSheetHost implements com.termux.app.terminal.TerminalSheetController.Host {
+        @NonNull @Override public Context context() {
+            return TermuxActivity.this;
+        }
+
+        @Nullable @Override public <T extends View> T findView(int viewId) {
+            return findViewById(viewId);
+        }
+
+        @Override public void yieldCompetingPlanes() {
+            closeFullStatusBarImmediate();
+            // Guarded on the open check rather than reached through the lazy accessor, so a session
+            // that never pulls the drawer down does not build one just because it opened a prompt.
+            if (isAppDrawerOpen()) mAppDrawerController.closeImmediate();
+        }
+
+        @Override public void ensureInAppTypingKeyboard() {
+            TermuxActivity.this.ensureInAppTypingKeyboard();
+        }
+
+        @Override public void setSheetInterceptorActive(boolean active) {
+            setTerminalSheetInterceptorActive(active);
+        }
+
+        @Override public boolean isPointOnInAppKeyboard(float rawX, float rawY) {
+            return TermuxActivity.this.isPointOnInAppKeyboard(rawX, rawY);
+        }
+
+        @Override public boolean applyWallpaperFrost(@NonNull ImageView frost) {
+            return applyCommandPaletteWallpaperFrost(frost);
+        }
+
+        @NonNull @Override public Drawable sheetSurface() {
+            return buildTerminalSheetSurface();
+        }
+
+        @Override public boolean dockBoundsOnScreen(@NonNull Rect out) {
+            return TermuxActivity.this.dockBoundsOnScreen(out);
+        }
+
+        @Override public boolean isReducedMotionEnabled() {
+            return TermuxActivity.this.isReducedMotionEnabled();
+        }
+    }
+
     /** Guarded on the field, not the lazy accessor: asking must not build a plane. */
-    public boolean isTerminalSheetOpen() {
+    private boolean isTerminalSheetOpen() {
         return mTerminalSheet != null && mTerminalSheet.isOpen();
     }
 
@@ -10361,7 +8527,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * plane reads as the same kit rather than as a Material dialog that lost its window.
      */
     @NonNull
-    public Drawable buildTerminalSheetSurface() {
+    private Drawable buildTerminalSheetSurface() {
         float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity() / 100f : 0.5f;
         int grain = mPreferences != null
             ? mPreferences.getDockGlassGrain()
@@ -10378,7 +8544,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * <p>False means there is nothing on screen to aim the key channel at — the caller either does
      * without typing or falls back to a focused editor.
      */
-    public boolean ensureInAppTypingKeyboard() {
+    private boolean ensureInAppTypingKeyboard() {
         if (!isInAppKeyboardEnabled() || mInAppKeyboard == null) return false;
         if (!mInAppKeyboard.isVisible()) {
             mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
@@ -10392,21 +8558,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * has to let those touches through: they are the keys it is typed with, and swallowing them
      * would end the interaction on its first keystroke.
      */
-    public boolean isPointOnInAppKeyboard(float rawX, float rawY) {
+    private boolean isPointOnInAppKeyboard(float rawX, float rawY) {
         if (mInAppKeyboard == null) return false;
         Rect keyboard = new Rect();
         return mInAppKeyboard.getKeyboardRectOnScreen(keyboard)
             && keyboard.contains(Math.round(rawX), Math.round(rawY));
-    }
-
-    /**
-     * The launcher row, or null before it is built. Exposed for the drawer's grid, whose cells
-     * borrow their icons, tint, launch ladder and context menu from it rather than owning a second
-     * copy of any of them.
-     */
-    @Nullable
-    public SuggestionBarView getSuggestionBarView() {
-        return mSuggestionBarView;
     }
 
     /**
@@ -10417,13 +8573,53 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     public com.termux.app.launcher.drawer.AppDrawerController getAppDrawerController() {
         if (mAppDrawerController == null) {
-            mAppDrawerController = new com.termux.app.launcher.drawer.AppDrawerController(this);
+            mAppDrawerController = new com.termux.app.launcher.drawer.AppDrawerController(
+                new AppDrawerHost());
             // Registered here rather than in setSuggestionBarView() so the accessor stays lazy: the
             // only thing that builds a controller is a drag, and a drag comes from the row itself,
             // which therefore already exists by the time this runs.
             mAppDrawerController.setDockChoreographyTarget(mSuggestionBarView);
         }
         return mAppDrawerController;
+    }
+
+    /** The activity's half of the drawer plane's seam. */
+    private final class AppDrawerHost implements com.termux.app.launcher.drawer.AppDrawerController.Host {
+        @NonNull @Override public Context context() {
+            return TermuxActivity.this;
+        }
+
+        @Nullable @Override public <T extends View> T findView(int viewId) {
+            return findViewById(viewId);
+        }
+
+        @Nullable @Override public TermuxAppSharedPreferences preferences() {
+            return getPreferences();
+        }
+
+        @NonNull @Override public DockLayout dockLayout() {
+            return getDockLayout();
+        }
+
+        @Nullable @Override public SuggestionBarView suggestionBar() {
+            return mSuggestionBarView;
+        }
+
+        @Override public boolean applyWallpaperFrost(@NonNull ImageView frost) {
+            return mChrome.frost().applyAppDrawer(frost);
+        }
+
+        @Override public void flushPendingAccessoryGeometry() {
+            TermuxActivity.this.flushPendingAccessoryGeometry();
+        }
+
+        @Override public void setInterceptorActive(boolean active) {
+            setAppDrawerInterceptorActive(active);
+        }
+
+        @Override public void requestSearchKeyboard() {
+            requestAppDrawerSearchKeyboard();
+        }
     }
 
     /**
@@ -10456,10 +8652,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * drawer close and unconditionally from {@link #onStart()}: a suppression that is never flushed
      * leaves the dock deaf to style and height changes until the activity is recreated.
      *
-     * <p>Public because {@code AppDrawerController} calls it from the {@code finally} of its own
-     * teardown: the flush must run even if restoring the plane's transforms throws.
+     * <p>{@code AppDrawerController} reaches it from the {@code finally} of its own teardown: the
+     * flush must run even if restoring the plane's transforms throws.
      */
-    public void flushPendingAccessoryGeometry() {
+    private void flushPendingAccessoryGeometry() {
         if (!mAppDrawerGeometryFreezePending || isAppDrawerEngaged()) {
             return;
         }
@@ -10500,7 +8696,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * <p>Releasing means "whoever owns the slot now", not "nobody": the drawer's search may be open
      * behind a sheet the drawer itself never closed.
      */
-    public void setTerminalSheetInterceptorActive(boolean active) {
+    private void setTerminalSheetInterceptorActive(boolean active) {
         if (mInAppKeyboard == null)
             return;
         if (active) {
@@ -10527,6 +8723,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * <p>Guarded on the field rather than the lazy accessor: deactivating a drawer that was never
      * opened must not build one.
      */
+    @VisibleForTesting
     public void setAppDrawerInterceptorActive(boolean active) {
         if (mInAppKeyboard == null)
             return;
@@ -10640,6 +8837,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** True while the drawer plane is up — what the key-release swallow asks. */
+    @VisibleForTesting
     public boolean isAppDrawerOpen() {
         return mAppDrawerController != null && mAppDrawerController.isOpen();
     }
@@ -10660,12 +8858,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Opens the rename editor for {@code target}. The single entry point every caller uses. */
     boolean beginTerminalRename(
-            @NonNull com.termux.app.terminal.TerminalRenameTarget target) {
-        if (target == com.termux.app.terminal.TerminalRenameTarget.WINDOW && !isSplitPanesEnabled())
+            @NonNull com.termux.app.terminal.rename.TerminalRenameTarget target) {
+        if (target == com.termux.app.terminal.rename.TerminalRenameTarget.WINDOW && !isSplitPanesEnabled())
             return false;
-        if (target == com.termux.app.terminal.TerminalRenameTarget.SESSION
+        if (target == com.termux.app.terminal.rename.TerminalRenameTarget.SESSION
             && (mCurrentWSession == null || !isSplitPanesEnabled())) return false;
-        if (target == com.termux.app.terminal.TerminalRenameTarget.PANE
+        if (target == com.termux.app.terminal.rename.TerminalRenameTarget.PANE
             && getCurrentSession() == null) return false;
         // The palette, the sheet plane and the drawer all own the same interceptor slot the chip
         // needs, so a rename starts from a clean surface rather than fighting one of them for
@@ -10689,7 +8887,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (index < 0 || index >= mWSessions.size()) return false;
         WSession target = mWSessions.get(index);
         if (target != mCurrentWSession && !activateBrowserSession(index)) return false;
-        return beginTerminalRename(com.termux.app.terminal.TerminalRenameTarget.SESSION);
+        return beginTerminalRename(com.termux.app.terminal.rename.TerminalRenameTarget.SESSION);
     }
 
     /** Renames a session identified by its drawer row, used by the drawer's long-press. */
@@ -10702,7 +8900,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // rather than editing something the user cannot see.
             getTermuxTerminalSessionClient().setCurrentSession(shell);
         }
-        return beginTerminalRename(com.termux.app.terminal.TerminalRenameTarget.SESSION);
+        return beginTerminalRename(com.termux.app.terminal.rename.TerminalRenameTarget.SESSION);
     }
 
     public boolean isTerminalRenameActive() {
@@ -10805,6 +9003,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
+        public void showModeHint(
+                @Nullable com.termux.app.terminal.TerminalModeHintCard.Mode mode) {
+            if (mode == null) TermuxActivity.this.hideTerminalModeHint();
+            else TermuxActivity.this.showTerminalModeHint(mode);
+        }
+
+        @Override
         public void copyToClipboard(@NonNull String text) {
             android.content.ClipboardManager clipboard =
                 (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
@@ -10834,16 +9039,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && mRenameCoordinator.handleCodePoint(codePoint, ctrlDown);
     }
 
-    /**
-     * Installs the backend that proposes names for windows and sessions. Nothing installs one yet;
-     * an on-device model backend is the intended first caller, and it reaches the same apply path a
-     * keybind does.
-     */
-    public void setRenameSuggestionProvider(
-            @Nullable com.termux.app.terminal.rename.TerminalRenameSuggestionProvider provider) {
-        getRenameCoordinator().setSuggestionProvider(provider);
-    }
-
     /** Activity half of the rename editor: anchors, names, glass and the keyboard it types with. */
     private final class TerminalRenameHost
             implements com.termux.app.terminal.rename.TerminalRenameCoordinator.Host {
@@ -10856,7 +9051,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Nullable
         @Override
-        public View anchorFor(@NonNull com.termux.app.terminal.TerminalRenameTarget target) {
+        public View anchorFor(@NonNull com.termux.app.terminal.rename.TerminalRenameTarget target) {
             switch (target) {
                 case WINDOW: {
                     com.termux.app.terminal.TerminalWindowBar bar =
@@ -10876,12 +9071,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Nullable
         @Override
-        public String currentName(@NonNull com.termux.app.terminal.TerminalRenameTarget target) {
+        public String currentName(@NonNull com.termux.app.terminal.rename.TerminalRenameTarget target) {
             return currentTerminalName(target);
         }
 
         @Override
-        public boolean applyName(@NonNull com.termux.app.terminal.TerminalRenameTarget target,
+        public boolean applyName(@NonNull com.termux.app.terminal.rename.TerminalRenameTarget target,
                                  @Nullable String name) {
             switch (target) {
                 case WINDOW: return renameCurrentWindowTo(name);
@@ -10932,7 +9127,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void promptRenameWithDialog(
-                @NonNull com.termux.app.terminal.TerminalRenameTarget target) {
+                @NonNull com.termux.app.terminal.rename.TerminalRenameTarget target) {
             switch (target) {
                 case WINDOW: promptWindowRenameDialog(); break;
                 case SESSION: promptSessionRename(mCurrentWSession); break;
@@ -10965,7 +9160,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
-        public void onRenameEnded(@NonNull com.termux.app.terminal.TerminalRenameTarget target,
+        public void onRenameEnded(@NonNull com.termux.app.terminal.rename.TerminalRenameTarget target,
                                   boolean committed) {
             if (!committed) return;
             refreshTerminalWindowBar();
@@ -10973,55 +9168,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (getTermuxTerminalSessionClient() != null)
                 getTermuxTerminalSessionClient().termuxSessionListNotifyUpdated();
         }
-
-        @Nullable
-        @Override
-        public com.termux.app.terminal.rename.TerminalRenameContext renameContext(
-                @NonNull com.termux.app.terminal.TerminalRenameTarget target) {
-            return buildRenameContext(target);
-        }
-    }
-
-    /**
-     * Facts a naming backend needs about {@code target}, gathered from the same sources the window
-     * pills read: the focused pane's directory, its resolved foreground process and open file, and
-     * the titles of the panes the target contains.
-     */
-    @Nullable
-    private com.termux.app.terminal.rename.TerminalRenameContext buildRenameContext(
-            @NonNull com.termux.app.terminal.TerminalRenameTarget target) {
-        TerminalSession focused = getCurrentSession();
-        java.util.List<String> paneTitles = new java.util.ArrayList<>();
-        if (mPaneController != null && mCurrentWSession != null) {
-            if (target == com.termux.app.terminal.TerminalRenameTarget.SESSION) {
-                for (com.termux.app.terminal.TerminalPaneController.Window window :
-                        mCurrentWSession.windows) {
-                    for (TerminalSession shell : mPaneController.shellsOf(window))
-                        paneTitles.add(shell.getTitle());
-                }
-            } else if (target == com.termux.app.terminal.TerminalRenameTarget.WINDOW
-                && !mCurrentWSession.windows.isEmpty()) {
-                for (TerminalSession shell :
-                        mPaneController.shellsOf(mCurrentWSession.currentWindow()))
-                    paneTitles.add(shell.getTitle());
-            }
-        }
-        if (paneTitles.isEmpty() && focused != null) paneTitles.add(focused.getTitle());
-        com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
-            focused == null || mWindowForegroundResolver == null ? null
-                : mWindowForegroundResolver.get(focused.getPid());
-        return new com.termux.app.terminal.rename.TerminalRenameContext(target,
-            currentTerminalName(target),
-            com.termux.app.terminal.TerminalNamePolicy.maxCodePointsFor(target),
-            focused == null ? null : focused.getCwd(),
-            info == null || info.idle ? null : info.processName,
-            info == null || info.idle ? null : info.openFile,
-            paneTitles);
     }
 
     /** The name {@code target} currently carries, or null when it is unnamed. */
     @Nullable
-    private String currentTerminalName(@NonNull com.termux.app.terminal.TerminalRenameTarget target) {
+    private String currentTerminalName(@NonNull com.termux.app.terminal.rename.TerminalRenameTarget target) {
         switch (target) {
             case WINDOW: return getCurrentWindowName();
             case SESSION: return mCurrentWSession == null ? null : mCurrentWSession.name;
@@ -11059,7 +9210,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * owning the input connection; the committed text reaches the drawer through
      * {@link #handleAppDrawerCodePoint}.
      */
-    public void requestAppDrawerSearchKeyboard() {
+    private void requestAppDrawerSearchKeyboard() {
         onSystemImeRequested();
         KeyboardUtils.showSoftKeyboard(this, mTerminalView);
     }
@@ -11134,8 +9285,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // absorbed it would dismiss something behind a full-screen plane.
             if (!mAppDrawerController.onBackPressedInDrawer())
                 mAppDrawerController.close(true);
-        } else if (mDockTuningMode) {
-            requestSurfaceEditorClose();
+        } else if (mSurfaceEditor.isActive()) {
+            mSurfaceEditor.requestClose();
         } else if (getDrawer().isDrawerOpen(Gravity.LEFT)) {
             getDrawer().closeDrawers();
         } else if (!isSplitPanesEnabled() && !getDrawer().isDrawerOpen(Gravity.LEFT)) {
@@ -11202,6 +9353,53 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** True while a window/pane operation is deliberately running silent. */
     public boolean areNoticesSuppressed() {
         return mNoticeSuppressionDepth > 0;
+    }
+
+    // ------------------------------------------------------------- "how do I drive this mode?"
+    //
+    // Copy mode and scrollback search are entered from a chord and then own every key. The find
+    // strip could only afford three words about that at its trailing end, and the view's own text
+    // selection said nothing at all. The card is the legend for whichever of them is up.
+
+    @Nullable private com.termux.app.terminal.TerminalModeHintCard mModeHintCard;
+
+    /** Shows (or swaps) the legend for a modal terminal mode. */
+    private void showTerminalModeHint(
+            @NonNull com.termux.app.terminal.TerminalModeHintCard.Mode mode) {
+        com.termux.app.terminal.TerminalModeHintCard card = obtainModeHintCard();
+        if (card == null)
+            return;
+        syncTerminalModeHintFrame(card);
+        card.show(mode);
+    }
+
+    private void hideTerminalModeHint() {
+        if (mModeHintCard != null) mModeHintCard.hide();
+    }
+
+    @Nullable
+    private com.termux.app.terminal.TerminalModeHintCard obtainModeHintCard() {
+        FrameLayout host = findViewById(R.id.terminal_surface_host);
+        if (host == null)
+            return null;
+        if (mModeHintCard == null)
+            mModeHintCard = new com.termux.app.terminal.TerminalModeHintCard(this);
+        if (mModeHintCard.getParent() == null) {
+            host.addView(mModeHintCard,
+                com.termux.app.terminal.TerminalModeHintCard.buildHostLayoutParams());
+        }
+        mModeHintCard.bringToFront();
+        return mModeHintCard;
+    }
+
+    /**
+     * Re-seats the card on the terminal's current edge. Margins, shape and style are all live
+     * settings, so this is read at every show rather than once at construction.
+     */
+    private void syncTerminalModeHintFrame(
+            @NonNull com.termux.app.terminal.TerminalModeHintCard card) {
+        float radiusPx = terminalEdgeCornerRadiusPx();
+        card.setTerminalFrame(terminalFrameInsetPx(false), terminalFrameInsetPx(true), radiusPx);
     }
 
     @Nullable
@@ -11637,12 +9835,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Ctrl+Alt+Shift+R entry point: rename the current session, not its window or focused pane. */
     boolean promptCurrentSessionRename() {
-        return beginTerminalRename(com.termux.app.terminal.TerminalRenameTarget.SESSION);
+        return beginTerminalRename(com.termux.app.terminal.rename.TerminalRenameTarget.SESSION);
     }
 
     /** Ctrl+Alt+R entry point: rename the current window, the tab it occupies in the window bar. */
     boolean promptCurrentWindowRename() {
-        return beginTerminalRename(com.termux.app.terminal.TerminalRenameTarget.WINDOW);
+        return beginTerminalRename(com.termux.app.terminal.rename.TerminalRenameTarget.WINDOW);
     }
 
     /**
@@ -12252,8 +10450,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mPreferences != null && mPreferences.isTerminalCursorTrailEnabled();
     }
 
-    void openGlassLab() {
-        enterDockTuningMode();
+    void openSurfaceEditor() {
+        mSurfaceEditor.enter();
     }
 
     void openSettings() {
@@ -12717,10 +10915,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         bar.setOnCreateWindowListener(this::createNewWindow);
         bar.setOnEdgeOverswipeListener(collapsed -> setTopStatusBarCollapsed(collapsed, true));
-        com.termux.app.terminal.TerminalWindowBar lazyWindowBar =
-            findViewById(R.id.terminal_window_bar);
-        if (lazyWindowBar != null && mPreferences != null)
-            lazyWindowBar.setLazyMode(mPreferences.isLazyModeEnabled());
+        applyLazyMode();
 
         com.termux.app.statusbar.SessionsIndicatorView sessionsIndicator =
             findViewById(R.id.terminal_sessions_indicator);
@@ -12750,7 +10945,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean isStatusGestureBlocked() {
                     // A normal COMPACT/EXPANDED animator is deliberately eligible for takeover;
                     // FullStatusBarController freezes its current height before cancelling it.
-                    return isCommandPaletteOpen() || isAppDrawerEngaged() || mDockTuningMode;
+                    return isCommandPaletteOpen() || isAppDrawerEngaged() || mSurfaceEditor.isActive();
                 }
                 @Override public boolean onFullDragBegin(
                         @NonNull com.termux.app.statusbar.TopStatusBarState priorState) {
@@ -12817,7 +11012,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // intermediate height (visible as mismatched corners mid-gesture). FULL frames are
             // excluded — applyFullStatusBarOutline re-resolves their radius right after this.
             if (!isFullStatusBarEngaged()) {
-                float radius = capsule ? resolveStatusBarCapsuleCornerRadiusPx(height) : 0f;
+                // Docked keeps its terminal-facing corners through the gesture too, at the radius
+                // this height resolves to — dropping to 0 mid-drag and snapping back on release
+                // read as the corners flickering square.
+                float radius = capsule ? resolveStatusBarCapsuleCornerRadiusPx(height)
+                    : resolveDockedStatusInnerRadiusPx(height);
+                mStatusBarSurfaceOutline.setInnerEdgeOnly(!capsule);
                 mStatusBarSurfaceOutline.setFrame(radius, radius, 0f);
                 if (host.getOutlineProvider() != mStatusBarSurfaceOutline)
                     host.setOutlineProvider(mStatusBarSurfaceOutline);
@@ -12981,7 +11181,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (host == null || bar == null) return;
         // Re-applied here, not only at setup, so a lazy-mode toggle takes effect on the
         // settings-return refresh instead of waiting for the activity to be recreated.
-        if (mPreferences != null) bar.setLazyMode(mPreferences.isLazyModeEnabled());
+        applyLazyMode();
         boolean visible = isSplitPanesEnabled();
         host.setVisibility(visible ? View.VISIBLE : View.GONE);
         if (!visible) {
@@ -12999,7 +11199,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 clock.setStyle(mPreferences.getTopPaneClockStyle());
                 clock.setAlignment(mPreferences.getTopPaneClockAlignment());
                 clock.setUseAmPm(mPreferences.isTopPaneClockAmPmEnabled());
-                clock.setLazyMode(mPreferences.isLazyModeEnabled());
             }
             // Only reachable while the panel is expanded: the widget slot the clock lives in is GONE
             // in the collapsed bar, so this needs no state check of its own.
@@ -13434,11 +11633,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAiIndicatorController.refresh();
     }
 
-    @NonNull
     /** The sampling cadence, stretched in lazy mode. */
     private long statsInterval(long normalMs) {
-        return mPreferences != null && mPreferences.isLazyModeEnabled()
-            ? normalMs * STATS_LAZY_MULTIPLIER : normalMs;
+        return isLazyModeEnabled() ? normalMs * STATS_LAZY_MULTIPLIER : normalMs;
+    }
+
+    private boolean isLazyModeEnabled() {
+        return mPreferences != null && mPreferences.isLazyModeEnabled();
+    }
+
+    /**
+     * Pushes the lazy-mode toggle to every consumer that caches it — the window bar and the clock;
+     * the stats sampler reads {@link #isLazyModeEnabled()} on each cadence instead.
+     */
+    private void applyLazyMode() {
+        boolean lazy = isLazyModeEnabled();
+        com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
+        if (bar != null) bar.setLazyMode(lazy);
+        com.termux.app.terminal.TerminalClockWidget clock = findViewById(R.id.terminal_clock_widget);
+        if (clock != null) clock.setLazyMode(lazy);
     }
 
     private com.termux.app.statusbar.SystemStatsController ensureStatsController() {
@@ -14394,6 +12607,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             getTermuxActivityRootView().setIsRootViewLoggingEnabled(enabled);
         }
 
+        @Override public void showTerminalModeHint(
+                @Nullable com.termux.app.terminal.TerminalModeHintCard.Mode mode) {
+            // Qualified: this inner class declares the same name, so an unqualified call is a
+            // recursion into itself rather than a call to the activity's own method.
+            if (mode == null) TermuxActivity.this.hideTerminalModeHint();
+            else TermuxActivity.this.showTerminalModeHint(mode);
+        }
+
         @Override public void setDrawerLocked(boolean locked) {
             // Split panes retire the legacy sessions drawer entirely, so leaving copy mode must
             // not unlock it.
@@ -14820,7 +13041,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean beginTerminalRename(
-                @NonNull com.termux.app.terminal.TerminalRenameTarget target) {
+                @NonNull com.termux.app.terminal.rename.TerminalRenameTarget target) {
             return TermuxActivity.this.beginTerminalRename(target);
         }
 
@@ -14884,8 +13105,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return TermuxActivity.this.isCursorTrailEnabled();
         }
 
-        @Override public void openGlassLab() {
-            TermuxActivity.this.openGlassLab();
+        @Override public void openSurfaceEditor() {
+            TermuxActivity.this.openSurfaceEditor();
         }
 
         @Override public void updateWindowBackgroundForCurrentSession() {
@@ -15062,7 +13283,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!hasFocus || mIsInvalidState || !mIsVisible) {
             return;
         }
-        mChrome.ledger().markAllBackdropsDirty();
+        mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
         // Returning from another app can restore focus before the terminal host re-measures to full
         // size, leaving panes stuck at a tiny stale grid. Re-measure once layout settles.
         if (mPaneController != null)
@@ -15686,6 +13907,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         Logger.logInfo(LOG_TAG, "Termux:Styling wrote a colour scheme; disabling wallpaper colours");
         mPreferences.setTerminalDynamicColorsEnabled(false);
+        // A second reason to drop the cache: that write also hands the chrome to the scheme, and
+        // the recreate this broadcast triggers must theme from the new answer, not the old one.
+        LauncherSchemeTheme.invalidate();
     }
 
     private void fixTermuxActivityBroadcastReceiverIntent(Intent intent) {
@@ -15778,8 +14002,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mAppDrawerController != null)
             mAppDrawerController.onPreferencesReloaded();
         applySuggestionBarInputChar();
-        mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
-        mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR);
+        mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS);
         applySeamlessStatusBackgroundModeIfNeeded();
         applyTerminalSurfaceAppearance();
         // After appearance: applyTerminalSurfaceAppearance() flat-colors the dock surfaces, so the

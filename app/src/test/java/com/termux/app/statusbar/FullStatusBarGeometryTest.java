@@ -21,4 +21,13 @@ public class FullStatusBarGeometryTest {
         assertTrue(FullStatusBarGeometry.calculate(96, 400, 0, 0, 0, .7f).height
             > FullStatusBarGeometry.calculate(96, 400, 0, 0, 0, .3f).height);
     }
+
+    @Test public void finiteUnitClampsAndReadsNonFiniteAsZero() {
+        assertEquals(0.5f, FullStatusBarGeometry.finiteUnit(0.5f), 0f);
+        assertEquals(0f, FullStatusBarGeometry.finiteUnit(-1f), 0f);
+        assertEquals(1f, FullStatusBarGeometry.finiteUnit(2f), 0f);
+        assertEquals(0f, FullStatusBarGeometry.finiteUnit(Float.NaN), 0f);
+        assertEquals(0f, FullStatusBarGeometry.finiteUnit(Float.POSITIVE_INFINITY), 0f);
+        assertEquals(0f, FullStatusBarGeometry.finiteUnit(Float.NEGATIVE_INFINITY), 0f);
+    }
 }

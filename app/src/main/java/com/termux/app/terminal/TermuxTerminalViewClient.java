@@ -284,7 +284,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (hyperlink != null) {
             // An OSC 8 link was tapped. Confirm before acting on it: unlike the URL regex below, the
             // target is chosen by the application and need not resemble the text that was tapped.
-            showHyperlinkDialog(hyperlink);
+            showHyperlinkStrip(hyperlink, hyperlinkStripAnchor(e));
             return;
         }
         if (mHost.properties().shouldOpenTerminalTranscriptURLOnClick()) {
@@ -334,6 +334,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     public void copyModeChanged(boolean copyMode) {
         // Disable drawer while copying.
         mHost.setDrawerLocked(copyMode);
+        // Selection handles and a floating Copy button are the whole interface, and neither says
+        // what the keys do or how to get out; the legend does.
+        mHost.showTerminalModeHint(copyMode ? TerminalModeHintCard.Mode.SELECTION : null);
     }
 
     @SuppressLint("RtlHardcoded")
@@ -1154,32 +1157,67 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         "http", "https", "mailto", "tel", "sms", "geo", "ftp", "ftps"));
 
     /**
-     * Ask what to do with a tapped OSC 8 hyperlink, showing its full target so that a link whose text
-     * and destination disagree is visible as such before anything is opened.
+     * Where the hyperlink strip's bottom edge should land: one text row above the tap, so the strip
+     * sits over the line above and the tapped link itself stays visible under it.
      */
-    private void showHyperlinkDialog(String uri) {
+    @Nullable
+    private PointF hyperlinkStripAnchor(@NonNull MotionEvent e) {
+        TerminalView view = mHost.focusedView();
+        if (view == null) return null;
+        int[] onScreen = new int[2];
+        view.getLocationOnScreen(onScreen);
+        return new PointF(onScreen[0] + e.getX(),
+            onScreen[1] + e.getY() - view.getFontLineSpacing());
+    }
+
+    /**
+     * Ask what to do with a tapped OSC 8 hyperlink. A thin two-action strip above the tapped line
+     * rather than a page: an outside tap is the cancel, and the transcript — including the link
+     * itself — stays readable behind it, which is also what shows what is about to be opened.
+     */
+    private void showHyperlinkStrip(String uri, @Nullable PointF anchor) {
         String scheme = Uri.parse(uri).getScheme();
         boolean openable = scheme != null && OPENABLE_HYPERLINK_SCHEMES.contains(scheme.toLowerCase(Locale.ROOT));
         TerminalSheetController sheet = mHost.sheetController();
-        LinearLayout body = TerminalSheetViews.body(mContext);
-        TerminalSheetViews.addMessage(body, uri);
-        LinearLayout actions = TerminalSheetViews.addActionRow(body);
-        TerminalSheetViews.addAction(actions, mContext.getString(android.R.string.cancel),
-            sheet::dismiss);
-        TerminalSheetViews.addAction(actions, mContext.getString(R.string.action_hyperlink_copy),
-            () -> {
-                sheet.dismiss();
-                ShareUtils.copyTextToClipboard(mContext, uri,
-                    mContext.getString(R.string.msg_select_url_copied_to_clipboard));
-            });
+        LinearLayout strip = new LinearLayout(mContext);
+        strip.setOrientation(LinearLayout.HORIZONTAL);
+        strip.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        addHyperlinkStripAction(strip, mContext.getString(R.string.action_hyperlink_copy), () -> {
+            sheet.dismiss();
+            ShareUtils.copyTextToClipboard(mContext, uri,
+                mContext.getString(R.string.msg_select_url_copied_to_clipboard));
+        });
         if (openable) {
-            TerminalSheetViews.addAction(actions,
-                mContext.getString(R.string.action_hyperlink_open), () -> {
+            addHyperlinkStripAction(strip, mContext.getString(R.string.action_hyperlink_open),
+                () -> {
                     sheet.dismiss();
                     ShareUtils.openUrl(mContext, uri);
                 });
         }
-        sheet.show(mContext.getString(R.string.title_hyperlink_dialog), body);
+        sheet.show("", strip, false, null, null, false,
+            TerminalSheetController.Placement.stripAbove(anchor));
+    }
+
+    private void addHyperlinkStripAction(@NonNull LinearLayout strip, @NonNull CharSequence label,
+                                         @NonNull Runnable action) {
+        int density = Math.round(mContext.getResources().getDisplayMetrics().density);
+        TextView button = new TextView(mContext);
+        button.setText(label);
+        button.setTextSize(14f);
+        button.setTypeface(null, android.graphics.Typeface.BOLD);
+        // Material text-button ink: the accent says "action", which the borderless pill no longer
+        // says with an outline.
+        button.setTextColor(com.google.android.material.color.MaterialColors.getColor(mContext,
+            com.google.android.material.R.attr.colorPrimary, button.getCurrentTextColor()));
+        button.setSingleLine(true);
+        button.setGravity(android.view.Gravity.CENTER);
+        // The 40dp is the strip's whole height budget: a thinner row than this stops being tappable.
+        button.setMinHeight(40 * density);
+        button.setPadding(14 * density, 0, 14 * density, 0);
+        button.setOnClickListener(v -> action.run());
+        strip.addView(button, new LinearLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
     }
 
     public void showUrlSelection() {

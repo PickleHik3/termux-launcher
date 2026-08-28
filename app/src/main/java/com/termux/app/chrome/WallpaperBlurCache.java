@@ -70,6 +70,7 @@ public final class WallpaperBlurCache {
     public static final int MAX_CACHED_WALLPAPER_BLUR_RADII = 3;
 
     @NonNull private final Source mSource;
+    @Nullable private final Runnable mOnCleared;
 
     @NonNull private final LinkedHashMap<Integer, Bitmap> mByRadius =
         new LinkedHashMap<>(4, 0.75f, true);
@@ -88,7 +89,13 @@ public final class WallpaperBlurCache {
     private int mOrientation = Configuration.ORIENTATION_UNDEFINED;
 
     public WallpaperBlurCache(@NonNull Source source) {
+        this(source, null);
+    }
+
+    /** @param onCleared runs after every clear, for the module-side state cut from the frames */
+    public WallpaperBlurCache(@NonNull Source source, @Nullable Runnable onCleared) {
         mSource = source;
+        mOnCleared = onCleared;
     }
 
     /** The rect the resident frames were captured for, in screen coordinates. */
@@ -241,5 +248,6 @@ public final class WallpaperBlurCache {
         mManagedLastModified = -1L;
         mManagedLength = -1L;
         mSource.onCacheCleared();
+        if (mOnCleared != null) mOnCleared.run();
     }
 }

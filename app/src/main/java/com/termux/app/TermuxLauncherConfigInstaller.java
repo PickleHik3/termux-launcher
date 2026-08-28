@@ -23,10 +23,13 @@ import java.util.Arrays;
  * are written when absent and never touched again, so an app update cannot overwrite
  * hand-edited bindings or font settings.
  *
- * <p>The seeded files ship with every directive commented out, so seeding one changes no
- * behavior — an all-comment file parses to zero mappings, zero faces, and zero properties,
- * which is what an absent file already meant. {@code keyboard/layout.xml} is not seeded at
- * all, because a present layout file replaces the bundled keyboard layout outright.
+ * <p>The seeded files ship almost entirely commented out, so seeding one changes close to
+ * nothing: an all-comment file parses to zero mappings, zero faces, and zero properties,
+ * which is what an absent file already meant. The one live line —
+ * {@code terminal-onclick-url-open = true} in the properties file — is this fork's default
+ * for fresh installs only, since a present file is never touched again.
+ * {@code keyboard/layout.xml} is not seeded at all, because a present layout file replaces
+ * the bundled keyboard layout outright.
  */
 final class TermuxLauncherConfigInstaller {
 

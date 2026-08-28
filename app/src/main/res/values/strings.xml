@@ -63,7 +63,8 @@
     <string name="settings_color_mode_title">Color mode</string>
     <string name="settings_wallpaper_colors_title">Use wallpaper colors</string>
     <string name="settings_wallpaper_colors_summary">Builds the launcher palette from the current wallpaper.</string>
-    <string name="settings_wallpaper_colors_hint">While on, this overrides ~/.termux/colors.properties. Applying a Termux:Styling scheme turns it off.</string>
+    <string name="settings_wallpaper_colors_hint">While on, this overrides ~/.termux/colors.properties. Turn it off — or apply a Termux:Styling scheme, which turns it off for you — and the terminal and the launcher chrome both follow that scheme. Overrides in ~/.termux/launcher-theme.properties are read on top of it: one token per line, e.g. primary = color3.</string>
+    <string name="settings_wallpaper_colors_hint_chrome_unsupported">While on, this overrides ~/.termux/colors.properties. Applying a Termux:Styling scheme turns it off. The launcher chrome needs Android 11 or newer to follow a scheme; here it stays on system colors while the terminal follows the scheme.</string>
     <string name="settings_terminal_contrast_title">Terminal contrast</string>
     <string name="settings_terminal_contrast_summary">%1$s</string>
     <string name="settings_terminal_contrast_disabled">Available when wallpaper colors are on</string>
@@ -77,21 +78,10 @@
         <item>default</item>
         <item>harder</item>
     </string-array>
-    <string name="settings_ui_color_source_title">Interface colors</string>
-    <string name="settings_ui_color_source_summary_wallpaper">Dock, status bar, drawer and keyboard follow the wallpaper palette.</string>
-    <string name="settings_ui_color_source_summary_scheme">Dock, status bar, drawer and keyboard are derived from the terminal color scheme.</string>
-    <string name="settings_ui_color_source_no_scheme">No color scheme installed yet — apply one from Termux:Styling first.</string>
-    <string name="settings_ui_color_source_unsupported">Needs Android 11 or newer; the terminal still follows the scheme.</string>
-    <string name="settings_ui_color_source_hint">Overrides in ~/.termux/launcher-theme.properties are read on top of the scheme: one token per line, e.g. primary = color3.</string>
-    <string-array name="termux_ui_color_source_entries">
-        <item>From wallpaper</item>
-        <item>From terminal color scheme</item>
-    </string-array>
-    <string-array name="termux_ui_color_source_values">
-        <item>wallpaper</item>
-        <item>scheme</item>
-    </string-array>
     <string name="settings_wallpaper_title">Wallpaper</string>
+    <string name="settings_sessions_sidebar_header">Sessions sidebar</string>
+    <string name="settings_sessions_opacity_title">Sessions opacity</string>
+    <string name="settings_sessions_opacity_summary">Background opacity of the legacy sessions drawer, shown only while split panes are off.</string>
     <string name="settings_icon_appearance_header">Icon appearance</string>
     <string name="settings_icon_appearance_title">Use monochrome icons</string>
     <string name="settings_icon_pack_title">Icon pack</string>
@@ -441,7 +431,6 @@
     <string name="msg_select_url_copied_to_clipboard">URL copied to clipboard</string>
 
     <!-- OSC 8 hyperlinks -->
-    <string name="title_hyperlink_dialog">Open link?</string>
     <string name="action_hyperlink_open">Open</string>
     <string name="action_hyperlink_copy">Copy</string>
 
@@ -488,7 +477,7 @@
     <string name="notice_tap_to_open">tap to open</string>
     <string name="notice_shell_wants_attention">%1$s wants attention</string>
     <string name="action_open_settings">Settings</string>
-    <string name="action_glass_lab">Surface editor</string>
+    <string name="action_surface_editor">Surface editor</string>
     <string name="msg_generating_report">Generating Report</string>
     <string name="msg_add_termux_debug_info">Add &TERMUX_APP_NAME; debug info to report?</string>
 
@@ -523,6 +512,7 @@
 
     <!-- Termux File Receiver -->
     <string name="title_file_received">Save file in ~/downloads/</string>
+    <string name="msg_file_received_source">Source: %1$s</string>
     <string name="action_file_received_edit">Edit</string>
     <string name="action_file_received_open_directory">Open directory</string>
 
@@ -642,8 +632,6 @@
                 <string name="termux_top_pane_clock_style_tape">Tape</string>
                 <string name="termux_top_pane_clock_style_slab">Slab</string>
                 <!-- Toggle-group labels: six faces have to share one row. -->
-                <string name="termux_top_pane_clock_style_minimal_short">Min</string>
-                <string name="termux_top_pane_clock_style_led_short">LED</string>
 
             <!-- Keyboard Category -->
             <string name="termux_keyboard_header">Keyboard</string>
@@ -1012,29 +1000,71 @@
             <string name="termux_fullscreen_summary">Hide system bars while using the launcher</string>
                 
             <!-- Extra Keys Category -->
-                <string name="termux_extrakeys_blur_live_wallpaper_note">Controls background blur in dp. Set to 0 for clear glass.</string>
-                <string name="termux_extrakeys_blur_live_wallpaper_active_note">Temporarily unavailable with a live wallpaper. Your value is preserved.</string>
                 <string name="termux_dock_tune_live_title">Surface editor</string>
-                <string name="termux_dock_tune_live_summary">Customize dock, keyboard, status panel, terminal, and sessions live on the home screen.</string>
+                <string name="termux_dock_tune_live_summary">Customize dock, keyboard, status panel, and terminal live on the home screen.</string>
                 <string name="termux_dock_tuning_title">Surface editor</string>
-                <string name="termux_surface_tuning_base">Base</string>
-                <string name="termux_surface_tuning_base_section">All surfaces</string>
-                <!-- The link chip on a shared row: an arrow while the surface follows Base, an
+                <string name="termux_surface_tuning_presets_section">Presets</string>
+                <!-- Preset names describe the whole look, deliberately not the material family:
+                     "Glass", "Frost" and "Solid" are what the Material control is called, and a
+                     preset named after one of them read as a shortcut to that control rather than
+                     as a complete look. -->
+                <string name="termux_surface_preset_stock">Classic</string>
+                <string name="termux_surface_preset_frost">Mist</string>
+                <string name="termux_surface_preset_solid">Slate</string>
+                <string name="termux_surface_preset_minimal">Bare</string>
+                <string name="termux_surface_preset_custom">Custom</string>
+                <string name="termux_surface_preset_applied">%1$s applied</string>
+                <string name="termux_surface_preset_saved">Look saved as Custom</string>
+                <string name="termux_surface_preset_custom_empty">No saved look yet</string>
+                <string name="termux_surface_preset_custom_empty_hint">Use ⤓ in the editor\'s title bar to save the look you have now.</string>
+                <string name="termux_surface_tuning_save_look">⤓</string>
+                <string name="termux_surface_tuning_save_look_description">Save this look as the Custom preset</string>
+                <!-- Subtitle on the "applied" notice chip, whose tap undoes the preset. -->
+                <string name="termux_surface_preset_undo_hint">Tap to undo</string>
+                <string name="termux_surface_preset_card_description">%1$s preset</string>
+                <string name="termux_surface_preset_apply_action">apply this look</string>
+                <string name="termux_surface_preset_current_look">Current look</string>
+                <string name="termux_surface_tuning_base_section">Global</string>
+                <string name="termux_surface_tuning_material">Material</string>
+                <string name="termux_surface_tuning_material_solid">Solid</string>
+                <string name="termux_surface_tuning_material_glass">Glass</string>
+                <string name="termux_surface_tuning_material_frost">Frost</string>
+                <string name="termux_surface_tuning_material_intensity">Intensity</string>
+                <string name="termux_surface_tuning_material_custom">Custom</string>
+                <!-- The link chip on a shared row: a tick while the surface follows Base, an
                      undo glyph once it has its own value. -->
-                <string name="termux_surface_tuning_link_inherited">↗</string>
+                <string name="termux_surface_tuning_link_inherited">✓</string>
                 <string name="termux_surface_tuning_link_detached">↺</string>
                 <string name="termux_surface_tuning_link_inherited_description">Following Base. Move this control to give %1$s its own value.</string>
                 <string name="termux_surface_tuning_link_detached_description">%1$s has its own value. Tap to follow Base again.</string>
-                <string name="termux_surface_tuning_followers_all">Every surface is following Base.</string>
                 <plurals name="termux_surface_tuning_followers_some">
                     <item quantity="one">%1$d property has its own value. Its ↺ puts it back.</item>
                     <item quantity="other">%1$d properties have their own values. Their ↺ puts them back.</item>
                 </plurals>
                 <string name="termux_surface_tuning_reattach_all">Reattach all</string>
+                <!-- The fold between the global controls and the per-surface groups, one of
+                     which shows at a time behind the surface pills. -->
+                <string name="termux_surface_tuning_advanced">Fine tune</string>
+                <string name="termux_surface_tuning_advanced_chevron_closed">▸</string>
+                <string name="termux_surface_tuning_advanced_chevron_open">▾</string>
+                <!-- The clock row in the editor's Status group. The pane's clock is the one
+                     thing in that group that is a look rather than a number, so the row shows the
+                     face itself and hides the six of them behind one tap. -->
+                <string name="termux_surface_tuning_clock">Clock</string>
+                <!-- One shape for the two chips on the status row: the sessions indicator and the
+                     window pills. Content inside the bar, not a surface, so it has its own knob. -->
+                <string name="termux_surface_tuning_indicator_radius">Chip radius</string>
+                <string name="termux_surface_tuning_indicator_radius_description">Corner radius of the sessions indicator and the window pills</string>
+                <string name="termux_surface_tuning_clock_chevron">▾</string>
+                <string name="termux_surface_tuning_clock_picker_title">Clock face</string>
+                <string name="termux_surface_tuning_clock_row_description">Clock face: %1$s. Tap to change.</string>
+                <string name="termux_surface_tuning_clock_face_description">%1$s clock face</string>
+                <string name="termux_surface_tuning_clock_selected">✓</string>
+                <string name="termux_surface_tuning_clock_elsewhere">Alignment and 12-hour time stay in Settings, under Terminal and status.</string>
                 <string name="termux_surface_tuning_dock">Dock</string>
                 <string name="termux_surface_tuning_keyboard">Keyboard</string>
                 <string name="termux_surface_tuning_status">Status</string>
-                <string name="termux_surface_tuning_other">Terminal</string>
+                <string name="termux_surface_tuning_terminal">Terminal</string>
                 <string name="termux_surface_tuning_reset">Reset</string>
                 <string name="termux_surface_tuning_keyboard_height">Height</string>
                 <string name="termux_surface_tuning_keyboard_spacing">Spacing</string>
@@ -1051,17 +1081,7 @@
                 <string name="termux_dock_tuning_size">Size</string>
                 <string name="termux_dock_tuning_icons">Apps per page</string>
                 <string name="termux_dock_tuning_terminal">Opacity</string>
-                <string name="termux_dock_tuning_terminal_contrast">Contrast</string>
-                <string name="termux_dock_tuning_terminal_contrast_softer">Softer</string>
-                <string name="termux_dock_tuning_terminal_contrast_default">Default</string>
-                <string name="termux_dock_tuning_terminal_contrast_harder">Harder</string>
                 <string name="termux_dock_tuning_terminal_border">Border</string>
-                <string name="termux_dock_tuning_sessions">Opacity</string>
-                <string name="termux_surface_tuning_normalize">Match all surfaces</string>
-                <string name="termux_surface_tuning_clock">Clock</string>
-                <string name="termux_dock_tuning_section_dock">Dock</string>
-                <string name="termux_dock_tuning_section_terminal">Terminal</string>
-                <string name="termux_dock_tuning_section_sessions">Sessions</string>
                 <string name="termux_dock_tuning_section_wallpaper">Wallpaper</string>
                 <string name="termux_dock_tuning_terminal_inner_padding">Inner padding</string>
                 <!-- Docked spends the same knob on the terminal's outer air as well as the gap
@@ -1083,7 +1103,6 @@
                 <string name="termux_surface_tuning_peek_dock_size">Dock size</string>
                 <string name="termux_surface_tuning_peek_dock_icons">Apps per page</string>
                 <string name="termux_surface_tuning_peek_keyboard_height">Keyboard height</string>
-                <string name="termux_surface_tuning_sessions_hint">The sessions drawer only appears while the in-app multiplexer is off. Turn split panes on and the status bar replaces it.</string>
                 <string name="termux_surface_tuning_unsaved_badge">Unsaved</string>
                 <string name="termux_surface_tuning_unsaved_title">Unsaved changes</string>
                 <string name="termux_surface_tuning_unsaved_message">Discard them and put every surface back to how it looked when you opened the editor, or save and close?</string>
@@ -1261,7 +1280,7 @@
     <string name="tool_app_key_inspector">Key inspector</string>
     <string name="tool_terminal_jump_previous_prompt">Jump to previous prompt</string>
     <string name="tool_terminal_jump_next_prompt">Jump to next prompt</string>
-    <string name="tool_appearance_glass_lab">Surface editor</string>
+    <string name="tool_appearance_surface_editor">Surface editor</string>
     <string name="tool_app_open_settings">Open settings</string>
     <string name="tool_app_open_look_and_feel">Look and feel settings</string>
     <string name="tool_app_open_apps_bar">Apps bar settings</string>
@@ -1329,6 +1348,18 @@
     <string name="tool_desc_terminal_search_scrollback">Find text in this pane’s scrollback and jump to a match.</string>
     <string name="terminal_scrollback_search_hint">Search text</string>
     <string name="terminal_find_yanked">Copied selection</string>
+    <!-- The legend card that hangs off the terminal's top-trailing corner while a modal terminal
+         mode is up. Keys first, meaning second, and only the keys that mean something right now. -->
+    <!-- The entry that opens the full keymap from the compact keybind hints. -->
+    <string name="keybind_hint_all_shortcuts">all shortcuts</string>
+    <string name="terminal_mode_hint_search_title">Search scrollback</string>
+    <string name="terminal_mode_hint_search_body">Type to match · ⏎ jump\n↑ ↓ step · ⌫ edit · esc close</string>
+    <string name="terminal_mode_hint_copy_title">Copy mode</string>
+    <string name="terminal_mode_hint_copy_body">h j k l or arrows move · w b words\nn N match · g G ends\nv char · V line · ⌃V block\ny copy · / search again · esc leave</string>
+    <string name="terminal_mode_hint_copy_select_title">Copy mode · selecting</string>
+    <string name="terminal_mode_hint_copy_select_body">Move to extend the selection\ny copy and leave · esc drop it</string>
+    <string name="terminal_mode_hint_selection_title">Text selected</string>
+    <string name="terminal_mode_hint_selection_body">Drag the handles to adjust\nCopy or More… on the bar\nesc or a tap cancels</string>
     <string name="terminal_scrollback_search_row">Row %1$s   %2$s</string>
     <plurals name="terminal_scrollback_search_results">
         <item quantity="one">1 match</item>
@@ -1348,7 +1379,7 @@
     <string name="key_inspector_hint">Press keys. Each event shows the Android key, the binding that claimed it, and the bytes sent.</string>
     <string name="tool_desc_terminal_jump_previous_prompt">Scroll to the previous shell prompt. Needs shell integration.</string>
     <string name="tool_desc_terminal_jump_next_prompt">Scroll to the next shell prompt. Needs shell integration.</string>
-    <string name="tool_desc_appearance_glass_lab">Tune the dock, keyboard, status bar, and terminal surfaces.</string>
+    <string name="tool_desc_appearance_surface_editor">Tune the dock, keyboard, status bar, and terminal surfaces.</string>
     <string name="tool_desc_app_open_settings">Open the launcher settings screen.</string>
     <string name="tool_desc_app_open_look_and_feel">Open the look and feel settings.</string>
     <string name="tool_desc_app_open_apps_bar">Open the apps bar settings.</string>

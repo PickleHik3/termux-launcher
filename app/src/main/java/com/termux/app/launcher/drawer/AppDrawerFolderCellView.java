@@ -1,7 +1,9 @@
 package com.termux.app.launcher.drawer;
 
+import android.content.Context;
 import android.graphics.Color;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -26,7 +28,7 @@ public final class AppDrawerFolderCellView extends AppDrawerAppCellView {
     private final ImageView[] minis = new ImageView[4];
     @Nullable private TextView countBadge;
 
-    public AppDrawerFolderCellView(@NonNull android.content.Context context) {
+    public AppDrawerFolderCellView(@NonNull Context context) {
         super(context);
         removeAllViews();
         mosaic = new FrameLayout(context);
@@ -65,7 +67,7 @@ public final class AppDrawerFolderCellView extends AppDrawerAppCellView {
 
     /** The member-icon mosaic, used as the drag shadow when the tile is picked up. */
     @NonNull
-    public android.view.View mosaicView() {
+    public View mosaicView() {
         return mosaic;
     }
 
@@ -152,7 +154,7 @@ public final class AppDrawerFolderCellView extends AppDrawerAppCellView {
     }
 
     /** Positions one mosaic slot in place, touching layout only when the geometry moved. */
-    private static void applySlotGeometry(@NonNull android.view.View slot, int sizePx,
+    private static void applySlotGeometry(@NonNull View slot, int sizePx,
                                           int leftPx, int topPx) {
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) slot.getLayoutParams();
         if (params.width != sizePx || params.height != sizePx

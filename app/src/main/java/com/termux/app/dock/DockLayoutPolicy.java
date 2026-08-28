@@ -292,9 +292,35 @@ public final class DockLayoutPolicy {
         if (configuredCornerRadiusDp >= 0) {
             return Math.min(safeDensity * configuredCornerRadiusDp, surfaceHeightPx / 2f);
         }
-        return Math.min(safeDensity
-            * TermuxPreferenceConstants.TERMUX_APP.DEFAULT_ROUNDED_SURFACE_CORNER_RADIUS_DP,
+        return Math.min(safeDensity * TermuxAppSharedPreferences.resolveAutoCornerRadiusDp(
+            TermuxAppSharedPreferences.SurfaceSlot.DOCK, true),
             surfaceHeightPx / 2f);
+    }
+
+    /**
+     * The inset that keeps the status bar's bottom row clear of its own rounded corners.
+     *
+     * <p>That row — sessions chip on the left, status widgets on the right — is bottom-gravity and
+     * therefore sits in the surface's bottom corners. Whatever radius rounds those corners eats
+     * into it, so the inset has to follow the radius rather than be a fixed number: half the radius
+     * is the arc's worst-case encroachment over the row's height.</p>
+     *
+     * <p>The two styles start from different places because their radii do. Docked is square at
+     * rest, so its 3dp baseline is the whole story and every bit of radius the user dials in is new
+     * encroachment. Floating is a card already rounded at rest — {@code baselineRadiusPx}, the auto
+     * radius — and its 8dp baseline was measured against exactly that, so only radius beyond the
+     * default is encroachment the baseline does not already answer. A stock Floating surface
+     * therefore keeps the inset it has always had, and a raised radius stops clipping the chips.</p>
+     *
+     * @param radiusPx          the radius actually rounding the row's corners
+     * @param baselineRadiusPx  the radius the fixed baseline was measured against; 0 for Docked
+     */
+    public static int statusBarContentEdgeInsetPx(boolean capsule, float radiusPx,
+                                                  float baselineRadiusPx, float density) {
+        float safeDensity = density > 0f ? density : 1f;
+        float basePx = safeDensity * (capsule ? 8f : 3f);
+        float encroachmentPx = Math.max(0f, radiusPx - Math.max(0f, baselineRadiusPx)) * 0.5f;
+        return Math.round(basePx + encroachmentPx);
     }
 
     /** The stored size preset normalized into 0..1. */

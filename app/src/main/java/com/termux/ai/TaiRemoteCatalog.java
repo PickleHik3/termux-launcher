@@ -8,6 +8,7 @@ import androidx.annotation.NonNull;
 import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -78,5 +79,5 @@ public final class TaiRemoteCatalog {
     }
 
     private static File cacheFile(Context context) { return new File(context.getFilesDir(), "tai/catalog/remote-catalog.json"); }
-    private static byte[] read(InputStream input) throws Exception { java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream(); byte[] buffer = new byte[8192]; int count; while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count); return output.toByteArray(); }
+    private static byte[] read(InputStream input) throws Exception { ByteArrayOutputStream output = new ByteArrayOutputStream(); byte[] buffer = new byte[8192]; int count; while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count); return output.toByteArray(); }
 }

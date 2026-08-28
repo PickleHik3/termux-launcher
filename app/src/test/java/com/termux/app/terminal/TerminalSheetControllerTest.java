@@ -4,14 +4,22 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
+import android.content.Context;
+import android.graphics.Rect;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -24,6 +32,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.ConscryptMode;
 import org.robolectric.util.ReflectionHelpers;
@@ -54,7 +63,6 @@ public class TerminalSheetControllerTest {
         assertTrue(sheet.isOpen());
         assertEquals(1, sheet.depth());
         assertEquals(View.VISIBLE, activity.findViewById(R.id.terminal_sheet_host).getVisibility());
-        assertTrue(activity.isTerminalSheetOpen());
 
         sheet.dismiss();
 
@@ -180,6 +188,159 @@ public class TerminalSheetControllerTest {
             new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL)));
 
         assertEquals("v▏", search.getText().toString());
+    }
+
+    // ------------------------------------------------------------ the seam, driven by a fake host
+
+    @Test
+    public void aStackYieldsThePlanesOnceAndHoldsTheInterceptorUntilItEmpties() {
+        FakeSheetHost host = new FakeSheetHost();
+        TerminalSheetController sheet = new TerminalSheetController(host);
+
+        assertTrue(sheet.show("Load workspace", new TextView(host.context())));
+        assertTrue(sheet.show("Delete “work”?", new TextView(host.context())));
+
+        assertEquals("only the first card takes over from the drawer and the FULL pane",
+            1, host.yields);
+        assertEquals(Boolean.TRUE, host.interceptorActive);
+
+        sheet.dismiss();
+        assertEquals("the plane still holds the slot while a card is up",
+            Boolean.TRUE, host.interceptorActive);
+
+        sheet.dismiss();
+        assertEquals(Boolean.FALSE, host.interceptorActive);
+        assertEquals(View.INVISIBLE, host.plane.getVisibility());
+    }
+
+    /** A confirmation is all buttons; summoning a keyboard for it would just push the terminal around. */
+    @Test
+    public void onlyASheetWithSomewhereToTypeSummonsTheKeyboard() {
+        FakeSheetHost host = new FakeSheetHost();
+        TerminalSheetController sheet = new TerminalSheetController(host);
+
+        sheet.show("Delete “work”?", new TextView(host.context()));
+        assertEquals(0, host.keyboardRequests);
+
+        sheet.show("Workspace name", new TextView(host.context()), false, new NoopSink(), null);
+        assertEquals(1, host.keyboardRequests);
+    }
+
+    /** The plane covers the keyboard too, and those keys are how the sheet is typed into. */
+    @Test
+    public void aTapOnTheKeyboardFallsThroughWhereATapOutsideDismisses() {
+        FakeSheetHost host = new FakeSheetHost();
+        host.keyboardRect.set(0, 600, 400, 800);
+        TerminalSheetController sheet = new TerminalSheetController(host);
+        sheet.show("Workspace name", new TextView(host.context()), false, new NoopSink(), null);
+
+        assertFalse("a DOWN on a key must reach the keyboard",
+            host.plane.dispatchTouchEvent(touch(MotionEvent.ACTION_DOWN, 100f, 700f)));
+        assertTrue(sheet.isOpen());
+
+        assertTrue(host.plane.dispatchTouchEvent(touch(MotionEvent.ACTION_DOWN, 100f, 100f)));
+        assertTrue("dismissed on the finished tap, never on DOWN", sheet.isOpen());
+        assertTrue(host.plane.dispatchTouchEvent(touch(MotionEvent.ACTION_UP, 100f, 100f)));
+        assertFalse(sheet.isOpen());
+    }
+
+    @Test
+    public void aCardWearsTheHostsGlassAndFrost() {
+        FakeSheetHost host = new FakeSheetHost();
+        TerminalSheetController sheet = new TerminalSheetController(host);
+
+        sheet.show("Sessions", new TextView(host.context()));
+
+        assertSame(host.glass, sheet.topCard().getBackground());
+        assertEquals(1, host.frostRequests);
+        assertEquals("the host frosted the plane, so the live blur rests",
+            View.GONE, host.blur.getVisibility());
+    }
+
+    @NonNull
+    private static MotionEvent touch(int action, float x, float y) {
+        return MotionEvent.obtain(0L, 0L, action, x, y, 0);
+    }
+
+    private static final class NoopSink implements TerminalSheetController.TextSink {
+        @Override public void onText(@NonNull String text) { }
+        @Override public void onBackspace() { }
+        @Override public boolean onCommit() { return false; }
+    }
+
+    /** The plane's views on a bare root, and a record of every ask the controller made. */
+    private static final class FakeSheetHost implements TerminalSheetController.Host {
+        final FrameLayout root;
+        final FrameLayout plane;
+        final ImageView frost;
+        final View blur;
+        final Drawable glass = new ColorDrawable(0xFF102030);
+        final Rect keyboardRect = new Rect();
+        int yields;
+        int keyboardRequests;
+        int frostRequests;
+        @Nullable Boolean interceptorActive;
+
+        FakeSheetHost() {
+            Context context = RuntimeEnvironment.getApplication();
+            root = new FrameLayout(context);
+            plane = new FrameLayout(context);
+            plane.setId(R.id.terminal_sheet_host);
+            frost = new ImageView(context);
+            frost.setId(R.id.terminal_sheet_wallpaper_backdrop);
+            blur = new View(context);
+            blur.setId(R.id.terminal_sheet_blur);
+            FrameLayout stack = new FrameLayout(context);
+            stack.setId(R.id.terminal_sheet_stack);
+            plane.addView(frost);
+            plane.addView(blur);
+            plane.addView(stack);
+            root.addView(plane);
+            root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
+            root.layout(0, 0, 400, 800);
+        }
+
+        @NonNull @Override public Context context() {
+            return root.getContext();
+        }
+
+        @Nullable @Override public <T extends View> T findView(int viewId) {
+            return root.findViewById(viewId);
+        }
+
+        @Override public void yieldCompetingPlanes() {
+            yields++;
+        }
+
+        @Override public void ensureInAppTypingKeyboard() {
+            keyboardRequests++;
+        }
+
+        @Override public void setSheetInterceptorActive(boolean active) {
+            interceptorActive = active;
+        }
+
+        @Override public boolean isPointOnInAppKeyboard(float rawX, float rawY) {
+            return keyboardRect.contains(Math.round(rawX), Math.round(rawY));
+        }
+
+        @Override public boolean applyWallpaperFrost(@NonNull ImageView frost) {
+            frostRequests++;
+            return true;
+        }
+
+        @NonNull @Override public Drawable sheetSurface() {
+            return glass;
+        }
+
+        @Override public boolean dockBoundsOnScreen(@NonNull Rect out) {
+            return false;
+        }
+
+        @Override public boolean isReducedMotionEnabled() {
+            return true;
+        }
     }
 
     @Nullable

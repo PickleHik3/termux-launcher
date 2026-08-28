@@ -969,6 +969,43 @@ public final class TermuxInAppKeyboard {
         mKeyboardView.setKeybindHintOverrides(overrides);
     }
 
+    /**
+     * Marks the cap that carries {@code token} — the {@code ?} that opens the full keymap — as the
+     * invitation, so it breathes harder than the bound caps lit around it. Null clears it.
+     *
+     * <p>Resolved here rather than in the view for the same reason the lighting is: only this side
+     * knows which position on the live layout a binding token sits on.
+     */
+    public void setKeybindHintPulse(@Nullable String token) {
+        if (mDestroyed || mKeyboardView == null)
+            return;
+        KeyboardData layout = getSelectedLayoutData();
+        if (token == null || layout == null) {
+            mKeyboardView.setKeybindHintPulseToken(null);
+            return;
+        }
+        for (int rowIndex = 0; rowIndex < layout.rows.size(); rowIndex++) {
+            KeyboardData.Row row = layout.rows.get(rowIndex);
+            for (int keyIndex = 0; keyIndex < row.keys.size(); keyIndex++) {
+                if (!keyCarriesToken(row.keys.get(keyIndex), token))
+                    continue;
+                mKeyboardView.setKeybindHintPulseToken(rowIndex + ":" + keyIndex);
+                return;
+            }
+        }
+        mKeyboardView.setKeybindHintPulseToken(null);
+    }
+
+    /** Whether any of a key's nine slots sends {@code token}. */
+    private static boolean keyCarriesToken(KeyboardData.Key key, @NonNull String token) {
+        for (int slot = 0; slot < 9; slot++) {
+            juloo.keyboard2.KeyValue value = key.getKeyValue(slot);
+            if (value != null && token.equals(keybindHintToken(value)))
+                return true;
+        }
+        return false;
+    }
+
     @Nullable
     private static Keyboard2View.KeyColorOverride hintOverrideForKey(
             KeyboardData.Key key, java.util.Map<String, Integer> litTokens,

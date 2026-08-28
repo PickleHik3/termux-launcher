@@ -129,13 +129,20 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
             Bitmap.Config.ARGB_8888);
     }
 
+    @Nullable
     @Override
-    public boolean isWallpaperBlurFrameInUse(@Nullable Bitmap frame) {
+    public Bitmap preBlur(@NonNull Bitmap sourceBitmap, int blurRadiusDp) {
+        // No renderer here: the cache's own frame bookkeeping is what these tests drive.
+        return blurRadiusDp <= 0 ? sourceBitmap : sourceBitmap.copy(Bitmap.Config.ARGB_8888, false);
+    }
+
+    @Override
+    public boolean isFrameInUse(@Nullable Bitmap frame) {
         return frame != null && inUse.contains(frame);
     }
 
     @Override
-    public void onWallpaperBlurCacheCleared() {
+    public void onCacheCleared() {
         cacheClearedCallbacks++;
     }
 

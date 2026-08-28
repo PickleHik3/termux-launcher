@@ -473,6 +473,7 @@ final class KittyGraphicsProtocol {
                     reply(command, "EINVAL:image placement failed", true, false, effectiveId);
                     return;
                 }
+                markPlaced(effectiveId);
                 reply(command, "OK", false, false, effectiveId);
             });
         });
@@ -500,6 +501,7 @@ final class KittyGraphicsProtocol {
                 return;
             }
             store.putVirtualPlacement(entry, placement);
+            markPlaced(id);
             reply(command, "OK", false, false, id);
             return;
         } else if (command.placeholder != 0) {
@@ -590,6 +592,7 @@ final class KittyGraphicsProtocol {
                         reply(command, "EINVAL:image placement failed", true, false, id);
                         return;
                     }
+                    markPlaced(id);
                     reply(command, "OK", false, false, id);
                 });
             });
@@ -613,6 +616,11 @@ final class KittyGraphicsProtocol {
         KittyImageStore.VirtualPlacement placement = KittyImageStore.virtualPlacement(entry, placementId);
         Bitmap bitmap = KittyImageStore.frameBitmap(entry, entry.currentFrame + 1);
         if (placement == null || bitmap == null) return false;
+        // The renderer is about to draw this image through a placeholder cell, which is the only
+        // moment a virtually-placed image is provably on a screen. Marking it here rather than at
+        // transmission is what keeps the sweep off an animation that is still loading: frames
+        // arrive before the shell has printed the placeholder grid that will display them.
+        entry.everPlaced = true;
         out.bitmap = bitmap;
         out.sourceX = placement.sourceX;
         out.sourceY = placement.sourceY;
@@ -646,8 +654,11 @@ final class KittyGraphicsProtocol {
         final int frameCountAtAccept = KittyImageStore.frameCount(initial);
         final int editNumber = (command.displayRows >= 1 && command.displayRows <= frameCountAtAccept)
             ? command.displayRows : 0;
-        final int estimate = (int) Math.min(Integer.MAX_VALUE, (long) initial.width * initial.height * 4L);
-        if (editNumber == 0 && store.wouldExceedFrameLimits(initial, estimate)) {
+        // Only the count is decided here. The byte quota is settled at commit, where the pixels are
+        // actually allocated and where a full quota can thin this animation instead of refusing the
+        // rest of it — a queued frame holds nothing but its compressed payload, which
+        // MAX_TRANSMITTED_BYTES already bounds.
+        if (editNumber == 0 && store.wouldExceedFrameCount(initial)) {
             reply(command, "ENOSPC:frame store is full", true, false, id);
             return;
         }
@@ -655,6 +666,11 @@ final class KittyGraphicsProtocol {
             reply(command, "ENOSPC:too much image data pending", true, false, id);
             return;
         }
+        // The gate above passed, so this frame now owns that slice of the quota until it commits
+        // or fails. Every return below releases it exactly once; an edit replaces pixels in place
+        // and so costs nothing new.
+        final boolean reservedFrame = editNumber == 0;
+        if (reservedFrame) store.reserveFrame(initial);
         final int transmittedBytes = data.length;
         decodeBytesInFlight += transmittedBytes;
 
@@ -695,11 +711,13 @@ final class KittyGraphicsProtocol {
                 decodeBytesInFlight = Math.max(0, decodeBytesInFlight - transmittedBytes);
                 KittyImageStore.Entry entry = store.get(id);
                 if (decodeError != null || entry == null) {
+                    if (reservedFrame) store.releaseFrame(initial);
                     reply(command, decodeError != null ? decodeError : "ENOENT:image not found",
                         true, false, id);
                     return;
                 }
                 if (!frameRectFits(entry, command.srcX, command.srcY, frameWidth, frameHeight)) {
+                    if (reservedFrame) store.releaseFrame(initial);
                     reply(command, "EINVAL:frame rectangle out of bounds", true, false, id);
                     return;
                 }
@@ -713,6 +731,7 @@ final class KittyGraphicsProtocol {
                 }
                 if ((targetNumber != 0 || (command.displayColumns >= 1 && command.displayColumns <= frameCount))
                     && base == null) {
+                    if (reservedFrame) store.releaseFrame(initial);
                     reply(command, "ENOENT:base frame data unavailable", true, false, id);
                     return;
                 }
@@ -748,6 +767,9 @@ final class KittyGraphicsProtocol {
                     final Bitmap frameBitmap = composed;
                     final String finalError = composeError;
                     output.postTerminalUpdate(() -> {
+                        // From here the frame either takes its bytes for real or takes none, so
+                        // the reservation has done its job either way.
+                        if (reservedFrame) store.releaseFrame(initial);
                         KittyImageStore.Entry live = store.get(id);
                         if (finalError != null || live != entry) {
                             reply(command, finalError != null ? finalError : "ENOENT:image not found",
@@ -763,6 +785,11 @@ final class KittyGraphicsProtocol {
                         } else {
                             int gap = command.z > 0 ? command.z
                                 : command.z < 0 ? 0 : KittyImageStore.DEFAULT_FRAME_GAP_MS;
+                            if (!store.makeRoomForFrame(entry, byteCount,
+                                    imageId -> !emulator.kittyPlacementsFor(imageId).isEmpty())) {
+                                reply(command, "ENOSPC:frame store is full", true, false, id);
+                                return;
+                            }
                             store.addFrame(entry, frameBitmap, byteCount, gap);
                         }
                         reply(command, "OK", false, false, id);
@@ -900,10 +927,52 @@ final class KittyGraphicsProtocol {
 
     private static final Paint FRAME_PAINT = new Paint(Paint.FILTER_BITMAP_FLAG);
     private boolean animationTickScheduled;
+    /**
+     * Whether this terminal is on screen. Playback is suspended, never discarded, while it is not:
+     * an animation that scrolled out of view or whose pane went away keeps every frame and its
+     * place in them, and picks up where it would have been when it comes back.
+     */
+    private boolean animationsVisible = true;
+    /**
+     * One runnable for the life of the protocol. It is the token the scheduled tick is posted
+     * under, so the tick can be withdrawn — and re-posting a new lambda every frame allocated a
+     * pair of objects per tick for nothing.
+     */
+    private final Runnable animationTickRunnable = this::animationTick;
+
+    /**
+     * Report whether this terminal's output can be seen. Suspending stops the tick outright: the
+     * scheduler has no notion of what is on display, so an off-screen animation otherwise keeps
+     * flipping frames — and compositing them — for as long as the process lives.
+     */
+    void setAnimationsVisible(boolean visible) {
+        if (animationsVisible == visible) return;
+        animationsVisible = visible;
+        if (visible) {
+            resumeAnimations();
+        } else {
+            cancelAnimationTick();
+        }
+    }
+
+    private void cancelAnimationTick() {
+        if (!animationTickScheduled) return;
+        animationTickScheduled = false;
+        output.cancelTerminalUpdateDelayed(animationTickRunnable);
+    }
+
+    /** Fast-forward every animation to where it would have been, composite once, and resume. */
+    private void resumeAnimations() {
+        long now = SystemClock.uptimeMillis();
+        for (KittyImageStore.Entry entry : store.entries()) {
+            if (KittyImageStore.catchUpAnimation(entry, now)) renderAnimationFrame(entry);
+        }
+        scheduleAnimationTick();
+    }
 
     /** Arm one delayed tick for the earliest due frame across all running animations. */
     private void scheduleAnimationTick() {
-        if (animationTickScheduled) return;
+        if (animationTickScheduled || !animationsVisible) return;
         long earliest = Long.MAX_VALUE;
         for (KittyImageStore.Entry entry : store.entries()) {
             long deadline = KittyImageStore.nextAnimationDeadline(entry);
@@ -912,16 +981,89 @@ final class KittyGraphicsProtocol {
         if (earliest == Long.MAX_VALUE) return;
         long delay = Math.min(60_000, Math.max(1, earliest - SystemClock.uptimeMillis()));
         animationTickScheduled = true;
-        output.postTerminalUpdateDelayed(this::animationTick, delay);
+        output.postTerminalUpdateDelayed(animationTickRunnable, delay);
     }
 
     private void animationTick() {
         animationTickScheduled = false;
         long now = SystemClock.uptimeMillis();
         for (KittyImageStore.Entry entry : store.entries()) {
-            if (KittyImageStore.advanceAnimation(entry, now)) renderAnimationFrame(entry);
+            // The frame index advances whether or not anything can see it — that is what keeps a
+            // scrolled-away animation in step, and keeps the scheduler from finding a deadline
+            // permanently in the past and spinning on it. Only the composite, which is the
+            // expensive half, waits until there is a cell on screen to composite into.
+            if (KittyImageStore.advanceAnimation(entry, now) && emulator.isKittyImageOnScreen(entry.id))
+                renderAnimationFrame(entry);
         }
         scheduleAnimationTick();
+    }
+
+    /**
+     * Release everything this protocol holds when its session is over: the pending tick first,
+     * because it is posted on the main looper and reaches the whole terminal through this object,
+     * then the stored pixels. Nothing else can be reading them once the session is finished, so
+     * the bitmaps are recycled rather than left to the collector.
+     */
+    void shutdown() {
+        cancelAnimationTick();
+        upload = null;
+        for (KittyImageStore.Entry entry : store.entries()) {
+            if (entry.bitmap != null && !entry.bitmap.isRecycled()) entry.bitmap.recycle();
+            for (KittyImageStore.Frame frame : entry.frames) {
+                if (frame.bitmap != null && !frame.bitmap.isRecycled()) frame.bitmap.recycle();
+            }
+        }
+        store.clear();
+    }
+
+    /**
+     * Drop the frames of every animation nothing can display any more, keeping the root image so a
+     * later {@code a=p} still works — kitty's behaviour, and what makes a {@code clear} actually
+     * hand the memory back. Only images that have been placed at least once are in scope: one that
+     * is still being transmitted has no placement yet and must keep the frames it is collecting.
+     */
+    void dropFramesOfUnreachableImages() {
+        // The placeholder scan walks the whole transcript, so it is only worth asking when there
+        // is an animation placed that way with frames still to reclaim — and then only once.
+        Boolean placeholderCellsRemain = null;
+        for (KittyImageStore.Entry entry : store.entries()) {
+            if (entry.frames.isEmpty() || !entry.everPlaced) continue;
+            if (!entry.virtualPlacements.isEmpty()) {
+                if (placeholderCellsRemain == null)
+                    placeholderCellsRemain = emulator.hasAnyKittyPlaceholderCell();
+                if (placeholderCellsRemain) continue;
+            } else if (!emulator.kittyPlacementsFor(entry.id).isEmpty()) {
+                continue;
+            }
+            store.dropFrames(entry);
+        }
+        cancelAnimationTickIfNothingAnimates();
+    }
+
+    /**
+     * Give up every animation, keeping the still image each one rests on. Frames are the one thing
+     * a terminal holds that it can lose without losing content: a logo stops moving where deleting
+     * the image would leave blank cells, and being killed would lose the session. Unlike the
+     * visibility gate this is not reversible — the sender has long exited and cannot retransmit —
+     * so it belongs to real memory pressure and nothing less.
+     */
+    void dropAllAnimationFrames() {
+        for (KittyImageStore.Entry entry : store.entries()) {
+            if (!entry.frames.isEmpty()) store.dropFrames(entry);
+        }
+        cancelAnimationTick();
+    }
+
+    private void markPlaced(long imageId) {
+        KittyImageStore.Entry entry = store.get(imageId);
+        if (entry != null) entry.everPlaced = true;
+    }
+
+    private void cancelAnimationTickIfNothingAnimates() {
+        for (KittyImageStore.Entry entry : store.entries()) {
+            if (KittyImageStore.nextAnimationDeadline(entry) >= 0) return;
+        }
+        cancelAnimationTick();
     }
 
     /**
@@ -1151,6 +1293,21 @@ final class KittyGraphicsProtocol {
         resetUploadAndDecodes();
         store.clear();
         emulator.deleteAllKittyGraphics();
+    }
+
+    /**
+     * Move between the normal and alternate screens. This is not a reset: the two buffers own their
+     * own cells, so an image displayed on one is already invisible from the other, and the
+     * alternate buffer is blanked as it is entered. Destroying the store here took the images of
+     * whatever was on the normal screen with it — running anything full-screen, a multiplexer, an
+     * editor, a pager, left a hole where the logo above the prompt had been, and exiting did not
+     * bring it back because there was nothing left to bring back.
+     *
+     * <p>A chunked transmission is the one thing that must not survive: half an image addressed to
+     * the screen being left is not the start of an image on the screen being entered.</p>
+     */
+    void screenSwitched() {
+        resetUploadAndDecodes();
     }
 
     void screenCleared() {

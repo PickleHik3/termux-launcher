@@ -20,6 +20,7 @@ import com.termux.app.launcher.model.PinnedIconOverride;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.util.Calendar;
+import java.util.List;
 
 public final class LauncherIconResolver {
     private static final int COMPOSE_SIZE_PX = 192;
@@ -259,7 +260,7 @@ public final class LauncherIconResolver {
     @Nullable
     private Drawable loadSelectedPackLayer(
         @NonNull String packageName,
-        @NonNull java.util.List<String> names,
+        @NonNull List<String> names,
         @NonNull AppRef ref,
         int salt
     ) {

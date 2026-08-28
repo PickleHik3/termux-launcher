@@ -62,14 +62,30 @@ public final class DockIconCache {
         @Nullable Drawable defaultIcon();
     }
 
+    /**
+     * Where an entry's raw artwork comes from. Catalogue entries carry identity rather than pixels,
+     * so the artwork is fetched at render time — see {@link LauncherIconStore}.
+     */
+    public interface ArtworkSource {
+        @Nullable Drawable artwork(@NonNull LauncherAppEntry entry);
+    }
+
     @NonNull private final Resources resources;
     @NonNull private final DefaultIconSource defaultIconSource;
+    @Nullable private final ArtworkSource artworkSource;
     @NonNull private final LruCache<String, Drawable> cache;
 
     public DockIconCache(@NonNull Resources resources, int memoryClassMb,
                          @NonNull DefaultIconSource defaultIconSource) {
+        this(resources, memoryClassMb, defaultIconSource, null);
+    }
+
+    public DockIconCache(@NonNull Resources resources, int memoryClassMb,
+                         @NonNull DefaultIconSource defaultIconSource,
+                         @Nullable ArtworkSource artworkSource) {
         this.resources = resources;
         this.defaultIconSource = defaultIconSource;
+        this.artworkSource = artworkSource;
         this.cache = new LruCache<String, Drawable>(resolveBudgetBytes(memoryClassMb)) {
             @Override
             protected int sizeOf(String key, Drawable value) {
@@ -94,11 +110,7 @@ public final class DockIconCache {
 
     /** One eighth of the per-app heap, clamped into [8MB, 32MB]. */
     public static int resolveBudgetBytes(int memoryClassMb) {
-        long heapBytes = (long) Math.max(0, memoryClassMb) * 1024L * 1024L;
-        long budget = heapBytes / HEAP_DIVISOR;
-        if (budget < MIN_BYTES) budget = MIN_BYTES;
-        if (budget > MAX_BYTES) budget = MAX_BYTES;
-        return (int) budget;
+        return HeapBudget.of(memoryClassMb, HEAP_DIVISOR, MIN_BYTES, MAX_BYTES);
     }
 
     /**
@@ -130,7 +142,7 @@ public final class DockIconCache {
      */
     @Nullable
     public Drawable icon(@NonNull LauncherAppEntry entry, int sizePx) {
-        Drawable raw = entry.icon != null ? entry.icon : defaultIconSource.defaultIcon();
+        Drawable raw = rawArtwork(entry);
         if (sizePx <= 0) {
             return raw;
         }
@@ -147,6 +159,17 @@ public final class DockIconCache {
             cache.put(key, built);
         }
         return built != null ? built : raw;
+    }
+
+    /**
+     * The untreated artwork for an entry: its own if it carries one, then the store's, then the
+     * system default — so a caller always has something to draw.
+     */
+    @Nullable
+    public Drawable rawArtwork(@NonNull LauncherAppEntry entry) {
+        if (entry.icon != null) return entry.icon;
+        Drawable stored = artworkSource == null ? null : artworkSource.artwork(entry);
+        return stored != null ? stored : defaultIconSource.defaultIcon();
     }
 
     /** Drops every rendered icon; the next bind re-renders at the current treatment. */

@@ -1,6 +1,8 @@
 package com.termux.launcherctl;
 
+import android.app.Notification;
 import android.content.ComponentName;
+import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -687,14 +689,14 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
     @Override
     public boolean openPinned(@NonNull String key) {
         StatusBarNotification sbn = activeNotification(key);
-        android.app.Notification notification = sbn == null ? null : sbn.getNotification();
+        Notification notification = sbn == null ? null : sbn.getNotification();
         String packageName = sbn == null
             ? (mPinned.containsKey(key) ? mPinned.get(key).packageName : null)
             : sbn.getPackageName();
         if (notification != null && notification.contentIntent != null) {
             try {
                 notification.contentIntent.send();
-                if ((notification.flags & android.app.Notification.FLAG_AUTO_CANCEL) != 0) {
+                if ((notification.flags & Notification.FLAG_AUTO_CANCEL) != 0) {
                     dismissPinned(key, true);
                 }
                 return true;
@@ -704,13 +706,13 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
             }
         }
         if (packageName == null) return false;
-        android.content.Intent launch =
+        Intent launch =
             getPackageManager().getLaunchIntentForPackage(packageName);
         if (launch == null) {
             Logger.logWarn(LOG_TAG, "No way to open " + packageName + " for a pinned notification");
             return false;
         }
-        launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
             startActivity(launch);
             return true;

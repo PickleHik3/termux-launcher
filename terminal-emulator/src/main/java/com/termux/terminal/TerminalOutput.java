@@ -60,4 +60,13 @@ public abstract class TerminalOutput {
      */
     public void postTerminalUpdateDelayed(Runnable update, long delayMillis) {
     }
+
+    /**
+     * Withdraw a pending {@link #postTerminalUpdateDelayed} of exactly this runnable. A delayed
+     * animation tick keeps its whole terminal — emulator, buffers, every stored frame — alive on
+     * the looper queue and re-arms itself when it runs, so suspending or tearing one down has to
+     * be able to take it back off the queue. The default has nothing scheduled to withdraw.
+     */
+    public void cancelTerminalUpdateDelayed(Runnable update) {
+    }
 }

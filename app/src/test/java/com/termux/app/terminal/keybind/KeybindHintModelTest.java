@@ -1,6 +1,7 @@
 package com.termux.app.terminal.keybind;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -297,5 +298,33 @@ public class KeybindHintModelTest {
         assertEquals("← ↑", chips.get(1).caps);
         assertEquals("P", chips.get(2).caps);
         assertEquals("palette", chips.get(2).label);
+    }
+
+    /**
+     * The strip's own tokens and nothing else — the keyboard's lighting under a held prefix is
+     * built from this, so it cannot disagree with what the strip prints.
+     */
+    @Test
+    public void stripLitTokens_coverTheStripsChipsOnly() {
+        Map<String, Hint> hints = new LinkedHashMap<>();
+        hints.put("v", new Hint("pane.split_vertical", null));
+        hints.put("c", new Hint("window.new", null));
+        hints.put("left", new Hint("window.previous", null));
+        hints.put("u", new Hint("terminal.hints", null));
+
+        Map<String, Integer> lit = KeybindHintModel.stripLitTokens(hints, false, group -> 0xFF00FF00);
+
+        assertTrue(lit.containsKey("v"));
+        assertTrue(lit.containsKey("c"));
+        assertTrue(lit.containsKey("left"));
+        assertFalse("a bind no chip prints is not the strip's to light", lit.containsKey("u"));
+    }
+
+    @Test
+    public void prefixLabel_spellsTheChordAHumanHolds() {
+        assertEquals("Ctrl+Alt", KeybindHintModel.prefixLabel("ctrl+alt+"));
+        assertEquals("Ctrl+Alt+Shift", KeybindHintModel.prefixLabel("ctrl+alt+shift+"));
+        // A leader keeps the mark that says it is waiting for a second key.
+        assertEquals("Ctrl+Space \u25b8", KeybindHintModel.prefixLabel("ctrl+space>"));
     }
 }

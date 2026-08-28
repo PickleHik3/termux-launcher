@@ -12,13 +12,21 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.TermuxService;
+import com.termux.app.terminal.rename.TerminalRenameTarget;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.settings.properties.TermuxSharedProperties;
 import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalView;
 
+import org.robolectric.RuntimeEnvironment;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -37,6 +45,21 @@ class FakeTerminalHost implements TerminalHost {
 
     /** Every host method the client under test called, in order, by name. */
     final List<String> calls = new ArrayList<>();
+
+    static Context testContext() {
+        return RuntimeEnvironment.getApplication();
+    }
+
+    /** Properties parsed from {@code lines}, written to a throwaway file as the real loader wants. */
+    static TermuxSharedProperties testProperties(String... lines) throws IOException {
+        File file = File.createTempFile("termux-host", ".properties");
+        Files.write(file.toPath(), String.join("\n", lines).getBytes(StandardCharsets.UTF_8));
+        return new TermuxSharedProperties(testContext(), "test",
+            Collections.singletonList(file.getAbsolutePath()),
+            TermuxPropertyConstants.TERMUX_APP_PROPERTIES_LIST,
+            new TermuxSharedProperties.SharedPropertiesParserClient()) {
+        };
+    }
 
     final Context context;
     final TermuxSharedProperties properties;
@@ -230,6 +253,13 @@ class FakeTerminalHost implements TerminalHost {
 
     @Override public void setDrawerLocked(boolean locked) {
         drawerLocked = locked;
+    }
+
+    /** The legend the terminal is currently showing, or null while no mode is up. */
+    public TerminalModeHintCard.Mode modeHint;
+
+    @Override public void showTerminalModeHint(TerminalModeHintCard.Mode mode) {
+        modeHint = mode;
     }
 
     @Override public void toggleTerminalToolbar() {
@@ -743,8 +773,8 @@ class FakeTerminalHost implements TerminalHost {
         return cursorTrailEnabled;
     }
 
-    @Override public void openGlassLab() {
-        record("openGlassLab");
+    @Override public void openSurfaceEditor() {
+        record("openSurfaceEditor");
     }
 
     @Override public void updateWindowBackgroundForCurrentSession() {

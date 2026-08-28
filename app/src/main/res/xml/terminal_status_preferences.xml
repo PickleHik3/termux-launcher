@@ -52,7 +52,7 @@
             app:title="@string/settings_clock_style_title"
             app:entries="@array/termux_top_pane_clock_style_entries"
             app:entryValues="@array/termux_top_pane_clock_style_values"
-            app:defaultValue="flip"
+            app:defaultValue="slab"
             app:useSimpleSummaryProvider="true" />
         <com.termux.app.fragments.settings.SegmentedPillPreference
             app:key="top_pane_clock_alignment"

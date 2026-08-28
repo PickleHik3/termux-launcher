@@ -4,6 +4,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.LauncherActivityInfo;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageInfo;
@@ -20,9 +21,12 @@ import android.os.UserManager;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.launcher.icon.DockIconCache;
+import com.termux.app.launcher.icon.LauncherIconStore;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -45,6 +49,7 @@ public final class LauncherAppDataProvider {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = newIdleFriendlyExecutor();
     private final LauncherIconResolver iconResolver;
+    private final LauncherIconStore iconStore;
     private List<LauncherAppEntry> cachedApps = Collections.emptyList();
     private final Map<String, LauncherAppEntry> cachedById = new LinkedHashMap<>();
     private final Map<String, LauncherAppEntry> cachedFirstByPackage = new HashMap<>();
@@ -60,6 +65,37 @@ public final class LauncherAppDataProvider {
     private LauncherAppDataProvider(@NonNull Context context) {
         this.context = context.getApplicationContext();
         this.iconResolver = new LauncherIconResolver(this.context);
+        this.iconStore = new LauncherIconStore(
+            this.context.getResources(),
+            DockIconCache.memoryClassMb(this.context),
+            ref -> iconResolver.resolveDetailed(ref, null, null).drawable);
+    }
+
+    /**
+     * Where an app's raw artwork lives. Catalogue entries carry identity, not pixels — see
+     * {@link LauncherIconStore} — so anything that wants to draw an app's own icon asks here.
+     */
+    @NonNull
+    public LauncherIconStore icons() {
+        return iconStore;
+    }
+
+    /**
+     * The provider if one has already been built, and null otherwise. Clearing a cache is not a
+     * reason to construct the thing that owns it: there is nothing held to clear until something
+     * has asked for artwork, and building a catalogue provider as a side effect of an invalidation
+     * pulls the whole icon-resolution stack up with it.
+     */
+    @Nullable
+    public static synchronized LauncherAppDataProvider peekInstance() {
+        return instance;
+    }
+
+    /** Shorthand for {@code getInstance(context).icons().artwork(entry)}. */
+    @Nullable
+    public static Drawable artworkFor(@NonNull Context context,
+                                      @Nullable LauncherAppEntry entry) {
+        return getInstance(context).icons().artwork(entry);
     }
 
     @NonNull
@@ -309,12 +345,15 @@ public final class LauncherAppDataProvider {
                 changedPackages, ref, label, times.lastUpdateEpochMs);
             if (entry == null) {
                 LauncherIconResolver.ResolvedIcon resolvedIcon = iconResolver.resolveDetailed(ref, null, null);
-                Drawable icon = resolvedIcon.drawable;
+                // Resolved on this worker, so the first paint is as warm as it ever was — but the
+                // pixels go to the budgeted store rather than onto the entry, which would keep one
+                // icon per installed app alive for the life of the process.
+                iconStore.prime(ref, resolvedIcon.drawable);
                 int category = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                     && info.applicationInfo != null
                     ? gameNormalizedCategory(info.applicationInfo)
-                    : android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED;
-                entry = new LauncherAppEntry(ref, label, icon,
+                    : ApplicationInfo.CATEGORY_UNDEFINED;
+                entry = new LauncherAppEntry(ref, label, null,
                     resolvedIcon.iconPackArtwork, category, times.firstInstallEpochMs);
             }
             snapshot.apps.add(entry);
@@ -458,10 +497,10 @@ public final class LauncherAppDataProvider {
                 // Resolve icon-pack and per-app choices for the exact profile, while keeping the
                 // LauncherApps-provided profile icon as the system fallback.
                 LauncherIconResolver.ResolvedIcon resolvedIcon = iconResolver.resolveDetailed(ref, null, icon);
-                icon = resolvedIcon.drawable;
+                iconStore.prime(ref, resolvedIcon.drawable);
                 EntryMetadata metadata = readProfileMetadata(activity, Build.VERSION.SDK_INT);
                 addEntry(snapshot, packageManager, defaultComponentsByPackage,
-                    new LauncherAppEntry(ref, label, icon, resolvedIcon.iconPackArtwork,
+                    new LauncherAppEntry(ref, label, null, resolvedIcon.iconPackArtwork,
                         metadata.applicationCategory, metadata.firstInstallTimeEpochMs));
             }
         } catch (SecurityException ignored) {
@@ -492,10 +531,10 @@ public final class LauncherAppDataProvider {
 
     @NonNull
     static EntryMetadata readProfileMetadata(@NonNull LauncherActivityInfo activity, int sdkInt) {
-        int category = android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED;
+        int category = ApplicationInfo.CATEGORY_UNDEFINED;
         if (sdkInt >= Build.VERSION_CODES.O) {
             try {
-                android.content.pm.ApplicationInfo applicationInfo =
+                ApplicationInfo applicationInfo =
                     activity.getApplicationInfo();
                 if (applicationInfo != null) category = gameNormalizedCategory(applicationInfo);
             } catch (Throwable ignored) {
@@ -522,11 +561,11 @@ public final class LauncherAppDataProvider {
      * Pre-category-API games declare {@code FLAG_IS_GAME} instead of {@code CATEGORY_GAME}; the
      * flag is the same signal, so it fills in only when the declared category is undefined.
      */
-    static int gameNormalizedCategory(@NonNull android.content.pm.ApplicationInfo applicationInfo) {
+    static int gameNormalizedCategory(@NonNull ApplicationInfo applicationInfo) {
         int category = applicationInfo.category;
-        if (category == android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED
-            && (applicationInfo.flags & android.content.pm.ApplicationInfo.FLAG_IS_GAME) != 0)
-            return android.content.pm.ApplicationInfo.CATEGORY_GAME;
+        if (category == ApplicationInfo.CATEGORY_UNDEFINED
+            && (applicationInfo.flags & ApplicationInfo.FLAG_IS_GAME) != 0)
+            return ApplicationInfo.CATEGORY_GAME;
         return category;
     }
 
@@ -562,7 +601,7 @@ public final class LauncherAppDataProvider {
 
     // UserHandle.getIdentifier() is @SystemApi — reachable only via reflection from app code.
     // Resolve once; any failure (hidden-API policy, vendor mismatch) degrades to -1 forever.
-    @Nullable private static java.lang.reflect.Method sGetIdentifierMethod;
+    @Nullable private static Method sGetIdentifierMethod;
     private static boolean sGetIdentifierResolved;
 
     public static int userIdOf(@NonNull UserHandle userHandle) {

@@ -51,7 +51,12 @@ public final class GlassRimDrawable extends Drawable {
     public void draw(@NonNull Canvas canvas) {
         Rect bounds = getBounds();
         if (bounds.isEmpty()) return;
-        mRim.draw(canvas, bounds.left, bounds.top, bounds.right, bounds.bottom, mRadiusPx,
+        // Against the bounds it is actually drawing into: a pane a few rows tall would otherwise
+        // get four arcs of the window's radius meeting in the middle, with no straight edge left
+        // between them, and the rim would read as a lozenge drawn over a rectangular slab.
+        float radiusPx = com.termux.app.terminal.PaneShape.radiusForBounds(mRadiusPx,
+            bounds.width(), bounds.height());
+        mRim.draw(canvas, bounds.left, bounds.top, bounds.right, bounds.bottom, radiusPx,
             -1f, mAlpha / 255f);
     }
 

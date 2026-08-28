@@ -71,6 +71,13 @@ public final class TerminalFindCoordinator implements TerminalFindController.Hos
         /** Told what was yanked, so the host can say so however it says things. */
         void onYanked(@NonNull String text);
 
+        /**
+         * The legend for the mode the session is in, or {@code null} once it is over. A session
+         * changes what every key means twice — typing a query, then vim over the transcript — and
+         * the strip has room for three words about it.
+         */
+        void showModeHint(@Nullable com.termux.app.terminal.TerminalModeHintCard.Mode mode);
+
         boolean isReducedMotionEnabled();
     }
 
@@ -134,6 +141,7 @@ public final class TerminalFindCoordinator implements TerminalFindController.Hos
             view.bind(model.query(), model.counter(), modeTag(model), hint(model),
                 model.mode() == TerminalFindModel.Mode.TYPING);
         }
+        host.showModeHint(hintFor(model));
         TerminalView terminalView = pane;
         if (terminalView == null) return;
         applyOverlay(model);
@@ -144,6 +152,7 @@ public final class TerminalFindCoordinator implements TerminalFindController.Hos
 
     @Override
     public void onFindEnded(@Nullable String yankedText) {
+        host.showModeHint(null);
         host.installFindInterceptor(null);
         TerminalView terminalView = pane;
         if (terminalView != null) terminalView.setFindOverlay(null);
@@ -223,6 +232,17 @@ public final class TerminalFindCoordinator implements TerminalFindController.Hos
             return;
         }
         container.animate().alpha(0f).setDuration(EXIT_DURATION_MS).withEndAction(detach).start();
+    }
+
+    /** Which legend the session's current state calls for. */
+    @NonNull
+    private static com.termux.app.terminal.TerminalModeHintCard.Mode hintFor(
+            @NonNull TerminalFindModel model) {
+        if (model.mode() == TerminalFindModel.Mode.TYPING)
+            return com.termux.app.terminal.TerminalModeHintCard.Mode.SEARCH;
+        return model.selection() == TerminalFindModel.Selection.NONE
+            ? com.termux.app.terminal.TerminalModeHintCard.Mode.COPY
+            : com.termux.app.terminal.TerminalModeHintCard.Mode.COPY_SELECTING;
     }
 
     @NonNull

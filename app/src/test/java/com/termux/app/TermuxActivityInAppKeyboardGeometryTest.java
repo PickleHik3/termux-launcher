@@ -1,5 +1,6 @@
 package com.termux.app;
 
+import com.termux.app.surfaces.SurfaceEditorController;
 import com.termux.app.chrome.ChromePolicy;
 import com.termux.app.chrome.ChromeRenderer;
 
@@ -52,14 +53,14 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
     @Test
     public void surfaceEditorKeyboardSlidersNormalizeFullStoredRanges() {
-        assertEquals(0, TermuxActivity.keyboardEditorProgress(0.5f, 0.5f, 1.6f));
-        assertEquals(100, TermuxActivity.keyboardEditorProgress(1.6f, 0.5f, 1.6f));
-        assertEquals(0.5f, TermuxActivity.keyboardEditorValue(0, 0.5f, 1.6f), 0.0001f);
-        assertEquals(1.6f, TermuxActivity.keyboardEditorValue(100, 0.5f, 1.6f), 0.0001f);
+        assertEquals(0, SurfaceEditorController.keyboardEditorProgress(0.5f, 0.5f, 1.6f));
+        assertEquals(100, SurfaceEditorController.keyboardEditorProgress(1.6f, 0.5f, 1.6f));
+        assertEquals(0.5f, SurfaceEditorController.keyboardEditorValue(0, 0.5f, 1.6f), 0.0001f);
+        assertEquals(1.6f, SurfaceEditorController.keyboardEditorValue(100, 0.5f, 1.6f), 0.0001f);
 
-        assertEquals(0, TermuxActivity.keyboardEditorProgress(0f, 0f, 8f));
-        assertEquals(100, TermuxActivity.keyboardEditorProgress(8f, 0f, 8f));
-        assertEquals(4f, TermuxActivity.keyboardEditorValue(50, 0f, 8f), 0.0001f);
+        assertEquals(0, SurfaceEditorController.keyboardEditorProgress(0f, 0f, 8f));
+        assertEquals(100, SurfaceEditorController.keyboardEditorProgress(8f, 0f, 8f));
+        assertEquals(4f, SurfaceEditorController.keyboardEditorValue(50, 0f, 8f), 0.0001f);
     }
 
     @After
@@ -185,14 +186,19 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
     @Test
     public void matchAllSurfacesOutranksAnEditedKeyboardBackground() {
-        // An edited scheme or a moved opacity slider owns the keyboard surface on its own...
-        assertTrue(ChromePolicy.hasInAppKeyboardBackgroundOverride(false, 0xFF203040, 100));
-        assertTrue(ChromePolicy.hasInAppKeyboardBackgroundOverride(false, null, 60));
-        assertFalse(ChromePolicy.hasInAppKeyboardBackgroundOverride(false, null,
-            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY));
-        // ...but not while surfaces are normalized, which is what left the keyboard lighter than
+        // An edited scheme or an opacity genuinely differing from the shared material owns the
+        // keyboard surface on its own...
+        assertTrue(ChromePolicy.hasInAppKeyboardBackgroundOverride(false, 0xFF203040, 46, 46));
+        assertTrue(ChromePolicy.hasInAppKeyboardBackgroundOverride(false, null, 60, 46));
+        // ...a detached row holding the shared material's own number repaints nothing — the
+        // unified dock/keyboard/nav sheet must survive it whatever the compile-time default says
+        // (comparing against a constant is how flipping the default once severed the sheet at the
+        // keyboard's bottom edge on every upgraded install)...
+        assertFalse(ChromePolicy.hasInAppKeyboardBackgroundOverride(false, null, 46, 46));
+        assertFalse(ChromePolicy.hasInAppKeyboardBackgroundOverride(false, null, 100, 100));
+        // ...and not while surfaces are normalized, which is what left the keyboard lighter than
         // every other surface until the keyboard section was reset by hand.
-        assertFalse(ChromePolicy.hasInAppKeyboardBackgroundOverride(true, 0xFF203040, 60));
+        assertFalse(ChromePolicy.hasInAppKeyboardBackgroundOverride(true, 0xFF203040, 60, 46));
     }
 
     @Test

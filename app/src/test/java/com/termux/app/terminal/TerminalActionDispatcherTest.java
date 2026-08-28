@@ -1,13 +1,10 @@
 package com.termux.app.terminal;
 
 import android.app.Application;
-import android.content.Context;
 import android.os.Build;
 import android.view.KeyEvent;
 import android.widget.LinearLayout;
 
-import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
-import com.termux.shared.termux.settings.properties.TermuxSharedProperties;
 import com.termux.terminal.TerminalSession;
 
 import org.json.JSONObject;
@@ -15,14 +12,9 @@ import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
-import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
-import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.util.Collections;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -54,7 +46,7 @@ public class TerminalActionDispatcherTest {
     // --- Tool table ---
 
     @Test
-    public void handles_coversEveryRegisteredTerminalTool() {
+    public void handlesCoversEveryRegisteredTerminalTool() {
         String[] handled = {
             "terminal.state", "pane.split_vertical", "pane.split_horizontal", "pane.focus_direction",
             "pane.resize", "pane.kill_focused", "window.new", "window.close", "window.next",
@@ -64,7 +56,7 @@ public class TerminalActionDispatcherTest {
             "terminal.font_size_decrease", "terminal.select_url", "terminal.share_transcript",
             "clipboard.paste", "window.select", "window.rename", "session.rename",
             "session.rename_at_index", "terminal.reset",
-            "appearance.set_wallpaper", "appearance.toggle_wallpaper", "appearance.glass_lab",
+            "appearance.set_wallpaper", "appearance.toggle_wallpaper", "appearance.surface_editor", "appearance.glass_lab",
             "app.command_palette", "app.open_drawer", "app.close_drawer", "terminal.action_sheet",
             "session.activate_by_index", "window.rename_prompt", "session.rename_prompt",
             "terminal.share_selected", "clipboard.copy_selected",
@@ -78,7 +70,7 @@ public class TerminalActionDispatcherTest {
     }
 
     @Test
-    public void handles_rejectsOtherTools() {
+    public void handlesRejectsOtherTools() {
         assertFalse(TerminalActionDispatcher.handles("apps.launch"));
         assertFalse(TerminalActionDispatcher.handles("memory.write"));
         assertFalse(TerminalActionDispatcher.handles("session.kill"));
@@ -90,7 +82,7 @@ public class TerminalActionDispatcherTest {
     // --- Nothing attached ---
 
     @Test
-    public void execute_withoutAttachedActivity_reportsConflict() throws Exception {
+    public void executeWithoutAnAttachedActivityReportsAConflict() throws Exception {
         assertFalse(dispatcher.isAttached());
 
         JSONObject result = dispatcher.execute("pane.split_vertical", new JSONObject());
@@ -101,7 +93,7 @@ public class TerminalActionDispatcherTest {
     }
 
     @Test
-    public void execute_everyTerminalTool_failsCleanlyWhenDetached() throws Exception {
+    public void everyTerminalToolFailsCleanlyWhenDetached() throws Exception {
         String[] tools = {
             "terminal.state", "pane.split_vertical", "pane.split_horizontal", "pane.focus_direction",
             "pane.resize", "pane.kill_focused", "window.new", "window.close", "window.next",
@@ -110,7 +102,7 @@ public class TerminalActionDispatcherTest {
             "terminal.toggle_soft_keyboard", "terminal.toggle_toolbar", "terminal.font_size_increase",
             "terminal.font_size_decrease", "terminal.select_url", "terminal.share_transcript",
             "clipboard.paste", "window.select", "window.rename", "session.rename", "terminal.reset",
-            "appearance.set_wallpaper", "appearance.toggle_wallpaper", "appearance.glass_lab",
+            "appearance.set_wallpaper", "appearance.toggle_wallpaper", "appearance.surface_editor", "appearance.glass_lab",
             "app.command_palette", "app.open_drawer", "app.close_drawer", "terminal.action_sheet",
             "session.activate_by_index", "window.rename_prompt", "session.rename_prompt",
             "terminal.share_selected", "clipboard.copy_selected",
@@ -126,7 +118,7 @@ public class TerminalActionDispatcherTest {
     }
 
     @Test
-    public void execute_unknownTool_isNotImplemented() throws Exception {
+    public void executeOfAnUnknownToolIsNotImplemented() throws Exception {
         JSONObject result = dispatcher.execute("pane.teleport", new JSONObject());
         assertFalse(result.getBoolean("ok"));
         assertEquals(501, result.getInt("_statusCode"));
@@ -134,7 +126,7 @@ public class TerminalActionDispatcherTest {
     }
 
     @Test
-    public void execute_neverThrowsForMissingArguments() throws Exception {
+    public void executeNeverThrowsForMissingArguments() throws Exception {
         // A caller that omits 'direction' must get an envelope, not an exception.
         JSONObject result = dispatcher.execute("pane.focus_direction", new JSONObject());
         assertFalse(result.getBoolean("ok"));
@@ -200,7 +192,7 @@ public class TerminalActionDispatcherTest {
             {"app.open_drawer", "openDrawer"},
             {"app.close_drawer", "closeDrawers"},
             {"appearance.set_wallpaper", "openWallpaperPicker"},
-            {"appearance.glass_lab", "openGlassLab"},
+            {"appearance.surface_editor", "openSurfaceEditor"},
             {"extrakeys.edit", "showExtraKeysRowEditor"},
             {"workspace.picker", "showWorkspacePicker"},
             {"workspace.save_prompt", "promptSaveWorkspace"},
@@ -588,7 +580,7 @@ public class TerminalActionDispatcherTest {
     @Test
     public void activateByIndexIsBoundedByTheDrawerList() throws Exception {
         FakeTerminalHost host = attach();
-        host.sessionClient = new TermuxTerminalSessionActivityClient(context(), host);
+        host.sessionClient = new TermuxTerminalSessionActivityClient(FakeTerminalHost.testContext(), host);
         TerminalSession first = session();
         TerminalSession second = session();
         host.sessions.rows.add(first);
@@ -613,7 +605,7 @@ public class TerminalActionDispatcherTest {
     @Test
     public void sessionNextAndPreviousWalkTheDrawerListThroughTheSessionClient() throws Exception {
         FakeTerminalHost host = attach();
-        host.sessionClient = new TermuxTerminalSessionActivityClient(context(), host);
+        host.sessionClient = new TermuxTerminalSessionActivityClient(FakeTerminalHost.testContext(), host);
         TerminalSession only = session();
         host.sessions.rows.add(only);
 
@@ -625,7 +617,7 @@ public class TerminalActionDispatcherTest {
     @Test
     public void paneRenameGoesThroughTheSessionClientAndNeedsAName() throws Exception {
         FakeTerminalHost host = attach();
-        host.sessionClient = new TermuxTerminalSessionActivityClient(context(), host);
+        host.sessionClient = new TermuxTerminalSessionActivityClient(FakeTerminalHost.testContext(), host);
 
         assertEquals(400, dispatcher.execute("pane.rename", new JSONObject()).getInt("_statusCode"));
 
@@ -799,7 +791,7 @@ public class TerminalActionDispatcherTest {
     @Test
     public void viewClientToolsNeedASessionOnceTheClientIsThere() throws Exception {
         FakeTerminalHost host = attach();
-        host.viewClient = new TermuxTerminalViewClient(context(), host, null);
+        host.viewClient = new TermuxTerminalViewClient(FakeTerminalHost.testContext(), host, null);
 
         JSONObject result = dispatcher.execute("terminal.font_size_increase", new JSONObject());
         assertEquals(409, result.getInt("_statusCode"));
@@ -809,7 +801,7 @@ public class TerminalActionDispatcherTest {
     @Test
     public void fontSizeToolsStepTheFocusedPaneThroughTheViewClient() throws Exception {
         FakeTerminalHost host = attach();
-        host.viewClient = new TermuxTerminalViewClient(context(), host, null);
+        host.viewClient = new TermuxTerminalViewClient(FakeTerminalHost.testContext(), host, null);
         host.currentSession = session();
         int base = host.preferences.getFontSize();
 
@@ -906,7 +898,7 @@ public class TerminalActionDispatcherTest {
     }
 
     private static FakeTerminalHost host() throws IOException {
-        return new FakeTerminalHost(context(), properties());
+        return new FakeTerminalHost(FakeTerminalHost.testContext(), FakeTerminalHost.testProperties());
     }
 
     private static TerminalSession session() {
@@ -914,17 +906,4 @@ public class TerminalActionDispatcherTest {
         return new TerminalSession("/bin/sh", "/", new String[0], new String[0], null, null);
     }
 
-    private static Context context() {
-        return RuntimeEnvironment.getApplication();
-    }
-
-    private static TermuxSharedProperties properties(String... lines) throws IOException {
-        File file = File.createTempFile("termux-dispatcher", ".properties");
-        Files.write(file.toPath(), String.join("\n", lines).getBytes(StandardCharsets.UTF_8));
-        return new TermuxSharedProperties(context(), "test",
-            Collections.singletonList(file.getAbsolutePath()),
-            TermuxPropertyConstants.TERMUX_APP_PROPERTIES_LIST,
-            new TermuxSharedProperties.SharedPropertiesParserClient()) {
-        };
-    }
 }

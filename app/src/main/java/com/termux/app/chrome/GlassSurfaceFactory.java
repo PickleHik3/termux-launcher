@@ -8,6 +8,7 @@ import android.graphics.drawable.LayerDrawable;
 import androidx.annotation.NonNull;
 
 import com.termux.app.DockGlassRendering;
+import com.termux.app.theme.SchemeTone;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
@@ -20,6 +21,9 @@ import java.util.List;
  * values their own controls supply.
  */
 public final class GlassSurfaceFactory {
+
+    /** The containing stroke's alpha, out of 255: barely there, or it reads as a drawn border. */
+    static final int RIM_ALPHA = 18;
 
     @NonNull private final ChromeRenderer.Surfaces mSurfaces;
 
@@ -132,7 +136,7 @@ public final class GlassSurfaceFactory {
         int midSheenAlpha = Math.round(8f * clamped);
         int bottomFootAlpha = withFoot ? Math.round(20f * clamped) : 0;
         GradientDrawable baseLayer = new GradientDrawable();
-        baseLayer.setColor(withAlphaComponent(base, baseAlpha));
+        baseLayer.setColor(SchemeTone.withAlpha(base, baseAlpha / 255f));
         baseLayer.setDither(true);
 
         int[] sliceColors = DockGlassRendering.lightModelSlice(accent, topSheenAlpha, midSheenAlpha,
@@ -156,7 +160,7 @@ public final class GlassSurfaceFactory {
             rim.setColor(Color.TRANSPARENT);
             rim.setCornerRadius(cornerRadiusPx);
             rim.setStroke(Math.max(1, Math.round(mSurfaces.dpToPx(1))),
-                withAlphaComponent(mSurfaces.outlineColor(), 18));
+                SchemeTone.withAlpha(mSurfaces.outlineColor(), RIM_ALPHA / 255f));
             layers.add(rim);
         }
         if (cornerRadiusPx > 0f) {
@@ -172,7 +176,4 @@ public final class GlassSurfaceFactory {
         return DockGlassRendering.createGrainLayer(mSurfaces.context().getResources(), grainPercent);
     }
 
-    private static int withAlphaComponent(int color, int alpha) {
-        return (Math.max(0, Math.min(255, alpha)) << 24) | (color & 0x00FFFFFF);
-    }
 }

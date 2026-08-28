@@ -20,6 +20,7 @@ import org.robolectric.RobolectricTestRunner;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
@@ -60,11 +61,11 @@ public class ApiSecuritySeamsTest {
         serverInstance.set(null, null);
         server = LauncherCtlApiServer.getInstance();
         server.start(context);
-        Thread.sleep(150);
 
         JSONObject endpoint = server.endpointSettings(context);
         port = endpoint.getInt("activePort");
         token = endpoint.getString("token");
+        awaitAnswering(port);
 
         // importModel scopes local paths to the Termux home directory, which is not a real
         // writable path on the test JVM; let fixtures import from the JVM temp dir instead.
@@ -113,11 +114,11 @@ public class ApiSecuritySeamsTest {
         serverInstance.set(null, null);
         LauncherCtlApiServer lanServer = LauncherCtlApiServer.getInstance();
         lanServer.start(context);
-        Thread.sleep(150);
 
         try {
             JSONObject lanEndpoint = lanServer.endpointSettings(context);
             int lanPort = lanEndpoint.getInt("activePort");
+            awaitAnswering(lanPort);
             assertUnauthorized(lanPort);
         } finally {
             lanServer.stop();
@@ -256,6 +257,22 @@ public class ApiSecuritySeamsTest {
         assertEquals(768, embedding.getJSONArray("embedding").length());
         assertEquals("embed-capable-mnn", response.getString("model"));
         assertTrue(response.has("usage"));
+    }
+
+    private static void awaitAnswering(int targetPort) throws Exception {
+        long deadline = System.currentTimeMillis() + 5_000;
+        while (true) {
+            try {
+                HttpURLConnection conn = (HttpURLConnection) new URL("http://127.0.0.1:" + targetPort + "/v1/models").openConnection();
+                conn.setConnectTimeout(250);
+                conn.setReadTimeout(250);
+                conn.getResponseCode();
+                return;
+            } catch (IOException e) {
+                if (System.currentTimeMillis() >= deadline) throw e;
+                Thread.sleep(20);
+            }
+        }
     }
 
     private void assertUnauthorized(int targetPort) throws Exception {

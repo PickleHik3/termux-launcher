@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.TermuxService;
+import com.termux.app.terminal.rename.TerminalRenameTarget;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -31,7 +32,7 @@ import java.util.List;
  * those, and the one client that cannot (the dispatcher is a process-wide singleton) borrows the
  * host's through {@link #context()}.
  */
-public interface TerminalHost {
+public interface TerminalHost extends SoftKeyboardPolicy {
 
     // --- Views and session ---
 
@@ -58,6 +59,13 @@ public interface TerminalHost {
 
     /** Locks the drawer closed, e.g. while a selection is being copied. */
     void setDrawerLocked(boolean locked);
+
+    /**
+     * Shows the legend for a modal terminal mode on the terminal's top-trailing corner, or takes it
+     * down with {@code null}. Copy mode and search repurpose every key, and a mode nobody can see
+     * the rules of is a mode people leave rather than use.
+     */
+    void showTerminalModeHint(@Nullable TerminalModeHintCard.Mode mode);
 
     /** Shows or hides the terminal toolbar, as the fn+q/fn+k writing mode keys do. */
     void toggleTerminalToolbar();
@@ -97,17 +105,7 @@ public interface TerminalHost {
     /** The client is about to ask for the system IME, so inset handling may allow it. */
     void onSystemImeRequested();
 
-    boolean shouldDelaySoftKeyboardShowOnResume();
-
-    boolean areSoftKeyboardFlagsDisabled();
-
-    void disableSoftKeyboard(@Nullable View view);
-
-    void clearDisableSoftKeyboardFlags();
-
-    void setSoftKeyboardAlwaysHiddenFlags();
-
-    void setSoftInputModeAdjustResize();
+    // The soft-input flag group lives in SoftKeyboardPolicy.
 
     void setSoftKeyboardVisibility(@NonNull Runnable showSoftKeyboardRunnable, @Nullable View view,
                                    boolean visible);
@@ -396,7 +394,7 @@ public interface TerminalHost {
 
     boolean isCursorTrailEnabled();
 
-    void openGlassLab();
+    void openSurfaceEditor();
 
     /** Repaints the window ground for whichever session is now current. */
     void updateWindowBackgroundForCurrentSession();

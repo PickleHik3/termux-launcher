@@ -67,7 +67,7 @@ public final class TopPaneFullRowPolicy {
             fullNotifications = mirror(fullNotifications, width);
             fullMedia = mirror(fullMedia, width);
         }
-        float p = Float.isFinite(progress) ? Math.max(0f, Math.min(1f, progress)) : 0f;
+        float p = FullStatusBarGeometry.finiteUnit(progress);
         Rect outClock = interpolate(normalClock, fullClock, p);
         Rect outNotifications = interpolate(normalNotifications, fullNotifications, p);
         Rect outMedia = interpolate(normalMedia, fullMedia, p);

@@ -410,7 +410,7 @@ public class LauncherToolRegistryTest {
     public void appearanceAndAppActions_areRegisteredWithoutSessionRequirement() {
         // These act on the app, not a shell, so they must stay usable with no session.
         String[] appLevel = {"appearance.set_wallpaper", "appearance.toggle_wallpaper",
-            "appearance.glass_lab", "app.open_settings", "app.open_look_and_feel",
+            "appearance.surface_editor", "app.open_settings", "app.open_look_and_feel",
             "app.open_apps_bar"};
         LauncherToolRegistry.ActionContext noSession = context(false, false);
         for (String name : appLevel) {
@@ -421,6 +421,8 @@ public class LauncherToolRegistryTest {
                 tool.availabilityIn(noSession).available);
             assertNull(name + " takes no arguments", tool.schema.optJSONArray("required"));
         }
+        assertEquals("appearance", registry.getTool("appearance.surface_editor").category);
+        // The legacy alias still resolves.
         assertEquals("appearance", registry.getTool("appearance.glass_lab").category);
         assertEquals("app", registry.getTool("app.open_settings").category);
     }

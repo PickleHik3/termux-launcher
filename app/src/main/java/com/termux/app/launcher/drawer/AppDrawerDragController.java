@@ -11,6 +11,7 @@ import android.os.Build;
 import android.view.DragEvent;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
+import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -142,7 +143,7 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
         int width = cell.icon.getWidth();
         int height = cell.icon.getHeight();
         if (width <= 0 || height <= 0) {
-            android.view.ViewGroup.LayoutParams params = cell.icon.getLayoutParams();
+            ViewGroup.LayoutParams params = cell.icon.getLayoutParams();
             width = params == null ? 0 : params.width;
             height = params == null ? 0 : params.height;
         }

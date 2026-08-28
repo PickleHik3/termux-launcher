@@ -165,7 +165,7 @@ public final class SuggestionBarView extends GridLayout
      *
      * <p>The row arbitrates the touch stream — it is the only view that sees the whole gesture from
      * {@code ACTION_DOWN} — but it knows nothing about the plane. Everything the claim depends on
-     * that lives outside the row (the preference, dock tuning, the palette, the drawer's own state)
+     * that lives outside the row (the preference, the surface editor, the palette, the drawer's own state)
      * is asked for through this listener, and the claimed drag is handed straight back to
      * {@code AppDrawerController} through it.
      *
@@ -179,8 +179,8 @@ public final class SuggestionBarView extends GridLayout
         /** The {@code app_launcher_drawer_enabled} preference. */
         boolean isAppDrawerEnabled();
 
-        /** Dock tuning owns drags on the dock itself while it is up. */
-        boolean isDockTuningActive();
+        /** The surface editor owns drags on the dock itself while it is up. */
+        boolean isSurfaceEditorActive();
 
         /** The command palette is a full-screen overlay of its own; it must not stack with one. */
         boolean isCommandPaletteOpen();
@@ -246,7 +246,8 @@ public final class SuggestionBarView extends GridLayout
     private final DockIconCache iconCache = new DockIconCache(
         getResources(),
         DockIconCache.memoryClassMb(getContext()),
-        () -> getContext().getPackageManager().getDefaultActivityIcon());
+        () -> getContext().getPackageManager().getDefaultActivityIcon(),
+        entry -> LauncherAppDataProvider.getInstance(getContext()).icons().artwork(entry));
     /** Visible alpha bounds per drawable; avoids rescanning custom/icon-pack artwork on every drag event. */
     private final Map<Drawable, RectF> drawableVisibleBoundsCache = new WeakHashMap<>();
     private final Map<Drawable, FocusOutlineRenderer.Visual> focusOutlineVisualCache = new WeakHashMap<>();
@@ -729,6 +730,20 @@ public final class SuggestionBarView extends GridLayout
         applyAppIconColorFilter(imageView);
     }
 
+    /**
+     * Drop the raw artwork as well as the rendering of it. The store holds icon-pack-treated
+     * artwork, so it is exactly as stale as the rendered cache once the treatment changes, and
+     * re-rendering from it would resurrect the previous pack. Kept separate from
+     * {@link #invalidateRenderedIconCaches()} because that also runs for pure geometry — an icon
+     * scale drag, a dock height hint — where throwing artwork away would reload every visible icon
+     * under the finger for no change in what it looks like.
+     */
+    private void invalidateIconArtwork() {
+        LauncherAppDataProvider existing = LauncherAppDataProvider.peekInstance();
+        if (existing != null) existing.icons().invalidateAll();
+        invalidateRenderedIconCaches();
+    }
+
     private void invalidateRenderedIconCaches() {
         launcherTextColorCache = null;
         iconCache.invalidateAll();
@@ -1074,7 +1089,7 @@ public final class SuggestionBarView extends GridLayout
 
     public void clearAppCache() {
         allApps = new ArrayList<>();
-        invalidateRenderedIconCaches();
+        invalidateIconArtwork();
         activeAzLetter = null;
         activeAzCandidates = new ArrayList<>();
         activeAzPageIndex = 0;
@@ -1100,7 +1115,7 @@ public final class SuggestionBarView extends GridLayout
             override -> getIconResolver().loadOverride(override) != null);
         if (changed) {
             pinnedItems = configRepository.loadPinnedItems();
-            invalidateRenderedIconCaches();
+            invalidateIconArtwork();
         }
     }
 
@@ -1197,7 +1212,7 @@ public final class SuggestionBarView extends GridLayout
             allApps = appDataProvider.getAllApps();
             resolvedRefCache.clear();
             shortcutCache.clear();
-            invalidateRenderedIconCaches();
+            invalidateIconArtwork();
             pruneUnavailablePinnedItems();
             invalidateAzRankCache();
             invalidateAzRenderState();
@@ -2083,7 +2098,7 @@ public final class SuggestionBarView extends GridLayout
             true,
             activeAzLetter == null,
             portrait,
-            listener != null && !listener.isDockTuningActive(),
+            listener != null && !listener.isSurfaceEditorActive(),
             listener != null && !listener.isCommandPaletteOpen(),
             noActivePickup,
             listener != null && !listener.isAppDrawerEngaged(),
@@ -3088,10 +3103,11 @@ public final class SuggestionBarView extends GridLayout
         if (entry == null) {
             return entry;
         }
+        Drawable globalArtwork = artworkOrNull(entry);
         LauncherIconResolver.ResolvedIcon resolvedIcon = getIconResolver().resolvePinnedDetailed(
-            entry.appRef, item.iconOverride, entry.icon, entry.iconPackArtwork);
+            entry.appRef, item.iconOverride, globalArtwork, entry.iconPackArtwork);
         Drawable pinnedIcon = resolvedIcon.drawable;
-        if ((pinnedIcon == null || pinnedIcon == entry.icon)
+        if ((pinnedIcon == null || pinnedIcon == globalArtwork)
             && resolvedIcon.iconPackArtwork == entry.iconPackArtwork) {
             return entry;
         }
@@ -3102,8 +3118,9 @@ public final class SuggestionBarView extends GridLayout
         Drawable icon = null;
         for (PinnedAppItem folderApp : folder.apps) {
             LauncherAppEntry entry = resolvePinnedApp(folderApp);
-            if (entry != null && entry.icon != null) {
-                icon = entry.icon;
+            Drawable folderAppIcon = artworkOrNull(entry);
+            if (folderAppIcon != null) {
+                icon = folderAppIcon;
                 break;
             }
         }
@@ -3512,7 +3529,7 @@ public final class SuggestionBarView extends GridLayout
         for (PinnedAppItem folderApp : folder.apps) {
             if (placed >= 4) break;
             LauncherAppEntry e = resolvePinnedApp(folderApp);
-            if (e == null || e.icon == null) continue;
+            if (artworkOrNull(e) == null) continue;
             ImageView mini = new ImageView(getContext());
             mini.setImageDrawable(getRenderedIcon(e, miniSize));
             mini.setScaleType(ImageView.ScaleType.FIT_CENTER);
@@ -4914,7 +4931,7 @@ public final class SuggestionBarView extends GridLayout
 
     private void refreshAfterAppIconOverride() {
         dismissAppContextPopup();
-        invalidateRenderedIconCaches();
+        invalidateIconArtwork();
         resolvedRefCache.clear();
         if (appDataProvider != null) appDataProvider.invalidate();
         allApps = new ArrayList<>();
@@ -4954,10 +4971,22 @@ public final class SuggestionBarView extends GridLayout
         }, false));
     }
 
+    /**
+     * The untreated artwork for an entry, from the entry itself when it carries bespoke artwork and
+     * otherwise from the bounded store. Null when the app has none — the sites that test for that
+     * are asking whether there is a picture at all, so they must not see the system stand-in.
+     */
+    @Nullable
+    private Drawable artworkOrNull(@Nullable LauncherAppEntry entry) {
+        if (entry == null) return null;
+        if (entry.icon != null) return entry.icon;
+        return LauncherAppDataProvider.getInstance(getContext()).icons().artwork(entry);
+    }
+
     /** A fresh copy of the app icon for the menu header so we don't disturb the row icon's bounds. */
     @Nullable
     private Drawable resolveMenuHeaderIcon(@NonNull LauncherAppEntry entry) {
-        Drawable base = entry.icon;
+        Drawable base = artworkOrNull(entry);
         if (base == null) {
             return null;
         }
@@ -6248,7 +6277,7 @@ public final class SuggestionBarView extends GridLayout
             for (PinnedAppItem folderApp : ((PinnedFolderItem) item).apps) {
                 if (folderEntries.size() >= 4) break;
                 LauncherAppEntry entry = resolvePinnedApp(folderApp);
-                if (entry != null && entry.icon != null) {
+                if (artworkOrNull(entry) != null) {
                     folderEntries.add(entry);
                 }
             }
@@ -6367,7 +6396,7 @@ public final class SuggestionBarView extends GridLayout
         // Same harmonized/cached drawable as the resting buttons → no size jump entering a page.
         Drawable icon = iconForDisplay(entry, iconSize);
         if (icon == null) {
-            icon = entry.icon != null ? entry.icon : getContext().getPackageManager().getDefaultActivityIcon();
+            icon = iconCache.rawArtwork(entry);
         }
         int half = Math.max(1, iconSize / 2);
         int saveAlpha = icon.getAlpha();
@@ -7102,6 +7131,10 @@ public final class SuggestionBarView extends GridLayout
 
             @Override
             public boolean hasIconAt(int index) {
+                // Deliberately the entry's own artwork and not the store's. This is one bit of a
+                // change-detection hash computed per layout, next to the stable ids that already
+                // identify the page; asking the store here would put an artwork lookup — and on a
+                // miss, a load — on a hot path, to distinguish pages the ids already distinguish.
                 return entries.get(index).icon != null;
             }
         };

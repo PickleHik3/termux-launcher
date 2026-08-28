@@ -60,10 +60,14 @@ public class TermuxLauncherConfigInstallerTest {
         File home = home("edits");
         assertEquals(8, TermuxLauncherConfigInstaller.install(context, home));
 
+        // The one directive the seed may activate: tap-to-open URLs is this fork's default for
+        // fresh installs. Anything else live in a seeded file is behavior slipped in unreviewed.
+        String allowedLive = "terminal-onclick-url-open = true";
         for (String name : new String[] {"termux-launcher-bindings.conf", "fonts.conf", "termux.properties"}) {
             for (String line : readFile(new File(home, name)).split("\n", -1)) {
                 assertTrue(name + " ships an active directive: " + line,
-                    line.trim().isEmpty() || line.trim().startsWith("#"));
+                    line.trim().isEmpty() || line.trim().startsWith("#")
+                        || ("termux.properties".equals(name) && line.trim().equals(allowedLive)));
             }
         }
 

@@ -16,6 +16,7 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -473,7 +474,7 @@ public final class LauncherWidgetRepository {
     private static Bundle decodeBundle(@Nullable JSONObject value) throws JSONException {
         Bundle out = new Bundle();
         if (value == null) return out;
-        java.util.Iterator<String> keys = value.keys();
+        Iterator<String> keys = value.keys();
         while (keys.hasNext()) {
             String key = keys.next();
             Object item = value.get(key);

@@ -16,5 +16,7 @@ public class TermuxConstantsTest {
             TermuxConstants.TERMUX_STYLING_APP.TERMUX_STYLING_ACTIVITY_NAME);
         assertEquals("com.termux.styling.activities.TermuxStylingMainActivity",
             TermuxConstants.TERMUX_STYLING_APP.TERMUX_STYLING_MAIN_ACTIVITY_NAME);
+        assertEquals("com.termux.styling.activities.TermuxStylingLauncherActivity",
+            TermuxConstants.TERMUX_STYLING_APP.TERMUX_STYLING_LAUNCHER_ACTIVITY_NAME);
     }
 }

@@ -212,6 +212,66 @@ public class KittyGraphicsProtocolTest extends TerminalTestCase {
             "\033_Gi=48;EINVAL:source and destination rectangles overlap\033\\");
     }
 
+    /**
+     * A GIF arrives as one burst of a=f, and each frame's decode lands back on the update thread
+     * long after the whole burst has been accepted. The accept-time gate must therefore count the
+     * frame it just let through; counting only what has already committed lets the entire burst
+     * pass against a ledger that stays empty until the last of it lands.
+     */
+    public void testFrameBurstIsCountedWhileItsDecodesAreStillInFlight() {
+        // o=z skips the synchronous payload-length check, so s and v alone fix the reservation and
+        // the never-drained decodes stand in for slow ones.
+        enterString("\033_Gi=60,a=t,f=24,o=z,s=4,v=4;AAAA\033\\");
+        mOutput.getOutputAndClear();
+        String frame = "\033_Gi=60,a=f,f=24,o=z,s=4,v=4,z=40;AAAA\033\\";
+        for (int i = 0; i < KittyImageStore.MAX_FRAMES_PER_IMAGE; i++) {
+            enterString(frame);
+            assertEquals("frame " + i + " is within the per-image limit", "",
+                mOutput.getOutputAndClear());
+        }
+        // Every frame of the limit is spoken for by one that is still decoding.
+        assertEnteringStringGivesResponse(frame, "\033_Gi=60;ENOSPC:frame store is full\033\\");
+    }
+
+    /**
+     * Closing a pane used to leave everything behind: the pending animation tick sits on the main
+     * looper holding the emulator, both buffers and every stored frame, and re-arms itself each
+     * time it runs, so nothing ever breaks the chain.
+     */
+    public void testShutdownReleasesTheStoreSoAClosedPaneKeepsNothing() {
+        enterString("\033_Gi=61,a=t,f=24,s=1,v=1;AAAA\033\\");
+        mOutput.getOutputAndClear();
+        // While the session lives the reservation answers, decode still pending or not.
+        assertEnteringStringGivesResponse("\033_Gi=61,a=a\033\\", "");
+        mTerminal.shutdownKittyGraphics();
+        assertEnteringStringGivesResponse("\033_Gi=61,a=a\033\\",
+            "\033_Gi=61;ENOENT:image not found\033\\");
+    }
+
+    /**
+     * A full-screen program — herdr, tmux, vim, less — enters the alternate screen when it starts
+     * and leaves it when it exits. Neither is a reason to destroy the images the main screen is
+     * displaying: the two buffers own their own cells, so nothing needs throwing away to keep them
+     * apart, and the alternate buffer is blanked on entry anyway. Running one used to take the
+     * fastfetch banner with it and leave a hole where the logo had been.
+     */
+    public void testStoredImagesSurviveAnAlternateScreenRoundTrip() {
+        enterString("\033_Gi=70,a=t,f=24,s=1,v=1;AAAA\033\\");
+        mOutput.getOutputAndClear();
+        enterString("\033[?1049h");
+        enterString("\033[?1049l");
+        assertEnteringStringGivesResponse("\033_Gi=70,a=a\033\\", "");
+    }
+
+    /** A full terminal reset is still a reset: RIS means start again from nothing. */
+    public void testAFullResetStillClearsTheStore() {
+        enterString("\033_Gi=71,a=t,f=24,s=1,v=1;AAAA\033\\");
+        mOutput.getOutputAndClear();
+        enterString("\033c");
+        assertEnteringStringGivesResponse("\033_Gi=71,a=a\033\\",
+            "\033_Gi=71;ENOENT:image not found\033\\");
+    }
+
     public void testDeleteFrameFormsOnAFramelessImage() {
         enterString("\033_Gi=49,a=t,f=24,s=1,v=1;AAAA\033\\");
         // d=f with no extra frames is a no-op; d=F deletes the whole image.

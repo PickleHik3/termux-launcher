@@ -32,6 +32,12 @@ public final class AppNoticeItem {
      * from the ordinary run of confirmations.
      */
     public final boolean attention;
+    /**
+     * What the tap does, in the caller's own words, for the chip's accessibility node — "tap to
+     * undo" rather than the default "tap to open". Null when the generic wording is right, and
+     * meaningless without {@link #onActivate}.
+     */
+    @Nullable public final CharSequence actionHint;
 
     public AppNoticeItem(@NonNull Kind kind, @NonNull CharSequence title,
                          @Nullable CharSequence sub, @Nullable String glyph, long durationMs) {
@@ -41,6 +47,13 @@ public final class AppNoticeItem {
     public AppNoticeItem(@NonNull Kind kind, @NonNull CharSequence title,
                          @Nullable CharSequence sub, @Nullable String glyph, long durationMs,
                          @Nullable Runnable onActivate, boolean attention) {
+        this(kind, title, sub, glyph, durationMs, onActivate, attention, null);
+    }
+
+    public AppNoticeItem(@NonNull Kind kind, @NonNull CharSequence title,
+                         @Nullable CharSequence sub, @Nullable String glyph, long durationMs,
+                         @Nullable Runnable onActivate, boolean attention,
+                         @Nullable CharSequence actionHint) {
         this.kind = kind;
         this.title = title;
         this.sub = sub;
@@ -48,6 +61,7 @@ public final class AppNoticeItem {
         this.durationMs = durationMs;
         this.onActivate = onActivate;
         this.attention = attention;
+        this.actionHint = actionHint;
     }
 
     /** The glyph actually drawn: the caller's, or the kind's default. */

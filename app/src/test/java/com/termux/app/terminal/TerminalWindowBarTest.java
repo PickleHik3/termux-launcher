@@ -89,13 +89,25 @@ public class TerminalWindowBarTest {
         assertEquals("verylong…name", TerminalWindowBar.middleEllipsize("verylongfoldername", 13));
     }
 
+    /**
+     * The pills draw the radius they are handed, in either style. Who decides that number moved to
+     * the caller when the status row grew its own chip-radius knob: the bar used to throw the
+     * radius away whenever the surface was Docked, which is exactly what the knob has to be able to
+     * override.
+     */
     @Test
-    public void surfaceStyle_updatesTabsWithStatusBarCornerRadius() {
+    public void surfaceStyle_updatesTabsWithTheRadiusItIsGiven() {
         TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
         bar.setWindows(Arrays.asList(new TerminalWindowBar.WindowItem("home", "home")), 0);
-        bar.setSurfaceStyle(false, 40f);
+        bar.setSurfaceStyle(false, 0f);
         LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
         assertEquals(0f,
+            ((GradientDrawable) tabs.getChildAt(0).getBackground()).getCornerRadius(), .01f);
+
+        // Docked, with the chip knob dialled in: the pills round.
+        bar.setSurfaceStyle(false, 10f);
+        tabs = (LinearLayout) bar.getChildAt(0);
+        assertEquals(10f,
             ((GradientDrawable) tabs.getChildAt(0).getBackground()).getCornerRadius(), .01f);
 
         bar.setSurfaceStyle(true, 40f);

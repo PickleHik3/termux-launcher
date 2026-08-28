@@ -254,7 +254,11 @@ public final class TerminalCommandPalette {
                 arguments.put("query", stableId);
             } catch (JSONException ignored) {
             }
-            if (iconsOut != null && app.icon != null) iconsOut.put(stableId, app.icon);
+            if (iconsOut != null) {
+                android.graphics.drawable.Drawable artwork = com.termux.app.launcher.data
+                    .LauncherAppDataProvider.artworkFor(context, app);
+                if (artwork != null) iconsOut.put(stableId, artwork);
+            }
             String stroke = shortcuts.get(stableId);
             entries.add(new CommandPaletteFilter.Entry(
                 LauncherToolRegistry.TOOL_APP_LAUNCH,

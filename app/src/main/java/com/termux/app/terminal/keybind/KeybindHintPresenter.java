@@ -91,26 +91,34 @@ public final class KeybindHintPresenter {
         boolean isShowKeyHintsEnabled();
 
         /**
-         * Whether the fallback card is up. The hint surfaces get their own card host in the host
-         * activity, so an open stats or weather card and a chord narration never dismiss each
-         * other; cards from it are passive — no focus, no swallowed outside touch — because the
-         * keyboard hold that raised them must keep working underneath.
+         * Whether the hint panel is up. The hints get their own panel on the terminal, so an open
+         * stats or weather card and a chord narration never dismiss each other; the panel is
+         * passive — no focus, no swallowed outside touch — because the keyboard hold that raised it
+         * must keep working underneath.
          */
-        boolean isCardShowing();
+        boolean isHintPanelShowing();
 
         /**
-         * Drops {@code content} from the status bar in the standard detail-card dress. A no-op when
-         * there is nothing to anchor to.
+         * Hangs {@code content} off the terminal's top edge, in the same dress the copy-mode and
+         * search legends wear. A no-op when there is no terminal surface to hang from.
          *
+         * @param wide the {@code ?} table, which spans the terminal edge to edge; false is the
+         *     strip, which hangs in the trailing corner like a mode legend.
          * @param onOutsideTap retires the sticky full table on a tap anywhere else; null for the
          *     strip, which tracks the hold alone.
          */
-        void showCard(@NonNull View content, @Nullable Runnable onOutsideTap);
+        void showHintPanel(@NonNull View content, boolean wide, @Nullable Runnable onOutsideTap);
 
-        void dismissCard(boolean animated);
+        void dismissHintPanel(boolean animated);
 
         /** Paints the bound caps on the in-app keyboard, or clears them with null. */
         void setKeyboardHintHighlights(@Nullable Map<String, Integer> litTokens);
+
+        /**
+         * Marks one cap as the invitation rather than a binding: it breathes harder than the lit
+         * caps around it. Null clears it.
+         */
+        void setKeyboardHintPulse(@Nullable String token);
     }
 
     /** Delayed work, so the linger and the readout hold can be driven by a fake clock. */
@@ -259,14 +267,15 @@ public final class KeybindHintPresenter {
 
     /** Whether a hint surface is on screen, i.e. whether a pending prefix is already announced. */
     public boolean isVisible() {
-        return mSurface.isCardShowing() || isDockRowVisible();
+        return mSurface.isHintPanelShowing();
     }
 
     /** Lets the surfaces go after the read-time linger. */
     public void hideAfterLinger() {
-        if (!mSurface.isCardShowing() && !isDockRowVisible()) {
+        if (!mSurface.isHintPanelShowing()) {
             mSignature = null;
             mSurface.setKeyboardHintHighlights(null);
+            mSurface.setKeyboardHintPulse(null);
             return;
         }
         mScheduler.remove(mHideRunnable);
@@ -277,29 +286,24 @@ public final class KeybindHintPresenter {
     public void hideNow(boolean fade) {
         cancelExtraKeyReadout();
         mSurface.setKeyboardHintHighlights(null);
+        mSurface.setKeyboardHintPulse(null);
         mSignature = null;
         mScheduler.remove(mHideRunnable);
         hideDockRow(fade);
-        if (!mSurface.isCardShowing()) return;
-        mSurface.dismissCard(fade);
+        if (!mSurface.isHintPanelShowing()) return;
+        mSurface.dismissHintPanel(fade);
     }
 
     /**
-     * A touch on the terminal while the strip occupies the A–Z row dismisses it — the user has
-     * moved on from the chord — and stays gone until the prefix is taken up afresh. The sticky full
-     * card handles the same gesture through its own outside-tap watcher.
+     * A touch on the terminal while the compact hints are up dismisses them — the user has moved on
+     * from the chord — and they stay gone until the prefix is taken up afresh. The sticky full
+     * table handles the same gesture through its own outside-tap watcher, so it is left alone here.
      */
     public void onTerminalTouch(@NonNull MotionEvent ev) {
         if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) return;
-        if (!isDockRowVisible()) return;
-        View stack = mSurface.findView(R.id.accessory_stack_container);
-        if (stack == null || !stack.isAttachedToWindow()) return;
-        int[] location = new int[2];
-        stack.getLocationOnScreen(location);
-        if (ev.getRawY() < location[1]) {
-            mSpent = true;
-            hideNow(true);
-        }
+        if (mFullMode || !mSurface.isHintPanelShowing()) return;
+        mSpent = true;
+        hideNow(true);
     }
 
     /**
@@ -313,7 +317,7 @@ public final class KeybindHintPresenter {
         String prefix = hardware ? mHardwarePrefix : mInAppPrefix;
         if (prefix == null || mLastPrefix == null) mSpent = false;
         if (prefix == null) {
-            if (mFullMode && mSurface.isCardShowing()) {
+            if (mFullMode && mSurface.isHintPanelShowing()) {
                 mLastPrefix = null;
                 return;
             }
@@ -349,8 +353,9 @@ public final class KeybindHintPresenter {
         if (!full && !showHints) {
             // Nothing drops on its own: the ? cap glowing on the keyboard is the whole surface.
             mSignature = null;
-            if (mSurface.isCardShowing()) mSurface.dismissCard(true);
+            if (mSurface.isHintPanelShowing()) mSurface.dismissHintPanel(true);
             mSurface.setKeyboardHintHighlights(questionGlow());
+            mSurface.setKeyboardHintPulse(QUESTION_TOKEN);
             return;
         }
 
@@ -363,7 +368,7 @@ public final class KeybindHintPresenter {
         }
         // Modifier callbacks repeat for the same latch state; only content changes rebuild.
         String signature = (full ? "full|" : "strip|") + prefix + '|' + hints + '|' + ctrlHints;
-        if ((mSurface.isCardShowing() || isDockRowVisible()) && signature.equals(mSignature)) return;
+        if (mSurface.isHintPanelShowing() && signature.equals(mSignature)) return;
         mSignature = signature;
 
         View content;
@@ -371,31 +376,37 @@ public final class KeybindHintPresenter {
             LinearLayout legend = new LinearLayout(context());
             legend.setOrientation(LinearLayout.VERTICAL);
             Map<String, Integer> litTokens = populateLegend(legend, hints, ctrlHints, shift);
+            // The question has been asked, so the whole keymap answers: every bound cap lights and
+            // nothing is left inviting a press.
             mSurface.setKeyboardHintHighlights(litTokens);
+            mSurface.setKeyboardHintPulse(null);
             hideDockRow(true);
             content = wrapScrolling(legend);
         } else {
+            // Only what the strip itself names. Lighting every bound key under a strip that lists
+            // five of them gave one question two answers, and the five that matter were the hardest
+            // to pick out of the lit field. The rest of the keymap is one ? away.
             Map<String, Integer> litTokens =
-                KeybindHintModel.litTokens(hints, this::groupColor);
+                new java.util.LinkedHashMap<>(
+                    KeybindHintModel.stripLitTokens(hints, shift, this::groupColor));
+            // The invitation is lit as well as named: the pulse modulates a cap's own lighting, so
+            // an unlit ? would breathe against nothing. It wears the accent rather than a legend
+            // group's colour, because it is not one of the binds.
+            litTokens.putAll(questionGlow());
             mSurface.setKeyboardHintHighlights(litTokens);
-            View strip = buildStrip(hints, shift, litTokens);
-            if (strip == null) {
+            mSurface.setKeyboardHintPulse(QUESTION_TOKEN);
+            View compact = buildCompactHints(prefix, hints, shift, litTokens);
+            if (compact == null) {
                 hideAfterLinger();
                 return;
             }
-            // The A-Z row's slot is the strip's first home: space the dock already pays for,
-            // directly above the keys being pressed. The top card is only the fallback for
-            // when that row is not on screen (apps bar hidden, hardware-keyboard-only).
-            if (canUseDockRow()) {
-                if (mSurface.isCardShowing()) mSurface.dismissCard(true);
-                // The leader's strip evicts any extra-key readout still holding the slot, and its
-                // pending hide must die with it or it would take the strip down mid-latch.
-                cancelExtraKeyReadout();
-                showDockRow(strip);
-                return;
-            }
+            // One place to look. The strip used to take over the dock's A-Z row, which put the
+            // answer to "what can I press" in a different part of the screen depending on whether
+            // that row happened to be enabled — and buried it in a band of letters either way. It
+            // hangs off the terminal now, where the copy-mode and search legends hang.
+            cancelExtraKeyReadout();
             hideDockRow(true);
-            content = strip;
+            content = compact;
         }
         // The sticky full table watches for a tap anywhere else and retires itself; the strip
         // tracks the hold alone.
@@ -403,51 +414,113 @@ public final class KeybindHintPresenter {
             mFullMode = false;
             hideNow(true);
         } : null;
-        mSurface.showCard(content, onOutsideTap);
+        mSurface.showHintPanel(content, full, onOutsideTap);
     }
 
-    /** The one lit cap of hints-off mode: {@code ?} glowing in the primary colour. */
+    /** The cap that opens the full table, and the one the keyboard is asked to flash. */
+    private static final String QUESTION_TOKEN = "?";
+
+    /**
+     * The invitation's own colour. Deliberately not the primary the legend groups are derived
+     * from: {@code ?} is not one of the binds, it is the way to see the rest of them, and a cap
+     * that shares a hue with the group beside it reads as belonging to that group.
+     */
+    private int questionColor() {
+        return themeColor(com.google.android.material.R.attr.colorTertiary,
+            R.color.termux_primary);
+    }
+
+    /** The one lit cap of hints-off mode: {@code ?} glowing in its own accent. */
     @NonNull
     private Map<String, Integer> questionGlow() {
-        return java.util.Collections.singletonMap("?", themeColor(
-            com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary));
+        return java.util.Collections.singletonMap(QUESTION_TOKEN, questionColor());
     }
 
     /**
-     * One compact row of curated binds for the held table — the base list under Ctrl+Alt, the
-     * session/resize list once Shift joins — closed by a {@code ?} chip that opens the full table.
-     * Chips are spread evenly across the row by weighted gaps, so the strip reads as a band rather
-     * than a huddle. Returns null when nothing curated is actually bound.
+     * The curated binds for the held table — the base list under Ctrl+Alt, the session/resize list
+     * once Shift joins — shaped like the copy-mode and search legends: a small titled card, one
+     * bind to a line, closed by the {@code ?} that opens the whole keymap. Returns null when
+     * nothing curated is actually bound.
+     *
+     * <p>It used to be one horizontal band, because it lived in the dock's A-Z row and a row is
+     * what fits there. Off that row the single line was only a constraint: it forced the labels
+     * narrow and the chips into a huddle at whatever width was going. Lines are what let a cap and
+     * its meaning sit beside each other at a readable size, which is the whole point of it.
      */
     @Nullable
-    private View buildStrip(@NonNull Map<String, TerminalKeyBindingResolver.Hint> hints,
-                            boolean shift, @NonNull Map<String, Integer> litTokens) {
+    private View buildCompactHints(@NonNull String prefix,
+                                   @NonNull Map<String, TerminalKeyBindingResolver.Hint> hints,
+                                   boolean shift, @NonNull Map<String, Integer> litTokens) {
         List<KeybindHintModel.StripChip> chips = KeybindHintModel.stripChips(hints, shift);
         if (chips.isEmpty()) return null;
-        LinearLayout strip = new LinearLayout(context());
-        strip.setOrientation(LinearLayout.HORIZONTAL);
-        strip.setGravity(Gravity.CENTER_VERTICAL);
         int onSurface = themeColor(com.termux.shared.R.attr.termuxColorOnSurface,
             R.color.termux_on_surface);
+
+        LinearLayout card = new LinearLayout(context());
+        card.setOrientation(LinearLayout.VERTICAL);
+
+        TextView title = new TextView(context());
+        title.setText(KeybindHintModel.prefixLabel(prefix));
+        title.setAllCaps(true);
+        title.setSingleLine(true);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 10f);
+        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        title.setLetterSpacing(0.1f);
+        title.setTextColor(themeColor(com.termux.shared.R.attr.termuxColorPrimary,
+            R.color.termux_primary));
+        card.addView(title, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        TextView body = new TextView(context());
+        SpannableStringBuilder text = new SpannableStringBuilder();
         for (KeybindHintModel.StripChip chip : chips) {
-            addStripGap(strip);
-            addChip(strip, chip.caps, chip.label, litTokens.get(chip.colorToken), onSurface, false);
+            if (text.length() > 0) text.append('\n');
+            appendEntry(text, chip.caps, chip.label, litTokens.get(chip.colorToken), onSurface);
         }
-        addStripGap(strip);
-        TextView more = addChip(strip, "?", "",
-            withAlphaComponent(onSurface, 140), onSurface, false);
+        NerdFontSpans.applyTo(context(), text);
+        body.setText(text);
+        body.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11f);
+        body.setLineSpacing(dpToPx(2), 1f);
+        LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        bodyParams.topMargin = Math.round(dpToPx(4));
+        card.addView(body, bodyParams);
+
+        TextView more = new TextView(context());
+        SpannableStringBuilder moreText = new SpannableStringBuilder();
+        appendEntry(moreText, QUESTION_TOKEN, getString(R.string.keybind_hint_all_shortcuts),
+            questionColor(), onSurface);
+        more.setText(moreText);
+        more.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11f);
+        more.setSingleLine(true);
+        LinearLayout.LayoutParams moreParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        moreParams.topMargin = Math.round(dpToPx(5));
+        card.addView(more, moreParams);
         more.setOnClickListener(view -> toggleFullPopup());
-        addStripGap(strip);
-        return strip;
+        return card;
     }
 
-    /** A weighted gap: in the full-width dock slot the gaps share the leftover space evenly. */
-    private void addStripGap(@NonNull LinearLayout strip) {
-        View gap = new View(context());
-        LinearLayout.LayoutParams params =
-            new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f);
-        params.width = Math.round(dpToPx(6));
-        strip.addView(gap, params);
+    private String getString(int stringRes) {
+        return context().getString(stringRes);
+    }
+
+    /** One line of a hint card: bold mono caps in their colour, then what they do. */
+    private void appendEntry(@NonNull SpannableStringBuilder text, @NonNull String caps,
+                             @NonNull String label, @Nullable Integer capColor, int onSurface) {
+        int capStart = text.length();
+        text.append(caps);
+        text.setSpan(new ForegroundColorSpan(capColor != null ? capColor : onSurface),
+            capStart, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        text.setSpan(new StyleSpan(Typeface.BOLD),
+            capStart, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        text.setSpan(new TypefaceSpan("monospace"),
+            capStart, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        if (label.isEmpty()) return;
+        int labelStart = text.length();
+        text.append("  ").append(label);
+        text.setSpan(new ForegroundColorSpan(withAlphaComponent(onSurface, 199)),
+            labelStart, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
     }
 
     /**
@@ -483,17 +556,15 @@ public final class KeybindHintPresenter {
         return chip;
     }
 
-    /** Scrolls a long legend instead of letting the card reach the keyboard. */
+    /**
+     * Scrolls a long legend rather than growing past its panel. The ceiling is whatever the panel
+     * hands down — the terminal's own height, less the user's margins — not a share of the screen:
+     * a fraction of the screen ignores where the terminal actually ends, which is how the table
+     * came to hang over the dock on a terminal with generous margins.
+     */
     @NonNull
     private View wrapScrolling(@NonNull View legend) {
-        ScrollView scroll = new ScrollView(context()) {
-            @Override
-            protected void onMeasure(int widthSpec, int heightSpec) {
-                int cap = Math.round(getResources().getDisplayMetrics().heightPixels * 0.45f);
-                super.onMeasure(widthSpec,
-                    View.MeasureSpec.makeMeasureSpec(cap, View.MeasureSpec.AT_MOST));
-            }
-        };
+        ScrollView scroll = new ScrollView(context());
         scroll.setVerticalScrollBarEnabled(false);
         scroll.addView(legend, new ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -763,7 +834,7 @@ public final class KeybindHintPresenter {
         if (label == null || label.length() == 0) return;
         // While a latched prefix owns the slot (or its fallback card is up), the readout stays
         // quiet: the strip is answering a question the user is still asking.
-        if (!mExtraKeyReadoutActive && (isDockRowVisible() || mSurface.isCardShowing())) return;
+        if (!mExtraKeyReadoutActive && (isDockRowVisible() || mSurface.isHintPanelShowing())) return;
         if (!canUseDockRow()) return;
         LinearLayout strip = new LinearLayout(context());
         strip.setOrientation(LinearLayout.HORIZONTAL);

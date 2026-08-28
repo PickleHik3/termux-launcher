@@ -6,6 +6,7 @@ import android.os.Build;
 import androidx.annotation.NonNull;
 
 import com.termux.app.TermuxActivity;
+import com.termux.app.surfaces.SurfaceEditorController;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -19,18 +20,18 @@ import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
-public class DockTuningFullArbitrationTest {
-    @Test public void everyDockTuningEntryRejectsWhileFullOwnsTheSurface() {
+public class SurfaceEditorFullArbitrationTest {
+    @Test public void everySurfaceEditorEntryRejectsWhileFullOwnsTheSurface() {
         TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
         FullStatusBarController full = new FullStatusBarController(new ImmediateHost());
         full.restoreFullImmediate(TopStatusBarState.EXPANDED);
         ReflectionHelpers.setField(activity, "mFullStatusBarController", full);
 
-        ReflectionHelpers.callInstanceMethod(activity, "enterDockTuningMode",
-            ReflectionHelpers.ClassParameter.from(String.class, "status"));
+        SurfaceEditorController editor = ReflectionHelpers.getField(activity, "mSurfaceEditor");
+        editor.enter("status");
 
         assertTrue(full.isEngaged());
-        assertFalse(ReflectionHelpers.getField(activity, "mDockTuningMode"));
+        assertFalse(editor.isActive());
     }
 
     private static final class ImmediateHost implements FullStatusBarController.Host {

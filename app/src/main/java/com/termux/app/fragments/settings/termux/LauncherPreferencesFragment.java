@@ -71,8 +71,8 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         Preference customizeDock = findPreference("customize_dock_surface");
         if (customizeDock != null) customizeDock.setOnPreferenceClickListener(preference -> {
             Intent intent = new Intent(context, TermuxActivity.class);
-            intent.putExtra(TermuxActivity.EXTRA_DOCK_TUNING, true);
-            intent.putExtra(TermuxActivity.EXTRA_DOCK_TUNING_SECTION, "dock");
+            intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR, true);
+            intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR_SECTION, "dock");
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             startActivity(intent);
             return true;

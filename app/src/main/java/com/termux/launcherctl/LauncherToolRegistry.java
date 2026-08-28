@@ -13,9 +13,11 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Shared launcher tool registry for the in-app UI surfaces: the command palette,
@@ -244,8 +246,8 @@ public final class LauncherToolRegistry {
          * The tools whose result is narrated by their own motion. One table, so the judgment
          * stays reviewable in one place instead of scattered through the registrations.
          */
-        private static final java.util.Set<String> SELF_EVIDENT_TOOLS =
-            new java.util.HashSet<>(java.util.Arrays.asList(
+        private static final Set<String> SELF_EVIDENT_TOOLS =
+            new HashSet<>(Arrays.asList(
                 TOOL_PANE_SPLIT_VERTICAL, TOOL_PANE_SPLIT_HORIZONTAL,
                 TOOL_PANE_KILL_FOCUSED, TOOL_PANE_EQUALIZE, TOOL_PANE_ROTATE,
                 TOOL_PANE_MOVE_TO_EDGE, TOOL_PANE_TOGGLE_FLOAT, TOOL_PANE_RESIZE,
@@ -408,7 +410,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_APPEARANCE_SET_WALLPAPER = "appearance.set_wallpaper";
     public static final String TOOL_APPEARANCE_TOGGLE_WALLPAPER = "appearance.toggle_wallpaper";
     public static final String TOOL_APPEARANCE_TOGGLE_CURSOR_TRAIL = "appearance.toggle_cursor_trail";
-    public static final String TOOL_APPEARANCE_GLASS_LAB = "appearance.glass_lab";
+    public static final String TOOL_APPEARANCE_SURFACE_EDITOR = "appearance.surface_editor";
     public static final String TOOL_APP_OPEN_SETTINGS = "app.open_settings";
     public static final String TOOL_APP_OPEN_LOOK_AND_FEEL = "app.open_look_and_feel";
     public static final String TOOL_APP_OPEN_APPS_BAR = "app.open_apps_bar";
@@ -939,11 +941,11 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.MEDIUM, true, ToolExecutor.TERMINAL,
             CATEGORY_APPEARANCE, R.string.tool_appearance_toggle_cursor_trail, R.string.tool_desc_appearance_toggle_cursor_trail, null);
-        addUi(map, TOOL_APPEARANCE_GLASS_LAB,
+        addUi(map, TOOL_APPEARANCE_SURFACE_EDITOR,
             "Enter the dock and surface tuning mode.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
-            CATEGORY_APPEARANCE, R.string.tool_appearance_glass_lab, R.string.tool_desc_appearance_glass_lab, null);
+            CATEGORY_APPEARANCE, R.string.tool_appearance_surface_editor, R.string.tool_desc_appearance_surface_editor, null);
         addUi(map, TOOL_APP_OPEN_SETTINGS,
             "Open the launcher settings screen.",
             schemaEmpty(),
@@ -1035,7 +1037,11 @@ public final class LauncherToolRegistry {
 
     @Nullable
     public ToolMetadata getTool(@Nullable String name) {
-        return name == null ? null : tools.get(name);
+        if (name == null) return null;
+        // The surface editor used to be listed as the glass lab; old bindings and scripts that
+        // still say so resolve to the same tool rather than to nothing.
+        if ("appearance.glass_lab".equals(name)) name = TOOL_APPEARANCE_SURFACE_EDITOR;
+        return tools.get(name);
     }
 
     /** Tools carrying UI metadata, in registration order. */
