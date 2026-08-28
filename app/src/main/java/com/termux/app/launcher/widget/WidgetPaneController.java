@@ -1,8 +1,11 @@
 package com.termux.app.launcher.widget;
 
+import android.appwidget.AppWidgetProviderInfo;
 import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.View;
+import android.widget.PopupWindow;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -21,7 +24,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         @NonNull TopStatusBarState fullPriorState();
         void restoreFull(@NonNull TopStatusBarState prior);
         /** A provider text editor took focus; give it the system IME. */
-        default void onWidgetEditorFocused(@NonNull android.view.View editor) { }
+        default void onWidgetEditorFocused(@NonNull View editor) { }
         /** The editor lost focus; restore the terminal's IME arrangement. */
         default void onWidgetEditorClosed() { }
     }
@@ -37,7 +40,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private boolean fullSettled;
     private int currentPage;
     private boolean editorFocusActive;
-    @Nullable private android.widget.PopupWindow paneMenu;
+    @Nullable private PopupWindow paneMenu;
 
     public WidgetPaneController(@NonNull WidgetPaneView pane,
                                 @NonNull LauncherWidgetHostController widgets,
@@ -51,7 +54,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         this.pane = pane; this.widgets = widgets; this.host = host; this.catalog = catalog;
         pane.grid().bind(widgets); pane.picker().setReducedMotion(host.reducedMotion());
         pane.setReducedMotion(host.reducedMotion());
-        pane.picker().adapter().setPreviewLoader(catalog::loadPreview);
+        pane.picker().adapter().setPreviewLoader(catalog);
         pane.grid().setListener(new WidgetGridView.Listener() {
             @Override public void onWidgetLongPressed(int appWidgetId, float rawX, float rawY) {
                 enterEditMode(appWidgetId, rawX, rawY);
@@ -65,7 +68,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             @Override public void onEmptySpaceLongPressed(float rawX, float rawY) {
                 showPaneMenu(rawX, rawY);
             }
-            @Override public void onWidgetEditorFocusChanged(android.view.View editor) {
+            @Override public void onWidgetEditorFocusChanged(View editor) {
                 relayEditorFocus(editor);
             }
         });
@@ -112,7 +115,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     /** Empty-surface long-press menu; the policy decides which rows this state offers. */
     private void showPaneMenu(float rawX, float rawY) {
         dismissPaneMenu();
-        java.util.List<WidgetPaneMenuPolicy.Item> items = WidgetPaneMenuPolicy.itemsFor(
+        List<WidgetPaneMenuPolicy.Item> items = WidgetPaneMenuPolicy.itemsFor(
             widgets.capability() == LauncherWidgetHostController.Capability.AVAILABLE,
             widgets.repository().pageCount(),
             widgets.repository().recordsOnPage(currentPage).isEmpty());
@@ -167,7 +170,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         render();
     }
 
-    private void relayEditorFocus(@Nullable android.view.View editor) {
+    private void relayEditorFocus(@Nullable View editor) {
         if (editor != null) {
             editorFocusActive = true;
             host.onWidgetEditorFocused(editor);
@@ -318,15 +321,15 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         LauncherWidgetRecord record = widgets.repository().get(appWidgetId);
         WidgetCellView cell = pane.grid().cellForId(appWidgetId);
         if (record == null || cell == null) return false;
-        android.appwidget.AppWidgetProviderInfo info = widgets.providerInfo(appWidgetId);
+        AppWidgetProviderInfo info = widgets.providerInfo(appWidgetId);
         WidgetGridMetrics metrics = pane.grid().metrics();
         int minColumns = 1, minRows = 1;
         boolean horizontal = false, vertical = false;
         if (info != null && record.state == LauncherWidgetRecord.State.ACTIVE) {
             horizontal = (info.resizeMode
-                & android.appwidget.AppWidgetProviderInfo.RESIZE_HORIZONTAL) != 0;
+                & AppWidgetProviderInfo.RESIZE_HORIZONTAL) != 0;
             vertical = (info.resizeMode
-                & android.appwidget.AppWidgetProviderInfo.RESIZE_VERTICAL) != 0;
+                & AppWidgetProviderInfo.RESIZE_VERTICAL) != 0;
             WidgetGridMetrics.Span minSpan = metrics.spanForPixels(
                 Math.max(1, info.minResizeWidth), Math.max(1, info.minResizeHeight));
             minColumns = minSpan.columns > 0

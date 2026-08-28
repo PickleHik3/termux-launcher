@@ -11,16 +11,12 @@ import android.os.Looper;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
 
 import com.termux.R;
 
@@ -123,6 +119,24 @@ public final class AppNotice {
             title, sub, glyph, false, onActivate, attention);
     }
 
+    /**
+     * A notice whose tap is the way back: what just happened, undone by touching the chip.
+     *
+     * <p>This is what a snackbar with an Undo action used to be. The snackbar landed bottom-centre,
+     * so it sat on the soft keyboard and ran into the display cutouts, it drew in Material's own
+     * palette rather than the app's, and it could not be swiped away. The chip is themed, is pinned
+     * to the one corner nothing else competes for, and dismisses on a swipe like every other notice
+     * — and it holds for {@link AppNoticeHostView#HOLD_UNDO_MS}, long enough to see what the write
+     * did and change one's mind.
+     *
+     * @param hint what the tap does, shown as the subtitle and announced to TalkBack.
+     */
+    public static void undoable(@Nullable Context context, @Nullable CharSequence title,
+                                @Nullable CharSequence hint, @NonNull Runnable undo) {
+        raise(context, AppNoticeItem.Kind.SUCCESS, title, hint, "↺",
+            AppNoticeHostView.HOLD_UNDO_MS, undo, false, hint);
+    }
+
     public static void error(@Nullable Context context, @Nullable CharSequence message) {
         raise(context, AppNoticeItem.Kind.ERROR, message, null, null, true);
     }
@@ -143,11 +157,20 @@ public final class AppNotice {
                               @Nullable CharSequence title, @Nullable CharSequence sub,
                               @Nullable String glyph, boolean longDuration,
                               @Nullable Runnable onActivate, boolean attention) {
+        raise(context, kind, title, sub, glyph,
+            longDuration ? AppNoticeHostView.HOLD_LONG_MS : AppNoticeHostView.HOLD_SHORT_MS,
+            onActivate, attention, null);
+    }
+
+    private static void raise(@Nullable Context context, @NonNull AppNoticeItem.Kind kind,
+                              @Nullable CharSequence title, @Nullable CharSequence sub,
+                              @Nullable String glyph, long holdMs,
+                              @Nullable Runnable onActivate, boolean attention,
+                              @Nullable CharSequence actionHint) {
         if (context == null || TextUtils.isEmpty(title)) return;
         Context appContext = context.getApplicationContext();
-        AppNoticeItem item = new AppNoticeItem(kind, title, sub, glyph,
-            longDuration ? AppNoticeHostView.HOLD_LONG_MS : AppNoticeHostView.HOLD_SHORT_MS,
-            onActivate, attention);
+        AppNoticeItem item = new AppNoticeItem(kind, title, sub, glyph, holdMs,
+            onActivate, attention, actionHint);
         Activity fromContext = activityOf(context);
         if (Looper.myLooper() == Looper.getMainLooper()) {
             deliver(appContext, fromContext, item);
@@ -186,51 +209,26 @@ public final class AppNotice {
             if (host.getParent() == anchor) return host;
         }
         AppNoticeHostView host = new AppNoticeHostView(activity);
-        FrameLayout.LayoutParams params = AppNoticeHostView.buildHostLayoutParams(activity);
-        if (anchor.getId() != R.id.terminal_surface_host) {
-            // Outside the terminal the chip has no chrome of ours to hang from, so it hangs from
-            // whatever is at the top of that screen instead: the app bar when there is one, and the
-            // system status bar otherwise.
-            params.topMargin = topChromeOffset(activity, anchor);
-        }
-        anchor.addView(host, params);
+        anchor.addView(host, AppNoticeHostView.buildHostLayoutParams(activity));
         anchor.setTag(HOST_TAG_KEY, host);
+        // Where the chip hangs from is derived and kept current rather than measured once here:
+        // the bar it hangs off may not be laid out yet, and it moves on rotation, on a resize and
+        // when a screen shows or hides it.
+        AppNoticePlacement.attach(anchor, host);
         return host;
     }
 
     /**
-     * The terminal hangs the chip off its window bar, which is what the design is drawn against.
-     * Every other screen — settings, the report viewer — gets it in the content root instead.
+     * The window's own content root, on every screen. The terminal used to get the chip inside its
+     * surface host instead, to hang it off the window bar — but that made it a sibling of anything
+     * the terminal opens in there, and the surface editor, added later, drew straight over the
+     * notice it had just raised. {@link AppNoticePlacement} lines the chip up with the chrome
+     * without parenting it to the same box.
      */
     @Nullable
     private static ViewGroup anchorFor(@NonNull Activity activity) {
-        View surfaceHost = activity.findViewById(R.id.terminal_surface_host);
-        if (surfaceHost instanceof FrameLayout) return (FrameLayout) surfaceHost;
         View content = activity.findViewById(android.R.id.content);
         return content instanceof ViewGroup ? (ViewGroup) content : null;
-    }
-
-    /**
-     * How far down the chip has to start so it does not land on top of the screen's own chrome.
-     * Measured off the real toolbar when one is laid out, because settings screens draw
-     * edge-to-edge and the status-bar inset alone would put the chip behind the app bar.
-     */
-    private static int topChromeOffset(@NonNull Activity activity, @NonNull ViewGroup anchor) {
-        View toolbar = activity.findViewById(com.termux.shared.R.id.toolbar);
-        if (toolbar != null && toolbar.getHeight() > 0) {
-            int[] toolbarLocation = new int[2];
-            int[] anchorLocation = new int[2];
-            toolbar.getLocationInWindow(toolbarLocation);
-            anchor.getLocationInWindow(anchorLocation);
-            int below = toolbarLocation[1] + toolbar.getHeight() - anchorLocation[1];
-            if (below > 0) return below;
-        }
-        WindowInsetsCompat insets =
-            ViewCompat.getRootWindowInsets(activity.getWindow().getDecorView());
-        if (insets == null) return 0;
-        Insets bars = insets.getInsets(
-            WindowInsetsCompat.Type.statusBars() | WindowInsetsCompat.Type.displayCutout());
-        return bars.top;
     }
 
     @Nullable

@@ -28,7 +28,7 @@ public class AppDrawerGestureArbiterTest {
     /** Index into the eligibility flags, in constructor order. */
     private static final String[] VETO_NAMES = {
         "drawerEnabled", "searchEmpty", "azInactive", "portrait",
-        "notDockTuning", "paletteClosed", "noActivePickup", "drawerIdle",
+        "surfaceEditorClosed", "paletteClosed", "noActivePickup", "drawerIdle",
     };
 
     @Test

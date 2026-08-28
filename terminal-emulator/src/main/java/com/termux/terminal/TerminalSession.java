@@ -3,6 +3,7 @@ package com.termux.terminal;
 import android.annotation.SuppressLint;
 import android.os.Handler;
 import android.os.Message;
+import android.os.SystemClock;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
@@ -355,6 +356,11 @@ public final class TerminalSession extends TerminalOutput {
         mTerminalToProcessIOQueue.close();
         mProcessToTerminalIOQueue.close();
         JNI.close(mTerminalFileDescriptor);
+        // A pending kitty animation tick sits on the main looper holding this session's emulator,
+        // both its buffers and every stored frame, and re-arms itself each time it runs — so a
+        // closed pane keeps its images alive, and keeps decoding them, for the life of the process.
+        // The emulator is only safe to touch from the main thread, which is where this runs.
+        if (mEmulator != null) mEmulator.shutdownKittyGraphics();
     }
 
     @Override
@@ -403,10 +409,17 @@ public final class TerminalSession extends TerminalOutput {
 
     @Override
     public void postTerminalUpdateDelayed(Runnable update, long delayMillis) {
-        mMainThreadHandler.postDelayed(() -> {
+        // The runnable posted is a wrapper, so the caller's own runnable is used as the message
+        // token — that is what makes the post withdrawable by identity below.
+        mMainThreadHandler.postAtTime(() -> {
             update.run();
             notifyScreenUpdate();
-        }, delayMillis);
+        }, update, SystemClock.uptimeMillis() + delayMillis);
+    }
+
+    @Override
+    public void cancelTerminalUpdateDelayed(Runnable update) {
+        mMainThreadHandler.removeCallbacksAndMessages(update);
     }
 
     public int getPid() {

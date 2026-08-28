@@ -2,6 +2,7 @@ package com.termux.app.theme;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Context;
 import android.content.res.Resources;
 import android.os.Build;
 
@@ -48,11 +49,6 @@ public final class LauncherSchemeTheme {
     public static final String THEME_OVERRIDES_FILE_PATH =
         TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/launcher-theme.properties";
 
-    /** Value of {@code ui_color_source} that hands the chrome to the terminal scheme. */
-    public static final String COLOR_SOURCE_SCHEME = "scheme";
-    /** Value of {@code ui_color_source} that keeps the chrome on wallpaper/system colours. */
-    public static final String COLOR_SOURCE_WALLPAPER = "wallpaper";
-
     /**
      * Which {@code Resources} already carry which palette.
      *
@@ -64,6 +60,7 @@ public final class LauncherSchemeTheme {
 
     private static LinkedHashMap<String, Integer> sCachedTokens;
     private static long sCachedFingerprint;
+    private static Boolean sCachedChromeActive;
 
     private LauncherSchemeTheme() {}
 
@@ -72,11 +69,43 @@ public final class LauncherSchemeTheme {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.R;
     }
 
-    /** Whether the user asked for scheme-driven chrome and there is a scheme to drive it. */
+    /**
+     * Whether the chrome is on the terminal's own scheme, and there is a scheme to drive it.
+     *
+     * <p>Derived rather than chosen. There used to be a second control naming the chrome's colour
+     * source, which could disagree with the switch above it — chrome on the scheme while the
+     * terminal was on the wallpaper, or the reverse — and every combination but "both from the
+     * same place" is a launcher wearing two palettes at once. Turning wallpaper colours off is
+     * choosing the scheme, for the terminal and for the chrome together.
+     */
     public static boolean isEnabled(@Nullable TermuxAppSharedPreferences preferences) {
         return preferences != null
-            && COLOR_SOURCE_SCHEME.equals(preferences.getUiColorSource())
+            && !preferences.isTerminalDynamicColorsEnabled()
             && TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE.isFile();
+    }
+
+    /**
+     * Whether the scheme palette is driving this context's chrome — supported, selected, and with
+     * a readable scheme behind it.
+     *
+     * <p>The launcher chrome has a handful of colours that deliberately bypass the theme in
+     * wallpaper mode (the glass base reads the framework's {@code system_neutral1_900} so the dock
+     * matches Material You exactly). Those sites must not bypass it when the chrome belongs to the
+     * scheme, and this is the predicate they gate on.
+     */
+    public static synchronized boolean isSchemeChromeActive(@NonNull Context context) {
+        if (!isSupported()) return false;
+        // Cached because glass colours are resolved on chrome-apply paths: every route that flips
+        // the wallpaper-colours switch or rewrites the scheme calls invalidate(), which clears
+        // this too.
+        if (sCachedChromeActive != null) return sCachedChromeActive;
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context);
+        sCachedChromeActive = isEnabled(preferences) && tokens() != null;
+        return sCachedChromeActive;
+    }
+
+    private static synchronized void setChromeActive(boolean active) {
+        sCachedChromeActive = active;
     }
 
     /**
@@ -88,8 +117,13 @@ public final class LauncherSchemeTheme {
     @SuppressLint("RestrictedApi")
     public static boolean apply(@NonNull Activity activity,
                                 @Nullable TermuxAppSharedPreferences preferences) {
-        if (!isSupported() || !isEnabled(preferences)) return false;
-        LinkedHashMap<String, Integer> tokens = tokens();
+        boolean enabled = isSupported() && isEnabled(preferences);
+        LinkedHashMap<String, Integer> tokens = enabled ? tokens() : null;
+        // apply() runs on every activity create, so it is the natural refresh point for the
+        // chrome-active cache: a scheme written after the first computation (termux-styling
+        // installing a theme, then termux-reload-settings recreating) must flip it without
+        // waiting for a settings-screen invalidate().
+        setChromeActive(tokens != null);
         if (tokens == null) return false;
 
         ColorResourcesOverride override = ColorResourcesOverride.getInstance();
@@ -162,6 +196,7 @@ public final class LauncherSchemeTheme {
     public static synchronized void invalidate() {
         sCachedTokens = null;
         sCachedFingerprint = 0;
+        sCachedChromeActive = null;
     }
 
     /**
@@ -275,6 +310,15 @@ public final class LauncherSchemeTheme {
 
     private static long fileFingerprint(@NonNull File file) {
         if (!file.isFile()) return 0L;
-        return file.lastModified() * 31L + file.length();
+        long fingerprint = file.lastModified() * 31L + file.length();
+        // On the Nix edition the scheme is usually a home-manager symlink into /nix/store, where
+        // every file carries the same fixed epoch mtime — two generations of equal length would
+        // fingerprint identically and serve a stale palette. The store path changes per
+        // generation, so mix the resolved target in.
+        try {
+            fingerprint = fingerprint * 31L + file.getCanonicalPath().hashCode();
+        } catch (Exception ignored) {
+        }
+        return fingerprint;
     }
 }

@@ -9,9 +9,10 @@ import android.os.Build;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.PopupWindow;
-import android.widget.TextView;
 
 import com.termux.app.launcher.model.AppRef;
+import com.termux.app.launcher.popup.AnchoredMenu;
+import com.termux.app.launcher.popup.MenuRow;
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedItem;
@@ -173,10 +174,9 @@ public class SuggestionBarDrawerPopupTest {
         idle();
 
         List<String> labels = new ArrayList<>();
-        List<?> rows = ReflectionHelpers.getField(row, "appContextRows");
-        for (Object menuRow : rows) {
-            TextView rowView = ReflectionHelpers.getField(menuRow, "rowView");
-            labels.add(String.valueOf(rowView.getText()));
+        AnchoredMenu menu = ReflectionHelpers.getField(row, "appContextMenu");
+        for (MenuRow menuRow : menu.rows()) {
+            labels.add(String.valueOf(menuRow.rowView.getText()));
         }
         ReflectionHelpers.callInstanceMethod(row, "dismissAppContextPopup");
         idle();
@@ -196,9 +196,8 @@ public class SuggestionBarDrawerPopupTest {
     }
 
     private void showAt(PopupWindow popup, View anchor) {
-        ReflectionHelpers.callInstanceMethod(row, "showPopupAtAnchor",
-            ReflectionHelpers.ClassParameter.from(PopupWindow.class, popup),
-            ReflectionHelpers.ClassParameter.from(View.class, anchor));
+        new AnchoredMenu(row, ReflectionHelpers.getField(row, "menuTheme"))
+            .placeAtAnchor(popup, anchor, false);
     }
 
     private Rect visibleFrame() {

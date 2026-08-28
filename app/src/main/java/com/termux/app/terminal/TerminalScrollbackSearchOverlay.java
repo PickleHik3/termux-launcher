@@ -31,7 +31,7 @@ import java.util.List;
  * <p>Nothing here takes focus: the query is a label typed from the sheet's key channel, so the
  * terminal keeps its {@code InputConnection} and no system IME is summoned.
  */
-final class TerminalScrollbackSearchOverlay {
+public final class TerminalScrollbackSearchOverlay {
 
     /** One result row's height. Compact, because this is a bar and not a browser. */
     private static final float ROW_HEIGHT_DP = 30f;
@@ -50,7 +50,7 @@ final class TerminalScrollbackSearchOverlay {
 
     private TerminalScrollbackSearchOverlay() {}
 
-    static void show(@NonNull TermuxActivity activity, @NonNull TerminalView terminalView) {
+    public static void show(@NonNull TermuxActivity activity, @NonNull TerminalView terminalView) {
         if (terminalView.mEmulator == null) return;
         show(activity, snapshot(terminalView.mEmulator), row -> {
             terminalView.jumpToBufferRow(row);

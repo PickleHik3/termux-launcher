@@ -124,9 +124,14 @@ None of these are required for the basic launcher and terminal:
   Termux AI**. See the [TAI user guide](Termux_AI.md).
 - **Shell setup scripts:** [`setup-launcher`](examples/setup-launcher) installs the showcase shell —
   everything, the essentials (fish + Oh My Posh with wallpaper Material colors, zoxide, eza), or one
-  item at a time — and nothing under `~/.termux`, which the app seeds for itself; [`setup-nvim`](examples/setup-nvim) sets up Neovim with the distro of your
+  item at a time — and nothing under `~/.termux`, which the app seeds for itself. The full install
+  also brings in the build tools (`build-essential`, i.e. clang, make and pkg-config, plus cmake and
+  autotools), which anything that compiles from source needs — Neovim's treesitter parsers included.
+  [`setup-nvim`](examples/setup-nvim) sets up Neovim with the distro of your
   choice — AstroNvim (default), NvChad, LazyVim, kickstart, or stock — plus OSC 52 clipboard, line
-  wrap, and, on AstroNvim and NvChad, a colorscheme generated from the wallpaper palette.
+  wrap, and, on AstroNvim and NvChad, a colorscheme generated from the wallpaper palette — on a
+  transparent background, so the wallpaper shows through the editor the way it does through the
+  terminal. `:MaterialTransparent off` gives you solid Material surfaces instead.
 
 ## 9. Your first recovery commands
 

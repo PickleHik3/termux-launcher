@@ -11,27 +11,30 @@ import androidx.annotation.NonNull;
  *
  * <p>The problem it exists to solve is that a downward drag on a scrollable grid is ambiguous —
  * it means "scroll up the list" until the list has no further up to give, at which point the same
- * motion has to start meaning "put the drawer away". Reading the two apart by watching the scroll
- * position live is what produces a drawer that closes itself at the end of an ordinary flick.
- * So the reading is deliberately conservative and depends on state sampled <em>before</em> the
- * gesture:
+ * motion has to start meaning "put the drawer away". This is the model every shipped launcher
+ * (Launcher3, Nova, Lawnchair) and {@code BottomSheetBehavior} converge on, and it is the one
+ * implemented here:
  *
  * <ul>
+ *   <li><b>A pull that begins at the top closes, in one gesture.</b> The close is a finger-tracked
+ *       drag, not a fire-and-forget dismissal: {@link AppDrawerCommitPolicy} only commits a release
+ *       past half the travel or a real downward fling, so a timid or accidental pull springs the
+ *       drawer back open. That commit gate — not a second swipe — is the accident protection.
  *   <li><b>The drag that carries you to the top is never the drag that closes.</b> A stream that
- *       began mid-list scrolls for its whole life, however far past the top it is pulled. Only a
- *       second, deliberate pull can close.
- *   <li><b>A pull at the top must be paid for once before it counts.</b> The first one overpulls
- *       against a spring and, if it was committed enough — {@link #ARM_OVERPULL_DP} of travel or a
- *       downward fling — arms the next one. Arming expires, so a pull minutes later starts over.
- *   <li><b>Arming protects a scroll, so where there is no scroll there is nothing to protect.</b>
- *       A grid that cannot move (a short catalogue, a query filtered down to two results) and every
- *       piece of chrome around it close on the first pull, exactly as they did in B-1.
+ *       began mid-list, or that ever scrolled (an upward delta means the list left its top),
+ *       scrolls for its whole life, however far past the top it is pulled — the leftover travel
+ *       becomes damped overpull. Only the next, deliberate pull can close.
  * </ul>
  *
- * <p>The claim is one-way within a stream, like {@link AppDrawerGestureArbiter}'s: once a pre-scroll
- * has been answered with {@link Decision#CLOSE_DRAG} the rest of the stream drives the close, so the
- * {@code RecyclerView} never scrolls, is never told to disallow interception and never sees an
- * {@code ACTION_CANCEL}.
+ * <p>An earlier revision additionally demanded that a first at-top pull merely "arm" a second one
+ * within a time window — every intentional close cost two swipes. That doubled the mid-list guard
+ * it was meant to back up and read as the drawer refusing the gesture, so it is gone.
+ *
+ * <p>The claim is one-way within a stream, like {@link AppDrawerGestureArbiter}'s, in both
+ * directions: once a pre-scroll has been answered with {@link Decision#CLOSE_DRAG} the rest of the
+ * stream drives the close, so the {@code RecyclerView} never scrolls, is never told to disallow
+ * interception and never sees an {@code ACTION_CANCEL}; and once a stream has scrolled it can only
+ * scroll, so a wiggle that leaves the top and comes back cannot throw the drawer away mid-list.
  */
 public final class AppDrawerCloseArmingPolicy {
 
@@ -41,29 +44,20 @@ public final class AppDrawerCloseArmingPolicy {
         CLOSE_DRAG,
         /** The child scrolls; the parent takes nothing and adds nothing. */
         SCROLL,
-        /** The child scrolls first; whatever downward delta it leaves becomes damped overpull. */
+        /**
+         * Retired: no claim answers this any more. A scrolling stream's leftover downward travel
+         * still rubber-bands, but through the unconsumed-scroll path, not through a claim.
+         */
         OVERPULL
     }
-
-    /** Overpull a release must have reached, in dp, to arm the next pull. */
-    public static final float ARM_OVERPULL_DP = 28f;
-    /**
-     * A downward fling at the top arms too, so a flick need not also be a long pull. Deliberately
-     * the release policy's own threshold rather than a second number: "this was thrown, not
-     * measured" means one thing across the whole drawer.
-     */
-    public static final float ARM_FLING_VELOCITY_PX_PER_SEC =
-        AppDrawerCommitPolicy.FLING_VELOCITY_PX_PER_SEC;
-    /** How long an armed grid stays armed, in ms. Checked at {@code ACTION_DOWN}, never on a timer. */
-    public static final long ARM_WINDOW_MS = 1200L;
 
     /**
      * Everything the arbitration depends on, sampled once at {@code ACTION_DOWN}.
      *
-     * <p>Sampled rather than read live for the same reason as B-1's eligibility snapshot, only more
-     * so: {@code atTop} is the field the gesture itself changes, and re-reading it mid-stream is
-     * precisely the bug — the finger that scrolls the list to its top would arrive at a grid that
-     * now reports "at top" and close the drawer it was scrolling.
+     * <p>Sampled rather than read live because {@code atTop} is the field the gesture itself
+     * changes, and re-reading it mid-stream is precisely the bug — the finger that scrolls the
+     * list to its top would arrive at a grid that now reports "at top" and close the drawer it
+     * was scrolling. The in-stream reversal case is covered by the one-way scroll latch instead.
      */
     public static final class Down {
 
@@ -93,21 +87,15 @@ public final class AppDrawerCloseArmingPolicy {
     private static final Down MID_LIST = new Down(true, false, true);
 
     @NonNull private Down mDown = MID_LIST;
-    private boolean mArmed;
-    private long mArmedAtMs;
     private boolean mClosing;
+    /** One-way within a stream: a gesture that has scrolled the list can never become a close. */
+    private boolean mScrollLatched;
 
-    /**
-     * Starts a fresh stream at {@code ACTION_DOWN} and expires a stale arming.
-     *
-     * <p>The window is checked here, against {@link #armedAtMs()}, rather than being cancelled by a
-     * posted message — a timer would be the one piece of this class that needs a looper, and the
-     * only moment the answer matters is this one.
-     */
+    /** Starts a fresh stream at {@code ACTION_DOWN}. */
     public void begin(@NonNull Down down, long nowMs) {
-        if (mArmed && nowMs - mArmedAtMs > ARM_WINDOW_MS) disarm();
         mDown = down;
         mClosing = false;
+        mScrollLatched = false;
     }
 
     /**
@@ -120,64 +108,42 @@ public final class AppDrawerCloseArmingPolicy {
     public Decision claimOnPreScroll(int dy) {
         if (mClosing) return Decision.CLOSE_DRAG;
 
-        // Chrome, and a grid that cannot scroll, keep the B-1 affordance: a pull closes.
+        // Chrome, and a grid that cannot scroll, have no scroll to protect: a pull closes.
         if (mDown.behavesAsChrome()) return claimClose();
 
-        // A tap is a launch and an upward drag is a scroll; neither is a dismissal, and both spend
-        // the arming so the pull after them starts from the top again.
-        if (dy >= 0) {
-            disarm();
+        if (mScrollLatched) return Decision.SCROLL;
+        // An upward delta means the list is leaving its top — the snapshot's atTop is stale for
+        // the rest of this stream, so the stream is a scroll for life. A mid-list stream likewise.
+        if (dy >= 0 || !mDown.atTop) {
+            mScrollLatched = true;
             return Decision.SCROLL;
         }
-        // Began mid-list: this stream scrolls, even once it reaches the top.
-        if (!mDown.atTop) return Decision.SCROLL;
-        if (mArmed) return claimClose();
-        return Decision.OVERPULL;
+        // At the top, first movement downward: the drawer leaves with the finger. The commit
+        // policy at release is what separates a close from a changed mind.
+        return claimClose();
     }
 
     /**
-     * Settles the arming when a touch gesture ends, i.e. at {@code onStopNestedScroll(TYPE_TOUCH)}.
+     * Settles the stream when a touch gesture ends, i.e. at {@code onStopNestedScroll(TYPE_TOUCH)}.
+     * Parameters are kept for the call sites; nothing is armed any more.
      *
-     * @param overpullPx       how far past its top the grid was pulled at release
-     * @param armOverpullPx    {@link #ARM_OVERPULL_DP} resolved to pixels by the caller
-     * @param velocityPxPerSec release velocity, positive downwards
-     * @param atTopAtEnd       {@code !canScrollVertically(-1)} at release
-     * @return the armed state after this gesture; false is also how a gesture that scrolled away
-     *         from the top, or one that closed the drawer, disarms
+     * @return false, always — closing needs no prior arming
      */
     public boolean end(float overpullPx, float armOverpullPx, float velocityPxPerSec,
                        boolean atTopAtEnd, long nowMs) {
-        boolean closed = mClosing;
         mClosing = false;
+        mScrollLatched = false;
         mDown = MID_LIST;
-        boolean arm = !closed && atTopAtEnd
-            && (overpullPx >= armOverpullPx || velocityPxPerSec >= ARM_FLING_VELOCITY_PX_PER_SEC);
-        if (arm) {
-            mArmed = true;
-            mArmedAtMs = nowMs;
-        } else {
-            disarm();
-        }
-        return mArmed;
+        return false;
     }
 
-    /**
-     * Forgets any arming. The caller drives this for everything that happens outside a nested
-     * scroll — a tap, a query change, {@code beginDrag}, {@code close}, {@code onClosed}.
-     */
+    /** Retired arming hook, kept for its call sites: there is no armed state to forget. */
     public void disarm() {
-        mArmed = false;
-        mArmedAtMs = 0L;
     }
 
-    /** @return true when the next downward pull at the top would close the drawer. */
+    /** @return false, always: a pull at the top closes without prior arming. */
     public boolean isArmed() {
-        return mArmed;
-    }
-
-    /** @return when the arming was recorded, for the window check at the next {@link #begin}. */
-    public long armedAtMs() {
-        return mArmedAtMs;
+        return false;
     }
 
     /** @return true once the current stream owns the close, i.e. the claim can no longer change. */
@@ -202,7 +168,6 @@ public final class AppDrawerCloseArmingPolicy {
     @NonNull
     private Decision claimClose() {
         mClosing = true;
-        disarm();
         return Decision.CLOSE_DRAG;
     }
 }

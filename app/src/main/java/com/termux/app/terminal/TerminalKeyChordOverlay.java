@@ -15,16 +15,17 @@ import com.termux.app.TermuxActivity;
 import java.util.Locale;
 
 /** A small, non-focusable indicator shown while a multi-stroke binding is pending. */
-final class TerminalKeyChordOverlay {
+public final class TerminalKeyChordOverlay implements TerminalHost.KeyChordUi {
 
     private final TermuxActivity activity;
     private TextView label;
 
-    TerminalKeyChordOverlay(@NonNull TermuxActivity activity) {
+    public TerminalKeyChordOverlay(@NonNull TermuxActivity activity) {
         this.activity = activity;
     }
 
-    void show(@NonNull String normalizedSequence) {
+    @Override
+    public void show(@NonNull String normalizedSequence) {
         FrameLayout host = activity.findViewById(R.id.terminal_root_container);
         if (host == null) return;
         if (label == null) label = createLabel();
@@ -40,7 +41,8 @@ final class TerminalKeyChordOverlay {
         label.announceForAccessibility(label.getText());
     }
 
-    void showMode(@NonNull String mode) {
+    @Override
+    public void showMode(@NonNull String mode) {
         FrameLayout host = activity.findViewById(R.id.terminal_root_container);
         if (host == null) return;
         if (label == null) label = createLabel();
@@ -60,7 +62,8 @@ final class TerminalKeyChordOverlay {
      * the keys and show nothing, which is exactly how a rename stroke that answered
      * {@code 409 no_session} looked like a dead key.
      */
-    void showFailure(@NonNull String stroke, @NonNull String message) {
+    @Override
+    public void showFailure(@NonNull String stroke, @NonNull String message) {
         FrameLayout host = activity.findViewById(R.id.terminal_root_container);
         if (host == null) return;
         if (label == null) label = createLabel();
@@ -83,7 +86,8 @@ final class TerminalKeyChordOverlay {
      * visible on their own — a rename prompt on a pane already named, a layout cycle between two
      * similar layouts — and without this the stroke and a dead key look the same.
      */
-    void showAction(@NonNull String stroke, @NonNull String name) {
+    @Override
+    public void showAction(@NonNull String stroke, @NonNull String name) {
         FrameLayout host = activity.findViewById(R.id.terminal_root_container);
         if (host == null) return;
         if (label == null) label = createLabel();
@@ -105,7 +109,8 @@ final class TerminalKeyChordOverlay {
     private static final long FAILURE_VISIBLE_MS = 2400L;
     private final Runnable hideRunnable = this::hide;
 
-    void hide() {
+    @Override
+    public void hide() {
         if (label != null) label.removeCallbacks(hideRunnable);
         if (label == null) return;
         label.setVisibility(TextView.GONE);

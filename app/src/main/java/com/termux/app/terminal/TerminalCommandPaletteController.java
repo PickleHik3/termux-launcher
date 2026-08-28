@@ -216,7 +216,7 @@ public final class TerminalCommandPaletteController
         mActivity.getAppDrawerController().closeImmediate();
         // Same rule for the sheet plane, which owns the same interceptor slot: the palette is the
         // one surface summonable over anything, so the modal sheets are the ones that yield.
-        if (mActivity.isTerminalSheetOpen()) mActivity.getTerminalSheetController().dismissAll();
+        mActivity.getTerminalSheetController().dismissAll();
         mEntries.clear();
         mEntries.addAll(TerminalCommandPalette.buildEntries(mActivity));
         mEntries.addAll(TerminalCommandPalette.buildSessionEntries(mActivity));

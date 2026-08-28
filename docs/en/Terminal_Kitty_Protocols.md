@@ -85,7 +85,9 @@ composition, frame gaps, animation control, composition, and frame deletion.
 Both client-driven and terminal-driven playback are supported. With terminal-driven playback, a GIF
 uploaded as Kitty frames keeps animating on the terminal's own clock after the sender exits.
 
-The repository's patched Fastfetch recipe demonstrates this path without replacing APT-owned files.
+The repository's patched Fastfetch recipe demonstrates this path without replacing APT-owned
+files; it places its logo through the Unicode placeholders above, so the animation runs on
+cells that are ordinary text.
 See [Building terminal showcase tools](Building_Terminal_Showcase_Tools.md).
 
 ## Sixel and iTerm paths

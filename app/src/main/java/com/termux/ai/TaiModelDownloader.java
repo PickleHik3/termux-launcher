@@ -2,6 +2,7 @@ package com.termux.ai;
 
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -12,11 +13,14 @@ import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.LinkedHashSet;
 import java.util.Locale;
@@ -465,11 +469,11 @@ public final class TaiModelDownloader {
         if (file.length() < 1024L * 1024L) {
             return false;
         }
-        try (InputStream input = new BufferedInputStream(new java.io.FileInputStream(file))) {
+        try (InputStream input = new BufferedInputStream(new FileInputStream(file))) {
             byte[] buffer = new byte[256];
             int read = input.read(buffer);
             if (read <= 0) return false;
-            String prefix = new String(buffer, 0, read, java.nio.charset.StandardCharsets.UTF_8).trim().toLowerCase();
+            String prefix = new String(buffer, 0, read, StandardCharsets.UTF_8).trim().toLowerCase();
             return !(prefix.startsWith("<!doctype html") || prefix.startsWith("<html") || prefix.contains("<head"));
         } catch (Exception e) {
             return false;
@@ -480,11 +484,11 @@ public final class TaiModelDownloader {
         if (!originalName.toLowerCase(Locale.ROOT).endsWith(".json") || file.length() <= 0L || file.length() > 10L * 1024L * 1024L) {
             return false;
         }
-        try (InputStream input = new BufferedInputStream(new java.io.FileInputStream(file))) {
+        try (InputStream input = new BufferedInputStream(new FileInputStream(file))) {
             byte[] buffer = new byte[256];
             int read = input.read(buffer);
             if (read <= 0) return false;
-            String prefix = new String(buffer, 0, read, java.nio.charset.StandardCharsets.UTF_8).trim().toLowerCase(Locale.ROOT);
+            String prefix = new String(buffer, 0, read, StandardCharsets.UTF_8).trim().toLowerCase(Locale.ROOT);
             return prefix.startsWith("{") && !(prefix.startsWith("<!doctype html") || prefix.startsWith("<html") || prefix.contains("<head"));
         } catch (Exception e) {
             return false;
@@ -742,7 +746,7 @@ public final class TaiModelDownloader {
     @NonNull
     private JSONObject withEffectiveConfig(@NonNull JSONObject transfer, @NonNull File config) throws JSONException {
         try {
-            transfer.put("effectiveConfig", new JSONObject(readSmallUtf8(new java.io.FileInputStream(config), 10L * 1024L * 1024L)));
+            transfer.put("effectiveConfig", new JSONObject(readSmallUtf8(new FileInputStream(config), 10L * 1024L * 1024L)));
         } catch (Exception ignored) {
             transfer.put("effectiveConfig", JSONObject.NULL);
         }
@@ -759,7 +763,7 @@ public final class TaiModelDownloader {
             while ((read = buffered.read(buffer)) != -1) {
                 total += read;
                 if (total > maxBytes) throw new IllegalStateException("Response too large.");
-                builder.append(new String(buffer, 0, read, java.nio.charset.StandardCharsets.UTF_8));
+                builder.append(new String(buffer, 0, read, StandardCharsets.UTF_8));
             }
             return builder.toString();
         }
@@ -786,7 +790,7 @@ public final class TaiModelDownloader {
     }
 
     private void startService(Intent intent) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) appContext.startForegroundService(intent);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) appContext.startForegroundService(intent);
         else appContext.startService(intent);
     }
 
@@ -822,19 +826,19 @@ public final class TaiModelDownloader {
                 String location = connection.getHeaderField("Location");
                 connection.disconnect();
                 if (location == null || location.isEmpty()) {
-                    throw new java.io.IOException("Redirect from " + currentUrl + " carried no Location header");
+                    throw new IOException("Redirect from " + currentUrl + " carried no Location header");
                 }
                 currentUrl = new URL(new URL(currentUrl), location).toString();
                 continue;
             }
             return connection;
         }
-        throw new java.io.IOException("Too many redirects resolving " + url);
+        throw new IOException("Too many redirects resolving " + url);
     }
 
     private String sha256(File file) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        try (InputStream input = new BufferedInputStream(new java.io.FileInputStream(file))) {
+        try (InputStream input = new BufferedInputStream(new FileInputStream(file))) {
             byte[] buffer = new byte[1024 * 128];
             int read;
             while ((read = input.read(buffer)) != -1) digest.update(buffer, 0, read);

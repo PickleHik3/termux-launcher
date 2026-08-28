@@ -6,7 +6,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Process;
 import android.os.UserHandle;
 import android.text.TextUtils;
@@ -16,7 +18,9 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.launcher.model.LauncherAppEntry;
 
+import java.lang.reflect.Method;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public final class LauncherAppLauncher {
 
@@ -90,8 +94,8 @@ public final class LauncherAppLauncher {
         Intent packageMain = new Intent(Intent.ACTION_MAIN);
         packageMain.addCategory(Intent.CATEGORY_LAUNCHER);
         packageMain.setPackage(entry.appRef.packageName);
-        List<android.content.pm.ResolveInfo> matches = packageManager.queryIntentActivities(packageMain, 0);
-        for (android.content.pm.ResolveInfo match : matches) {
+        List<ResolveInfo> matches = packageManager.queryIntentActivities(packageMain, 0);
+        for (ResolveInfo match : matches) {
             if (match == null || match.activityInfo == null) continue;
             String pkg = match.activityInfo.packageName;
             String cls = match.activityInfo.name;
@@ -110,7 +114,7 @@ public final class LauncherAppLauncher {
 
     public static boolean tryStartProfileMainActivity(@NonNull Context context,
                                                       @NonNull LauncherAppEntry entry,
-                                                      @Nullable android.os.Bundle options) {
+                                                      @Nullable Bundle options) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP || entry.appRef.userId < 0) {
             return false;
         }
@@ -140,7 +144,7 @@ public final class LauncherAppLauncher {
 
     @NonNull
     private static UserHandle userHandleFor(int userId) throws Exception {
-        java.lang.reflect.Method method = UserHandle.class.getDeclaredMethod("of", int.class);
+        Method method = UserHandle.class.getDeclaredMethod("of", int.class);
         method.setAccessible(true);
         Object value = method.invoke(null, userId);
         if (value instanceof UserHandle) {
@@ -159,7 +163,7 @@ public final class LauncherAppLauncher {
                 String.valueOf(userId), "-n", component)
                 .redirectErrorStream(true)
                 .start();
-            boolean finished = process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            boolean finished = process.waitFor(5, TimeUnit.SECONDS);
             return finished && process.exitValue() == 0;
         } catch (Throwable ignored) {
             return false;

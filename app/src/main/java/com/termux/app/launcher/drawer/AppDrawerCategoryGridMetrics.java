@@ -34,6 +34,8 @@ public final class AppDrawerCategoryGridMetrics {
      * like, where three columns of a 919dp-wide body came out as tall as the whole 297dp viewport.
      */
     public static final float MAX_TILE_VIEWPORT_FRACTION = 0.75f;
+    /** Fraction of the viewport a collapse drag spans from fully expanded to fully collapsed. */
+    public static final float COLLAPSE_TRAVEL_VIEWPORT_FRACTION = 0.5f;
     /**
      * Ceiling only. The preview icons are sized to fill their half of the card, so on a phone the
      * geometry (or the cache budget) decides — not this. It exists so a very wide card cannot ask
@@ -184,7 +186,12 @@ public final class AppDrawerCategoryGridMetrics {
             itemHeight, spacing, heading, bottom, spacing, spacing, largeSlot, smallBlockGap,
             icon, attached,
             detailColumns, detailRow, Math.min(finiteNonNegative(drawerRadiusPx), tile / 2f),
-            Math.max(1f, viewport), EMPTY_TOP_MIN_DP * d, HEADER_LIST_GAP_DP * d);
+            // The collapse drag's full range. A whole viewport of travel made the shrink lag the
+            // finger — two-thirds of the screen dragged still left the pane 60% expanded, and a
+            // plain release had to cover half the screen to commit. Half a viewport is the sheet
+            // convention: the pane visibly follows the finger and a natural pull commits.
+            Math.max(1f, viewport * COLLAPSE_TRAVEL_VIEWPORT_FRACTION),
+            EMPTY_TOP_MIN_DP * d, HEADER_LIST_GAP_DP * d);
     }
 
     public long chargedPreviewBytes() {

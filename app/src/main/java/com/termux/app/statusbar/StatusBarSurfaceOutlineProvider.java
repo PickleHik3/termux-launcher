@@ -12,6 +12,17 @@ public final class StatusBarSurfaceOutlineProvider extends ViewOutlineProvider {
     private float fullRadiusPx;
     private float fullProgress;
     private float radiusPx;
+    private boolean innerEdgeOnly;
+
+    /**
+     * Docked keeps the pane flush with the screen on three sides, so only its bottom edge - the one
+     * facing the terminal - carries corners. See
+     * {@link com.termux.app.surfaces.InnerEdgeOutlineProvider} for why the top two are pushed
+     * outside the view rather than described with a per-corner path.
+     */
+    public void setInnerEdgeOnly(boolean innerEdgeOnly) {
+        this.innerEdgeOnly = innerEdgeOnly;
+    }
 
     /**
      * Keeps normal surface styling at progress zero and reaches the pane's existing rounded-style
@@ -21,14 +32,15 @@ public final class StatusBarSurfaceOutlineProvider extends ViewOutlineProvider {
     public void setFrame(float normalRadiusPx, float fullRadiusPx, float fullProgress) {
         this.normalRadiusPx = finiteNonNegative(normalRadiusPx);
         this.fullRadiusPx = finiteNonNegative(fullRadiusPx);
-        this.fullProgress = finiteUnit(fullProgress);
+        this.fullProgress = FullStatusBarGeometry.finiteUnit(fullProgress);
         radiusPx = this.normalRadiusPx
             + (this.fullRadiusPx - this.normalRadiusPx) * this.fullProgress;
     }
 
     @Override
     public void getOutline(View view, @NonNull Outline outline) {
-        outline.setRoundRect(0, 0, Math.max(0, view.getWidth()),
+        int top = innerEdgeOnly && radiusPx > 0f ? -Math.round(radiusPx) : 0;
+        outline.setRoundRect(0, top, Math.max(0, view.getWidth()),
             Math.max(0, view.getHeight()), radiusPx);
     }
 
@@ -39,9 +51,5 @@ public final class StatusBarSurfaceOutlineProvider extends ViewOutlineProvider {
 
     private static float finiteNonNegative(float value) {
         return Float.isFinite(value) ? Math.max(0f, value) : 0f;
-    }
-
-    private static float finiteUnit(float value) {
-        return Float.isFinite(value) ? Math.max(0f, Math.min(1f, value)) : 0f;
     }
 }

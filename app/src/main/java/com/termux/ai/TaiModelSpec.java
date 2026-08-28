@@ -443,7 +443,7 @@ public final class TaiModelSpec {
     }
 
     private static boolean hasMnnHint(@Nullable String path) {
-        String value = path == null ? "" : path.toLowerCase(java.util.Locale.ROOT);
+        String value = path == null ? "" : path.toLowerCase(Locale.ROOT);
         return value.contains("mnn") || value.endsWith("config.json") || value.endsWith("llm.mnn");
     }
 

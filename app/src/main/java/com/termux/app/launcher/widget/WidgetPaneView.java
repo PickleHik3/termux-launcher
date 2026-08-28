@@ -20,6 +20,8 @@ import androidx.core.view.ViewCompat;
 
 import com.termux.R;
 
+import java.util.List;
+
 /** Fixed middle-body UI; it has no authority over FULL or terminal geometry. */
 public final class WidgetPaneView extends FrameLayout {
     public interface Listener {
@@ -138,7 +140,7 @@ public final class WidgetPaneView extends FrameLayout {
     public void render(@NonNull LauncherWidgetRepository repository,
                        @NonNull LauncherWidgetHostController.Capability capability, int page) {
         hideWidgetEditOverlay();
-        java.util.List<LauncherWidgetRecord> pageRecords = repository.recordsOnPage(page);
+        List<LauncherWidgetRecord> pageRecords = repository.recordsOnPage(page);
         boolean populated = !pageRecords.isEmpty();
         grid.refresh(repository.gridDefinition(), pageRecords);
         empty.setVisibility(populated ? GONE : VISIBLE);

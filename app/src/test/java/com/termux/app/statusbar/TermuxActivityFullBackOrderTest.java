@@ -16,7 +16,7 @@ public class TermuxActivityFullBackOrderTest {
         int full = source.indexOf("mFullStatusBarController.onBackPressed()", method);
         int palette = source.indexOf("isCommandPaletteOpen()", method);
         int drawer = source.indexOf("mAppDrawerController != null", method);
-        int dock = source.indexOf("mDockTuningMode", method);
+        int dock = source.indexOf("mSurfaceEditor.isActive()", method);
         int navigation = source.indexOf("getDrawer().isDrawerOpen", method);
         assertTrue(method < full && full < palette && palette < drawer && drawer < dock
             && dock < navigation);

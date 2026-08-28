@@ -11,7 +11,6 @@ import com.termux.app.launcher.drawer.AppDrawerCategoryTouchRegions.Part;
 import org.junit.Test;
 
 public class AppDrawerCategoryGesturePolicyTest {
-    private static final float ARM = 28f;
 
     @Test public void actionTapStaysActionUntilAClaimSuppressesIt() {
         AppDrawerCategoryGesturePolicy policy = new AppDrawerCategoryGesturePolicy();
@@ -22,14 +21,16 @@ public class AppDrawerCategoryGesturePolicyTest {
         assertTrue(policy.suppressClick());
     }
 
-    @Test public void overviewFirstPullArmsAndFreshSecondPullCloses() {
+    @Test public void overviewPullAtTheTopClosesInOneGesture() {
         AppDrawerCategoryGesturePolicy policy = new AppDrawerCategoryGesturePolicy();
         policy.begin(new Down(Part.OVERVIEW_LIST, true, true, 0), 1000);
-        assertEquals(Claim.OVERPULL, policy.claimOnPreScroll(-20));
-        assertTrue(policy.finishOverview(ARM, ARM, 0, true, 1000));
-        policy.begin(new Down(Part.OVERVIEW_LIST, true, true, 1000), 1100);
         assertEquals(Claim.CLOSE_DRAG, policy.claimOnPreScroll(-20));
         assertTrue(policy.suppressClick());
+        // A stream that began mid-list stays a scroll for its whole life.
+        AppDrawerCategoryGesturePolicy mid = new AppDrawerCategoryGesturePolicy();
+        mid.begin(new Down(Part.OVERVIEW_LIST, false, true, 0), 1000);
+        assertEquals(Claim.SCROLL, mid.claimOnPreScroll(-20));
+        assertEquals(Claim.SCROLL, mid.claimOnPreScroll(-200));
     }
 
     @Test public void midListAndUpwardClaimsAreFrozenForTheStream() {

@@ -9,8 +9,6 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.terminal.TerminalRenameTarget;
-
 /**
  * The drawn half of an inline rename: a small glass chip showing what is being renamed, the draft
  * name and a caret.

@@ -36,16 +36,17 @@ import org.robolectric.util.ReflectionHelpers;
 public class TermuxActivityBackOrderTest {
 
     @Test
-    public void theDrawerConsumesBackBeforeDockTuning() {
+    public void theDrawerConsumesBackBeforeTheSurfaceEditor() {
         TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
         AppDrawerController controller = openDrawer(activity);
-        ReflectionHelpers.setField(activity, "mDockTuningMode", true);
+        Object editor = ReflectionHelpers.getField(activity, "mSurfaceEditor");
+        ReflectionHelpers.setField(editor, "mSurfaceEditorOpen", true);
 
         activity.onBackPressed();
 
         assertFalse(controller.isOpen());
-        boolean dockTuningMode = ReflectionHelpers.getField(activity, "mDockTuningMode");
-        assertTrue("dock tuning must not consume a back press aimed at the drawer", dockTuningMode);
+        boolean editorOpen = ReflectionHelpers.getField(editor, "mSurfaceEditorOpen");
+        assertTrue("the surface editor must not consume a back press aimed at the drawer", editorOpen);
     }
 
     @Test
@@ -73,7 +74,25 @@ public class TermuxActivityBackOrderTest {
         // The branch is guarded on the field, not on the lazy accessor: a back press on a session
         // that never pulled the drawer down must not build one.
         assertNull(ReflectionHelpers.getField(activity, "mAppDrawerController"));
-        assertTrue(activity.getDrawer().isDrawerOpen(Gravity.LEFT));
+        // Split panes are the default, and they retire the legacy sessions drawer: the sessions
+        // panel under the status pill replaces it, so back must leave it shut.
+        assertFalse(activity.getDrawer().isDrawerOpen(Gravity.LEFT));
+    }
+
+    @Test
+    public void backStillOpensTheLegacySessionsDrawerInCompatibilityMode() {
+        TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
+        activity.setContentView(R.layout.activity_termux);
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(activity);
+        ReflectionHelpers.setField(activity, "mPreferences", preferences);
+        preferences.setCompatibilityModeEnabled(true);
+        try {
+            activity.onBackPressed();
+            assertTrue(activity.getDrawer().isDrawerOpen(Gravity.LEFT));
+        } finally {
+            preferences.setCompatibilityModeEnabled(false);
+        }
     }
 
     // ------------------------------------------------------------------ back inside the drawer

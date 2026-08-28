@@ -444,6 +444,31 @@ public final class TerminalWorkspace {
         return Collections.unmodifiableList(new ArrayList<>(values));
     }
 
+    /**
+     * Result summary returned by the durable workspace loader.
+     *
+     * <p>Lives here rather than on the activity so a caller can report a load without naming the
+     * activity type.
+     */
+    public static final class LoadResult {
+        public final int sessions;
+        public final int windows;
+        public final int panes;
+        public final int commandsRun;
+        public final int commandsSkipped;
+        public final boolean replaced;
+
+        public LoadResult(int sessions, int windows, int panes, int commandsRun,
+                          int commandsSkipped, boolean replaced) {
+            this.sessions = sessions;
+            this.windows = windows;
+            this.panes = panes;
+            this.commandsRun = commandsRun;
+            this.commandsSkipped = commandsSkipped;
+            this.replaced = replaced;
+        }
+    }
+
     public static final class WorkspaceException extends Exception {
         @NonNull public final String code;
 

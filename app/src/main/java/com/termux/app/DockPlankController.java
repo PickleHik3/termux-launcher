@@ -34,12 +34,16 @@ public final class DockPlankController implements Choreographer.FrameCallback {
     private static final float OVERSCAN_SLACK_DP = 2f;
     /** The capsule's press dip. */
     private static final float DEFAULT_PRESS_DIP = 0.013f;
+    /** No cap on how far the dip may travel; the dock's own slab keeps its proportional dip. */
+    private static final float NO_DIP_TRAVEL_CAP = 0f;
 
     // Per-instance tuning: the dock keeps the defaults; the terminal's full-screen pane uses far
     // gentler values, since 3° on a surface that tall reads as the whole screen keeling over.
     private final float mMaxTiltDeg;
     private final float mShiftDp;
     private final float mPressDip;
+    /** Ceiling on the dip's edge travel in px, or 0 for none. See {@link #setMaxDipTravelDp}. */
+    private float mMaxDipTravelPx = NO_DIP_TRAVEL_CAP;
 
     private final View mPlank;       // the transformed slab (whole dock stack)
     private final View mSpecular;    // moving specular highlight
@@ -135,6 +139,22 @@ public final class DockPlankController implements Choreographer.FrameCallback {
         layer.setTranslationY(0f);
         layer.setScaleX(1f);
         layer.setScaleY(1f);
+    }
+
+    /**
+     * Caps how far the press dip may pull an edge inward, in dp.
+     *
+     * <p>A dip expressed as a fraction of the slab scales with the slab. On the dock — a bar a
+     * finger tall — 1.3% is a couple of pixels and reads as a press. On a terminal pane, which is
+     * most of the screen, the same fraction moves each edge by a dozen pixels: the slab, its
+     * content and its lit rim all shrink away from the terminal's own edge, so the border stops
+     * looking attached to the terminal and reads as a frame sliding off it. The cap keeps the
+     * gesture tactile on a small surface and imperceptible in geometry on a large one.
+     *
+     * @param dp maximum travel per edge, or 0 for the uncapped proportional dip.
+     */
+    public void setMaxDipTravelDp(float dp) {
+        mMaxDipTravelPx = dp > 0f ? dp * mDensity : NO_DIP_TRAVEL_CAP;
     }
 
     public void setReducedMotion(boolean reduced) {
@@ -360,10 +380,22 @@ public final class DockPlankController implements Choreographer.FrameCallback {
             slab.setScaleY(1f);
         } else {
             // The floating capsule has margins to slide into, so it needs no overscan — just the dip.
-            float scale = 1f - mPress.value * mPressDip;
+            float scale = 1f - dipFor(width, height);
             slab.setScaleX(scale);
             slab.setScaleY(scale);
         }
+    }
+
+    /**
+     * The press dip as a scale delta, capped so it cannot become a visible resize on a large slab.
+     * A uniform scale moves each edge by half the shrink, so the cap is doubled before dividing.
+     */
+    private float dipFor(float width, float height) {
+        float dip = mPress.value * mPressDip;
+        float longest = Math.max(width, height);
+        if (mMaxDipTravelPx <= 0f || longest <= 0f)
+            return dip;
+        return Math.min(dip, (2f * mMaxDipTravelPx) / longest);
     }
 
     /**

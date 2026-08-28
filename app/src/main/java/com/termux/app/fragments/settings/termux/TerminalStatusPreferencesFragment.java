@@ -227,8 +227,8 @@ public final class TerminalStatusPreferencesFragment extends MaterialPreferenceF
 
     private void openSurfaceEditor(Context context, String section) {
         Intent intent = new Intent(context, TermuxActivity.class);
-        intent.putExtra(TermuxActivity.EXTRA_DOCK_TUNING, true);
-        intent.putExtra(TermuxActivity.EXTRA_DOCK_TUNING_SECTION, section);
+        intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR, true);
+        intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR_SECTION, section);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(intent);
     }

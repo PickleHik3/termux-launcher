@@ -11,6 +11,8 @@ import android.graphics.drawable.LayerDrawable;
 
 import androidx.annotation.NonNull;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 /** Shared dock-glass math and texture generation used by both launcher and Settings preview. */
@@ -36,7 +38,7 @@ public final class DockGlassRendering {
                                         int bottomFootAlpha, float sliceStart, float sliceEnd) {
         float start = Math.max(0f, Math.min(1f, sliceStart));
         float end = Math.max(start, Math.min(1f, sliceEnd));
-        java.util.List<Integer> colors = new java.util.ArrayList<>();
+        List<Integer> colors = new ArrayList<>();
         colors.add(lightModelColorAt(start, accent, topSheenAlpha, midSheenAlpha, bottomFootAlpha));
         for (float stop : LIGHT_MODEL_STOPS) {
             if (stop > start && stop < end) {

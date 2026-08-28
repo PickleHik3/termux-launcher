@@ -20,21 +20,32 @@ import androidx.preference.PreferenceManager;
 
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
+import com.termux.app.TermuxActivity;
+import com.termux.app.settings.TermuxPropertiesFile;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardExtraKeys;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
+import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboardLayoutLoader;
+import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Locale;
+import java.util.Properties;
 import java.util.Set;
+
+import juloo.keyboard2.KeyboardData;
 
 /** Standalone settings page for the built-in terminal keyboard. */
 @Keep
@@ -74,15 +85,17 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         if (context == null)
             return;
         PreferenceManager preferenceManager = getPreferenceManager();
-        preferenceManager.setPreferenceDataStore(KeyboardPreferencesDataStore.getInstance(context));
+        KeyboardPreferencesDataStore store = KeyboardPreferencesDataStore.getInstance(context);
+        store.forgetTermuxProperties();
+        preferenceManager.setPreferenceDataStore(store);
         setPreferencesFromResource(R.xml.termux_keyboard_preferences, rootKey);
         refreshThemeEntries();
 
         Preference editRow = findPreference("edit_extra_keys_row");
         if (editRow != null) editRow.setOnPreferenceClickListener(preference -> {
             // Edited over the live terminal, so the row on screen is the row being changed.
-            Intent intent = new Intent(context, com.termux.app.TermuxActivity.class);
-            intent.putExtra(com.termux.app.TermuxActivity.EXTRA_EDIT_EXTRA_KEYS, true);
+            Intent intent = new Intent(context, TermuxActivity.class);
+            intent.putExtra(TermuxActivity.EXTRA_EDIT_EXTRA_KEYS, true);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             startActivity(intent);
             return true;
@@ -90,9 +103,9 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
 
         Preference customizeSurface = findPreference("customize_keyboard_surface");
         if (customizeSurface != null) customizeSurface.setOnPreferenceClickListener(preference -> {
-            Intent intent = new Intent(context, com.termux.app.TermuxActivity.class);
-            intent.putExtra(com.termux.app.TermuxActivity.EXTRA_DOCK_TUNING, true);
-            intent.putExtra(com.termux.app.TermuxActivity.EXTRA_DOCK_TUNING_SECTION, "keyboard");
+            Intent intent = new Intent(context, TermuxActivity.class);
+            intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR, true);
+            intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR_SECTION, "keyboard");
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             startActivity(intent);
             return true;
@@ -136,7 +149,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     private void validateCustomLayout() {
         Context context = getContext();
         if (context == null) return;
-        File file = new File(com.termux.shared.termux.TermuxConstants.TERMUX_DATA_HOME_DIR_PATH,
+        File file = new File(TermuxConstants.TERMUX_DATA_HOME_DIR_PATH,
             "keyboard/layout.xml");
         if (!file.isFile()) {
             AppNotice.show(context, R.string.settings_custom_layout_missing, true);
@@ -150,12 +163,12 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
                 int total = 0, read;
                 while ((read = input.read(buffer)) != -1) {
                     total += read;
-                    if (total > com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboardLayoutLoader.MAX_LAYOUT_BYTES)
-                        throw new java.io.IOException("layout too large");
+                    if (total > TermuxInAppKeyboardLayoutLoader.MAX_LAYOUT_BYTES)
+                        throw new IOException("layout too large");
                     output.write(buffer, 0, read);
                 }
-                juloo.keyboard2.KeyboardData.load_string_exn(
-                    new String(output.toByteArray(), java.nio.charset.StandardCharsets.UTF_8));
+                KeyboardData.load_string_exn(
+                    new String(output.toByteArray(), StandardCharsets.UTF_8));
                 valid = true;
             } catch (Exception ignored) {}
             final int message = valid ? R.string.settings_custom_layout_valid
@@ -180,6 +193,9 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         if (getActivity() != null) {
             getActivity().setTitle(R.string.settings_destination_keyboard_input);
         }
+        // The file may have been hand-edited while the screen was away.
+        if (getContext() != null)
+            KeyboardPreferencesDataStore.getInstance(getContext()).forgetTermuxProperties();
         refreshThemeEntries();
     }
 
@@ -381,6 +397,12 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
 
     private final TermuxAppSharedPreferences mPreferences;
     private final Context mContext;
+    /**
+     * termux.properties as last read. The preference framework asks for every bound key on each
+     * bind, so this is read once per screen and dropped by {@link #forgetTermuxProperties} when the
+     * fragment (re)appears, and after this store's own write.
+     */
+    @Nullable private Properties mTermuxProperties;
 
     private static KeyboardPreferencesDataStore mInstance;
 
@@ -394,6 +416,17 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             mInstance = new KeyboardPreferencesDataStore(context);
         }
         return mInstance;
+    }
+
+    @NonNull
+    private Properties termuxProperties() {
+        if (mTermuxProperties == null)
+            mTermuxProperties = TermuxPropertiesFile.load(mContext);
+        return mTermuxProperties;
+    }
+
+    void forgetTermuxProperties() {
+        mTermuxProperties = null;
     }
 
     @Override
@@ -415,16 +448,16 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 break;
             case "app_launcher_extra_keys_row_enabled":
                 mPreferences.setAppLauncherExtraKeysRowEnabled(value);
-                com.termux.app.TermuxActivity.requestTermuxActivityStylingOnNextResume(
+                TermuxActivity.requestTermuxActivityStylingOnNextResume(
                     mContext, false);
                 break;
             case "extra_keys_text_all_caps":
                 // A property, not a preference: the row reads it from termux.properties, so this
                 // writes there and the styling reload picks it up like any hand edit would.
-                com.termux.app.settings.TermuxPropertiesFile.write(
-                    com.termux.shared.termux.settings.properties.TermuxPropertyConstants
-                        .KEY_EXTRA_KEYS_TEXT_ALL_CAPS, Boolean.toString(value));
-                com.termux.app.TermuxActivity.requestTermuxActivityStylingOnNextResume(
+                TermuxPropertiesFile.write(TermuxPropertyConstants.KEY_EXTRA_KEYS_TEXT_ALL_CAPS,
+                    Boolean.toString(value));
+                mTermuxProperties = null;
+                TermuxActivity.requestTermuxActivityStylingOnNextResume(
                     mContext, false);
                 break;
             default:
@@ -448,12 +481,11 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             case "app_launcher_extra_keys_row_enabled":
                 return mPreferences.isAppLauncherExtraKeysRowEnabled();
             case "extra_keys_text_all_caps": {
-                String stored = com.termux.app.settings.TermuxPropertiesFile.load(mContext)
-                    .getProperty(com.termux.shared.termux.settings.properties
-                        .TermuxPropertyConstants.KEY_EXTRA_KEYS_TEXT_ALL_CAPS);
+                String stored = termuxProperties()
+                    .getProperty(TermuxPropertyConstants.KEY_EXTRA_KEYS_TEXT_ALL_CAPS);
                 // Absent means this property's documented default-true behaviour.
                 return stored == null
-                    || !"false".equals(stored.trim().toLowerCase(java.util.Locale.ROOT));
+                    || !"false".equals(stored.trim().toLowerCase(Locale.ROOT));
             }
             default:
                 return defValue;

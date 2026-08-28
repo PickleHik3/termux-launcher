@@ -225,7 +225,7 @@ public class AppDrawerContentHorizontalTest {
         assertEquals(View.GONE, content.getPageIndicator().getVisibility());
     }
 
-    @Test public void switchingBackRestoresVerticalGeometryAndDisarmedFirstPull() {
+    @Test public void switchingBackRestoresVerticalGeometryAndTopPullClose() {
         content.setViewType(AppDrawerViewType.VERTICAL);
         content.setVerticalMetrics(AppDrawerGridMetrics.resolve(
             WIDTH - content.getColumnWidthPx(), 1f, 11f));
@@ -245,8 +245,9 @@ public class AppDrawerContentHorizontalTest {
         down.recycle();
         int[] consumed = {0, 0};
         content.onNestedPreScroll(content.getGrid(), 0, -40, consumed, ViewCompat.TYPE_TOUCH);
-        assertEquals(0, consumed[1]);
-        assertEquals(0, callbacks.begins);
+        // A grid restored at its top closes on the first pull, exactly as the vertical view does.
+        assertEquals(-40, consumed[1]);
+        assertEquals(1, callbacks.begins);
     }
 
     @Test public void switchingToVerticalUnbindsEveryAttachedHorizontalPageBeforeHiding() {

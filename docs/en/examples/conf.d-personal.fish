@@ -1,6 +1,10 @@
 # ~/.config/fish/conf.d/personal.fish — YOUR file. Writable, edit freely, takes
 # effect in the next shell (`exec fish`).
 #
+# This is the Termux-edition copy (com.termux, io.vaj.tl). The Nix edition ships
+# its own, with nix-on-droid shortcuts in place of the package ones and the sshd
+# autostart hook — see the launcher template in the nix-on-droid flake.
+#
 # setup-launcher installs this once (from the conf.d-personal.fish example) and
 # never overwrites it, so edits here survive re-runs. The launcher's own
 # settings live in ~/.config/fish/config.fish, which the installer does replace
@@ -19,12 +23,6 @@ set -q VISUAL; or set -gx VISUAL $EDITOR
 ## ls / cd helpers. Remove the block if you prefer plain ls and cd.
 ## ---------------------------------------------------------------------------
 if status is-interactive
-    # Nix edition only: start the declarative sshd when armed via
-    # `sshd-autostart on`. A no-op everywhere else.
-    if test -e ~/.config/sshd/autostart; and type -q sshd-start
-        sshd-start --quiet
-    end
-
     # eza replaces ls-style commands when installed.
     if type -q eza
         function ls
@@ -79,35 +77,41 @@ function y
 end
 
 ## ---------------------------------------------------------------------------
-## Quick guide: make this config yours
+## Package shortcuts. Uncomment what you want.
 ## ---------------------------------------------------------------------------
 #
-# Abbreviations expand as you type (like typing `cc` + space becoming `clear`).
-# They live in your history as the expanded command, which keeps history
-# useful. Uncomment any of these or add your own:
-#
-#   abbr -a cc clear
-#   abbr -a ee exit
-#   abbr -a cdd 'cd ..'
-#   abbr -a nn nvim
-#   abbr -a mm mkdir
-#   abbr -a py python
-#   abbr -a gitc 'git clone'
-#   abbr -a fishy 'nvim ~/.config/fish/conf.d/personal.fish' # edit this file
-#   abbr -a termuxy 'nvim ~/.termux/termux.properties' # edit terminal settings
-#   abbr -a rfish 'exec fish'                          # reload the fish configs
-#   abbr -a rr termux-reload-settings                  # reload ~/.termux configs
-#
-# Package-manager shortcuts, guarded so they only exist where pacman does:
+# Termux ships apt, driven through `pkg`; the termux-pacman variant ships pacman
+# instead. Guarding on which one exists keeps the same abbreviations working on
+# both, so muscle memory carries across a reinstall:
 #
 #   if type -q pacman
 #       abbr -a ii 'pacman -S --needed --noconfirm'
 #       abbr -a ss 'pacman -Ss'
 #       abbr -a uu 'pacman -Syu --needed --noconfirm'
+#   else
+#       abbr -a ii 'pkg install -y'
+#       abbr -a ss 'pkg search'
+#       abbr -a uu 'pkg upgrade -y'
 #   end
 #
-# Functions are for anything with logic (see `y` above). Key bindings attach
-# to any function; this one runs it on Alt+G in an interactive shell:
+#   abbr -a bb 'pkg install -y build-essential'   # compiler, for building things
+
+## ---------------------------------------------------------------------------
+## General shortcuts. Abbreviations expand as you type, so history stays useful.
+## ---------------------------------------------------------------------------
+#
+#   abbr -a cc clear
+#   abbr -a ee exit
+#   abbr -a cdd 'cd ..'
+#   abbr -a nn nvim
+#   abbr -a py python
+#   abbr -a gitc 'git clone'
+#   abbr -a fishy 'nvim ~/.config/fish/conf.d/personal.fish'   # edit this file
+#   abbr -a termuxy 'nvim ~/.termux/termux.properties'         # terminal settings
+#   abbr -a rfish 'exec fish'                                  # reload fish
+#   abbr -a rr termux-reload-settings                          # reload ~/.termux configs
+#
+# Functions are for anything with logic (see `y` above). Bind one to a key:
 #
 #   function __git_status
 #       git status

@@ -2,6 +2,7 @@ package com.termux.ai;
 
 import android.content.Context;
 import android.net.Uri;
+import android.os.Process;
 import java.util.Base64;
 
 import androidx.annotation.NonNull;
@@ -22,6 +23,7 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.io.File;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.ArrayList;
@@ -137,7 +139,7 @@ public final class TaiManager {
     }
 
     private static boolean isTaiRuntimeProcess(@NonNull Context context) {
-        String processName = ProcessUtils.getAppProcessNameForPid(context, android.os.Process.myPid());
+        String processName = ProcessUtils.getAppProcessNameForPid(context, Process.myPid());
         return processName != null && processName.endsWith(TaiRuntimeIpc.RUNTIME_PROCESS_SUFFIX);
     }
 
@@ -1826,7 +1828,7 @@ public final class TaiManager {
     @NonNull
     static Map<String, Object> jsonObjectToMap(@NonNull JSONObject object) {
         Map<String, Object> map = new LinkedHashMap<>();
-        java.util.Iterator<String> keys = object.keys();
+        Iterator<String> keys = object.keys();
         while (keys.hasNext()) {
             String key = keys.next();
             map.put(key, jsonCompatibleValue(object.opt(key)));

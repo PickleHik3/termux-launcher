@@ -554,6 +554,14 @@ public final class TerminalEmulator {
     private int mScrollCounter = 0;
 
     /**
+     * Total lines ever scrolled off the top, never reset (unlike {@link #mScrollCounter}, which the
+     * view consumes and clears). A kitty graphics placement captures the cursor row when the command
+     * arrives but lands after an asynchronous decode; the difference in this count across that gap is
+     * how many rows the captured anchor has since moved up.
+     */
+    private long mScrollEventCount;
+
+    /**
      * If automatic scrolling of terminal is disabled
      */
     private boolean mAutoScrollDisabled;
@@ -590,6 +598,10 @@ public final class TerminalEmulator {
     public void setCellSize(int w, int h) {
         cellW = w;
         cellH = h;
+    }
+
+    long scrollEventCount() {
+        return mScrollEventCount;
     }
 
     public int getCellWidthPixels() {
@@ -672,6 +684,9 @@ public final class TerminalEmulator {
         mCellHeightPixels = cellHeightPixels;
         mTabStop = new boolean[mColumns];
         mKittyGraphics = new KittyGraphicsProtocol(this, session);
+        TerminalBuffer.UnreachableImageListener collected = this::onKittyCellsCollected;
+        mMainBuffer.setUnreachableImageListener(collected);
+        mAltBuffer.setUnreachableImageListener(collected);
         reset();
     }
 
@@ -1881,7 +1896,7 @@ public final class TerminalEmulator {
                     // Reset: Use Normal Screen Buffer and restore cursor as in DECRC.
                     TerminalBuffer newScreen = setting ? mAltBuffer : mMainBuffer;
                     if (newScreen != mScreen) {
-                        mKittyGraphics.reset();
+                        mKittyGraphics.screenSwitched();
                         clearExtraCursors();
                         boolean resized = !(newScreen.mColumns == mColumns && newScreen.mScreenRows == mRows);
                         if (setting)
@@ -3396,6 +3411,7 @@ public final class TerminalEmulator {
 
     private void scrollDownOneLine() {
         mScrollCounter++;
+        mScrollEventCount++;
         long currentStyle = getStyle();
         if (mLeftMargin != 0 || mRightMargin != mColumns) {
             // Horizontal margin: Do not put anything into scroll history, just non-margin part of screen up.
@@ -3919,6 +3935,18 @@ public final class TerminalEmulator {
 
     boolean placeKittyGraphics(Bitmap bitmap, KittyGraphicsProtocol.Command command, long imageId,
                                int row, int col, int cellWidth, int cellHeight, int[] transform) {
+        mPlacingKittyGraphics = true;
+        try {
+            return placeKittyGraphicsLocked(bitmap, command, imageId, row, col, cellWidth, cellHeight,
+                transform);
+        } finally {
+            mPlacingKittyGraphics = false;
+        }
+    }
+
+    private boolean placeKittyGraphicsLocked(Bitmap bitmap, KittyGraphicsProtocol.Command command,
+                                             long imageId, int row, int col, int cellWidth,
+                                             int cellHeight, int[] transform) {
         if (command.action == 'p') {
             // A placement command replaces only its own (image, placement) pair; unidentified
             // placements are additive, which is what makes multiple placements per image work.
@@ -3941,6 +3969,69 @@ public final class TerminalEmulator {
         int[] delta = mScreen.addKittyImage(bitmap, imageId, command.placementId, command.z, row, col,
             cellWidth, cellHeight, transform);
         return delta[0] != 0 || delta[1] != 0;
+    }
+
+    /**
+     * Supplies the first row on display, negative into the scrollback. The view owns scrolling, so
+     * the position is pulled when it is needed rather than pushed from a dozen scroll sites where
+     * one missed call would leave an animation stuck.
+     */
+    public interface TopRowProvider {
+        int topRow();
+    }
+
+    private TopRowProvider mTopRowProvider;
+
+    public void setTopRowProvider(TopRowProvider provider) {
+        mTopRowProvider = provider;
+    }
+
+    /**
+     * Whether any cell displaying this kitty image is on screen. With no view attached there is
+     * nothing to hide behind, so everything counts as visible.
+     */
+    boolean isKittyImageOnScreen(long imageId) {
+        if (mTopRowProvider == null) return true;
+        return mScreen.hasKittyImageInRows(imageId, mTopRowProvider.topRow(), mRows);
+    }
+
+    /**
+     * Set while a placement is being written. Replacing a placement deletes its old cells before
+     * it adds the new ones, and adding them can scroll — so without this a sweep landing in that
+     * window would see a live animation with nothing displaying it and throw its frames away.
+     */
+    private boolean mPlacingKittyGraphics;
+
+    /**
+     * Report whether this terminal's output is on screen, so kitty animations can be suspended
+     * while it is not. Frames and playback position are kept either way; only the ticking stops.
+     */
+    public void setKittyAnimationsVisible(boolean visible) {
+        mKittyGraphics.setAnimationsVisible(visible);
+    }
+
+    /** Release every kitty graphics resource, including the pending animation tick. */
+    public void shutdownKittyGraphics() {
+        mKittyGraphics.shutdown();
+    }
+
+    /**
+     * Under memory pressure, give up animation and keep the picture: every stored animation drops
+     * its frames and rests on the still image it started from. The placements stay, so no cell goes
+     * blank and no session is lost.
+     */
+    public void dropKittyAnimationFrames() {
+        mKittyGraphics.dropAllAnimationFrames();
+    }
+
+    private void onKittyCellsCollected() {
+        if (mPlacingKittyGraphics) return;
+        mKittyGraphics.dropFramesOfUnreachableImages();
+    }
+
+    /** Whether a U+10EEEE cell survives on either screen, so virtual placements stay reachable. */
+    boolean hasAnyKittyPlaceholderCell() {
+        return mMainBuffer.hasAnyKittyPlaceholderCell() || mAltBuffer.hasAnyKittyPlaceholderCell();
     }
 
     /** Live placements of one stored kitty image on both screens, for animation frame flips. */

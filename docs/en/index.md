@@ -60,8 +60,7 @@ Shizuku.
 ## Project and developer reference
 
 - [Developer docs](Developer_Docs.md)
-- [Releases](https://github.com/PickleHik3/termux-launcher/releases)
-- [Changelog](../../CHANGELOG.md)
+- [Releases & changelog](https://github.com/PickleHik3/termux-launcher/releases)
 - [Source repository](https://github.com/PickleHik3/termux-launcher)
 
 This wiki covers Termux Launcher-specific behavior. General shell commands, Linux packages, and

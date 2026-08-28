@@ -1,6 +1,7 @@
 package com.termux.app.launcher;
 
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
@@ -12,6 +13,7 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
@@ -27,6 +29,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -351,7 +354,8 @@ public final class PinnedAppsEditor {
             chip.setBackground(chipBg);
 
             ImageView icon = new ImageView(context);
-            if (entry.icon != null) icon.setImageDrawable(entry.icon);
+            Drawable chipArtwork = LauncherAppDataProvider.artworkFor(context, entry);
+            if (chipArtwork != null) icon.setImageDrawable(chipArtwork);
             LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(34), dp(34));
             chip.addView(icon, iconParams);
 
@@ -477,7 +481,7 @@ public final class PinnedAppsEditor {
             ImageView icon = (ImageView) row.getChildAt(0);
             TextView label = (TextView) row.getChildAt(1);
             CheckBox check = (CheckBox) row.getChildAt(2);
-            icon.setImageDrawable(entry.icon);
+            icon.setImageDrawable(LauncherAppDataProvider.artworkFor(context, entry));
             label.setText(entry.label);
             check.setChecked(selectedIds.contains(entry.appRef.stableId()));
             GradientDrawable bg = new GradientDrawable();
@@ -504,7 +508,7 @@ public final class PinnedAppsEditor {
             CheckBox check = new CheckBox(context);
             check.setClickable(false);
             check.setFocusable(false);
-            check.setButtonTintList(android.content.res.ColorStateList.valueOf(colorAccent));
+            check.setButtonTintList(ColorStateList.valueOf(colorAccent));
             row.addView(check, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             return row;
         }
@@ -577,7 +581,7 @@ public final class PinnedAppsEditor {
                 if (pos >= 0 && pos < orderedSelected.size()) removeAt(pos, this);
             });
             holder.dragHandle.setOnTouchListener((v, event) -> {
-                if (event.getActionMasked() == android.view.MotionEvent.ACTION_DOWN && touchHelper != null) {
+                if (event.getActionMasked() == MotionEvent.ACTION_DOWN && touchHelper != null) {
                     touchHelper.startDrag(holder);
                 }
                 return false;
@@ -596,9 +600,9 @@ public final class PinnedAppsEditor {
     private Drawable iconForPinned(@NonNull PinnedItem item) {
         if (item instanceof PinnedAppItem) {
             LauncherAppEntry entry = appByStableId.get(((PinnedAppItem) item).appRef.stableId());
-            return entry == null ? null : entry.icon;
+            return LauncherAppDataProvider.artworkFor(context, entry);
         }
-        Drawable folder = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_folder_24);
+        Drawable folder = ContextCompat.getDrawable(context, R.drawable.ic_folder_24);
         if (folder != null) folder.setTint(colorAccent);
         return folder;
     }

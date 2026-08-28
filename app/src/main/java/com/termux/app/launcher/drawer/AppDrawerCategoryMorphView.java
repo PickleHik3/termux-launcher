@@ -1,5 +1,6 @@
 package com.termux.app.launcher.drawer;
 
+import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.view.View;
@@ -18,7 +19,7 @@ public final class AppDrawerCategoryMorphView extends View {
     private float destinationRadius;
     private float progress;
 
-    public AppDrawerCategoryMorphView(@NonNull android.content.Context context) {
+    public AppDrawerCategoryMorphView(@NonNull Context context) {
         super(context);
         paint.setColor(0x2FFFFFFF);
         setClickable(false);

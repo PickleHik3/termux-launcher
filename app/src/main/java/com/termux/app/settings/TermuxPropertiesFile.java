@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.regex.Pattern;
 
 /**
  * Single-property read/write against {@code termux.properties}, kept in one place so the settings
@@ -52,33 +53,47 @@ public final class TermuxPropertiesFile {
             parentDir.mkdirs();
         }
         List<String> lines = new ArrayList<>();
-        boolean updated = false;
         if (propertiesFile.exists()) {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(
                     new FileInputStream(propertiesFile), StandardCharsets.UTF_8))) {
                 String line;
-                while ((line = reader.readLine()) != null) {
-                    String trimmed = line.trim();
-                    if (!trimmed.startsWith("#")
-                        && trimmed.matches("^\\s*" + propertyKey + "\\s*=.*$")) {
-                        lines.add(propertyKey + "=" + propertyValue);
-                        updated = true;
-                    } else {
-                        lines.add(line);
-                    }
-                }
+                while ((line = reader.readLine()) != null)
+                    lines.add(line);
             } catch (Exception e) {
                 Logger.logStackTraceWithMessage(LOG_TAG, "Failed to read termux.properties", e);
             }
         }
-        if (!updated) {
-            lines.add(propertyKey + "=" + propertyValue);
-        }
         StringBuilder output = new StringBuilder();
-        for (String line : lines) {
+        for (String line : withProperty(lines, propertyKey, propertyValue)) {
             output.append(line).append('\n');
         }
         FileUtils.writeTextToFile("termux.properties", propertiesFile.getAbsolutePath(),
             StandardCharsets.UTF_8, output.toString(), false);
+    }
+
+    /**
+     * The file's lines with {@code propertyKey} set to {@code propertyValue}: every uncommented
+     * line assigning that exact key is replaced in place, and the assignment is appended only when
+     * none does. The key is matched literally, so a dot or bracket in it is not a regex.
+     */
+    @NonNull
+    static List<String> withProperty(@NonNull List<String> lines, @NonNull String propertyKey,
+                                     @NonNull String propertyValue) {
+        String assignment = propertyKey + "=" + propertyValue;
+        String assignsKey = Pattern.quote(propertyKey) + "\\s*=.*";
+        List<String> out = new ArrayList<>(lines.size() + 1);
+        boolean updated = false;
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (!trimmed.startsWith("#") && trimmed.matches(assignsKey)) {
+                out.add(assignment);
+                updated = true;
+            } else {
+                out.add(line);
+            }
+        }
+        if (!updated)
+            out.add(assignment);
+        return out;
     }
 }

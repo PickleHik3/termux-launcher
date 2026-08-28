@@ -55,7 +55,6 @@ project-plan.md
 knowledge-base.md
 CLAUDE.md
 project-ledger.md
-AGENTS.md
 
 # Agent workspace (keep config/scripts tracked, ignore runtime logs)
 /work-logs/build-error.log
@@ -77,8 +76,10 @@ reference-repos/
 *.mp4
 WhatsApp Video*
 
-# CLI-tool local settings (do not commit)
-.claude/settings.local.json
+# CLI-tool local state: agent worktrees, session scratch and settings all live
+# under these, and none of it is part of the app source.
+.claude/
+.lavish/
 
 # Reference-only handoff bundles (not part of app source)
 .artifacts/

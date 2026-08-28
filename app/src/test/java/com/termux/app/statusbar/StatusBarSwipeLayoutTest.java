@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.time.Duration;
@@ -248,6 +249,14 @@ public class StatusBarSwipeLayoutTest {
         view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 180, 40));
         view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 180, 40));
         assertEquals(java.util.Collections.singletonList("full"), actions);
+    }
+
+    @Test
+    public void pullHintColorFallsBackToTheThemeResourceNotALiteralGrey() {
+        StatusBarSwipeLayout view = createView();
+        assertNotEquals(0xFFB0B0B0, view.pullHintColor());
+        assertEquals(androidx.core.content.ContextCompat.getColor(view.getContext(),
+            R.color.termux_on_surface_variant), view.pullHintColor());
     }
 
     private static StatusBarSwipeLayout createView() {

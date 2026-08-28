@@ -19,6 +19,8 @@ import android.os.UserManager;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -455,8 +457,8 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         for (LauncherWidgetRecord record : repository.records()) represented.add(record.appWidgetId);
         WidgetAddTransaction representedPending = repository.pending();
         if (representedPending != null) represented.add(representedPending.appWidgetId);
-        java.util.ArrayList<Integer> recoverableOwned = new java.util.ArrayList<>(owned);
-        java.util.Collections.sort(recoverableOwned);
+        ArrayList<Integer> recoverableOwned = new ArrayList<>(owned);
+        Collections.sort(recoverableOwned);
         for (int id : recoverableOwned) {
             if (represented.contains(id)) continue;
             AppWidgetProviderInfo info;

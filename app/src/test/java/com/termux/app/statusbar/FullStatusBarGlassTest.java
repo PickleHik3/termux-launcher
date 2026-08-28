@@ -12,16 +12,17 @@ import static org.junit.Assert.assertTrue;
 
 public class FullStatusBarGlassTest {
     @Test public void fullReusesGlassRadiusCacheAndAlignedFrame() throws Exception {
-        String source = read("app/src/main/java/com/termux/app/TermuxActivity.java");
-        assertTrue(source.contains("MAX_CACHED_WALLPAPER_BLUR_RADII = 3"));
-        assertTrue(source.contains("alignFullStatusBarWallpaperFrost"));
-        String method = source.substring(source.indexOf("private void alignFullStatusBarWallpaperFrost"),
-            source.indexOf("private void releaseFullStatusBarWallpaperFrost"));
-        assertTrue(method.contains("getEffectiveStatusBarBlurRadius()"));
-        assertTrue(method.contains("obtainCachedAccessoryWallpaperBlur"));
+        String cache = read("app/src/main/java/com/termux/app/chrome/WallpaperBlurCache.java");
+        assertTrue(cache.contains("MAX_CACHED_WALLPAPER_BLUR_RADII = 3"));
+        String painter = read("app/src/main/java/com/termux/app/chrome/WallpaperFrostPainter.java");
+        assertTrue(painter.contains("alignFullStatusBar"));
+        String method = painter.substring(painter.indexOf("public void alignFullStatusBar()"),
+            painter.indexOf("public void releaseFullStatusBar()"));
+        assertTrue(method.contains("effectiveStatusBarBlurRadiusDp()"));
+        assertTrue(method.contains("mBlurCache.obtain"));
         assertFalse(method.contains("applyWallpaperFrostCrop"));
         assertFalse(method.contains("Bitmap.createBitmap"));
-        assertTrue(source.contains("R.id.terminal_window_bar_wallpaper_backdrop"));
+        assertTrue(method.contains("R.id.terminal_window_bar_wallpaper_backdrop"));
     }
 
     private static String read(String relative) throws Exception {

@@ -20,8 +20,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.view.NestedScrollingParent3;
 import androidx.core.view.NestedScrollingParentHelper;
+import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
 
+import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 
 /** Status pane gesture observer with a frozen DOWN snapshot and one-way claims. */
@@ -130,8 +132,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
      * transition (or the pull-down drag) is live, and disappears entirely in the normal forms.
      */
     public void setGlassRim(float radiusPx, float fullProgress) {
-        float progress = Float.isFinite(fullProgress)
-            ? Math.max(0f, Math.min(1f, fullProgress)) : 0f;
+        float progress = FullStatusBarGeometry.finiteUnit(fullProgress);
         if (progress == mRimProgress && radiusPx == mRimRadiusPx) return;
         mRimRadiusPx = Math.max(0f, radiusPx);
         mRimProgress = progress;
@@ -187,9 +188,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
             mHintPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             mHintPaint.setStyle(Paint.Style.FILL);
         }
-        int color = com.google.android.material.color.MaterialColors.getColor(this,
-            com.termux.shared.R.attr.termuxColorOnSurfaceVariant, 0xFFB0B0B0);
-        mHintPaint.setColor(color);
+        mHintPaint.setColor(pullHintColor());
         mHintPaint.setAlpha(Math.round(150 * envelope));
         float width = HINT_WIDTH_DP * density;
         float height = HINT_HEIGHT_DP * density;
@@ -199,6 +198,12 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         if (mHintRect == null) mHintRect = new RectF();
         mHintRect.set(left, top, left + width, top + height);
         canvas.drawRoundRect(mHintRect, height / 2f, height / 2f, mHintPaint);
+    }
+
+    /** The hint's colour, from the theme like every other status widget, never a literal grey. */
+    int pullHintColor() {
+        return MaterialColors.getColor(this, com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+            ContextCompat.getColor(getContext(), R.color.termux_on_surface_variant));
     }
 
     @Override protected void dispatchDraw(@NonNull android.graphics.Canvas canvas) {

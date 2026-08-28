@@ -664,6 +664,7 @@ public final class TerminalBuffer {
         // Visible bitmap cells still reference their image data after ED 3 clears scrollback.
         collectUnusedBitmaps();
         terminalSixel = null;
+        notifyKittyCellsCollected();
     }
 
     public Bitmap getSixelBitmap(int codePoint, long style) {
@@ -787,6 +788,59 @@ public final class TerminalBuffer {
     }
 
     /** Collect the live placements of one kitty image, for animation frame re-rendering. */
+    /**
+     * Whether any U+10EEEE placeholder cell survives anywhere in this buffer, scrollback included.
+     *
+     * <p>A virtual placement paints nothing itself: it is a prototype that placeholder cells point
+     * at, so an image placed that way is reachable exactly as long as one of those cells exists.
+     * The question asked here is deliberately the coarse one — <em>any</em> placeholder cell, not
+     * one naming a particular image — because that is enough to decide whether frames can go, and
+     * it needs neither the id decode nor the run-inheritance chain the renderer carries. Two
+     * animations on screen keep each other's frames alive until the last cell of either goes,
+     * which errs towards keeping pixels that are still being displayed.</p>
+     */
+    boolean hasAnyKittyPlaceholderCell() {
+        int firstRow = -getActiveTranscriptRows();
+        for (int row = firstRow; row < mScreenRows; row++) {
+            TerminalRow line = mLines[externalToInternalRow(row)];
+            if (line == null) continue;
+            char[] text = line.mText;
+            int used = line.getSpaceUsed();
+            for (int i = 0; i < used - 1; i++) {
+                if (text[i] == KITTY_PLACEHOLDER_HIGH && text[i + 1] == KITTY_PLACEHOLDER_LOW)
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    /** U+10EEEE as a surrogate pair, which is how it sits in a row's char array. */
+    private static final char KITTY_PLACEHOLDER_HIGH =
+        Character.highSurrogate(KittyUnicodePlaceholder.CODE_POINT);
+    private static final char KITTY_PLACEHOLDER_LOW =
+        Character.lowSurrogate(KittyUnicodePlaceholder.CODE_POINT);
+
+    /**
+     * Whether any cell displaying {@code imageId} lies in the {@code rowCount} rows starting at
+     * external row {@code topRow} — what the user is actually looking at. Rows without a bitmap
+     * cell cost one flag read, so this is cheap enough to ask on every animation frame.
+     */
+    boolean hasKittyImageInRows(long imageId, int topRow, int rowCount) {
+        int firstRow = Math.max(-getActiveTranscriptRows(), topRow);
+        int lastRow = Math.min(mScreenRows, topRow + rowCount);
+        for (int row = firstRow; row < lastRow; row++) {
+            TerminalRow line = mLines[externalToInternalRow(row)];
+            if (line == null || !line.mHasBitmap) continue;
+            for (int column = 0; column < mColumns; column++) {
+                long style = line.getStyle(column);
+                if (!TextStyle.isBitmap(style)) continue;
+                TerminalBitmap bitmap = bitmaps.get(TextStyle.bitmapNum(style));
+                if (bitmap != null && bitmap.kittyImageId == imageId) return true;
+            }
+        }
+        return false;
+    }
+
     void collectKittyPlacements(long imageId, java.util.List<TerminalBitmap> out) {
         for (TerminalBitmap bitmap : bitmaps.values()) {
             if (bitmap.kittyImageId == imageId && bitmap.bitmap != null && bitmap.kittyTransform != null)
@@ -835,6 +889,7 @@ public final class TerminalBuffer {
             if (changed) recomputeBitmapFlag(line);
         }
         collectUnusedBitmaps();
+        notifyKittyCellsCollected();
         return deletedCells;
     }
 
@@ -848,12 +903,31 @@ public final class TerminalBuffer {
         }
     }
 
+    /**
+     * Notified after a sweep that could have left stored kitty images with no cell to display
+     * them — a scroll past the transcript limit, or a cleared transcript.
+     */
+    interface UnreachableImageListener {
+        void onKittyCellsCollected();
+    }
+
+    private UnreachableImageListener mUnreachableImageListener;
+
+    void setUnreachableImageListener(UnreachableImageListener listener) {
+        mUnreachableImageListener = listener;
+    }
+
+    private void notifyKittyCellsCollected() {
+        if (mUnreachableImageListener != null) mUnreachableImageListener.onKittyCellsCollected();
+    }
+
     public void bitmapGC(int timeDelta) {
         if (!hasBitmaps || bitmapLastGC + timeDelta > SystemClock.uptimeMillis()) {
             return;
         }
         collectUnusedBitmaps();
         bitmapLastGC = SystemClock.uptimeMillis();
+        notifyKittyCellsCollected();
     }
 
     private void collectUnusedBitmaps() {

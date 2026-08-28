@@ -3,6 +3,8 @@ package com.termux.app.launcher.data;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.shared.termux.TermuxConstants;
+
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -34,6 +36,29 @@ public final class LauncherCategoryFile {
 
     private static final String HEADER_COMMENT =
         "# Managed by Termux Launcher. Edit freely: sections are categories, lines are packages.";
+
+    private static final String FILE_NAME = "app-categories.conf";
+
+    /**
+     * Where the drop-in lives: {@code ~/.termux/app-categories.conf}, beside the other launcher
+     * config drop-ins, not loose in the home directory. Early builds wrote it to {@code ~}; a
+     * legacy file found there is moved into place once, so hand-made assignments survive the
+     * relocation. When the move fails (a read-only home would be new, but never throw for it) the
+     * legacy path keeps working.
+     */
+    @NonNull
+    public static File defaultFile() {
+        File file = new File(
+            TermuxConstants.TERMUX_DATA_HOME_DIR_PATH, FILE_NAME);
+        File legacy = new File(
+            TermuxConstants.TERMUX_HOME_DIR_PATH, FILE_NAME);
+        if (!file.exists() && legacy.isFile()) {
+            File dir = file.getParentFile();
+            if (dir != null) dir.mkdirs();
+            if (!legacy.renameTo(file)) return legacy;
+        }
+        return file;
+    }
 
     private final LinkedHashMap<String, List<String>> sections;
     private final Map<String, String> sectionByPackage;

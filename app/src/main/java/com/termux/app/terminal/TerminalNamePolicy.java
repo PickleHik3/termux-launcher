@@ -2,6 +2,8 @@ package com.termux.app.terminal;
 
 import androidx.annotation.Nullable;
 
+import com.termux.app.terminal.rename.TerminalRenameTarget;
+
 /**
  * Naming policy for the three things the terminal lets a user name, in the vocabulary the UI uses:
  * a <b>session</b> (a drawer row, holding windows), a <b>window</b> (a window-bar tab, holding

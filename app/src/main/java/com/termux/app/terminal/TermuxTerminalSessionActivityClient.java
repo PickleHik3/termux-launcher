@@ -2,6 +2,7 @@ package com.termux.app.terminal;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
 import android.media.SoundPool;
@@ -14,10 +15,9 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import com.termux.R;
 import com.termux.app.notice.AppNotice;
+import com.termux.app.terminal.rename.TerminalRenameTarget;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
-import com.termux.shared.termux.interact.TextInputDialogUtils;
-import com.termux.app.TermuxActivity;
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
@@ -38,11 +38,15 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The {@link TerminalSessionClient} implementation that may require an {@link Activity} for its interface methods.
+ * The {@link TerminalSessionClient} implementation that may require an {@link Activity} for its
+ * interface methods, which it reaches through {@link TerminalHost} rather than through the activity
+ * itself.
  */
 public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionClientBase {
 
-    private final TermuxActivity mActivity;
+    @NonNull private final Context mContext;
+
+    @NonNull private final TerminalHost mHost;
 
     /**
      * Upper bound on live shells, counted across every session, window, and pane.
@@ -75,19 +79,20 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     @NonNull private String mLastFontErrorSummary = "";
     private final Runnable mForegroundTerminalRefreshRunnable;
 
-    public TermuxTerminalSessionActivityClient(TermuxActivity activity) {
-        this.mActivity = activity;
+    public TermuxTerminalSessionActivityClient(@NonNull Context context, @NonNull TerminalHost host) {
+        this.mContext = context;
+        this.mHost = host;
         this.mForegroundTerminalRefreshRunnable = () -> {
             mForegroundRefreshPending = false;
-            if (!mActivity.isVisible()) return;
-            if (mActivity.getCurrentSession() != null) {
-                mActivity.getTerminalView().onScreenUpdated();
+            if (!mHost.isVisible()) return;
+            if (mHost.currentSession() != null) {
+                mHost.focusedView().onScreenUpdated();
             }
         };
     }
 
     /**
-     * Should be called when mActivity.onCreate() is called
+     * Should be called when onCreate() is called
      */
     public void onCreate() {
         // Set terminal fonts and colors
@@ -95,25 +100,25 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     /**
-     * Should be called when mActivity.onStart() is called
+     * Should be called when onStart() is called
      */
     public void onStart() {
         // The service has connected, but data may have changed since we were last in the foreground.
         // Get the session stored in shared preferences stored by {@link #onStop} if its valid,
         // otherwise get the last session currently running.
-        if (mActivity.getTermuxService() != null) {
+        if (mHost.service() != null) {
             setCurrentSession(getCurrentStoredSessionOrLast());
             termuxSessionListNotifyUpdated();
         }
         if (shouldDeferForegroundScreenRefresh()) {
             scheduleDeferredForegroundRefresh();
         } else {
-            mActivity.getTerminalView().onScreenUpdated();
+            mHost.focusedView().onScreenUpdated();
         }
     }
 
     /**
-     * Should be called when mActivity.onResume() is called
+     * Should be called when onResume() is called
      */
     public void onResume() {
         // Just initialize the mBellSoundPool and load the sound, otherwise bell might not run
@@ -123,7 +128,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     /**
-     * Should be called when mActivity.onStop() is called
+     * Should be called when onStop() is called
      */
     public void onStop() {
         // Store current session in shared preferences so that it can be restored later in
@@ -154,15 +159,15 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     @Override
     public void onTextChanged(@NonNull TerminalSession changedSession) {
-        if (!mActivity.isVisible())
+        if (!mHost.isVisible())
             return;
         // Every screen update is output activity — this is tmux's monitor-activity. Noted above the
         // early return below: windows other than the active one have no TerminalView, so their
         // activity would otherwise never register.
-        mActivity.noteShellActivity(changedSession);
+        mHost.noteShellActivity(changedSession);
         // Split-pane: redraw whichever pane is showing the changed session (may be the
         // non-active pane). Coalesce per-session so two live panes never drop each other's frames.
-        if (mActivity.getTerminalViewForSession(changedSession) == null)
+        if (mHost.viewForSession(changedSession) == null)
             return;
         if (!mPendingScreenUpdateSessions.add(changedSession))
             return;
@@ -170,9 +175,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         Runnable redraw = () -> {
             mPendingScreenUpdateSessions.remove(changedSession);
             mTerminalScreenUpdatePending = !mPendingScreenUpdateSessions.isEmpty();
-            if (!mActivity.isVisible())
+            if (!mHost.isVisible())
                 return;
-            com.termux.view.TerminalView view = mActivity.getTerminalViewForSession(changedSession);
+            com.termux.view.TerminalView view = mHost.viewForSession(changedSession);
             if (view != null)
                 view.onScreenUpdated();
         };
@@ -189,11 +194,11 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         //     (median 7ms, 3% janky): it competes with an already-ticking frame source.
         //
         // So: the frame clock exactly when nothing else is driving frames.
-        boolean pumpFrames = mActivity.getPreferences() != null
-            && mActivity.getPreferences().isLazyModeEnabled();
+        boolean pumpFrames = mHost.preferences() != null
+            && mHost.preferences().isLazyModeEnabled();
         if (pumpFrames) {
             com.termux.view.TerminalView pendingView =
-                mActivity.getTerminalViewForSession(changedSession);
+                mHost.viewForSession(changedSession);
             pendingView.postOnAnimation(redraw);
         } else {
             mUiHandler.post(redraw);
@@ -212,33 +217,33 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     @Override
     public void onTitleChanged(@NonNull TerminalSession updatedSession) {
-        if (!mActivity.isVisible())
+        if (!mHost.isVisible())
             return;
         // Deliberately no corner notice here. A title changes whenever a command starts, finishes, or
         // reports progress, which made the notice fire several times a second for one background job.
         // A window of this session says so on its own pill; another session's job gets a standing row
         // in the corner stack. Neither needs a transient copy of the same news.
-        mActivity.syncBackgroundProcessStack();
+        mHost.syncBackgroundProcessStack();
         termuxSessionListNotifyUpdated();
     }
 
     @Override
     public void onSessionFinished(@NonNull TerminalSession finishedSession) {
-        TermuxService service = mActivity.getTermuxService();
+        TermuxService service = mHost.service();
         if (service == null || service.wantsToStop()) {
             // The service wants to stop as soon as possible.
-            mActivity.finishActivityIfNotFinishing();
+            mHost.finishActivityIfNotFinishing();
             return;
         }
         // Split panes / windows: route the finished shell through the pane controller first.
-        com.termux.app.terminal.TerminalPaneController panes = mActivity.getPaneController();
+        com.termux.app.terminal.TerminalPaneController panes = mHost.paneController();
         if (panes != null) {
             com.termux.app.terminal.TerminalPaneController.Window window = panes.windowOf(finishedSession);
             int result = panes.onSessionFinished(finishedSession);
             if (result == com.termux.app.terminal.TerminalPaneController.FINISHED_PANE) {
                 // A pane with siblings closed; its window lives on. Kill the shell, refresh drawer.
                 service.killTermuxSession(finishedSession);
-                mActivity.rebuildDrawerSessions();
+                mHost.rebuildDrawerSessions();
                 termuxSessionListNotifyUpdated();
                 return;
             }
@@ -246,7 +251,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 // The window's last pane closed; drop the window from its session (and the session
                 // if that was its last window), then switch to whatever remains.
                 service.killTermuxSession(finishedSession);
-                if (window != null) mActivity.onWindowEmptied(window);
+                if (window != null) mHost.onWindowEmptied(window);
                 termuxSessionListNotifyUpdated();
                 return;
             }
@@ -263,14 +268,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             if (isPluginExecutionCommandWithPendingResult)
                 Logger.logVerbose(LOG_TAG, "The \"" + finishedSession.mSessionName + "\" session will be force finished automatically since result in pending.");
         }
-        mActivity.clearShellAttention(finishedSession.getPid());
-        if (mActivity.isVisible() && finishedSession != mActivity.getCurrentSession()) {
+        mHost.clearShellAttention(finishedSession.getPid());
+        if (mHost.isVisible() && finishedSession != mHost.currentSession()) {
             // Show indicator for non-current sessions that exit.
             // Verify that session was not removed before we got told about it finishing:
             if (index >= 0)
-                mActivity.showSessionSwitchIndicator(toToastTitle(finishedSession) + " - exited");
+                mHost.showSessionSwitchIndicator(toToastTitle(finishedSession) + " - exited");
         }
-        if (mActivity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)) {
+        if (mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)) {
             // On Android TV devices we need to use older behaviour because we may
             // not be able to have multiple launcher icons.
             if (service.getTermuxSessionsSize() > 1 || isPluginExecutionCommandWithPendingResult) {
@@ -287,31 +292,31 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     @Override
     public void onCopyTextToClipboard(@NonNull TerminalSession session, String text) {
-        if (!mActivity.isVisible())
+        if (!mHost.isVisible())
             return;
-        ShareUtils.copyTextToClipboard(mActivity, text);
+        ShareUtils.copyTextToClipboard(mContext, text);
     }
 
     @Override
     public void onPasteTextFromClipboard(@Nullable TerminalSession session) {
-        if (!mActivity.isVisible())
+        if (!mHost.isVisible())
             return;
-        String text = ShareUtils.getTextStringFromClipboardIfSet(mActivity, true);
+        String text = ShareUtils.getTextStringFromClipboardIfSet(mContext, true);
         if (text != null)
-            mActivity.getTerminalView().mEmulator.paste(text);
+            mHost.focusedView().mEmulator.paste(text);
     }
 
     @Override
     public void onBell(@NonNull TerminalSession session) {
         // Marked before the visibility and behaviour gates: the pill is not a sound, and a bell that
         // rang while the launcher was in the background is exactly the one the user needs to find.
-        mActivity.noteShellAttention(session);
-        if (!mActivity.isVisible())
+        mHost.noteShellAttention(session);
+        if (!mHost.isVisible())
             return;
         raiseAttentionNotice(session);
-        switch(mActivity.getProperties().getBellBehaviour()) {
+        switch(mHost.properties().getBellBehaviour()) {
             case TermuxPropertyConstants.IVALUE_BELL_BEHAVIOUR_VIBRATE:
-                BellHandler.getInstance(mActivity).doBell();
+                BellHandler.getInstance(mContext).doBell();
                 break;
             case TermuxPropertyConstants.IVALUE_BELL_BEHAVIOUR_BEEP:
                 loadBellSoundPool();
@@ -333,37 +338,37 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      * completion beep of whatever they are running.
      */
     private void raiseAttentionNotice(@NonNull TerminalSession session) {
-        if (session == mActivity.getCurrentSession())
+        if (session == mHost.currentSession())
             return;
         String title = toToastTitle(session);
         if (title == null || title.isEmpty())
             return;
-        AppNotice.shell(mActivity,
-            mActivity.getString(R.string.notice_shell_wants_attention, title),
+        AppNotice.shell(mContext,
+            mContext.getString(R.string.notice_shell_wants_attention, title),
             null, "\uf0f3" /* nf-fa-bell */, true, () -> setCurrentSession(session));
     }
 
     @Override
     public void onColorsChanged(@NonNull TerminalSession changedSession) {
-        if (mActivity.getCurrentSession() == changedSession)
+        if (mHost.currentSession() == changedSession)
             updateBackgroundColor();
     }
 
     @Override
     public void onTerminalCursorStateChange(boolean enabled) {
         // Do not start cursor blinking thread if activity is not visible
-        if (enabled && !mActivity.isVisible()) {
+        if (enabled && !mHost.isVisible()) {
             Logger.logVerbose(LOG_TAG, "Ignoring call to start cursor blinking since activity is not visible");
             return;
         }
         // If cursor is to enabled now, then start cursor blinking if blinking is enabled
         // otherwise stop cursor blinking
-        mActivity.getTerminalView().setTerminalCursorBlinkerState(enabled, false);
+        mHost.focusedView().setTerminalCursorBlinkerState(enabled, false);
     }
 
     @Override
     public void setTerminalShellPid(@NonNull TerminalSession terminalSession, int pid) {
-        TermuxService service = mActivity.getTermuxService();
+        TermuxService service = mHost.service();
         if (service == null)
             return;
         TermuxSession termuxSession = service.getTermuxSessionForTerminalSession(terminalSession);
@@ -372,17 +377,17 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     /**
-     * Should be called when mActivity.onResetTerminalSession() is called
+     * Should be called when onResetTerminalSession() is called
      */
     public void onResetTerminalSession() {
         // Ensure blinker starts again after reset if cursor blinking was disabled before reset like
         // with "tput civis" which would have called onTerminalCursorStateChange()
-        mActivity.getTerminalView().setTerminalCursorBlinkerState(true, true);
+        mHost.focusedView().setTerminalCursorBlinkerState(true, true);
     }
 
     @Override
     public Integer getTerminalCursorStyle() {
-        return mActivity.getProperties().getTerminalCursorStyle();
+        return mHost.properties().getTerminalCursorStyle();
     }
 
     /**
@@ -392,7 +397,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (mBellSoundPool == null) {
             mBellSoundPool = new SoundPool.Builder().setMaxStreams(1).setAudioAttributes(new AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION).build()).build();
             try {
-                mBellSoundId = mBellSoundPool.load(mActivity, com.termux.shared.R.raw.bell, 1);
+                mBellSoundId = mBellSoundPool.load(mContext, com.termux.shared.R.raw.bell, 1);
             } catch (Exception e){
                 // Catch java.lang.RuntimeException: Unable to resume activity {com.termux/com.termux.app.TermuxActivity}: android.content.res.Resources$NotFoundException: File res/raw/bell.ogg from drawable resource ID
                 Logger.logStackTraceWithMessage(LOG_TAG, "Failed to load bell sound pool", e);
@@ -422,8 +427,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // drawer indices: the drawer keys off the focused pane's shell, which is absent from the
         // tab list whenever a secondary split pane holds focus — every switch made from such a
         // pane used to silently skip its animation.
-        int fromNumber = mActivity.getCurrentSessionNumber();
-        int toNumber = mActivity.getSessionNumberFor(session);
+        int fromNumber = mHost.sessions().currentNumber();
+        int toNumber = mHost.sessions().numberOf(session);
         boolean travelled = fromNumber > 0 && toNumber > 0 && fromNumber != toNumber;
         // A brand-new shell is appended to the session list, so — niri's language — it arrives
         // the same way "next session" does: the old session is carried off and the new one
@@ -432,14 +437,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // Captured before the pane tree is swapped so the arrival has an outgoing half to slide
         // away.
         if (travelled || created)
-            mActivity.captureTerminalDeparture();
+            mHost.captureTerminalDeparture();
         // Route through the split-pane model: shows the session's tab (primary + optional
         // secondary pane) and focuses the pane displaying this session.
-        if (mActivity.activateSessionInPanes(session)) {
+        if (mHost.activateSessionInPanes(session)) {
             if (travelled)
-                mActivity.animateTerminalSessionArrival(toNumber >= fromNumber ? 1 : -1);
+                mHost.animateSessionArrival(toNumber >= fromNumber ? 1 : -1);
             else if (created)
-                mActivity.animateTerminalSessionLifecycleArrival(1);
+                mHost.animateSessionLifecycleArrival(1);
             // No "[1] fish in ~" chip here any more: the action hint already narrates the switch,
             // and two stacked notices for one keypress read as noise. The indicator view stays for
             // notices that carry real news — an exited session, a refused split.
@@ -452,14 +457,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     public void switchToSession(boolean forward) {
         // Cycle through drawer-visible sessions (tabs), skipping secondary pane shells.
-        java.util.List<TermuxSession> tabs = mActivity.mDrawerSessions;
-        int size = tabs.size();
+        TerminalHost.Sessions tabs = mHost.sessions();
+        int size = tabs.count();
         if (size == 0)
             return;
-        TerminalSession reference = mActivity.getCurrentTabPrimary();
+        TerminalSession reference = tabs.currentTabPrimary();
         if (reference == null)
-            reference = mActivity.getCurrentSession();
-        int index = mActivity.getDrawerIndexOfSession(reference);
+            reference = mHost.currentSession();
+        int index = tabs.indexOf(reference);
         if (index < 0)
             index = 0;
         if (forward) {
@@ -469,19 +474,15 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             if (--index < 0)
                 index = size - 1;
         }
-        TermuxSession termuxSession = tabs.get(index);
-        if (termuxSession != null)
-            setCurrentSession(termuxSession.getTerminalSession());
+        setCurrentSession(tabs.at(index));
     }
 
     public void switchToSession(int index) {
         // Index into the drawer-visible (tab) list.
-        java.util.List<TermuxSession> tabs = mActivity.mDrawerSessions;
-        if (index < 0 || index >= tabs.size())
+        TerminalHost.Sessions tabs = mHost.sessions();
+        if (index < 0 || index >= tabs.count())
             return;
-        TermuxSession termuxSession = tabs.get(index);
-        if (termuxSession != null)
-            setCurrentSession(termuxSession.getTerminalSession());
+        setCurrentSession(tabs.at(index));
     }
 
     /**
@@ -492,8 +493,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      * {@code pane.rename_prompt} means in both modes. Returns false when there is no focused pane.
      */
     public boolean promptCurrentPaneRename() {
-        if (mActivity.getCurrentSession() == null) return false;
-        return mActivity.beginTerminalRename(TerminalRenameTarget.PANE);
+        if (mHost.currentSession() == null) return false;
+        return mHost.beginTerminalRename(TerminalRenameTarget.PANE);
     }
 
     /**
@@ -502,13 +503,13 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      */
     @SuppressLint("InflateParams")
     public void promptCurrentPaneRenameDialog() {
-        final TerminalSession session = mActivity.getCurrentSession();
+        final TerminalSession session = mHost.currentSession();
         if (session == null) return;
-        TextInputDialogUtils.textInput(mActivity, R.string.title_rename_pane,
-            session.mSessionName, R.string.action_rename_session_confirm, text -> {
+        mHost.showTextInputDialog(R.string.title_rename_pane, session.mSessionName,
+            R.string.action_rename_session_confirm, text -> {
                 renameSession(session, text);
                 termuxSessionListNotifyUpdated();
-            }, -1, null, -1, null, null);
+            });
     }
 
     /**
@@ -519,7 +520,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      * symmetric with {@code window.rename} and {@code session.rename}.
      */
     public boolean renameCurrentPaneTo(@Nullable String name) {
-        TerminalSession session = mActivity.getCurrentSession();
+        TerminalSession session = mHost.currentSession();
         if (session == null || name == null) return false;
         String trimmed = TerminalNamePolicy.normalizePane(name) == null
             ? "" : TerminalNamePolicy.normalizePane(name);
@@ -532,7 +533,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (sessionToRename == null)
             return;
         sessionToRename.mSessionName = text;
-        TermuxService service = mActivity.getTermuxService();
+        TermuxService service = mHost.service();
         if (service != null) {
             TermuxSession termuxSession = service.getTermuxSessionForTerminalSession(sessionToRename);
             if (termuxSession != null)
@@ -541,9 +542,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     public void addNewSession(boolean isFailSafe, String sessionName) {
-        TerminalSession currentSession = mActivity.getCurrentSession();
+        TerminalSession currentSession = mHost.currentSession();
         String workingDirectory = currentSession == null
-            ? mActivity.getProperties().getDefaultWorkingDirectory()
+            ? mHost.properties().getDefaultWorkingDirectory()
             : currentSession.getCwd();
         addNewSessionAtWorkingDirectory(workingDirectory, isFailSafe, sessionName);
     }
@@ -552,7 +553,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     public boolean addNewSessionAtWorkingDirectory(@Nullable String workingDirectory,
                                                    boolean isFailSafe,
                                                    @Nullable String sessionName) {
-        TermuxService service = mActivity.getTermuxService();
+        TermuxService service = mHost.service();
         if (service == null)
             return false;
         if (service.getTermuxSessionsSize() >= MAX_SESSIONS) {
@@ -560,30 +561,30 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             // can do nothing about mid-dialog. The window and pane paths report this on the notice
             // chip; match them. This branch returns before createShellForCwd, so the same event
             // never produces two presentations.
-            mActivity.showSessionSwitchIndicator(
-                mActivity.getString(R.string.title_max_terminals_reached) + " — "
-                    + mActivity.getString(R.string.msg_max_terminals_reached));
+            mHost.showSessionSwitchIndicator(
+                mContext.getString(R.string.title_max_terminals_reached) + " — "
+                    + mContext.getString(R.string.msg_max_terminals_reached));
             return false;
         } else {
             if (workingDirectory == null) {
-                workingDirectory = mActivity.getProperties().getDefaultWorkingDirectory();
+                workingDirectory = mHost.properties().getDefaultWorkingDirectory();
             }
             TermuxSession newTermuxSession = service.createTermuxSession(null, null, null, workingDirectory, isFailSafe, sessionName);
             if (newTermuxSession == null)
                 return false;
             TerminalSession newTerminalSession = newTermuxSession.getTerminalSession();
             setCurrentSession(newTerminalSession);
-            mActivity.getDrawer().closeDrawers();
+            mHost.closeDrawers();
             return true;
         }
     }
 
     public void setCurrentStoredSession() {
-        TerminalSession currentSession = mActivity.getCurrentSession();
+        TerminalSession currentSession = mHost.currentSession();
         if (currentSession != null)
-            mActivity.getPreferences().setCurrentSession(currentSession.mHandle);
+            mHost.preferences().setCurrentSession(currentSession.mHandle);
         else
-            mActivity.getPreferences().setCurrentSession(null);
+            mHost.preferences().setCurrentSession(null);
     }
 
     /**
@@ -596,7 +597,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             return stored;
         } else {
             // Else return the last session currently running
-            TermuxService service = mActivity.getTermuxService();
+            TermuxService service = mHost.service();
             if (service == null)
                 return null;
             TermuxSession termuxSession = service.getLastTermuxSession();
@@ -608,12 +609,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     private TerminalSession getCurrentStoredSession() {
-        String sessionHandle = mActivity.getPreferences().getCurrentSession();
+        String sessionHandle = mHost.preferences().getCurrentSession();
         // If no session is stored in shared preferences
         if (sessionHandle == null)
             return null;
         // Check if the session handle found matches one of the currently running sessions
-        TermuxService service = mActivity.getTermuxService();
+        TermuxService service = mHost.service();
         if (service == null)
             return null;
         return service.getTerminalSessionForHandle(sessionHandle);
@@ -621,13 +622,13 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     public void removeFinishedSession(TerminalSession finishedSession) {
         // Return pressed with finished session - remove it.
-        TermuxService service = mActivity.getTermuxService();
+        TermuxService service = mHost.service();
         if (service == null)
             return;
         int index = service.killTermuxSession(finishedSession);
         int size = service.getTermuxSessionsSize();
         if (size == 0) {
-            mActivity.finishActivityIfNotFinishing();
+            mHost.finishActivityIfNotFinishing();
         } else {
             if (index >= size) {
                 index = size - 1;
@@ -639,20 +640,20 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     public void termuxSessionListNotifyUpdated() {
-        mActivity.termuxSessionListNotifyUpdated();
+        mHost.notifySessionListUpdated();
     }
 
     public void checkAndScrollToSession(TerminalSession session) {
-        if (!mActivity.isVisible())
+        if (!mHost.isVisible())
             return;
-        TermuxService service = mActivity.getTermuxService();
+        TermuxService service = mHost.service();
         if (service == null)
             return;
         // Use the drawer-visible index (secondary panes are filtered out).
-        final int indexOfSession = mActivity.getDrawerIndexOfSession(session);
+        final int indexOfSession = mHost.sessions().indexOf(session);
         if (indexOfSession < 0)
             return;
-        final ListView termuxSessionsListView = mActivity.findViewById(R.id.terminal_sessions_list);
+        final ListView termuxSessionsListView = mHost.sessions().listView();
         if (termuxSessionsListView == null)
             return;
         termuxSessionsListView.setItemChecked(indexOfSession, true);
@@ -661,7 +662,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     String toToastTitle(TerminalSession session) {
-        TermuxService service = mActivity.getTermuxService();
+        TermuxService service = mHost.service();
         if (service == null)
             return null;
         final int indexOfSession = service.getIndexOfSession(session);
@@ -670,10 +671,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // Number by the launcher's tmux-style session, not by raw shell count: every pane and
         // window is its own service shell, so the service index kept flashing "[3]" for what the
         // user sees as their second session.
-        int sessionNumber = mActivity.getSessionNumberFor(session);
+        int sessionNumber = mHost.sessions().numberOf(session);
         if (sessionNumber < 1) sessionNumber = indexOfSession + 1;
         StringBuilder toastTitle = new StringBuilder("[" + sessionNumber + "]");
-        String sessionName = mActivity.getSessionNameFor(session);
+        String sessionName = mHost.sessions().nameOf(session);
         if (TextUtils.isEmpty(sessionName)) sessionName = session.mSessionName;
         if (!TextUtils.isEmpty(sessionName)) {
             toastTitle.append(" ").append(sessionName);
@@ -700,19 +701,19 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      */
     public void applyTerminalColors() {
         try {
-            boolean dynamic = mActivity.getPreferences() != null
-                && mActivity.getPreferences().isTerminalDynamicColorsEnabled();
+            boolean dynamic = mHost.preferences() != null
+                && mHost.preferences().isTerminalDynamicColorsEnabled();
             final Properties props;
             if (dynamic) {
-                TerminalContrastLevel level = mActivity.getPreferences().getTerminalContrastLevel();
-                props = MaterialTerminalColorScheme.create(mActivity, level);
+                TerminalContrastLevel level = mHost.preferences().getTerminalContrastLevel();
+                props = MaterialTerminalColorScheme.create(mContext, level);
                 mLastMaterialTerminalPaletteSignature =
-                    MaterialTerminalColorScheme.signature(mActivity, level);
+                    MaterialTerminalColorScheme.signature(mContext, level);
                 // Built here, on the main thread, and handed over as finished values: the writer thread
                 // must not touch the theme or resources, and this way the files describe the same
                 // palette the terminal just took.
                 final Properties exported =
-                    MaterialTerminalColorScheme.createMaterialRoleProperties(mActivity, props, level);
+                    MaterialTerminalColorScheme.createMaterialRoleProperties(mContext, props, level);
                 MATERIAL_COLOR_FILE_EXECUTOR.execute(() -> {
                     try {
                         MaterialTerminalColorScheme.writeMaterialColorFiles(exported);
@@ -814,7 +815,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         try {
             TerminalFontLoader.Faces faces = TerminalFontLoader.load(TerminalFontConfig.load());
             reportFontErrors(faces.errors);
-            for (com.termux.view.TerminalView v : mActivity.getTerminalPaneViews()) {
+            for (com.termux.view.TerminalView v : mHost.paneViews()) {
                 if (v.isFontInitialized())
                     v.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic,
                         faces.symbolMaps, faces.ligaturePolicy, faces.fontFeatures,
@@ -822,7 +823,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                         faces.boxDrawingPolicy, fallbackTypefaces(faces),
                         faces.symbolExpansion);
             }
-            mActivity.requestTerminalFlushDockGeometryUpdate();
+            mHost.requestFlushDockGeometryUpdate();
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyTerminalFonts()", e);
         }
@@ -856,7 +857,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         mLastFontErrorSummary = summary;
         if (errors.isEmpty()) return;
         for (String error : errors) Logger.logError(LOG_TAG, "Font config: " + error);
-        mActivity.showToast(mActivity.getResources().getQuantityString(
+        mHost.showToast(mContext.getResources().getQuantityString(
             R.plurals.terminal_font_config_errors, errors.size(), errors.size()), true);
     }
 
@@ -867,18 +868,18 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      * every session, and two file writes that open shells watch.
      */
     public void refreshMaterialTerminalColorsIfNeeded() {
-        if (mActivity.getPreferences() == null
-            || !mActivity.getPreferences().isTerminalDynamicColorsEnabled()) {
+        if (mHost.preferences() == null
+            || !mHost.preferences().isTerminalDynamicColorsEnabled()) {
             return;
         }
-        int signature = MaterialTerminalColorScheme.signature(mActivity,
-            mActivity.getPreferences().getTerminalContrastLevel());
+        int signature = MaterialTerminalColorScheme.signature(mContext,
+            mHost.preferences().getTerminalContrastLevel());
         if (signature == mLastMaterialTerminalPaletteSignature) return;
         applyTerminalColors();
     }
 
     private void resetAllSessionColors() {
-        TermuxService service = mActivity.getTermuxService();
+        TermuxService service = mHost.service();
         if (service != null) {
             for (TermuxSession termuxSession : service.getTermuxSessions()) {
                 TerminalSession session = termuxSession.getTerminalSession();
@@ -888,13 +889,13 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             }
             return;
         }
-        TerminalSession session = mActivity.getCurrentSession();
+        TerminalSession session = mHost.currentSession();
         if (session != null && session.getEmulator() != null) {
             session.getEmulator().mColors.reset();
         }
     }
 
     public void updateBackgroundColor() {
-        mActivity.updateWindowBackgroundForCurrentSession();
+        mHost.updateWindowBackgroundForCurrentSession();
     }
 }
