@@ -3,6 +3,7 @@ package com.termux.app.terminal;
 import android.content.Context;
 import android.graphics.PointF;
 import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -18,7 +19,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
-import com.termux.app.TermuxActivity;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
 
 import java.util.ArrayList;
@@ -45,6 +45,39 @@ import juloo.keyboard2.KeyValue;
 public final class TerminalSheetController
     implements TerminalKeyEventHandler.KeyValueInterceptor {
 
+    /** What the plane needs from the activity: its views, the keyboard it is typed with, its glass. */
+    public interface Host {
+        @NonNull Context context();
+
+        @Nullable <T extends View> T findView(int viewId);
+
+        /**
+         * Two full-screen glass planes must never stack, and a sheet is the modal one: the FULL
+         * status pane and the drawer yield, the same handoff the palette makes.
+         */
+        void yieldCompetingPlanes();
+
+        /** Makes a keyboard available for typing into the sheet, if the in-app keyboard is on. */
+        void ensureInAppTypingKeyboard();
+
+        /** Claims (or releases) the in-app keyboard's single interceptor slot for the plane. */
+        void setSheetInterceptorActive(boolean active);
+
+        /** Whether a raw screen point lands on the in-app keyboard — the keys the sheet is typed with. */
+        boolean isPointOnInAppKeyboard(float rawX, float rawY);
+
+        /** Wallpaper frost for the plane's glass; true when the live blur should rest. */
+        boolean applyWallpaperFrost(@NonNull ImageView frost);
+
+        /** Glass for a sheet card, in the same kit as the dock and the rename chip. */
+        @NonNull Drawable sheetSurface();
+
+        /** The dock's rectangle on screen; false when there is no dock laid out. */
+        boolean dockBoundsOnScreen(@NonNull Rect out);
+
+        boolean isReducedMotionEnabled();
+    }
+
     private static final long ENTER_DURATION_MS = 170L;
     private static final long EXIT_DURATION_MS = 110L;
     /** Side inset of a card, and the vertical inset of a full-height one. */
@@ -52,6 +85,12 @@ public final class TerminalSheetController
     private static final float VERTICAL_INSET_DP = 28f;
     /** An anchored card is a menu, not a page: it takes the width its rows need and no more. */
     private static final float ANCHORED_MAX_WIDTH_DP = 260f;
+    /** A strip is one row of actions; its buttons carry their own touch padding. */
+    private static final float STRIP_MAX_WIDTH_DP = 420f;
+    private static final float STRIP_PADDING_DP = 2f;
+    /** Half the strip's ~44dp height: a full pill, the Material shape for a floating action row. */
+    private static final float STRIP_CORNER_RADIUS_DP = 22f;
+    private static final float STRIP_ELEVATION_DP = 3f;
     /** How far a page key moves a list selection, in rows. */
     private static final int PAGE_ARROW_ROWS = 5;
     private static final float CORNER_RADIUS_DP = 22f;
@@ -83,17 +122,20 @@ public final class TerminalSheetController
 
     /** Where a card sits on the plane. */
     public static final class Placement {
-        private static final Placement CENTERED = new Placement(null, false, false);
+        private static final Placement CENTERED = new Placement(null, false, false, false);
 
         @Nullable final PointF anchor;
         final boolean docked;
         /** No plane backdrop: the surface behind this card stays exactly as it was. */
         final boolean bare;
+        /** A thin one-line card whose bottom edge sits at the anchor instead of its top. */
+        final boolean strip;
 
-        private Placement(@Nullable PointF anchor, boolean docked, boolean bare) {
+        private Placement(@Nullable PointF anchor, boolean docked, boolean bare, boolean strip) {
             this.anchor = anchor;
             this.docked = docked;
             this.bare = bare;
+            this.strip = strip;
         }
 
         /** The default: a centred card with side and vertical insets. */
@@ -105,7 +147,19 @@ public final class TerminalSheetController
         /** A compact menu at a touch point, clamped inside the plane. */
         @NonNull
         public static Placement at(@Nullable PointF screenPoint) {
-            return screenPoint == null ? CENTERED : new Placement(screenPoint, false, false);
+            return screenPoint == null ? CENTERED : new Placement(screenPoint, false, false, false);
+        }
+
+        /**
+         * A thin strip whose bottom edge lands at the touch point, with no backdrop.
+         *
+         * <p>For a card that is <em>about</em> the text under the finger — the tapped hyperlink's
+         * strip must not cover the link it names, and frosting the transcript would take away the
+         * very line being asked about.
+         */
+        @NonNull
+        public static Placement stripAbove(@Nullable PointF screenPoint) {
+            return screenPoint == null ? CENTERED : new Placement(screenPoint, false, true, true);
         }
 
         /**
@@ -117,7 +171,7 @@ public final class TerminalSheetController
          */
         @NonNull
         public static Placement aboveDock() {
-            return new Placement(null, true, false);
+            return new Placement(null, true, false, false);
         }
 
         /**
@@ -130,7 +184,7 @@ public final class TerminalSheetController
          */
         @NonNull
         public static Placement aboveDockBare() {
-            return new Placement(null, true, true);
+            return new Placement(null, true, true, false);
         }
     }
 
@@ -224,18 +278,18 @@ public final class TerminalSheetController
         }
     }
 
-    @NonNull private final TermuxActivity mActivity;
+    @NonNull private final Host mHost;
     @NonNull private final List<Sheet> mStack = new ArrayList<>();
     private final float mDensity;
 
-    @Nullable private FrameLayout mHost;
+    @Nullable private FrameLayout mPlane;
     @Nullable private FrameLayout mStackHost;
     /** Set by {@link #show} for the card it is about to build; read once by {@link #buildCard}. */
     @NonNull private Placement mPendingPlacement = Placement.centered();
 
-    public TerminalSheetController(@NonNull TermuxActivity activity) {
-        mActivity = activity;
-        mDensity = activity.getResources().getDisplayMetrics().density;
+    public TerminalSheetController(@NonNull Host host) {
+        mHost = host;
+        mDensity = host.context().getResources().getDisplayMetrics().density;
     }
 
     public boolean isOpen() {
@@ -296,26 +350,19 @@ public final class TerminalSheetController
                         boolean coverPrevious, @NonNull Placement placement) {
         if (!bindViews()) return false;
         mPendingPlacement = placement;
-        if (mStack.isEmpty()) {
-            // Two full-screen glass planes must never stack, and a sheet is the modal one: the
-            // drawer and the FULL status pane yield, the same handoff the palette makes. Guarded on
-            // the open check rather than reached through the lazy accessor, so a session that never
-            // pulls the drawer down does not build one just because it opened a prompt.
-            mActivity.closeFullStatusBarImmediate();
-            if (mActivity.isAppDrawerOpen()) mActivity.getAppDrawerController().closeImmediate();
-        }
+        if (mStack.isEmpty()) mHost.yieldCompetingPlanes();
         boolean bare = placement.bare;
         View card = buildCard(title, content, fillHeight);
         if (coverPrevious && !mStack.isEmpty())
             mStack.get(mStack.size() - 1).card.setVisibility(View.GONE);
         mStackHost.addView(card);
         mStack.add(new Sheet(card, sink, onDismiss, coverPrevious, bare));
-        mHost.setVisibility(View.VISIBLE);
+        mPlane.setVisibility(View.VISIBLE);
         applyBackdropMaterial();
         // Only a sheet with somewhere for typing to land is worth summoning a keyboard for; a
         // confirmation is all buttons and would just push the terminal around.
-        if (sink != null) mActivity.ensureInAppTypingKeyboard();
-        mActivity.setTerminalSheetInterceptorActive(true);
+        if (sink != null) mHost.ensureInAppTypingKeyboard();
+        mHost.setSheetInterceptorActive(true);
         animateIn(card);
         return true;
     }
@@ -380,9 +427,9 @@ public final class TerminalSheetController
     }
 
     private void onEmptied() {
-        mActivity.setTerminalSheetInterceptorActive(false);
-        if (mHost != null) mHost.setVisibility(View.INVISIBLE);
-        ImageView frost = mActivity.findViewById(R.id.terminal_sheet_wallpaper_backdrop);
+        mHost.setSheetInterceptorActive(false);
+        if (mPlane != null) mPlane.setVisibility(View.INVISIBLE);
+        ImageView frost = mHost.findView(R.id.terminal_sheet_wallpaper_backdrop);
         if (frost != null) {
             // Drop the full-screen frost bitmap while shut; the next show() rebuilds it.
             frost.setImageDrawable(null);
@@ -392,8 +439,8 @@ public final class TerminalSheetController
 
     private boolean bindViews() {
         if (mStackHost != null) return true;
-        FrameLayout host = mActivity.findViewById(R.id.terminal_sheet_host);
-        FrameLayout stack = mActivity.findViewById(R.id.terminal_sheet_stack);
+        FrameLayout host = mHost.findView(R.id.terminal_sheet_host);
+        FrameLayout stack = mHost.findView(R.id.terminal_sheet_stack);
         if (host == null || stack == null) return false;
         // The plane must never take focus itself; the whole point of it is that TerminalView keeps
         // the InputConnection while a sheet is up.
@@ -404,7 +451,7 @@ public final class TerminalSheetController
                     // Taps on the in-app keyboard are not "outside": the host covers the whole
                     // activity, keyboard included, and those keys are how the sheet is typed into.
                     // They must fall through unconsumed or the first keystroke closes the sheet.
-                    return !mActivity.isPointOnInAppKeyboard(event.getRawX(), event.getRawY());
+                    return !mHost.isPointOnInAppKeyboard(event.getRawX(), event.getRawY());
                 case MotionEvent.ACTION_UP:
                     // Dismissed on the finished tap, not on DOWN: a gesture-nav back swipe delivers
                     // its DOWN to the app before the system claims the gesture with ACTION_CANCEL,
@@ -415,7 +462,7 @@ public final class TerminalSheetController
                     return true;
             }
         });
-        mHost = host;
+        mPlane = host;
         mStackHost = stack;
         return true;
     }
@@ -426,8 +473,8 @@ public final class TerminalSheetController
      * RealtimeBlurView blurring real window content.
      */
     private void applyBackdropMaterial() {
-        ImageView frost = mActivity.findViewById(R.id.terminal_sheet_wallpaper_backdrop);
-        View blur = mActivity.findViewById(R.id.terminal_sheet_blur);
+        ImageView frost = mHost.findView(R.id.terminal_sheet_wallpaper_backdrop);
+        View blur = mHost.findView(R.id.terminal_sheet_blur);
         if (allBare()) {
             // Every open card asked for no backdrop, so the plane draws nothing of its own and what
             // is behind it — the transcript a search is searching — stays exactly as it was.
@@ -438,7 +485,7 @@ public final class TerminalSheetController
             if (blur != null) blur.setVisibility(View.GONE);
             return;
         }
-        boolean frosted = frost != null && mActivity.applyCommandPaletteWallpaperFrost(frost);
+        boolean frosted = frost != null && mHost.applyWallpaperFrost(frost);
         if (blur != null) blur.setVisibility(frosted ? View.GONE : View.VISIBLE);
     }
 
@@ -457,9 +504,20 @@ public final class TerminalSheetController
         Context context = mStackHost.getContext();
         LinearLayout card = new LinearLayout(context);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(mActivity.buildTerminalSheetSurface());
-        int padding = dp(CARD_PADDING_DP);
-        card.setPadding(padding, padding, padding, padding);
+        if (mPendingPlacement.strip) {
+            // A strip is one row of actions on a flat opaque surface: the glass sheet material and
+            // the page padding would both spend more screen than the strip's content does.
+            card.setBackground(buildStripSurface(context));
+            // Separation comes from the shadow, not a border: the pill background provides the
+            // rounded outline the shadow is cast from.
+            card.setElevation(dp(STRIP_ELEVATION_DP));
+            int pad = dp(STRIP_PADDING_DP);
+            card.setPadding(pad, pad, pad, pad);
+        } else {
+            card.setBackground(mHost.sheetSurface());
+            int padding = dp(CARD_PADDING_DP);
+            card.setPadding(padding, padding, padding, padding);
+        }
         // A card swallows the taps that land on it, so the host's listener only ever sees the ones
         // that fell outside every sheet.
         card.setClickable(true);
@@ -473,6 +531,21 @@ public final class TerminalSheetController
         // already are. Prompts and confirmations still title themselves.
         if (title.length() > 0) addHeading(card, context, title);
         return finishCard(card, content, fillHeight);
+    }
+
+    /** The strip's flat material: an opaque borderless pill, no glass and no blur. */
+    @NonNull
+    private android.graphics.drawable.Drawable buildStripSurface(@NonNull Context context) {
+        android.graphics.drawable.GradientDrawable surface =
+            new android.graphics.drawable.GradientDrawable();
+        surface.setColor(com.google.android.material.color.MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorSurfaceContainerHigh,
+            com.google.android.material.color.MaterialColors.getColor(context,
+                com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+                androidx.core.content.ContextCompat.getColor(context,
+                    R.color.termux_surface_panel_high))));
+        surface.setCornerRadius(dp(STRIP_CORNER_RADIUS_DP));
+        return surface;
     }
 
     private void addHeading(@NonNull LinearLayout card, @NonNull Context context,
@@ -500,7 +573,7 @@ public final class TerminalSheetController
         Placement placement = mPendingPlacement;
         mPendingPlacement = Placement.centered();
         if (placement.anchor != null) {
-            card.setLayoutParams(anchoredParams(card, placement.anchor));
+            card.setLayoutParams(anchoredParams(card, placement));
             return card;
         }
         if (placement.docked) {
@@ -535,7 +608,7 @@ public final class TerminalSheetController
         Rect dock = new Rect();
         int[] planeOnScreen = new int[2];
         mStackHost.getLocationOnScreen(planeOnScreen);
-        boolean haveDock = mActivity.dockBoundsOnScreen(dock) && dock.width() > 0;
+        boolean haveDock = mHost.dockBoundsOnScreen(dock) && dock.width() > 0;
 
         int width = haveDock ? dock.width() : Math.max(0, planeWidth - 2 * inset);
         if (planeWidth > 0) width = Math.min(width, planeWidth);
@@ -564,23 +637,29 @@ public final class TerminalSheetController
      * absolute, so nothing here depends on the plane's own gravity.
      */
     @NonNull
-    private FrameLayout.LayoutParams anchoredParams(@NonNull View card, @NonNull PointF anchor) {
+    private FrameLayout.LayoutParams anchoredParams(@NonNull View card,
+                                                    @NonNull Placement placement) {
+        PointF anchor = placement.anchor;
         int planeWidth = mStackHost.getWidth();
         int planeHeight = mStackHost.getHeight();
-        int maxWidth = Math.min(dp(ANCHORED_MAX_WIDTH_DP),
+        int maxWidth = Math.min(dp(placement.strip ? STRIP_MAX_WIDTH_DP : ANCHORED_MAX_WIDTH_DP),
             Math.max(dp(160f), planeWidth - 2 * dp(SIDE_INSET_DP)));
         card.measure(
             View.MeasureSpec.makeMeasureSpec(maxWidth, View.MeasureSpec.AT_MOST),
             View.MeasureSpec.makeMeasureSpec(Math.max(0, planeHeight - 2 * dp(SIDE_INSET_DP)),
                 View.MeasureSpec.AT_MOST));
-        int width = Math.min(maxWidth, Math.max(card.getMeasuredWidth(), dp(160f)));
+        // A strip is exactly its actions wide; the menu minimum would pad it with dead surface.
+        int minWidth = placement.strip ? dp(48f) : dp(160f);
+        int width = Math.min(maxWidth, Math.max(card.getMeasuredWidth(), minWidth));
         int height = card.getMeasuredHeight();
 
         int[] planeOnScreen = new int[2];
         mStackHost.getLocationOnScreen(planeOnScreen);
         int inset = dp(SIDE_INSET_DP);
         int left = Math.round(anchor.x) - planeOnScreen[0] - width / 2;
-        int top = Math.round(anchor.y) - planeOnScreen[1];
+        // A strip hangs from its anchor rather than growing down from it, so the tapped line —
+        // the thing the strip is about — stays visible below it.
+        int top = Math.round(anchor.y) - planeOnScreen[1] - (placement.strip ? height : 0);
         if (planeWidth > 0)
             left = Math.max(inset, Math.min(left, planeWidth - width - inset));
         if (planeHeight > 0 && height > 0)
@@ -595,7 +674,7 @@ public final class TerminalSheetController
 
     private void animateIn(@NonNull View card) {
         card.animate().cancel();
-        if (mActivity.isReducedMotionEnabled()) {
+        if (mHost.isReducedMotionEnabled()) {
             card.setAlpha(1f);
             card.setScaleX(1f);
             card.setScaleY(1f);
@@ -614,7 +693,7 @@ public final class TerminalSheetController
         FrameLayout stack = mStackHost;
         if (stack == null) return;
         card.animate().cancel();
-        if (mActivity.isReducedMotionEnabled()) {
+        if (mHost.isReducedMotionEnabled()) {
             stack.removeView(card);
             return;
         }

@@ -1,8 +1,11 @@
 package com.termux.app.launcher.widget;
 
 import android.app.Application;
+import android.content.res.Resources;
 import android.appwidget.AppWidgetProviderInfo;
+import android.graphics.Bitmap;
 import android.graphics.Rect;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
@@ -14,6 +17,7 @@ import android.os.UserHandle;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
 import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 
@@ -39,14 +43,17 @@ public class WidgetProviderCatalogLoaderTest {
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         assertEquals(2, result[0].size()); // same package, separate personal/work serials
         assertEquals(1, result[0].get(0).providers.size());
-        assertNull(result[0].get(0).providers.get(0).preview());
         assertNotNull(result[0].get(0).providers.get(0).icon);
-        // The broken preview surfaces at lazy resolution and must not break the row.
+        // The broken preview surfaces at lazy resolution and must not break the row; the miss is
+        // remembered so the next bind does not ask the provider again.
         WidgetProviderItem broken = result[0].get(0).providers.get(0);
-        loader.loadPreview(broken, item -> {});
+        final Drawable[] delivered = {new ColorDrawable(9)};
+        loader.loadPreview(broken, (item, preview) -> delivered[0] = preview);
         Shadows.shadowOf(Looper.getMainLooper()).idle();
-        assertTrue(broken.previewResolved());
-        assertNull(broken.preview());
+        assertNull(delivered[0]);
+        loader.loadPreview(broken, (item, preview) -> {});
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(1, boundary.previewCalls);
     }
 
     @Test public void cachedCatalogSkipsRebuildUntilKeyChangesOrInvalidated() {
@@ -54,7 +61,7 @@ public class WidgetProviderCatalogLoaderTest {
         boundary.providers = Collections.singletonList(info("pkg", "Clock", true));
         QueuedExecutor queue = new QueuedExecutor();
         WidgetProviderCatalogLoader loader = new WidgetProviderCatalogLoader(boundary, queue,
-            new Handler(Looper.getMainLooper()), 2.625f);
+            new Handler(Looper.getMainLooper()), resources(), 1024);
         final List<WidgetAppGroup>[] first = new List[1];
         final List<WidgetAppGroup>[] second = new List[1];
         loader.load(metrics(400, 600), 1, (g, groups) -> first[0] = groups);
@@ -82,15 +89,66 @@ public class WidgetProviderCatalogLoaderTest {
             (g, groups) -> item[0] = groups.get(0).providers.get(0));
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         assertEquals(0, boundary.previewCalls); // build never touches previews
-        assertFalse(item[0].previewResolved());
         AtomicInteger callbacks = new AtomicInteger();
-        loader.loadPreview(item[0], it -> callbacks.incrementAndGet());
+        final Drawable[] delivered = new Drawable[2];
+        loader.loadPreview(item[0], (it, preview) -> {
+            callbacks.incrementAndGet(); delivered[0] = preview;
+        });
         Shadows.shadowOf(Looper.getMainLooper()).idle();
-        assertTrue(item[0].previewResolved());
-        assertNotNull(item[0].preview());
-        loader.loadPreview(item[0], it -> callbacks.incrementAndGet());
-        assertEquals(2, callbacks.get()); // resolved items answer synchronously
+        assertNotNull(delivered[0]);
+        loader.loadPreview(item[0], (it, preview) -> {
+            callbacks.incrementAndGet(); delivered[1] = preview;
+        });
+        assertEquals(2, callbacks.get()); // held previews answer synchronously
+        assertSame(delivered[0], delivered[1]);
         assertEquals(1, boundary.previewCalls);
+    }
+
+    /**
+     * The store, not the row, owns the pixels: previews are shrunk to the card's slot on the way
+     * in, the total never exceeds the budget however many rows bind, and closing the picker
+     * gives all of it back.
+     */
+    @Test public void previewsAreShrunkAndHeldUnderTheBudgetUntilReleased() {
+        FakeBoundary boundary = new FakeBoundary();
+        boundary.providers = Arrays.asList(info("pkg", "A", true), info("pkg", "B", true),
+            info("pkg", "C", true), info("pkg", "D", true));
+        boundary.previewBitmapPx = 400;
+        Resources resources = resources();
+        int extent = Math.round(WidgetPickerAdapter.PREVIEW_DP
+            * resources.getDisplayMetrics().density);
+        int budget = extent * extent * 4 * 3; // three previews' worth at the retained size
+        WidgetProviderCatalogLoader loader = new WidgetProviderCatalogLoader(boundary,
+            Runnable::run, new Handler(Looper.getMainLooper()), resources, budget);
+        assertEquals(extent, loader.previewExtentPx());
+        final List<WidgetAppGroup>[] result = new List[1];
+        loader.load(metrics(400, 600), 0, (g, groups) -> result[0] = groups);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        int bound = 0;
+        for (WidgetAppGroup group : result[0]) {
+            for (WidgetProviderItem item : group.providers) {
+                loader.loadPreview(item, (it, preview) -> {
+                    assertNotNull(preview);
+                    assertTrue(preview.getIntrinsicWidth() <= extent);
+                    assertTrue(preview.getIntrinsicHeight() <= extent);
+                });
+                bound++;
+            }
+        }
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(8, bound); // four providers in each of two profiles
+        assertEquals(8, boundary.previewCalls);
+        assertTrue(loader.previewBytes() > 0);
+        assertTrue(loader.previewBytes() <= budget);
+        assertEquals(budget, loader.previewBudgetBytes());
+        loader.releasePreviews();
+        assertEquals(0, loader.previewBytes());
+    }
+
+    @Test public void previewBudgetFollowsTheHeapBetweenItsClamps() {
+        assertEquals(2 * 1024 * 1024, WidgetProviderCatalogLoader.previewBudgetBytes(0));
+        assertEquals(4 * 1024 * 1024, WidgetProviderCatalogLoader.previewBudgetBytes(128));
+        assertEquals(8 * 1024 * 1024, WidgetProviderCatalogLoader.previewBudgetBytes(512));
     }
 
     @Test public void staleGenerationIsSuppressedAndMetricsRefreshChangesSpanFit() {
@@ -98,7 +156,7 @@ public class WidgetProviderCatalogLoaderTest {
             info("pkg", "Wide", true)); boundary.providers.get(0).minWidth = 220;
         QueuedExecutor queue = new QueuedExecutor();
         WidgetProviderCatalogLoader loader = new WidgetProviderCatalogLoader(boundary, queue,
-            new Handler(Looper.getMainLooper()), 2.625f);
+            new Handler(Looper.getMainLooper()), resources(), 1024);
         AtomicInteger callbacks = new AtomicInteger();
         loader.load(metrics(200, 600), 1, (g, groups) -> callbacks.incrementAndGet());
         loader.load(metrics(800, 600), 2, (g, groups) -> {
@@ -127,7 +185,10 @@ public class WidgetProviderCatalogLoaderTest {
 
     private static WidgetProviderCatalogLoader loader(FakeBoundary boundary) {
         return new WidgetProviderCatalogLoader(boundary, Runnable::run,
-            new Handler(Looper.getMainLooper()), 2.625f);
+            new Handler(Looper.getMainLooper()), resources(), 1024);
+    }
+    private static Resources resources() {
+        return RuntimeEnvironment.getApplication().getResources();
     }
     private static WidgetGridMetrics metrics(int width, int height) {
         return new WidgetGridMetrics(new Rect(0, 0, width, height), 0, 0, 0,
@@ -143,7 +204,7 @@ public class WidgetProviderCatalogLoaderTest {
     }
     private static final class FakeBoundary implements WidgetProviderCatalogLoader.Boundary {
         List<AppWidgetProviderInfo> providers = Collections.emptyList(); boolean throwPreview;
-        int serial; int previewCalls;
+        int serial; int previewCalls; int previewBitmapPx;
         @Override public List<UserHandle> profiles() { return Arrays.asList(Process.myUserHandle(), Process.myUserHandle()); }
         @Override public long serial(UserHandle profile) { return serial++ * 10L; }
         @Override public List<AppWidgetProviderInfo> providers(UserHandle profile) { return providers; }
@@ -153,7 +214,10 @@ public class WidgetProviderCatalogLoaderTest {
         @Override public Drawable providerIcon(AppWidgetProviderInfo info) { return new ColorDrawable(2); }
         @Override public Drawable preview(AppWidgetProviderInfo info) {
             previewCalls++;
-            if (throwPreview) throw new RuntimeException("broken preview"); return new ColorDrawable(3);
+            if (throwPreview) throw new RuntimeException("broken preview");
+            if (previewBitmapPx > 0) return new BitmapDrawable(resources(), Bitmap.createBitmap(
+                previewBitmapPx, previewBitmapPx, Bitmap.Config.ARGB_8888));
+            return new ColorDrawable(3);
         }
         @Override public boolean enabled(AppWidgetProviderInfo info) { return true; }
     }

@@ -2,7 +2,9 @@
 
 Nix counterpart of `recipes/termux/fastfetch`: fastfetch 2.67.0 with the
 animated Kitty graphics patch, built from nixpkgs with ImageMagick, zlib,
-and Chafa support.
+and Chafa support. The patch is the same file in both recipes; it places
+the logo through Kitty's Unicode placeholders, described in
+`docs/en/Building_Terminal_Showcase_Tools.md`.
 
 The `#launcher` flake template already carries this overlay as
 `overlays.nix`, gated behind `animatedFastfetchLogo` in `toolkits.nix`

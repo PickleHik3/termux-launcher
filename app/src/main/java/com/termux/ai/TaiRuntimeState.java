@@ -6,6 +6,8 @@ import androidx.annotation.Nullable;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.Iterator;
+
 public final class TaiRuntimeState {
     public final boolean loaded;
     @Nullable public final String loadedModelId;
@@ -140,7 +142,7 @@ public final class TaiRuntimeState {
         json.put("loadedAtMs", loadedAtMs);
         json.put("lastUsedAtMs", lastUsedAtMs);
         if (extraJson != null) {
-            java.util.Iterator<String> keys = extraJson.keys();
+            Iterator<String> keys = extraJson.keys();
             while (keys.hasNext()) {
                 String key = keys.next();
                 json.put(key, extraJson.opt(key));

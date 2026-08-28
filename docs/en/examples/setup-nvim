@@ -1,8 +1,6 @@
 #!/system/bin/sh
 # setup-nvim — pick a Neovim setup, or add the launcher's integrations to one you
-# already have. Nothing installs Neovim configuration automatically: the choice of
-# distro is the user's, and an existing ~/.config/nvim is never touched unless you
-# say so in as many words.
+# already have. An existing ~/.config/nvim is never touched unless you say so.
 #
 #   setup-nvim                          interactive menu
 #   setup-nvim --distro astronvim       non-interactive
@@ -11,19 +9,19 @@
 #                                       NVIM_APPNAME=astronvim nvim
 #   setup-nvim --integrations-only      just clipboard + wrap (+ theme where supported)
 #
-# What "integrations" means: OSC 52 clipboard so yanks reach the Android clipboard
-# with no helper tool, always-on line wrap for a phone-width screen, and — on
-# AstroNvim and NvChad — a colourscheme generated from the launcher's wallpaper
-# palette (~/.termux/material-colors.sh) that retints live when the wallpaper
-# changes.
+# Integrations: OSC 52 clipboard (yanks reach the Android clipboard, no helper
+# tool), always-on line wrap, and — on AstroNvim and NvChad — a colourscheme built
+# from ~/.termux/material-colors.sh that retints with the wallpaper, on a
+# transparent background so the wallpaper shows through the editor as well. Opt
+# out with :MaterialTransparent off.
 #
-# Replacing an existing config is gated on typing REPLACE, and even then the old
-# config is moved to ~/.config/nvim.bak-<timestamp> first — only the plugin,
-# state, and cache directories are deleted, and plugins reinstall themselves.
+# Replacing a config needs a typed REPLACE, and the old one still moves to
+# ~/.config/nvim.bak-<timestamp>; only plugin/state/cache dirs are deleted.
 
 set -eu
 
 fail() { printf 'setup-nvim: %s\n' "$*" >&2; exit 1; }
+warn() { printf 'setup-nvim: %s\n' "$*" >&2; }
 
 distro=""
 appname="nvim"
@@ -53,19 +51,45 @@ data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/$appname"
 # ----------------------------------------------------------------------------
 
 ensure_packages() {
-    missing=""
-    command -v nvim >/dev/null 2>&1 || missing="$missing neovim"
-    command -v git >/dev/null 2>&1 || missing="$missing git"
-    [ -n "$missing" ] || return 0
+    # Required: treesitter parsers compile from source on first start, so the C
+    # toolchain is as hard a dependency as neovim. build-essential is the Termux
+    # name for it (clang, make, pkg-config) — "base-devel" is Arch's.
+    # Optional: the pickers shell out to rg/fd and Mason needs unzip. Warn, do
+    # not abort.
+    required=""
+    command -v nvim >/dev/null 2>&1 || required="$required neovim"
+    command -v git >/dev/null 2>&1 || required="$required git"
+    if ! command -v cc >/dev/null 2>&1 && ! command -v clang >/dev/null 2>&1; then
+        required="$required build-essential"
+    fi
+    command -v make >/dev/null 2>&1 || required="$required make"
+
+    optional=""
+    command -v rg >/dev/null 2>&1 || optional="$optional ripgrep"
+    command -v fd >/dev/null 2>&1 || optional="$optional fd"
+    command -v unzip >/dev/null 2>&1 || optional="$optional unzip"
+
+    [ -n "$required$optional" ] || return 0
 
     if command -v pacman >/dev/null 2>&1; then
-        # shellcheck disable=SC2086
-        pacman -S --needed --noconfirm $missing || fail "could not install:$missing"
+        pkg_install='pacman -S --needed --noconfirm'
     elif command -v pkg >/dev/null 2>&1; then
-        # shellcheck disable=SC2086
-        pkg install -y $missing || fail "could not install:$missing"
+        pkg_install='pkg install -y'
     else
-        fail "missing:$missing (and no supported package manager, pkg or pacman, to install them)"
+        [ -z "$required" ] ||
+            fail "missing:$required (and no supported package manager, pkg or pacman, to install them)"
+        warn "missing:$optional (and no package manager to install them) — the file pickers will be limited"
+        return 0
+    fi
+
+    if [ -n "$required" ]; then
+        # shellcheck disable=SC2086
+        $pkg_install $required || fail "could not install:$required"
+    fi
+    if [ -n "$optional" ]; then
+        # shellcheck disable=SC2086
+        $pkg_install $optional ||
+            warn "could not install:$optional — the file pickers will be limited"
     fi
 }
 
@@ -505,7 +529,9 @@ vim.api.nvim_create_user_command("MaterialThemeInfo", function()
     return
   end
   palette.build() -- populates vim.g.material_theme_info
-  print(vim.inspect(vim.g.material_theme_info))
+  local info = vim.deepcopy(vim.g.material_theme_info or {})
+  info.glass = not (vim.g.material_opaque == true or vim.g.material_transparent == false)
+  print(vim.inspect(info))
 end, { desc = "Show how the wallpaper-derived theme was built" })
 LUA_INTEGRATIONS
 
@@ -583,40 +609,65 @@ end
 local set = function(group, attrs) vim.api.nvim_set_hl(0, group, attrs) end
 local accent = d.pmenu_bg -- Material PRIMARY
 
--- Chrome, on the Material surface ramp.
-set("StatusLine", { fg = d.white, bg = d.statusline_bg })
-set("StatusLineNC", { fg = d.grey_fg, bg = d.statusline_bg })
-set("TabLine", { fg = d.grey_fg2, bg = d.darker_black })
-set("TabLineFill", { bg = d.darker_black })
-set("TabLineSel", { fg = d.white, bg = d.one_bg2 })
-set("WinBar", { fg = d.grey_fg2, bg = d.black })
-set("WinBarNC", { fg = d.grey, bg = d.black })
-set("WinSeparator", { fg = d.line, bg = d.black })
-set("Pmenu", { fg = d.white, bg = d.one_bg })
+-- Glass is the default: the editor is a window onto the wallpaper, like the rest
+-- of the launcher. A terminal cell has no alpha channel, so "transparent" here
+-- means bg "NONE" -- nvim inherits the terminal's own background, and the degree
+-- comes from the launcher's terminal/surface opacity slider.
+--
+-- Opt out with vim.g.material_opaque = true before the colourscheme loads, or
+-- :MaterialTransparent off. vim.g.material_transparent = false is still honoured
+-- for configs written against the old opt-in default.
+local glass = not (vim.g.material_opaque == true or vim.g.material_transparent == false)
+
+-- Every chrome background goes through this, so opaque mode stays a real theme
+-- rather than a fallback nobody looks at.
+local function surface(solid) return glass and "NONE" or solid end
+
+-- Chrome. With the fills gone, structure has to come from somewhere else: borders
+-- and separators carry it, so they step up from outline_variant to outline, and
+-- what keeps a fill does so because it marks a position rather than a region --
+-- the mode block, the selected tab, the selected line. Bare text on glass cannot
+-- show you where the cursor is.
+local border = glass and d.grey_fg2 or d.line
+set("StatusLine", { fg = d.white, bg = surface(d.statusline_bg) })
+set("StatusLineNC", { fg = d.grey_fg, bg = surface(d.statusline_bg) })
+set("TabLine", { fg = d.grey_fg2, bg = surface(d.darker_black) })
+set("TabLineFill", { bg = surface(d.darker_black) })
+set("TabLineSel", { fg = d.white, bg = d.one_bg2, bold = glass })
+set("WinBar", { fg = d.grey_fg2, bg = surface(d.black) })
+set("WinBarNC", { fg = d.grey, bg = surface(d.black) })
+set("WinSeparator", { fg = border, bg = surface(d.black) })
+set("Pmenu", { fg = d.white, bg = surface(d.one_bg) })
 set("PmenuSel", { fg = d.black, bg = accent })
-set("PmenuSbar", { bg = d.one_bg2 })
+set("PmenuSbar", { bg = surface(d.one_bg2) })
 set("PmenuThumb", { bg = d.grey })
-set("FloatBorder", { fg = d.line, bg = d.darker_black })
-set("NormalFloat", { fg = d.white, bg = d.darker_black })
+set("FloatBorder", { fg = border, bg = surface(d.darker_black) })
+set("NormalFloat", { fg = d.white, bg = surface(d.darker_black) })
+set("FloatTitle", { fg = accent, bold = true })
+-- Position markers, kept solid on purpose.
 set("CursorLine", { bg = d.one_bg })
 set("Visual", { bg = d.one_bg3 })
 
 -- Sidebar and pickers. Setting a group that a plugin never uses is harmless, so
 -- both neo-tree and the snacks picker are covered without probing which is active.
+-- The panel backgrounds go too: a solid sidebar next to a glass buffer reads as a
+-- rendering bug rather than a design. Titles keep their accent fill, which is what
+-- separates one panel from the next once the fills are gone.
+local panel = surface(d.darker_black)
 for group, attrs in pairs {
-  NeoTreeNormal = { fg = d.white, bg = d.darker_black },
-  NeoTreeNormalNC = { fg = d.grey_fg2, bg = d.darker_black },
-  NeoTreeEndOfBuffer = { fg = d.darker_black, bg = d.darker_black },
-  NeoTreeWinSeparator = { fg = d.darker_black, bg = d.darker_black },
+  NeoTreeNormal = { fg = d.white, bg = panel },
+  NeoTreeNormalNC = { fg = d.grey_fg2, bg = panel },
+  NeoTreeEndOfBuffer = { fg = glass and border or d.darker_black, bg = panel },
+  NeoTreeWinSeparator = { fg = border, bg = panel },
   NeoTreeRootName = { fg = accent, bold = true },
   NeoTreeDirectoryIcon = { fg = accent },
   NeoTreeGitModified = { fg = d.yellow },
-  TelescopeNormal = { fg = d.white, bg = d.darker_black },
-  TelescopeBorder = { fg = d.line, bg = d.darker_black },
+  TelescopeNormal = { fg = d.white, bg = panel },
+  TelescopeBorder = { fg = border, bg = panel },
   TelescopePromptTitle = { fg = d.black, bg = accent, bold = true },
   TelescopeSelection = { bg = d.one_bg2 },
-  SnacksPicker = { fg = d.white, bg = d.darker_black },
-  SnacksPickerBorder = { fg = d.line, bg = d.darker_black },
+  SnacksPicker = { fg = d.white, bg = panel },
+  SnacksPickerBorder = { fg = border, bg = panel },
   SnacksPickerTitle = { fg = d.black, bg = accent, bold = true },
   SnacksPickerListCursorLine = { bg = d.one_bg2 },
   SnacksDashboardHeader = { fg = accent },
@@ -633,6 +684,8 @@ set("GitSignsDelete", { fg = d.red })
 set("GitSignsAddNr", { fg = d.green })
 set("GitSignsChangeNr", { fg = d.yellow })
 set("GitSignsDeleteNr", { fg = d.red })
+-- Diffs keep their fills in both modes: they mark regions, and a region with no
+-- background is not a region.
 set("DiffAdd", { fg = d.green, bg = d.one_bg })
 set("DiffChange", { fg = d.yellow, bg = d.one_bg })
 set("DiffDelete", { fg = d.red, bg = d.one_bg })
@@ -658,53 +711,41 @@ for i, colour in ipairs(ansi) do
   vim.g["terminal_color_" .. (i - 1)] = colour
 end
 
--- Transparency. A terminal cell has no alpha channel, so this is on/off here: bg
--- "NONE" makes nvim inherit the terminal's own background, and *that* is where the
--- degree comes from -- the launcher's terminal/surface opacity slider. Set
--- vim.g.material_transparent = true before the colourscheme loads, or toggle it
--- live with :MaterialTransparent.
+-- The buffer area. base16-colorscheme has already painted these with base00, so
+-- unlike the chrome above they have to be overridden rather than declared.
 --
--- Deliberately selective: the buffer area goes transparent so the wallpaper shows
--- through, while statusline, sidebar, floats and pickers keep solid backgrounds.
--- Fully transparent chrome is where legibility falls apart -- those surfaces carry
--- small, dense text over whatever happens to be behind them.
-local function apply_transparency(on)
-  local groups = {
-    "Normal", "NormalNC", "SignColumn", "EndOfBuffer", "LineNr", "CursorLineNr",
-    "FoldColumn", "NonText", "MsgArea", "VertSplit",
-  }
-  for _, group in ipairs(groups) do
-    local hl = vim.api.nvim_get_hl(0, { name = group, link = false })
-    -- Opaque means opaque: set the background explicitly rather than leaving it
-    -- unset. Unset merely inherits Normal, which looks identical but reports as
-    -- NONE and would go transparent again if Normal ever did.
-    hl.bg = on and "NONE" or built.base_16.base00
-    vim.api.nvim_set_hl(0, group, hl)
-  end
-  set("WinSeparator", { fg = d.line, bg = on and "NONE" or d.black })
-  -- Floats blend against the buffer behind them; the popup menu likewise. Modest
-  -- values only: past ~20 the text starts fighting whatever is underneath.
-  vim.o.winblend = on and 10 or 0
-  vim.o.pumblend = on and 10 or 0
+-- Opaque means opaque: the background is set explicitly rather than left unset.
+-- Unset merely inherits Normal -- identical on screen, but it reports as NONE and
+-- would go transparent again the moment Normal did.
+for _, group in ipairs {
+  "Normal", "NormalNC", "SignColumn", "EndOfBuffer", "LineNr", "CursorLineNr",
+  "FoldColumn", "NonText", "MsgArea", "VertSplit",
+} do
+  local hl = vim.api.nvim_get_hl(0, { name = group, link = false })
+  hl.bg = surface(built.base_16.base00)
+  vim.api.nvim_set_hl(0, group, hl)
 end
 
-apply_transparency(vim.g.material_transparent == true)
+-- No window blending. Everything that floats is already bg NONE in glass mode, and
+-- blending a transparent window washes the text out against the wallpaper twice.
+vim.o.winblend = 0
+vim.o.pumblend = 0
 
 vim.api.nvim_create_user_command("MaterialTransparent", function(cmd)
-  local arg = cmd.args ~= "" and cmd.args or nil
   local on
-  if arg == "on" then
+  if cmd.args == "on" then
     on = true
-  elseif arg == "off" then
+  elseif cmd.args == "off" then
     on = false
   else
-    on = not (vim.g.material_transparent == true)
+    on = not glass
   end
+  vim.g.material_opaque = not on
   vim.g.material_transparent = on
   vim.cmd.colorscheme "material"
-  print("material: transparency " .. (on and "on" or "off"))
+  print("material: glass " .. (on and "on" or "off"))
 end, { nargs = "?", complete = function() return { "on", "off" } end,
-       desc = "Toggle transparent background (inherits the terminal's opacity)" })
+       desc = "Toggle the glass background (opacity comes from the terminal)" })
 
 vim.g.colors_name = "material"
 LUA_ASTRO_COLORS
@@ -786,6 +827,10 @@ install_material_theme() {
     [ -e "$target/lua/themes/material.lua" ] || cp "$payload_dir/theme-material.lua" "$target/lua/themes/material.lua"
     if [ -e "$target/lua/chadrc.lua" ]; then
         sed -i 's|theme = "onedark"|theme = "material"|' "$target/lua/chadrc.lua"
+        # base46 strips backgrounds itself when this is on, which is how NvChad
+        # gets the same glass look the AstroNvim colours file builds by hand.
+        grep -q 'transparency' "$target/lua/chadrc.lua" ||
+            sed -i 's|theme = "material"|theme = "material",\n  transparency = true|' "$target/lua/chadrc.lua"
     fi
     # base46 compiles highlights to a cache; a stale cache silently keeps the old
     # theme, which looks exactly like the new theme failing to load.
@@ -825,8 +870,9 @@ install_astronvim() {
     [ -e "$target/lua/plugins/material.lua" ] || cp "$payload_dir/astro-plugin-material.lua" "$target/lua/plugins/material.lua"
     hook_integrations "$target/init.lua"
     echo "AstroNvim installed. Keybind hints: <leader> shows the which-key menu."
-    echo "Colourscheme follows your wallpaper; :MaterialThemeInfo shows how it was built,"
-    echo "and :MaterialTransparent toggles a transparent background."
+    echo "Colourscheme follows your wallpaper, on a transparent background so it shows"
+    echo "through. :MaterialThemeInfo shows how it was built, :MaterialTransparent off"
+    echo "gives you solid Material surfaces instead."
 }
 
 install_nvchad() {
@@ -835,7 +881,8 @@ install_nvchad() {
     install_material_theme
     hook_integrations "$target/lua/options.lua"
     echo "NvChad installed. Cheatsheet: <leader>ch   Theme picker: <leader>th"
-    echo "Colourscheme follows your wallpaper; :MaterialThemeInfo shows how it was built."
+    echo "Colourscheme follows your wallpaper on a transparent background (base46"
+    echo "transparency); :MaterialThemeInfo shows how it was built."
 }
 
 install_lazyvim() {

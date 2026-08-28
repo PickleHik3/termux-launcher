@@ -86,4 +86,29 @@ public class TerminalClockWidgetTest {
         widget.setAlignment(null);
         assertEquals("left", widget.getAlignment());
     }
+
+    @Test
+    public void lazyMode_reportsEveryDigitSettledOnTheTickThatChangedIt() {
+        TerminalClockWidget widget = new TerminalClockWidget(
+            ApplicationProvider.getApplicationContext(), null);
+        widget.setStyle(TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD);
+        long wall = 1_700_000_000_000L;
+        widget.updateTime(wall, 1_000L);
+        widget.updateTime(wall + 1_000L, 2_000L);
+
+        // Animating: the seconds' ones digit has just changed, so it is at the start of its fold.
+        assertEquals(0f, widget.secondsProgress(1, 2_000L, 340L), 0f);
+
+        widget.setLazyMode(true);
+        widget.updateTime(wall + 2_000L, 3_000L);
+
+        // Lazy: the same tick must read as settled, or the single frame it paints is the digit
+        // dropped 4dp and faded out until the next second.
+        assertEquals(1f, widget.secondsProgress(1, 3_000L, 340L), 0f);
+        assertEquals(1f, widget.progress(0, 3_000L, 340L), 0f);
+
+        widget.setLazyMode(false);
+        widget.updateTime(wall + 3_000L, 4_000L);
+        assertEquals(0f, widget.secondsProgress(1, 4_000L, 340L), 0f);
+    }
 }

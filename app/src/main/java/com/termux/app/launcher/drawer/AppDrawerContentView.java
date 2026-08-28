@@ -2,18 +2,30 @@ package com.termux.app.launcher.drawer;
 
 import android.content.Context;
 import android.content.res.Resources;
+import android.graphics.Color;
+import android.graphics.Typeface;
 import android.os.SystemClock;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
+import android.text.style.StyleSpan;
+import android.util.Log;
+import android.util.TypedValue;
 import android.view.Choreographer;
 import android.view.DragEvent;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.ViewParent;
 import android.widget.FrameLayout;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.graphics.ColorUtils;
 import androidx.core.view.NestedScrollingParent3;
 import androidx.core.view.NestedScrollingParentHelper;
 import androidx.core.view.ViewCompat;
@@ -32,8 +44,10 @@ import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.PinnedFolderItem;
 
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.io.IOException;
 
@@ -108,8 +122,8 @@ public final class AppDrawerContentView extends FrameLayout
     private static final float RESULTS_LABEL_BAND_DP = 24f;
 
     private final AppDrawerSearchPillView mPill;
-    private final android.widget.TextView mResultsLabel;
-    private final android.widget.TextView mNoResults;
+    private final TextView mResultsLabel;
+    private final TextView mNoResults;
     private final RecyclerView mGrid;
     private final AppDrawerHorizontalPagerView mHorizontalPager;
     private final AppDrawerPageIndicatorView mPageIndicator;
@@ -154,8 +168,8 @@ public final class AppDrawerContentView extends FrameLayout
     @NonNull private List<LauncherAppEntry> mVisibleResults = Collections.emptyList();
     @NonNull private List<AppDrawerCategoryBucket> mCategoryBuckets = Collections.emptyList();
     /** stableId → category label res, rebuilt with the buckets; the search rows' second line. */
-    @NonNull private final java.util.HashMap<String, Integer> mCategoryLabelIds =
-        new java.util.HashMap<>();
+    @NonNull private final HashMap<String, Integer> mCategoryLabelIds =
+        new HashMap<>();
     /** Vertical grid columns, retained so the search-row presentation can restore the span. */
     private int mVerticalColumns = AppDrawerGridMetrics.MIN_COLUMNS;
     private boolean mCategorySearchPresentation;
@@ -341,9 +355,9 @@ public final class AppDrawerContentView extends FrameLayout
 
         // The categories search chrome: a quiet mono "N RESULTS" band between the pill and the
         // rows, and a centred no-results state. Both exist only while that presentation is up.
-        mResultsLabel = new android.widget.TextView(context);
-        mResultsLabel.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 10f);
-        mResultsLabel.setTypeface(android.graphics.Typeface.MONOSPACE);
+        mResultsLabel = new TextView(context);
+        mResultsLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
+        mResultsLabel.setTypeface(Typeface.MONOSPACE);
         mResultsLabel.setLetterSpacing(0.16f);
         mResultsLabel.setSingleLine(true);
         mResultsLabel.setIncludeFontPadding(false);
@@ -357,9 +371,9 @@ public final class AppDrawerContentView extends FrameLayout
         resultsLabelParams.topMargin = mGridBaseTopMarginPx;
         addView(mResultsLabel, resultsLabelParams);
 
-        mNoResults = new android.widget.TextView(context);
+        mNoResults = new TextView(context);
         mNoResults.setGravity(Gravity.CENTER);
-        mNoResults.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 15f);
+        mNoResults.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
         mNoResults.setLineSpacing(0f, 1.3f);
         mNoResults.setVisibility(GONE);
         bindNoResultsText();
@@ -422,7 +436,7 @@ public final class AppDrawerContentView extends FrameLayout
 
     @NonNull
     private static AppDrawerCuratedCategoryMap loadCuratedMap(@NonNull Resources resources) {
-        try (java.io.InputStream input = resources.openRawResource(
+        try (InputStream input = resources.openRawResource(
             com.termux.R.raw.app_drawer_category_overrides)) {
             return AppDrawerCuratedCategoryMap.parse(input);
         } catch (IOException | Resources.NotFoundException ignored) {
@@ -466,7 +480,7 @@ public final class AppDrawerContentView extends FrameLayout
             int to = Math.min(report.length(), from + 3500);
             int newline = report.lastIndexOf('\n', to - 1);
             if (newline > from && to < report.length()) to = newline + 1;
-            android.util.Log.d("AppDrawerCategories", report.substring(from, to));
+            Log.d("AppDrawerCategories", report.substring(from, to));
             from = to;
         }
     }
@@ -485,8 +499,8 @@ public final class AppDrawerContentView extends FrameLayout
     /** The launcher text colour at an alpha, for the search chrome; white before a dock exists. */
     private int resultsChromeColor(int alpha) {
         SuggestionBarView dock = mDock;
-        int base = dock == null ? android.graphics.Color.WHITE : dock.getLauncherTextColor();
-        return androidx.core.graphics.ColorUtils.setAlphaComponent(base, alpha);
+        int base = dock == null ? Color.WHITE : dock.getLauncherTextColor();
+        return ColorUtils.setAlphaComponent(base, alpha);
     }
 
     /** "No apps matched" over the quieter suggestion line, per the mock's no-results state. */
@@ -495,16 +509,16 @@ public final class AppDrawerContentView extends FrameLayout
             com.termux.R.string.app_drawer_search_no_results_title);
         String body = getResources().getString(
             com.termux.R.string.app_drawer_search_no_results_body);
-        android.text.SpannableStringBuilder text =
-            new android.text.SpannableStringBuilder(title + "\n" + body);
-        int flags = android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE;
-        text.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+        SpannableStringBuilder text =
+            new SpannableStringBuilder(title + "\n" + body);
+        int flags = Spanned.SPAN_EXCLUSIVE_EXCLUSIVE;
+        text.setSpan(new StyleSpan(Typeface.BOLD),
             0, title.length(), flags);
-        text.setSpan(new android.text.style.ForegroundColorSpan(resultsChromeColor(0xCC)),
+        text.setSpan(new ForegroundColorSpan(resultsChromeColor(0xCC)),
             0, title.length(), flags);
-        text.setSpan(new android.text.style.RelativeSizeSpan(0.8f),
+        text.setSpan(new RelativeSizeSpan(0.8f),
             title.length() + 1, text.length(), flags);
-        text.setSpan(new android.text.style.ForegroundColorSpan(resultsChromeColor(0x73)),
+        text.setSpan(new ForegroundColorSpan(resultsChromeColor(0x73)),
             title.length() + 1, text.length(), flags);
         mNoResults.setText(text);
     }
@@ -573,21 +587,7 @@ public final class AppDrawerContentView extends FrameLayout
         if (!interactive) {
             if (mDragController != null) mDragController.cancel();
             cancelCellLongPresses();
-            switch (mViewType) {
-                case VERTICAL:
-                    break;
-                case HORIZONTAL:
-                    cancelNestedClose();
-                    mHorizontalPager.stopForModeChange();
-                    break;
-                case CATEGORIES:
-                    cancelNestedClose();
-                    // Drawer close/lifecycle teardown cancels the category transition outright;
-                    // it must not keep animating beneath the closing plane. reset() suppresses the
-                    // retained UP before releasing any holder, preserving the reentrant click gate.
-                    mCategoryView.reset();
-                    break;
-            }
+            stopPresentationMotion();
             stopOverpullSpring();
             mPolicy.disarm();
             // A scrub left in flight is a finger's worth of state on a surface that has stopped
@@ -641,6 +641,7 @@ public final class AppDrawerContentView extends FrameLayout
         }
         dismissContextPopups();
         cancelCellLongPresses();
+        stopPresentationMotion();
         switch (mViewType) {
             case VERTICAL:
                 clearScrub();
@@ -649,14 +650,10 @@ public final class AppDrawerContentView extends FrameLayout
                 stopOverpullSpring();
                 break;
             case HORIZONTAL:
-                cancelNestedClose();
-                mHorizontalPager.stopForModeChange();
                 unbindAttachedHorizontalPages();
                 mHorizontalAdapter.submit(Collections.emptyList());
                 break;
             case CATEGORIES:
-                cancelNestedClose();
-                mCategoryView.reset();
                 mPolicy.disarm();
                 stopOverpullSpring();
                 break;
@@ -664,6 +661,28 @@ public final class AppDrawerContentView extends FrameLayout
         mViewType = viewType;
         applyViewType();
         submitVisibleResults(true);
+    }
+
+    /**
+     * Halts whatever the current presentation has in flight — the pager's settle or the category
+     * transition — before the drawer is torn down or the presentation swapped. The category
+     * transition is cancelled outright: it must not keep animating beneath the closing plane, and
+     * reset() suppresses the retained UP before releasing any holder, preserving the reentrant click
+     * gate. The vertical grid has no motion of its own here.
+     */
+    private void stopPresentationMotion() {
+        switch (mViewType) {
+            case HORIZONTAL:
+                cancelNestedClose();
+                mHorizontalPager.stopForModeChange();
+                break;
+            case CATEGORIES:
+                cancelNestedClose();
+                mCategoryView.reset();
+                break;
+            case VERTICAL:
+                break;
+        }
     }
 
     private void unbindAttachedHorizontalPages() {
@@ -840,8 +859,7 @@ public final class AppDrawerContentView extends FrameLayout
         // index and the highlight.
         List<LauncherAppEntry> catalogue = AppDrawerSectionIndex.sortByLabel(provider.getAllApps());
         search.setCatalogue(catalogue);
-        if (mViewType == AppDrawerViewType.CATEGORIES && !hasQuery())
-            mCategoryView.submitBuckets(mCategoryBuckets);
+        if (categoryTilesShown()) mCategoryView.submitBuckets(mCategoryBuckets);
     }
 
     /** Empties the query and puts the grid back to the top. For a drawer that has closed. */
@@ -866,6 +884,11 @@ public final class AppDrawerContentView extends FrameLayout
         return search != null && search.hasQuery();
     }
 
+    /** True while the category tiles are the presentation: categories view type, no query typed. */
+    private boolean categoryTilesShown() {
+        return mViewType == AppDrawerViewType.CATEGORIES && !hasQuery();
+    }
+
     /** @return true when a non-empty query was cleared, i.e. when Back has already been spent */
     public boolean clearQueryIfPresent() {
         AppDrawerSearchController search = mSearch;
@@ -875,8 +898,7 @@ public final class AppDrawerContentView extends FrameLayout
 
     /** Back's second rung after search: collapse or reverse any category detail transition. */
     public boolean collapseCategoryIfNeeded() {
-        return mViewType == AppDrawerViewType.CATEGORIES && !hasQuery()
-            && mCategoryView.collapseIfNeeded();
+        return categoryTilesShown() && mCategoryView.collapseIfNeeded();
     }
 
     /** One internal hierarchy; one press performs at most one action. */
@@ -948,7 +970,7 @@ public final class AppDrawerContentView extends FrameLayout
         // ordered by match quality, not by letter — because the column is inactive there and nothing
         // can ask it for one.
         mSectionIndex = AppDrawerSectionIndex.build(results);
-        mVisibleResults = new java.util.ArrayList<>(results);
+        mVisibleResults = new ArrayList<>(results);
         if (mViewType == AppDrawerViewType.CATEGORIES) {
             if (hasQuery()) mCategoryView.cancelForSearch();
             else if (mGrid.getVisibility() == VISIBLE) recycleSearchGridHolders();
@@ -1016,7 +1038,7 @@ public final class AppDrawerContentView extends FrameLayout
 
     @NonNull
     private static List<LauncherAppEntry> indexEntries(@NonNull List<AppDrawerItem> items) {
-        List<LauncherAppEntry> entries = new java.util.ArrayList<>(items.size());
+        List<LauncherAppEntry> entries = new ArrayList<>(items.size());
         for (AppDrawerItem item : items) {
             if (item.app != null) entries.add(item.app);
             else entries.add(new LauncherAppEntry(new AppRef("folder." + item.stableId, ""),
@@ -1104,8 +1126,8 @@ public final class AppDrawerContentView extends FrameLayout
             View child = surface.getChildAt(i);
             if (child == null) continue;
             child.cancelLongPress();
-            if (child instanceof android.view.ViewGroup) {
-                android.view.ViewGroup group = (android.view.ViewGroup) child;
+            if (child instanceof ViewGroup) {
+                ViewGroup group = (ViewGroup) child;
                 for (int j = 0; j < group.getChildCount(); j++) {
                     View cell = group.getChildAt(j);
                     if (cell != null) cell.cancelLongPress();
@@ -1861,7 +1883,7 @@ public final class AppDrawerContentView extends FrameLayout
         float velocityPxPerSec =
             AppDrawerCloseArmingPolicy.closeVelocityForNestedFling(mFlingVelocityY);
         RecyclerView recycler = mGestureRecycler == null ? mGrid : mGestureRecycler;
-        mPolicy.end(mOverpullTranslationPx, armOverpullPx(), velocityPxPerSec,
+        mPolicy.end(mOverpullTranslationPx, 0f, velocityPxPerSec,
             !recycler.canScrollVertically(-1), SystemClock.uptimeMillis());
         mFlingVelocityY = 0f;
         releaseOverpull();
@@ -1902,10 +1924,6 @@ public final class AppDrawerContentView extends FrameLayout
 
     private float overpullMaxPx() {
         return OVERPULL_MAX_DP * mDensity;
-    }
-
-    private float armOverpullPx() {
-        return AppDrawerCloseArmingPolicy.ARM_OVERPULL_DP * mDensity;
     }
 
     /** The grid's current overpull travel, in pixels. */
@@ -2019,13 +2037,13 @@ public final class AppDrawerContentView extends FrameLayout
 
     /** @return the categories search's "N RESULTS" band */
     @NonNull
-    public android.widget.TextView getResultsLabel() {
+    public TextView getResultsLabel() {
         return mResultsLabel;
     }
 
     /** @return the categories search's centred no-results state */
     @NonNull
-    public android.widget.TextView getNoResultsView() {
+    public TextView getNoResultsView() {
         return mNoResults;
     }
 }

@@ -55,21 +55,13 @@ public class AppDrawerContentCategoryGestureTest {
         categories = content.getCategoryView();
     }
 
-    @Test public void overviewUsesVerticalFirstPullThenFreshSecondPullClose() {
+    @Test public void overviewPullAtTheTopClosesInOneGesture() {
         RecyclerView overview = categories.getOverview();
         assertTrue(overview.canScrollVertically(1));
         downOnOverview();
         int[] consumed = {0, 0};
         content.onNestedPreScroll(overview, 0, -60, consumed, ViewCompat.TYPE_TOUCH);
-        assertEquals(0, consumed[1]);
-        content.onNestedScroll(overview, 0, 0, 0, -200, ViewCompat.TYPE_TOUCH, consumed);
-        content.onStopNestedScroll(overview, ViewCompat.TYPE_TOUCH);
-        assertEquals(0, callbacks.begins);
-
-        downOnOverview();
-        consumed[1] = 0;
-        content.onNestedPreScroll(overview, 0, -30, consumed, ViewCompat.TYPE_TOUCH);
-        assertEquals(-30, consumed[1]);
+        assertEquals(-60, consumed[1]);
         assertEquals(1, callbacks.begins);
         content.onStopNestedScroll(overview, ViewCompat.TYPE_TOUCH);
         assertEquals(1, callbacks.ends);
@@ -130,14 +122,8 @@ public class AppDrawerContentCategoryGestureTest {
 
     @Test public void nestedFlingSignIsConvertedExactlyOnceAndDuplicateStopFinalizesOnce() {
         RecyclerView overview = categories.getOverview();
-        // Arm the ordinary scrollable overview, then claim the fresh second stream.
         downOnOverview();
         int[] consumed = {0, 0};
-        content.onNestedPreScroll(overview, 0, -20, consumed, ViewCompat.TYPE_TOUCH);
-        content.onNestedScroll(overview, 0, 0, 0, -200, ViewCompat.TYPE_TOUCH, consumed);
-        content.onStopNestedScroll(overview, ViewCompat.TYPE_TOUCH);
-        downOnOverview();
-        consumed[1] = 0;
         content.onNestedPreScroll(overview, 0, -20, consumed, ViewCompat.TYPE_TOUCH);
         assertTrue(content.onNestedPreFling(overview, 0, -1234));
         assertEquals(1234f, callbacks.lastVelocity, 0f);

@@ -19,6 +19,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.termux.R;
 import com.termux.app.Spring;
 
+import java.util.Collections;
 import java.util.List;
 
 /** Modal child sheet that never creates a window or input editor. */
@@ -99,12 +100,12 @@ public final class WidgetPickerSheetView extends FrameLayout {
     }
     public void close() {
         if (!open) return; open = false; spring.value = Math.max(0f, spring.value);
-        adapter.submit(java.util.Collections.emptyList());
+        adapter.submit(Collections.emptyList());
         spring.target = 1f; spring.vel = 0f; startSpring();
     }
     public void closeImmediate() {
         open = false; animating = false; removeCallbacks(frame); spring.reset(1f);
-        adapter.submit(java.util.Collections.emptyList());
+        adapter.submit(Collections.emptyList());
         applyProgress(1f); setVisibility(GONE);
     }
 

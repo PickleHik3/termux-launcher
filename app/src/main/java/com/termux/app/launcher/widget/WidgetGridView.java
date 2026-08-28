@@ -3,8 +3,10 @@ package com.termux.app.launcher.widget;
 import android.content.Context;
 import android.graphics.Rect;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
@@ -52,7 +54,7 @@ public final class WidgetGridView extends ViewGroup {
         super(context);
         edgePadding = Math.round(4f * getResources().getDisplayMetrics().density);
         gap = Math.round(4f * getResources().getDisplayMetrics().density);
-        touchSlop = android.view.ViewConfiguration.get(context).getScaledTouchSlop();
+        touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         setClipChildren(true);
         setClipToPadding(true);
         setChildrenDrawingOrderEnabled(true);
@@ -136,7 +138,7 @@ public final class WidgetGridView extends ViewGroup {
                 emptyDownRawX = event.getRawX(); emptyDownRawY = event.getRawY();
                 emptyLongPressPending = true;
                 postDelayed(emptyLongPressFire,
-                    android.view.ViewConfiguration.getLongPressTimeout());
+                    ViewConfiguration.getLongPressTimeout());
                 return true;
             case MotionEvent.ACTION_MOVE:
                 if (emptyLongPressPending && Math.hypot(event.getX() - emptyDownX,
@@ -160,7 +162,7 @@ public final class WidgetGridView extends ViewGroup {
     private void fireEmptyLongPress() {
         if (!emptyLongPressPending) return;
         emptyLongPressPending = false;
-        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
         if (listener != null) listener.onEmptySpaceLongPressed(emptyDownRawX, emptyDownRawY);
     }
 

@@ -15,20 +15,11 @@ import static org.junit.Assert.assertEquals;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
+/**
+ * The page arithmetic itself now lives in {@code DockPagingModel} and is covered by
+ * {@code DockPagingModelTest}; what is left here is the row's own platform-facing choice.
+ */
 public class SuggestionBarPagingTest {
-    @Test
-    public void pinnedPages_wrapInBothDirections() {
-        assertEquals(0, SuggestionBarView.wrapPageIndex(3, 3));
-        assertEquals(2, SuggestionBarView.wrapPageIndex(-1, 3));
-        assertEquals(1, SuggestionBarView.wrapPageIndex(4, 3));
-    }
-
-    @Test
-    public void pageWrap_handlesEmptyAndSinglePage() {
-        assertEquals(0, SuggestionBarView.wrapPageIndex(5, 0));
-        assertEquals(0, SuggestionBarView.wrapPageIndex(-5, 1));
-    }
-
     @Test
     public void pinnedPageHaptics_distinguishPinnedAndMostUsedDestinations() {
         assertEquals(HapticFeedbackConstants.SEGMENT_TICK,

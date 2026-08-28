@@ -1,12 +1,15 @@
 package com.termux.app.launcher.drawer;
 
+import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.text.TextUtils;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -14,6 +17,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.graphics.ColorUtils;
 
 import com.termux.R;
 import com.termux.app.SuggestionBarView;
@@ -62,7 +66,7 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
     /** Label band inside the tile's top: the icon square starts below it. */
     private float headingBand;
 
-    public AppDrawerCategoryTileView(@NonNull android.content.Context context) {
+    public AppDrawerCategoryTileView(@NonNull Context context) {
         super(context);
         setWillNotDraw(false);
         setClipChildren(false);
@@ -92,15 +96,15 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         }
         heading = new TextView(context);
         heading.setTextSize(TypedValue.COMPLEX_UNIT_SP, HEADING_TEXT_SP);
-        heading.setTypeface(android.graphics.Typeface.create("sans-serif-medium",
-            android.graphics.Typeface.NORMAL));
+        heading.setTypeface(Typeface.create("sans-serif-medium",
+            Typeface.NORMAL));
         // One line, ellipsized. A two-line band reserved a whole empty line inside every card — no
         // shipped category label wraps at two columns, and the ones that would are read the same
         // ellipsized as they were on a second line nobody could see the bottom of.
         heading.setMaxLines(1);
         heading.setEllipsize(TextUtils.TruncateAt.END);
         heading.setLetterSpacing(-0.005f);
-        heading.setGravity(android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL);
+        heading.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         heading.setIncludeFontPadding(false);
         heading.setClickable(true);
         addView(heading);
@@ -116,7 +120,7 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
 
     /** A preview icon that dips on its own while held, so a launch tap reads as a button. */
     private static final class PressScaleImageView extends ImageView {
-        PressScaleImageView(@NonNull android.content.Context context) { super(context); }
+        PressScaleImageView(@NonNull Context context) { super(context); }
         @Override protected void dispatchSetPressed(boolean pressed) {
             super.dispatchSetPressed(pressed);
             applyPress(pressed);
@@ -137,7 +141,7 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
     private static final class PressTargetView extends View {
         interface PressedListener { void onPressedChanged(boolean pressed); }
         @NonNull private final PressedListener listener;
-        PressTargetView(@NonNull android.content.Context context,
+        PressTargetView(@NonNull Context context,
                         @NonNull PressedListener listener) {
             super(context);
             this.listener = listener;
@@ -163,6 +167,7 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         @NonNull AppDrawerAppCellView.ClickGate clickGate,
         @Nullable AppDrawerCategoryChoiceListener categoryChoiceListener) {
         unbind();
+        boolean metricsChanged = this.metrics != metrics;
         this.dock = dock;
         this.bucket = bucket;
         this.metrics = metrics;
@@ -174,7 +179,7 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         heading.setClickable(true);
         // 90% of the launcher text colour, per the mock's card titles.
         int headingColor = dock == null ? Color.WHITE : dock.getLauncherTextColor();
-        heading.setTextColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
+        heading.setTextColor(ColorUtils.setAlphaComponent(
             headingColor, 0xE6));
         String open = getResources().getString(R.string.app_drawer_category_open, label);
         heading.setContentDescription(open);
@@ -235,7 +240,10 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
                 icon.setContentDescription(null);
             }
         }
-        requestLayout();
+        // Geometry is a function of the metrics alone; the heading TextView requests its own
+        // layout when its text changes. Unconditional here, this forced a full measure+layout of
+        // all seven children for every tile bound during a categories scroll.
+        if (metricsChanged) requestLayout();
     }
 
     /** Releases every drawable and app-specific listener while retaining the cheap holder tree. */

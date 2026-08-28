@@ -1,67 +1,46 @@
 #!/system/bin/sh
-# setup-launcher — Termux Launcher shell environment installer.
-#
-# Three choices: everything, the shell essentials, or one item at a time.
-# Nothing here is required — the launcher works out of the box, and this only
-# installs the shell setup the screenshots were taken with.
+# setup-launcher — installs the showcase shell environment: everything, the
+# shell essentials, or one item at a time.
 #
 #   Shell        fish, Oh My Posh with the wallpaper Material palette, zoxide, eza
+#   Build tools  build-essential (clang, make, pkg-config), cmake, autotools
 #   Editor       neovim + AstroNvim, themed from the same palette
 #   Showcase     sigye, the animated-logo fastfetch, kitten
 #
-# ~/.termux is not touched. The app seeds termux.properties,
-# termux-launcher-bindings.conf and fonts.conf itself — only when they are
-# absent — and ships the extra keys row and the in-app keyboard layout as
-# built-in defaults. Rewriting termux.properties from a script would discard the
-# extra-keys row the in-app editor writes into it.
+# ~/.termux is left alone: the app seeds termux.properties, the bindings conf and
+# fonts.conf itself, and rewriting them here would discard the extra-keys row the
+# in-app editor writes. Fonts come from the in-app picker (Settings > Terminal >
+# Font).
 #
-# Fonts are not handled here either: the in-app font picker (Settings >
-# Terminal > Font) downloads and wires up curated families, Nerd Font builds
-# included.
+# config.fish is launcher-owned and replaced on every run; conf.d/personal.fish
+# is installed once and never touched again. Every replaced file gets a
+# timestamped .bak.
 #
-# tmux, btop, and Shizuku are gone from this setup. The old installer that
-# handled them is kept as docs/en/examples/setup-tmux-btop for existing users,
-# but it is deprecated: the launcher's own windows, panes, workspaces, and
-# status bar replace what tmux and btop provided.
+# Templates are fetched from a pinned tag and checked against the digest tables
+# below — config.fish and setup-nvim run code every session, so an unverified
+# download would own the shell forever. Unpublished binaries are skipped, not
+# installed unpinned.
 #
-# The fish config is split in two: config.fish is launcher-owned and replaced on
-# every run (with a .bak), while ~/.config/fish/conf.d/personal.fish is yours —
-# installed once, never overwritten, and the place for aliases, EDITOR, and
-# other personal settings.
-#
-# Existing files are never overwritten silently — every replaced config gets a
-# timestamped .bak alongside it.
-
-# Every file this script installs is fetched from a pinned release tag and checked
-# against a digest table below before it is allowed anywhere near your shell.
-# Two of them — config.fish and setup-nvim — run code on every session, so a
-# mutable branch and an unverified download would mean the repository (or anything
-# that can answer for it) gets to choose what your shell executes forever after.
-# The showcase binaries get the same treatment, and are skipped rather than
-# installed unverified when a release has not published them.
-#
-# Maintainers: after editing any template, run
+# Maintainers: after editing any template run
 #   docs/en/examples/update-setup-launcher-digests.sh [dir-with-built-binaries]
-# and commit the refreshed tables, then move TEMPLATES_REF to the release tag.
+# commit the tables, then move TEMPLATES_REF to the release tag.
 
 set -eu
 
 TEMPLATES_REF="${TERMUX_LAUNCHER_REF:-v0.2.35}"
 RAW_BASE="${TERMUX_LAUNCHER_RAW_BASE:-https://raw.githubusercontent.com/PickleHik3/termux-launcher/$TEMPLATES_REF/docs/en/examples}"
-# The showcase binaries live in their own repository, pinned to a tag of it rather
-# than to TEMPLATES_REF: they are builds of other people's software on their own
-# schedule, and tying them to a launcher release would mean rebuilding all three
-# for every launcher tag.
-BINARIES_REF="${TERMUX_LAUNCHER_BINARIES_REF:-2026.08.17}"
+# Pinned separately from TEMPLATES_REF: these are other people's software on
+# their own release schedule.
+BINARIES_REF="${TERMUX_LAUNCHER_BINARIES_REF:-2026.08.25}"
 BINARIES_BASE="${TERMUX_LAUNCHER_BINARIES_BASE:-https://raw.githubusercontent.com/PickleHik3/termux-launcher-binaries/$BINARIES_REF/bin}"
 
 # --- BEGIN DIGESTS (generated: update-setup-launcher-digests.sh) ---
 expected_digest() {
     case "$1" in
         aliens-material.omp.json) echo 87ce6bfdb16335fc543d3c974f19632503f0e803de73e728de8a265ac03da148 ;;
-        conf.d-personal.fish)     echo 6f7b666475e07ee0447fbdba29485a8681f1f622e7c0ab3f98f3ff15b0142190 ;;
+        conf.d-personal.fish)     echo d950402c7b896d34e7fb9e310f6ceef93fbbd0e7e86e6a5743fda80b251f4c7a ;;
         config.fish)              echo 9e977847efd4410075282d686441faa4bb9524e2eb5aecbb3031317d5b857de0 ;;
-        setup-nvim)               echo 345c79f048d4bf26dc5de7022443a470fb55266cb945367d383b2123049fa400 ;;
+        setup-nvim)               echo 33f102c400dd706d6bf7fb46eeb363a94899d861c36c36286afaa6a951e48295 ;;
         *) echo "" ;;
     esac
 }
@@ -70,7 +49,7 @@ expected_digest() {
 # --- BEGIN BINARY DIGESTS (generated: update-setup-launcher-digests.sh) ---
 expected_binary_digest() {
     case "$1" in
-        fastfetch)   echo 82fa706a1ad5eeb4a7899212ba6e03c441a1b6a798d81367ebb0d62cfca615e3 ;;
+        fastfetch)   echo f176e7a18ab62d9b5efc1e48bea2f323dc20e7123a0f3a0a063a9184600a7751 ;;
         kitten)      echo 274ff935007bd6aa28dd7ef71439b52e10c2d7e0641f4413fd959508a74bf8c7 ;;
         sigye)       echo be095e85f54c2a462b924ce21916a6586580713785ab5efc79b63050eead5eea ;;
         *) echo "" ;;
@@ -158,8 +137,7 @@ fetch() {
     download "$RAW_BASE/$1" "$2" "$expected"
 }
 
-# fetch_once <template-name> <destination> — for files that become the user's
-# after the first install: copied when missing, never replaced afterwards.
+# fetch_once <template-name> <destination> — installed when missing, never replaced.
 fetch_once() {
     if [ -e "$2" ]; then
         log "  kept existing $2 (yours to edit; delete it and re-run to refresh)"
@@ -168,7 +146,7 @@ fetch_once() {
     fi
 }
 
-# fetch_binary <name> — a release asset into ~/.local/bin, or a clear skip.
+# fetch_binary <name> — a release asset into ~/.local/bin, or a skip.
 fetch_binary() {
     name="$1"
     expected=$(expected_binary_digest "$name")
@@ -245,12 +223,27 @@ item_eza() {
 item_neovim() {
     log ""
     log "== Neovim + AstroNvim =="
-    install_pkg neovim git
+    # treesitter parsers compile on first start (needs a C toolchain) and the
+    # pickers shell out to rg/fd.
+    install_pkg neovim git build-essential ripgrep fd unzip wget
     fetch setup-nvim "$BIN_DIR/setup-nvim"
     chmod +x "$BIN_DIR/setup-nvim"
-    # setup-nvim never replaces an existing config without an explicit REPLACE,
-    # so this is safe to run unattended.
+    # Safe unattended: setup-nvim will not replace a config without a typed REPLACE.
     "$BIN_DIR/setup-nvim" --distro astronvim --yes || warn "setup-nvim did not finish; run it yourself"
+}
+
+item_devtools() {
+    log ""
+    log "== build tools =="
+    # build-essential = clang, make, pkg-config. The rest are its Recommends,
+    # named explicitly because Recommends are not guaranteed to be pulled in.
+    install_pkg build-essential git cmake autoconf automake libtool m4 bison flex \
+                patchelf binutils python
+    if command -v cc >/dev/null 2>&1; then
+        log "  cc: $(cc --version 2>/dev/null | head -n 1)"
+    else
+        warn "no cc on PATH after install — package builds will still fail"
+    fi
 }
 
 item_sigye()     { log ""; log "== sigye =="; fetch_binary sigye; }
@@ -259,15 +252,17 @@ item_kitten()    { log ""; log "== kitten (kitty's client) =="; fetch_binary kit
 item_fastfetch() {
     log ""
     log "== fastfetch (animated Kitty logo) =="
-    # The published build links libandroid-glob and dlopens ImageMagick, Chafa and zlib: without
-    # the first it will not start at all, and without the others there is no image logo, only the
-    # built-in ASCII art.
+    # Links libandroid-glob (or it will not start) and dlopens the rest (or there
+    # is no image logo, only ASCII art).
     install_pkg imagemagick chafa libandroid-glob zlib
     fetch_binary fastfetch
     if [ -x "$BIN_DIR/fastfetch" ] &&
        ! "$BIN_DIR/fastfetch" --list-features 2>/dev/null | grep -qx imagemagick7; then
         warn "fastfetch reports no imagemagick7 support — the GIF logo will not render."
     fi
+    # The logo is placed as Unicode-placeholder cells, so the shell prompt clears
+    # the bottom of a logo that is taller than the module list.
+    log "   set \"printRemaining\": true in ~/.config/fastfetch/config.jsonc if the logo is cut off"
 }
 
 install_all() {
@@ -275,6 +270,7 @@ install_all() {
     item_ohmyposh
     item_zoxide
     item_eza
+    item_devtools
     item_neovim
     item_sigye
     item_fastfetch
@@ -293,6 +289,7 @@ install_individually() {
     ask_yn "Oh My Posh + the Material theme?"          && item_ohmyposh
     ask_yn "zoxide?"                                   && item_zoxide
     ask_yn "eza?"                                      && item_eza
+    ask_yn "Build tools (clang, make, cmake, autotools)?"   && item_devtools
     ask_yn "Neovim + AstroNvim (Material theme)?"      && item_neovim
     ask_yn "sigye (clock)?"                        n   && item_sigye
     ask_yn "fastfetch with the animated logo?"     n   && item_fastfetch
@@ -309,8 +306,8 @@ welcome() {
 Termux Launcher setup
 =====================
 
-  1) All — fish, Oh My Posh, zoxide, eza, Neovim + AstroNvim, sigye,
-     fastfetch with the animated logo, kitten
+  1) All — fish, Oh My Posh, zoxide, eza, build tools, Neovim + AstroNvim,
+     sigye, fastfetch with the animated logo, kitten
   2) Shell essentials — fish, Oh My Posh, zoxide, eza
   3) Pick items one at a time
   q) Quit

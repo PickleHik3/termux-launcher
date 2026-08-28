@@ -59,7 +59,10 @@ public class DockAppearancePreferencesTest {
 
     @Test
     public void cornerRadiusSupportsStyleDefaultAndSliderBounds() {
-        assertEquals(-1, preferences.getAppLauncherDockCornerRadius());
+        // The shipped Docked look names a radius on the shared layer; the dock's own -1 stays the
+        // "follow the selected style" sentinel the slider's lower bound clamps to.
+        assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS,
+            preferences.getAppLauncherDockCornerRadius());
 
         preferences.setAppLauncherDockCornerRadius(-4);
         assertEquals(-1, preferences.getAppLauncherDockCornerRadius());
@@ -98,17 +101,28 @@ public class DockAppearancePreferencesTest {
     }
 
     @Test
-    public void surfaceEdgeInsetsDefaultToTheCapsuleOuterMargin() {
+    public void surfaceEdgeInsetsDefaultToTheSharedOuterMargin() {
+        // A fresh install starts fully linked, so all three read the Base gap. The keyboard used to
+        // ship 3dp wider than its neighbours; following Base lines it up with them instead, and an
+        // existing install keeps its 13dp because migration sees the difference and detaches it.
         assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET,
             preferences.getDockHorizontalInset());
-        assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET,
+        assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET,
             preferences.getInAppKeyboardHorizontalInset());
         assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET,
             preferences.getStatusBarHorizontalInset());
     }
 
     @Test
-    public void surfaceEdgeInsetsAreIndependentAndClampedToTheirSliderBounds() {
+    public void surfaceEdgeInsetsAreIndependentOnceDetachedAndClampedToTheirSliderBounds() {
+        // While linked these three name the same Base gap, so independence is what detaching buys.
+        preferences.detachSurfaceValue(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
+            TermuxAppSharedPreferences.SurfaceProperty.SIDE_GAP, 0);
+        preferences.detachSurfaceValue(TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD,
+            TermuxAppSharedPreferences.SurfaceProperty.SIDE_GAP, 0);
+        preferences.detachSurfaceValue(TermuxAppSharedPreferences.SurfaceSlot.STATUS,
+            TermuxAppSharedPreferences.SurfaceProperty.SIDE_GAP, 0);
+
         preferences.setDockHorizontalInset(-3);
         preferences.setInAppKeyboardHorizontalInset(96);
         preferences.setStatusBarHorizontalInset(24);
@@ -117,6 +131,14 @@ public class DockAppearancePreferencesTest {
         assertEquals(TermuxPreferenceConstants.TERMUX_APP.MAX_SURFACE_HORIZONTAL_INSET,
             preferences.getInAppKeyboardHorizontalInset());
         assertEquals(24, preferences.getStatusBarHorizontalInset());
+    }
+
+    @Test
+    public void surfaceEdgeInsetsMoveTogetherWhileLinked() {
+        preferences.setStatusBarHorizontalInset(18);
+        assertEquals(18, preferences.getDockHorizontalInset());
+        assertEquals(18, preferences.getInAppKeyboardHorizontalInset());
+        assertEquals(18, preferences.getStatusBarHorizontalInset());
     }
 
     @Test

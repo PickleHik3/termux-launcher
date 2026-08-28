@@ -73,11 +73,15 @@ public class AppDrawerControllerHorizontalTest {
 
     @Test public void storedGeometryPreferencesAreIgnoredNowThatTheSettingsAreGone() {
         preferences.setAppLauncherDrawerViewType("horizontal");
-        preferences.setAppLauncherDrawerIconSizeDp(36);
-        preferences.setAppLauncherDrawerGridColumnsVertical(5);
-        preferences.setAppLauncherDrawerGridColumnsHorizontal(6);
-        preferences.setAppLauncherDrawerGridRowsHorizontal(2);
-        preferences.setAppLauncherDrawerGridColumnsCategories(1);
+        // Written raw: the geometry keys have no setters any more, but an older install may still
+        // carry values under them.
+        activity.getSharedPreferences("b4-controller", Context.MODE_PRIVATE).edit()
+            .putInt("app_launcher_drawer_icon_size_dp", 36)
+            .putInt("app_launcher_drawer_grid_columns_vertical", 5)
+            .putInt("app_launcher_drawer_grid_columns_horizontal", 6)
+            .putInt("app_launcher_drawer_grid_rows_horizontal", 2)
+            .putInt("app_launcher_drawer_grid_columns_categories", 1)
+            .commit();
 
         AppDrawerLayoutConfig config = AppDrawerLayoutConfig.from(preferences);
 

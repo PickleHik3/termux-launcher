@@ -42,8 +42,18 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
         mPreferences = TermuxAppSharedPreferences.build(context, true);
     }
 
+    /**
+     * The one store the settings screens share.
+     *
+     * <p>Rebuilt when it is asked for from a different application context: the instance holds a
+     * {@link TermuxAppSharedPreferences} bound to the context that first asked for it, and a store
+     * pinned to a dead one writes into preferences nobody reads back. In the app that only happens
+     * across a process restart, which takes the static with it; under Robolectric every test brings
+     * a new Application while the static survives, and the stale store silently dropped writes.
+     */
     public static synchronized TerminalIOPreferencesDataStore getInstance(Context context) {
-        if (mInstance == null) {
+        Context application = context.getApplicationContext();
+        if (mInstance == null || mInstance.mContext.getApplicationContext() != application) {
             mInstance = new TerminalIOPreferencesDataStore(context);
         }
         return mInstance;

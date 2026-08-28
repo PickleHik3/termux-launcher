@@ -254,13 +254,28 @@ public class RealtimeBlurView extends View {
         mAppliedEffectRadius = -1f;
     }
 
+    /**
+     * While true, the pre-draw hook skips the capture+blur entirely and the view keeps drawing its
+     * last blurred frame. The capture is a full software rasterization of the decor hierarchy on
+     * every frame the window draws, which is exactly what a scrolling list above this view pays
+     * for; a host whose backdrop is effectively static (a settled drawer over a resting terminal)
+     * can rest it and resume when its own geometry starts moving again.
+     */
+    private boolean mUpdatesPaused;
+
+    public void setUpdatesPaused(boolean paused) {
+        if (mUpdatesPaused == paused) return;
+        mUpdatesPaused = paused;
+        if (!paused) invalidate();
+    }
+
     private final ViewTreeObserver.OnPreDrawListener mPreDrawListener = new ViewTreeObserver.OnPreDrawListener() {
         @Override
         public boolean onPreDraw() {
             int[] locations = new int[2];
             Bitmap oldBmp = BLUR_ON_GPU ? mBitmapToBlur : mBlurredBitmap;
             View decor = mDecorView;
-            if (decor != null && isShown() && prepare()) {
+            if (decor != null && !mUpdatesPaused && isShown() && prepare()) {
                 boolean redrawBitmap = (BLUR_ON_GPU ? mBitmapToBlur : mBlurredBitmap) != oldBmp;
 
                 decor.getLocationOnScreen(locations);

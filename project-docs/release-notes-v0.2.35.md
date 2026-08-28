@@ -66,7 +66,7 @@
 ### Lazy Mode
 
 - Added an experimental Lazy Mode designed to reduce idle resource usage.
-- Enable it from **Settings → Terminal & Status**.
+- Enable it from Settings → Terminal & Status.
 - If testing goes well, Lazy Mode is intended to become the default in a future
   release.
 
@@ -79,7 +79,7 @@
 - Added `setup-nvim`, a Neovim distro chooser (AstroNvim by default, or NvChad,
   LazyVim, kickstart or stock) themed from your wallpaper palette.
 - Added one switch for the launcher versus terminal-only use case, in
-  **Settings → Launcher & apps**.
+  Settings → Launcher & apps.
 - Landscape is now usable: the dock becomes a side rail on the edge you pick,
   and the drawer is denser.
 - The whole interface can follow the terminal colour scheme
@@ -138,14 +138,13 @@
 Findings from an external review of the launcher's local API surface, all
 fixed:
 
-- Browser pages and other network origins can no longer reach the local API:
-  CORS is granted to loopback origins only, and the `Host` header is checked
-  against the bound address to close DNS rebinding.
+- The local API only answers pages served from this device; a web page from
+  anywhere else can no longer reach it.
 - Media paths in inference requests are validated, so a request can no longer
   read arbitrary files or pivot into the LAN.
 - Notification history is opt-in and off by default; turning it off deletes
   what was captured.
-- LAN mode now ends itself after 12 hours, rebinding to loopback and rotating
-  the token.
+- LAN mode now ends itself after 12 hours: the API goes back to this device
+  only, and the old token stops working.
 - The setup script verifies everything it installs against pinned checksums
   and fails closed on a mismatch.

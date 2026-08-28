@@ -214,12 +214,12 @@ public class ShellBackend implements PrivilegedBackend {
                 return executeDirectCommand(args);
                 
             } catch (Exception e) {
-                Log.e(TAG, "Failed to execute command: " + command, e);
+                Log.e(TAG, "Failed to execute command: " + maskSensitive(command), e);
                 return "Error: " + e.getMessage();
             }
         }, PrivilegedExecutors.commands());
     }
-    
+
     @Override
     public boolean isOperationSupported(PrivilegedOperation operation) {
         // Shell backend supports most operations but with text-based limitations
@@ -360,10 +360,7 @@ public class ShellBackend implements PrivilegedBackend {
      * Mask sensitive values in command logging
      */
     private String maskSensitive(String command) {
-        if (command == null) return null;
-        // Mask file paths and package names for safe logging
-        return command.replaceAll("/[\\w/.-]+\\.apk", "<apk>")
-                      .replaceAll("[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)+", "<package>");
+        return PrivilegedBackend.maskSensitiveCommand(command);
     }
 
     private enum RootMethod {

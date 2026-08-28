@@ -144,7 +144,9 @@ public final class SessionsIndicatorView extends LinearLayout {
             MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurface,
                 ContextCompat.getColor(context, R.color.termux_on_surface)));
         GradientDrawable chip = new GradientDrawable();
-        chip.setCornerRadius(mCapsuleSurface ? mStatusBarRadiusPx : 0f);
+        // The caller resolves the shape (the chip-radius knob, or the bar's own shape while that
+        // knob is untouched), so the indicator and the window pills beside it always agree.
+        chip.setCornerRadius(mStatusBarRadiusPx);
         chip.setColor(ColorUtils.setAlphaComponent(
             ColorUtils.blendARGB(tertiaryContainer, tertiary, .22f), 198));
         chip.setStroke(dp(1), tertiary);

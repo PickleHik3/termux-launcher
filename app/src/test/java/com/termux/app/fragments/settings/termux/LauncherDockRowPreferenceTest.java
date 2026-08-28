@@ -42,7 +42,10 @@ public class LauncherDockRowPreferenceTest {
         PreferenceScreen screen = manager.inflateFromResource(app, R.xml.launcher_preferences, null);
 
         assertIndependentSwitch(screen, "app_launcher_apps_row_enabled", "Apps row");
-        assertIndependentSwitch(screen, "app_launcher_extra_keys_row_enabled", "Extra keys row");
+        // The extra-keys row switch lives on Keyboard & input alone now; it must not creep back
+        // here as a second home.
+        assertNull("extra-keys row belongs to the keyboard screen",
+            screen.findPreference("app_launcher_extra_keys_row_enabled"));
         // A-Z is the one coupled row: it scrubs the apps row, so it greys out with it.
         Preference az = screen.findPreference("app_launcher_az_row_enabled");
         assertTrue("app_launcher_az_row_enabled", az instanceof SwitchPreferenceCompat);
@@ -58,7 +61,6 @@ public class LauncherDockRowPreferenceTest {
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(141, TimeUnit.MILLISECONDS);
 
         assertLiveBooleanWrite(app, store, "app_launcher_apps_row_enabled", false);
-        assertLiveBooleanWrite(app, store, "app_launcher_extra_keys_row_enabled", false);
         assertTrue("A-Z remains independent when Apps is disabled",
             store.getBoolean("app_launcher_az_row_enabled", true));
     }

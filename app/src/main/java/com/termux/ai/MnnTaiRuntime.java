@@ -1017,12 +1017,12 @@ public final class MnnTaiRuntime implements TaiRuntime {
     }
 
     private int inferredInteger(@NonNull String text) {
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("-?\\d+").matcher(text);
+        Matcher matcher = Pattern.compile("-?\\d+").matcher(text);
         return matcher.find() ? Integer.parseInt(matcher.group()) : 0;
     }
 
     private double inferredNumber(@NonNull String text) {
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("-?\\d+(?:\\.\\d+)?").matcher(text);
+        Matcher matcher = Pattern.compile("-?\\d+(?:\\.\\d+)?").matcher(text);
         return matcher.find() ? Double.parseDouble(matcher.group()) : 0.0d;
     }
 

@@ -160,7 +160,7 @@ public class SuggestionBarDrawerGestureTest {
         List<String> failures = new ArrayList<>();
         // "searchText" is deliberately absent: a filtered apps row no longer vetoes the pull-down
         // (the vertical pull is unambiguous even over filtered results).
-        for (String veto : new String[] {"pref", "dockTuning", "palette", "engaged", "full",
+        for (String veto : new String[] {"pref", "surfaceEditor", "palette", "engaged", "full",
             "azLetter", "landscape", "activePickup", "noListener"}) {
             setUp();
             applyVeto(veto);
@@ -195,7 +195,7 @@ public class SuggestionBarDrawerGestureTest {
     private void applyVeto(String veto) {
         switch (veto) {
             case "pref": listener.drawerEnabled = false; break;
-            case "dockTuning": listener.dockTuning = true; break;
+            case "surfaceEditor": listener.surfaceEditor = true; break;
             case "palette": listener.paletteOpen = true; break;
             case "engaged": listener.drawerEngaged = true; break;
             case "full": listener.fullStatusPaneClosed = false; break;
@@ -312,7 +312,7 @@ public class SuggestionBarDrawerGestureTest {
         implements SuggestionBarView.AppDrawerGestureListener {
 
         boolean drawerEnabled = true;
-        boolean dockTuning = false;
+        boolean surfaceEditor = false;
         boolean paletteOpen = false;
         boolean drawerEngaged = false;
         boolean fullStatusPaneClosed = true;
@@ -329,8 +329,8 @@ public class SuggestionBarDrawerGestureTest {
         }
 
         @Override
-        public boolean isDockTuningActive() {
-            return dockTuning;
+        public boolean isSurfaceEditorActive() {
+            return surfaceEditor;
         }
 
         @Override

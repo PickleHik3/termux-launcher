@@ -1,5 +1,7 @@
 package com.termux.app.launcher.drawer;
 
+import android.util.Log;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -92,7 +94,7 @@ public final class AppDrawerCuratedCategoryMap {
     @NonNull
     private static AppDrawerCuratedCategoryMap rejected(@NonNull String reason) {
         try {
-            android.util.Log.w("AppDrawerCategories", "Curated category map rejected: " + reason);
+            Log.w("AppDrawerCategories", "Curated category map rejected: " + reason);
         } catch (RuntimeException ignored) {
             // android.util.Log is unavailable under plain-JVM unit tests.
         }

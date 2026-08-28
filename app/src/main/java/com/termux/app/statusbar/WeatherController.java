@@ -417,6 +417,65 @@ public final class WeatherController {
     public static final String WEATHER_ANIMATION_ASSET_DIR = "weather";
 
     /**
+     * One row of the WMO table: the codes that describe a sky, and everything the UI shows for it.
+     *
+     * <p>Codes that describe the same sky share a row on purpose — drizzle intensity (51/53/55)
+     * is a rate, not a different sky. Conditions with no sun or moon in frame (overcast, rime fog,
+     * snow grains) carry one animation for both day and night, because a split there would be a
+     * difference the sky does not have. The glyph is the bundled Nerd Font cut for the card's week
+     * rows, where a Lottie view per row would be seven animations deep; day variants throughout,
+     * because a daily code describes the day, not a moment with an is_day flag.
+     */
+    enum Condition {
+        CLEAR("Clear", "", "clear-day", "clear-night", 0),
+        MAINLY_CLEAR("Mainly clear", "", "clear-day", "clear-night", 1),
+        PARTLY_CLOUDY("Partly cloudy", "", "partly-cloudy-day", "partly-cloudy-night", 2),
+        OVERCAST("Overcast", "", "overcast", "overcast", 3),
+        FOG("Fog", "", "fog-day", "fog-night", 45),
+        RIME_FOG("Fog", "", "overcast-fog", "overcast-fog", 48),
+        DRIZZLE("Drizzle", "", "partly-cloudy-day-drizzle", "partly-cloudy-night-drizzle",
+            51, 53, 55),
+        FREEZING_DRIZZLE("Drizzle", "", "partly-cloudy-day-sleet", "partly-cloudy-night-sleet",
+            56, 57),
+        RAIN("Rain", "", "overcast-day-rain", "overcast-night-rain", 61, 63, 65),
+        FREEZING_RAIN("Rain", "", "overcast-day-sleet", "overcast-night-sleet", 66, 67),
+        SNOW("Snow", "", "overcast-day-snow", "overcast-night-snow", 71, 73, 75),
+        SNOW_GRAINS("Snow", "", "snowflake", "snowflake", 77),
+        /** Rain showers fall from broken cloud, not an overcast lid. */
+        SHOWERS("Showers", "", "partly-cloudy-day-rain", "partly-cloudy-night-rain", 80, 81, 82),
+        SNOW_SHOWERS("Snow showers", "", "partly-cloudy-day-snow", "partly-cloudy-night-snow",
+            85, 86),
+        THUNDERSTORM("Thunderstorm", "", "thunderstorms-day", "thunderstorms-night", 95),
+        THUNDERSTORM_HAIL("Thunderstorm with hail", "", "thunderstorms-day-hail",
+            "thunderstorms-night-hail", 96, 99),
+        /** An unknown code is not "cloudy": it gets the not-available cut and no label. */
+        UNKNOWN("—", "", "not-available", "not-available");
+
+        @NonNull final String label;
+        @NonNull final String glyph;
+        @NonNull final String dayAnimation;
+        @NonNull final String nightAnimation;
+        @NonNull final int[] codes;
+
+        Condition(@NonNull String label, @NonNull String glyph, @NonNull String dayAnimation,
+                  @NonNull String nightAnimation, int... codes) {
+            this.label = label;
+            this.glyph = glyph;
+            this.dayAnimation = dayAnimation;
+            this.nightAnimation = nightAnimation;
+            this.codes = codes;
+        }
+
+        @NonNull
+        static Condition forCode(int code) {
+            for (Condition condition : values()) {
+                for (int c : condition.codes) if (c == code) return condition;
+            }
+            return UNKNOWN;
+        }
+    }
+
+    /**
      * Meteocons animation name for a WMO weather code, day/night aware.
      *
      * <p>The Material vector set this replaced had one file per condition, so it collapsed the
@@ -425,51 +484,13 @@ public final class WeatherController {
      * size. Meteocons carries a day and a night cut of every condition that looks different after
      * dark, at whatever size the view gives it.
      *
-     * <p>Codes that describe the same sky share a name on purpose — drizzle intensity (51/53/55)
-     * is a rate, not a different sky. Conditions with no sun or moon in frame (overcast, rime fog,
-     * snow grains) return one name for both, because a day/night split there would be a
-     * difference the sky does not have.
-     *
      * @param isDay from the provider's own is_day flag, not from the device clock
      * @return the asset's base name, without the {@code .json} suffix
      */
     @NonNull
     public static String animationFor(int code, boolean isDay) {
-        switch (code) {
-            case 0:                       // clear sky
-            case 1:                       // mainly clear
-                return isDay ? "clear-day" : "clear-night";
-            case 2:                       // partly cloudy
-                return isDay ? "partly-cloudy-day" : "partly-cloudy-night";
-            case 3:                       // overcast
-                return "overcast";
-            case 45:                      // fog
-                return isDay ? "fog-day" : "fog-night";
-            case 48:                      // depositing rime fog
-                return "overcast-fog";
-            case 51: case 53: case 55:    // drizzle
-                return isDay ? "partly-cloudy-day-drizzle" : "partly-cloudy-night-drizzle";
-            case 56: case 57:             // freezing drizzle
-                return isDay ? "partly-cloudy-day-sleet" : "partly-cloudy-night-sleet";
-            case 61: case 63: case 65:    // rain
-                return isDay ? "overcast-day-rain" : "overcast-night-rain";
-            case 66: case 67:             // freezing rain
-                return isDay ? "overcast-day-sleet" : "overcast-night-sleet";
-            case 71: case 73: case 75:    // snow
-                return isDay ? "overcast-day-snow" : "overcast-night-snow";
-            case 77:                      // snow grains
-                return "snowflake";
-            case 80: case 81: case 82:    // rain showers: broken cloud, not an overcast lid
-                return isDay ? "partly-cloudy-day-rain" : "partly-cloudy-night-rain";
-            case 85: case 86:             // snow showers
-                return isDay ? "partly-cloudy-day-snow" : "partly-cloudy-night-snow";
-            case 95:                      // thunderstorm
-                return isDay ? "thunderstorms-day" : "thunderstorms-night";
-            case 96: case 99:             // thunderstorm with hail
-                return isDay ? "thunderstorms-day-hail" : "thunderstorms-night-hail";
-            default:
-                return "not-available";   // an unknown code is not "cloudy"
-        }
+        Condition condition = Condition.forCode(code);
+        return isDay ? condition.dayAnimation : condition.nightAnimation;
     }
 
     /** The asset path {@code LottieAnimationView.setAnimation(String)} takes. */
@@ -480,39 +501,12 @@ public final class WeatherController {
 
     @NonNull
     public static String describe(int code) {
-        if (code == 0) return "Clear";
-        if (code == 1) return "Mainly clear";
-        if (code == 2) return "Partly cloudy";
-        if (code == 3) return "Overcast";
-        if (code == 45 || code == 48) return "Fog";
-        if (code >= 51 && code <= 57) return "Drizzle";
-        if (code >= 61 && code <= 67) return "Rain";
-        if (code >= 71 && code <= 77) return "Snow";
-        if (code >= 80 && code <= 82) return "Showers";
-        if (code >= 85 && code <= 86) return "Snow showers";
-        if (code == 96 || code == 99) return "Thunderstorm with hail";
-        if (code >= 95) return "Thunderstorm";
-        return "—";
+        return Condition.forCode(code).label;
     }
 
-    /**
-     * Bundled Nerd Font weather glyph for a WMO code, for the card's week rows, where a Lottie
-     * view per row would be seven animations deep. Day variants throughout: a daily code
-     * describes the day, not a moment with an is_day flag.
-     */
+    /** Bundled Nerd Font weather glyph for a WMO code, for the card's week rows. */
     @NonNull
     public static String glyphFor(int code) {
-        if (code == 0) return "";                  // clear
-        if (code == 1) return "";                  // mainly clear
-        if (code == 2) return "";                  // partly cloudy
-        if (code == 3) return "";                  // overcast
-        if (code == 45 || code == 48) return "";   // fog
-        if (code >= 51 && code <= 57) return "";   // drizzle
-        if (code >= 61 && code <= 67) return "";   // rain
-        if (code >= 71 && code <= 77) return "";   // snow
-        if (code >= 80 && code <= 82) return "";   // showers
-        if (code >= 85 && code <= 86) return "";   // snow showers
-        if (code >= 95) return "";                 // thunderstorm
-        return "";
+        return Condition.forCode(code).glyph;
     }
 }

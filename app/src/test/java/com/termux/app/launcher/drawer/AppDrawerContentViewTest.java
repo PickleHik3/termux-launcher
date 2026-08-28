@@ -105,9 +105,7 @@ public class AppDrawerContentViewTest {
     // ------------------------------------------------------------------ the claim
 
     @Test
-    public void anArmedPullConsumesTheDeltaAndReportsTheCloseExactlyOnce() {
-        armWithAPaidPull();
-
+    public void aTopPullConsumesTheDeltaAndReportsTheCloseExactlyOnce() {
         pressOnGrid();
         assertEquals(-40, preScroll(-40));
         assertEquals(1, callbacks.begins);
@@ -122,15 +120,14 @@ public class AppDrawerContentViewTest {
         content.onStopNestedScroll(grid, ViewCompat.TYPE_TOUCH);
         assertEquals(1, callbacks.ends);
         assertEquals(0, callbacks.cancels);
-        // ...and the claim is spent: the pull after a close starts from nothing again.
+        // The next gesture at the top is simply another close.
         pressOnGrid();
-        assertEquals(0, preScroll(-40));
-        assertEquals(1, callbacks.begins);
+        assertEquals(-40, preScroll(-40));
+        assertEquals(2, callbacks.begins);
     }
 
     @Test
     public void aStreamTakenAwayMidCloseCancelsRatherThanCommits() {
-        armWithAPaidPull();
         pressOnGrid();
         preScroll(-40);
         assertEquals(1, callbacks.begins);
@@ -141,11 +138,12 @@ public class AppDrawerContentViewTest {
     }
 
     @Test
-    public void theFirstPullAtTheTopOverpullsRatherThanClosing() {
+    public void theFirstPullAtTheTopClosesInOneGesture() {
         pressOnGrid();
 
-        assertEquals(0, preScroll(-60));
-        assertEquals(0, callbacks.begins);
+        assertEquals(-60, preScroll(-60));
+        assertEquals(1, callbacks.begins);
+        // A close is a tracked drag, never a rubber-band.
         assertTrue(content.getOverpullTranslationPx() == 0f);
     }
 
@@ -153,6 +151,9 @@ public class AppDrawerContentViewTest {
 
     @Test
     public void unconsumedDeltaBecomesDampedOverpullAndTranslatesTheGrid() {
+        // Overpull belongs to the stream that scrolled: begin mid-list, so the pull past the top
+        // stays a scroll whose leftovers rubber-band instead of becoming a close.
+        grid.scrollBy(0, 400);
         pressOnGrid();
         preScroll(-Math.round(pull));
 
@@ -177,7 +178,6 @@ public class AppDrawerContentViewTest {
 
     @Test
     public void aFlingContinuationCanNeitherCloseNorOverpull() {
-        armWithAPaidPull();
         pressOnGrid();
 
         assertEquals(0, preScrollOfType(-40, ViewCompat.TYPE_NON_TOUCH));
@@ -189,7 +189,8 @@ public class AppDrawerContentViewTest {
     // ------------------------------------------------------------------ release
 
     @Test
-    public void aStopSpringsTheOverpullBackAndArmsTheNextPull() {
+    public void aStopSpringsTheOverpullBack() {
+        grid.scrollBy(0, 400);
         pressOnGrid();
         preScroll(-Math.round(pull));
         unconsumed(-Math.round(pull));
@@ -199,28 +200,22 @@ public class AppDrawerContentViewTest {
         driveFrames();
         assertEquals(0f, content.getOverpullTranslationPx(), 0.5f);
         assertEquals(0f, grid.getTranslationY(), 0.5f);
-
-        // Paid for: the next pull at the top closes instead of stretching.
-        pressOnGrid();
-        assertEquals(-30, preScroll(-30));
-        assertEquals(1, callbacks.begins);
     }
 
     @Test
-    public void aPullTooShortToPayForItselfDoesNotArm() {
+    public void aShortPullAtTheTopStillBeginsATrackedClose() {
+        // Whether it commits is the controller's release policy; the content's job is only to
+        // start tracking. A two-pixel twitch begins and ends the same drag a full pull does.
         pressOnGrid();
-        preScroll(-2);
-        unconsumed(-2);
+        assertEquals(-2, preScroll(-2));
+        assertEquals(1, callbacks.begins);
         content.onStopNestedScroll(grid, ViewCompat.TYPE_TOUCH);
-        driveFrames();
-
-        pressOnGrid();
-        assertEquals(0, preScroll(-30));
-        assertEquals(0, callbacks.begins);
+        assertEquals(1, callbacks.ends);
     }
 
     @Test
     public void stopOverpullSpringDropsTheTravelWhereverItWas() {
+        grid.scrollBy(0, 400);
         pressOnGrid();
         preScroll(-Math.round(pull));
         unconsumed(-Math.round(pull));
@@ -307,7 +302,6 @@ public class AppDrawerContentViewTest {
         search.setCatalogue(lettered(APP_COUNT));
         layout();
         assertTrue(content.isColumnActive());
-        armWithAPaidPull();
 
         pressOnGrid();
         assertEquals(-40, preScroll(-40));
@@ -316,7 +310,8 @@ public class AppDrawerContentViewTest {
         content.onStopNestedScroll(grid, ViewCompat.TYPE_TOUCH);
         assertEquals(1, callbacks.ends);
 
-        // First pull at the top still overpulls rather than closing...
+        // A stream that begins mid-list still scrolls rather than closing...
+        grid.scrollBy(0, 400);
         pressOnGrid();
         assertEquals(0, preScroll(-60));
         assertEquals(1, callbacks.begins);
@@ -367,7 +362,7 @@ public class AppDrawerContentViewTest {
     }
 
     @Test
-    public void returningFromHorizontalRestoresVerticalGeometryAndTwoPullPolicy() {
+    public void returningFromHorizontalRestoresVerticalGeometryAndTopPullClose() {
         content.setHorizontalMetrics(AppDrawerHorizontalGridMetrics.resolve(WIDTH,
             content.horizontalPagerUsableHeight(HEIGHT), density, LABEL_HEIGHT_PX, 4, 2));
         content.setViewType(AppDrawerViewType.HORIZONTAL);
@@ -382,15 +377,10 @@ public class AppDrawerContentViewTest {
             ((android.widget.FrameLayout.LayoutParams) grid.getLayoutParams()).rightMargin);
 
         pressOnGrid();
-        assertEquals(0, preScroll(-Math.round(pull)));
-        assertEquals(-Math.round(pull), unconsumed(-Math.round(pull)));
-        assertEquals(0, callbacks.begins);
-        content.onStopNestedScroll(grid, ViewCompat.TYPE_TOUCH);
-        driveFrames();
-
-        pressOnGrid();
-        assertEquals(-30, preScroll(-30));
+        assertEquals(-Math.round(pull), preScroll(-Math.round(pull)));
         assertEquals(1, callbacks.begins);
+        content.onStopNestedScroll(grid, ViewCompat.TYPE_TOUCH);
+        assertEquals(1, callbacks.ends);
     }
 
     // ------------------------------------------------------------------ search
@@ -414,8 +404,7 @@ public class AppDrawerContentViewTest {
     }
 
     @Test
-    public void aQueryChangeResetsTheScrollAndDisarms() {
-        armWithAPaidPull();
+    public void aQueryChangeResetsTheScroll() {
         grid.scrollBy(0, 400);
         assertTrue(grid.computeVerticalScrollOffset() > 0);
 
@@ -423,10 +412,10 @@ public class AppDrawerContentViewTest {
         layout();
         assertEquals(0, grid.computeVerticalScrollOffset());
 
-        // The list is a different list; whatever the last pull earned it earned against the old one.
+        // The filtered list starts at its top, so a pull on it closes like any other top pull.
         pressOnGrid();
-        assertEquals(0, preScroll(-40));
-        assertEquals(0, callbacks.begins);
+        assertEquals(-40, preScroll(-40));
+        assertEquals(1, callbacks.begins);
     }
 
     @Test
@@ -444,14 +433,6 @@ public class AppDrawerContentViewTest {
 
     // ------------------------------------------------------------------ plumbing
 
-    private void armWithAPaidPull() {
-        pressOnGrid();
-        preScroll(-Math.round(pull));
-        unconsumed(-Math.round(pull));
-        content.onStopNestedScroll(grid, ViewCompat.TYPE_TOUCH);
-        driveFrames();
-        callbacks.reset();
-    }
 
     /** @return the delta the parent consumed */
     private int preScroll(int dy) {

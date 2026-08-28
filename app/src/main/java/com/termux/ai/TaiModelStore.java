@@ -2,6 +2,7 @@ package com.termux.ai;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -10,10 +11,15 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 public final class TaiModelStore {
     static final String PREFS_NAME = "termux_ai_model_store";
@@ -94,9 +100,9 @@ public final class TaiModelStore {
     }
 
     /** User-declared capability set for a model (e.g. enable vision/audio/tools on an import). */
-    public synchronized void setCapabilityOverride(@NonNull String modelId, @NonNull java.util.Set<String> capabilities) {
+    public synchronized void setCapabilityOverride(@NonNull String modelId, @NonNull Set<String> capabilities) {
         LinkedHashSet<String> caps = new LinkedHashSet<>(capabilities);
-        preferences.edit().putString(KEY_CAPS_PREFIX + modelId, android.text.TextUtils.join(",", caps)).commit();
+        preferences.edit().putString(KEY_CAPS_PREFIX + modelId, TextUtils.join(",", caps)).commit();
     }
 
     /** How a multimodal model is advertised: split / combined / both. Defaults to split. */
@@ -192,7 +198,7 @@ public final class TaiModelStore {
         File[] children = dir.listFiles();
         if (children == null) return null;
         for (File child : children) {
-            String name = child.getName().toLowerCase(java.util.Locale.ROOT);
+            String name = child.getName().toLowerCase(Locale.ROOT);
             if (child.isFile() && (name.endsWith(".litertlm") || name.endsWith(".task") || name.endsWith(".tflite"))) return child;
         }
         return null;
@@ -342,7 +348,7 @@ public final class TaiModelStore {
         if (TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) {
             return mnnPackageReadable(modelFile);
         }
-        String lowerName = modelFile.getName().toLowerCase(java.util.Locale.ROOT);
+        String lowerName = modelFile.getName().toLowerCase(Locale.ROOT);
         return modelFile.isFile()
             && modelFile.canRead()
             && (lowerName.endsWith(".litertlm") || lowerName.endsWith(".task") || lowerName.endsWith(".tflite"));
@@ -379,7 +385,7 @@ public final class TaiModelStore {
     @NonNull
     static LinkedHashSet<String> mnnPackageCapabilities(
         @NonNull File configFile,
-        @NonNull java.util.Set<String> declared
+        @NonNull Set<String> declared
     ) {
         LinkedHashSet<String> capabilities = new LinkedHashSet<>(declared);
         if (!configFile.isFile()) return capabilities;
@@ -498,9 +504,9 @@ public final class TaiModelStore {
     }
 
     @NonNull
-    private static String readUtf8(@NonNull File file) throws java.io.IOException {
-        try (java.io.FileInputStream input = new java.io.FileInputStream(file);
-             java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
+    private static String readUtf8(@NonNull File file) throws IOException {
+        try (FileInputStream input = new FileInputStream(file);
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[8192];
             int read;
             while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
@@ -512,7 +518,7 @@ public final class TaiModelStore {
     private TaiModelSpec normalizeLegacyModelSpec(@NonNull TaiModelSpec spec) {
         String migratedId = TaiSettings.migrateBuiltInModelId(spec.id);
         TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(migratedId);
-        String identity = (migratedId + " " + (spec.localPath == null ? "" : spec.localPath)).toLowerCase(java.util.Locale.ROOT);
+        String identity = (migratedId + " " + (spec.localPath == null ? "" : spec.localPath)).toLowerCase(Locale.ROOT);
         if (entry == null && TaiModelSpec.BACKEND_LITERT_LM.equals(spec.backend)
             && TaiModelProfile.isQwen3Thinking2507(migratedId, spec.localPath)) {
             LinkedHashSet<String> capabilities = new LinkedHashSet<>(spec.sourceCapabilities);

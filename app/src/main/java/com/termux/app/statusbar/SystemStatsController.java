@@ -91,6 +91,19 @@ public final class SystemStatsController {
     /** How long to wait between privileged-backend re-initialization attempts while it is down. */
     private static final long BACKEND_RETRY_INTERVAL_MS = 30_000L;
 
+    /**
+     * The fast cadence used while there is no CPU reading yet. CPU utilisation is a delta between
+     * two tick reads, so after any (re)start the first reading only exists at the *second* sample —
+     * at the resting cadence that put the first number 12 s out (36 s in lazy mode), which reads as
+     * a dead widget, and the privileged backend usually finishes initializing well inside that
+     * first interval. Priming is budgeted, not open-ended: a device where the read never succeeds
+     * (no backend, hardened /proc) must fall back to the caller's cadence, not poll every second
+     * forever.
+     */
+    static final long PRIME_INTERVAL_MS = 1000L;
+    /** How many fast ticks one priming episode may spend before falling back to the set cadence. */
+    static final int PRIME_BUDGET_TICKS = 5;
+
     private final Context mContext;
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
     @Nullable private final Listener mListener;
@@ -108,6 +121,10 @@ public final class SystemStatsController {
     private int mSampleGeneration;
     /** Last privileged-backend re-initialization attempt, for {@link #requestPrivilegedBackendRetry}. */
     private long mLastBackendRetryAtMs;
+    /** Remaining fast ticks in the current priming episode. Main thread only. */
+    private int mPrimeTicksLeft = PRIME_BUDGET_TICKS;
+    /** Whether the previous sample saw a privileged backend, to re-prime when one comes up. */
+    private boolean mSawPrivilegedAvailable;
 
     // Previous CPU tick totals per line ("cpu", "cpu0", ...) for delta-based utilisation.
     @Nullable private long[] mPrevTotal;
@@ -135,6 +152,9 @@ public final class SystemStatsController {
         mIntervalMs = Math.max(1000L, intervalMs);
         mWantTop = wantTop;
         mRunning = true;
+        // A start with no reading on screen opens a fresh priming episode; a retune while a
+        // reading already exists (card open/close) keeps the ordinary cadence.
+        if (mLatest.cpuPercent < 0) mPrimeTicksLeft = PRIME_BUDGET_TICKS;
         // Re-post rather than return early when already running: retuning has to take effect now.
         // Opening the card drops the interval from 4s to 1.5s, and waiting out the old delay first
         // made the card sit empty for seconds.
@@ -152,9 +172,20 @@ public final class SystemStatsController {
         public void run() {
             if (!mRunning) return;
             sampleOnce();
-            mMainHandler.postDelayed(this, mIntervalMs);
+            long delay = nextTickDelayMs(mLatest.cpuPercent >= 0, mPrimeTicksLeft, mIntervalMs);
+            if (delay < mIntervalMs) mPrimeTicksLeft--;
+            mMainHandler.postDelayed(this, delay);
         }
     };
+
+    /**
+     * The delay before the next sample: the priming cadence while there is still no CPU reading and
+     * budget left for chasing one, the set cadence otherwise. Never longer than the set cadence.
+     */
+    static long nextTickDelayMs(boolean cpuKnown, int primeTicksLeft, long intervalMs) {
+        if (!cpuKnown && primeTicksLeft > 0) return Math.min(PRIME_INTERVAL_MS, intervalMs);
+        return intervalMs;
+    }
 
     private void sampleOnce() {
         // Memory: always available and cheap.
@@ -171,7 +202,14 @@ public final class SystemStatsController {
             mLatest.stale = true;
         }
         PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
-        if (manager.isPrivilegedAvailable()) {
+        boolean privilegedAvailable = manager.isPrivilegedAvailable();
+        // A backend coming up re-arms priming: the ticks spent failing the direct read while it was
+        // initializing are not held against the first readable samples.
+        if (privilegedAvailable && !mSawPrivilegedAvailable && mLatest.cpuPercent < 0) {
+            mPrimeTicksLeft = PRIME_BUDGET_TICKS;
+        }
+        mSawPrivilegedAvailable = privilegedAvailable;
+        if (privilegedAvailable) {
             mInFlight = true;
             mInFlightStartedAtMs = now;
             final boolean wantTop = mWantTop;

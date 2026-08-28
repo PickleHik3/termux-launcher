@@ -44,6 +44,21 @@ public class SystemStatsControllerTest {
     }
 
     @Test
+    public void nextTickDelay_primesFastUntilTheFirstCpuReadingExists() {
+        // No reading yet, budget left: chase the second sample at the priming cadence.
+        assertEquals(SystemStatsController.PRIME_INTERVAL_MS,
+            SystemStatsController.nextTickDelayMs(false, SystemStatsController.PRIME_BUDGET_TICKS, 6000L));
+        // A reading exists: the set cadence, however large the remaining budget.
+        assertEquals(6000L,
+            SystemStatsController.nextTickDelayMs(true, SystemStatsController.PRIME_BUDGET_TICKS, 6000L));
+        // Budget exhausted with still no reading (no backend, hardened /proc): fall back to the
+        // set cadence rather than polling fast forever.
+        assertEquals(18000L, SystemStatsController.nextTickDelayMs(false, 0, 18000L));
+        // The card's own cadence is already faster than priming; never stretch it.
+        assertEquals(700L, SystemStatsController.nextTickDelayMs(false, 3, 700L));
+    }
+
+    @Test
     public void shouldStartSample_overridesAWedgedInFlightRequest() {
         // Nothing in flight: always sample.
         assertTrue(SystemStatsController.shouldStartSample(false, 10_000L, 0L, 6_000L));

@@ -1,7 +1,9 @@
 package com.termux.app.launcher.drawer;
 
+import android.content.Context;
 import android.graphics.Color;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -15,11 +17,18 @@ import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedFolderItem;
 
-/** Mixed-list folder target. Its four mini icons use the shared cache at their actual pixel size. */
+/**
+ * Mixed-list folder target. Its four mini icons reuse the grid-size render from the shared cache
+ * (the ImageView downscales), so a folder never mints a second cache entry per member at its own
+ * mini pixel size.
+ */
 public final class AppDrawerFolderCellView extends AppDrawerAppCellView {
     private final FrameLayout mosaic;
+    /** Lazily created once and rebound in place: a bind must not rebuild the mosaic's view tree. */
+    private final ImageView[] minis = new ImageView[4];
+    @Nullable private TextView countBadge;
 
-    public AppDrawerFolderCellView(@NonNull android.content.Context context) {
+    public AppDrawerFolderCellView(@NonNull Context context) {
         super(context);
         removeAllViews();
         mosaic = new FrameLayout(context);
@@ -58,7 +67,7 @@ public final class AppDrawerFolderCellView extends AppDrawerAppCellView {
 
     /** The member-icon mosaic, used as the drag shadow when the tile is picked up. */
     @NonNull
-    public android.view.View mosaicView() {
+    public View mosaicView() {
         return mosaic;
     }
 
@@ -83,29 +92,49 @@ public final class AppDrawerFolderCellView extends AppDrawerAppCellView {
             if (shown >= 4 || dock == null) break;
             LauncherAppEntry entry = dock.resolveFolderMemberForDrawer(member);
             if (entry == null) continue;
-            ImageView mini = new ImageView(getContext());
-            mini.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-            mini.setImageDrawable(dock.getRenderedIcon(entry, miniPx));
+            ImageView mini = minis[shown];
+            if (mini == null) {
+                mini = new ImageView(getContext());
+                mini.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+                minis[shown] = mini;
+                // Under the count badge if one already exists — the badge always draws on top.
+                int insertAt = countBadge == null ? -1 : mosaic.indexOfChild(countBadge);
+                mosaic.addView(mini, insertAt, new FrameLayout.LayoutParams(miniPx, miniPx,
+                    Gravity.TOP | Gravity.START));
+            }
+            applySlotGeometry(mini, miniPx,
+                padPx + (shown % 2) * (miniPx + gapPx),
+                padPx + (shown / 2) * (miniPx + gapPx));
+            // Grid-size render on purpose: the cache key carries the pixel size, so asking at
+            // miniPx would mint a second entry per member; the view downscales the shared one.
+            mini.setImageDrawable(dock.getRenderedIcon(entry, iconPx));
             dock.applyIconColorFilter(mini);
-            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(miniPx, miniPx,
-                Gravity.TOP | Gravity.START);
-            params.leftMargin = padPx + (shown % 2) * (miniPx + gapPx);
-            params.topMargin = padPx + (shown / 2) * (miniPx + gapPx);
-            mosaic.addView(mini, params);
+            mini.setVisibility(VISIBLE);
             shown++;
         }
+        for (int i = shown; i < minis.length; i++) {
+            ImageView mini = minis[i];
+            if (mini == null) continue;
+            mini.setImageDrawable(null);
+            mini.setVisibility(GONE);
+        }
         if (folder.apps.size() > 4) {
-            TextView count = new TextView(getContext());
+            TextView count = countBadge;
+            if (count == null) {
+                count = new TextView(getContext());
+                count.setTextColor(Color.WHITE);
+                count.setTextSize(8f);
+                count.setGravity(Gravity.CENTER);
+                count.setBackgroundColor(0xB8000000);
+                countBadge = count;
+                mosaic.addView(count, new FrameLayout.LayoutParams(miniPx, miniPx,
+                    Gravity.TOP | Gravity.START));
+            }
             count.setText("+" + (folder.apps.size() - 3));
-            count.setTextColor(Color.WHITE);
-            count.setTextSize(8f);
-            count.setGravity(Gravity.CENTER);
-            count.setBackgroundColor(0xB8000000);
-            FrameLayout.LayoutParams countParams = new FrameLayout.LayoutParams(miniPx, miniPx,
-                Gravity.TOP | Gravity.START);
-            countParams.leftMargin = padPx + miniPx + gapPx;
-            countParams.topMargin = padPx + miniPx + gapPx;
-            mosaic.addView(count, countParams);
+            applySlotGeometry(count, miniPx, padPx + miniPx + gapPx, padPx + miniPx + gapPx);
+            count.setVisibility(VISIBLE);
+        } else if (countBadge != null) {
+            countBadge.setVisibility(GONE);
         }
         label.setText(folder.title);
         label.setTextColor(dock == null ? Color.WHITE : dock.getLauncherTextColor());
@@ -124,8 +153,29 @@ public final class AppDrawerFolderCellView extends AppDrawerAppCellView {
         }
     }
 
+    /** Positions one mosaic slot in place, touching layout only when the geometry moved. */
+    private static void applySlotGeometry(@NonNull View slot, int sizePx,
+                                          int leftPx, int topPx) {
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) slot.getLayoutParams();
+        if (params.width != sizePx || params.height != sizePx
+            || params.leftMargin != leftPx || params.topMargin != topPx) {
+            params.width = sizePx;
+            params.height = sizePx;
+            params.leftMargin = leftPx;
+            params.topMargin = topPx;
+            slot.setLayoutParams(params);
+        }
+    }
+
     @Override public void unbind() {
         super.unbind();
-        if (mosaic != null) mosaic.removeAllViews();
+        // The slots are retained (a rebind must not rebuild the view tree); only their rendered
+        // artwork is released.
+        for (ImageView mini : minis) {
+            if (mini == null) continue;
+            mini.setImageDrawable(null);
+            mini.setVisibility(GONE);
+        }
+        if (countBadge != null) countBadge.setVisibility(GONE);
     }
 }

@@ -18,6 +18,9 @@ import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -231,7 +234,7 @@ final class TaiMediaAccess {
     private static String[] allowedRoots() {
         File shared = Environment.getExternalStorageDirectory();
         String testRoot = extraAllowedRootForTesting;
-        java.util.List<String> roots = new java.util.ArrayList<>(java.util.Arrays.asList(ALLOWED_ROOTS));
+        List<String> roots = new ArrayList<>(Arrays.asList(ALLOWED_ROOTS));
         if (shared != null) roots.add(shared.getAbsolutePath());
         if (testRoot != null) roots.add(testRoot);
         return roots.toArray(new String[0]);

@@ -264,28 +264,6 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_APP_LAUNCHER_DRAWER_VIEW_TYPE =
             APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL;
 
-        public static final String KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_VERTICAL =
-            "app_launcher_drawer_grid_columns_vertical";
-        public static final String KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_HORIZONTAL =
-            "app_launcher_drawer_grid_columns_horizontal";
-        public static final String KEY_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL =
-            "app_launcher_drawer_grid_rows_horizontal";
-        public static final String KEY_APP_LAUNCHER_DRAWER_ICON_SIZE_DP =
-            "app_launcher_drawer_icon_size_dp";
-        public static final String KEY_APP_LAUNCHER_DRAWER_GRID_COLUMNS_CATEGORIES =
-            "app_launcher_drawer_grid_columns_categories";
-        public static final int DEFAULT_APP_LAUNCHER_DRAWER_GRID_COLUMNS_VERTICAL = 0;
-        public static final int DEFAULT_APP_LAUNCHER_DRAWER_GRID_COLUMNS_HORIZONTAL = 0;
-        public static final int DEFAULT_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL = 0;
-        public static final int DEFAULT_APP_LAUNCHER_DRAWER_ICON_SIZE_DP = 0;
-        public static final int DEFAULT_APP_LAUNCHER_DRAWER_GRID_COLUMNS_CATEGORIES = 0;
-        public static final int MIN_APP_LAUNCHER_DRAWER_GRID_COLUMNS = 4;
-        public static final int MAX_APP_LAUNCHER_DRAWER_GRID_COLUMNS = 6;
-        public static final int MIN_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL = 2;
-        public static final int MAX_APP_LAUNCHER_DRAWER_GRID_ROWS_HORIZONTAL = 6;
-        public static final int MIN_APP_LAUNCHER_DRAWER_GRID_COLUMNS_CATEGORIES = 1;
-        public static final int MAX_APP_LAUNCHER_DRAWER_GRID_COLUMNS_CATEGORIES = 3;
-
         /** Custom drawer corner radius in dp, or -1 to follow the shared rounded-surface token. */
         public static final String KEY_APP_LAUNCHER_DRAWER_CORNER_RADIUS =
             "app_launcher_drawer_corner_radius";
@@ -293,26 +271,62 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_APP_LAUNCHER_DRAWER_CORNER_RADIUS = 40;
 
         /**
-         * Radius every Rounded-style surface takes when its own radius is left on -1 (follow the
-         * style): the dock capsule, the status surface and the terminal border all read this, so
-         * "Rounded" is one shape rather than three that drifted apart.
+         * Radius a Floating surface takes when its own radius is left on -1 (follow the style):
+         * the dock capsule, the drawer and the terminal border all read this. The one resolver for
+         * the sentinel is {@code TermuxAppSharedPreferences.resolveAutoCornerRadiusDp}.
          */
         public static final int DEFAULT_ROUNDED_SURFACE_CORNER_RADIUS_DP = 20;
 
-        /** Section the surface editor last had open ("dock", "keyboard", "status", "other"). */
-        public static final String KEY_SURFACE_TUNING_LAST_SECTION = "surface_tuning_last_section";
-        public static final String DEFAULT_SURFACE_TUNING_LAST_SECTION = "dock";
+        /**
+         * The floating status surface shipped with its own adaptive answer to the -1 sentinel -
+         * between these bounds, capped at half the pane height - instead of the shared 20dp above.
+         * Kept as shipped: an upgrade must not reshape the pane. At the expanded pane height the
+         * cap never bites, so the MAX is the number the surface actually shows and the number the
+         * editor displays for it.
+         */
+        public static final int STATUS_AUTO_CORNER_RADIUS_MIN_DP = 16;
+        public static final int STATUS_AUTO_CORNER_RADIUS_MAX_DP = 26;
+
+        /*
+         * There is no per-session "last section" key any more: the editor became one page when its
+         * five tabs were dissolved, so there is no section to remember. A stored
+         * "surface_tuning_last_section" from an older build is ignored.
+         */
 
         /** Independent status-surface glass controls used by the live surface editor. */
         public static final String KEY_STATUS_BAR_BLUR_RADIUS = "status_bar_blur_radius";
-        public static final int DEFAULT_STATUS_BAR_BLUR_RADIUS = 12;
+        public static final int DEFAULT_STATUS_BAR_BLUR_RADIUS = 8;
         public static final String KEY_STATUS_BAR_OPACITY = "status_bar_opacity";
-        public static final int DEFAULT_STATUS_BAR_OPACITY = 37;
+        public static final int DEFAULT_STATUS_BAR_OPACITY = 34;
         public static final String KEY_STATUS_BAR_GRAIN = "status_bar_grain";
-        public static final int DEFAULT_STATUS_BAR_GRAIN = 39;
+        public static final int DEFAULT_STATUS_BAR_GRAIN = 18;
         public static final String KEY_STATUS_BAR_CORNER_RADIUS = "status_bar_corner_radius";
         public static final int DEFAULT_STATUS_BAR_CORNER_RADIUS = -1;
         public static final int MAX_STATUS_BAR_CORNER_RADIUS = 40;
+
+        /**
+         * Corner radius (dp) of the two chips on the status row — the sessions indicator and the
+         * window pills — which wear one shape between them.
+         *
+         * <p>Outside the Base cascade, like the terminal frame's radius: this is the shape of two
+         * pieces of content inside the status surface, not the shape of a surface. {@code -1} is
+         * the shipped "follow the bar" state, which is square while Docked and the capsule's own
+         * radius while Floating; any value the user dials in holds in both styles.
+         */
+        public static final String KEY_STATUS_INDICATOR_CORNER_RADIUS =
+            "status_indicator_corner_radius";
+        public static final int DEFAULT_STATUS_INDICATOR_CORNER_RADIUS = -1;
+        public static final int MAX_STATUS_INDICATOR_CORNER_RADIUS = 16;
+
+        /**
+         * Corner radius (dp) of the Docked terminal's bordered frame. Not part of the Base
+         * cascade: Floating derives the frame radius from the capsule, so this only exists where
+         * the user can actually see it act — Docked with the border on. Defaults to the flush
+         * square frame Docked always drew.
+         */
+        public static final String KEY_TERMINAL_CORNER_RADIUS = "terminal_corner_radius";
+        public static final int DEFAULT_TERMINAL_CORNER_RADIUS = 24;
+        public static final int MAX_TERMINAL_CORNER_RADIUS = 40;
 
         /**
          * Terminal glass pane, available while the terminal border is on: wallpaper blur radius
@@ -320,18 +334,26 @@ public final class TermuxPreferenceConstants {
          * Both default off so the border alone stays the plain outline it always was.
          */
         public static final String KEY_TERMINAL_GLASS_BLUR_RADIUS = "terminal_glass_blur_radius";
-        public static final int DEFAULT_TERMINAL_GLASS_BLUR_RADIUS = 0;
+        public static final int DEFAULT_TERMINAL_GLASS_BLUR_RADIUS = 8;
         public static final String KEY_TERMINAL_GLASS_GRAIN = "terminal_glass_grain";
-        public static final int DEFAULT_TERMINAL_GLASS_GRAIN = 0;
+        public static final int DEFAULT_TERMINAL_GLASS_GRAIN = 18;
 
         /**
-         * Opacity of the wallpaper behind every surface (percent): 100 shows the wallpaper as-is,
-         * lower values dim it toward black before any surface tint is painted over it. Needed once
-         * the terminal tint could be localised to its own glass pane — until then the terminal
-         * opacity doubled as the whole-window dim.
+         * Legacy key for the wallpaper backdrop, counted as the wallpaper's own visibility: 100
+         * showed the wallpaper as-is and lower values dimmed it. Read only to migrate; every
+         * reader now uses {@link #KEY_WALLPAPER_BACKDROP_DIM}, which counts the way the slider
+         * reads — right is more backdrop, not less.
          */
         public static final String KEY_WALLPAPER_BACKDROP_OPACITY = "wallpaper_backdrop_opacity";
-        public static final int DEFAULT_WALLPAPER_BACKDROP_OPACITY = 100;
+
+        /**
+         * Opacity of the black backdrop drawn over the wallpaper, behind every surface (percent):
+         * 0 shows the wallpaper as-is, 100 hides it completely, before any surface tint is painted
+         * over it. Needed once the terminal tint could be localised to its own glass pane — until
+         * then the terminal opacity doubled as the whole-window dim.
+         */
+        public static final String KEY_WALLPAPER_BACKDROP_DIM = "wallpaper_backdrop_dim";
+        public static final int DEFAULT_WALLPAPER_BACKDROP_DIM = 0;
 
         /**
          * Gap between tiled terminal panes in dp — the surface editor's Inner padding. The old
@@ -339,7 +361,7 @@ public final class TermuxPreferenceConstants {
          * pane read as its own floating terminal rather than a cell of one sheet.
          */
         public static final String KEY_TERMINAL_PANE_GAP = "terminal_pane_gap";
-        public static final int DEFAULT_TERMINAL_PANE_GAP = 1;
+        public static final int DEFAULT_TERMINAL_PANE_GAP = 4;
         public static final int MAX_TERMINAL_PANE_GAP = 24;
 
         /**
@@ -347,9 +369,9 @@ public final class TermuxPreferenceConstants {
          * default matches the floating capsule's redline outer margin; the edge-to-edge default
          * shape only honours whatever is configured beyond that baseline.
          */
-        public static final int DEFAULT_SURFACE_HORIZONTAL_INSET = 10;
+        public static final int DEFAULT_SURFACE_HORIZONTAL_INSET = 12;
         /** The keyboard sits slightly further in than the other surfaces; tuned on Pong. */
-        public static final int DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET = 13;
+        public static final int DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET = 12;
         public static final int MAX_SURFACE_HORIZONTAL_INSET = 48;
         public static final String KEY_DOCK_HORIZONTAL_INSET = "dock_horizontal_inset";
         public static final String KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET =
@@ -544,7 +566,7 @@ public final class TermuxPreferenceConstants {
 
         // Default-dock baseline tuned on Pong (1080x2412). Height is drag-based, so retain the
         // exact confirmed value; spacing and radius below are discrete slider steps.
-        public static final float DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.0830541f;
+        public static final float DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.0423018f;
 
         /** Default keyboard height for the Rounded dock, tuned on Pong. */
         public static final float DEFAULT_ROUNDED_IN_APP_KEYBOARD_HEIGHT_SCALE = 1.0830541f;
@@ -572,7 +594,7 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP =
             "in_app_keyboard_key_corner_radius_dp";
 
-        public static final float DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 2.7f;
+        public static final float DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 10.8f;
 
         /** Default key radius for the Rounded dock, tuned on Pong. */
         public static final float DEFAULT_ROUNDED_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 12.5f;
@@ -604,7 +626,7 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY =
             "in_app_keyboard_background_opacity";
 
-        public static final int DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY = 100;
+        public static final int DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY = 34;
 
         public static final int MIN_IN_APP_KEYBOARD_BACKGROUND_OPACITY = 0;
 
@@ -677,7 +699,7 @@ public final class TermuxPreferenceConstants {
         public static final String TOP_PANE_CLOCK_STYLE_TAPE = "tape";
         public static final String TOP_PANE_CLOCK_STYLE_SLAB = "slab";
 
-        public static final String DEFAULT_TOP_PANE_CLOCK_STYLE = TOP_PANE_CLOCK_STYLE_FLIP;
+        public static final String DEFAULT_TOP_PANE_CLOCK_STYLE = TOP_PANE_CLOCK_STYLE_SLAB;
 
         /** Horizontal alignment of the FULL-form top-pane clock inside the pane. */
         public static final String KEY_TOP_PANE_CLOCK_ALIGNMENT = "top_pane_clock_alignment";
@@ -690,11 +712,11 @@ public final class TermuxPreferenceConstants {
 
         /** Use a 12-hour top-pane clock and append the AM/PM period. */
         public static final String KEY_TOP_PANE_CLOCK_AM_PM = "top_pane_clock_am_pm";
-        public static final boolean DEFAULT_TOP_PANE_CLOCK_AM_PM = false;
+        public static final boolean DEFAULT_TOP_PANE_CLOCK_AM_PM = true;
 
         /** Persist the user-controlled compact single-row status-bar state. */
         public static final String KEY_TOP_PANE_CLOCK_COLLAPSED = "top_pane_clock_collapsed";
-        public static final boolean DEFAULT_TOP_PANE_CLOCK_COLLAPSED = false;
+        public static final boolean DEFAULT_TOP_PANE_CLOCK_COLLAPSED = true;
 
         /**
          * Rules that pin a notification into the top-pane widget slot, stored as a JSON array of
@@ -765,7 +787,7 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_TERMINAL_BACKGROUND_OPACITY = "terminal_background_opacity";
 
-        public static final int DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY = 47;
+        public static final int DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY = 34;
 
         /**
          * Defines the key for sessions menu opacity (percentage), where 100 is fully opaque.
@@ -779,14 +801,14 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_EXTRAKEYS_BLUR_RADIUS = "extrakeys_blur_radius";
 
-        public static final int DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS = 10;
+        public static final int DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS = 8;
 
         /**
          * Defines the key for extrakeys/app bar opacity (percentage), where 100 is fully opaque.
          */
         public static final String KEY_APP_BAR_OPACITY = "app_bar_opacity";
 
-        public static final int DEFAULT_VALUE_APP_BAR_OPACITY = 46;
+        public static final int DEFAULT_VALUE_APP_BAR_OPACITY = 43;
 
         /**
          * Defines the key for the dock-glass grain/noise amount (percentage, 0 disables). A subtle
@@ -794,7 +816,7 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_DOCK_GLASS_GRAIN = "dock_glass_grain";
 
-        public static final int DEFAULT_VALUE_DOCK_GLASS_GRAIN = 39;
+        public static final int DEFAULT_VALUE_DOCK_GLASS_GRAIN = 18;
 
         /**
          * Defines whether the terminal's bottom cell remainder is absorbed by the dock glass.
@@ -807,11 +829,92 @@ public final class TermuxPreferenceConstants {
          * Defines whether a thin outline border is drawn around the terminal surface.
          */
         public static final String KEY_TERMINAL_BORDER_ENABLED = "terminal_border_enabled";
-        /** Whether the surface editor writes its glass controls to every surface at once. */
-        public static final String KEY_SURFACE_TUNING_NORMALIZED = "surface_tuning_normalized";
+        /*
+         * Surface inheritance. Five properties are shared across the surfaces; each surface either
+         * follows the Base value or holds an override of its own. The per-surface value keys already
+         * exist above and keep their meaning - they are simply only consulted once a surface has
+         * detached. Replaces the old all-or-nothing normalize flag, which could not
+         * express "the same everywhere except this one thing".
+         */
+        public static final String KEY_SURFACE_BASE_BLUR = "surface_base_blur";
+        public static final String KEY_SURFACE_BASE_OPACITY = "surface_base_opacity";
+        public static final String KEY_SURFACE_BASE_GRAIN = "surface_base_grain";
+        public static final String KEY_SURFACE_BASE_CORNER_RADIUS = "surface_base_corner_radius";
+        public static final String KEY_SURFACE_BASE_SIDE_GAP = "surface_base_side_gap";
 
-        public static final boolean DEFAULT_VALUE_TERMINAL_BORDER_ENABLED = false;
+        /**
+         * The shared layer's shipped values. Deliberately its own set rather than an alias of the
+         * dock's: the shipped look gives the dock a slightly denser opacity than the surfaces that
+         * follow Base, and folding the two together would drag every other surface along with it.
+         */
+        public static final int DEFAULT_SURFACE_BASE_BLUR = 8;
+        public static final int DEFAULT_SURFACE_BASE_OPACITY = 34;
+        public static final int DEFAULT_SURFACE_BASE_GRAIN = 18;
+        public static final int DEFAULT_SURFACE_BASE_CORNER_RADIUS = 24;
+        public static final int DEFAULT_SURFACE_BASE_SIDE_GAP = 12;
+
+        /**
+         * The Base glass triple said as one decision: a material family plus how much of it.
+         * The editor's macro writes blur/opacity/grain through the Base setters like anything
+         * else; these two keys only remember which point on which family's curve the triple came
+         * from, so the control can show that point again — or "Custom" once the triple no longer
+         * matches any point, which is how hand-tuned installs are left untouched.
+         */
+        public static final String KEY_SURFACE_MATERIAL = "surface_material";
+        public static final String KEY_SURFACE_MATERIAL_INTENSITY = "surface_material_intensity";
+        public static final String SURFACE_MATERIAL_SOLID = "solid";
+        public static final String SURFACE_MATERIAL_GLASS = "glass";
+        public static final String SURFACE_MATERIAL_FROST = "frost";
+        /** Glass at 50 reproduces the shipped Base triple exactly (8 / 34 / 18). */
+        public static final String DEFAULT_SURFACE_MATERIAL = SURFACE_MATERIAL_GLASS;
+        public static final int DEFAULT_SURFACE_MATERIAL_INTENSITY = 50;
+
+        /**
+         * The look the user pinned as the editor's Custom preset, as the preset format's JSON.
+         * Written only by the editor's save glyph — never by Done, which commits the live
+         * preferences and would otherwise replace the pin every time someone left the editor.
+         */
+        public static final String KEY_SURFACE_CUSTOM_PRESET = "surface_custom_preset";
+
+        /** Prefix for the per-(surface, property) detach flags: {@code surface_inherit_dock_blur}. */
+        public static final String KEY_SURFACE_INHERIT_PREFIX = "surface_inherit_";
+        /** A surface follows Base until the user moves that one control. */
+        public static final boolean DEFAULT_VALUE_SURFACE_INHERITS_BASE = true;
+
+        /** Set once the one-time inheritance migration has folded the old per-surface values in. */
+        public static final String KEY_SURFACE_INHERITANCE_MIGRATED = "surface_inheritance_migrated";
+
+        /**
+         * Set once the install has been told apart as new or existing, and given the shipped
+         * Docked look or had the pre-shipped one pinned accordingly. Separate from the
+         * inheritance marker above: an install can already have folded and still need this.
+         */
+        public static final String KEY_SHIPPED_SURFACE_DEFAULTS_ADOPTED =
+            "shipped_surface_defaults_adopted";
+
+        /**
+         * Set once the keyboard-opacity rows detached at the old sentinel default have been
+         * relinked to Base. Before the tuned Docked look, {@code 100} on
+         * {@link #KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY} meant "never touched — render the shared
+         * dock material", and the inheritance fold turned that sentinel into a detached override.
+         * When the default then changed, those installs silently lost the unified
+         * dock/keyboard/nav glass sheet.
+         */
+        public static final String KEY_KEYBOARD_OPACITY_SENTINEL_HEALED =
+            "keyboard_opacity_sentinel_healed";
+
+        /** The pre-tuned-look keyboard-opacity default, which doubled as the "untouched" sentinel. */
+        public static final int LEGACY_IN_APP_KEYBOARD_BACKGROUND_OPACITY_SENTINEL = 100;
+
+        /**
+         * The old all-or-nothing "match all surfaces" switch. Read once by
+         * {@code migrateSurfaceInheritance} to decide whether an upgrading install starts fully
+         * linked, but never written again.
+         */
+        public static final String KEY_SURFACE_TUNING_NORMALIZED = "surface_tuning_normalized";
         public static final boolean DEFAULT_VALUE_SURFACE_TUNING_NORMALIZED = false;
+
+        public static final boolean DEFAULT_VALUE_TERMINAL_BORDER_ENABLED = true;
 
         /**
          * Stores the user's preferred terminal opacity while wallpaper mode is enabled so it can
@@ -820,7 +923,7 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_WALLPAPER_ENABLED_TERMINAL_BACKGROUND_OPACITY =
             "wallpaper_enabled_terminal_background_opacity";
 
-        public static final int DEFAULT_VALUE_WALLPAPER_ENABLED_TERMINAL_BACKGROUND_OPACITY = 47;
+        public static final int DEFAULT_VALUE_WALLPAPER_ENABLED_TERMINAL_BACKGROUND_OPACITY = 34;
 
         /**
          * Stores the user's preferred dock opacity while wallpaper mode is enabled so it can be
@@ -829,7 +932,7 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_WALLPAPER_ENABLED_APP_BAR_OPACITY =
             "wallpaper_enabled_app_bar_opacity";
 
-        public static final int DEFAULT_VALUE_WALLPAPER_ENABLED_APP_BAR_OPACITY = 46;
+        public static final int DEFAULT_VALUE_WALLPAPER_ENABLED_APP_BAR_OPACITY = 43;
 
         /**
          * Stores the user's preferred dock blur radius while wallpaper mode is enabled so it can
@@ -857,14 +960,13 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_VALUE_TERMINAL_DYNAMIC_COLORS_ENABLED = true;
 
-        /**
-         * Defines the key for where the launcher chrome — dock, status bar, drawer, keyboard —
-         * takes its colours from: {@code wallpaper} for Material dynamic colours, or {@code scheme}
-         * to derive them from the terminal colour scheme in {@code ~/.termux/colors.properties}.
+        /*
+         * There is no key for the launcher chrome's colour source any more. It was a second name
+         * for a decision the wallpaper-colours switch already makes, and the two could disagree —
+         * chrome on the scheme with the terminal on the wallpaper, or the reverse. The chrome now
+         * follows {@link #KEY_TERMINAL_DYNAMIC_COLORS_ENABLED}: off means both take the scheme in
+         * ~/.termux/colors.properties. A stored "ui_color_source" from an older build is ignored.
          */
-        public static final String KEY_UI_COLOR_SOURCE = "ui_color_source";
-
-        public static final String DEFAULT_VALUE_UI_COLOR_SOURCE = "wallpaper";
 
         /** Contrast profile for wallpaper-derived terminal colors. */
         public static final String KEY_TERMINAL_CONTRAST_LEVEL = "terminal_contrast_level";

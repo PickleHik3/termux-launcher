@@ -40,18 +40,6 @@
             app:selectable="false"
             app:iconSpaceReserved="false" />
         <ListPreference
-            app:key="ui_color_source"
-            app:title="@string/settings_ui_color_source_title"
-            app:entries="@array/termux_ui_color_source_entries"
-            app:entryValues="@array/termux_ui_color_source_values"
-            android:defaultValue="wallpaper" />
-        <Preference
-            app:key="ui_color_source_hint"
-            app:summary="@string/settings_ui_color_source_hint"
-            app:persistent="false"
-            app:selectable="false"
-            app:iconSpaceReserved="false" />
-        <ListPreference
             app:key="terminal_contrast_level"
             app:title="@string/settings_terminal_contrast_title"
             app:entries="@array/terminal_contrast_entries"
@@ -80,6 +68,19 @@
             app:icon="@drawable/ic_symbol_grid_view"
             app:title="@string/settings_pinned_icon_pack_title"
             app:summary="@string/termux_app_launcher_pinned_icon_pack_summary" />
+    </PreferenceCategory>
+
+    <!-- Deliberately last: the sessions drawer is a legacy surface (it only exists with split
+         panes off), so its one styling control sits at the bottom rather than in the surface
+         editor, which tunes the surfaces the launcher actually ships on. -->
+    <PreferenceCategory app:title="@string/settings_sessions_sidebar_header">
+        <SeekBarPreference
+            app:key="sessions_opacity"
+            app:title="@string/settings_sessions_opacity_title"
+            app:summary="@string/settings_sessions_opacity_summary"
+            app:showSeekBarValue="true"
+            android:max="100"
+            android:defaultValue="50" />
     </PreferenceCategory>
 
 </PreferenceScreen>

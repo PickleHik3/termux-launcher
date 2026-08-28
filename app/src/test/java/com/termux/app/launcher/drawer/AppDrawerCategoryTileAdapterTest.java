@@ -61,16 +61,16 @@ public class AppDrawerCategoryTileAdapterTest {
         }
     }
 
-    @Test public void containerDisablesEagerCacheAndPrefetchAndCapturesSelectedSquare() {
+    @Test public void containerKeepsRecyclerCacheAndPrefetchAndCapturesSelectedSquare() {
         AppDrawerCategoryView view = categoryView(Arrays.asList(
             bucket(AppDrawerCategory.SOCIAL, 7), bucket(AppDrawerCategory.UTILITIES, 2)));
         RecyclerView overview = view.getOverview();
-        Object recycler = org.robolectric.util.ReflectionHelpers.getField(overview, "mRecycler");
-        assertEquals(0, (int) org.robolectric.util.ReflectionHelpers.getField(
-            recycler, "mViewCacheMax"));
+        // Prefetch and the default view cache stay on: a tile bind renders seven icons and
+        // requests layout, so a zero cache made every one-pixel scroll-out a full rebind on the
+        // scroll frame itself.
         GridLayoutManager manager = (GridLayoutManager) overview.getLayoutManager();
         assertNotNull(manager);
-        assertFalse(manager.isItemPrefetchEnabled());
+        assertTrue(manager.isItemPrefetchEnabled());
         assertTrue(overview.getChildCount() > 0);
         Frame bounds = view.getTileAdapter().selectedTileBounds(overview, "social", view);
         assertNotNull(bounds);

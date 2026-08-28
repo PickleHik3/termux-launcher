@@ -35,6 +35,7 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -45,6 +46,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -75,6 +79,16 @@ public class LauncherCtlApiServer {
 
     private final ThreadPoolExecutor clientExecutor = new ThreadPoolExecutor(
         2, 4, 30L, TimeUnit.SECONDS, new LinkedBlockingQueue<>(64));
+    /**
+     * The server's own housekeeping — the accept loop, an async start, a LAN-session expiry. A
+     * cached pool rather than a single thread because the accept loop occupies its thread for the
+     * whole listening lifetime and the expiry has to be able to tear that loop down.
+     */
+    private final ExecutorService controlExecutor = Executors.newCachedThreadPool(runnable -> {
+        Thread thread = new Thread(runnable, "launcherctl-control");
+        thread.setDaemon(true);
+        return thread;
+    });
     private final SecureRandom random = new SecureRandom();
     private final Map<String, SimpleRateLimiter> rateLimiters = new HashMap<>();
 
@@ -87,7 +101,7 @@ public class LauncherCtlApiServer {
     private volatile boolean lanSessionExpiring;
     private volatile int port;
     private ServerSocket serverSocket;
-    private Thread acceptThread;
+    private Future<?> acceptLoop;
     private Context appContext;
 
     private LauncherCtlApiServer() {
@@ -165,18 +179,20 @@ public class LauncherCtlApiServer {
             lanSessionExpiring = true;
         }
         final Context context = appContext;
-        Thread expiry = new Thread(() -> {
-            try {
-                if (context == null) return;
-                // applyEndpointSettings rebinds without tearing down the client executor, and
-                // start() runs expireLanSessionIfStale, which is what actually rotates the token.
-                applyEndpointSettings(context);
-            } catch (Exception e) {
-                Logger.logErrorExtended(LOG_TAG, "Failed to expire LAN session: " + e.getMessage());
-            }
-        }, "launcherctl-lan-expiry");
-        expiry.setDaemon(true);
-        expiry.start();
+        try {
+            controlExecutor.execute(() -> {
+                try {
+                    if (context == null) return;
+                    // applyEndpointSettings rebinds without tearing down the client executor, and
+                    // start() runs expireLanSessionIfStale, which is what actually rotates the token.
+                    applyEndpointSettings(context);
+                } catch (Exception e) {
+                    Logger.logErrorExtended(LOG_TAG, "Failed to expire LAN session: " + e.getMessage());
+                }
+            });
+        } catch (RejectedExecutionException stopped) {
+            lanSessionExpiring = false;
+        }
     }
 
     /**
@@ -215,9 +231,11 @@ public class LauncherCtlApiServer {
 
         starting = true;
         Context appContext = context.getApplicationContext();
-        Thread startThread = new Thread(() -> start(appContext), "launcherctl-start");
-        startThread.setDaemon(true);
-        startThread.start();
+        try {
+            controlExecutor.execute(() -> start(appContext));
+        } catch (RejectedExecutionException stopped) {
+            starting = false;
+        }
     }
 
     /**
@@ -232,25 +250,25 @@ public class LauncherCtlApiServer {
     }
 
     public synchronized void stop() {
+        stopListening();
+        clientExecutor.shutdownNow();
+        controlExecutor.shutdownNow();
+    }
+
+    /** Closes the socket and ends the accept loop; the executors stay up for a restart. */
+    private void stopListening() {
         running = false;
         starting = false;
         cleanupSocket();
-        if (acceptThread != null) {
-            acceptThread.interrupt();
-            acceptThread = null;
+        if (acceptLoop != null) {
+            acceptLoop.cancel(true);
+            acceptLoop = null;
         }
-        clientExecutor.shutdownNow();
     }
 
     public synchronized JSONObject applyEndpointSettings(Context context) throws JSONException {
         Context nextContext = context.getApplicationContext();
-        running = false;
-        starting = false;
-        cleanupSocket();
-        if (acceptThread != null) {
-            acceptThread.interrupt();
-            acceptThread = null;
-        }
+        stopListening();
         start(nextContext);
         return buildEndpointSettings(nextContext, true);
     }
@@ -280,7 +298,7 @@ public class LauncherCtlApiServer {
     }
 
     private void startAcceptLoop(Context context) {
-        acceptThread = new Thread(() -> {
+        acceptLoop = controlExecutor.submit(() -> {
             while (running && serverSocket != null && !serverSocket.isClosed()) {
                 try {
                     Socket client = serverSocket.accept();
@@ -295,9 +313,7 @@ public class LauncherCtlApiServer {
                     }
                 }
             }
-        }, "launcherctl-api-accept");
-        acceptThread.setDaemon(true);
-        acceptThread.start();
+        });
     }
 
     private void handleClient(Socket socket, Context context) {
@@ -1753,7 +1769,7 @@ public class LauncherCtlApiServer {
                         JSONObject delta = choice == null ? null : choice.optJSONObject("delta");
                         if (delta == null || delta.length() == 0) return;
                         JSONObject chunk = new JSONObject().put("model", model)
-                            .put("created_at", java.time.Instant.now().toString()).put("done", false);
+                            .put("created_at", Instant.now().toString()).put("done", false);
                         if (generate) {
                             chunk.put("response", delta.optString("content", ""));
                         } else {
@@ -1772,7 +1788,7 @@ public class LauncherCtlApiServer {
                 public void onDone() throws IOException {
                     try {
                         JSONObject done = new JSONObject().put("model", model)
-                            .put("created_at", java.time.Instant.now().toString()).put("done", true)
+                            .put("created_at", Instant.now().toString()).put("done", true)
                             .put("done_reason", "stop").put("total_duration", 0L).put("load_duration", 0L)
                             .put("prompt_eval_count", 0).put("prompt_eval_duration", 0L)
                             .put("eval_count", 0).put("eval_duration", 0L);

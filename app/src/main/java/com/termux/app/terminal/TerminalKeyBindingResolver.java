@@ -122,7 +122,7 @@ public final class TerminalKeyBindingResolver {
         /** The binding's {@code --label}, or null to fall back to the action's own title. */
         @Nullable public final String label;
 
-        Hint(@NonNull String toolName, @Nullable String label) {
+        public Hint(@NonNull String toolName, @Nullable String label) {
             this.toolName = toolName;
             this.label = label;
         }

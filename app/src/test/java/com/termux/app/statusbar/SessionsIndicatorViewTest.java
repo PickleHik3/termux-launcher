@@ -45,12 +45,20 @@ public class SessionsIndicatorViewTest {
         assertFalse(view.isShowingSessionNumber());
     }
 
+    /**
+     * The indicator wears the radius it is handed, in either style — the caller resolves it from
+     * the status row's chip knob, falling back to the bar's own shape. The two chips in that row
+     * have to be able to round together while the surface stays Docked.
+     */
     @Test
-    public void surfaceStyle_matchesSquareOrCapsuleStatusBar() {
+    public void surfaceStyle_wearsTheRadiusItIsGiven() {
         SessionsIndicatorView view = new SessionsIndicatorView(
             ApplicationProvider.getApplicationContext(), null);
-        view.setSurfaceStyle(false, 42f);
+        view.setSurfaceStyle(false, 0f);
         assertEquals(0f, ((GradientDrawable) view.getBackground()).getCornerRadius(), .01f);
+
+        view.setSurfaceStyle(false, 10f);
+        assertEquals(10f, ((GradientDrawable) view.getBackground()).getCornerRadius(), .01f);
 
         view.setSurfaceStyle(true, 42f);
         assertEquals(42f, ((GradientDrawable) view.getBackground()).getCornerRadius(), .01f);

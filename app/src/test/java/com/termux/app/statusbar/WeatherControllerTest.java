@@ -106,4 +106,54 @@ public class WeatherControllerTest {
         assertEquals("--°", WeatherController.formatTemp(Double.NaN, false));
         assertEquals("--°", WeatherController.formatTemp(Double.NaN, true));
     }
+
+    /**
+     * The (label, glyph, day animation, night animation) every code Open-Meteo reports resolved to
+     * before the three cascades became one table. Glyphs are Nerd Font private-use code points.
+     */
+    private static final Object[][] WMO_TABLE = {
+        {0, "Clear", "\ue30d", "clear-day", "clear-night"},
+        {1, "Mainly clear", "\ue30c", "clear-day", "clear-night"},
+        {2, "Partly cloudy", "\ue302", "partly-cloudy-day", "partly-cloudy-night"},
+        {3, "Overcast", "\ue312", "overcast", "overcast"},
+        {45, "Fog", "\ue313", "fog-day", "fog-night"},
+        {48, "Fog", "\ue313", "overcast-fog", "overcast-fog"},
+        {51, "Drizzle", "\ue31b", "partly-cloudy-day-drizzle", "partly-cloudy-night-drizzle"},
+        {53, "Drizzle", "\ue31b", "partly-cloudy-day-drizzle", "partly-cloudy-night-drizzle"},
+        {55, "Drizzle", "\ue31b", "partly-cloudy-day-drizzle", "partly-cloudy-night-drizzle"},
+        {56, "Drizzle", "\ue31b", "partly-cloudy-day-sleet", "partly-cloudy-night-sleet"},
+        {57, "Drizzle", "\ue31b", "partly-cloudy-day-sleet", "partly-cloudy-night-sleet"},
+        {61, "Rain", "\ue318", "overcast-day-rain", "overcast-night-rain"},
+        {63, "Rain", "\ue318", "overcast-day-rain", "overcast-night-rain"},
+        {65, "Rain", "\ue318", "overcast-day-rain", "overcast-night-rain"},
+        {66, "Rain", "\ue318", "overcast-day-sleet", "overcast-night-sleet"},
+        {67, "Rain", "\ue318", "overcast-day-sleet", "overcast-night-sleet"},
+        {71, "Snow", "\ue31a", "overcast-day-snow", "overcast-night-snow"},
+        {73, "Snow", "\ue31a", "overcast-day-snow", "overcast-night-snow"},
+        {75, "Snow", "\ue31a", "overcast-day-snow", "overcast-night-snow"},
+        {77, "Snow", "\ue31a", "snowflake", "snowflake"},
+        {80, "Showers", "\ue319", "partly-cloudy-day-rain", "partly-cloudy-night-rain"},
+        {81, "Showers", "\ue319", "partly-cloudy-day-rain", "partly-cloudy-night-rain"},
+        {82, "Showers", "\ue319", "partly-cloudy-day-rain", "partly-cloudy-night-rain"},
+        {85, "Snow showers", "\ue31a", "partly-cloudy-day-snow", "partly-cloudy-night-snow"},
+        {86, "Snow showers", "\ue31a", "partly-cloudy-day-snow", "partly-cloudy-night-snow"},
+        {95, "Thunderstorm", "\ue31d", "thunderstorms-day", "thunderstorms-night"},
+        {96, "Thunderstorm with hail", "\ue31d", "thunderstorms-day-hail", "thunderstorms-night-hail"},
+        {99, "Thunderstorm with hail", "\ue31d", "thunderstorms-day-hail", "thunderstorms-night-hail"},
+        {-1, "\u2014", "\ue312", "not-available", "not-available"},
+    };
+
+    @Test
+    public void everyWmoCodeKeepsItsLabelGlyphAndAnimations() {
+        Set<Integer> covered = new HashSet<>();
+        for (Object[] row : WMO_TABLE) {
+            int code = (Integer) row[0];
+            covered.add(code);
+            assertEquals("label " + code, row[1], WeatherController.describe(code));
+            assertEquals("glyph " + code, row[2], WeatherController.glyphFor(code));
+            assertEquals("day " + code, row[3], WeatherController.animationFor(code, true));
+            assertEquals("night " + code, row[4], WeatherController.animationFor(code, false));
+        }
+        for (int code : WMO_CODES) assertTrue("code " + code + " unpinned", covered.contains(code));
+    }
 }
