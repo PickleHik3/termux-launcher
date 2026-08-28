@@ -114,11 +114,25 @@ public interface PrivilegedBackend {
     void cleanup();
 
     /**
-     * Mask file paths and package names in a command string before it is logged.
+     * Mask credentials, file paths and package names in a command string before it is logged.
+     * <p>
+     * Credentials are masked first, so that a secret containing dots is redacted whole rather
+     * than being chewed up by the package-name rule below it.
      */
     static String maskSensitiveCommand(String command) {
         if (command == null) return null;
-        return command.replaceAll("/[\\w/.-]+\\.apk", "<apk>")
-                      .replaceAll("[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)+", "<package>");
+        return command
+            // scheme://user:secret@host
+            .replaceAll("([a-zA-Z][a-zA-Z0-9+.-]*://)[^\\s:@/]+:[^\\s@/]+@", "$1<credentials>@")
+            // curl-style -u user:secret / --user user:secret
+            .replaceAll("(?i)((?:^|\\s)(?:-u|--user)[=\\s])\\S+", "$1<credentials>")
+            // --password=secret, --token secret, --api-key=secret, ...
+            .replaceAll("(?i)((?:--)(?:password|passwd|token|api-?key|access-key|secret-key|secret|auth|credentials?)[=\\s])\\S+", "$1<credentials>")
+            // PASSWORD=secret, GH_TOKEN=secret, MY_API_KEY=secret, ...
+            .replaceAll("(?i)(\\b\\w*(?:password|passwd|token|secret|api_?key|credential)\\w*=)\\S+", "$1<credentials>")
+            // Authorization: Bearer <secret> / Basic <secret>
+            .replaceAll("(?i)\\b(bearer|basic)\\s+[A-Za-z0-9+/=._~-]+", "$1 <credentials>")
+            .replaceAll("/[\\w/.-]+\\.apk", "<apk>")
+            .replaceAll("[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)+", "<package>");
     }
 }
