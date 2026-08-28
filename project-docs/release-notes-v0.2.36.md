@@ -1,8 +1,8 @@
 # Changelog — v0.2.36
 
 A big one: a rebuilt appearance editor, tappable links in the terminal,
-redesigned shortcut hints, and a round of memory fixes that stop the launcher
-growing without bound over a long session.
+redesigned shortcut hints, and fixes for the memory leaks that made long
+sessions grow.
 
 ## New
 
@@ -59,10 +59,9 @@ growing without bound over a long session.
 
 ### Memory and speed
 
-- **Memory no longer grows without bound.** A session that had loaded images and
-  run for a while could climb past 600 MB and stay there. That growth is gone,
-  and the memory now comes back on `clear`, when you close a pane, or when the
-  system needs it. Idle usage is unchanged — it was never the problem.
+- **Fixed memory leaks.** A long session with images loaded could climb past
+  600 MB and stay there. Memory now comes back on `clear`, when you close a
+  pane, or when the system needs it.
 - Animated images no longer hold onto their frames forever. Playback stops when
   they are off screen, and memory is released once nothing is showing them or
   when the system is running short. Running `clear` after a fastfetch banner
