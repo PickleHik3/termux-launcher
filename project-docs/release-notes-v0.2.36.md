@@ -1,6 +1,6 @@
 # Changelog — v0.2.36
 
-DRAFT — not yet released. Covers `dev` since v0.2.35-a.
+Covers `dev` since v0.2.35-a.
 
 ## New
 
