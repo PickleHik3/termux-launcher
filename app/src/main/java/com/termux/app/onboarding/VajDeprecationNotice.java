@@ -20,7 +20,7 @@ import com.termux.R;
 
 /**
  * The one-shot deprecation notice for the VAJ edition ({@code io.vaj.tl}), which is maintained
- * for security fixes only and points its users at the Nix edition.
+ * for security fixes only and points its users at the Nix and Termux editions.
  *
  * <p>The notice shows once per notice version — that is, once after the update that introduces
  * it — and the "do not show again" box suppresses every later version of it too. The edition
@@ -42,7 +42,7 @@ public final class VajDeprecationNotice {
 
     /** Bump only to re-notify users who dismissed an earlier wording without opting out. */
     @VisibleForTesting
-    static final int NOTICE_VERSION = 1;
+    static final int NOTICE_VERSION = 2;
 
     private static final String MIGRATION_GUIDE_URL =
         "https://github.com/PickleHik3/termux-launcher/blob/main/docs/en/VAJ_To_Nix_Migration.md";

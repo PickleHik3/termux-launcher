@@ -1515,9 +1515,9 @@
     <string name="onboarding_page_three_footer">Long-press a surface to personalize it</string>
 
     <!-- VAJ edition (io.vaj.tl) deprecation notice, shown once after the update that adds it. -->
-    <string name="vaj_deprecation_title">This edition is being deprecated</string>
+    <string name="vaj_deprecation_title">A note on this edition\'s packages</string>
     <string name="vaj_deprecation_message">Thank you for trying out the launcher. This version is still using my own manually managed pkg repository - i encourage you to install either the nix version or the normal (com.termux) version for a stable pkg repository since i really cannot make promises to maintain the repository, which in this wild west of CVE\'s we are in is not ideal</string>
-    <string name="vaj_deprecation_open_guide">Migration guide</string>
+    <string name="vaj_deprecation_open_guide">Switching editions</string>
     <string name="vaj_deprecation_dismiss">Dismiss</string>
     <string name="vaj_deprecation_do_not_show_again">Do not show this again</string>
 
